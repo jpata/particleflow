@@ -993,8 +993,13 @@ def run(rank, world_size, config, args, outdir, logfile):
 
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
     else:  # instantiate a new model in the outdir created
+
+        input_dim = (
+            len(X_FEATURES[config["dataset"]]) if config["test_dataset"]["clic_edm_ttbar_pf"]["version"] != "2.2.0" else 26
+        )
+
         model_kwargs = {
-            "input_dim": len(X_FEATURES[config["dataset"]]),
+            "input_dim": input_dim,
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
             "input_encoding": config["model"]["input_encoding"],
             "pt_mode": config["model"]["pt_mode"],
@@ -1230,8 +1235,12 @@ def train_ray_trial(config, args, outdir=None):
     world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
+    input_dim = (
+        len(X_FEATURES[config["dataset"]]) if config["test_dataset"]["clic_edm_ttbar_pf"]["version"] != "2.2.0" else 26
+    )
+
     model_kwargs = {
-        "input_dim": len(X_FEATURES[config["dataset"]]),
+        "input_dim": input_dim,
         "num_classes": len(CLASS_LABELS[config["dataset"]]),
         "input_encoding": config["model"]["input_encoding"],
         "pt_mode": config["model"]["pt_mode"],
