@@ -365,10 +365,10 @@ def get_input_standardization(dataset, train_loader, nsubset=10_000):
             else:
                 concatenated_pfelements = torch.cat([concatenated_pfelements, batch.X[msk]])
 
+            if tot_events > nsubset:
+                break
+
         standardization_dict["PFelement" + str(ielem)]["mean"] = torch.mean(concatenated_pfelements, axis=0).tolist()
         standardization_dict["PFelement" + str(ielem)]["std"] = torch.std(concatenated_pfelements, axis=0).tolist()
-
-        if tot_events > nsubset:
-            break
 
     return standardization_dict
