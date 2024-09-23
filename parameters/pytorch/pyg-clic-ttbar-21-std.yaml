@@ -1,5 +1,6 @@
 backend: pytorch
 
+standardize_inputs: True
 save_attention: yes
 dataset: clic
 sort_data: no
@@ -61,7 +62,6 @@ model:
     head_dim: 64
     num_heads: 12
     attention_type: math
-    standardize_inputs: True
     use_pre_layernorm: True
 
   mamba:

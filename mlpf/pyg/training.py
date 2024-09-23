@@ -450,6 +450,7 @@ def train_and_valid(
     dtype=torch.float32,
     tensorboard_writer=None,
     save_attention=False,
+    standardization_dict=None,
 ):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
@@ -496,13 +497,13 @@ def train_and_valid(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                ypred_raw = model(batch.X, batch.mask)
+                ypred_raw = model(batch.X, batch.mask, standardization_dict)
             else:
                 with torch.no_grad():
                     # save some attention matrices
                     if save_attention and (rank == 0 or rank == "cpu") and itrain == 0:
                         set_save_attention(model, outdir, True)
-                    ypred_raw = model(batch.X, batch.mask)
+                    ypred_raw = model(batch.X, batch.mask, standardization_dict)
 
         ypred = unpack_predictions(ypred_raw)
 
@@ -684,6 +685,7 @@ def train_mlpf(
     comet_step_freq=None,
     val_freq=None,
     save_attention=False,
+    standardization_dict=None,
 ):
     """
     Will run a full training by calling train().
@@ -747,6 +749,7 @@ def train_mlpf(
                         lr_schedule=lr_schedule,
                         val_freq=val_freq,
                         dtype=dtype,
+                        standardization_dict=standardization_dict,
                     )
             prof.export_chrome_trace("trace.json")
         else:
@@ -767,6 +770,7 @@ def train_mlpf(
                 val_freq=val_freq,
                 dtype=dtype,
                 tensorboard_writer=tensorboard_writer_train,
+                standardization_dict=standardization_dict,
             )
         t_train = time.time()  # epoch time excluding validation
 
@@ -787,6 +791,7 @@ def train_mlpf(
             dtype=dtype,
             tensorboard_writer=tensorboard_writer_valid,
             save_attention=save_attention,
+            standardization_dict=standardization_dict,
         )
         t_valid = time.time()
 
@@ -1072,6 +1077,42 @@ def run(rank, world_size, config, args, outdir, logfile):
         last_epoch = -1 if start_epoch == 1 else start_epoch - 1
         lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch)
 
+        def get_standardization_dict(dataset, train_loader, nsubset=10_000):
+
+            standardization_dict = {}
+
+            for ielem in ELEM_TYPES_NONZERO[dataset]:
+                standardization_dict["PFelement" + str(ielem)] = {}
+
+                tot_events = 0
+                for i, batch in enumerate(train_loader):
+
+                    tot_events += batch.X.shape[0]
+
+                    # remove the first dimension because we will stack all PFelements anyway to compute the mean/std
+                    batch.X = batch.X.view(-1, batch.X.shape[-1])
+
+                    msk = (batch.X[:, 0] == ielem) & (batch.X[:, 0] != 0)  # skip 0 padded elements
+
+                    if i == 0:
+                        # initialize
+                        concatenated_pfelements = batch.X[msk]
+                    else:
+                        concatenated_pfelements = torch.cat([concatenated_pfelements, batch.X[msk]])
+
+                standardization_dict["PFelement" + str(ielem)]["mean"] = torch.mean(concatenated_pfelements, axis=0).tolist()
+                standardization_dict["PFelement" + str(ielem)]["std"] = torch.std(concatenated_pfelements, axis=0).tolist()
+
+                if tot_events > nsubset:
+                    break
+
+            return standardization_dict
+
+        if config["standardize_inputs"] is True:
+            standardization_dict = get_standardization_dict(config["dataset"], loaders["train"])
+        else:
+            standardization_dict = None
+
         train_mlpf(
             rank,
             world_size,
@@ -1092,6 +1133,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             comet_step_freq=config["comet_step_freq"],
             val_freq=config["val_freq"],
             save_attention=config["save_attention"],
+            standardization_dict=standardization_dict,
         )
 
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
@@ -1345,6 +1387,7 @@ def train_ray_trial(config, args, outdir=None):
         comet_step_freq=config["comet_step_freq"],
         dtype=getattr(torch, config["dtype"]),
         val_freq=config["val_freq"],
+        standardization_dict=None,
     )
 
 

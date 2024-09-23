@@ -57,25 +57,15 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
         return tensor
 
 
-def standardize_inputs(X, elemtypes_nonzero):
-
-    if X.shape[-1] == 26:
-        vs = "2.2.0"
-    else:
-        vs = "2.1.0"
-
-    import json
-
-    with open("/pfvolcentral/clic_standardization.json", "rb") as f:
-        standard_dict = json.load(f)[vs]
+def standardize_inputs(X, elemtypes_nonzero, standardization_dict):
 
     for i, ielem in enumerate(elemtypes_nonzero):
 
         Xfeat_normed_msked = X.clone()
 
         # get mean/std of features of that elem
-        mean = torch.tensor(standard_dict[f"PFelement{ielem}"]["mean"]).to(Xfeat_normed_msked.device)
-        std = torch.tensor(standard_dict[f"PFelement{ielem}"]["std"]).to(Xfeat_normed_msked.device)
+        mean = torch.tensor(standardization_dict[f"PFelement{ielem}"]["mean"]).to(Xfeat_normed_msked.device)
+        std = torch.tensor(standardization_dict[f"PFelement{ielem}"]["std"]).to(Xfeat_normed_msked.device)
 
         # standardize
         Xfeat_normed_msked[..., 1:] = (Xfeat_normed_msked[..., 1:] - mean[..., 1:]) / std[..., 1:]
@@ -300,8 +290,6 @@ class MLPF(nn.Module):
         dropout_conv_id_mha=0.0,
         dropout_conv_id_ff=0.0,
         use_pre_layernorm=False,
-        # standardize_inputs
-        standardize_inputs=False,
     ):
         super(MLPF, self).__init__()
 
@@ -320,8 +308,6 @@ class MLPF(nn.Module):
         self.elemtypes_nonzero = elemtypes_nonzero
 
         self.use_pre_layernorm = use_pre_layernorm
-
-        self.standardize_inputs = standardize_inputs
 
         if self.conv_type == "attention":
             embedding_dim = num_heads * head_dim
@@ -414,11 +400,11 @@ class MLPF(nn.Module):
             self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
 
     # @torch.compile
-    def forward(self, X_features, mask):
+    def forward(self, X_features, mask, standardization_dict=None):
         Xfeat_normed = X_features
 
-        if self.standardize_inputs:
-            Xfeat_normed = standardize_inputs(X_features, self.elemtypes_nonzero)
+        if standardization_dict is not None:
+            Xfeat_normed = standardize_inputs(X_features, self.elemtypes_nonzero, standardization_dict)
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
