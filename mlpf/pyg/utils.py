@@ -162,9 +162,7 @@ def unpack_target(y, model):
 
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
     ret["momentum"] = y[..., 2:7].to(dtype=torch.float32)
-    ret["p4"] = torch.cat(
-        [ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], axis=-1
-    )
+    ret["p4"] = torch.cat([ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], axis=-1)
 
     ret["ispu"] = y[..., -1]
 
@@ -282,11 +280,7 @@ def load_lr_schedule(lr_schedule, checkpoint):
         lr_schedule.load_state_dict(checkpoint["extra_state"]["lr_schedule_state_dict"])
         return lr_schedule
     else:
-        raise KeyError(
-            "Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(
-                checkpoint["extra_state"].keys()
-            )
-        )
+        raise KeyError("Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(checkpoint["extra_state"].keys()))
 
 
 def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-1):
@@ -304,9 +298,7 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
             pct_start=config["lr_schedule_config"]["onecycle"]["pct_start"] or 0.3,
         )
     elif config["lr_schedule"] == "cosinedecay":
-        lr_schedule = CosineAnnealingLR(
-            opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=config["lr"] * 0.1
-        )
+        lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=config["lr"] * 0.1)
     else:
         raise ValueError("Supported values for lr_schedule are 'constant', 'onecycle' and 'cosinedecay'.")
     return lr_schedule
