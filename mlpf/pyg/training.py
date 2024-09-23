@@ -1070,7 +1070,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         last_epoch = -1 if start_epoch == 1 else start_epoch - 1
         lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch)
 
-        if config["standardize_inputs"] is True:
+        if config["standardize_input"] is True:
             if (rank == 0) or (rank == "cpu"):
                 _logger.info("Will standardize the input features before running the training")
             standardization_dict = get_input_standardization(config["dataset"], loaders["train"])

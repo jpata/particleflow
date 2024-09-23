@@ -95,7 +95,7 @@ parser.add_argument(
 parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
 
 parser.add_argument(
-    "--standardize_inputs", action="store_true", default=None, help="will standardize the input features before training"
+    "--standardize_input", action="store_true", default=None, help="will standardize the input features before training"
 )
 
 
@@ -159,8 +159,8 @@ def main():
                 }
             config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
 
-    if args.standardize_inputs:
-        config["standardize_inputs"] = True
+    if args.standardize_input:
+        config["standardize_input"] = True
 
     # override loaded config with values from command line args
     config = override_config(config, args)

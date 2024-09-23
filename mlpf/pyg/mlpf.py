@@ -57,7 +57,7 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
         return tensor
 
 
-def standardize_inputs(X, elemtypes_nonzero, standardization_dict):
+def standardize_input(X, elemtypes_nonzero, standardization_dict):
 
     for i, ielem in enumerate(elemtypes_nonzero):
 
@@ -122,7 +122,9 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
+        self.seq = torch.nn.Sequential(
+            nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act()
+        )
         self.dropout = torch.nn.Dropout(dropout_ff)
         _logger.info("using attention_type={}".format(attention_type))
         # params for torch sdp_kernel
@@ -402,7 +404,7 @@ class MLPF(nn.Module):
         Xfeat_normed = X_features
 
         if standardization_dict is not None:
-            Xfeat_normed = standardize_inputs(X_features, self.elemtypes_nonzero, standardization_dict)
+            Xfeat_normed = standardize_input(X_features, self.elemtypes_nonzero, standardization_dict)
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
@@ -463,7 +465,9 @@ class MLPF(nn.Module):
         e_real[~mask] = 0
         e_real[torch.isinf(e_real)] = 0
         e_real[torch.isnan(e_real)] = 0
-        preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
+        preds_energy = e_real + torch.nn.functional.relu(
+            self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6])
+        )
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
         return preds_binary_particle, preds_pid, preds_momentum
 
