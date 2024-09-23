@@ -360,7 +360,7 @@ def get_input_standardization(dataset, train_loader, nsubset=10_000):
                 concatenated_pfelements = batch.X[msk]
             else:
                 concatenated_pfelements = torch.cat([concatenated_pfelements, batch.X[msk]])
-            print("concatenated_pfelements", concatenated_pfelements.device)
+
             if tot_events > nsubset:
                 break
 
