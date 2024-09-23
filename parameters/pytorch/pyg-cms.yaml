@@ -1,5 +1,6 @@
 backend: pytorch
 
+standardize_inputs: False
 save_attention: no
 dataset: cms
 sort_data: yes

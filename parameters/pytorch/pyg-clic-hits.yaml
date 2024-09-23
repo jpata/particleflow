@@ -1,5 +1,6 @@
 backend: pytorch
 
+standardize_inputs: False
 dataset: clic
 data_dir:
 gpus: 1

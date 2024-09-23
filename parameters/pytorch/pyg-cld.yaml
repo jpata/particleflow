@@ -1,5 +1,6 @@
 backend: pytorch
 
+standardize_inputs: False
 dataset: cld
 sort_data: no
 data_dir:
