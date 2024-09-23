@@ -733,7 +733,7 @@ def plot_jet_ratio(
     plt.figure()
     ax = plt.axes()
 
-    p = med_iqr(yvals["jet_ratio_target_to_pred"])
+    p = med_iqr(yvals["jet_ratio_target_to_cand"])
     plt.plot([], [])
     plt.hist(
         yvals["jet_ratio_target_to_cand"],
@@ -742,6 +742,7 @@ def plot_jet_ratio(
         lw=2,
         label="PF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
+    p = med_iqr(yvals["jet_ratio_target_to_pred"])
     plt.hist(
         yvals["jet_ratio_target_to_pred"],
         bins=bins,
@@ -752,6 +753,8 @@ def plot_jet_ratio(
     plt.xlabel(labels["reco_target_jet_ratio"])
     plt.ylabel("Matched jets / bin")
     plt.legend(loc="best")
+    EXPERIMENT_LABELS[dataset](ax)
+    sample_label(ax, sample)
     save_img(
         "jet_res{}_vstarget.png".format(file_modifier),
         epoch,
