@@ -342,12 +342,8 @@ def get_input_standardization(dataset, train_loader, nsubset=10_000):
 
     standardization_dict = {}
 
-    print("dataset", dataset)
-    print("ELEM_TYPES_NONZERO[dataset]", ELEM_TYPES_NONZERO[dataset])
-
     for ielem in ELEM_TYPES_NONZERO[dataset]:
         standardization_dict["PFelement" + str(ielem)] = {}
-        print(standardization_dict.keys())
 
         tot_events = 0
         for i, batch in enumerate(train_loader):
