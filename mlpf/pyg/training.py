@@ -1,4 +1,5 @@
 import csv
+import glob
 import json
 import logging
 import os
@@ -12,14 +13,12 @@ from tempfile import TemporaryDirectory
 from typing import Optional
 
 import fastjet
-import numpy as np
-import pandas
 import matplotlib
 import matplotlib.pyplot as plt
-import glob
-
-# comet needs to be imported before torch
-from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
+import numpy as np
+import pandas
+import sklearn
+import sklearn.metrics
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -27,7 +26,7 @@ import tqdm
 import yaml
 from pyg.inference import make_plots, run_predictions
 from pyg.logger import _configLogger, _logger
-from pyg.mlpf import MLPF
+from pyg.mlpf import MLPF, set_save_attention
 from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from pyg.utils import (
     CLASS_LABELS,
@@ -46,34 +45,10 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.tensorboard import SummaryWriter
-
-from pyg.logger import _logger, _configLogger
-from pyg.utils import (
-    unpack_predictions,
-    unpack_target,
-    get_model_state_dict,
-    load_checkpoint,
-    save_checkpoint,
-    CLASS_LABELS,
-    X_FEATURES,
-    ELEM_TYPES_NONZERO,
-    save_HPs,
-    get_lr_schedule,
-    count_parameters,
-)
-
-
-import fastjet
-from pyg.inference import make_plots, run_predictions
-
-from pyg.mlpf import set_save_attention
-from pyg.mlpf import MLPF
-from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from utils import create_comet_experiment
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
-
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
@@ -119,7 +94,9 @@ def mlpf_loss(y, ypred, batch):
 
     # binary loss for particle / no-particle classification
     # loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
-    loss_binary_classification = 10 * torch.nn.functional.cross_entropy(ypred["cls_binary"], (y["cls_id"] != 0).long(), reduction="none")
+    loss_binary_classification = 10 * torch.nn.functional.cross_entropy(
+        ypred["cls_binary"], (y["cls_id"] != 0).long(), reduction="none"
+    )
 
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
@@ -406,18 +383,30 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
         ratio = (ypred_raw[2][batch.mask][:, 1] / batch.ygen[batch.mask][:, 3])[batch.ygen[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("eta_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("sphi_target", torch.clamp(batch.ygen[batch.mask][:, 4], -10, 10), global_step=epoch)
-        tensorboard_writer.add_histogram("sphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 2], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram(
+            "sphi_target", torch.clamp(batch.ygen[batch.mask][:, 4], -10, 10), global_step=epoch
+        )
+        tensorboard_writer.add_histogram(
+            "sphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 2], -10, 10), global_step=epoch
+        )
         ratio = (ypred_raw[2][batch.mask][:, 2] / batch.ygen[batch.mask][:, 4])[batch.ygen[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("sphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("cphi_target", torch.clamp(batch.ygen[batch.mask][:, 5], -10, 10), global_step=epoch)
-        tensorboard_writer.add_histogram("cphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 3], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram(
+            "cphi_target", torch.clamp(batch.ygen[batch.mask][:, 5], -10, 10), global_step=epoch
+        )
+        tensorboard_writer.add_histogram(
+            "cphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 3], -10, 10), global_step=epoch
+        )
         ratio = (ypred_raw[2][batch.mask][:, 3] / batch.ygen[batch.mask][:, 5])[batch.ygen[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("cphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("energy_target", torch.clamp(batch.ygen[batch.mask][:, 6], -10, 10), global_step=epoch)
-        tensorboard_writer.add_histogram("energy_pred", torch.clamp(ypred_raw[2][batch.mask][:, 4], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram(
+            "energy_target", torch.clamp(batch.ygen[batch.mask][:, 6], -10, 10), global_step=epoch
+        )
+        tensorboard_writer.add_histogram(
+            "energy_pred", torch.clamp(ypred_raw[2][batch.mask][:, 4], -10, 10), global_step=epoch
+        )
         ratio = (ypred_raw[2][batch.mask][:, 4] / batch.ygen[batch.mask][:, 6])[batch.ygen[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("energy_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
@@ -910,19 +899,35 @@ def train_mlpf(
                 color="bold",
             )
 
+            log_t = (
+                losses_t["Regression_pt"]
+                + losses_t["Regression_eta"]
+                + losses_t["Regression_sin_phi"]
+                + losses_t["Regression_cos_phi"]
+                + losses_t["Regression_energy"]
+            )
+
             _logger.info(
                 f"train: loss_total={losses_t['Total']:.4f} "
                 + f"loss_clf={losses_t['Classification']:.4f} "
                 + f"loss_clfbinary={losses_t['Classification_binary']:.4f} "
-                + f"loss_reg={losses_t['Regression']:.4f} ",
+                + f"loss_reg={log_t:.4f} ",
                 color="bold",
+            )
+
+            log_v = (
+                losses_v["Regression_pt"]
+                + losses_v["Regression_eta"]
+                + losses_v["Regression_sin_phi"]
+                + losses_v["Regression_cos_phi"]
+                + losses_v["Regression_energy"]
             )
 
             _logger.info(
                 f"valid: loss_total={losses_v['Total']:.4f} "
                 + f"loss_clf={losses_v['Classification']:.4f} "
                 + f"loss_clfbinary={losses_v['Classification_binary']:.4f} "
-                + f"loss_reg={losses_v['Regression']:.4f} ",
+                + f"loss_reg={log_v:.4f} ",
                 color="bold",
             )
 
