@@ -63,7 +63,7 @@ cluster_feature_order = [
     "sigma_x",
     "sigma_y",
     "sigma_z",
-    # added by farouk
+    # additional cluster input features
     "energyError",
     "sigma_energy",
     "sigma_x_weighted",
@@ -343,7 +343,6 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     cl_sigma_y = []
     cl_sigma_z = []
 
-    # added by farouk
     cl_sigma_energy = []
     cl_sigma_x_weighted, cl_sigma_y_weighted, cl_sigma_z_weighted = [], [], []
     cl_energy_weighted_width = []
@@ -378,7 +377,6 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
         cl_sigma_y.append(np.std(hits_posy))
         cl_sigma_z.append(np.std(hits_posz))
 
-        # added by farouk
         cl_sigma_energy.append(np.std(hits_energy))
         cl_sigma_x_weighted.append(np.std(hits_posx * hits_energy))
         cl_sigma_y_weighted.append(np.std(hits_posy * hits_energy))
@@ -393,14 +391,8 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
 
         cl_energy_weighted_width.append(num / den)
 
-        #         if i==1:
-        # xs += [np.array(hits_posx)]
-        # ys += [np.array(hits_posy)]
-        # zs += [np.array(hits_posz)]
-        # es += [np.array(hits_energy)]
-
         # get position at shower max
-        # for each unique z integrate the energy of all the hits to find zmax
+        # at each unique "z" integrate the energy of all the hits to find zmax
         zmax, emax = 0, -1000
         for z in np.unique(np.array(hits_posz)):
             msk = np.array(hits_posz) == z
@@ -452,7 +444,7 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     ret["sin_phi"] = np.sin(ret["phi"])
     ret["cos_phi"] = np.cos(ret["phi"])
 
-    # added by farouk
+    # additional cluster input features
     ret["sigma_energy"] = np.array(cl_sigma_energy)
     ret["sigma_x_weighted"] = np.array(cl_sigma_x_weighted)
     ret["sigma_y_weighted"] = np.array(cl_sigma_y_weighted)

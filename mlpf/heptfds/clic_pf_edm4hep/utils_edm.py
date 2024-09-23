@@ -40,7 +40,7 @@ X_FEATURES_CL = [
     "sigma_x",
     "sigma_y",
     "sigma_z",
-    # added by farouk
+    # additional cluster input features
     "energyError",
     "sigma_energy",
     "sigma_x_weighted",
