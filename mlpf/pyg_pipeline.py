@@ -159,8 +159,8 @@ def main():
                 }
             config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
 
-    if args.standardize_input:
-        config["standardize_input"] = True
+    # if args.standardize_input:
+    #     config["standardize_input"] = True
 
     # override loaded config with values from command line args
     config = override_config(config, args)
