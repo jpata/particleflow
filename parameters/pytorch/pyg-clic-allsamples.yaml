@@ -132,7 +132,7 @@ valid_dataset:
         clic_edm_zh_tautau_pf:
           version: 2.1.0
         clic_edm_z_tautau_pf:
-          version: 2.1.0          
+          version: 2.1.0
 
 test_dataset:
   clic_edm_ttbar_pf:
