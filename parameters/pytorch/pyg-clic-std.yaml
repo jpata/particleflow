@@ -107,7 +107,7 @@ train_dataset:
     physical:
       batch_size: 1
       samples:
-        clic_edm_ttbar_pf:
+        clic_edm_qq_pf:
           version: 2.1.0
 
 valid_dataset:
