@@ -1066,7 +1066,8 @@ def run(rank, world_size, config, args, outdir, logfile):
             torch.cuda.empty_cache()
 
             if args.dataset == "clic":
-                jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.7, -1.0)
+                # note: must be the same as in scripts/clic/postprocessing.py for truth jets!
+                jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
                 jet_ptcut = 5
             else:
                 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
