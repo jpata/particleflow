@@ -1,11 +1,11 @@
 import json
+import logging
 import pickle as pkl
 
 import pandas as pd
 import torch
 import torch.utils.data
-from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
-import logging
+from torch.optim.lr_scheduler import ConstantLR, CosineAnnealingLR, OneCycleLR
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
@@ -328,3 +328,35 @@ def count_parameters(model):
             )
             trainable_params += params
     return trainable_params, nontrainable_params, table
+
+
+def get_input_standardization(dataset, train_loader, nsubset=10_000):
+
+    standardization_dict = {}
+
+    for ielem in ELEM_TYPES_NONZERO[dataset]:
+        standardization_dict["PFelement" + str(ielem)] = {}
+
+        tot_events = 0
+        for i, batch in enumerate(train_loader):
+
+            tot_events += batch.X.shape[0]
+
+            # remove the first dimension because we will stack all PFelements anyway to compute the mean/std
+            batch.X = batch.X.view(-1, batch.X.shape[-1])
+
+            msk = (batch.X[:, 0] == ielem) & (batch.X[:, 0] != 0)  # skip 0 padded elements
+
+            if i == 0:
+                # initialize
+                concatenated_pfelements = batch.X[msk]
+            else:
+                concatenated_pfelements = torch.cat([concatenated_pfelements, batch.X[msk]])
+
+            if tot_events > nsubset:
+                break
+
+        standardization_dict["PFelement" + str(ielem)]["mean"] = torch.mean(concatenated_pfelements, axis=0).tolist()
+        standardization_dict["PFelement" + str(ielem)]["std"] = torch.std(concatenated_pfelements, axis=0).tolist()
+
+    return standardization_dict

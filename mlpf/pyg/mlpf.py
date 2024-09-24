@@ -1,12 +1,12 @@
+import math
+
+import numpy as np
 import torch
 import torch.nn as nn
+from pyg.logger import _logger
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from .gnn_lsh import CombinedGraphLayer
-
-from pyg.logger import _logger
-import math
-import numpy as np
-from torch.nn.attention import SDPBackend, sdpa_kernel
 
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
@@ -55,6 +55,32 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
         # Clamp to ensure it's in the proper range
         tensor.clamp_(min=a, max=b)
         return tensor
+
+
+def standardize_input(X, elemtypes_nonzero, standardization_dict):
+
+    for i, ielem in enumerate(elemtypes_nonzero):
+
+        Xfeat_normed_msked = X.clone()
+
+        # get mean/std of features of that elem
+        mean = torch.tensor(standardization_dict[f"PFelement{ielem}"]["mean"]).to(Xfeat_normed_msked.device)
+        std = torch.tensor(standardization_dict[f"PFelement{ielem}"]["std"]).to(Xfeat_normed_msked.device)
+
+        # standardize
+        Xfeat_normed_msked[..., 1:] = (Xfeat_normed_msked[..., 1:] - mean[..., 1:]) / std[..., 1:]
+
+        # msk other elements
+        msk = Xfeat_normed_msked[..., 0:1] == ielem
+        Xfeat_normed_msked = Xfeat_normed_msked * msk
+        Xfeat_normed_msked = torch.nan_to_num(Xfeat_normed_msked, nan=0.0)
+
+        if i == 0:
+            Xfeat_normed = Xfeat_normed_msked
+        else:
+            Xfeat_normed += Xfeat_normed_msked
+
+    return Xfeat_normed
 
 
 def get_activation(activation):
@@ -372,8 +398,11 @@ class MLPF(nn.Module):
             self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
 
     # @torch.compile
-    def forward(self, X_features, mask):
+    def forward(self, X_features, mask, standardization_dict=None):
         Xfeat_normed = X_features
+
+        if standardization_dict is not None:
+            Xfeat_normed = standardize_input(X_features, self.elemtypes_nonzero, standardization_dict)
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:

@@ -1,58 +1,57 @@
+import csv
+import glob
+import json
+import logging
 import os
 import os.path as osp
 import pickle as pkl
+import shutil
 import time
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
-import logging
-import shutil
-from datetime import datetime
-import tqdm
-import yaml
-import csv
-import json
-import sklearn
-import sklearn.metrics
-import numpy as np
-import pandas
+
+import fastjet
 import matplotlib
 import matplotlib.pyplot as plt
-import glob
+import numpy as np
+import pandas
 
-# comet needs to be imported before torch
-from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
+# import sklearn
+# import sklearn.metrics
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import tqdm
+import yaml
+from pyg.inference import make_plots, run_predictions
+from pyg.logger import _configLogger, _logger
+from pyg.mlpf import MLPF, set_save_attention
+from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
+from pyg.utils import (
+    CLASS_LABELS,
+    ELEM_TYPES_NONZERO,
+    X_FEATURES,
+    count_parameters,
+    get_input_standardization,
+    get_lr_schedule,
+    get_model_state_dict,
+    load_checkpoint,
+    save_checkpoint,
+    save_HPs,
+    unpack_predictions,
+    unpack_target,
+)
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.tensorboard import SummaryWriter
-
-from pyg.logger import _logger, _configLogger
-from pyg.utils import (
-    unpack_predictions,
-    unpack_target,
-    get_model_state_dict,
-    load_checkpoint,
-    save_checkpoint,
-    CLASS_LABELS,
-    X_FEATURES,
-    ELEM_TYPES_NONZERO,
-    save_HPs,
-    get_lr_schedule,
-    count_parameters,
-)
-
-
-import fastjet
-from pyg.inference import make_plots, run_predictions
-
-from pyg.mlpf import set_save_attention
-from pyg.mlpf import MLPF
-from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from utils import create_comet_experiment
+
+# comet needs to be imported before torch
+from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
+
 
 # Ignore divide by 0 errors
 np.seterr(divide="ignore", invalid="ignore")
@@ -74,7 +73,7 @@ def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     return ret
 
 
-def mlpf_loss(y, ypred, batch):
+def mlpf_loss(y, ypred, batch, epoch):
     """
     Args
         y [dict]: relevant keys are "cls_id, momentum, charge"
@@ -436,6 +435,7 @@ def train_and_valid(
     dtype=torch.float32,
     tensorboard_writer=None,
     save_attention=False,
+    standardization_dict=None,
 ):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
@@ -464,10 +464,10 @@ def train_and_valid(
     loss_accum = 0.0
     val_freq_time_0 = time.time()
 
-    if not is_train:
-        cm_X_gen = np.zeros((13, 13))
-        cm_X_pred = np.zeros((13, 13))
-        cm_id = np.zeros((13, 13))
+    # if not is_train:
+    #     cm_X_gen = np.zeros((13, 13))
+    #     cm_X_pred = np.zeros((13, 13))
+    #     cm_id = np.zeros((13, 13))
 
     for itrain, batch in iterator:
         set_save_attention(model, outdir, False)
@@ -480,37 +480,43 @@ def train_and_valid(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                ypred_raw = model(batch.X, batch.mask)
+                ypred_raw = model(batch.X, batch.mask, standardization_dict)
             else:
                 with torch.no_grad():
                     # save some attention matrices
                     if save_attention and (rank == 0 or rank == "cpu") and itrain == 0:
                         set_save_attention(model, outdir, True)
-                    ypred_raw = model(batch.X, batch.mask)
+                    ypred_raw = model(batch.X, batch.mask, standardization_dict)
 
         ypred = unpack_predictions(ypred_raw)
 
-        if not is_train:
-            cm_X_gen += sklearn.metrics.confusion_matrix(
-                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ygen["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-            )
-            cm_X_pred += sklearn.metrics.confusion_matrix(
-                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-            )
-            cm_id += sklearn.metrics.confusion_matrix(
-                ygen["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-            )
-            # save the events of the first validation batch for quick checks
-            if (rank == 0 or rank == "cpu") and itrain == 0:
-                validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, outdir)
+        # if not is_train:
+        #     cm_X_gen += sklearn.metrics.confusion_matrix(
+        #         batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
+        #         ygen["cls_id"][batch.mask].detach().cpu().numpy(),
+        #         labels=range(13),
+        #     )
+        #     cm_X_pred += sklearn.metrics.confusion_matrix(
+        #         batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
+        #         ypred["cls_id"][batch.mask].detach().cpu().numpy(),
+        #         labels=range(13),
+        #     )
+        #     cm_id += sklearn.metrics.confusion_matrix(
+        #         ygen["cls_id"][batch.mask].detach().cpu().numpy(),
+        #         ypred["cls_id"][batch.mask].detach().cpu().numpy(),
+        #         labels=range(13),
+        #     )
+        #     # save the events of the first validation batch for quick checks
+        #     if (rank == 0 or rank == "cpu") and itrain == 0:
+        #         validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, outdir)
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                loss = mlpf_loss(ygen, ypred, batch)
+                loss = mlpf_loss(ygen, ypred, batch, epoch)
                 for param in model.parameters():
                     param.grad = None
             else:
                 with torch.no_grad():
-                    loss = mlpf_loss(ygen, ypred, batch)
+                    loss = mlpf_loss(ygen, ypred, batch, epoch)
 
         if is_train:
             loss["Total"].backward()
@@ -602,16 +608,26 @@ def train_and_valid(
                     comet_experiment.log_metrics(intermediate_losses_v, prefix="valid", step=step)
                 val_freq_time_0 = time.time()  # reset intermediate validation spacing timer
 
-    if not is_train and comet_experiment:
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_X_gen, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_gen.json"
-        )
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", epoch=epoch, file_name="cm_X_pred.json"
-        )
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_id, title="Target to pred", row_label="gen", column_label="pred", epoch=epoch, file_name="cm_id.json"
-        )
+    # if not is_train and comet_experiment:
+    #     comet_experiment.log_confusion_matrix(
+    #         matrix=cm_X_gen,
+    #         title="Element to target",
+    #         row_label="X",
+    #         column_label="target",
+    #         epoch=epoch,
+    #         file_name="cm_X_gen.json",
+    #     )
+    #     comet_experiment.log_confusion_matrix(
+    #         matrix=cm_X_pred,
+    #         title="Element to pred",
+    #         row_label="X",
+    #         column_label="pred",
+    #         epoch=epoch,
+    #         file_name="cm_X_pred.json",
+    #     )
+    #     comet_experiment.log_confusion_matrix(
+    #         matrix=cm_id, title="Target to pred", row_label="gen", column_label="pred", epoch=epoch, file_name="cm_id.json"
+    #     )
 
     num_data = torch.tensor(len(data_loader), device=rank)
     # sum up the number of steps from all workers
@@ -652,6 +668,7 @@ def train_mlpf(
     comet_step_freq=None,
     val_freq=None,
     save_attention=False,
+    standardization_dict=None,
 ):
     """
     Will run a full training by calling train().
@@ -713,6 +730,7 @@ def train_mlpf(
                         lr_schedule=lr_schedule,
                         val_freq=val_freq,
                         dtype=dtype,
+                        standardization_dict=standardization_dict,
                     )
             prof.export_chrome_trace("trace.json")
         else:
@@ -733,6 +751,7 @@ def train_mlpf(
                 val_freq=val_freq,
                 dtype=dtype,
                 tensorboard_writer=tensorboard_writer_train,
+                standardization_dict=standardization_dict,
             )
         t_train = time.time()  # epoch time excluding validation
 
@@ -753,6 +772,7 @@ def train_mlpf(
             dtype=dtype,
             tensorboard_writer=tensorboard_writer_valid,
             save_attention=save_attention,
+            standardization_dict=standardization_dict,
         )
         t_valid = time.time()
 
@@ -847,13 +867,45 @@ def train_mlpf(
 
             _logger.info(
                 f"Rank {rank}: epoch={epoch} / {num_epochs} "
-                + f"train_loss={losses_t['Total']:.4f} "
-                + f"valid_loss={losses_v['Total']:.4f} "
                 + f"stale={stale_epochs} "
                 + f"epoch_train_time={round((t_train-t0)/60, 2)}m "
                 + f"epoch_valid_time={round((t_valid-t_train)/60, 2)}m "
                 + f"epoch_total_time={round((t1-t0)/60, 2)}m "
                 + f"eta={round(eta, 1)}m",
+                color="bold",
+            )
+
+            log_t = (
+                losses_t["Regression_pt"]
+                + losses_t["Regression_eta"]
+                + losses_t["Regression_sin_phi"]
+                + losses_t["Regression_cos_phi"]
+                + losses_t["Regression_energy"]
+            )
+            log_tot = losses_t["Classification"] + losses_t["Classification_binary"] + log_t
+
+            _logger.info(
+                f"train: loss_total={log_tot:.4f} "
+                + f"loss_clf={losses_t['Classification']:.4f} "
+                + f"loss_clfbinary={losses_t['Classification_binary']:.4f} "
+                + f"loss_reg={log_t:.4f} ",
+                color="bold",
+            )
+
+            log_v = (
+                losses_v["Regression_pt"]
+                + losses_v["Regression_eta"]
+                + losses_v["Regression_sin_phi"]
+                + losses_v["Regression_cos_phi"]
+                + losses_v["Regression_energy"]
+            )
+            log_tot = losses_v["Classification"] + losses_v["Classification_binary"] + log_v
+
+            _logger.info(
+                f"valid: loss_total={log_tot:.4f} "
+                + f"loss_clf={losses_v['Classification']:.4f} "
+                + f"loss_clfbinary={losses_v['Classification_binary']:.4f} "
+                + f"loss_reg={log_v:.4f} ",
                 color="bold",
             )
 
@@ -919,8 +971,17 @@ def run(rank, world_size, config, args, outdir, logfile):
 
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
     else:  # instantiate a new model in the outdir created
+
+        input_dim = len(X_FEATURES[config["dataset"]])
+        if config["dataset"] == "clic":
+            # extract the version of the dataset
+            for sample in config["test_dataset"]:
+                if config["test_dataset"][sample]["version"] == "2.2.0":
+                    input_dim = 26
+                break
+
         model_kwargs = {
-            "input_dim": len(X_FEATURES[config["dataset"]]),
+            "input_dim": input_dim,
             "num_classes": len(CLASS_LABELS[config["dataset"]]),
             "input_encoding": config["model"]["input_encoding"],
             "pt_mode": config["model"]["pt_mode"],
@@ -989,6 +1050,13 @@ def run(rank, world_size, config, args, outdir, logfile):
         last_epoch = -1 if start_epoch == 1 else start_epoch - 1
         lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch)
 
+        if config["standardize_input"] is True:
+            if (rank == 0) or (rank == "cpu"):
+                _logger.info("Will standardize the input features before running the training")
+            standardization_dict = get_input_standardization(config["dataset"], loaders["train"])
+        else:
+            standardization_dict = None
+
         train_mlpf(
             rank,
             world_size,
@@ -1009,6 +1077,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             comet_step_freq=config["comet_step_freq"],
             val_freq=config["val_freq"],
             save_attention=config["save_attention"],
+            standardization_dict=standardization_dict,
         )
 
         checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
@@ -1154,8 +1223,16 @@ def train_ray_trial(config, args, outdir=None):
     world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
+    input_dim = len(X_FEATURES[config["dataset"]])
+    if config["dataset"] == "clic":
+        # extract the version of the dataset
+        for sample in config["test_dataset"]:
+            if config["test_dataset"][sample]["version"] == "2.2.0":
+                input_dim = 26
+            break
+
     model_kwargs = {
-        "input_dim": len(X_FEATURES[config["dataset"]]),
+        "input_dim": input_dim,
         "num_classes": len(CLASS_LABELS[config["dataset"]]),
         "input_encoding": config["model"]["input_encoding"],
         "pt_mode": config["model"]["pt_mode"],
@@ -1254,6 +1331,7 @@ def train_ray_trial(config, args, outdir=None):
         comet_step_freq=config["comet_step_freq"],
         dtype=getattr(torch, config["dtype"]),
         val_freq=config["val_freq"],
+        standardization_dict=None,
     )
 
 
@@ -1346,7 +1424,6 @@ def run_hpo(config, args):
     import ray
     from ray import tune
     from ray.train.torch import TorchTrainer
-
     from raytune.pt_search_space import raytune_num_samples, search_space
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 

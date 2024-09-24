@@ -88,6 +88,8 @@ parser.add_argument(
 )
 parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
 
+parser.add_argument("--standardize-input", action="store_true", default=None, help="will standardize the input features before training")
+
 
 def get_outdir(resume_training, load):
     outdir = None

@@ -1,20 +1,22 @@
+import glob
 import os
 
-# to prevent https://stackoverflow.com/questions/52026652/openblas-blas-thread-init-pthread-create-resource-temporarily-unavailable
+# noqa: to prevent https://stackoverflow.com/questions/52026652/openblas-blas-thread-init-pthread-create-resource-temporarily-unavailable
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
-import numpy as np
+import bz2
+
 import awkward
+import fastjet
+import numpy as np
+import pyhepmc
+import tqdm
 import uproot
 import vector
-import tqdm
-import pyhepmc
-import bz2
-import fastjet
 from scipy.sparse import coo_matrix
 
 track_coll = "SiTracks_Refitted"
@@ -61,6 +63,16 @@ cluster_feature_order = [
     "sigma_x",
     "sigma_y",
     "sigma_z",
+    # additional cluster input features
+    "energyError",
+    "sigma_energy",
+    "sigma_x_weighted",
+    "sigma_y_weighted",
+    "sigma_z_weighted",
+    "energy_weighted_width",
+    "pos_shower_max",
+    "width_shower_max",
+    "energy_shower_max",
 ]
 hit_feature_order = [
     "elemtype",
@@ -311,7 +323,7 @@ def genparticle_track_adj(sitrack_links, iev):
 
 def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     cluster_arr = prop_data["PandoraClusters"][iev]
-    feats = ["type", "position.x", "position.y", "position.z", "iTheta", "phi", "energy"]
+    feats = ["type", "position.x", "position.y", "position.z", "iTheta", "phi", "energy", "energyError"]
     ret = {feat: cluster_arr["PandoraClusters." + feat] for feat in feats}
 
     hit_idx = np.array(hit_to_cluster[0])
@@ -324,8 +336,15 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     cl_sigma_y = []
     cl_sigma_z = []
 
+    cl_sigma_energy = []
+    cl_sigma_x_weighted, cl_sigma_y_weighted, cl_sigma_z_weighted = [], [], []
+    cl_energy_weighted_width = []
+    cl_pos_shower_max, cl_energy_shower_max, cl_width_shower_max = [], [], []
+
     n_cl = len(ret["energy"])
-    for cl in range(n_cl):
+
+    # xs, ys, zs, es = [], [], [], []
+    for i, cl in enumerate(range(n_cl)):
         msk_cl = cluster_idx == cl
         hits = hit_idx[msk_cl]
 
@@ -351,6 +370,46 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
         cl_sigma_y.append(np.std(hits_posy))
         cl_sigma_z.append(np.std(hits_posz))
 
+        cl_sigma_energy.append(np.std(hits_energy))
+        cl_sigma_x_weighted.append(np.std(hits_posx * hits_energy))
+        cl_sigma_y_weighted.append(np.std(hits_posy * hits_energy))
+        cl_sigma_z_weighted.append(np.std(hits_posz * hits_energy))
+
+        # z_bar = np.sum(hits_posz * hits_energy) / np.sum(hits_energy)  # energy weighted average
+        x_bar = np.sum(hits_posx * hits_energy) / np.sum(hits_energy)  # energy weighted average
+        y_bar = np.sum(hits_posy * hits_energy) / np.sum(hits_energy)  # energy weighted average
+
+        num = (np.sum(hits_energy * (hits_posx - x_bar) ** 2)) + (np.sum(hits_energy * (hits_posy - y_bar) ** 2))
+        den = np.sum(hits_energy)
+
+        cl_energy_weighted_width.append(num / den)
+
+        # get position at shower max
+        # at each unique "z" integrate the energy of all the hits to find zmax
+        zmax, emax = 0, -1000
+        for z in np.unique(np.array(hits_posz)):
+            msk = np.array(hits_posz) == z
+            ez = np.sum(np.array(hits_energy)[msk])
+
+            if ez > emax:
+                zmax, emax = z, ez
+
+        cl_pos_shower_max.append(zmax)
+        cl_energy_shower_max.append(emax)
+
+        # get width at shower max
+        msk = np.array(hits_posz) == zmax  # select the hits at zmax
+
+        x_bar = np.sum(np.array(hits_posx)[msk] * np.array(hits_energy)[msk]) / np.sum(np.array(hits_energy)[msk])  # energy weighted average
+        y_bar = np.sum(np.array(hits_posy)[msk] * np.array(hits_energy)[msk]) / np.sum(np.array(hits_energy)[msk])  # energy weighted average
+
+        num = (np.sum(np.array(hits_energy)[msk] * (np.array(hits_posx)[msk] - x_bar) ** 2)) + (
+            np.sum(np.array(hits_energy)[msk] * (np.array(hits_posy)[msk] - y_bar) ** 2)
+        )
+        den = np.sum(np.array(hits_energy)[msk])
+
+        cl_width_shower_max.append(num / den)
+
     ret["energy_ecal"] = np.array(cl_energy_ecal)
     ret["energy_hcal"] = np.array(cl_energy_hcal)
     ret["energy_other"] = np.array(cl_energy_other)
@@ -373,6 +432,17 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
 
     ret["sin_phi"] = np.sin(ret["phi"])
     ret["cos_phi"] = np.cos(ret["phi"])
+
+    # additional cluster input features
+    ret["sigma_energy"] = np.array(cl_sigma_energy)
+    ret["sigma_x_weighted"] = np.array(cl_sigma_x_weighted)
+    ret["sigma_y_weighted"] = np.array(cl_sigma_y_weighted)
+    ret["sigma_z_weighted"] = np.array(cl_sigma_z_weighted)
+    ret["energy_weighted_width"] = np.array(cl_energy_weighted_width)
+
+    ret["pos_shower_max"] = np.array(cl_pos_shower_max)
+    ret["energy_shower_max"] = np.array(cl_energy_shower_max)
+    ret["width_shower_max"] = np.array(cl_width_shower_max)
 
     return awkward.Record(ret)
 
@@ -936,16 +1006,25 @@ def parse_args():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
+    parser.add_argument("--input", type=str, help="Input ROOT file - else if dir then will process all files inside", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
     args = parser.parse_args()
     return args
 
 
 def process(args):
-    infile = args.input
-    outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-    process_one_file(infile, outfile)
+
+    if os.path.isdir(args.input) is True:
+        print("Will process all files in " + args.input)
+
+        flist = glob.glob(args.input + "/*.root")
+        for infile in flist:
+            outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
+            process_one_file(infile, outfile)
+    else:
+        infile = args.input
+        outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
+        process_one_file(infile, outfile)
 
 
 if __name__ == "__main__":
