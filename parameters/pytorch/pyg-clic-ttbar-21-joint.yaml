@@ -1,0 +1,123 @@
+backend: pytorch
+
+standardize_input: True
+save_attention: yes
+dataset: clic
+sort_data: no
+data_dir:
+gpus: 1
+gpu_batch_multiplier: 1
+load:
+num_epochs: 100
+patience: 20
+lr: 0.0001
+lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
+conv_type: attention  # gnn_lsh, attention, mamba, flashattention
+ntrain:
+ntest:
+nvalid:
+num_workers: 0
+prefetch_factor:
+checkpoint_freq:
+comet_name: particleflow-pt
+comet_offline: False
+comet_step_freq: 100
+dtype: float32
+val_freq:  # run an extra validation run every val_freq training steps
+
+model:
+  trainable: all
+  learned_representation_mode: last #last, concat
+  input_encoding: joint #split, joint
+  pt_mode: direct-elemtype-split
+  eta_mode: linear
+  sin_phi_mode: linear
+  cos_phi_mode: linear
+  energy_mode: direct-elemtype-split
+
+  gnn_lsh:
+    conv_type: gnn_lsh
+    embedding_dim: 512
+    width: 512
+    num_convs: 8
+    activation: "elu"
+    # gnn-lsh specific parameters
+    bin_size: 32
+    max_num_bins: 200
+    distance_dim: 128
+    layernorm: True
+    num_node_messages: 2
+    ffn_dist_hidden_dim: 128
+    ffn_dist_num_layers: 2
+
+  attention:
+    conv_type: attention
+    num_convs: 4
+    dropout_ff: 0.0
+    dropout_conv_id_mha: 0.0
+    dropout_conv_id_ff: 0.0
+    dropout_conv_reg_mha: 0.0
+    dropout_conv_reg_ff: 0.0
+    activation: "gelu"
+    head_dim: 32
+    num_heads: 32
+    attention_type: math
+    use_pre_layernorm: True
+
+  mamba:
+    conv_type: mamba
+    embedding_dim: 128
+    width: 128
+    num_convs: 2
+    dropout: 0.0
+    activation: "elu"
+    # transformer specific paramters
+    num_heads: 2
+    # mamba specific paramters
+    d_state: 16
+    d_conv: 4
+    expand: 2
+
+lr_schedule_config:
+  onecycle:
+    pct_start: 0.3
+
+raytune:
+  local_dir:  # Note: please specify an absolute path
+  sched:  # asha, hyperband
+  search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
+  default_metric: "val_loss"
+  default_mode: "min"
+  # Tune schedule specific parameters
+  asha:
+    max_t: 200
+    reduction_factor: 4
+    brackets: 1
+    grace_period: 10
+  hyperband:
+    max_t: 200
+    reduction_factor: 4
+  hyperopt:
+    n_random_steps: 10
+  nevergrad:
+    n_random_steps: 10
+
+train_dataset:
+  clic:
+    physical:
+      batch_size: 1
+      samples:
+        clic_edm_ttbar_pf:
+          version: 2.1.0
+
+valid_dataset:
+  clic:
+    physical:
+      batch_size: 1
+      samples:
+        clic_edm_ttbar_pf:
+          version: 2.1.0
+
+test_dataset:
+  clic_edm_ttbar_pf:
+    version: 2.1.0
