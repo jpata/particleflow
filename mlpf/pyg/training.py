@@ -140,16 +140,16 @@ def mlpf_loss(y, ypred, batch):
     # compute predicted pt from model output
     pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], axis=-1) * msk_pred_particle
     pred_e = torch.unsqueeze(torch.exp(ypred["energy"]) * batch.X[..., 5], axis=-1) * msk_pred_particle
-    pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"], axis=-1) * msk_pred_particle
-    pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"], axis=-1) * msk_pred_particle
-    pred_pz = pred_pt * torch.unsqueeze(torch.sinh(ypred["eta"]), axis=-1) * msk_pred_particle
+    pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"].detach(), axis=-1) * msk_pred_particle
+    pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"].detach(), axis=-1) * msk_pred_particle
+    pred_pz = pred_pt * torch.unsqueeze(torch.sinh(ypred["eta"].detach()), axis=-1) * msk_pred_particle
     pred_mass2 = pred_e**2 - pred_pt**2 - pred_pz**2
 
     target_pt = torch.unsqueeze(torch.exp(y["pt"]) * batch.X[..., 1], axis=-1) * msk_true_particle
     target_e = torch.unsqueeze(torch.exp(y["energy"]) * batch.X[..., 5], axis=-1) * msk_true_particle
     target_pz = target_pt * torch.unsqueeze(torch.sinh(y["eta"]), axis=-1) * msk_true_particle
     target_mass2 = target_e**2 - target_pt**2 - target_pz**2
-    loss["Mass"] = 1e-2 * torch.nn.functional.mse_loss(pred_mass2, target_mass2, reduction="none")
+    loss["Mass"] = 1e-4 * torch.nn.functional.mse_loss(pred_mass2.detach(), target_mass2, reduction="none")
     loss["Mass"][y["cls_id"] == 0] *= 0
     loss["Mass"] = loss["Mass"].mean() / npart
 
@@ -177,7 +177,7 @@ def mlpf_loss(y, ypred, batch):
         + loss["Regression_sin_phi"]
         + loss["Regression_cos_phi"]
         + loss["Regression_energy"]
-        + loss["Mass"]
+        # + loss["Mass"]
     )
 
     # store these separately but detached
