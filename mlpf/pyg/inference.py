@@ -17,6 +17,7 @@ from plotting.plot_utils import (
     plot_jets,
     plot_jet_ratio,
     plot_jet_response_binned,
+    plot_jet_response_binned_vstarget,
     plot_jet_response_binned_eta,
     plot_met,
     plot_met_ratio,
@@ -242,6 +243,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
         sample=sample,
     )
     plot_jet_response_binned(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_jet_response_binned_vstarget(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
     plot_jet_response_binned_eta(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
     # plot_jet_response_binned_separate(yvals, cp_dir=plots_path, title=title)
 
