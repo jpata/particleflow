@@ -158,15 +158,11 @@ def mlpf_loss(y, ypred, batch, epoch):
     std = was_input_true[batch.mask].std(axis=0)
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
-    loss["Total"] = loss["Classification_binary"]
-
-    if epoch >= 3:
-        loss["Total"] += loss["Classification"]
-
-    elif epoch >= 6:
+    loss["Total"] = loss["Classification_binary"] + loss["Classification"]
+    if epoch >= 5:
         # this is the final loss to be optimized
-        loss["Total"] = (
-            +loss["Regression_pt"]
+        loss["Total"] += (
+            loss["Regression_pt"]
             + loss["Regression_eta"]
             + loss["Regression_sin_phi"]
             + loss["Regression_cos_phi"]
