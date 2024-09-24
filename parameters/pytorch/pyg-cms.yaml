@@ -113,6 +113,11 @@ train_dataset:
           version: 2.3.0
         cms_pf_qcd:
           version: 2.3.0
+    physical_nopu:
+      batch_size: 8
+      samples:
+        cms_pf_ttbar_nopu:
+          version: 2.3.0
 
 valid_dataset:
   cms:
