@@ -1,6 +1,6 @@
 backend: pytorch
 
-standardize_inputs: False
+standardize_inputs: True
 save_attention: yes
 dataset: clic
 sort_data: no
