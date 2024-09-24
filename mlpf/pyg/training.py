@@ -160,10 +160,10 @@ def mlpf_loss(y, ypred, batch, epoch):
 
     loss["Total"] = loss["Classification_binary"]
 
-    if epoch >= 2:
+    if epoch >= 3:
         loss["Total"] += loss["Classification"]
 
-    elif epoch >= 4:
+    elif epoch >= 6:
         # this is the final loss to be optimized
         loss["Total"] = (
             +loss["Regression_pt"]
@@ -906,9 +906,10 @@ def train_mlpf(
                 + losses_t["Regression_cos_phi"]
                 + losses_t["Regression_energy"]
             )
+            log_tot = losses_t["Classification"] + losses_t["Classification_binary"] + log_t
 
             _logger.info(
-                f"train: loss_total={losses_t['Total']:.4f} "
+                f"train: loss_total={log_tot:.4f} "
                 + f"loss_clf={losses_t['Classification']:.4f} "
                 + f"loss_clfbinary={losses_t['Classification_binary']:.4f} "
                 + f"loss_reg={log_t:.4f} ",
@@ -922,9 +923,10 @@ def train_mlpf(
                 + losses_v["Regression_cos_phi"]
                 + losses_v["Regression_energy"]
             )
+            log_tot = losses_v["Classification"] + losses_v["Classification_binary"] + log_v
 
             _logger.info(
-                f"valid: loss_total={losses_v['Total']:.4f} "
+                f"valid: loss_total={log_tot:.4f} "
                 + f"loss_clf={losses_v['Classification']:.4f} "
                 + f"loss_clfbinary={losses_v['Classification_binary']:.4f} "
                 + f"loss_reg={log_v:.4f} ",
