@@ -128,3 +128,5 @@ test_dataset:
     version: 2.1.0
   clic_edm_qq_pf:
     version: 2.1.0
+  clic_edm_ww_fullhad_pf:
+    version: 2.1.0

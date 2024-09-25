@@ -734,7 +734,7 @@ def load_hepmc(hepmc_file_path):
     events = []
     with pyhepmc.open(bz2.BZ2File(hepmc_file_path, "rb")) as f:
         for event in f:
-            parts = [p for p in event.particles if p.status == 1 and (p.pid != 12) and (p.pid != 14) and (p.pid != 16)]
+            parts = [p for p in event.particles if p.status == 1 and (abs(p.pid) != 12) and (abs(p.pid) != 14) and (abs(p.pid) != 16)]
             parts = {
                 "MCParticles.momentum.x": [p.momentum.x for p in parts],
                 "MCParticles.momentum.y": [p.momentum.y for p in parts],
