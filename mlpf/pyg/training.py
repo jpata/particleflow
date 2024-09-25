@@ -269,6 +269,8 @@ class FocalLoss(nn.Module):
 
 
 def configure_model_trainable(model, trainable, is_training):
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        raise Exception("configure trainability before distributing the model")
     if is_training:
         model.train()
         if trainable != "all":
@@ -460,7 +462,6 @@ def train_and_valid(
     # this one will keep accumulating `train_loss` and then return the average
     epoch_loss = {}
 
-    configure_model_trainable(model, trainable, is_train)
     if is_train:
         data_loader = train_loader
     else:
@@ -949,12 +950,12 @@ def run(rank, world_size, config, args, outdir, logfile):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
     model.to(rank)
+    configure_model_trainable(model, config["model"]["trainable"], True)
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
-    configure_model_trainable(model, config["model"]["trainable"], True)
     trainable_params, nontrainable_params, table = count_parameters(model)
 
     if (rank == 0) or (rank == "cpu"):
