@@ -141,7 +141,21 @@ X_FEATURES = {
     ],
 }
 
-Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "ispu", "jet_idx"]
+Y_FEATURES = [
+    "PDG",
+    "charge",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "ispu",
+    "generatorStatus",
+    "simulatorStatus",
+    "gp_to_track",
+    "gp_to_cluster",
+    "jet_idx",
+]
 
 
 def unpack_target(y, model):

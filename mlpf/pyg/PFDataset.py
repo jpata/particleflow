@@ -27,9 +27,6 @@ class TFDSDataSource:
         if len(item) == 1:
             ret = ret[0]
 
-        # relabel until datasets are regenerated
-        ret["ytarget"] = ret["ygen"]
-
         # sort the elements in each event in pT descending order
         if self.sort:
             sortidx = np.argsort(ret["X"][:, 1])[::-1]
@@ -81,12 +78,15 @@ class TFDSDataSource:
 
         # transform pt -> log(pt / elem pt), same for energy
         target_pt = np.log(ret["ytarget"][:, 2] / ret["X"][:, 1])
-        target_pt[ret["ytarget"][:, 0] == 0] = 0
+        target_pt[np.isnan(target_pt)] = 0
+        target_pt[np.isinf(target_pt)] = 0
         ret["ytarget_pt_orig"] = ret["ytarget"][:, 2].copy()
         ret["ytarget"][:, 2] = target_pt
 
         target_e = np.log(ret["ytarget"][:, 6] / ret["X"][:, 5])
         target_e[ret["ytarget"][:, 0] == 0] = 0
+        target_e[np.isnan(target_e)] = 0
+        target_e[np.isinf(target_e)] = 0
         ret["ytarget_e_orig"] = ret["ytarget"][:, 6].copy()
         ret["ytarget"][:, 6] = target_e
 

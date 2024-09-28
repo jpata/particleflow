@@ -138,19 +138,10 @@ def mlpf_loss(y, ypred, batch):
 
     # compute predicted pt from model output
     pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], axis=-1) * msk_pred_particle
-    pred_e = torch.unsqueeze(torch.exp(ypred["energy"]) * batch.X[..., 5], axis=-1) * msk_pred_particle
     pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"].detach(), axis=-1) * msk_pred_particle
     pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"].detach(), axis=-1) * msk_pred_particle
-    pred_pz = pred_pt * torch.unsqueeze(torch.sinh(ypred["eta"].detach()), axis=-1) * msk_pred_particle
-    pred_mass2 = pred_e**2 - pred_pt**2 - pred_pz**2
-
-    target_pt = torch.unsqueeze(torch.exp(y["pt"]) * batch.X[..., 1], axis=-1) * msk_true_particle
-    target_e = torch.unsqueeze(torch.exp(y["energy"]) * batch.X[..., 5], axis=-1) * msk_true_particle
-    target_pz = target_pt * torch.unsqueeze(torch.sinh(y["eta"]), axis=-1) * msk_true_particle
-    target_mass2 = target_e**2 - target_pt**2 - target_pz**2
-    loss["Mass"] = 1e-4 * torch.nn.functional.mse_loss(pred_mass2.detach(), target_mass2, reduction="none")
-    loss["Mass"][y["cls_id"] == 0] *= 0
-    loss["Mass"] = loss["Mass"].mean() / npart
+    # pred_pz = pred_pt * torch.unsqueeze(torch.sinh(ypred["eta"].detach()), axis=-1) * msk_pred_particle
+    # pred_mass2 = pred_e**2 - pred_pt**2 - pred_pz**2
 
     # compute MET, sum across particle axis in event
     pred_met = torch.sqrt(torch.sum(pred_px, axis=-2) ** 2 + torch.sum(pred_py, axis=-2) ** 2).detach()
@@ -176,7 +167,6 @@ def mlpf_loss(y, ypred, batch):
         + loss["Regression_sin_phi"]
         + loss["Regression_cos_phi"]
         + loss["Regression_energy"]
-        # + loss["Mass"]
     )
 
     # store these separately but detached
@@ -188,7 +178,10 @@ def mlpf_loss(y, ypred, batch):
     loss["Regression_cos_phi"] = loss["Regression_cos_phi"].detach()
     loss["Regression_energy"] = loss["Regression_energy"].detach()
     loss["Sliced_Wasserstein_Loss"] = loss["Sliced_Wasserstein_Loss"].detach()
-    loss["Mass"] = loss["Mass"].detach()
+
+    # print out losses for debugging
+    # for k in sorted(loss.keys()):
+    #     print(k, loss[k].item())
 
     return loss
 
@@ -696,7 +689,6 @@ def train_mlpf(
         "Regression_sin_phi",
         "Regression_cos_phi",
         "Regression_energy",
-        "Mass",
     ]
 
     losses = {}
@@ -1066,7 +1058,10 @@ def run(rank, world_size, config, args, outdir, logfile):
             torch.cuda.empty_cache()
 
             if args.dataset == "clic":
-                from heptfds.clic_pf_edm4hep.utils_edm import jetdef, jet_ptcut
+                import fastjet
+
+                jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
+                jet_ptcut = 5
             elif args.dataset == "cms":
                 from heptfds.cms_pf.cms_utils import jetdef, jet_ptcut
             else:
