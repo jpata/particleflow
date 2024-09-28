@@ -26,7 +26,7 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("2.1.0")
+    VERSION = tfds.core.Version("2.2.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "update stats, move to 380 GeV",
@@ -36,6 +36,7 @@ class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
         "1.5.0": "Regenerate with ARRAY_RECORD",
         "2.0.0": "Add ispu, genjets, genmet; disable genjet_idx; truth def not based on gp.status==1",
         "2.1.0": "Bump dataset size",
+        "2.2.0": "Fix truth jets, add targetjets and jet idx",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
@@ -66,6 +67,7 @@ class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "genmet": tfds.features.Scalar(dtype=tf.float32),
                     "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
+                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
             supervised_keys=None,

@@ -27,48 +27,51 @@ class TFDSDataSource:
         if len(item) == 1:
             ret = ret[0]
 
+        # relabel until datasets are regenerated
+        ret["ytarget"] = ret["ygen"]
+
         # sort the elements in each event in pT descending order
         if self.sort:
             sortidx = np.argsort(ret["X"][:, 1])[::-1]
             ret["X"] = ret["X"][sortidx]
             ret["ycand"] = ret["ycand"][sortidx]
-            ret["ygen"] = ret["ygen"][sortidx]
+            ret["ytarget"] = ret["ytarget"][sortidx]
 
         if self.ds.dataset_info.name.startswith("cms_"):
             # track, target label neutral hadron -> reconstruct as charged hadron
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 1) & (ret["ygen"][:, 0] == 2)] = 1
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 1) & (ret["ytarget"][:, 0] == 2)] = 1
 
             # track, target label photon -> reconstruct as charged hadron
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 1) & (ret["ygen"][:, 0] == 5)] = 1
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 1) & (ret["ytarget"][:, 0] == 5)] = 1
 
             # ECAL cluster, target label charged hadron -> reconstruct as photon
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 4) & (ret["ygen"][:, 0] == 1)] = 5
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 4) & (ret["ytarget"][:, 0] == 1)] = 5
 
             # HCAL cluster, target label charged hadron -> reconstruct as neutral hadron
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 1)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 5) & (ret["ytarget"][:, 0] == 1)] = 2
 
             # ECAL cluster, target label electron -> reconstruct as photon
-            # ret["ygen"][:, 0][(ret["X"][:, 0]==4) & (ret["ygen"][:, 0] == 6)] = 5
+            # ret["ytarget"][:, 0][(ret["X"][:, 0]==4) & (ret["ytarget"][:, 0] == 6)] = 5
 
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 6)] = 2
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 4) & (ret["ygen"][:, 0] == 7)] = 5
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 5) & (ret["ygen"][:, 0] == 7)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 5) & (ret["ytarget"][:, 0] == 6)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 4) & (ret["ytarget"][:, 0] == 7)] = 5
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 5) & (ret["ytarget"][:, 0] == 7)] = 2
 
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 1)] = 4
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 1)] = 3
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 2)] = 4
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 2)] = 3
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 6)] = 4
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 6)] = 3
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 8) & (ret["ygen"][:, 0] == 7)] = 4
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 9) & (ret["ygen"][:, 0] == 7)] = 3
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 8) & (ret["ytarget"][:, 0] == 1)] = 4
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 9) & (ret["ytarget"][:, 0] == 1)] = 3
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 8) & (ret["ytarget"][:, 0] == 2)] = 4
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 9) & (ret["ytarget"][:, 0] == 2)] = 3
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 8) & (ret["ytarget"][:, 0] == 6)] = 4
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 9) & (ret["ytarget"][:, 0] == 6)] = 3
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 8) & (ret["ytarget"][:, 0] == 7)] = 4
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 9) & (ret["ytarget"][:, 0] == 7)] = 3
 
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 10) & (ret["ygen"][:, 0] == 1)] = 2
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 11) & (ret["ygen"][:, 0] == 1)] = 2
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 10) & (ret["ygen"][:, 0] == 6)] = 2
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 11) & (ret["ygen"][:, 0] == 6)] = 2
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 10) & (ret["ygen"][:, 0] == 7)] = 2
-            ret["ygen"][:, 0][(ret["X"][:, 0] == 11) & (ret["ygen"][:, 0] == 7)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 10) & (ret["ytarget"][:, 0] == 1)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 11) & (ret["ytarget"][:, 0] == 1)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 10) & (ret["ytarget"][:, 0] == 6)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 11) & (ret["ytarget"][:, 0] == 6)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 10) & (ret["ytarget"][:, 0] == 7)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 11) & (ret["ytarget"][:, 0] == 7)] = 2
 
             # set pt for HO which would otherwise be 0
             msk_ho = ret["X"][:, 0] == 10
@@ -77,15 +80,15 @@ class TFDSDataSource:
             ret["X"][:, 1][msk_ho] = np.sqrt(e**2 - (np.tanh(eta) * e) ** 2)
 
         # transform pt -> log(pt / elem pt), same for energy
-        ret["ygen"][:, 6] = np.log(ret["ygen"][:, 6] / ret["X"][:, 5])
-        ret["ygen"][:, 6][np.isnan(ret["ygen"][:, 6])] = 0.0
-        ret["ygen"][:, 6][np.isinf(ret["ygen"][:, 6])] = 0.0
-        ret["ygen"][:, 6][ret["ygen"][:, 0] == 0] = 0
+        target_pt = np.log(ret["ytarget"][:, 2] / ret["X"][:, 1])
+        target_pt[ret["ytarget"][:, 0] == 0] = 0
+        ret["ytarget_pt_orig"] = ret["ytarget"][:, 2].copy()
+        ret["ytarget"][:, 2] = target_pt
 
-        ret["ygen"][:, 2] = np.log(ret["ygen"][:, 2] / ret["X"][:, 1])
-        ret["ygen"][:, 2][np.isnan(ret["ygen"][:, 2])] = 0.0
-        ret["ygen"][:, 2][np.isinf(ret["ygen"][:, 2])] = 0.0
-        ret["ygen"][:, 2][ret["ygen"][:, 0] == 0] = 0
+        target_e = np.log(ret["ytarget"][:, 6] / ret["X"][:, 5])
+        target_e[ret["ytarget"][:, 0] == 0] = 0
+        ret["ytarget_e_orig"] = ret["ytarget"][:, 6].copy()
+        ret["ytarget"][:, 6] = target_e
 
         return ret
 
@@ -105,7 +108,6 @@ class PFDataset:
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
             name: sample and version (e.g. `clic_edm_ttbar_pf:1.5.0`)
             split: "train" or "test" (if "valid" then will use "test")
-            keys_to_get: any keys in the TFDS to retrieve (e.g. X, ygen, ycand)
         """
         if split == "valid":
             split = "test"
@@ -127,10 +129,13 @@ class PFBatch:
 
         # write out the possible attributes here explicitly
         self.X = kwargs.get("X")
-        self.ygen = kwargs.get("ygen")
+        self.ytarget = kwargs.get("ytarget")
+        self.ytarget_pt_orig = kwargs.get("ytarget_pt_orig", None)
+        self.ytarget_e_orig = kwargs.get("ytarget_e_orig", None)
         self.ycand = kwargs.get("ycand", None)
         self.genmet = kwargs.get("genmet", None)
         self.genjets = kwargs.get("genjets", None)
+        self.targetjets = kwargs.get("targetjets", None)
         self.mask = self.X[:, :, 0] != 0
 
     def to(self, device, **kwargs):
@@ -158,7 +163,6 @@ class Collater:
         # per-event quantities can be stacked across events
         for key_to_get in self.per_event_keys_to_get:
             ret[key_to_get] = torch.stack([torch.tensor(inp[key_to_get]) for inp in inputs])
-
         return PFBatch(**ret)
 
 
@@ -245,7 +249,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen", "genjets"], ["genmet"]),
+                collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "genjets", "targetjets"], ["genmet"]),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],

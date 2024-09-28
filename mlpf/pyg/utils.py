@@ -141,7 +141,7 @@ X_FEATURES = {
     ],
 }
 
-Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
+Y_FEATURES = ["cls_id", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "ispu", "jet_idx"]
 
 
 def unpack_target(y, model):
@@ -163,8 +163,6 @@ def unpack_target(y, model):
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
     ret["momentum"] = y[..., 2:7].to(dtype=torch.float32)
     ret["p4"] = torch.cat([ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], axis=-1)
-
-    ret["ispu"] = y[..., -1]
 
     return ret
 

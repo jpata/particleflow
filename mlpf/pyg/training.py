@@ -46,7 +46,6 @@ from pyg.utils import (
 )
 
 
-import fastjet
 from pyg.inference import make_plots, run_predictions
 
 from pyg.mlpf import set_save_attention
@@ -287,16 +286,16 @@ def configure_model_trainable(model, trainable, is_training):
         model.eval()
 
 
-def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, outdir):
+def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir):
     X = batch.X[batch.mask].cpu()
-    ygen_flat = batch.ygen[batch.mask].cpu()
+    ytarget_flat = batch.ytarget[batch.mask].cpu()
     ypred_binary = ypred_raw[0][batch.mask].detach().cpu()
     ypred_binary_cls = torch.argmax(ypred_binary, axis=-1)
     ypred_cls = ypred_raw[1][batch.mask].detach().cpu()
     ypred_p4 = ypred_raw[2][batch.mask].detach().cpu()
 
     arr = torch.concatenate(
-        [X, ygen_flat, ypred_binary, ypred_cls, ypred_p4],
+        [X, ytarget_flat, ypred_binary, ypred_cls, ypred_p4],
         axis=-1,
     ).numpy()
     df = pandas.DataFrame(arr)
@@ -307,110 +306,110 @@ def validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, o
         for xcls in np.unique(X[:, 0]):
             fig = plt.figure()
             msk = X[:, 0] == xcls
-            egen = ygen_flat[msk & (ygen_flat[:, 0] != 0), 6]
+            etarget = ytarget_flat[msk & (ytarget_flat[:, 0] != 0), 6]
             epred = ypred_p4[msk & (ypred_binary_cls != 0), 4]
             b = np.linspace(-4, 4, 100)
-            plt.hist(egen, bins=b, histtype="step")
+            plt.hist(etarget, bins=b, histtype="step")
             plt.hist(epred, bins=b, histtype="step")
             plt.xlabel("log [E/E_elem]")
             tensorboard_writer.add_figure("energy_elemtype{}".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure()
             msk = X[:, 0] == xcls
-            pt_gen = ygen_flat[msk & (ygen_flat[:, 0] != 0), 2]
+            pt_target = ytarget_flat[msk & (ytarget_flat[:, 0] != 0), 2]
             pt_pred = ypred_p4[msk & (ypred_binary_cls != 0), 0]
             b = np.linspace(-4, 4, 100)
-            plt.hist(egen, bins=b, histtype="step")
+            plt.hist(etarget, bins=b, histtype="step")
             plt.hist(epred, bins=b, histtype="step")
             plt.xlabel("log [pt/pt_elem]")
             tensorboard_writer.add_figure("pt_elemtype{}".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure(figsize=(5, 5))
-            msk = (X[:, 0] == xcls) & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
-            egen = ygen_flat[msk, 6]
+            msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
+            etarget = ytarget_flat[msk, 6]
             epred = ypred_p4[msk, 4]
             b = np.linspace(-4, 4, 100)
-            plt.hist2d(egen, epred, bins=b, cmap="Blues")
+            plt.hist2d(etarget, epred, bins=b, cmap="Blues")
             plt.plot([-4, 4], [-4, 4], color="black", ls="--")
-            plt.xlabel("log [E_gen/E_elem]")
+            plt.xlabel("log [E_target/E_elem]")
             plt.ylabel("log [E_pred/E_elem]")
             tensorboard_writer.add_figure("energy_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure(figsize=(5, 5))
-            msk = (X[:, 0] == xcls) & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
-            pt_gen = ygen_flat[msk, 2]
+            msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
+            pt_target = ytarget_flat[msk, 2]
             pt_pred = ypred_p4[msk, 0]
             b = np.linspace(-4, 4, 100)
-            plt.hist2d(pt_gen, pt_pred, bins=b, cmap="Blues")
+            plt.hist2d(pt_target, pt_pred, bins=b, cmap="Blues")
             plt.plot([-4, 4], [-4, 4], color="black", ls="--")
-            plt.xlabel("log [pt_gen/pt_elem]")
+            plt.xlabel("log [pt_target/pt_elem]")
             plt.ylabel("log [pt_pred/pt_elem]")
             tensorboard_writer.add_figure("pt_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure(figsize=(5, 5))
-            msk = (X[:, 0] == xcls) & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
-            eta_gen = ygen_flat[msk, 3]
+            msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
+            eta_target = ytarget_flat[msk, 3]
             eta_pred = ypred_p4[msk, 1]
             b = np.linspace(-6, 6, 100)
-            plt.hist2d(eta_gen, eta_pred, bins=b, cmap="Blues")
+            plt.hist2d(eta_target, eta_pred, bins=b, cmap="Blues")
             plt.plot([-6, 6], [-6, 6], color="black", ls="--")
-            plt.xlabel("eta_gen")
+            plt.xlabel("eta_target")
             plt.ylabel("eta_pred")
             tensorboard_writer.add_figure("eta_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure(figsize=(5, 5))
-            msk = (X[:, 0] == xcls) & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
-            sphi_gen = ygen_flat[msk, 4]
+            msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
+            sphi_target = ytarget_flat[msk, 4]
             sphi_pred = ypred_p4[msk, 2]
             b = np.linspace(-2, 2, 100)
-            plt.hist2d(sphi_gen, sphi_pred, bins=b, cmap="Blues")
+            plt.hist2d(sphi_target, sphi_pred, bins=b, cmap="Blues")
             plt.plot([-2, 2], [-2, 2], color="black", ls="--")
-            plt.xlabel("sin_phi_gen")
+            plt.xlabel("sin_phi_target")
             plt.ylabel("sin_phi_pred")
             tensorboard_writer.add_figure("sphi_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure(figsize=(5, 5))
-            msk = (X[:, 0] == xcls) & (ygen_flat[:, 0] != 0) & (ypred_binary_cls != 0)
-            cphi_gen = ygen_flat[msk, 5]
+            msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
+            cphi_target = ytarget_flat[msk, 5]
             cphi_pred = ypred_p4[msk, 3]
             b = np.linspace(-2, 2, 100)
-            plt.hist2d(cphi_gen, cphi_pred, bins=b, cmap="Blues")
+            plt.hist2d(cphi_target, cphi_pred, bins=b, cmap="Blues")
             plt.plot([-2, 2], [-2, 2], color="black", ls="--")
-            plt.xlabel("cos_phi_gen")
+            plt.xlabel("cos_phi_target")
             plt.ylabel("cos_phi_pred")
             tensorboard_writer.add_figure("cphi_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure()
             msk = X[:, 0] == xcls
             b = np.linspace(0, 1, 100)
-            plt.hist(sig_prob[msk & (ygen_flat[:, 0] == 0)], bins=b, histtype="step")
-            plt.hist(sig_prob[msk & (ygen_flat[:, 0] != 0)], bins=b, histtype="step")
+            plt.hist(sig_prob[msk & (ytarget_flat[:, 0] == 0)], bins=b, histtype="step")
+            plt.hist(sig_prob[msk & (ytarget_flat[:, 0] != 0)], bins=b, histtype="step")
             plt.xlabel("particle proba")
             tensorboard_writer.add_figure("sig_proba_elemtype{}".format(int(xcls)), fig, global_step=epoch)
 
-        tensorboard_writer.add_histogram("pt_target", torch.clamp(batch.ygen[batch.mask][:, 2], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram("pt_target", torch.clamp(batch.ytarget[batch.mask][:, 2], -10, 10), global_step=epoch)
         tensorboard_writer.add_histogram("pt_pred", torch.clamp(ypred_raw[2][batch.mask][:, 0], -10, 10), global_step=epoch)
-        ratio = (ypred_raw[2][batch.mask][:, 0] / batch.ygen[batch.mask][:, 2])[batch.ygen[batch.mask][:, 0] != 0]
+        ratio = (ypred_raw[2][batch.mask][:, 0] / batch.ytarget[batch.mask][:, 2])[batch.ytarget[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("pt_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("eta_target", torch.clamp(batch.ygen[batch.mask][:, 3], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram("eta_target", torch.clamp(batch.ytarget[batch.mask][:, 3], -10, 10), global_step=epoch)
         tensorboard_writer.add_histogram("eta_pred", torch.clamp(ypred_raw[2][batch.mask][:, 1], -10, 10), global_step=epoch)
-        ratio = (ypred_raw[2][batch.mask][:, 1] / batch.ygen[batch.mask][:, 3])[batch.ygen[batch.mask][:, 0] != 0]
+        ratio = (ypred_raw[2][batch.mask][:, 1] / batch.ytarget[batch.mask][:, 3])[batch.ytarget[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("eta_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("sphi_target", torch.clamp(batch.ygen[batch.mask][:, 4], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram("sphi_target", torch.clamp(batch.ytarget[batch.mask][:, 4], -10, 10), global_step=epoch)
         tensorboard_writer.add_histogram("sphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 2], -10, 10), global_step=epoch)
-        ratio = (ypred_raw[2][batch.mask][:, 2] / batch.ygen[batch.mask][:, 4])[batch.ygen[batch.mask][:, 0] != 0]
+        ratio = (ypred_raw[2][batch.mask][:, 2] / batch.ytarget[batch.mask][:, 4])[batch.ytarget[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("sphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("cphi_target", torch.clamp(batch.ygen[batch.mask][:, 5], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram("cphi_target", torch.clamp(batch.ytarget[batch.mask][:, 5], -10, 10), global_step=epoch)
         tensorboard_writer.add_histogram("cphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 3], -10, 10), global_step=epoch)
-        ratio = (ypred_raw[2][batch.mask][:, 3] / batch.ygen[batch.mask][:, 5])[batch.ygen[batch.mask][:, 0] != 0]
+        ratio = (ypred_raw[2][batch.mask][:, 3] / batch.ytarget[batch.mask][:, 5])[batch.ytarget[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("cphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("energy_target", torch.clamp(batch.ygen[batch.mask][:, 6], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram("energy_target", torch.clamp(batch.ytarget[batch.mask][:, 6], -10, 10), global_step=epoch)
         tensorboard_writer.add_histogram("energy_pred", torch.clamp(ypred_raw[2][batch.mask][:, 4], -10, 10), global_step=epoch)
-        ratio = (ypred_raw[2][batch.mask][:, 4] / batch.ygen[batch.mask][:, 6])[batch.ygen[batch.mask][:, 0] != 0]
+        ratio = (ypred_raw[2][batch.mask][:, 4] / batch.ytarget[batch.mask][:, 6])[batch.ytarget[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("energy_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
         for attn in sorted(list(glob.glob(f"{outdir}/attn_conv_*.npz"))):
@@ -479,7 +478,7 @@ def train_and_valid(
     val_freq_time_0 = time.time()
 
     if not is_train:
-        cm_X_gen = np.zeros((13, 13))
+        cm_X_target = np.zeros((13, 13))
         cm_X_pred = np.zeros((13, 13))
         cm_id = np.zeros((13, 13))
 
@@ -487,7 +486,7 @@ def train_and_valid(
         set_save_attention(model, outdir, False)
         batch = batch.to(rank, non_blocking=True)
 
-        ygen = unpack_target(batch.ygen, model)
+        ytarget = unpack_target(batch.ytarget, model)
 
         num_elems = batch.X[batch.mask].shape[0]
         num_batch = batch.X.shape[0]
@@ -505,26 +504,26 @@ def train_and_valid(
         ypred = unpack_predictions(ypred_raw)
 
         if not is_train:
-            cm_X_gen += sklearn.metrics.confusion_matrix(
-                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ygen["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+            cm_X_target += sklearn.metrics.confusion_matrix(
+                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ytarget["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
             )
             cm_X_pred += sklearn.metrics.confusion_matrix(
                 batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
             )
             cm_id += sklearn.metrics.confusion_matrix(
-                ygen["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+                ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
             )
             # save the events of the first validation batch for quick checks
             if (rank == 0 or rank == "cpu") and itrain == 0:
-                validation_plots(batch, ypred_raw, ygen, ypred, tensorboard_writer, epoch, outdir)
+                validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
-                loss = mlpf_loss(ygen, ypred, batch)
+                loss = mlpf_loss(ytarget, ypred, batch)
                 for param in model.parameters():
                     param.grad = None
             else:
                 with torch.no_grad():
-                    loss = mlpf_loss(ygen, ypred, batch)
+                    loss = mlpf_loss(ytarget, ypred, batch)
 
         if is_train:
             loss["Total"].backward()
@@ -618,13 +617,13 @@ def train_and_valid(
 
     if not is_train and comet_experiment:
         comet_experiment.log_confusion_matrix(
-            matrix=cm_X_gen, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_gen.json"
+            matrix=cm_X_target, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_target.json"
         )
         comet_experiment.log_confusion_matrix(
             matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", epoch=epoch, file_name="cm_X_pred.json"
         )
         comet_experiment.log_confusion_matrix(
-            matrix=cm_id, title="Target to pred", row_label="gen", column_label="pred", epoch=epoch, file_name="cm_id.json"
+            matrix=cm_id, title="Target to pred", row_label="target", column_label="pred", epoch=epoch, file_name="cm_id.json"
         )
 
     num_data = torch.tensor(len(data_loader), device=rank)
@@ -673,8 +672,8 @@ def train_mlpf(
     Args:
         rank: 'cpu' or int representing the gpu device id
         model: a pytorch model (may be wrapped by DistributedDataParallel)
-        train_loader: a pytorch geometric Dataloader that loads the training data in the form ~ DataBatch(X, ygen, ycands)
-        valid_loader: a pytorch geometric Dataloader that loads the validation data in the form ~ DataBatch(X, ygen, ycands)
+        train_loader: a pytorch geometric Dataloader that loads the training data in the form ~ DataBatch(X, ytarget, ycands)
+        valid_loader: a pytorch geometric Dataloader that loads the validation data in the form ~ DataBatch(X, ytarget, ycands)
         patience: number of stale epochs before stopping the training
         outdir: path to store the model weights and training plots
     """
@@ -1051,7 +1050,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             test_loader = torch.utils.data.DataLoader(
                 ds,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ygen", "ycand", "genjets"], ["genmet"]),
+                collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
@@ -1067,12 +1066,11 @@ def run(rank, world_size, config, args, outdir, logfile):
             torch.cuda.empty_cache()
 
             if args.dataset == "clic":
-                # note: must be the same as in scripts/clic/postprocessing.py for truth jets!
-                jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
-                jet_ptcut = 5
+                from heptfds.clic_pf_edm4hep.utils_edm import jetdef, jet_ptcut
+            elif args.dataset == "cms":
+                from heptfds.cms_pf.cms_utils import jetdef, jet_ptcut
             else:
-                jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-                jet_ptcut = 3
+                raise Exception("not implemented")
 
             device_type = "cuda" if isinstance(rank, int) else "cpu"
             with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):

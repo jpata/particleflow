@@ -1661,6 +1661,7 @@ def plot_jet_response_binned_vstarget(yvals, epoch=None, cp_dir=None, comet_expe
     plt.legend(loc=1, fontsize=16, title=title)
     plt.ylabel("Response IQR / median")
     plt.xlabel(labels["target_jet"])
+    plt.ylim(bottom=0)
     plt.tight_layout()
 
     EXPERIMENT_LABELS[dataset](ax)
@@ -1787,7 +1788,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.ylabel("Response IQR / median")
     plt.xlabel(labels["gen_jet"])
     plt.tight_layout()
-
+    plt.ylim(bottom=0)
     EXPERIMENT_LABELS[dataset](ax)
     sample_label(ax, sample)
     save_img(
@@ -2035,11 +2036,10 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.legend(loc=1, fontsize=16, title=title)
     plt.xlabel(labels["gen_met"])
     plt.tight_layout()
+    plt.ylim(bottom=0)
     ax = plt.gca()
-    if dataset:
-        EXPERIMENT_LABELS[dataset](ax)
-    if sample:
-        sample_label(ax, sample)
+    EXPERIMENT_LABELS[dataset](ax)
+    sample_label(ax, sample)
     save_img(
         "met_response_iqr_over_med.png",
         epoch,
@@ -2123,6 +2123,7 @@ def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experi
     plt.xlabel(labels["gen_mom"])
     plt.legend(loc=1, fontsize=16, title=title)
     plt.tight_layout()
+    plt.ylim(bottom=0)
     save_img(
         "mom_response_med_iqr.png",
         epoch,

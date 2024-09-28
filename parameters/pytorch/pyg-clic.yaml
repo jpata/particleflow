@@ -125,8 +125,8 @@ valid_dataset:
 
 test_dataset:
   clic_edm_ttbar_pf:
-    version: 2.1.0
-  clic_edm_qq_pf:
-    version: 2.1.0
-  clic_edm_ww_fullhad_pf:
-    version: 2.1.0
+    version: 2.2.0
+#  clic_edm_qq_pf:
+#    version: 2.1.0
+#  clic_edm_ww_fullhad_pf:
+#    version: 2.1.0

@@ -11,7 +11,7 @@ def chunks(lst, n):
 def write_script(infiles, outpath):
     s = []
     s += ["#!/bin/bash"]
-    s += ["#SBATCH --partition short"]
+    s += ["#SBATCH --partition main"]
     s += ["#SBATCH --cpus-per-task 1"]
     s += ["#SBATCH --mem-per-cpu 4G"]
     s += ["#SBATCH -o logs/slurm-%x-%j-%N.out"]
@@ -40,7 +40,7 @@ ichunk = 1
 for sample, outpath in samples:
     infiles = list(glob.glob(f"{sample}/*.root"))
     os.makedirs(outpath, exist_ok=True)
-    for infiles_chunk in chunks(infiles, 20):
+    for infiles_chunk in chunks(infiles, 100):
         scr = write_script(infiles_chunk, outpath)
         ofname = f"jobscripts/postproc_{ichunk}.sh"
         with open(ofname, "w") as outfi:

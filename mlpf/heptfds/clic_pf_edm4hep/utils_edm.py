@@ -41,7 +41,21 @@ X_FEATURES_CL = [
     "sigma_z",
 ]
 
-Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "ispu"]
+Y_FEATURES = [
+    "PDG",
+    "charge",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "ispu",
+    "generatorStatus",
+    "simulatorStatus",
+    "gp_to_track",
+    "gp_to_cluster",
+    "jet_idx",
+]
 labels = [0, 211, 130, 22, 11, 13]
 
 N_X_FEATURES = max(len(X_FEATURES_CL), len(X_FEATURES_TRK))
@@ -53,8 +67,8 @@ def split_sample(path, test_frac=0.8):
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
     idx_split = int(test_frac * len(files))
-    files_train = files[:idx_split]
-    files_test = files[idx_split:]
+    files_train = files[:idx_split][:1000]
+    files_test = files[idx_split:][:1000]
     assert len(files_train) > 0
     assert len(files_test) > 0
     return {
@@ -92,6 +106,7 @@ def prepare_data_clic(fn):
     ycands = []
     genmets = []
     genjets = []
+    targetjets = []
     for iev in range(nev):
 
         X1 = ak.to_numpy(X_track[iev])
@@ -109,8 +124,16 @@ def prepare_data_clic(fn):
         ygen_cluster = ak.to_numpy(ret["ygen_cluster"][iev])
         ycand_track = ak.to_numpy(ret["ycand_track"][iev])
         ycand_cluster = ak.to_numpy(ret["ycand_cluster"][iev])
+
+        # add jet_idx column
+        ygen_track = np.concatenate([ygen_track, np.zeros((len(ygen_track), 1))], axis=-1)
+        ygen_cluster = np.concatenate([ygen_cluster, np.zeros((len(ygen_cluster), 1))], axis=-1)
+        ycand_track = np.concatenate([ycand_track, np.zeros((len(ycand_track), 1))], axis=-1)
+        ycand_cluster = np.concatenate([ycand_cluster, np.zeros((len(ycand_cluster), 1))], axis=-1)
+
         genmet = ak.to_numpy(ret["genmet"][iev])
         genjet = ak.to_numpy(ret["genjet"][iev])
+        targetjet = ak.to_numpy(ret["targetjet"][iev])
 
         if len(ygen_track) == 0 and len(ygen_cluster) == 0:
             continue
@@ -153,21 +176,24 @@ def prepare_data_clic(fn):
         ycands.append(ycand)
         genmets.append(genmet)
         genjets.append(genjet)
-    return Xs, ygens, ycands, genmets, genjets
+        targetjets.append(targetjet)
+    return Xs, ygens, ycands, genmets, genjets, targetjets
 
 
 def generate_examples(files):
     for fi in files:
-        Xs, ygens, ycands, genmets, genjets = prepare_data_clic(fi)
+        Xs, ygens, ycands, genmets, genjets, targetjets = prepare_data_clic(fi)
         for iev in range(len(Xs)):
             gm = genmets[iev][0]
             gj = genjets[iev]
+            tj = targetjets[iev]
             yield str(fi) + "_" + str(iev), {
                 "X": Xs[iev].astype(np.float32),
                 "ygen": ygens[iev].astype(np.float32),
                 "ycand": ycands[iev].astype(np.float32),
                 "genmet": gm,
                 "genjets": gj.astype(np.float32),
+                "targetjets": tj.astype(np.float32),
             }
 
 
