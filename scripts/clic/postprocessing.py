@@ -16,12 +16,30 @@ import pyhepmc
 import bz2
 import fastjet
 from scipy.sparse import coo_matrix
+import math
+
+jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
+jet_ptcut = 5
 
 track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
 
 # the feature matrices will be saved in this order
-particle_feature_order = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "ispu"]
+particle_feature_order = [
+    "PDG",
+    "charge",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "ispu",
+    "generatorStatus",
+    "simulatorStatus",
+    "gp_to_track",
+    "gp_to_cluster",
+    "jet_idx",
+]
 
 # arrange track and cluster features such that pt (et), eta, phi, p (energy) are in the same spot
 # so we can easily use them in skip connections
@@ -76,6 +94,33 @@ hit_feature_order = [
     "subdetector",
     "type",
 ]
+
+
+def deltaphi(phi1, phi2):
+    diff = phi1 - phi2
+    return np.arctan2(np.sin(diff), np.cos(diff))
+
+
+def deltar(eta1, phi1, eta2, phi2):
+    deta = eta1 - eta2
+    dphi = deltaphi(phi1, phi2)
+    return np.sqrt(deta**2 + dphi**2)
+
+
+# https://stackoverflow.com/questions/2413522/weighted-standard-deviation-in-numpy
+def weighted_avg_and_std(values, weights):
+    """
+    Return the weighted average and standard deviation.
+
+    They weights are in effect first normalized so that they
+    sum to 1 (and so they must not all be 0).
+
+    values, weights -- NumPy ndarrays with the same shape.
+    """
+    average = np.average(values, weights=weights)
+    # Fast and numerically precise:
+    variance = np.average((values - average) ** 2, weights=weights)
+    return (average, math.sqrt(variance))
 
 
 def track_pt(omega):
@@ -278,23 +323,25 @@ def gen_to_features(prop_data, iev):
     gen_arr["sin_phi"] = np.sin(gen_arr["phi"])
     gen_arr["cos_phi"] = np.cos(gen_arr["phi"])
 
-    # placeholder
+    # placeholder flag
     gen_arr["ispu"] = np.zeros_like(gen_arr["phi"])
 
-    return awkward.Record(
-        {
-            "PDG": gen_arr["PDG"],
-            "generatorStatus": gen_arr["generatorStatus"],
-            "charge": gen_arr["charge"],
-            "pt": gen_arr["pt"],
-            "eta": gen_arr["eta"],
-            "phi": gen_arr["phi"],
-            "sin_phi": gen_arr["sin_phi"],
-            "cos_phi": gen_arr["cos_phi"],
-            "energy": gen_arr["energy"],
-            "ispu": gen_arr["ispu"],
-        }
-    )
+    return {
+        "PDG": gen_arr["PDG"],
+        "generatorStatus": gen_arr["generatorStatus"],
+        "charge": gen_arr["charge"],
+        "pt": gen_arr["pt"],
+        "eta": gen_arr["eta"],
+        "phi": gen_arr["phi"],
+        "sin_phi": gen_arr["sin_phi"],
+        "cos_phi": gen_arr["cos_phi"],
+        "energy": gen_arr["energy"],
+        "ispu": gen_arr["ispu"],
+        "simulatorStatus": gen_arr["simulatorStatus"],
+        "gp_to_track": np.zeros(len(gen_arr["PDG"]), dtype=np.float64),
+        "gp_to_cluster": np.zeros(len(gen_arr["PDG"]), dtype=np.float64),
+        "jet_idx": np.zeros(len(gen_arr["PDG"]), dtype=np.int64),
+    }
 
 
 def genparticle_track_adj(sitrack_links, iev):
@@ -347,9 +394,13 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
         cl_energy_hcal.append(energy_hcal)
         cl_energy_other.append(energy_other)
 
-        cl_sigma_x.append(np.std(hits_posx))
-        cl_sigma_y.append(np.std(hits_posy))
-        cl_sigma_z.append(np.std(hits_posz))
+        # weighted standard deviation of cluster hits
+        sigma_x = weighted_avg_and_std(hits_posx, hits_energy)[1]
+        sigma_y = weighted_avg_and_std(hits_posy, hits_energy)[1]
+        sigma_z = weighted_avg_and_std(hits_posz, hits_energy)[1]
+        cl_sigma_x.append(sigma_x)
+        cl_sigma_y.append(sigma_y)
+        cl_sigma_z.append(sigma_z)
 
     ret["energy_ecal"] = np.array(cl_energy_ecal)
     ret["energy_hcal"] = np.array(cl_energy_hcal)
@@ -455,12 +506,32 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
 
     gp_interacted_with_detector = gp_in_tracker | gp_in_calo
 
-    mask_visible = (gen_features["energy"] > 0.01) & gp_interacted_with_detector
+    gen_features["gp_to_track"] = np.asarray(gp_to_track)[:, 0]
+    gen_features["gp_to_cluster"] = np.asarray(gp_to_cluster)[:, 0]
+
+    mask_status1 = (gen_features["energy"] > 0.001) & (gen_features["generatorStatus"] == 1)
+    mask_visible = np.asarray(mask_status1 & gp_interacted_with_detector)
+
+    # some status=1 particles from Pythia did not interact with the detector
+    # we could look for their status=0 children, but daughter indices are messed up
+    # find dr-nearby status=0 particles that interacted with the detector and add them to the list of reconstructable particles
+    not_visible_particles = np.argsort(gen_features["pt"][mask_status1 & ~mask_visible])[::-1]
+    nvp_pdg = gen_features["PDG"][mask_status1 & ~mask_visible][not_visible_particles]
+    nvp_pt = gen_features["pt"][mask_status1 & ~mask_visible][not_visible_particles]
+    nvp_eta = gen_features["eta"][mask_status1 & ~mask_visible][not_visible_particles]
+    nvp_phi = gen_features["phi"][mask_status1 & ~mask_visible][not_visible_particles]
+    for pdg, pt, eta, phi in zip(nvp_pdg, nvp_pt, nvp_eta, nvp_phi):
+        if (abs(pdg) != 12) & (abs(pdg) != 14) & (abs(pdg) != 16):
+            dr = deltar(eta, phi, gen_features["eta"], gen_features["phi"])
+            gen_mask = (dr < 0.2) & (gen_features["generatorStatus"] != 1) & gp_interacted_with_detector
+            mask_visible[gen_mask] = 1
+            # print(pdg, pt, eta, phi, gen_features["pt"][gen_mask], gp_interacted_with_detector[gen_mask], np.where(gen_mask))
+
     # print("gps total={} visible={}".format(n_gp, np.sum(mask_visible)))
     idx_all_masked = np.where(mask_visible)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
 
-    gen_features = awkward.Record({feat: gen_features[feat][mask_visible] for feat in gen_features.fields})
+    gen_features = awkward.Record({feat: gen_features[feat][mask_visible] for feat in gen_features.keys()})
 
     genparticle_to_hit = filter_adj(genparticle_to_hit, genpart_idx_all_to_filtered)
     genparticle_to_track = filter_adj(genparticle_to_track, genpart_idx_all_to_filtered)
@@ -540,7 +611,10 @@ def assign_genparticles_to_obj_and_merge(gpdata):
     gp_merges_gp1 = []
     for igp_unmatched in unmatched:
         mask_gp_unmatched[igp_unmatched] = False
+
+        # find closest cluster that this particle is matched to
         idx_best_cluster = np.argmax(gp_to_cluster[igp_unmatched])
+        # get the first genparticle matched to that cluster
         idx_gp_bestcluster = np.where(gp_to_obj[:, 1] == idx_best_cluster)[0]
 
         # if the genparticle is not matched to any cluster, then it left a few hits to some other track
@@ -581,6 +655,11 @@ def assign_genparticles_to_obj_and_merge(gpdata):
         "cos_phi": np.cos(phi_arr[mask_gp_unmatched]),
         "energy": energy_arr[mask_gp_unmatched],
         "ispu": gpdata.gen_features["ispu"][mask_gp_unmatched],
+        "generatorStatus": gpdata.gen_features["generatorStatus"][mask_gp_unmatched],
+        "simulatorStatus": gpdata.gen_features["simulatorStatus"][mask_gp_unmatched],
+        "gp_to_track": gpdata.gen_features["gp_to_track"][mask_gp_unmatched],
+        "gp_to_cluster": gpdata.gen_features["gp_to_cluster"][mask_gp_unmatched],
+        "jet_idx": gpdata.gen_features["jet_idx"][mask_gp_unmatched],
     }
     assert (np.sum(gen_features_new["energy"]) - np.sum(gpdata.gen_features["energy"])) < 1e-2
 
@@ -712,34 +791,36 @@ def get_p4(part, prefix="MCParticles"):
     return p4
 
 
-def compute_met(part, prefix="MCParticles"):
-    p4 = get_p4(part, prefix)
+def compute_met(p4):
     px = awkward.sum(p4.px, axis=1)
     py = awkward.sum(p4.py, axis=1)
     met = np.sqrt(px**2 + py**2)
     return met
 
 
-def compute_jets(part, prefix="MCParticles", min_pt=0):
-    particles_p4 = get_p4(part, prefix)
-    jetdef = fastjet.JetDefinition2Param(fastjet.ee_genkt_algorithm, 0.4, -1)
+def compute_jets(particles_p4, min_pt=jet_ptcut, with_indices=False):
     cluster = fastjet.ClusterSequence(particles_p4, jetdef)
     jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
     jets = vector.awk(awkward.zip({"energy": jets["t"], "px": jets["x"], "py": jets["y"], "pz": jets["z"]}))
     jets = awkward.Array({"pt": jets.pt, "eta": jets.eta, "phi": jets.phi, "energy": jets.energy})
-    return jets
+    ret = jets
+    if with_indices:
+        indices = cluster.constituent_index(min_pt=min_pt)
+        ret = jets, indices
+    return ret
 
 
 def load_hepmc(hepmc_file_path):
     events = []
     with pyhepmc.open(bz2.BZ2File(hepmc_file_path, "rb")) as f:
         for event in f:
-            parts = [p for p in event.particles if p.status == 1 and (abs(p.pid) != 12) and (abs(p.pid) != 14) and (abs(p.pid) != 16)]
+            parts = [p for p in event.particles if p.status == 1]
             parts = {
                 "MCParticles.momentum.x": [p.momentum.x for p in parts],
                 "MCParticles.momentum.y": [p.momentum.y for p in parts],
                 "MCParticles.momentum.z": [p.momentum.z for p in parts],
                 "MCParticles.mass": [p.momentum.m() for p in parts],
+                "MCParticles.PDG": [p.pid for p in parts],
             }
             events.append(parts)
     events = awkward.from_iter(events)
@@ -761,8 +842,12 @@ def process_one_file(fn, ofn):
     hepmc_file_path = fn.replace("/root/", "/sim/").replace(".root", ".hepmc.bz2").replace("reco_", "sim_")
     hepmc_mcp = load_hepmc(hepmc_file_path)
 
-    met_hepmc = compute_met(hepmc_mcp)
-    genjets_hepmc = compute_jets(hepmc_mcp)
+    # compute Pythia jets and MET with visible particles
+    hepmc_p4 = get_p4(hepmc_mcp, "MCParticles")
+    hepmc_pid = np.abs(hepmc_mcp["MCParticles.PDG"])
+    hepmc_p4_visible = hepmc_p4[(hepmc_pid != 12) & (hepmc_pid != 14) & (hepmc_pid != 16)]
+    met_hepmc = compute_met(hepmc_p4_visible)
+    genjets_hepmc = compute_jets(hepmc_p4_visible)
 
     assert len(hepmc_mcp) == arrs.num_entries
 
@@ -783,6 +868,7 @@ def process_one_file(fn, ofn):
             "MCParticles.mass",
             "MCParticles.charge",
             "MCParticles.generatorStatus",
+            "MCParticles.simulatorStatus",
             track_coll,
             "SiTracks_1",
             "PandoraClusters",
@@ -791,6 +877,18 @@ def process_one_file(fn, ofn):
             "MergedRecoParticles",
         ]
     )
+
+    # fix status 1 particles momentum from hepmc
+    eq = prop_data["MCParticles.PDG"][prop_data["MCParticles.generatorStatus"] == 1] == hepmc_mcp["MCParticles.PDG"]
+    assert np.all(eq)
+
+    msk = prop_data["MCParticles.generatorStatus"] == 1
+    counts = awkward.count(msk, axis=1)
+    for branch in ["MCParticles.momentum.x", "MCParticles.momentum.y", "MCParticles.momentum.z"]:
+        arr_as_np = np.asarray(awkward.flatten(prop_data[branch]))
+        arr_as_np[awkward.flatten(msk)] = awkward.flatten(hepmc_mcp[branch])
+        prop_data[branch] = awkward.unflatten(arr_as_np, counts)
+
     calohit_links = arrs.arrays(
         [
             "CalohitMCTruthLink.weight",
@@ -842,6 +940,11 @@ def process_one_file(fn, ofn):
                 "cos_phi": np.cos(reco_arr["phi"]),
                 "energy": reco_arr["energy"],
                 "ispu": np.zeros(len(reco_type)),
+                "generatorStatus": np.zeros(len(reco_type)),
+                "simulatorStatus": np.zeros(len(reco_type)),
+                "gp_to_track": np.zeros(len(reco_type)),
+                "gp_to_cluster": np.zeros(len(reco_type)),
+                "jet_idx": np.zeros(len(reco_type)),
             }
         )
 
@@ -901,29 +1004,61 @@ def process_one_file(fn, ofn):
 
         X_track = get_feature_matrix(gpdata_cleaned.track_features, track_feature_order)
         X_cluster = get_feature_matrix(gpdata_cleaned.cluster_features, cluster_feature_order)
-        ygen_track = gps_track
-        ygen_cluster = gps_cluster
+        ytarget_track = gps_track
+        ytarget_cluster = gps_cluster
         ycand_track = rps_track
         ycand_cluster = rps_cluster
 
         sanitize(X_track)
         sanitize(X_cluster)
-        # print("X_track={} X_cluster={}".format(len(X_track), len(X_cluster)))
-        sanitize(ygen_track)
-        sanitize(ygen_cluster)
+        sanitize(ytarget_track)
+        sanitize(ytarget_cluster)
         sanitize(ycand_track)
         sanitize(ycand_cluster)
+
+        # cluster target particles to jets, save per-particle jet index
+        ytarget = np.concatenate([ytarget_track, ytarget_cluster], axis=0)
+        ytarget_constituents = -1 * np.ones(len(ytarget), dtype=np.int64)
+        valid = ytarget[:, 0] != 0
+        # save mapping of index after masking -> index before masking as numpy array
+        # inspired from:
+        # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
+        cumsum = np.cumsum(valid) - 1
+        _, index_mapping = np.unique(cumsum, return_index=True)
+        ytarget = ytarget[valid]
+        ytarget_p4 = ytarget[:, 2:7]
+        ytarget_p4 = vector.awk(
+            awkward.zip(
+                {
+                    "pt": ytarget_p4[:, 0],
+                    "eta": ytarget_p4[:, 1],
+                    "phi": np.arctan2(ytarget_p4[:, 2], ytarget_p4[:, 3]),
+                    "energy": ytarget_p4[:, 4],
+                }
+            )
+        )
+        target_jets, target_jets_indices = compute_jets(ytarget_p4, with_indices=True)
+        sorted_jet_idx = awkward.argsort(target_jets.pt, axis=-1, ascending=False).to_list()
+        target_jets_indices = target_jets_indices.to_list()
+        for jet_idx in sorted_jet_idx:
+            jet_constituents = [index_mapping[idx] for idx in target_jets_indices[jet_idx]]  # map back to constituent index *before* masking
+            ytarget_constituents[jet_constituents] = jet_idx
+        ytarget_track_constituents = ytarget_constituents[: len(ytarget_track)]
+        ytarget_cluster_constituents = ytarget_constituents[len(ytarget_track) :]
+        ytarget_track[:, particle_feature_order.index("jet_idx")] = ytarget_track_constituents
+        ytarget_cluster[:, particle_feature_order.index("jet_idx")] = ytarget_cluster_constituents
 
         this_ev = awkward.Record(
             {
                 "X_track": X_track,
                 "X_cluster": X_cluster,
-                "ygen_track": ygen_track,
-                "ygen_cluster": ygen_cluster,
+                "ytarget_track": ytarget_track,
+                "ytarget_cluster": ytarget_cluster,
                 "ycand_track": ycand_track,
                 "ycand_cluster": ycand_cluster,
                 "genmet": met_hepmc[iev],
                 "genjet": get_feature_matrix(genjets_hepmc[iev], ["pt", "eta", "phi", "energy"]),
+                "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
             }
         )
         ret.append(this_ev)
