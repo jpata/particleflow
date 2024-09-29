@@ -9,13 +9,17 @@ import uproot
 import vector
 import awkward
 from sklearn.neighbors import KDTree
+import fastjet
+
+jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+jet_ptcut = 3
 
 elem_branches = [
     "typ",
     "pt",
     "eta",
     "phi",
-    "e",
+    "energy",
     "layer",
     "depth",
     "charge",
@@ -67,7 +71,33 @@ elem_branches = [
     "phierror4",
 ]
 
-target_branches = ["pid", "charge", "pt", "eta", "sin_phi", "cos_phi", "e", "ispu"]
+particle_feature_order = [
+    "pid",
+    "charge",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "ispu",
+    "generatorStatus",
+    "simulatorStatus",
+    "gp_to_track",
+    "gp_to_cluster",
+    "jet_idx",
+]
+
+
+def compute_jets(particles_p4, min_pt=jet_ptcut, with_indices=False):
+    cluster = fastjet.ClusterSequence(particles_p4, jetdef)
+    jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
+    jets = vector.awk(awkward.zip({"energy": jets["t"], "px": jets["x"], "py": jets["y"], "pz": jets["z"]}))
+    jets = awkward.Array({"pt": jets.pt, "eta": jets.eta, "phi": jets.phi, "energy": jets.energy})
+    ret = jets
+    if with_indices:
+        indices = cluster.constituent_index(min_pt=min_pt)
+        ret = jets, indices
+    return ret
 
 
 def print_gen(g, min_pt=1):
@@ -83,16 +113,6 @@ def print_gen(g, min_pt=1):
     for node in elem_nodes:
         if g.nodes[node]["pt"] > min_pt:
             print(node, g.nodes[node]["pt"], g.nodes[node]["eta"], g.nodes[node]["phi"], g.nodes[node]["typ"])
-
-    # sc_nodes = [n for n in g.nodes if n[0] == "sc"]
-    # for node in sc_nodes:
-    #     print(node, g.nodes[node]["pt"], g.nodes[node]["eta"], g.nodes[node]["phi"], g.nodes[node]["pid"])
-    #     children = list(g.successors(node))
-    #     int_e = 0.0
-    #     for ch in children:
-    #         print("  ", ch, g.edges[node, ch]["weight"])
-    #         int_e += g.edges[node, ch]["weight"]
-    #     g.nodes[node]["interacting"] = int_e
 
     cp_nodes = [n for n in g.nodes if n[0] == "cp"]
     for node in cp_nodes:
@@ -155,7 +175,7 @@ def split_caloparticles(g, elem_type):
     for _, cp in cps:
 
         # get all associated elements with type==elem_type that received a contribution from this caloparticle
-        sucs = [(suc, g.edges[cp, suc]["weight"], g.nodes[suc]["e"]) for suc in g.successors(cp) if g.nodes[suc]["typ"] == elem_type]
+        sucs = [(suc, g.edges[cp, suc]["weight"], g.nodes[suc]["energy"]) for suc in g.successors(cp) if g.nodes[suc]["typ"] == elem_type]
         sum_sucs_w = sum([s[1] for s in sucs])
         sucs = [s[0] for s in sucs]
         if len(sucs) > 1:
@@ -163,7 +183,7 @@ def split_caloparticles(g, elem_type):
                 pt=g.nodes[cp]["pt"],
                 eta=g.nodes[cp]["eta"],
                 phi=g.nodes[cp]["phi"],
-                e=g.nodes[cp]["e"],
+                energy=g.nodes[cp]["energy"],
             )
             lv_fracs = []
             for suc in sucs:
@@ -178,10 +198,15 @@ def split_caloparticles(g, elem_type):
                     pt=lv_frac.pt,
                     eta=lv_frac.eta,
                     phi=lv_frac.phi,
-                    e=lv_frac.e,
+                    energy=lv_frac.e,
                     charge=g.nodes[cp]["charge"],
                     pid=g.nodes[cp]["pid"],
                     ispu=g.nodes[cp]["ispu"],
+                    generatorStatus=0,
+                    simulatorStatus=1,
+                    gp_to_track=g.nodes[cp]["gp_to_track"] * (lv_frac.e / lv.e),
+                    gp_to_cluster=g.nodes[cp]["gp_to_cluster"] * (lv_frac.e / lv.e),
+                    jet_idx=-1,
                 )
                 g.add_edge(("cp", new_cp_index), suc, weight=g.edges[cp, suc]["weight"])
                 new_cp_index += 1
@@ -226,26 +251,18 @@ def prepare_normalized_table(g, iev):
     gp_to_elem = {}  # map of genparticle -> element
 
     # assign genparticles in reverse pt order uniquely to best element
-    find_representative_elements(g, elem_to_gp, gp_to_elem, 1)
-    find_representative_elements(g, elem_to_gp, gp_to_elem, 6)
-    find_representative_elements(g, elem_to_gp, gp_to_elem, 4)
-    find_representative_elements(g, elem_to_gp, gp_to_elem, 5)
-    find_representative_elements(g, elem_to_gp, gp_to_elem, 8)
-    find_representative_elements(g, elem_to_gp, gp_to_elem, 9)
-    find_representative_elements(g, elem_to_gp, gp_to_elem, 10)
+    find_representative_elements(g, elem_to_gp, gp_to_elem, 1)  # tracks
+    find_representative_elements(g, elem_to_gp, gp_to_elem, 6)  # gsf
+    find_representative_elements(g, elem_to_gp, gp_to_elem, 4)  # ecal
+    find_representative_elements(g, elem_to_gp, gp_to_elem, 5)  # hcal
+    find_representative_elements(g, elem_to_gp, gp_to_elem, 8)  # HF
+    find_representative_elements(g, elem_to_gp, gp_to_elem, 9)  # HF
+    find_representative_elements(g, elem_to_gp, gp_to_elem, 10)  #
     find_representative_elements(g, elem_to_gp, gp_to_elem, 11)
 
     s1 = set(list(gp_to_elem.keys()))
     s2 = set(all_genparticles)
     unmatched_gp = list(s2 - s1)
-    # for gp in unmatched_gp:
-    #     print(gp, g.nodes[gp]["pid"], g.nodes[gp]["pt"])
-
-    # s1 = set(list(elem_to_gp.keys()))
-    # s2 = set(all_elements)
-    # unmatched_elem = list(s2 - s1)
-    # for elem in unmatched_elem:
-    #     print(elem, g.nodes[elem]["typ"], g.nodes[elem]["pt"])
 
     # assign unmatched genparticles to best element, allowing for overlaps
     elem_to_gp = {k: [v] for k, v in elem_to_gp.items()}
@@ -283,7 +300,7 @@ def prepare_normalized_table(g, iev):
         # other particles will be assigned to the highest-energy cluster (ECAL, HCAL, HFEM, HFHAD, SC)
         else:
             # neighbors = [n for n in neighbors if g.nodes[n]["typ"] in [4,5,8,9,10]]
-            # sorted_neighbors = sorted(neighbors, key=lambda x: g.nodes[x]["e"], reverse=True)
+            # sorted_neighbors = sorted(neighbors, key=lambda x: g.nodes[x]["energy"], reverse=True)
             sorted_neighbors = sorted(
                 neighbors,
                 key=lambda x: g.edges[(x, cand)]["weight"],
@@ -304,14 +321,14 @@ def prepare_normalized_table(g, iev):
         dtype=[(name, np.float32) for name in elem_branches],
     )
     Xelem.fill(0.0)
-    ygen = np.recarray(
+    ytarget = np.recarray(
         (len(all_elements),),
-        dtype=[(name, np.float32) for name in target_branches],
+        dtype=[(name, np.float32) for name in particle_feature_order],
     )
-    ygen.fill(0.0)
+    ytarget.fill(0.0)
     ycand = np.recarray(
         (len(all_elements),),
-        dtype=[(name, np.float32) for name in target_branches],
+        dtype=[(name, np.float32) for name in particle_feature_order],
     )
     ycand.fill(0.0)
 
@@ -327,14 +344,14 @@ def prepare_normalized_table(g, iev):
             Xelem[elem_branches[j]][ielem] = g.nodes[elem][elem_branches[j]]
 
         if not (candidate is None):
-            for j in range(len(target_branches)):
-                ycand[target_branches[j]][ielem] = g.nodes[candidate][target_branches[j]]
+            for j in range(len(particle_feature_order)):
+                ycand[particle_feature_order[j]][ielem] = g.nodes[candidate][particle_feature_order[j]]
 
         lv = vector.obj(x=0, y=0, z=0, t=0)
 
-        # if several CaloParticles/TrackingParticles are associated to ONLY this element, merge them, as they are not reconstructable separately
+        # if several CaloParticles are associated to ONLY this element, merge them, as they are not reconstructable separately
         if len(genparticles) > 0:
-            pids_e = sorted([(g.nodes[gp]["pid"], g.nodes[gp]["e"]) for gp in genparticles], key=lambda x: x[1], reverse=True)
+            pids_e = sorted([(g.nodes[gp]["pid"], g.nodes[gp]["energy"]) for gp in genparticles], key=lambda x: x[1], reverse=True)
             # get the pid of the highest-energy particle associated with this element
             pid = pids_e[0][0]
 
@@ -348,39 +365,58 @@ def prepare_normalized_table(g, iev):
                     pt=g.nodes[gp]["pt"],
                     eta=g.nodes[gp]["eta"],
                     phi=g.nodes[gp]["phi"],
-                    e=g.nodes[gp]["e"],
+                    energy=g.nodes[gp]["energy"],
                 )
-                sum_pu += g.nodes[gp]["ispu"] * g.nodes[gp]["e"]
-                sum_tot += g.nodes[gp]["e"]
+                sum_pu += g.nodes[gp]["ispu"] * g.nodes[gp]["energy"]
+                sum_tot += g.nodes[gp]["energy"]
 
             gp = {
                 "pt": lv.rho,
                 "eta": lv.eta,
                 "sin_phi": np.sin(lv.phi),
                 "cos_phi": np.cos(lv.phi),
-                "e": lv.t,
+                "energy": lv.t,
                 "pid": pid,
                 "px": lv.x,
                 "py": lv.y,
                 "pz": lv.z,
                 "ispu": sum_pu / sum_tot,
                 "charge": charge,
+                "gp_to_track": np.sum([g.nodes[gp]["gp_to_track"] for gp in genparticles]),
+                "gp_to_cluster": np.sum([g.nodes[gp]["gp_to_cluster"] for gp in genparticles]),
+                "generatorStatus": 0,
+                "simulatorStatus": 2,
+                "jet_idx": -1,
             }
 
-            for j in range(len(target_branches)):
-                ygen[target_branches[j]][ielem] = gp[target_branches[j]]
+            for j in range(len(particle_feature_order)):
+                ytarget[particle_feature_order[j]][ielem] = gp[particle_feature_order[j]]
 
-    px = np.sum(ygen["pt"] * ygen["cos_phi"])
-    py = np.sum(ygen["pt"] * ygen["sin_phi"])
+    px = np.sum(ytarget["pt"] * ytarget["cos_phi"])
+    py = np.sum(ytarget["pt"] * ytarget["sin_phi"])
     met = np.sqrt(px**2 + py**2)
     print("normalized, met={:.2f}".format(met))
 
-    return Xelem, ycand, ygen
+    return Xelem, ycand, ytarget
 
 
 # end of prepare_normalized_table
 
 
+# This function prepares a directed graph.
+# The node types are:
+#   - CaloParticles: cp
+#   - SimClusters: sc
+#   - TrackingParticles: tp
+#   - PFCandidates: pfcand
+#   - PFElements: elem
+# The final form of the graph is: cp->elem, pfcand->elem.
+# To achieve this, first, we prepare a graph with the edges:
+#   cp->elem
+#   cp->sc->elem *
+#   cp->tp->elem *
+#   pfcand->elem
+# Then, the intermediate sc/tp from edges marked with * are collapsed , such that only cp->elem remains
 def make_graph(ev, iev):
     element_type = ev["element_type"][iev]
     element_pt = ev["element_pt"][iev]
@@ -484,7 +520,7 @@ def make_graph(ev, iev):
             ("elem", iobj),
             typ=element_type[iobj],
             pt=element_pt[iobj],
-            e=element_e[iobj],
+            energy=element_e[iobj],
             eta=element_eta[iobj],
             phi=element_phi[iobj],
             eta_ecal=element_eta_ecal[iobj],
@@ -544,7 +580,7 @@ def make_graph(ev, iev):
             ("gen", iobj),
             pid=abs(gen_pdgid[iobj]),
             pt=gen_pt[iobj],
-            e=gen_e[iobj],
+            energy=gen_e[iobj],
             eta=gen_eta[iobj],
             phi=gen_phi[iobj],
             status=gen_status[iobj],
@@ -561,10 +597,15 @@ def make_graph(ev, iev):
             pid=abs(trackingparticle_pid[iobj]),
             charge=trackingparticle_charge[iobj],
             pt=trackingparticle_pt[iobj],
-            e=trackingparticle_e[iobj],
+            energy=trackingparticle_e[iobj],
             eta=trackingparticle_eta[iobj],
             phi=trackingparticle_phi[iobj],
             ispu=float(trackingparticle_ev[iobj] != 0),
+            generatorStatus=0,
+            simulatorStatus=0,
+            gp_to_track=0,
+            gp_to_cluster=0,
+            jet_idx=-1,
         )
 
     # CaloParticles
@@ -574,10 +615,15 @@ def make_graph(ev, iev):
             pid=abs(caloparticle_pid[iobj]),
             charge=caloparticle_charge[iobj],
             pt=caloparticle_pt[iobj],
-            e=caloparticle_e[iobj],
+            energy=caloparticle_e[iobj],
             eta=caloparticle_eta[iobj],
             phi=caloparticle_phi[iobj],
             ispu=float(caloparticle_ev[iobj] != 0),
+            generatorStatus=0,
+            simulatorStatus=0,
+            gp_to_track=0,
+            gp_to_cluster=0,
+            jet_idx=-1,
         )
         itp = caloparticle_idx_trackingparticle[iobj]
         if itp != -1:
@@ -591,7 +637,7 @@ def make_graph(ev, iev):
             pt=simcluster_pt[iobj],
             eta=simcluster_eta[iobj],
             phi=simcluster_phi[iobj],
-            e=simcluster_e[iobj],
+            energy=simcluster_e[iobj],
         )
         icp = simcluster_idx_caloparticle[iobj]
         g.add_edge(("cp", icp), ("sc", iobj))
@@ -606,12 +652,17 @@ def make_graph(ev, iev):
             ("pfcand", iobj),
             pid=abs(pfcandidate_pdgid[iobj]),
             pt=pfcandidate_pt[iobj],
-            e=pfcandidate_e[iobj],
+            energy=pfcandidate_e[iobj],
             eta=pfcandidate_eta[iobj],
             sin_phi=np.sin(pfcandidate_phi[iobj]),
             cos_phi=np.cos(pfcandidate_phi[iobj]),
             charge=get_charge(pfcandidate_pdgid[iobj]),
             ispu=0.0,  # for PF candidates, we don't know if it was PU or not
+            generatorStatus=0,
+            simulatorStatus=0,
+            gp_to_track=0,
+            gp_to_cluster=0,
+            jet_idx=-1,
         )
 
     trackingparticle_to_element_first = ev["trackingparticle_to_element.first"][iev]
@@ -626,7 +677,7 @@ def make_graph(ev, iev):
             continue
         if ("tp", iobj) in g.nodes and ("elem", elem) in g.nodes:
             # print(("tp", iobj), ("elem", elem), c)
-            g.add_edge(("tp", iobj), ("elem", elem), weight=c * g.nodes[("elem", elem)]["e"])
+            g.add_edge(("tp", iobj), ("elem", elem), weight=c * g.nodes[("elem", elem)]["energy"])
 
     caloparticle_to_element_first = ev["caloparticle_to_element.first"][iev]
     caloparticle_to_element_second = ev["caloparticle_to_element.second"][iev]
@@ -656,7 +707,7 @@ def make_graph(ev, iev):
 
     print("make_graph init, met={:.2f}".format(compute_gen_met(g)))
 
-    # add children of trackingparticle to parent
+    # add children of trackingparticle (tracks) to parents (simcluster/caloparticle)
     tps = [n for n in g.nodes if n[0] == "tp"]
     for tp in tps:
         preds = g.predecessors(tp)
@@ -664,12 +715,15 @@ def make_graph(ev, iev):
         for pred in preds:
             for suc in sucs:
                 if (pred, suc) not in g.edges:
+                    # print(pred, tp, suc)
                     g.add_edge(pred, suc, weight=g.edges[(tp, suc)]["weight"])
+    # remove tracking particles
     g.remove_nodes_from(tps)
 
     # pickle.dump(g, open("init_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
 
-    # add any remaining links between CaloParticles and Elements using delta-R proximity
+    # add any remaining links between CaloParticles and Elements using delta-R proximity with dR<0.05
+    # note: this may have issues with phi wraparound
     elems = [n for n in g.nodes if n[0] == "elem"]
     scs = [node for node in g.nodes if node[0] == "sc"]
     sc_coords = np.array([[g.nodes[n]["eta"] for n in scs], [g.nodes[n]["phi"] for n in scs]])
@@ -682,9 +736,9 @@ def make_graph(ev, iev):
             for isc in nearby_scs:
                 if scs[isc] in g.nodes:
                     if (scs[isc], elem) not in g.edges:
-                        g.add_edge(scs[isc], elem, weight=g.nodes[elem]["e"])
+                        g.add_edge(scs[isc], elem, weight=g.nodes[elem]["energy"])
 
-    # add children of simcluster to parent
+    # add children of simcluster (elems) to parent (caloparticle)
     scs = [n for n in g.nodes if n[0] == "sc"]
     for sc in scs:
         preds = g.predecessors(sc)
@@ -692,11 +746,13 @@ def make_graph(ev, iev):
         for pred in preds:
             for suc in sucs:
                 if (pred, suc) not in g.edges:
+                    # print(pred, sc, suc)
                     g.add_edge(pred, suc, weight=g.edges[(sc, suc)]["weight"])
-
+    # remove simclusters
     g.remove_nodes_from(scs)
     print("make_graph duplicates removed, met={:.2f}".format(compute_gen_met(g)))
 
+    # now remove PS and BREM elements, as they are not informative
     elems = [n for n in g.nodes if n[0] == "elem"]
     nodes_to_remove = []
     for elem in elems:
@@ -713,6 +769,29 @@ def make_graph(ev, iev):
         if ("elem", elem) in g.nodes:
             g.add_edge(("elem", elem), ("pfcand", pfcand), weight=1.0)
 
+    num_cp = len([n for n in g.nodes if n[0] == "cp"])
+    num_sc = len([n for n in g.nodes if n[0] == "sc"])
+    num_tp = len([n for n in g.nodes if n[0] == "tp"])
+    num_pf = len([n for n in g.nodes if n[0] == "pfcand"])
+    num_elem = len([n for n in g.nodes if n[0] == "elem"])
+    print(f"CP={num_cp} SC={num_sc} TP={num_tp} PF={num_pf} EL={num_elem}")
+
+    # for caloparticles, compute the total energy deposited to tracks or clusters
+    for node in g.nodes:
+        if node[0] == "cp":
+            elems_children = list(g.successors(node))
+            gp_to_track = 0
+            gp_to_cluster = 0
+            for elem in elems_children:
+                w = g.edges[node, elem]["weight"]
+                elem_type = g.nodes[elem]["typ"]
+                if elem_type in [1, 6]:
+                    gp_to_track += w
+                else:
+                    gp_to_cluster += w
+            g.nodes[node]["gp_to_track"] = gp_to_track
+            g.nodes[node]["gp_to_cluster"] = gp_to_cluster
+
     # pickle.dump(g, open("cleanup_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
     # print_gen(g)
     return g
@@ -725,12 +804,12 @@ def cleanup_graph(g):
         edges_to_remove = []
         for pred in g.predecessors(elem):
             edge = (pred, elem)
-            if g.edges[edge]["weight"] / g.nodes[elem]["e"] < 0.1:
+            if g.edges[edge]["weight"] / g.nodes[elem]["energy"] < 0.1:
                 edges_to_remove.append(edge)
         all_removed_edges += edges_to_remove
     # print("removed edges:", all_removed_edges)
     # for edge in all_removed_edges:
-    #     print(g.nodes[edge[0]]["e"], g.nodes[edge[1]]["e"], g.edges[edge]["weight"])
+    #     print(g.nodes[edge[0]]["energy"], g.nodes[edge[1]]["energy"], g.edges[edge]["weight"])
     g.remove_edges_from(all_removed_edges)
     return g
 
@@ -754,7 +833,7 @@ def process(args):
         # g = cleanup_graph(g)
 
         # associate target particles to input elements
-        Xelem, ycand, ygen = prepare_normalized_table(g, iev)
+        Xelem, ycand, ytarget = prepare_normalized_table(g, iev)
         data = {}
 
         # produce a list of stable pythia particles for downstream validation
@@ -764,7 +843,7 @@ def process(args):
             for n in g.nodes
             if n[0] == "gen" and ((g.nodes[n]["status"] == 1) or ((g.nodes[n]["status"] == 2) and g.nodes[n]["num_daughters"] == 0))
         ]
-        feats = ["pid", "pt", "eta", "phi", "e"]
+        feats = ["pid", "pt", "eta", "phi", "energy"]
         arr_ptcls_pythia = np.array([[g.nodes[n][f] for f in feats] for n in ptcls_pythia])
 
         # produce pythia-level genjets and genmet
@@ -780,13 +859,49 @@ def process(args):
         genmet_phi = ev["genmet_phi"][iev]
         genmet = np.stack([genmet_pt, genmet_phi], axis=-1)
 
+        # cluster target particles to jets, save per-particle jet index
+        ytarget_constituents = -1 * np.ones(len(ytarget), dtype=np.int64)
+        valid = ytarget["pid"] != 0
+        # save mapping of index after masking -> index before masking as numpy array
+        # inspired from:
+        # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
+        cumsum = np.cumsum(valid) - 1
+        _, index_mapping = np.unique(cumsum, return_index=True)
+        ytarget_p4 = vector.awk(
+            awkward.zip(
+                {
+                    "pt": ytarget[valid]["pt"],
+                    "eta": ytarget[valid]["eta"],
+                    "phi": np.arctan2(ytarget[valid]["sin_phi"], ytarget[valid]["cos_phi"]),
+                    "energy": ytarget[valid]["energy"],
+                }
+            )
+        )
+        target_jets, target_jets_indices = compute_jets(ytarget_p4, with_indices=True)
+        sorted_jet_idx = awkward.argsort(target_jets.pt, axis=-1, ascending=False).to_list()
+        target_jets_indices = target_jets_indices.to_list()
+        for jet_idx in sorted_jet_idx:
+            jet_constituents = [index_mapping[idx] for idx in target_jets_indices[jet_idx]]  # map back to constituent index *before* masking
+            ytarget_constituents[jet_constituents] = jet_idx
+        ytarget["jet_idx"] = ytarget_constituents
+
+        targetjets = np.stack(
+            [
+                awkward.to_numpy(target_jets.pt),
+                awkward.to_numpy(target_jets.eta),
+                awkward.to_numpy(target_jets.phi),
+                awkward.to_numpy(target_jets.energy),
+            ],
+            axis=-1,
+        )
         data = {
             "Xelem": Xelem,
             "ycand": ycand,
-            "ygen": ygen,
+            "ytarget": ytarget,
             "pythia": arr_ptcls_pythia,
             "genjet": genjet,
             "genmet": genmet,
+            "targetjet": targetjets,
         }
 
         if args.save_full_graph:

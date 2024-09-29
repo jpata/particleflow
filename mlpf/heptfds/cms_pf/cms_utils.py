@@ -1,7 +1,6 @@
 import bz2
 import pickle
 import tqdm
-import fastjet
 
 import awkward as ak
 import numpy as np
@@ -114,9 +113,6 @@ Y_FEATURES = [
     "e",
     "ispu",
 ]
-
-jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-jet_ptcut = 3
 
 
 def prepare_data_cms(fn):

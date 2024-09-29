@@ -62,13 +62,13 @@ N_X_FEATURES = max(len(X_FEATURES_CL), len(X_FEATURES_TRK))
 N_Y_FEATURES = len(Y_FEATURES)
 
 
-def split_sample(path, test_frac=0.8):
+def split_sample(path, test_frac=0.9):
     files = sorted(list(path.glob("*.parquet")))
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
     idx_split = int(test_frac * len(files))
-    files_train = files[:idx_split][:1000]
-    files_test = files[idx_split:][:1000]
+    files_train = files[:idx_split]
+    files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
     return {
@@ -77,7 +77,7 @@ def split_sample(path, test_frac=0.8):
     }
 
 
-def split_sample_several(paths, test_frac=0.8):
+def split_sample_several(paths, test_frac=0.9):
     files = sum([list(path.glob("*.parquet")) for path in paths], [])
     random.shuffle(files)
     print("Found {} files".format(len(files)))

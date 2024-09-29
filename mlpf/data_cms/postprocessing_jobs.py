@@ -11,7 +11,7 @@ def chunks(lst, n):
 def write_script(infiles, outfiles):
     s = []
     s += ["#!/bin/bash"]
-    s += ["#SBATCH --partition short"]
+    s += ["#SBATCH --partition main"]
     s += ["#SBATCH --cpus-per-task 1"]
     s += ["#SBATCH --mem-per-cpu 4G"]
     s += ["#SBATCH -o logs/slurm-%x-%j-%N.out"]
@@ -34,14 +34,14 @@ def write_script(infiles, outfiles):
 
 samples = [
     "/local/joosep/mlpf/cms/20240823_simcluster/nopu/TTbar_14TeV_TuneCUETP8M1_cfi",
-    # "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi",
-    # "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/QCDForPF_14TeV_TuneCUETP8M1_cfi",
+    "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi",
+    "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/QCDForPF_14TeV_TuneCUETP8M1_cfi",
 ]
 
 ichunk = 1
 for sample in samples:
     infiles = list(glob.glob(f"{sample}/root/pfntuple*.root"))
-    for infiles_chunk in chunks(infiles, 10):
+    for infiles_chunk in chunks(infiles, 50):
         outfiles_chunk = [inf.replace(".root", ".pkl.bz2").replace("/root/", "/raw/") for inf in infiles_chunk]
         os.makedirs(os.path.dirname(outfiles_chunk[0]), exist_ok=True)
         scr = write_script(infiles_chunk, outfiles_chunk)
