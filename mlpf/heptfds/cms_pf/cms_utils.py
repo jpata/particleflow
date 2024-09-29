@@ -110,8 +110,13 @@ Y_FEATURES = [
     "eta",
     "sin_phi",
     "cos_phi",
-    "e",
+    "energy",
     "ispu",
+    "generatorStatus",
+    "simulatorStatus",
+    "gp_to_track",
+    "gp_to_cluster",
+    "jet_idx",
 ]
 
 
@@ -121,6 +126,7 @@ def prepare_data_cms(fn):
     ycands = []
     genmets = []
     genjets = []
+    targetjets = []
 
     if fn.endswith(".pkl"):
         data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
@@ -133,6 +139,7 @@ def prepare_data_cms(fn):
         ycand = event["ycand"]
         genmet = event["genmet"][0][0]
         genjet = event["genjet"]
+        targetjet = event["targetjet"]
 
         # remove PS and BREM from inputs
         msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
@@ -175,11 +182,12 @@ def prepare_data_cms(fn):
         ycands.append(ycand)
         genmets.append(genmet)
         genjets.append(genjet)
+        targetjets.append(targetjet)
 
-    return Xs, ytargets, ycands, genmets, genjets
+    return Xs, ytargets, ycands, genmets, genjets, targetjets
 
 
-def split_sample(path, test_frac=0.8):
+def split_sample(path, test_frac=0.9):
     files = sorted(list(path.glob("*.pkl*")))
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
@@ -198,13 +206,14 @@ def generate_examples(files):
     """Yields examples."""
 
     for fi in tqdm.tqdm(files):
-        Xs, ytargets, ycands, genmets, genjets = prepare_data_cms(str(fi))
+        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
         for ii in range(len(Xs)):
             x = Xs[ii]
             yg = ytargets[ii]
             yc = ycands[ii]
             gm = genmets[ii]
             gj = genjets[ii]
+            tj = targetjets[ii]
 
             uniqs, counts = np.unique(yg[:, 0], return_counts=True)
-            yield str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj}
+            yield str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj, "targetjets": tj}

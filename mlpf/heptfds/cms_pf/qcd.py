@@ -21,7 +21,7 @@ _CITATION = """
 class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd dataset."""
 
-    VERSION = tfds.core.Version("2.3.0")
+    VERSION = tfds.core.Version("2.4.0")
     RELEASE_NOTES = {
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
         "1.3.1": "Remove PS again",
@@ -34,6 +34,7 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
         "2.0.0": "New truth def based primarily on CaloParticles",
         "2.1.0": "Additional stats",
         "2.3.0": "Split CaloParticles along tracks",
+        "2.4.0": "Add gp_to_track, gp_to_cluster, jet_idx",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_qcd ~/tensorflow_datasets/
@@ -52,13 +53,14 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
             features=tfds.features.FeaturesDict(
                 {
                     "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "genmet": tfds.features.Scalar(dtype=tf.float32),
                     "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
+                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
-            supervised_keys=("X", "ygen"),
+            supervised_keys=("X", "ytarget"),
             homepage="",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(x_features=X_FEATURES, y_features=Y_FEATURES),
