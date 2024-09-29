@@ -208,12 +208,12 @@ def generate_examples(files):
     for fi in tqdm.tqdm(files):
         Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
         for ii in range(len(Xs)):
-            x = Xs[ii]
-            yg = ytargets[ii]
-            yc = ycands[ii]
-            gm = genmets[ii]
-            gj = genjets[ii]
-            tj = targetjets[ii]
+            x = Xs[ii].astype(np.float32)
+            yg = ytargets[ii].astype(np.float32)
+            yc = ycands[ii].astype(np.float32)
+            gm = genmets[ii].astype(np.float32)
+            gj = genjets[ii].astype(np.float32)
+            tj = targetjets[ii].astype(np.float32)
 
             uniqs, counts = np.unique(yg[:, 0], return_counts=True)
             yield str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj, "targetjets": tj}
