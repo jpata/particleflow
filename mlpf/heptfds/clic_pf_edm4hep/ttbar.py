@@ -36,7 +36,7 @@ class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
         "1.5.0": "Regenerate with ARRAY_RECORD",
         "2.0.0": "Add ispu, genjets, genmet; disable genjet_idx; truth def not based on gp.status==1",
         "2.1.0": "Bump dataset size",
-        "2.2.0": "Fix truth jets, add targetjets and jet idx",
+        "2.2.0": "New target definition, fix truth jets, add targetjets and jet idx",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.

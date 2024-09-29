@@ -26,12 +26,13 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("2.1.0")
+    VERSION = tfds.core.Version("2.2.0")
     RELEASE_NOTES = {
         "1.3.0": "Update stats to ~1M events",
         "1.4.0": "Fix ycand matching",
         "1.5.0": "Regenerate with ARRAY_RECORD",
         "2.1.0": "Add ispu, genjets, genmet; disable genjet_idx; truth def not based on gp.status==1",
+        "2.2.0": "New target definition, fix truth jets, add targetjets and jet idx",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
@@ -58,10 +59,11 @@ class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
                         ),
                         dtype=tf.float32,
                     ),
-                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "genmet": tfds.features.Scalar(dtype=tf.float32),
                     "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
+                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
             supervised_keys=None,

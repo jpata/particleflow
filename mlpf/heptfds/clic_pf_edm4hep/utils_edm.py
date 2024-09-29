@@ -132,6 +132,11 @@ def prepare_data_clic(fn):
         if len(ytarget_track) == 0 and len(ytarget_cluster) == 0:
             continue
 
+        if len(genjet) == 0:
+            genjet = np.zeros((0, 4), dtype=np.float32)
+        if len(targetjet) == 0:
+            targetjet = np.zeros((0, 4), dtype=np.float32)
+
         # in case the event had no track or cluster, create the right shapes
         if len(ytarget_track) == 0:
             ytarget_track = np.zeros((0, N_Y_FEATURES))
