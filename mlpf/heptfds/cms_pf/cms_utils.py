@@ -51,7 +51,7 @@ X_FEATURES = [
     "eta",
     "sin_phi",
     "cos_phi",
-    "e",
+    "energy",
     "layer",
     "depth",
     "charge",
