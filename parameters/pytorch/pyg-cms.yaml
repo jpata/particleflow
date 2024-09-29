@@ -110,14 +110,14 @@ train_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 2.3.0
+          version: 2.4.0
         cms_pf_qcd:
-          version: 2.3.0
+          version: 2.4.0
     physical_nopu:
       batch_size: 8
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.3.0
+          version: 2.4.0
 
 valid_dataset:
   cms:
@@ -125,11 +125,11 @@ valid_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 2.3.0
+          version: 2.4.0
         cms_pf_qcd:
-          version: 2.3.0
+          version: 2.4.0
 test_dataset:
   cms_pf_ttbar:
-    version: 2.3.0
+    version: 2.4.0
   cms_pf_qcd:
-    version: 2.3.0
+    version: 2.4.0
