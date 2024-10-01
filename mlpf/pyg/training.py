@@ -301,28 +301,30 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             msk = X[:, 0] == xcls
             etarget = ytarget_flat[msk & (ytarget_flat[:, 0] != 0), 6]
             epred = ypred_p4[msk & (ypred_binary_cls != 0), 4]
-            b = np.linspace(-4, 4, 100)
+            b = np.linspace(-2, 2, 100)
             plt.hist(etarget, bins=b, histtype="step")
             plt.hist(epred, bins=b, histtype="step")
             plt.xlabel("log [E/E_elem]")
+            plt.yscale("log")
             tensorboard_writer.add_figure("energy_elemtype{}".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure()
             msk = X[:, 0] == xcls
             pt_target = ytarget_flat[msk & (ytarget_flat[:, 0] != 0), 2]
             pt_pred = ypred_p4[msk & (ypred_binary_cls != 0), 0]
-            b = np.linspace(-4, 4, 100)
+            b = np.linspace(-2, 2, 100)
             plt.hist(etarget, bins=b, histtype="step")
             plt.hist(epred, bins=b, histtype="step")
             plt.xlabel("log [pt/pt_elem]")
+            plt.yscale("log")
             tensorboard_writer.add_figure("pt_elemtype{}".format(int(xcls)), fig, global_step=epoch)
 
             fig = plt.figure(figsize=(5, 5))
             msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
             etarget = ytarget_flat[msk, 6]
             epred = ypred_p4[msk, 4]
-            b = np.linspace(-4, 4, 100)
-            plt.hist2d(etarget, epred, bins=b, cmap="Blues")
+            b = np.linspace(-2, 2, 100)
+            plt.hist2d(etarget, epred, bins=b, cmap="hot", norm=matplotlib.colors.LogNorm())
             plt.plot([-4, 4], [-4, 4], color="black", ls="--")
             plt.xlabel("log [E_target/E_elem]")
             plt.ylabel("log [E_pred/E_elem]")
@@ -332,8 +334,8 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
             pt_target = ytarget_flat[msk, 2]
             pt_pred = ypred_p4[msk, 0]
-            b = np.linspace(-4, 4, 100)
-            plt.hist2d(pt_target, pt_pred, bins=b, cmap="Blues")
+            b = np.linspace(-2, 2, 100)
+            plt.hist2d(pt_target, pt_pred, bins=b, cmap="hot", norm=matplotlib.colors.LogNorm())
             plt.plot([-4, 4], [-4, 4], color="black", ls="--")
             plt.xlabel("log [pt_target/pt_elem]")
             plt.ylabel("log [pt_pred/pt_elem]")
@@ -344,7 +346,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             eta_target = ytarget_flat[msk, 3]
             eta_pred = ypred_p4[msk, 1]
             b = np.linspace(-6, 6, 100)
-            plt.hist2d(eta_target, eta_pred, bins=b, cmap="Blues")
+            plt.hist2d(eta_target, eta_pred, bins=b, cmap="hot", norm=matplotlib.colors.LogNorm())
             plt.plot([-6, 6], [-6, 6], color="black", ls="--")
             plt.xlabel("eta_target")
             plt.ylabel("eta_pred")
@@ -355,7 +357,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             sphi_target = ytarget_flat[msk, 4]
             sphi_pred = ypred_p4[msk, 2]
             b = np.linspace(-2, 2, 100)
-            plt.hist2d(sphi_target, sphi_pred, bins=b, cmap="Blues")
+            plt.hist2d(sphi_target, sphi_pred, bins=b, cmap="hot", norm=matplotlib.colors.LogNorm())
             plt.plot([-2, 2], [-2, 2], color="black", ls="--")
             plt.xlabel("sin_phi_target")
             plt.ylabel("sin_phi_pred")
@@ -366,7 +368,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             cphi_target = ytarget_flat[msk, 5]
             cphi_pred = ypred_p4[msk, 3]
             b = np.linspace(-2, 2, 100)
-            plt.hist2d(cphi_target, cphi_pred, bins=b, cmap="Blues")
+            plt.hist2d(cphi_target, cphi_pred, bins=b, cmap="hot", norm=matplotlib.colors.LogNorm())
             plt.plot([-2, 2], [-2, 2], color="black", ls="--")
             plt.xlabel("cos_phi_target")
             plt.ylabel("cos_phi_pred")
@@ -416,7 +418,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
                 plt.sca(axes[ibatch])
                 print(attn_matrix[ibatch])
                 # plot the attention matrix of the first event in the batch
-                plt.imshow(attn_matrix[ibatch].T, cmap="Blues", norm=matplotlib.colors.LogNorm())
+                plt.imshow(attn_matrix[ibatch].T, cmap="hot", norm=matplotlib.colors.LogNorm())
                 plt.xticks([])
                 plt.yticks([])
                 plt.colorbar()

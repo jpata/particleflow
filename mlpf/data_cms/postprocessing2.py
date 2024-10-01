@@ -11,6 +11,9 @@ import awkward
 from sklearn.neighbors import KDTree
 import fastjet
 
+# enable this to save the full graph for debugging (very large outputs)
+save_debugging_pickle = False
+
 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 jet_ptcut = 3
 
@@ -231,7 +234,8 @@ def find_representative_elements(g, elem_to_gp, gp_to_elem, elem_type):
 
 def prepare_normalized_table(g, iev):
     split_caloparticles(g, 1)
-    # pickle.dump(g, open("split_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
+    if save_debugging_pickle:
+        pickle.dump(g, open("split_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
 
     all_genparticles = []
     all_elements = []
@@ -720,23 +724,25 @@ def make_graph(ev, iev):
     # remove tracking particles
     g.remove_nodes_from(tps)
 
-    # pickle.dump(g, open("init_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
+    if save_debugging_pickle:
+        pickle.dump(g, open("init_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
 
-    # add any remaining links between CaloParticles and Elements using delta-R proximity with dR<0.05
+    # add any remaining links between SimClusters and Elements using delta-R proximity with dR<0.05
     # note: this may have issues with phi wraparound
     elems = [n for n in g.nodes if n[0] == "elem"]
     scs = [node for node in g.nodes if node[0] == "sc"]
     sc_coords = np.array([[g.nodes[n]["eta"] for n in scs], [g.nodes[n]["phi"] for n in scs]])
-    tree = KDTree(sc_coords.T, leaf_size=32)
-    for elem in elems:
-        if len(list(g.predecessors(elem))) == 0 and g.nodes[elem]["pt"] > 1:
-            eta = g.nodes[elem]["eta"]
-            phi = g.nodes[elem]["phi"]
-            nearby_scs = tree.query_radius([[eta, phi]], 0.05)[0]
-            for isc in nearby_scs:
-                if scs[isc] in g.nodes:
-                    if (scs[isc], elem) not in g.edges:
-                        g.add_edge(scs[isc], elem, weight=g.nodes[elem]["energy"])
+    if len(sc_coords.T) > 0:
+        tree = KDTree(sc_coords.T, leaf_size=32)
+        for elem in elems:
+            if len(list(g.predecessors(elem))) == 0 and g.nodes[elem]["pt"] > 1:
+                eta = g.nodes[elem]["eta"]
+                phi = g.nodes[elem]["phi"]
+                nearby_scs = tree.query_radius([[eta, phi]], 0.05)[0]
+                for isc in nearby_scs:
+                    if scs[isc] in g.nodes:
+                        if (scs[isc], elem) not in g.edges:
+                            g.add_edge(scs[isc], elem, weight=g.nodes[elem]["energy"])
 
     # add children of simcluster (elems) to parent (caloparticle)
     scs = [n for n in g.nodes if n[0] == "sc"]
@@ -792,7 +798,8 @@ def make_graph(ev, iev):
             g.nodes[node]["gp_to_track"] = gp_to_track
             g.nodes[node]["gp_to_cluster"] = gp_to_cluster
 
-    # pickle.dump(g, open("cleanup_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
+    if save_debugging_pickle:
+        pickle.dump(g, open("cleanup_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
     # print_gen(g)
     return g
 

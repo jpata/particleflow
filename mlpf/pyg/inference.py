@@ -130,49 +130,10 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
         jets = cluster.inclusive_jets(min_pt=jet_ptcut)
         jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e}))
-        if typ == "pred":
-            msk = (ydata["cls_id"] != 0) & (awkvals["target"]["pt"] > 0)
-            vec = vector.awk(
-                awkward.zip(
-                    {
-                        "pt": awkvals["target"]["pt"][msk],
-                        "eta": ydata["eta"][msk],
-                        "phi": ydata["phi"][msk],
-                        "e": awkvals["target"]["energy"][msk],
-                    }
-                )
-            )
-            cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-            jets = cluster.inclusive_jets(min_pt=jet_ptcut)
-            jets_coll["pred_targetpte"] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e}))
-
-    # get target jets from tfds for cross-check
-    # tgtjets_mask = batch.targetjets[:, :, 0] != 0
-    # tgtjets_counts = torch.sum(tgtjets_mask, axis=1).cpu().numpy()
-
-    # cluster PF and MLPF particles according to target jet particle jet indices, idea from MK
-    jets_coll["pred_targetclustering"] = vector.awk(
-        [
-            cluster_particles(awkvals["pred"], awkvals["pred"], awkvals["pred"], awkvals["target"]["jet_idx"][iev], iev)
-            for iev in range(len(awkvals["pred"]))
-        ]
-    )
-    jets_coll["pred_targetclustering"] = awkward.Array(jets_coll["pred_targetclustering"], with_name="Momentum4D")
-
-    jets_coll["pred_targetclustering2"] = vector.awk(
-        [
-            cluster_particles(awkvals["pred"], awkvals["target"], awkvals["pred"], awkvals["target"]["jet_idx"][iev], iev)
-            for iev in range(len(awkvals["pred"]))
-        ]
-    )
-    jets_coll["pred_targetclustering2"] = awkward.Array(jets_coll["pred_targetclustering2"], with_name="Momentum4D")
 
     matched_jets = awkward.Array(
         {
             "gen_to_pred": match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr),
-            "gen_to_pred_targetpte": match_two_jet_collections(jets_coll, "gen", "pred_targetpte", jet_match_dr),
-            "gen_to_pred_targetclustering": match_two_jet_collections(jets_coll, "gen", "pred_targetclustering", jet_match_dr),
-            "gen_to_pred_targetclustering2": match_two_jet_collections(jets_coll, "gen", "pred_targetclustering2", jet_match_dr),
             "gen_to_cand": match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr),
             "gen_to_target": match_two_jet_collections(jets_coll, "gen", "target", jet_match_dr),
             "target_to_cand": match_two_jet_collections(jets_coll, "target", "cand", jet_match_dr),

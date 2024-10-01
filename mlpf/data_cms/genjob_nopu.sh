@@ -72,16 +72,16 @@ ls -lrt
 
 echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> step2_phase1_new.py
 cmsRun step2_phase1_new.py > /dev/null
-cmsRun step3_phase1_new.py > /dev/null
-mv pfntuple.root pfntuple_${SEED}.root
-
-python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./
-bzip2 -z pfntuple_${SEED}.pkl
-cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
-
-#copy ROOT outputs
 #cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
+
+cmsRun step3_phase1_new.py > /dev/null
 #cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
+
+mv pfntuple.root pfntuple_${SEED}.root
 cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
+
+# python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./
+# bzip2 -z pfntuple_${SEED}.pkl
+# cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
 
 rm -Rf /scratch/local/joosep/$SLURM_JOBID

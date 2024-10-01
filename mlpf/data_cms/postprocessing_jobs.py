@@ -33,9 +33,15 @@ def write_script(infiles, outfiles):
 
 
 samples = [
-    "/local/joosep/mlpf/cms/20240823_simcluster/nopu/TTbar_14TeV_TuneCUETP8M1_cfi",
-    "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi",
-    "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/QCDForPF_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/TTbar_14TeV_TuneCUETP8M1_cfi",
+    "/local/joosep/mlpf/cms/20240823_simcluster/nopu/QCDForPF_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/QCDForPF_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SinglePiMinusFlatPt0p7To1000_cfi"
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleGammaFlatPt1To1000_pythia8_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleK0FlatPt1To1000_pythia8_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleElectronFlatPt1To1000_pythia8_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/MultiParticlePFGun50_cfi",
 ]
 
 ichunk = 1
