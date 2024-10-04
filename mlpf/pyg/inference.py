@@ -200,7 +200,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     plot_jet_ratio(
         yvals,
         cp_dir=plots_path,
-        bins=np.linspace(0, 5, 100),
+        bins=np.linspace(0, 5, 500),
         logy=True,
         dataset=dataset,
         sample=sample,
@@ -208,7 +208,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     plot_jet_ratio(
         yvals,
         cp_dir=plots_path,
-        bins=np.linspace(0.5, 1.5, 100),
+        bins=np.linspace(0.5, 1.5, 500),
         logy=False,
         file_modifier="_bins_0p5_1p5",
         dataset=dataset,
@@ -226,7 +226,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     plot_met_ratio(
         met_data,
         cp_dir=plots_path,
-        bins=np.linspace(0, 2, 100),
+        bins=np.linspace(0, 2, 500),
         logy=False,
         file_modifier="_bins_0_2",
         dataset=dataset,
@@ -235,7 +235,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     plot_met_ratio(
         met_data,
         cp_dir=plots_path,
-        bins=np.linspace(0, 5, 100),
+        bins=np.linspace(0, 5, 500),
         logy=False,
         file_modifier="_bins_0_5",
         dataset=dataset,

@@ -610,7 +610,7 @@ def plot_jet_ratio(
     ax = plt.axes()
 
     if bins is None:
-        bins = np.linspace(0, 5, 100)
+        bins = np.linspace(0, 5, 500)
 
     p = med_iqr(yvals["jet_ratio_gen_to_target"])
     plt.hist(
@@ -714,7 +714,7 @@ def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=No
     minval = math.floor(np.log10(max(minval, 1e-2)))
 
     plt.figure()
-    b = np.logspace(minval, maxval, 100)
+    b = np.logspace(minval, maxval, 500)
     plt.hist(
         met_ratio["target_met"],
         bins=b,
@@ -760,7 +760,7 @@ def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=No
 
     save_img("met_log.png", epoch, cp_dir=cp_dir, comet_experiment=comet_experiment)
 
-    b = np.linspace(0, 300, 100)
+    b = np.linspace(0, 300, 500)
     plt.hist(
         met_ratio["target_met"],
         bins=b,
@@ -819,7 +819,7 @@ def plot_met_ratio(
     plt.figure()
     ax = plt.axes()
     if bins is None:
-        bins = np.linspace(0, 20, 100)
+        bins = np.linspace(0, 20, 500)
 
     mask = met_ratio["gen_met"] > 5
 
