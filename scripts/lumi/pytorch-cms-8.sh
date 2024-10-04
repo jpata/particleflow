@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=mlpf-train
 #SBATCH --account=project_465000301
-#SBATCH --time=2-00:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
@@ -40,4 +40,4 @@ singularity exec \
     --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
      $IMG python3 mlpf/pyg_pipeline.py --dataset cms --gpus 8 \
      --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms.yaml \
-     --train --gpu-batch-multiplier 8 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --lr 0.0001 --load experiments/pyg-cms_20240917_155112_841033/checkpoints/checkpoint-20-2.787848.pth
+     --train --gpu-batch-multiplier 6 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --lr 0.0001
