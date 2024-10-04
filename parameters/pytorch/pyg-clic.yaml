@@ -52,11 +52,11 @@ model:
   attention:
     conv_type: attention
     num_convs: 4
-    dropout_ff: 0.0
+    dropout_ff: 0.1
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
-    dropout_conv_reg_mha: 0.0
-    dropout_conv_reg_ff: 0.0
+    dropout_conv_reg_mha: 0.1
+    dropout_conv_reg_ff: 0.1
     activation: "gelu"
     head_dim: 32
     num_heads: 32
@@ -106,23 +106,29 @@ train_dataset:
     physical:
       batch_size: 1
       samples:
-        clic_edm_ttbar_pf:
-          version: 2.1.0
         clic_edm_qq_pf:
-          version: 2.1.0
+          version: 2.2.0
+        clic_edm_ttbar_pf:
+          version: 2.2.0
+        clic_edm_ww_fullhad_pf:
+          version: 2.2.0
 
 valid_dataset:
   clic:
     physical:
       batch_size: 1
       samples:
-        clic_edm_ttbar_pf:
-          version: 2.1.0
         clic_edm_qq_pf:
-          version: 2.1.0
+          version: 2.2.0
+        clic_edm_ttbar_pf:
+          version: 2.2.0
+        clic_edm_ww_fullhad_pf:
+          version: 2.2.0
 
 test_dataset:
-  clic_edm_ttbar_pf:
-    version: 2.1.0
   clic_edm_qq_pf:
-    version: 2.1.0
+    version: 2.2.0
+  clic_edm_ttbar_pf:
+    version: 2.2.0
+  clic_edm_ww_fullhad_pf:
+    version: 2.2.0

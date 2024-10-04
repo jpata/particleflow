@@ -21,7 +21,7 @@ _CITATION = """
 class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf dataset."""
 
-    VERSION = tfds.core.Version("2.3.0")
+    VERSION = tfds.core.Version("2.4.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",
@@ -39,6 +39,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         "2.1.0": "Additional stats",
         "2.2.0": "Split CaloParticles along tracks",
         "2.3.0": "Increase stats",
+        "2.4.0": "Add gp_to_track, gp_to_cluster, jet_idx",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar ~/tensorflow_datasets/
@@ -56,13 +57,14 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
             features=tfds.features.FeaturesDict(
                 {
                     "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
-                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
                     "genmet": tfds.features.Scalar(dtype=tf.float32),
                     "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
+                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
-            supervised_keys=("X", "ygen"),
+            supervised_keys=("X", "ytarget"),
             homepage="",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(x_features=X_FEATURES, y_features=Y_FEATURES),

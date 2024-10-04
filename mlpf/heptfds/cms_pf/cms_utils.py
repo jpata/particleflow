@@ -51,7 +51,7 @@ X_FEATURES = [
     "eta",
     "sin_phi",
     "cos_phi",
-    "e",
+    "energy",
     "layer",
     "depth",
     "charge",
@@ -110,17 +110,23 @@ Y_FEATURES = [
     "eta",
     "sin_phi",
     "cos_phi",
-    "e",
+    "energy",
     "ispu",
+    "generatorStatus",
+    "simulatorStatus",
+    "gp_to_track",
+    "gp_to_cluster",
+    "jet_idx",
 ]
 
 
 def prepare_data_cms(fn):
     Xs = []
-    ygens = []
+    ytargets = []
     ycands = []
     genmets = []
     genjets = []
+    targetjets = []
 
     if fn.endswith(".pkl"):
         data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
@@ -129,22 +135,23 @@ def prepare_data_cms(fn):
 
     for event in data:
         Xelem = event["Xelem"]
-        ygen = event["ygen"]
+        ytarget = event["ytarget"]
         ycand = event["ycand"]
         genmet = event["genmet"][0][0]
         genjet = event["genjet"]
+        targetjet = event["targetjet"]
 
         # remove PS and BREM from inputs
         msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
 
         Xelem = ak.Array(Xelem[~msk_ps])
-        ygen = ak.Array(ygen[~msk_ps])
+        ytarget = ak.Array(ytarget[~msk_ps])
         ycand = ak.Array(ycand[~msk_ps])
 
         Xelem["sin_phi"] = np.sin(Xelem["phi"])
         Xelem["cos_phi"] = np.cos(Xelem["phi"])
         Xelem["typ_idx"] = np.array([ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]], dtype=np.float32)
-        ygen["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ygen["pid"]], dtype=np.float32)
+        ytarget["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ytarget["pid"]], dtype=np.float32)
         ycand["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["pid"]], dtype=np.float32)
 
         Xelem_flat = ak.to_numpy(
@@ -153,9 +160,9 @@ def prepare_data_cms(fn):
                 axis=-1,
             )
         )
-        ygen_flat = ak.to_numpy(
+        ytarget_flat = ak.to_numpy(
             np.stack(
-                [ygen[k] for k in Y_FEATURES],
+                [ytarget[k] for k in Y_FEATURES],
                 axis=-1,
             )
         )
@@ -168,18 +175,19 @@ def prepare_data_cms(fn):
 
         X = Xelem_flat
         ycand = ycand_flat
-        ygen = ygen_flat
+        ytarget = ytarget_flat
 
         Xs.append(X)
-        ygens.append(ygen)
+        ytargets.append(ytarget)
         ycands.append(ycand)
         genmets.append(genmet)
         genjets.append(genjet)
+        targetjets.append(targetjet)
 
-    return Xs, ygens, ycands, genmets, genjets
+    return Xs, ytargets, ycands, genmets, genjets, targetjets
 
 
-def split_sample(path, test_frac=0.8):
+def split_sample(path, test_frac=0.9):
     files = sorted(list(path.glob("*.pkl*")))
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
@@ -198,13 +206,14 @@ def generate_examples(files):
     """Yields examples."""
 
     for fi in tqdm.tqdm(files):
-        Xs, ygens, ycands, genmets, genjets = prepare_data_cms(str(fi))
+        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
         for ii in range(len(Xs)):
-            x = Xs[ii]
-            yg = ygens[ii]
-            yc = ycands[ii]
-            gm = genmets[ii]
-            gj = genjets[ii]
+            x = Xs[ii].astype(np.float32)
+            yg = ytargets[ii].astype(np.float32)
+            yc = ycands[ii].astype(np.float32)
+            gm = genmets[ii].astype(np.float32)
+            gj = genjets[ii].astype(np.float32)
+            tj = targetjets[ii].astype(np.float32)
 
             uniqs, counts = np.unique(yg[:, 0], return_counts=True)
-            yield str(fi) + "_" + str(ii), {"X": x, "ygen": yg, "ycand": yc, "genmet": gm, "genjets": gj}
+            yield str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj, "targetjets": tj}

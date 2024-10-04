@@ -24,13 +24,18 @@ def match_jets(jets1, jets2, deltaR_cut):
     jet_inds_1_ev = []
     jet_inds_2_ev = []
     for ev in range(iev):
-        j1 = jets1[ev]
-        j2 = jets2[ev]
+        j1 = jets1[ev]  # first jet collection
+        j2 = jets2[ev]  # second jet collection
 
         jet_inds_1 = []
         jet_inds_2 = []
+
+        # loop over the first jet collection
         for ij1 in range(len(j1)):
+            # compute deltaR from this jet to all jets in the other collection
             drs = np.zeros(len(j2), dtype=np.float64)
+
+            # loop over the other jet collection
             for ij2 in range(len(j2)):
                 eta1 = j1.eta[ij1]
                 eta2 = j2.eta[ij2]
@@ -41,8 +46,12 @@ def match_jets(jets1, jets2, deltaR_cut):
                 # dr = j1[ij1].deltaR(j2[ij2])
                 dr = deltar(eta1, phi1, eta2, phi2)
                 drs[ij2] = dr
+
             if len(drs) > 0:
+                # find closest match to this jet
                 min_idx_dr = np.argmin(drs)
+
+                # has to be closer than the deltaR_cut
                 if drs[min_idx_dr] < deltaR_cut:
                     jet_inds_1.append(ij1)
                     jet_inds_2.append(min_idx_dr)

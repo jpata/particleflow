@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=mlpf-train
 #SBATCH --account=project_465000301
-#SBATCH --time=3-00:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=200G
 #SBATCH --gpus-per-task=8
-#SBATCH --partition=small-g
+#SBATCH --partition=standard-g
 #SBATCH --no-requeue
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
@@ -40,4 +40,4 @@ singularity exec \
     --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
      $IMG python3 mlpf/pyg_pipeline.py --dataset clic --gpus 8 \
      --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-clic.yaml \
-     --train --gpu-batch-multiplier 128 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --lr 0.0001
+     --train --gpu-batch-multiplier 128 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --lr 0.0001 --num-epochs 30
