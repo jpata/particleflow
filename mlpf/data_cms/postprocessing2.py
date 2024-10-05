@@ -165,9 +165,9 @@ def get_charge(pid):
 
 def compute_gen_met(g):
     genpart = [elem for elem in g.nodes if elem[0] == "cp"]
-    px = np.sum([g.nodes[elem]["pt"] * np.cos(g.nodes[elem]["phi"]) for elem in genpart])
-    py = np.sum([g.nodes[elem]["pt"] * np.sin(g.nodes[elem]["phi"]) for elem in genpart])
-    met = np.sqrt(px**2 + py**2)
+    sum_px = np.sum([g.nodes[elem]["pt"] * np.cos(g.nodes[elem]["phi"]) for elem in genpart])
+    sum_py = np.sum([g.nodes[elem]["pt"] * np.sin(g.nodes[elem]["phi"]) for elem in genpart])
+    met = np.sqrt(sum_px**2 + sum_py**2)
     return met
 
 
