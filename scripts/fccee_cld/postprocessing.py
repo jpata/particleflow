@@ -706,9 +706,9 @@ def get_p4(part, prefix="MCParticles"):
 
 def compute_met(part, prefix="MCParticles"):
     p4 = get_p4(part, prefix)
-    px = awkward.sum(p4.px, axis=1)
-    py = awkward.sum(p4.py, axis=1)
-    met = np.sqrt(px**2 + py**2)
+    sum_px = awkward.sum(p4.px, axis=1)
+    sum_py = awkward.sum(p4.py, axis=1)
+    met = np.sqrt(sum_px**2 + sum_py**2)
     return met
 
 
