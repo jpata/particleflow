@@ -1,5 +1,13 @@
 import math
 import os
+
+# to prevent https://stackoverflow.com/questions/52026652/openblas-blas-thread-init-pthread-create-resource-temporarily-unavailable
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import pickle
 
 import networkx as nx
@@ -770,21 +778,13 @@ def make_graph(ev, iev):
 
     print("make_graph duplicates removed, met={:.2f}".format(compute_gen_met(g)))
 
-    # now remove PS and BREM elements, as they are not informative
+    # now remove PS and BREM elements, as they are not that informative
     elems = [n for n in g.nodes if n[0] == "elem"]
     nodes_to_remove = []
     for elem in elems:
         if g.nodes[elem]["typ"] in [2, 3, 7]:
             nodes_to_remove.append(elem)
     g.remove_nodes_from(nodes_to_remove)
-
-    # now remove PS and BREM elements, as they are not informative for reconstruction
-    # elems = [n for n in g.nodes if n[0] == "elem"]
-    # nodes_to_remove = []
-    # for elem in elems:
-    #     if g.nodes[elem]["typ"] in [2, 3, 7]:
-    #         nodes_to_remove.append(elem)
-    # g.remove_nodes_from(nodes_to_remove)
 
     print("cleanup done, met={:.2f}".format(compute_gen_met(g)))
 
@@ -802,8 +802,6 @@ def make_graph(ev, iev):
     num_elem = len([n for n in g.nodes if n[0] == "elem"])
     print(f"GEN={num_gen} CP={num_cp} SC={num_sc} TP={num_tp} PF={num_pf} EL={num_elem}")
 
-    cp_reconstructed = []
-    cp_not_reconstructed = []
     for node in g.nodes:
         if node[0] == "cp":
             elems_children = list(g.successors(node))
@@ -818,49 +816,6 @@ def make_graph(ev, iev):
                     cp_to_cluster += w
             g.nodes[node]["cp_to_track"] = cp_to_track
             g.nodes[node]["cp_to_cluster"] = cp_to_cluster
-
-            # this caloparticle did not leave any reco hits
-            if cp_to_track == 0 and cp_to_cluster == 0:
-                cp_not_reconstructed.append(node)
-            else:
-                cp_reconstructed.append(node)
-
-    # assign not reconstructable caloparticles to closest reconstructable caloparticle
-    cp_coords = np.array([[g.nodes[n]["eta"] for n in cp_reconstructed], [g.nodes[n]["phi"] for n in cp_reconstructed]])
-    tree = KDTree(cp_coords.T, leaf_size=32)
-    for cp in cp_not_reconstructed:
-        # find closest caloparticle that was reconstructable
-        eta = g.nodes[cp]["eta"]
-        phi = g.nodes[cp]["phi"]
-        nearby_cp = tree.query([[eta, phi]])
-        if nearby_cp[0][0, 0] < 0.05:
-            nearby_cp_idx = nearby_cp[1][0, 0]
-            nearby_cp = cp_reconstructed[nearby_cp_idx]
-
-            lv_nearby = vector.obj(
-                pt=g.nodes[nearby_cp]["pt"],
-                eta=g.nodes[nearby_cp]["eta"],
-                phi=g.nodes[nearby_cp]["phi"],
-                energy=g.nodes[nearby_cp]["energy"],
-            )
-            lv = vector.obj(
-                pt=g.nodes[cp]["pt"],
-                eta=g.nodes[cp]["eta"],
-                phi=g.nodes[cp]["phi"],
-                energy=g.nodes[cp]["energy"],
-            )
-            lv_tot = lv_nearby + lv
-
-            g.nodes[nearby_cp]["pt"] = lv_tot.rho
-            g.nodes[nearby_cp]["eta"] = lv_tot.eta
-            g.nodes[nearby_cp]["sin_phi"] = np.sin(lv_tot.phi)
-            g.nodes[nearby_cp]["cos_phi"] = np.cos(lv_tot.phi)
-            g.nodes[nearby_cp]["energy"] = lv_tot.t
-            g.nodes[nearby_cp]["px"] = lv_tot.x
-            g.nodes[nearby_cp]["py"] = lv_tot.y
-            g.nodes[nearby_cp]["pz"] = lv_tot.z
-            g.nodes[nearby_cp]["ispu"] = g.nodes[nearby_cp]["ispu"] * (lv_nearby.energy / lv_tot.t) + g.nodes[cp]["ispu"] * (lv.energy / lv_tot.t)
-    g.remove_nodes_from(cp_not_reconstructed)
 
     if save_debugging_pickle:
         pickle.dump(g, open("cleanup_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
