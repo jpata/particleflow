@@ -131,18 +131,6 @@ def print_gen(g, min_pt=1):
         print(node, g.nodes[node]["pt"], g.nodes[node]["eta"], g.nodes[node]["phi"], g.nodes[node]["pid"], children)
 
 
-def map_pdgid_to_candid(pdgid, charge):
-    if pdgid in [22, 11, 13]:
-        return pdgid
-
-    # charged hadron
-    if abs(charge) > 0:
-        return 211
-
-    # neutral hadron
-    return 130
-
-
 def deltar_pairs(eta_vec, phi_vec, dr_cut):
 
     deta = np.abs(np.subtract.outer(eta_vec, eta_vec))
