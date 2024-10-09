@@ -5,11 +5,9 @@ import csv
 
 import matplotlib.pyplot as plt
 
-sys.path.append("../mlpf")
-
-from pyg.mlpf import MLPF
-from pyg.training import override_config
-from pyg.utils import (
+from mlpf.model.mlpf import MLPF
+from mlpf.model.training import override_config
+from mlpf.model.utils import (
     CLASS_LABELS,
     X_FEATURES,
     count_parameters,

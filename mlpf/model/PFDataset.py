@@ -4,7 +4,7 @@ import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
 
-from pyg.logger import _logger
+from mlpf.model.logger import _logger
 
 import numpy as np
 

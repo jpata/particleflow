@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  deps-pyg:
+  deps-torch:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
@@ -19,9 +19,9 @@ jobs:
           cache: "pip"
       - run: pip install -r requirements.txt
 
-  pyg-unittests:
+  torch-unittests:
     runs-on: ubuntu-22.04
-    needs: [deps-pyg]
+    needs: [deps-torch]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -31,9 +31,9 @@ jobs:
       - run: pip install -r requirements.txt
       - run: PYTHONPATH=. python3 -m unittest tests/test_torch_and_tf.py
 
-  pyg-pipeline:
+  torch-pipeline:
     runs-on: ubuntu-22.04
-    needs: [pyg-unittests]
+    needs: [torch-unittests]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -41,4 +41,4 @@ jobs:
           python-version: "3.10.12"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - run: ./scripts/local_test_pyg.sh
+      - run: ./scripts/local_test_torch.sh

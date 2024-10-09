@@ -22,6 +22,7 @@ import glob
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
+
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -30,8 +31,8 @@ from torch.nn import functional as F
 from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.tensorboard import SummaryWriter
 
-from pyg.logger import _logger, _configLogger
-from pyg.utils import (
+from mlpf.model.logger import _logger, _configLogger
+from mlpf.model.utils import (
     unpack_predictions,
     unpack_target,
     get_model_state_dict,
@@ -46,15 +47,12 @@ from pyg.utils import (
 )
 
 
-from pyg.inference import make_plots, run_predictions
+from mlpf.model.inference import make_plots, run_predictions
+from mlpf.model.mlpf import set_save_attention
+from mlpf.model.mlpf import MLPF
+from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 
-from pyg.mlpf import set_save_attention
-from pyg.mlpf import MLPF
-from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
-from utils import create_comet_experiment
-
-# Ignore divide by 0 errors
-np.seterr(divide="ignore", invalid="ignore")
+from mlpf.utils import create_comet_experiment
 
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
@@ -416,7 +414,6 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
                 axes = [axes]
             for ibatch in range(batch_size):
                 plt.sca(axes[ibatch])
-                print(attn_matrix[ibatch])
                 # plot the attention matrix of the first event in the batch
                 plt.imshow(attn_matrix[ibatch].T, cmap="hot", norm=matplotlib.colors.LogNorm())
                 plt.xticks([])
@@ -1071,6 +1068,7 @@ def run(rank, world_size, config, args, outdir, logfile):
                 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
                 jet_ptcut = 3
             else:
+                import pdb;pdb.set_trace()
                 raise Exception("not implemented")
 
             device_type = "cuda" if isinstance(rank, int) else "cpu"
