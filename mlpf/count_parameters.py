@@ -1,4 +1,3 @@
-import sys
 import yaml
 import argparse
 import csv

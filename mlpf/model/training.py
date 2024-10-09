@@ -1068,7 +1068,6 @@ def run(rank, world_size, config, args, outdir, logfile):
                 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
                 jet_ptcut = 3
             else:
-                import pdb;pdb.set_trace()
                 raise Exception("not implemented")
 
             device_type = "cuda" if isinstance(rank, int) else "cpu"
