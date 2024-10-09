@@ -32,8 +32,8 @@ scikit-optimize
 scipy
 seaborn
 setGPU
-tensorflow-datasets
 tensorflow
+tensorflow-datasets
 tf2onnx
 torch
 torch_runstats

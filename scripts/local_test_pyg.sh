@@ -3,8 +3,8 @@ set -e
 export TFDS_DATA_DIR=`pwd`/tensorflow_datasets
 export PWD=`pwd`
 
+#create data directories
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
-
 mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 cd local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 
@@ -14,7 +14,7 @@ wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/2024
 
 cd ../../..
 
-#Create the ntuples
+#Create the ntuples using postprocessing2.py
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
 mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
 for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; do
@@ -24,9 +24,10 @@ for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; d
 	  --num-events 10
 done
 
-mkdir -p experiments
-
+#create the tensorflow dataset
 tfds build mlpf/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
+
+mkdir -p experiments
 
 #test transformer with onnx export
 python mlpf/pyg_pipeline.py --config parameters/pytorch/pyg-cms.yaml --dataset cms --data-dir ./tensorflow_datasets/ \
