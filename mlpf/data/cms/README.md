@@ -89,7 +89,7 @@ mlpf/data_cms/genjob_pu55to75.sh
 
 ## pytorch training
 
-Copy the datasets from EOS (about 500GB):
+Copy the datasets from EOS:
 ```
 rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms ./tensorflow_datasets
 ```
@@ -102,9 +102,9 @@ wget https://jpata.web.cern.ch/jpata/pytorch.simg
 On a machine with a single GPU, the following is a quick test of the training workflow
 ```
 singularity exec --env CUDA_VISIBLE_DEVICES=0 -B /scratch/persistent --nv \
-    --env PYTHONPATH=hep_tfds \
+    --env PYTHONPATH=`pwd` \
     --env KERAS_BACKEND=torch \
-    pytorch.simg python3.10 mlpf/pyg_pipeline.py --dataset cms --gpus 1 \
+    pytorch.simg python3.10 mlpf/pipeline.py --dataset cms --gpus 1 \
     --data-dir ./tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
     --train --test --make-plots --conv-type attention --num-epochs 10 --gpu-batch-multiplier 1 \
     --num-workers 4 --prefetch-factor 100 --checkpoint-freq 1 --ntrain 1000 --ntest 1000 --nvalid 1000

@@ -33,7 +33,7 @@ python3 --version
 
 
 echo 'Starting training.'
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -u mlpf/pyg_pipeline.py --train \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -u mlpf/pipeline.py --train \
     --config $1 \
     --prefix $2 \
     --gpus 8 \
