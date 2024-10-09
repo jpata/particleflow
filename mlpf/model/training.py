@@ -972,8 +972,10 @@ def run(rank, world_size, config, args, outdir, logfile):
             comet_experiment.log_parameter(trainable_params, "trainable_params")
             comet_experiment.log_parameter(nontrainable_params, "nontrainable_params")
             comet_experiment.log_parameter(trainable_params + nontrainable_params, "total_trainable_params")
-            comet_experiment.log_code("mlpf/pyg/training.py")
-            comet_experiment.log_code("mlpf/pyg_pipeline.py")
+            comet_experiment.log_code("mlpf/model/training.py")
+            comet_experiment.log_code("mlpf/model/mlpf.py")
+            comet_experiment.log_code("mlpf/model/utils.py")
+            comet_experiment.log_code("mlpf/pipeline.py")
             # save overridden config then log to comet
             config_filename = "overridden_config.yaml"
             with open((Path(outdir) / config_filename), "w") as file:
@@ -1219,8 +1221,10 @@ def train_ray_trial(config, args, outdir=None):
         comet_experiment.log_parameter(trainable_params, "trainable_params")
         comet_experiment.log_parameter(nontrainable_params, "nontrainable_params")
         comet_experiment.log_parameter(trainable_params + nontrainable_params, "total_trainable_params")
-        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pyg/training.py"))
-        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pyg_pipeline.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/model/training.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/model/mlpf.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/model/utils.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pipeline.py"))
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/raytune/pt_search_space.py"))
         # save overridden config then log to comet
         config_filename = "overridden_config.yaml"

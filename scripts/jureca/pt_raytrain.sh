@@ -94,7 +94,7 @@ echo 'Starting training.'
 # when training with Ray Train, --gpus should be equal to toal number of GPUs across the Ray Cluster
 # apptainer exec --nv -B /p/project/jureap57/cern/data/tensorflow_datasets,/p/project/jureap57/cern/particleflow \
 #  apptainer/images/jureca_torch2307.sif \
-python3 -u $PWD/mlpf/pyg_pipeline.py --train --ray-train \
+python3 -u $PWD/mlpf/pipeline.py --train --ray-train \
     --config $1 \
     --prefix $2 \
     --ray-cpus $((SLURM_CPUS_PER_TASK*SLURM_JOB_NUM_NODES)) \

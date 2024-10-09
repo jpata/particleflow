@@ -33,7 +33,7 @@ python3 --version
 
 
 echo 'Starting testing.'
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -u mlpf/pyg_pipeline.py \
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -u mlpf/pipeline.py \
     --config $1 \
     --load $2 \
     --gpus 4 \
