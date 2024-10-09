@@ -11,7 +11,7 @@ jupyter
 jupyter-book
 keras
 keras-tuner
-matplotlib<=3.7.3
+matplotlib
 mplhep
 networkx
 nevergrad
@@ -32,10 +32,13 @@ scikit-optimize
 scipy
 seaborn
 setGPU
-tensorflow==2.14.1
 tensorflow-datasets
+tensorflow
 tf2onnx
+torch
 torch_runstats
+torchaudio
+torchvision
 tqdm
 uproot
 vector
