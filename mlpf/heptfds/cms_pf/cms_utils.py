@@ -114,10 +114,22 @@ Y_FEATURES = [
     "ispu",
     "generatorStatus",
     "simulatorStatus",
-    "gp_to_track",
-    "gp_to_cluster",
+    "cp_to_track",
+    "cp_to_cluster",
     "jet_idx",
 ]
+
+
+def map_pdgid_to_candid(pdgid, charge):
+    if pdgid in [22, 11, 13]:
+        return pdgid
+
+    # charged hadron
+    if abs(charge) > 0:
+        return 211
+
+    # neutral hadron
+    return 130
 
 
 def prepare_data_cms(fn):
@@ -151,7 +163,8 @@ def prepare_data_cms(fn):
         Xelem["sin_phi"] = np.sin(Xelem["phi"])
         Xelem["cos_phi"] = np.cos(Xelem["phi"])
         Xelem["typ_idx"] = np.array([ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]], dtype=np.float32)
-        ytarget["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ytarget["pid"]], dtype=np.float32)
+        pids_remapped = [map_pdgid_to_candid(abs(int(pid)), q) for (pid, q) in zip(ytarget["pid"], ytarget["charge"])]
+        ytarget["typ_idx"] = np.array([CLASS_LABELS_CMS.index(pid) for pid in pids_remapped], dtype=np.float32)
         ycand["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["pid"]], dtype=np.float32)
 
         Xelem_flat = ak.to_numpy(
