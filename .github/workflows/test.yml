@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  deps:
+  deps-pyg:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
@@ -18,17 +18,6 @@ jobs:
           python-version: "3.10.12"
           cache: "pip"
       - run: pip install -r requirements.txt
-  deps-pyg:
-    runs-on: ubuntu-20.04
-    needs: [deps]
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.10.12"
-          cache: "pip"
-      - run: pip install -r requirements.txt
-      - run: pip3 install torch==2.3.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
   pyg-unittests:
     runs-on: ubuntu-22.04
@@ -40,7 +29,6 @@ jobs:
           python-version: "3.10.12"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - run: pip3 install torch==2.3.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
       - run: PYTHONPATH=. python3 -m unittest tests/test_torch_and_tf.py
 
   pyg-pipeline:
@@ -53,5 +41,4 @@ jobs:
           python-version: "3.10.12"
           cache: "pip"
       - run: pip install -r requirements.txt
-      - run: pip3 install torch==2.3.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
       - run: ./scripts/local_test_pyg.sh
