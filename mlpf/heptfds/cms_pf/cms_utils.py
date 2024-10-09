@@ -205,8 +205,8 @@ def split_sample(path, test_frac=0.9):
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
     idx_split = int(test_frac * len(files))
-    files_train = files[:idx_split][:10]
-    files_test = files[idx_split:][:1000]
+    files_train = files[:idx_split]
+    files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
     return {
