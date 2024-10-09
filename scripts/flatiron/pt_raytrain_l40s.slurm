@@ -78,7 +78,7 @@ fi
 echo 'Starting training.'
 # when training with Ray Train, --gpus should be equal to toal number of GPUs across the Ray Cluster
 # singularity exec --nv pytorch.simg \
-python3 -u mlpf/pyg_pipeline.py --train --ray-train \
+python3 -u mlpf/pipeline.py --train --ray-train \
     --config $1 \
     --prefix $2 \
     --ray-cpus $((SLURM_CPUS_PER_TASK*SLURM_JOB_NUM_NODES)) \

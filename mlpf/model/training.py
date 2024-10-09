@@ -22,6 +22,7 @@ import glob
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
+
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -30,8 +31,8 @@ from torch.nn import functional as F
 from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.tensorboard import SummaryWriter
 
-from pyg.logger import _logger, _configLogger
-from pyg.utils import (
+from mlpf.model.logger import _logger, _configLogger
+from mlpf.model.utils import (
     unpack_predictions,
     unpack_target,
     get_model_state_dict,
@@ -46,15 +47,12 @@ from pyg.utils import (
 )
 
 
-from pyg.inference import make_plots, run_predictions
+from mlpf.model.inference import make_plots, run_predictions
+from mlpf.model.mlpf import set_save_attention
+from mlpf.model.mlpf import MLPF
+from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 
-from pyg.mlpf import set_save_attention
-from pyg.mlpf import MLPF
-from pyg.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
-from utils import create_comet_experiment
-
-# Ignore divide by 0 errors
-np.seterr(divide="ignore", invalid="ignore")
+from mlpf.utils import create_comet_experiment
 
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
@@ -416,7 +414,6 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
                 axes = [axes]
             for ibatch in range(batch_size):
                 plt.sca(axes[ibatch])
-                print(attn_matrix[ibatch])
                 # plot the attention matrix of the first event in the batch
                 plt.imshow(attn_matrix[ibatch].T, cmap="hot", norm=matplotlib.colors.LogNorm())
                 plt.xticks([])
@@ -975,8 +972,10 @@ def run(rank, world_size, config, args, outdir, logfile):
             comet_experiment.log_parameter(trainable_params, "trainable_params")
             comet_experiment.log_parameter(nontrainable_params, "nontrainable_params")
             comet_experiment.log_parameter(trainable_params + nontrainable_params, "total_trainable_params")
-            comet_experiment.log_code("mlpf/pyg/training.py")
-            comet_experiment.log_code("mlpf/pyg_pipeline.py")
+            comet_experiment.log_code("mlpf/model/training.py")
+            comet_experiment.log_code("mlpf/model/mlpf.py")
+            comet_experiment.log_code("mlpf/model/utils.py")
+            comet_experiment.log_code("mlpf/pipeline.py")
             # save overridden config then log to comet
             config_filename = "overridden_config.yaml"
             with open((Path(outdir) / config_filename), "w") as file:
@@ -1222,8 +1221,10 @@ def train_ray_trial(config, args, outdir=None):
         comet_experiment.log_parameter(trainable_params, "trainable_params")
         comet_experiment.log_parameter(nontrainable_params, "nontrainable_params")
         comet_experiment.log_parameter(trainable_params + nontrainable_params, "total_trainable_params")
-        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pyg/training.py"))
-        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pyg_pipeline.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/model/training.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/model/mlpf.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/model/utils.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pipeline.py"))
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/raytune/pt_search_space.py"))
         # save overridden config then log to comet
         config_filename = "overridden_config.yaml"

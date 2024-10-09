@@ -85,7 +85,7 @@ echo All Ray workers started.
 
 echo 'Starting HPO.'
 # when training with Ray Train, --gpus should be equal to toal number of GPUs across the Ray Cluster
-python3 -u $PWD/mlpf/pyg_pipeline.py --train \
+python3 -u $PWD/mlpf/pipeline.py --train \
     --data-dir /p/project/jureap57/cern/tensorflow_datasets/clusters \
     --config $1 \
     --hpo $2 \

@@ -71,7 +71,7 @@ echo All Ray workers started.
 ##############################################################################################
 # call your code below
 
-python3 -u mlpf/pyg_pipeline.py --train \
+python3 -u mlpf/pipeline.py --train \
     --config $1 \
     --hpo $2 \
     --ray-cpus $((SLURM_CPUS_PER_TASK/2)) \
