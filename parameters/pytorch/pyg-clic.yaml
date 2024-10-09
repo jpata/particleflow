@@ -107,11 +107,11 @@ train_dataset:
       batch_size: 1
       samples:
         clic_edm_qq_pf:
-          version: 2.2.0
+          version: 2.3.0
         clic_edm_ttbar_pf:
-          version: 2.2.0
+          version: 2.3.0
         clic_edm_ww_fullhad_pf:
-          version: 2.2.0
+          version: 2.3.0
 
 valid_dataset:
   clic:
@@ -119,16 +119,16 @@ valid_dataset:
       batch_size: 1
       samples:
         clic_edm_qq_pf:
-          version: 2.2.0
+          version: 2.3.0
         clic_edm_ttbar_pf:
-          version: 2.2.0
+          version: 2.3.0
         clic_edm_ww_fullhad_pf:
-          version: 2.2.0
+          version: 2.3.0
 
 test_dataset:
   clic_edm_qq_pf:
-    version: 2.2.0
+    version: 2.3.0
   clic_edm_ttbar_pf:
-    version: 2.2.0
+    version: 2.3.0
   clic_edm_ww_fullhad_pf:
-    version: 2.2.0
+    version: 2.3.0
