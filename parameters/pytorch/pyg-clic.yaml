@@ -7,7 +7,7 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-num_epochs: 100
+num_epochs: 30
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
@@ -51,7 +51,7 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 4
+    num_convs: 6
     dropout_ff: 0.1
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
