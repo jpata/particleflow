@@ -109,3 +109,11 @@ singularity exec --env CUDA_VISIBLE_DEVICES=0 -B /scratch/persistent --nv \
     --train --test --make-plots --conv-type attention --num-epochs 10 --gpu-batch-multiplier 1 \
     --num-workers 4 --prefetch-factor 100 --checkpoint-freq 1 --ntrain 1000 --ntest 1000 --nvalid 1000
 ```
+
+
+### Compatibility table
+The following table specifies which version of the jpata/particleflow software should be used with which version of the tensorflow datasets.
+
+| Code  | Datasets |
+| ----- | -------- |
+| [1.9.0](https://github.com/jpata/particleflow/releases/v1.9.0) | 2.4.0    |
