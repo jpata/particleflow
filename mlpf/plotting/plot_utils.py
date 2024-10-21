@@ -363,6 +363,9 @@ def compute_met_and_ratio(yvals):
     pred_met = awkward.to_numpy(np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2))
     cand_met = awkward.to_numpy(np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2))
 
+    print(gen_met)
+    print(target_met)
+
     met_ratio_target = awkward.to_numpy(target_met / gen_met)
     met_ratio_pred = awkward.to_numpy(pred_met / gen_met)
     met_ratio_cand = awkward.to_numpy(cand_met / gen_met)
@@ -1141,6 +1144,7 @@ def plot_particle_ratio(yvals, class_names, epoch=None, cp_dir=None, comet_exper
     target_cls_id1 = awkward.flatten(yvals["target_cls_id"][msk_target & msk_cand])
     target_cls_id2 = awkward.flatten(yvals["target_cls_id"][msk_target & msk_pred])
     cls_ids = np.unique(awkward.values_astype(target_cls_id, np.int64))
+    print("cls_ids", cls_ids)
     for cls_id in cls_ids:
         if cls_id == 0:
             continue
