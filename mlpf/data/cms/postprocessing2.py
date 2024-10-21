@@ -345,10 +345,6 @@ def prepare_normalized_table(g, iev):
             reverse=True,
         )
 
-        # keep track which CaloParticles were already used
-        for cp in caloparticles:
-            all_caloparticles.remove(cp)
-
         candidate = elem_to_cand.get(elem, None)
 
         for j in range(len(elem_branches)):
@@ -407,7 +403,6 @@ def prepare_normalized_table(g, iev):
     py = np.sum(ytarget["pt"] * ytarget["sin_phi"])
     met = np.sqrt(px**2 + py**2)
     print("normalized, met={:.2f}".format(met))
-    assert len(all_caloparticles) == 0
 
     return Xelem, ycand, ytarget
 
@@ -734,21 +729,25 @@ def make_graph(ev, iev):
     if save_debugging_pickle:
         pickle.dump(g, open("init_g_{}.pkl".format(iev), "wb"), pickle.HIGHEST_PROTOCOL)
 
-    # add any remaining links between SimClusters and Elements using delta-R proximity with dR<0.05
-    # note: this may have issues with phi wraparound
-    elems = [n for n in g.nodes if n[0] == "elem"]
+    # sometimes, the SimClusters are clearly leaving tracks, but the simulation links between the tracks and SimClusters don't seem to exist.
+    # add any remaining links between SimClusters and tracks using delta-R proximity with dR<0.05
+    # note: this is in general a hack for missing simulation information, currently has issues with phi wraparound
+    elems = [n for n in g.nodes if n[0] == "elem" and g.nodes[n]["typ"] == 1]
     scs = [node for node in g.nodes if node[0] == "sc"]
     sc_coords = np.array([[g.nodes[n]["eta"] for n in scs], [g.nodes[n]["phi"] for n in scs]])
     if len(sc_coords.T) > 0:
         tree = KDTree(sc_coords.T, leaf_size=32)
         for elem in elems:
-            eta = g.nodes[elem]["eta"]
-            phi = g.nodes[elem]["phi"]
-            nearby_scs = tree.query_radius([[eta, phi]], 0.05)[0]
-            for isc in nearby_scs:
-                if scs[isc] in g.nodes:
-                    if (scs[isc], elem) not in g.edges:
-                        g.add_edge(scs[isc], elem, weight=g.nodes[elem]["energy"])
+            # PFElement must have no links and a high-enough pT
+            # note: this can have some effect on the target - genjet matching
+            if len(list(g.predecessors(elem))) == 0 and g.nodes[elem]["pt"] > 1.0:
+                eta = g.nodes[elem]["eta"]
+                phi = g.nodes[elem]["phi"]
+                nearby_scs = tree.query_radius([[eta, phi]], 0.05)[0]
+                for isc in nearby_scs:
+                    if scs[isc] in g.nodes:
+                        if (scs[isc], elem) not in g.edges:
+                            g.add_edge(scs[isc], elem, weight=g.nodes[elem]["energy"])
 
     # add children of simcluster (elems) to parent (caloparticle)
     scs = [n for n in g.nodes if n[0] == "sc"]
@@ -810,23 +809,6 @@ def make_graph(ev, iev):
     return g
 
 
-def cleanup_graph(g):
-    all_removed_edges = []
-    elems = [n for n in g.nodes if n[0] == "elem"]
-    for elem in elems:
-        edges_to_remove = []
-        for pred in g.predecessors(elem):
-            edge = (pred, elem)
-            if g.edges[edge]["weight"] / g.nodes[elem]["energy"] < 0.1:
-                edges_to_remove.append(edge)
-        all_removed_edges += edges_to_remove
-    # print("removed edges:", all_removed_edges)
-    # for edge in all_removed_edges:
-    #     print(g.nodes[edge[0]]["energy"], g.nodes[edge[1]]["energy"], g.edges[edge]["weight"])
-    g.remove_edges_from(all_removed_edges)
-    return g
-
-
 def process(args):
     infile = args.input
     outpath = os.path.join(args.outpath, os.path.basename(infile).split(".")[0])
@@ -843,7 +825,6 @@ def process(args):
     for iev in tqdm.tqdm(events_to_process):
         print("processing iev={}, genmet_cmssw={:.2f}".format(iev, ev["genmet_pt"][iev][0]))
         g = make_graph(ev, iev)
-        # g = cleanup_graph(g)
 
         # associate target particles to input elements
         Xelem, ycand, ytarget = prepare_normalized_table(g, iev)
@@ -851,15 +832,12 @@ def process(args):
 
         # produce a list of stable pythia particles for downstream validation
         # stable: status=1 (typical) or status=2 and no daughters (B hadrons)
-        ptcls_pythia = [
-            n
-            for n in g.nodes
-            if n[0] == "gen" and ((g.nodes[n]["status"] == 1) or ((g.nodes[n]["status"] == 2) and g.nodes[n]["num_daughters"] == 0))
-        ]
+        ptcls_pythia = [n for n in g.nodes if n[0] == "gen" and ((g.nodes[n]["status"] == 1) and (abs(g.nodes[n]["pid"]) not in [12, 14, 16]))]
         feats = ["pid", "pt", "eta", "phi", "energy"]
         arr_ptcls_pythia = np.array([[g.nodes[n][f] for f in feats] for n in ptcls_pythia])
 
-        # genjet from CMSSW currently contains neutrinos (ak4GenJet), so it's not good to use
+        # note for simulation 20240823_simcluster: genjet from CMSSW contains neutrinos (ak4GenJet),
+        # so it's somewhat mismatched with respect to CaloParticles, which don't contain neutrinos
         # genjet_pt = ev["genjet_pt"][iev]
         # genjet_eta = ev["genjet_eta"][iev]
         # genjet_phi = ev["genjet_phi"][iev]

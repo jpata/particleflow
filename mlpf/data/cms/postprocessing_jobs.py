@@ -24,7 +24,7 @@ def write_script(infiles, outfiles):
         s += [f"if [ ! -f {outf} ]; then"]
         s += [
             "  singularity exec -B /local /home/software/singularity/pytorch.simg:2024-08-18"
-            + f" python3 mlpf/data_cms/postprocessing2.py --input {inf} --outpath {outpath}"
+            + f" python3 mlpf/data/cms/postprocessing2.py --input {inf} --outpath {outpath}"
         ]
         s += [f"  bzip2 -z {outf_no_bzip}"]
         s += ["fi"]
@@ -33,11 +33,14 @@ def write_script(infiles, outfiles):
 
 
 samples = [
+    # PU
     # "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi",
     # "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/QCDForPF_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
     # NoPU
-    "/local/joosep/mlpf/cms/20240823_simcluster/nopu/TTbar_14TeV_TuneCUETP8M1_cfi",
-    "/local/joosep/mlpf/cms/20240823_simcluster/nopu/QCDForPF_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/TTbar_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/QCDForPF_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
     # Single particle gun
     # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SinglePiMinusFlatPt0p7To1000_cfi"
     # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SinglePi0Pt1To1000_pythia8_cfi"
@@ -52,7 +55,7 @@ samples = [
 
 ichunk = 1
 for sample in samples:
-    infiles = list(glob.glob(f"{sample}/root/pfntuple*.root"))
+    infiles = sorted(list(glob.glob(f"{sample}/root/pfntuple*.root")))
     for infiles_chunk in chunks(infiles, 50):
         outfiles_chunk = [inf.replace(".root", ".pkl.bz2").replace("/root/", "/raw/") for inf in infiles_chunk]
         os.makedirs(os.path.dirname(outfiles_chunk[0]), exist_ok=True)

@@ -1,7 +1,6 @@
 """CMS PF QCD dataset."""
 import cms_utils
 import tensorflow as tf
-
 import tensorflow_datasets as tfds
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -21,7 +20,7 @@ _CITATION = """
 class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd dataset."""
 
-    VERSION = tfds.core.Version("2.4.0")
+    VERSION = tfds.core.Version("2.5.0")
     RELEASE_NOTES = {
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
         "1.3.1": "Remove PS again",
@@ -35,10 +34,14 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
         "2.1.0": "Additional stats",
         "2.3.0": "Split CaloParticles along tracks",
         "2.4.0": "Add gp_to_track, gp_to_cluster, jet_idx",
+        "2.5.0": "Remove neutrinos from genjets, split to 10",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_qcd ~/tensorflow_datasets/
     """
+
+    # create configs 1 ... NUM_SPLITS + 1 that allow to parallelize the dataset building
+    BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, cms_utils.NUM_SPLITS + 1)]
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
@@ -46,7 +49,6 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
-        # TODO(cms_pf): Specifies the tfds.core.DatasetInfo object
         return tfds.core.DatasetInfo(
             builder=self,
             description=_DESCRIPTION,
@@ -60,8 +62,7 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
                     "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
-            supervised_keys=("X", "ytarget"),
-            homepage="",
+            homepage="https://github.com/jpata/particleflow",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(x_features=X_FEATURES, y_features=Y_FEATURES),
         )
@@ -70,7 +71,7 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "QCDForPF_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path / sample_dir / "raw")
+        return cms_utils.split_sample(path / sample_dir / "raw", self.builder_config, num_splits=cms_utils.NUM_SPLITS)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)

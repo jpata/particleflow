@@ -119,6 +119,9 @@ Y_FEATURES = [
     "jet_idx",
 ]
 
+# split each dataset into equal parts for faster building
+NUM_SPLITS = 10
+
 
 def map_pdgid_to_candid(pdgid, charge):
     if pdgid in [22, 11, 13]:
@@ -200,33 +203,54 @@ def prepare_data_cms(fn):
     return Xs, ytargets, ycands, genmets, genjets, targetjets
 
 
-def split_sample(path, test_frac=0.9):
+def split_list(lst, x):
+    # Calculate the size of each sublist (except potentially the last)
+    sublist_size = len(lst) // x
+
+    # Create x-1 sublists of equal size
+    result = [lst[i * sublist_size : (i + 1) * sublist_size] for i in range(x - 1)]
+
+    # Add the remaining elements to the last sublist
+    result.append(lst[(x - 1) * sublist_size :])
+
+    return result
+
+
+def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     files = sorted(list(path.glob("*.pkl*")))
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
-    idx_split = int(test_frac * len(files))
-    files_train = files[:idx_split]
-    files_test = files[idx_split:]
+    idx_test = int(test_frac * len(files))
+    files_train = files[:idx_test]
+    files_test = files[idx_test:]
     assert len(files_train) > 0
     assert len(files_test) > 0
+
+    split_index = int(builder_config.name) - 1
+    files_train_split = split_list(files_train, num_splits)
+    files_test_split = split_list(files_test, num_splits)
     return {
-        "train": generate_examples(files_train),
-        "test": generate_examples(files_test),
+        "train": generate_examples(files_train_split[split_index]),
+        "test": generate_examples(files_test_split[split_index]),
     }
+
+
+def convert_example(fi):
+    Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
+    for ii in range(len(Xs)):
+        x = Xs[ii].astype(np.float32)
+        yg = ytargets[ii].astype(np.float32)
+        yc = ycands[ii].astype(np.float32)
+        gm = genmets[ii].astype(np.float32)
+        gj = genjets[ii].astype(np.float32)
+        tj = targetjets[ii].astype(np.float32)
+
+        uniqs, counts = np.unique(yg[:, 0], return_counts=True)
+        return str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj, "targetjets": tj}
 
 
 def generate_examples(files):
     """Yields examples."""
 
     for fi in tqdm.tqdm(files):
-        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
-        for ii in range(len(Xs)):
-            x = Xs[ii].astype(np.float32)
-            yg = ytargets[ii].astype(np.float32)
-            yc = ycands[ii].astype(np.float32)
-            gm = genmets[ii].astype(np.float32)
-            gj = genjets[ii].astype(np.float32)
-            tj = targetjets[ii].astype(np.float32)
-
-            uniqs, counts = np.unique(yg[:, 0], return_counts=True)
-            yield str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj, "targetjets": tj}
+        yield convert_example(fi)

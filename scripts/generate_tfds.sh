@@ -5,7 +5,7 @@ export PYTHONPATH="mlpf:$PYTHONPATH"
 
 # T2_EE_Estonia
 export IMG=/home/software/singularity/pytorch.simg:2024-08-18
-export CMD="singularity exec -B /local -B /scratch/persistent $IMG tfds build "
+export CMD="singularity exec -B /local -B /scratch/persistent $IMG tfds build"
 
 # Desktop
 # export MANUAL_DIR=/media/joosep/data/cms/v3_1/
@@ -14,9 +14,11 @@ export CMD="singularity exec -B /local -B /scratch/persistent $IMG tfds build "
 # export CMD="singularity exec -B /media/joosep/data --env PYTHONPATH=$PYTHONPATH $IMG tfds build "
 
 # CMS
-# export DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets
-# export MANUAL_DIR=/local/joosep/mlpf/cms/20240823_simcluster
-# $CMD mlpf/heptfds/cms_pf/ttbar --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ttbar.log &
+export DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets2
+export MANUAL_DIR=/local/joosep/mlpf/cms/20240823_simcluster
+for i in `seq 1 10`; do
+    $CMD mlpf/heptfds/cms_pf/ttbar --config $i --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ttbar.log$i &
+done
 # $CMD mlpf/heptfds/cms_pf/qcd --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_qcd.log &
 # $CMD mlpf/heptfds/cms_pf/ztt --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ztt.log &
 # $CMD mlpf/heptfds/cms_pf/qcd_high_pt --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_qcd_high_pt.log &
@@ -34,7 +36,7 @@ export CMD="singularity exec -B /local -B /scratch/persistent $IMG tfds build "
 # $CMD mlpf/heptfds/cms_pf/ttbar_nopu --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_ttbar_nopu.log &
 # $CMD mlpf/heptfds/cms_pf/qcd_nopu --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_qcd_nopu.log &
 # $CMD mlpf/heptfds/cms_pf/vbf_nopu --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite &> logs/tfds_vbf_nopu.log &
-# wait
+wait
 
 # CLIC cluster-based
 # export DATA_DIR=/scratch/persistent/joosep/tensorflow_datasets

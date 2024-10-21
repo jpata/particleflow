@@ -29,11 +29,14 @@ class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
         "2.2.0": "Split CaloParticles along tracks",
         "2.3.0": "Additional stats",
         "2.4.0": "Add gp_to_track, gp_to_cluster, jet_idx",
-        "2.5.0": "Remove neutrinos from truth jets",
+        "2.5.0": "Remove neutrinos from genjets, split to 10",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar_nopu ~/tensorflow_datasets/
     """
+
+    # create configs 1 ... NUM_SPLITS + 1 that allow to parallelize the dataset building
+    BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, cms_utils.NUM_SPLITS + 1)]
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
@@ -54,8 +57,7 @@ class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
                     "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
-            supervised_keys=("X", "ytarget"),
-            homepage="",
+            homepage="https://github.com/jpata/particleflow",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(x_features=X_FEATURES, y_features=Y_FEATURES),
         )
@@ -64,7 +66,7 @@ class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path / sample_dir / "raw")
+        return cms_utils.split_sample(path / sample_dir / "raw", self.builder_config, num_splits=cms_utils.NUM_SPLITS)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)

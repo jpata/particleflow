@@ -117,6 +117,7 @@ EVALUATION_DATASET_NAMES = {
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
     "cms_pf_qcd": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$+PU",
     "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$+PU",
+    "cms_pf_ztt_nopu": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$",
     "cms_pf_vbf": r"VBF+PU",
     "cms_pf_ttbar": r"$\mathrm{t}\overline{\mathrm{t}}$+PU",
     "cms_pf_ttbar_nopu": r"$\mathrm{t}\overline{\mathrm{t}}$",
@@ -340,7 +341,9 @@ def compute_jet_ratio(data, yvals):
                     axis=1,
                 )
             )
-            ret[f"jet_ratio_{match1}_to_{match2}"] = ret[f"jet_{match1}_to_{match2}_{match2}{val}"] / ret[f"jet_{match1}_to_{match2}_{match1}{val}"]
+            ret[f"jet_ratio_{match1}_to_{match2}_{val}"] = (
+                ret[f"jet_{match1}_to_{match2}_{match2}{val}"] / ret[f"jet_{match1}_to_{match2}_{match1}{val}"]
+            )
     return ret
 
 
@@ -609,27 +612,27 @@ def plot_jet_ratio(
     if bins is None:
         bins = np.linspace(0, 5, 500)
 
-    p = med_iqr(yvals["jet_ratio_gen_to_target"])
+    p = med_iqr(yvals["jet_ratio_gen_to_target_pt"])
     plt.hist(
-        yvals["jet_ratio_gen_to_target"],
+        yvals["jet_ratio_gen_to_target_pt"],
         bins=bins,
         histtype="step",
         lw=2,
         label="target $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
-    p = med_iqr(yvals["jet_ratio_gen_to_cand"])
+    p = med_iqr(yvals["jet_ratio_gen_to_cand_pt"])
     plt.hist(
-        yvals["jet_ratio_gen_to_cand"],
+        yvals["jet_ratio_gen_to_cand_pt"],
         bins=bins,
         histtype="step",
         lw=2,
         label="PF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
-    p = med_iqr(yvals["jet_ratio_gen_to_pred"])
+    p = med_iqr(yvals["jet_ratio_gen_to_pred_pt"])
     plt.hist(
-        yvals["jet_ratio_gen_to_pred"],
+        yvals["jet_ratio_gen_to_pred_pt"],
         bins=bins,
         histtype="step",
         lw=2,
@@ -662,18 +665,18 @@ def plot_jet_ratio(
     plt.figure()
     ax = plt.axes()
 
-    p = med_iqr(yvals["jet_ratio_target_to_cand"])
+    p = med_iqr(yvals["jet_ratio_target_to_cand_pt"])
     plt.plot([], [])
     plt.hist(
-        yvals["jet_ratio_target_to_cand"],
+        yvals["jet_ratio_target_to_cand_pt"],
         bins=bins,
         histtype="step",
         lw=2,
         label="PF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
-    p = med_iqr(yvals["jet_ratio_target_to_pred"])
+    p = med_iqr(yvals["jet_ratio_target_to_pred_pt"])
     plt.hist(
-        yvals["jet_ratio_target_to_pred"],
+        yvals["jet_ratio_target_to_pred_pt"],
         bins=bins,
         histtype="step",
         lw=2,
@@ -1416,8 +1419,8 @@ def plot_jet_response_binned_vstarget(yvals, epoch=None, cp_dir=None, comet_expe
     pf_genjet_pt = yvals["jet_target_to_cand_targetpt"]
     mlpf_genjet_pt = yvals["jet_target_to_pred_targetpt"]
 
-    pf_response = yvals["jet_ratio_target_to_cand"]
-    mlpf_response = yvals["jet_ratio_target_to_pred"]
+    pf_response = yvals["jet_ratio_target_to_cand_pt"]
+    mlpf_response = yvals["jet_ratio_target_to_pred_pt"]
 
     genjet_bins = [10, 20, 40, 60, 80, 100, 200]
 
@@ -1525,9 +1528,9 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     pf_genjet_pt = yvals["jet_gen_to_cand_genpt"]
     mlpf_genjet_pt = yvals["jet_gen_to_pred_genpt"]
 
-    target_response = yvals["jet_ratio_gen_to_target"]
-    pf_response = yvals["jet_ratio_gen_to_cand"]
-    mlpf_response = yvals["jet_ratio_gen_to_pred"]
+    target_response = yvals["jet_ratio_gen_to_target_pt"]
+    pf_response = yvals["jet_ratio_gen_to_cand_pt"]
+    mlpf_response = yvals["jet_ratio_gen_to_pred_pt"]
 
     genjet_bins = [10, 20, 40, 60, 80, 100, 200]
 
@@ -1648,9 +1651,9 @@ def plot_jet_response_binned_eta(yvals, epoch=None, cp_dir=None, comet_experimen
     pf_genjet_eta = yvals["jet_gen_to_cand_geneta"]
     mlpf_genjet_eta = yvals["jet_gen_to_pred_geneta"]
 
-    target_response = yvals["jet_ratio_gen_to_target"]
-    pf_response = yvals["jet_ratio_gen_to_cand"]
-    mlpf_response = yvals["jet_ratio_gen_to_pred"]
+    target_response = yvals["jet_ratio_gen_to_target_pt"]
+    pf_response = yvals["jet_ratio_gen_to_cand_pt"]
+    mlpf_response = yvals["jet_ratio_gen_to_pred_pt"]
 
     genjet_bins = [-4, -3, -2, -1, 0, 1, 2, 3, 4]
 
