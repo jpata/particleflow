@@ -235,22 +235,18 @@ def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     }
 
 
-def convert_example(fi):
-    Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
-    for ii in range(len(Xs)):
-        x = Xs[ii].astype(np.float32)
-        yg = ytargets[ii].astype(np.float32)
-        yc = ycands[ii].astype(np.float32)
-        gm = genmets[ii].astype(np.float32)
-        gj = genjets[ii].astype(np.float32)
-        tj = targetjets[ii].astype(np.float32)
-
-        uniqs, counts = np.unique(yg[:, 0], return_counts=True)
-        return str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj, "targetjets": tj}
-
-
 def generate_examples(files):
     """Yields examples."""
 
     for fi in tqdm.tqdm(files):
-        yield convert_example(fi)
+        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
+        for ii in range(len(Xs)):
+            x = Xs[ii].astype(np.float32)
+            yg = ytargets[ii].astype(np.float32)
+            yc = ycands[ii].astype(np.float32)
+            gm = genmets[ii].astype(np.float32)
+            gj = genjets[ii].astype(np.float32)
+            tj = targetjets[ii].astype(np.float32)
+
+            uniqs, counts = np.unique(yg[:, 0], return_counts=True)
+            yield str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj, "targetjets": tj}
