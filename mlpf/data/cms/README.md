@@ -109,5 +109,3 @@ singularity exec --env CUDA_VISIBLE_DEVICES=0 -B /scratch/persistent --nv \
     --train --test --make-plots --conv-type attention --num-epochs 10 --gpu-batch-multiplier 1 \
     --num-workers 4 --prefetch-factor 100 --checkpoint-freq 1 --ntrain 1000 --ntest 1000 --nvalid 1000
 ```
-
-
