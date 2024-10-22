@@ -111,9 +111,3 @@ singularity exec --env CUDA_VISIBLE_DEVICES=0 -B /scratch/persistent --nv \
 ```
 
 
-### Compatibility table
-The following table specifies which version of the jpata/particleflow software should be used with which version of the tensorflow datasets.
-
-| Code  | Datasets |
-| ----- | -------- |
-| [1.9.0](https://github.com/jpata/particleflow/releases/v1.9.0) | 2.4.0    |
