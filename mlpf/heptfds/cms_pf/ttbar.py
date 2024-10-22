@@ -18,7 +18,7 @@ _CITATION = """
 
 
 class CmsPfTtbar(tfds.core.GeneratorBasedBuilder, skip_registration=True):
-    """DatasetBuilder for cms_pf dataset."""
+    """DatasetBuilder for cms_pf_ttbar dataset."""
 
     VERSION = tfds.core.Version("2.5.0")
     RELEASE_NOTES = {
