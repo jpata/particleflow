@@ -86,12 +86,17 @@ def mlpf_loss(y, ypred, batch):
     nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
 
+
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
     y["momentum"] = y["momentum"] * msk_true_particle
+
 
     # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
     ypred["cls_binary"] = ypred["cls_binary"].permute((0, 2, 1))
     ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
+    ypred["ispu"] = ypred["ispu"].permute((0, 2, 1))
+    ypred["ispu"] = torch.squeeze(ypred["ispu"], dim = 1)
+
 
     # binary loss for particle / no-particle classification
     # loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
@@ -100,6 +105,9 @@ def mlpf_loss(y, ypred, batch):
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_pid_classification[y["cls_id"] == 0] *= 0
+    loss_pu = torch.nn.functional.mse_loss(ypred["ispu"], y["ispu"], reduction="none")
+    loss_pu[y["cls_id"] == 0] *= 0
+    loss_pu[batch.mask == 0] *= 0
 
     # compare particle momentum, only for cases where there was a true particle
     loss_regression_pt = torch.nn.functional.mse_loss(ypred["pt"], y["pt"], reduction="none")
@@ -133,6 +141,7 @@ def mlpf_loss(y, ypred, batch):
     # average over all elements that were not padded
     loss["Classification_binary"] = loss_binary_classification.sum() / nelem
     loss["Classification"] = loss_pid_classification.sum() / nelem
+    loss["ispu"] = loss_pu.sum() / nelem
 
     # compute predicted pt from model output
     pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], axis=-1) * msk_pred_particle
@@ -165,6 +174,7 @@ def mlpf_loss(y, ypred, batch):
         + loss["Regression_sin_phi"]
         + loss["Regression_cos_phi"]
         + loss["Regression_energy"]
+        + loss["ispu"]
     )
 
     # store these separately but detached
@@ -176,6 +186,7 @@ def mlpf_loss(y, ypred, batch):
     loss["Regression_cos_phi"] = loss["Regression_cos_phi"].detach()
     loss["Regression_energy"] = loss["Regression_energy"].detach()
     loss["Sliced_Wasserstein_Loss"] = loss["Sliced_Wasserstein_Loss"].detach()
+    loss["ispu"] = loss["ispu"].detach()
 
     # print out losses for debugging
     # for k in sorted(loss.keys()):
