@@ -220,7 +220,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     ret[f"{sample_folder}/jets_pt_cand"] = to_bh(ak.flatten(jets_coll["ycand"].pt), bins=b)
 
     # jet pt ratio
-    b = np.linspace(0, 2, 500)
+    b = np.linspace(0, 5, 1000)
     ratio = ak.flatten((jets_coll["cp"][pythia_to_cp["cp"]].pt / jets_coll["pythia_nonu"][pythia_to_cp["pythia_nonu"]].pt))
     ret[f"{sample_folder}/jets_pt_ratio_caloparticle"] = to_bh(ratio, bins=b)
     ratio = ak.flatten((jets_coll["ytarget"][pythia_to_ytarget["ytarget"]].pt / jets_coll["pythia_nonu"][pythia_to_ytarget["pythia_nonu"]].pt))
@@ -228,7 +228,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     ratio = ak.flatten(
         (jets_coll["ytarget_nopu"][pythia_to_ytarget_nopu["ytarget_nopu"]].pt / jets_coll["pythia_nonu"][pythia_to_ytarget_nopu["pythia_nonu"]].pt)
     )
-    ret[f"{sample_folder}/jets_pt_ratio_target_nopu"] = to_bh(ratio, bins=b)
+    ret[f"{sample_folder}/jets_pt_ratio_target_pumask"] = to_bh(ratio, bins=b)
     ratio = ak.flatten((jets_coll["ycand"][pythia_to_ycand["ycand"]].pt / jets_coll["pythia_nonu"][pythia_to_ycand["pythia_nonu"]].pt))
     ret[f"{sample_folder}/jets_pt_ratio_cand"] = to_bh(ratio, bins=b)
 
@@ -245,11 +245,12 @@ if __name__ == "__main__":
 
     pu_config = "pu55to75"
     maxfiles = 100
-    perjob = 10
+    perjob = 1
     numjobs = 16
     is_test = False
 
     args = []
+    ijob = 0
     for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:
         rootfiles = sorted(glob.glob("/local/joosep/mlpf/cms/20240823_simcluster/{}/{}/root/pfntuple_*.root".format(pu_config, sample_folder)))
         pklfiles = sorted(glob.glob("/local/joosep/mlpf/cms/20240823_simcluster/{}/{}/raw/pfntuple_*.pkl.bz2".format(pu_config, sample_folder)))
@@ -261,8 +262,9 @@ if __name__ == "__main__":
         common_keys = sorted(list(set(set(rootfiles_d.keys()).intersection(set(pklfiles_d.keys())))))[:maxfiles]
 
         # prepare chunked arguments for process_files
-        for ijob, ck in enumerate(chunks(common_keys, perjob)):
+        for ck in chunks(common_keys, perjob):
             args.append((sample_folder, [rootfiles_d[c] for c in ck], [pklfiles_d[c] for c in ck], "out{}.pkl".format(ijob)))
+        ijob += 1
 
     if is_test:
         process_files(*args[0])
