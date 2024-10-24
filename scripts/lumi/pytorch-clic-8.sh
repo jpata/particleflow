@@ -38,6 +38,6 @@ singularity exec \
     -B /tmp \
     --env LD_LIBRARY_PATH=/opt/rocm/lib/ \
     --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
-     $IMG python3 mlpf/pipeline.py --dataset clic --gpus 8 \
+     $IMG python3 mlpf/pipeline.py --gpus 8 \
      --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-clic.yaml \
      --train --gpu-batch-multiplier 128 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --lr 0.0001 --num-epochs 30
