@@ -1059,12 +1059,12 @@ def run(rank, world_size, config, args, outdir, logfile):
             torch.cuda.empty_cache()
 
             # FIXME: import this from a central place
-            if args.dataset == "clic":
+            if config["dataset"] == "clic":
                 import fastjet
 
                 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
                 jet_ptcut = 5
-            elif args.dataset == "cms":
+            if config["dataset"] == "cms":
                 import fastjet
 
                 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
