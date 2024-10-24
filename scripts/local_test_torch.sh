@@ -3,6 +3,7 @@ set -e
 export TFDS_DATA_DIR=`pwd`/tensorflow_datasets
 export PWD=`pwd`
 export PYTHONPATH=`pwd`
+export KERAS_BACKEND=torch
 
 #create data directories
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
@@ -25,8 +26,8 @@ for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; d
 	  --num-events 10
 done
 
-#create the tensorflow dataset
-tfds build mlpf/heptfds/cms_pf/ttbar --manual_dir ./local_test_data
+#create the tensorflow dataset for the last split config only
+tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
 
 mkdir -p experiments
 

@@ -149,7 +149,11 @@ def main():
                         "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]},
                     }
                 }
+                # load only the last config split
+                config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]["splits"] = ["10"]
             config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
+            # load only the last config split
+            config["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
 
     # override loaded config with values from command line args
     config = override_config(config, args)

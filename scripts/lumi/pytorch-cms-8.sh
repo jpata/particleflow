@@ -16,7 +16,7 @@ cd /scratch/project_465000301/particleflow
 module load LUMI/24.03 partition/G
 
 export IMG=/scratch/project_465000301/pytorch-rocm6.2.simg
-export PYTHONPATH=hep_tfds
+export PYTHONPATH=`pwd`
 export TFDS_DATA_DIR=/scratch/project_465000301/tensorflow_datasets
 #export MIOPEN_DISABLE_CACHE=true
 export MIOPEN_USER_DB_PATH=/tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
@@ -39,5 +39,5 @@ singularity exec \
     --env LD_LIBRARY_PATH=/opt/rocm/lib/ \
     --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
      $IMG python3 mlpf/pipeline.py --dataset cms --gpus 8 \
-     --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms.yaml \
+     --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms-nopu.yaml \
      --train --gpu-batch-multiplier 6 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --lr 0.0001

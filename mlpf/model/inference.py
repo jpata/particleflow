@@ -32,23 +32,6 @@ from .logger import _logger
 from .utils import unpack_predictions, unpack_target
 
 
-def cluster_particles(data_cls, data_pte, data_etaphi, jet_idx, iev):
-    pt = data_pte["pt"][iev]
-    eta = data_etaphi["eta"][iev]
-    phi = data_etaphi["phi"][iev]
-    energy = data_pte["energy"][iev]
-    p4 = np.stack([pt, eta, phi, energy], axis=-1)
-
-    unique_jets = np.unique(jet_idx)
-    p4 = awkward.Array([p4[jet_idx == i] for i in unique_jets if i != 0])
-    p4 = p4[(p4[:, :, 0] != 0) & (p4[:, :, 1] != 0) & (p4[:, :, 2] != 0)]
-
-    p4 = vector.awk(awkward.zip({"pt": p4[:, :, 0], "eta": p4[:, :, 1], "phi": p4[:, :, 2], "energy": p4[:, :, 3]}))
-
-    sum_jets = awkward.sum(p4, axis=1)
-    return sum_jets
-
-
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
 
     # skip prediction if output exists
