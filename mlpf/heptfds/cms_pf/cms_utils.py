@@ -124,6 +124,9 @@ NUM_SPLITS = 10
 
 
 def map_pdgid_to_candid(pdgid, charge):
+    if pdgid == 0:
+        return 0
+
     if pdgid in [22, 11, 13]:
         return pdgid
 
