@@ -1030,7 +1030,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             batch_size = config["gpu_batch_multiplier"]
             version = config["test_dataset"][sample]["version"]
 
-            split_configs = config["test_dataset"][sample]["splits"].split(",")
+            split_configs = config["test_dataset"][sample]["splits"]
             print("split_configs", split_configs)
 
             dataset = []

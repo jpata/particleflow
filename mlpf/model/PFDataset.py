@@ -226,7 +226,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
             dataset = []
             for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
                 version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
-                split_configs = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["splits"].split(",")
+                split_configs = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["splits"]
                 print("split_configs", split_configs)
 
                 for split_config in split_configs:

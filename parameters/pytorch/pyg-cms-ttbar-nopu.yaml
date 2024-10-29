@@ -62,7 +62,7 @@ model:
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "gelu"
+    activation: "relu"
     head_dim: 32
     num_heads: 32
     attention_type: flash
@@ -111,7 +111,7 @@ train_dataset:
       samples:
         cms_pf_ttbar_nopu:
           version: 2.5.0
-          splits: "1"
+          splits: [1]
 
 valid_dataset:
   cms:
@@ -120,9 +120,9 @@ valid_dataset:
       samples:
         cms_pf_ttbar_nopu:
           version: 2.5.0
-          splits: "1"
+          splits: [1]
 
 test_dataset:
   cms_pf_ttbar_nopu:
     version: 2.5.0
-    splits: "1"
+    splits: [1]
