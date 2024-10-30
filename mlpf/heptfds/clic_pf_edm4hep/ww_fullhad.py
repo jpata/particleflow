@@ -26,13 +26,14 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("2.2.0")
+    VERSION = tfds.core.Version("2.3.0")
     RELEASE_NOTES = {
         "1.3.0": "Update stats to ~1M events",
         "1.4.0": "Fix ycand matching",
         "1.5.0": "Regenerate with ARRAY_RECORD",
         "2.1.0": "Add ispu, genjets, genmet; disable genjet_idx; truth def not based on gp.status==1",
         "2.2.0": "New target definition, fix truth jets, add targetjets and jet idx",
+        "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.

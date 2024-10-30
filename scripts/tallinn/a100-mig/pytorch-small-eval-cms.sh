@@ -13,6 +13,6 @@ env
 singularity exec -B /scratch/persistent --nv \
      --env PYTHONPATH=`pwd` \
      --env KERAS_BACKEND=torch \
-     $IMG python mlpf/pipeline.py --dataset cms --gpus 1 \
-     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms-ttbar-nopu.yaml \
-     --test --make-plots --gpu-batch-multiplier 4 --ntest 5000 --load $WEIGHTS --dtype bfloat16 --num-workers 8 --prefetch-factor 10 --load $WEIGHTS --test-datasets $DATASET
+     $IMG python mlpf/pipeline.py --gpus 1 \
+     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
+     --test --make-plots --gpu-batch-multiplier 2 --load $WEIGHTS --ntest 10000 --dtype bfloat16 --num-workers 8 --prefetch-factor 10

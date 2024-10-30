@@ -11,6 +11,6 @@ WEIGHTS=experiments/pyg-clic_20241001_215132_345408/checkpoints/checkpoint-26-2.
 singularity exec -B /scratch/persistent --nv \
      --env PYTHONPATH=`pwd` \
      --env KERAS_BACKEND=torch \
-     $IMG  python3 mlpf/pipeline.py --dataset clic --gpus 1 \
+     $IMG  python3 mlpf/pipeline.py --gpus 1 \
      --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-clic.yaml \
      --test --make-plots --gpu-batch-multiplier 100 --load $WEIGHTS --dtype bfloat16 --prefetch-factor 10 --num-workers 8 --load $WEIGHTS --ntest 50000
