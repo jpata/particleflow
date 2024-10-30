@@ -56,13 +56,13 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 4
+    num_convs: 6
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "gelu"
+    activation: "relu"
     head_dim: 32
     num_heads: 32
     attention_type: flash
@@ -115,6 +115,9 @@ train_dataset:
         cms_pf_qcd:
           version: 2.5.0
           splits: 1,2,3,4,5,6,7,8,9,10
+        cms_pf_ztt:
+          version: 2.5.0
+          splits: 1,2,3,4,5,6,7,8,9,10
     physical_nopu:
       batch_size: 8
       samples:
@@ -122,6 +125,9 @@ train_dataset:
           version: 2.5.0
           splits: 1,2,3,4,5,6,7,8,9,10
         cms_pf_qcd_nopu:
+          version: 2.5.0
+          splits: 1,2,3,4,5,6,7,8,9,10
+        cms_pf_ztt_nopu:
           version: 2.5.0
           splits: 1,2,3,4,5,6,7,8,9,10
 
@@ -136,6 +142,9 @@ valid_dataset:
         cms_pf_qcd:
           version: 2.5.0
           splits: 1,2,3,4,5,6,7,8,9,10
+        cms_pf_ztt:
+          version: 2.5.0
+          splits: 1,2,3,4,5,6,7,8,9,10
     physical_nopu:
       batch_size: 8
       samples:
@@ -143,6 +152,9 @@ valid_dataset:
           version: 2.5.0
           splits: 1,2,3,4,5,6,7,8,9,10
         cms_pf_qcd_nopu:
+          version: 2.5.0
+          splits: 1,2,3,4,5,6,7,8,9,10
+        cms_pf_ztt_nopu:
           version: 2.5.0
           splits: 1,2,3,4,5,6,7,8,9,10
 
@@ -153,9 +165,15 @@ test_dataset:
   cms_pf_qcd:
     version: 2.5.0
     splits: 1,2,3,4,5,6,7,8,9,10
+  cms_pf_ztt:
+    version: 2.5.0
+    splits: 1,2,3,4,5,6,7,8,9,10
   cms_pf_ttbar_nopu:
     version: 2.5.0
     splits: 1,2,3,4,5,6,7,8,9,10
   cms_pf_qcd_nopu:
+    version: 2.5.0
+    splits: 1,2,3,4,5,6,7,8,9,10
+  cms_pf_ztt_nopu:
     version: 2.5.0
     splits: 1,2,3,4,5,6,7,8,9,10

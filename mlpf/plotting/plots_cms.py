@@ -45,13 +45,11 @@ def to_bh(data, bins, cumulative=False):
     h1[:] = sum_overflow_into_last_bin(h1.values(flow=True)[:])
     return h1
 
+
 def compute_met(pt, phi, mask=None):
     if mask is None:
         mask = np.ones_like(pt, dtype=bool)
-    met = np.sqrt(
-        ak.sum(pt[mask] * np.sin(phi[mask]), axis=1) ** 2 + 
-        ak.sum(pt[mask] * np.cos(phi[mask]), axis=1) ** 2
-    )
+    met = np.sqrt(ak.sum(pt[mask] * np.sin(phi[mask]), axis=1) ** 2 + ak.sum(pt[mask] * np.cos(phi[mask]), axis=1) ** 2)
     return met
 
 
@@ -60,7 +58,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     time.sleep(pause)
 
     # check that the root and pkl file lists correspond to each other
-    if len(rootfiles)>0:
+    if len(rootfiles) > 0:
         assert len(rootfiles) == len(pklfiles)
         for fn1, fn2 in zip(rootfiles, pklfiles):
             assert os.path.basename(fn1).split(".")[0] == os.path.basename(fn2).split(".")[0]
@@ -115,7 +113,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     arrs_awk["pythia"]["energy"] = ak.from_regular([np.array(p["pythia"][:, 4]) for p in pickle_data])
 
     pu_mask = arrs_awk["ytarget"]["ispu"] < 0.5
-    if len(rootfiles)>0:
+    if len(rootfiles) > 0:
         abs_pid = np.abs(particles_pythia["gen_pdgid"])
         mask_pythia_nonu = (
             (particles_pythia["gen_status"] == 1)
@@ -125,20 +123,20 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
             # ((particles_pythia["gen_status"]==2) & (ak.num(particles_pythia["gen_daughters"], axis=2) == 0))
         )
         mask_cp = np.abs(particles_cp["caloparticle_eta"]) < 5
-    
-        # MET from MLPF targets and from PF particles
-        ypythia_met = compute_met(particles_pythia["gen_pt"], particles_pythia["gen_phi"], mask_pythia_nonu)
-        ycaloparticle_met = compute_met(particles_cp["caloparticle_pt"], particles_cp["caloparticle_phi"], mask_cp)
 
-    #dummy mask
+        # MET from MLPF targets and from PF particles
+        # ypythia_met = compute_met(particles_pythia["gen_pt"], particles_pythia["gen_phi"], mask_pythia_nonu)
+        # ycaloparticle_met = compute_met(particles_cp["caloparticle_pt"], particles_cp["caloparticle_phi"], mask_cp)
+
+    # dummy mask
     ytarget_met = compute_met(arrs_awk["ytarget"]["pt"], arrs_awk["ytarget"]["phi"])
-    ytarget_nopu_met = compute_met(arrs_awk["ytarget"]["pt"], arrs_awk["ytarget"]["phi"], pu_mask) 
+    ytarget_nopu_met = compute_met(arrs_awk["ytarget"]["pt"], arrs_awk["ytarget"]["phi"], pu_mask)
     ycand_met = compute_met(arrs_awk["ycand"]["pt"], arrs_awk["ycand"]["phi"])
 
     # cluster jets
     jets_coll = {}
     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-    
+
     # genMet, genJets from CMSSW (should be the same as computed from Pythia)
     # genmet_cmssw = np.array([pickle_data[i]["genmet"][0, 0] for i in range(len(pickle_data))])
     genjet_cmssw = ak.from_regular([pickle_data[i]["genjet"] for i in range(len(pickle_data))])
@@ -156,8 +154,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     )
     jets_coll["genjet"] = genjet_cmssw
 
-
-    if len(rootfiles)>0:
+    if len(rootfiles) > 0:
         vec = vector.awk(
             ak.zip(
                 {
@@ -211,8 +208,6 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
     jets_coll["ytarget_nopu"] = cluster.inclusive_jets(min_pt=3)
 
-    if len(rootfiles)>0:
-        genjet_to_cp = jet_utils.match_two_jet_collections(jets_coll, "genjet", "cp", 0.1)
     genjet_to_ytarget = jet_utils.match_two_jet_collections(jets_coll, "genjet", "ytarget", 0.1)
     genjet_to_ytarget_nopu = jet_utils.match_two_jet_collections(jets_coll, "genjet", "ytarget_nopu", 0.1)
     genjet_to_ycand = jet_utils.match_two_jet_collections(jets_coll, "genjet", "ycand", 0.1)
@@ -221,15 +216,30 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
 
     # particle distributions
     b = np.logspace(-4, 4, 100)
-    if len(rootfiles)>0:
+    if len(rootfiles) > 0:
         ret[f"{sample_folder}/particles_pt_pythia"] = to_bh(ak.flatten(particles_pythia[mask_pythia_nonu]["gen_pt"]), bins=b)
         ret[f"{sample_folder}/particles_pt_caloparticle"] = to_bh(ak.flatten(particles_cp[mask_cp]["caloparticle_pt"]), bins=b)
     ret[f"{sample_folder}/particles_pt_target"] = to_bh(ak.flatten(arrs_awk["ytarget"]["pt"]), bins=b)
     ret[f"{sample_folder}/particles_pt_target_pumask"] = to_bh(ak.flatten(arrs_awk["ytarget"]["pt"][pu_mask]), bins=b)
     ret[f"{sample_folder}/particles_pt_cand"] = to_bh(ak.flatten(arrs_awk["ycand"]["pt"]), bins=b)
-    
+
+    # per-pid particle distribution
+    pidset = np.unique(np.abs(ak.flatten(arrs_awk["ytarget"]["pid"])))
+    for pid in pidset:
+        pid = int(pid)
+        if len(rootfiles) > 0:
+            pidmask_pythia = np.abs(particles_pythia[mask_pythia_nonu]["gen_pdgid"]) == pid
+            ret[f"{sample_folder}/particle_{pid}_pt_pythia"] = to_bh(ak.flatten(particles_pythia[mask_pythia_nonu]["gen_pt"][pidmask_pythia]), bins=b)
+            pidmask_cp = np.abs(particles_cp[mask_cp]["caloparticle_pid"]) == pid
+            ret[f"{sample_folder}/particle_{pid}_pt_caloparticle"] = to_bh(ak.flatten(particles_cp[mask_cp]["caloparticle_pt"][pidmask_cp]), bins=b)
+        pidmask_ytarget = np.abs(arrs_awk["ytarget"]["pid"]) == pid
+        ret[f"{sample_folder}/particle_{pid}_pt_target"] = to_bh(ak.flatten(arrs_awk["ytarget"]["pt"][pidmask_ytarget]), bins=b)
+        ret[f"{sample_folder}/particle_{pid}_pt_target_pumask"] = to_bh(ak.flatten(arrs_awk["ytarget"]["pt"][pu_mask & pidmask_ytarget]), bins=b)
+        pidmask_ytarget = np.abs(arrs_awk["ycand"]["pid"]) == pid
+        ret[f"{sample_folder}/particle_{pid}_pt_cand"] = to_bh(ak.flatten(arrs_awk["ycand"]["pt"]), bins=b)
+
     b = np.linspace(-5, 5, 100)
-    if len(rootfiles)>0:
+    if len(rootfiles) > 0:
         ret[f"{sample_folder}/particles_eta_pythia"] = to_bh(ak.flatten(particles_pythia[mask_pythia_nonu]["gen_eta"]), bins=b)
         ret[f"{sample_folder}/particles_eta_caloparticle"] = to_bh(ak.flatten(particles_cp[mask_cp]["caloparticle_eta"]), bins=b)
     ret[f"{sample_folder}/particles_eta_target"] = to_bh(ak.flatten(arrs_awk["ytarget"]["eta"]), bins=b)
@@ -243,7 +253,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     ret[f"{sample_folder}/jets_pt_target"] = to_bh(ak.flatten(jets_coll["ytarget"].pt), bins=b)
     ret[f"{sample_folder}/jets_pt_target_pumask"] = to_bh(ak.flatten(jets_coll["ytarget_nopu"].pt), bins=b)
     ret[f"{sample_folder}/jets_pt_cand"] = to_bh(ak.flatten(jets_coll["ycand"].pt), bins=b)
-    
+
     b = np.linspace(-5, 5, 100)
     ret[f"{sample_folder}/jets_eta_genjet"] = to_bh(ak.flatten(jets_coll["genjet"].eta), bins=b)
     # ret[f"{sample_folder}/jets_eta_caloparticle"] = to_bh(ak.flatten(jets_coll["cp"].eta), bins=b)
@@ -263,7 +273,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     ret[f"{sample_folder}/jets_pt_ratio_target_pumask"] = to_bh(ratio, bins=b)
     ratio = ak.flatten((jets_coll["ycand"][genjet_to_ycand["ycand"]].pt / jets_coll["genjet"][genjet_to_ycand["genjet"]].pt))
     ret[f"{sample_folder}/jets_pt_ratio_cand"] = to_bh(ratio, bins=b)
-    
+
     b = np.linspace(0.5, 1.5, 1000)
     # ratio = ak.flatten((jets_coll["cp"][genjet_to_cp["cp"]].pt / jets_coll["genjet"][genjet_to_cp["genjet"]].pt))
     # ret[f"{sample_folder}/jets_pt_ratio2_caloparticle"] = to_bh(ratio, bins=b)
@@ -275,8 +285,8 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     ret[f"{sample_folder}/jets_pt_ratio2_target_pumask"] = to_bh(ratio, bins=b)
     ratio = ak.flatten((jets_coll["ycand"][genjet_to_ycand["ycand"]].pt / jets_coll["genjet"][genjet_to_ycand["genjet"]].pt))
     ret[f"{sample_folder}/jets_pt_ratio2_cand"] = to_bh(ratio, bins=b)
-    
-    b = np.logspace(0, 3, 100)
+
+    b = np.logspace(-1, 3, 100)
     ret[f"{sample_folder}/met_pythia"] = to_bh(genmet_cmssw, bins=b)
     # ret[f"{sample_folder}/met_caloparticle"] = to_bh(ycaloparticle_met, bins=b)
     ret[f"{sample_folder}/met_target"] = to_bh(ytarget_met, bins=b)
@@ -294,17 +304,16 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
 
 if __name__ == "__main__":
 
-    path = "/media/joosep/data/"
-    pu_config = "pu55to75"
-    perjob = 20
-    numjobs = 12 
+    perjob = 50
+    numjobs = 16
     is_test = False
 
     args = []
     ijob = 0
 
-    #process pkl and ROOT files together
-    maxfiles = 100
+    # process pkl and ROOT files together
+    maxfiles = 500
+    path = "/local/joosep/mlpf/cms/"
     for pu_config in ["nopu", "pu55to75"]:
         for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:
             rootfiles = sorted(glob.glob(f"{path}/20240823_simcluster/{pu_config}/{sample_folder}/root/pfntuple_*.root"))
@@ -314,15 +323,18 @@ if __name__ == "__main__":
             pklfiles_d = {fn.split("/")[-1].split(".")[0]: fn for fn in pklfiles}
 
             # find the set of common filenames betweek the root and pkl files
-            common_keys = sorted(list(set(set(rootfiles_d.keys()).intersection(set(pklfiles_d.keys())))))[:50]
+            common_keys = sorted(list(set(set(rootfiles_d.keys()).intersection(set(pklfiles_d.keys())))))[:maxfiles]
 
             # prepare chunked arguments for process_files
             for ck in chunks(common_keys, perjob):
-                args.append((f"combined/{pu_config}/{sample_folder}", [rootfiles_d[c] for c in ck], [pklfiles_d[c] for c in ck], "out{}.pkl".format(ijob)))
+                args.append(
+                    (f"combined/{pu_config}/{sample_folder}", [rootfiles_d[c] for c in ck], [pklfiles_d[c] for c in ck], "out{}.pkl".format(ijob))
+                )
                 ijob += 1
 
-    #process only pkl files
-    maxfiles = 2000
+    # process only pkl files
+    maxfiles = -1
+    path = "/scratch/persistent/joosep/"
     for pu_config in ["nopu", "pu55to75"]:
         for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:
             pklfiles = sorted(glob.glob(f"{path}/20240823_simcluster/{pu_config}/{sample_folder}/raw/pfntuple_*.pkl.bz2"))[:maxfiles]
@@ -334,6 +346,7 @@ if __name__ == "__main__":
         process_files(*args[0])
     else:
         import multiprocessing
+
         pool = multiprocessing.Pool(numjobs)
         pool.starmap(process_files, tqdm.tqdm(args, total=len(args)))
         pool.close()
