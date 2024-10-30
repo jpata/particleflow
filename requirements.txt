@@ -43,3 +43,4 @@ tqdm
 uproot
 vector
 zenodo_get
+mlcroissant
