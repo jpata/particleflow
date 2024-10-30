@@ -111,7 +111,7 @@ train_dataset:
       samples:
         cms_pf_ttbar_nopu:
           version: 2.5.0
-          splits: "1"
+          splits: [1]
 
 valid_dataset:
   cms:
@@ -120,9 +120,9 @@ valid_dataset:
       samples:
         cms_pf_ttbar_nopu:
           version: 2.5.0
-          splits: "1"
+          splits: [1]
 
 test_dataset:
   cms_pf_ttbar_nopu:
     version: 2.5.0
-    splits: "1"
+    splits: [1]

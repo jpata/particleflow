@@ -288,7 +288,6 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
 
     b = np.logspace(-1, 3, 100)
     ret[f"{sample_folder}/met_pythia"] = to_bh(genmet_cmssw, bins=b)
-    # ret[f"{sample_folder}/met_caloparticle"] = to_bh(ycaloparticle_met, bins=b)
     ret[f"{sample_folder}/met_target"] = to_bh(ytarget_met, bins=b)
     ret[f"{sample_folder}/met_target_pumask"] = to_bh(ytarget_nopu_met, bins=b)
     ret[f"{sample_folder}/met_cand"] = to_bh(ycand_met, bins=b)
