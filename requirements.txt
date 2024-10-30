@@ -12,6 +12,7 @@ jupyter-book
 keras
 keras-tuner
 matplotlib
+mlcroissant
 mplhep
 networkx
 nevergrad
@@ -43,4 +44,3 @@ tqdm
 uproot
 vector
 zenodo_get
-mlcroissant
