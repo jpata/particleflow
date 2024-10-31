@@ -12,6 +12,7 @@ jupyter-book
 keras
 keras-tuner
 matplotlib
+mlcroissant
 mplhep
 networkx
 nevergrad
@@ -26,7 +27,7 @@ plotly
 pre-commit
 protobuf
 pyarrow
-ray[tune]
+ray[train,tune]
 scikit-learn
 scikit-optimize
 scipy
