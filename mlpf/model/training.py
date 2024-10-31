@@ -1093,6 +1093,8 @@ def run(rank, world_size, config, args, outdir, logfile):
                     jet_match_dr=0.1,
                     dir_name=testdir_name,
                 )
+            if world_size > 1:
+                dist.barrier()  # block until all workers finished executing run_predictions()
 
     if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
         if args.make_plots:

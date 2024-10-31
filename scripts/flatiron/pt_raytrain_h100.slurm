@@ -6,6 +6,7 @@
 #SBATCH --exclusive
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
+#SBATCH --gpus-per-node=8
 #SBATCH --gpus-per-task=8
 #SBATCH --cpus-per-task=64
 #SBATCH --constraint=ib-h100p
@@ -27,12 +28,37 @@ module --force purge; module load modules/2.2-20230808
 module load slurm gcc cmake cuda/12.1.1 cudnn/8.9.2.26-12.x nccl openmpi apptainer
 
 nvidia-smi
-source ~/miniconda3/bin/activate pytorch
+export PYTHONPATH=`pwd`
+source ~/miniforge3/bin/activate mlpf
 which python3
 python3 --version
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-num_gpus=${SLURM_GPUS_PER_TASK}  # gpus per compute node
+num_gpus=$((SLURM_GPUS_PER_NODE))  # gpus per compute node
+
+export SRUN_CPUS_PER_TASK=${SLURM_CPUS_PER_TASK}  # necessary on JURECA for Ray to work
+
+## Disable Ray Usage Stats
+export RAY_USAGE_STATS_DISABLE=1
+
+echo "DEBUG: SLURM_JOB_ID: $SLURM_JOB_ID"
+echo "DEBUG: SLURM_JOB_NODELIST: $SLURM_JOB_NODELIST"
+echo "DEBUG: SLURM_NNODES: $SLURM_NNODES"
+echo "DEBUG: SLURM_NTASKS: $SLURM_NTASKS"
+echo "DEBUG: SLURM_TASKS_PER_NODE: $SLURM_TASKS_PER_NODE"
+echo "DEBUG: SLURM_SUBMIT_HOST: $SLURM_SUBMIT_HOST"
+echo "DEBUG: SLURMD_NODENAME: $SLURMD_NODENAME"
+echo "DEBUG: SLURM_NODEID: $SLURM_NODEID"
+echo "DEBUG: SLURM_LOCALID: $SLURM_LOCALID"
+echo "DEBUG: SLURM_PROCID: $SLURM_PROCID"
+echo "DEBUG: CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
+echo "DEBUG: SLURM_JOB_NUM_NODES: $SLURM_JOB_NUM_NODES"
+echo "DEBUG: SLURM_CPUS_PER_TASK: $SLURM_CPUS_PER_TASK"
+echo "DEBUG: SLURM_GPUS_PER_TASK: $SLURM_GPUS_PER_TASK"
+echo "DEBUG: SLURM_GPUS_PER_NODE: $SLURM_GPUS_PER_NODE"
+echo "DEBUG: SLURM_GPUS: $SLURM_GPUS"
+echo "DEBUG: num_gpus: $num_gpus"
+
 
 if [ "$SLURM_JOB_NUM_NODES" -gt 1 ]; then
   ################# DON NOT CHANGE THINGS HERE UNLESS YOU KNOW WHAT YOU ARE DOING ###############
@@ -80,7 +106,7 @@ python3 -u mlpf/pipeline.py --train --ray-train \
     --config $1 \
     --prefix $2 \
     --ray-cpus $((SLURM_CPUS_PER_TASK*SLURM_JOB_NUM_NODES)) \
-    --gpus $((SLURM_GPUS_PER_TASK*SLURM_JOB_NUM_NODES)) \
+    --gpus $((SLURM_GPUS_PER_NODE*SLURM_JOB_NUM_NODES)) \
     --gpu-batch-multiplier 8 \
     --num-workers 4 \
     --prefetch-factor 8 \
