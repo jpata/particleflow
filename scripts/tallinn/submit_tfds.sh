@@ -18,5 +18,5 @@ export MANUAL_DIR=/local/joosep/mlpf/clic_edm4hep/
 for i in `seq 1 10`; do
     sbatch $SUB clic_pf_edm4hep/ttbar $i
     sbatch $SUB clic_pf_edm4hep/qq $i
-    sbatch $SUB clic_pf_edm4hep/z $i
+    sbatch $SUB clic_pf_edm4hep/ww_fullhad $i
 done
