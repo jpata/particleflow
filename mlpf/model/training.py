@@ -1035,7 +1035,7 @@ def run(rank, world_size, config, args, outdir, logfile):
 
             dataset = []
             for split_config in split_configs:
-                ds = PFDataset(config["data_dir"], f"{sample}/{split_config}:{version}", "test", num_samples=config["ntest"]).ds
+                ds = PFDataset(config["data_dir"], f"{sample}/{split_config}:{version}", "test", num_samples=config["ntest"] // len(split_configs)).ds
                 dataset.append(ds)
             ds = torch.utils.data.ConcatDataset(dataset)
 
