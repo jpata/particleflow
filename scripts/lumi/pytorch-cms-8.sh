@@ -39,5 +39,5 @@ singularity exec \
     --env LD_LIBRARY_PATH=/opt/rocm/lib/ \
     --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
      $IMG python3 mlpf/pipeline.py --dataset cms --gpus 8 \
-     --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms-nopu.yaml \
-     --train --gpu-batch-multiplier 6 --num-workers 8 --prefetch-factor 100 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --lr 0.0001
+     --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms.yaml \
+     --train --gpu-batch-multiplier 5 --num-workers 8 --prefetch-factor 50 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --lr 0.0001
