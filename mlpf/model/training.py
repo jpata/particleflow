@@ -1034,8 +1034,13 @@ def run(rank, world_size, config, args, outdir, logfile):
             print("split_configs", split_configs)
 
             dataset = []
+
+            ntest = None
+            if not (config["ntest"] is None):
+                ntest = config["ntest"] // len(split_configs)
+
             for split_config in split_configs:
-                ds = PFDataset(config["data_dir"], f"{sample}/{split_config}:{version}", "test", num_samples=config["ntest"]).ds
+                ds = PFDataset(config["data_dir"], f"{sample}/{split_config}:{version}", "test", num_samples=ntest).ds
                 dataset.append(ds)
             ds = torch.utils.data.ConcatDataset(dataset)
 
@@ -1066,12 +1071,12 @@ def run(rank, world_size, config, args, outdir, logfile):
             torch.cuda.empty_cache()
 
             # FIXME: import this from a central place
-            if args.dataset == "clic":
+            if config["dataset"] == "clic":
                 import fastjet
 
                 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
                 jet_ptcut = 5
-            elif args.dataset == "cms":
+            if config["dataset"] == "cms":
                 import fastjet
 
                 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
@@ -1093,6 +1098,8 @@ def run(rank, world_size, config, args, outdir, logfile):
                     jet_match_dr=0.1,
                     dir_name=testdir_name,
                 )
+            if world_size > 1:
+                dist.barrier()  # block until all workers finished executing run_predictions()
 
     if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
         if args.make_plots:

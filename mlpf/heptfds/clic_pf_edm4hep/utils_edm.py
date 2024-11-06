@@ -2,6 +2,8 @@ import awkward as ak
 import numpy as np
 import random
 
+NUM_SPLITS = 10
+
 # from fcc/postprocessing.py
 X_FEATURES_TRK = [
     "elemtype",
@@ -62,7 +64,20 @@ N_X_FEATURES = max(len(X_FEATURES_CL), len(X_FEATURES_TRK))
 N_Y_FEATURES = len(Y_FEATURES)
 
 
-def split_sample(path, test_frac=0.9):
+def split_list(lst, x):
+    # Calculate the size of each sublist (except potentially the last)
+    sublist_size = len(lst) // x
+
+    # Create x-1 sublists of equal size
+    result = [lst[i * sublist_size : (i + 1) * sublist_size] for i in range(x - 1)]
+
+    # Add the remaining elements to the last sublist
+    result.append(lst[(x - 1) * sublist_size :])
+
+    return result
+
+
+def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     files = sorted(list(path.glob("*.parquet")))
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
@@ -71,13 +86,19 @@ def split_sample(path, test_frac=0.9):
     files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
+
+    split_index = int(builder_config.name) - 1
+    files_train_split = split_list(files_train, num_splits)
+    files_test_split = split_list(files_test, num_splits)
+
     return {
-        "train": generate_examples(files_train),
-        "test": generate_examples(files_test),
+        "train": generate_examples(files_train_split[split_index]),
+        "test": generate_examples(files_test_split[split_index]),
     }
 
 
-def split_sample_several(paths, test_frac=0.9):
+# merge and shuffle several samples (e.g. e+, e-), split into test/train
+def split_sample_several(paths, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     files = sum([list(path.glob("*.parquet")) for path in paths], [])
     random.shuffle(files)
     print("Found {} files".format(len(files)))
@@ -87,9 +108,14 @@ def split_sample_several(paths, test_frac=0.9):
     files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
+
+    split_index = int(builder_config.name) - 1
+    files_train_split = split_list(files_train, num_splits)
+    files_test_split = split_list(files_test, num_splits)
+
     return {
-        "train": generate_examples(files_train),
-        "test": generate_examples(files_test),
+        "train": generate_examples(files_train_split[split_index]),
+        "test": generate_examples(files_test_split[split_index]),
     }
 
 
@@ -194,13 +220,3 @@ def generate_examples(files):
                 "genjets": gj.astype(np.float32),
                 "targetjets": tj.astype(np.float32),
             }
-
-
-if __name__ == "__main__":
-    for ex in generate_examples(
-        [
-            "/local/joosep/mlpf/clic_edm4hep/pi+/reco_pi+_98.parquet",
-            "/local/joosep/mlpf/clic_edm4hep/pi-/reco_pi-_11.parquet",
-        ]
-    ):
-        print(ex[0], ex[1]["X"].shape, ex[1]["ytarget"].shape, ex[1]["ycand"].shape)

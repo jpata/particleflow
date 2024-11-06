@@ -43,14 +43,14 @@ samples = [
     # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
     # Single particle gun
     # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SinglePiMinusFlatPt0p7To1000_cfi"
-    "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SinglePi0Pt1To1000_pythia8_cfi",
-    "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleGammaFlatPt1To1000_pythia8_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SinglePi0Pt1To1000_pythia8_cfi",
+    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleGammaFlatPt1To1000_pythia8_cfi",
     # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleK0FlatPt1To1000_pythia8_cfi",
     # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleElectronFlatPt1To1000_pythia8_cfi",
     # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleMuFlatPt1To1000_pythia8_cfi",
-    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleNeutronFlatPt0p7To1000_cfi",
-    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleProtonMinusFlatPt0p7To1000_cfi",
-    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleTauFlatPt1To1000_cfi",
+    "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleNeutronFlatPt0p7To1000_cfi",
+    "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleProtonMinusFlatPt0p7To1000_cfi",
+    "/local/joosep/mlpf/cms/20240823_simcluster/nopu/SingleTauFlatPt1To1000_cfi",
 ]
 
 ichunk = 1

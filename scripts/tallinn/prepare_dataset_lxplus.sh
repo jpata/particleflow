@@ -4,12 +4,6 @@ rm -f scripts/files_to_copy.txt
 
 maxfiles=100000
 samplestocopy=(
-    "nopu/QCDForPF_14TeV_TuneCUETP8M1_cfi"
-    "nopu/TTbar_14TeV_TuneCUETP8M1_cfi"
-    "nopu/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
-    "pu55to75/QCDForPF_14TeV_TuneCUETP8M1_cfi"
-    "pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi"
-    "pu55to75/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
     "nopu/SingleElectronFlatPt1To1000_pythia8_cfi"
     "nopu/SingleGammaFlatPt1To1000_pythia8_cfi"
     "nopu/SingleK0FlatPt1To1000_pythia8_cfi"
@@ -19,6 +13,12 @@ samplestocopy=(
     "nopu/SinglePiMinusFlatPt0p7To1000_cfi"
     "nopu/SingleProtonMinusFlatPt0p7To1000_cfi"
     "nopu/SingleTauFlatPt1To1000_cfi"
+    "nopu/QCDForPF_14TeV_TuneCUETP8M1_cfi"
+    "nopu/TTbar_14TeV_TuneCUETP8M1_cfi"
+    "nopu/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
+    "pu55to75/QCDForPF_14TeV_TuneCUETP8M1_cfi"
+    "pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi"
+    "pu55to75/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
 )
 
 

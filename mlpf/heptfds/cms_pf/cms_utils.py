@@ -219,11 +219,11 @@ def split_list(lst, x):
     return result
 
 
-def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
+def split_sample(path, builder_config, num_splits=NUM_SPLITS, train_frac=0.9):
     files = sorted(list(path.glob("*.pkl*")))
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
-    idx_test = int(test_frac * len(files))
+    idx_test = int(train_frac * len(files))
     files_train = files[:idx_test]
     files_test = files[idx_test:]
     assert len(files_train) > 0

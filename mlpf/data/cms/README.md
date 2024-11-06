@@ -1,15 +1,15 @@
 ## Validation data
 
 ```
-gfal-copy -r root://xrootd.hep.kbfi.ee:1094//store/user/jpata/mlpf/results/ ./
+gfal-copy -r root://xrootd.hep.kbfi.ee:1094//store/user/jpata/mlpf/results/cms/CMSSW_14_1_0_pre3 ./
 ```
 
 See below for the steps to reproduce these samples.
 
 The resulting plots can be found at:
 ```
-https://jpata.web.cern.ch/jpata/mlpf/results/acat2022_20221004_model40M_revalidation20240523/
-https://jpata.web.cern.ch/jpata/mlpf/results/acat2022_20221004_model40M_revalidation_CMSSW14_20240527/
+https://jpata.web.cern.ch/jpata/mlpf/cms/results/acat2022_20221004_model40M_revalidation20240523/
+https://jpata.web.cern.ch/jpata/mlpf/cms/results/acat2022_20221004_model40M_revalidation_CMSSW14_20240527/
 ```
 
 ## Code setup

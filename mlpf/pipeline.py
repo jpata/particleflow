@@ -30,14 +30,6 @@ parser.add_argument("--prefix", type=str, default=None, help="prefix appended to
 parser.add_argument("--data-dir", type=str, default=None, help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=int, default=None, help="to use CPU set to 0; else e.g., 4")
 parser.add_argument("--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor")
-parser.add_argument(
-    "--dataset",
-    type=str,
-    default=None,
-    choices=["clic", "cms"],
-    required=True,
-    help="which dataset?",
-)
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
 parser.add_argument("--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume")
