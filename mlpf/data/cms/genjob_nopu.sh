@@ -80,7 +80,7 @@ cmsRun step3_phase1_new.py > /dev/null
 mv pfntuple.root pfntuple_${SEED}.root
 cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
 
-# python3 ${MLPF_PATH}/mlpf/data_cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./
+# python3 ${MLPF_PATH}/mlpf/data/cms/postprocessing2.py --input pfntuple_${SEED}.root --outpath ./
 # bzip2 -z pfntuple_${SEED}.pkl
 # cp *.pkl.bz2 $OUTDIR/$SAMPLE/raw/
 

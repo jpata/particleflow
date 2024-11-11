@@ -7,6 +7,7 @@ import torch.utils.data
 from mlpf.model.logger import _logger
 
 import numpy as np
+import sys
 
 
 class TFDSDataSource:
@@ -112,8 +113,13 @@ class PFDataset:
         if split == "valid":
             split = "test"
 
-        builder = tfds.builder(name, data_dir=data_dir)
-
+        try:
+            builder = tfds.builder(name, data_dir=data_dir)
+        except Exception:
+            _logger.error(
+                "Could not find dataset {} in {}, please check that you have downloaded the correct version of the dataset".format(name, data_dir)
+            )
+            sys.exit(1)
         self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort)
 
         if num_samples and num_samples < len(self.ds):
@@ -220,19 +226,22 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
             dataset = []
             for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
                 version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
+                split_configs = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["splits"]
+                print("split_configs", split_configs)
 
-                ds = PFDataset(
-                    config["data_dir"],
-                    f"{sample}:{version}",
-                    split,
-                    num_samples=config[f"n{split}"],
-                    sort=config["sort_data"],
-                ).ds
+                for split_config in split_configs:
+                    ds = PFDataset(
+                        config["data_dir"],
+                        f"{sample}/{split_config}:{version}",
+                        split,
+                        num_samples=config[f"n{split}"],
+                        sort=config["sort_data"],
+                    ).ds
 
-                if (rank == 0) or (rank == "cpu"):
-                    _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")
+                    if (rank == 0) or (rank == "cpu"):
+                        _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")
 
-                dataset.append(ds)
+                    dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
 
             shuffle = split == "train"

@@ -49,7 +49,6 @@ parser.add_argument(
 )
 parser.add_argument("--num-convs", type=int, default=None, help="number of cross-particle convolution (GNN, attention, Mamba) layers")
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
-parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--nvalid", type=int, default=None, help="validation samples to use")
@@ -141,7 +140,10 @@ def main():
                         "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]},
                     }
                 }
+                # load only the last config split
+                config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]["splits"] = ["10"]
             config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
+            config["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
 
     # override loaded config with values from command line args
     config = override_config(config, args)

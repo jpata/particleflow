@@ -1,7 +1,6 @@
 """CMS PF TTbar dataset."""
 import cms_utils
 import tensorflow as tf
-
 import tensorflow_datasets as tfds
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -18,10 +17,10 @@ _CITATION = """
 """
 
 
-class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
-    """DatasetBuilder for cms_pf dataset."""
+class CmsPfTtbar(tfds.core.GeneratorBasedBuilder, skip_registration=True):
+    """DatasetBuilder for cms_pf_ttbar dataset."""
 
-    VERSION = tfds.core.Version("2.4.0")
+    VERSION = tfds.core.Version("2.5.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",
@@ -40,10 +39,14 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         "2.2.0": "Split CaloParticles along tracks",
         "2.3.0": "Increase stats",
         "2.4.0": "Add gp_to_track, gp_to_cluster, jet_idx",
+        "2.5.0": "Remove neutrinos from genjets, split to 10",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar ~/tensorflow_datasets/
     """
+
+    # create configs 1 ... NUM_SPLITS + 1 that allow to parallelize the dataset building
+    BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, cms_utils.NUM_SPLITS + 1)]
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
@@ -64,8 +67,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
                     "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
-            supervised_keys=("X", "ytarget"),
-            homepage="",
+            homepage="https://github.com/jpata/particleflow",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(x_features=X_FEATURES, y_features=Y_FEATURES),
         )
@@ -74,7 +76,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path / sample_dir / "raw")
+        return cms_utils.split_sample(path / sample_dir / "raw", self.builder_config, num_splits=cms_utils.NUM_SPLITS)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)

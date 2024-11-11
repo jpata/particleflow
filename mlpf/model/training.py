@@ -1030,7 +1030,19 @@ def run(rank, world_size, config, args, outdir, logfile):
             batch_size = config["gpu_batch_multiplier"]
             version = config["test_dataset"][sample]["version"]
 
-            ds = PFDataset(config["data_dir"], f"{sample}:{version}", "test", num_samples=config["ntest"]).ds
+            split_configs = config["test_dataset"][sample]["splits"]
+            print("split_configs", split_configs)
+
+            dataset = []
+
+            ntest = None
+            if not (config["ntest"] is None):
+                ntest = config["ntest"] // len(split_configs)
+
+            for split_config in split_configs:
+                ds = PFDataset(config["data_dir"], f"{sample}/{split_config}:{version}", "test", num_samples=ntest).ds
+                dataset.append(ds)
+            ds = torch.utils.data.ConcatDataset(dataset)
 
             if (rank == 0) or (rank == "cpu"):
                 _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")

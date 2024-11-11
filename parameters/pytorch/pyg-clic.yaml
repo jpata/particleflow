@@ -57,7 +57,7 @@ model:
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.1
     dropout_conv_reg_ff: 0.1
-    activation: "gelu"
+    activation: "relu"
     head_dim: 32
     num_heads: 32
     attention_type: math
@@ -107,11 +107,14 @@ train_dataset:
       batch_size: 1
       samples:
         clic_edm_qq_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         clic_edm_ttbar_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         clic_edm_ww_fullhad_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
   clic:
@@ -119,16 +122,22 @@ valid_dataset:
       batch_size: 1
       samples:
         clic_edm_qq_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         clic_edm_ttbar_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         clic_edm_ww_fullhad_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
   clic_edm_qq_pf:
-    version: 2.3.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
   clic_edm_ttbar_pf:
-    version: 2.3.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
   clic_edm_ww_fullhad_pf:
-    version: 2.3.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
