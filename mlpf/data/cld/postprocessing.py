@@ -361,7 +361,7 @@ def gen_to_features(dataset, prop_data, iev):
     # placeholder flag
     gen_arr["ispu"] = np.zeros_like(gen_arr["phi"])
 
-    return {
+    ret = {
         "PDG": gen_arr["PDG"],
         "generatorStatus": gen_arr["generatorStatus"],
         "charge": gen_arr["charge"],
@@ -378,8 +378,16 @@ def gen_to_features(dataset, prop_data, iev):
         "jet_idx": np.zeros(len(gen_arr["PDG"]), dtype=np.int64),
         "daughters_begin": gen_arr["daughters_begin"],
         "daughters_end": gen_arr["daughters_end"],
-        # "index": prop_data["MCParticles#1.index"][iev],
     }
+
+    if dataset == "clic":
+        ret["index"] = prop_data["MCParticles#1.index"][iev]
+    elif dataset == "fcc":
+        ret["index"] = prop_data["_MCParticles_daughters/_MCParticles_daughters.index"][iev]
+    else:
+        raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+
+    return ret
 
 
 def genparticle_track_adj(dataset, sitrack_links, iev):
@@ -1013,6 +1021,7 @@ def process_one_file(fn, ofn, dataset):
                 "MCParticles.simulatorStatus",
                 "MCParticles.daughters_begin",
                 "MCParticles.daughters_end",
+                "_MCParticles_daughters/_MCParticles_daughters.index",  # similar to "MCParticles#1.index" in clic
                 track_coll,
                 "_SiTracks_trackStates",
                 "PandoraClusters",
