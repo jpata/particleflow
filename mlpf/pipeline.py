@@ -49,7 +49,6 @@ parser.add_argument(
 )
 parser.add_argument("--num-convs", type=int, default=None, help="number of cross-particle convolution (GNN, attention, Mamba) layers")
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
-parser.add_argument("--export-onnx", action="store_true", default=None, help="exports the model to onnx")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--nvalid", type=int, default=None, help="validation samples to use")
