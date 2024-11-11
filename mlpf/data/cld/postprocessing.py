@@ -1003,6 +1003,17 @@ def process_one_file(fn, ofn, dataset):
         prop_data = arrs.arrays(
             [
                 mc_coll,
+                "MCParticles.PDG",
+                "MCParticles.momentum.x",
+                "MCParticles.momentum.y",
+                "MCParticles.momentum.z",
+                "MCParticles.mass",
+                "MCParticles.charge",
+                "MCParticles.generatorStatus",
+                "MCParticles.simulatorStatus",
+                "MCParticles.daughters_begin",
+                "MCParticles.daughters_end",
+                "MCParticles#1.index",
                 track_coll,
                 "_SiTracks_trackStates",
                 "PandoraClusters",
