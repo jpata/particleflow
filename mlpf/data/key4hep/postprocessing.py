@@ -7,6 +7,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
+import glob
 import math
 
 import awkward
@@ -1233,9 +1234,18 @@ def parse_args():
 
 
 def process(args):
-    infile = args.input
-    outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-    process_one_file(infile, outfile, args.dataset)
+
+    if os.path.isdir(args.input) is True:
+        print("Will process all files in " + args.input)
+
+        flist = glob.glob(args.input + "/*.root")
+        for infile in flist:
+            outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
+            process_one_file(infile, outfile, args.dataset)
+    else:
+        infile = args.input
+        outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
+        process_one_file(infile, outfile, args.dataset)
 
 
 if __name__ == "__main__":
