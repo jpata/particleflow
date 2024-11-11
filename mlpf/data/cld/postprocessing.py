@@ -982,6 +982,16 @@ def process_one_file(fn, ofn, dataset):
         # to the index in the track/cluster collection
         idx_rp_to_cluster = arrs["MergedRecoParticles#0/MergedRecoParticles#0.index"].array()
         idx_rp_to_track = arrs["MergedRecoParticles#1/MergedRecoParticles#1.index"].array()
+
+        hit_data = {
+            "ECALBarrel": arrs["ECALBarrel"].array(),
+            "ECALEndcap": arrs["ECALEndcap"].array(),
+            "ECALOther": arrs["ECALOther"].array(),
+            "HCALBarrel": arrs["HCALBarrel"].array(),
+            "HCALEndcap": arrs["HCALEndcap"].array(),
+            "HCALOther": arrs["HCALOther"].array(),
+            "MUON": arrs["MUON"].array(),
+        }
     elif dataset == "fcc":
         collectionIDs = {
             k: v
@@ -1024,18 +1034,16 @@ def process_one_file(fn, ofn, dataset):
         idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
         idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
+        hit_data = {
+            "ECALBarrel": arrs["ECALBarrel"].array(),
+            "ECALEndcap": arrs["ECALEndcap"].array(),
+            "HCALBarrel": arrs["HCALBarrel"].array(),
+            "HCALEndcap": arrs["HCALEndcap"].array(),
+            "HCALOther": arrs["HCALOther"].array(),
+            "MUON": arrs["MUON"].array(),
+        }
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
-
-    hit_data = {
-        "ECALBarrel": arrs["ECALBarrel"].array(),
-        "ECALEndcap": arrs["ECALEndcap"].array(),
-        "ECALOther": arrs["ECALOther"].array(),
-        "HCALBarrel": arrs["HCALBarrel"].array(),
-        "HCALEndcap": arrs["HCALEndcap"].array(),
-        "HCALOther": arrs["HCALOther"].array(),
-        "MUON": arrs["MUON"].array(),
-    }
 
     # Compute truth MET and jets from status=1 pythia particles
     mc_pdg = np.abs(prop_data["MCParticles.PDG"])
