@@ -1013,7 +1013,6 @@ def process_one_file(fn, ofn, dataset):
                 "MCParticles.simulatorStatus",
                 "MCParticles.daughters_begin",
                 "MCParticles.daughters_end",
-                "MCParticles#1.index",
                 track_coll,
                 "_SiTracks_trackStates",
                 "PandoraClusters",
