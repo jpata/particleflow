@@ -378,7 +378,7 @@ def gen_to_features(dataset, prop_data, iev):
         "jet_idx": np.zeros(len(gen_arr["PDG"]), dtype=np.int64),
         "daughters_begin": gen_arr["daughters_begin"],
         "daughters_end": gen_arr["daughters_end"],
-        "index": prop_data["MCParticles#1.index"][iev],
+        # "index": prop_data["MCParticles#1.index"][iev],
     }
 
 
