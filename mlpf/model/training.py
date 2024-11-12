@@ -1,58 +1,54 @@
+import csv
+import glob
+import json
+import logging
 import os
 import os.path as osp
 import pickle as pkl
+import shutil
 import time
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional
-import logging
-import shutil
-from datetime import datetime
-import tqdm
-import yaml
-import csv
-import json
-import sklearn
-import sklearn.metrics
-import numpy as np
-import pandas
+
 import matplotlib
 import matplotlib.pyplot as plt
-import glob
-
-# comet needs to be imported before torch
-from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
-
+import numpy as np
+import pandas
+import sklearn
+import sklearn.metrics
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import tqdm
+import yaml
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.tensorboard import SummaryWriter
 
-from mlpf.model.logger import _logger, _configLogger
+from mlpf.model.inference import make_plots, run_predictions
+from mlpf.model.logger import _configLogger, _logger
+from mlpf.model.mlpf import MLPF, set_save_attention
+from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.utils import (
-    unpack_predictions,
-    unpack_target,
+    CLASS_LABELS,
+    ELEM_TYPES_NONZERO,
+    X_FEATURES,
+    count_parameters,
+    get_lr_schedule,
     get_model_state_dict,
     load_checkpoint,
     save_checkpoint,
-    CLASS_LABELS,
-    X_FEATURES,
-    ELEM_TYPES_NONZERO,
     save_HPs,
-    get_lr_schedule,
-    count_parameters,
+    unpack_predictions,
+    unpack_target,
 )
-
-
-from mlpf.model.inference import make_plots, run_predictions
-from mlpf.model.mlpf import set_save_attention
-from mlpf.model.mlpf import MLPF
-from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
-
 from mlpf.utils import create_comet_experiment
+
+# comet needs to be imported before torch
+from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
 
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
@@ -95,7 +91,9 @@ def mlpf_loss(y, ypred, batch):
 
     # binary loss for particle / no-particle classification
     # loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
-    loss_binary_classification = 10 * torch.nn.functional.cross_entropy(ypred["cls_binary"], (y["cls_id"] != 0).long(), reduction="none")
+    loss_binary_classification = 10 * torch.nn.functional.cross_entropy(
+        ypred["cls_binary"], (y["cls_id"] != 0).long(), reduction="none"
+    )
 
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
@@ -145,12 +143,12 @@ def mlpf_loss(y, ypred, batch):
     pred_met = torch.sqrt(torch.sum(pred_px, axis=-2) ** 2 + torch.sum(pred_py, axis=-2) ** 2).detach()
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
-    was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), axis=-1), ypred["momentum"]], axis=-1) * batch.mask.unsqueeze(
-        axis=-1
-    )
-    was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], axis=-1) * batch.mask.unsqueeze(
-        axis=-1
-    )
+    was_input_pred = torch.concat(
+        [torch.softmax(ypred["cls_binary"].transpose(1, 2), axis=-1), ypred["momentum"]], axis=-1
+    ) * batch.mask.unsqueeze(axis=-1)
+    was_input_true = torch.concat(
+        [torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], axis=-1
+    ) * batch.mask.unsqueeze(axis=-1)
 
     # standardize Wasserstein loss
     std = was_input_true[batch.mask].std(axis=0)
@@ -196,7 +194,9 @@ class FocalLoss(nn.Module):
         - y: (batch_size,) or (batch_size, d1, d2, ..., dK), K > 0.
     """
 
-    def __init__(self, alpha: Optional[Tensor] = None, gamma: float = 0.0, reduction: str = "mean", ignore_index: int = -100):
+    def __init__(
+        self, alpha: Optional[Tensor] = None, gamma: float = 0.0, reduction: str = "mean", ignore_index: int = -100
+    ):
         """Constructor.
         Args:
             alpha (Tensor, optional): Weights for each class. Defaults to None.
@@ -380,28 +380,44 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             plt.xlabel("particle proba")
             tensorboard_writer.add_figure("sig_proba_elemtype{}".format(int(xcls)), fig, global_step=epoch)
 
-        tensorboard_writer.add_histogram("pt_target", torch.clamp(batch.ytarget[batch.mask][:, 2], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram(
+            "pt_target", torch.clamp(batch.ytarget[batch.mask][:, 2], -10, 10), global_step=epoch
+        )
         tensorboard_writer.add_histogram("pt_pred", torch.clamp(ypred_raw[2][batch.mask][:, 0], -10, 10), global_step=epoch)
         ratio = (ypred_raw[2][batch.mask][:, 0] / batch.ytarget[batch.mask][:, 2])[batch.ytarget[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("pt_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("eta_target", torch.clamp(batch.ytarget[batch.mask][:, 3], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram(
+            "eta_target", torch.clamp(batch.ytarget[batch.mask][:, 3], -10, 10), global_step=epoch
+        )
         tensorboard_writer.add_histogram("eta_pred", torch.clamp(ypred_raw[2][batch.mask][:, 1], -10, 10), global_step=epoch)
         ratio = (ypred_raw[2][batch.mask][:, 1] / batch.ytarget[batch.mask][:, 3])[batch.ytarget[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("eta_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("sphi_target", torch.clamp(batch.ytarget[batch.mask][:, 4], -10, 10), global_step=epoch)
-        tensorboard_writer.add_histogram("sphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 2], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram(
+            "sphi_target", torch.clamp(batch.ytarget[batch.mask][:, 4], -10, 10), global_step=epoch
+        )
+        tensorboard_writer.add_histogram(
+            "sphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 2], -10, 10), global_step=epoch
+        )
         ratio = (ypred_raw[2][batch.mask][:, 2] / batch.ytarget[batch.mask][:, 4])[batch.ytarget[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("sphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("cphi_target", torch.clamp(batch.ytarget[batch.mask][:, 5], -10, 10), global_step=epoch)
-        tensorboard_writer.add_histogram("cphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 3], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram(
+            "cphi_target", torch.clamp(batch.ytarget[batch.mask][:, 5], -10, 10), global_step=epoch
+        )
+        tensorboard_writer.add_histogram(
+            "cphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 3], -10, 10), global_step=epoch
+        )
         ratio = (ypred_raw[2][batch.mask][:, 3] / batch.ytarget[batch.mask][:, 5])[batch.ytarget[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("cphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
-        tensorboard_writer.add_histogram("energy_target", torch.clamp(batch.ytarget[batch.mask][:, 6], -10, 10), global_step=epoch)
-        tensorboard_writer.add_histogram("energy_pred", torch.clamp(ypred_raw[2][batch.mask][:, 4], -10, 10), global_step=epoch)
+        tensorboard_writer.add_histogram(
+            "energy_target", torch.clamp(batch.ytarget[batch.mask][:, 6], -10, 10), global_step=epoch
+        )
+        tensorboard_writer.add_histogram(
+            "energy_pred", torch.clamp(ypred_raw[2][batch.mask][:, 4], -10, 10), global_step=epoch
+        )
         ratio = (ypred_raw[2][batch.mask][:, 4] / batch.ytarget[batch.mask][:, 6])[batch.ytarget[batch.mask][:, 0] != 0]
         tensorboard_writer.add_histogram("energy_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
 
@@ -462,7 +478,9 @@ def train_and_valid(
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(data_loader)
     else:
-        iterator = tqdm.tqdm(enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}")
+        iterator = tqdm.tqdm(
+            enumerate(data_loader), total=len(data_loader), desc=f"Epoch {epoch} {train_or_valid} loop on rank={rank}"
+        )
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
 
@@ -497,13 +515,19 @@ def train_and_valid(
 
         if not is_train:
             cm_X_target += sklearn.metrics.confusion_matrix(
-                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ytarget["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
+                ytarget["cls_id"][batch.mask].detach().cpu().numpy(),
+                labels=range(13),
             )
             cm_X_pred += sklearn.metrics.confusion_matrix(
-                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+                batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
+                ypred["cls_id"][batch.mask].detach().cpu().numpy(),
+                labels=range(13),
             )
             cm_id += sklearn.metrics.confusion_matrix(
-                ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+                ytarget["cls_id"][batch.mask].detach().cpu().numpy(),
+                ypred["cls_id"][batch.mask].detach().cpu().numpy(),
+                labels=range(13),
             )
             # save the events of the first validation batch for quick checks
             if (rank == 0 or rank == "cpu") and itrain == 0:
@@ -609,13 +633,28 @@ def train_and_valid(
 
     if not is_train and comet_experiment:
         comet_experiment.log_confusion_matrix(
-            matrix=cm_X_target, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_target.json"
+            matrix=cm_X_target,
+            title="Element to target",
+            row_label="X",
+            column_label="target",
+            epoch=epoch,
+            file_name="cm_X_target.json",
         )
         comet_experiment.log_confusion_matrix(
-            matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", epoch=epoch, file_name="cm_X_pred.json"
+            matrix=cm_X_pred,
+            title="Element to pred",
+            row_label="X",
+            column_label="pred",
+            epoch=epoch,
+            file_name="cm_X_pred.json",
         )
         comet_experiment.log_confusion_matrix(
-            matrix=cm_id, title="Target to pred", row_label="target", column_label="pred", epoch=epoch, file_name="cm_id.json"
+            matrix=cm_id,
+            title="Target to pred",
+            row_label="target",
+            column_label="pred",
+            epoch=epoch,
+            file_name="cm_id.json",
         )
 
     num_data = torch.tensor(len(data_loader), device=rank)
@@ -702,7 +741,9 @@ def train_mlpf(
 
         # training step, edit here to profile a specific epoch
         if epoch == -1:
-            with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True) as prof:
+            with profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True
+            ) as prof:
                 with record_function("model_train"):
                     losses_t = train_and_valid(
                         rank,
@@ -899,7 +940,10 @@ def run(rank, world_size, config, args, outdir, logfile):
     start_epoch = 1
 
     if config["load"]:  # load a pre-trained model
-        with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
+        pload = Path(config["load"])
+
+        # with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
+        with open(f"{pload.parent}/model_kwargs.pkl", "rb") as f:
             model_kwargs = pkl.load(f)
         _logger.info("model_kwargs: {}".format(model_kwargs))
 
@@ -962,7 +1006,9 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info(f"Model directory {outdir}", color="bold")
 
         if args.comet:
-            comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
+            comet_experiment = create_comet_experiment(
+                config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
+            )
             comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
             comet_experiment.log_parameter("run_id", Path(outdir).name)
             comet_experiment.log_parameter("world_size", world_size)
@@ -1055,7 +1101,9 @@ def run(rank, world_size, config, args, outdir, logfile):
             test_loader = torch.utils.data.DataLoader(
                 ds,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]),
+                collate_fn=Collater(
+                    ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]
+                ),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
@@ -1224,7 +1272,9 @@ def train_ray_trial(config, args, outdir=None):
     loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
 
     if args.comet:
-        comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
+        comet_experiment = create_comet_experiment(
+            config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
+        )
         comet_experiment.set_name(f"world_rank_{world_rank}_{Path(outdir).name}")
         comet_experiment.log_parameter("run_id", Path(outdir).name)
         comet_experiment.log_parameter("world_size", world_size)
@@ -1260,7 +1310,9 @@ def train_ray_trial(config, args, outdir=None):
                 if args.resume_training:
                     model, optimizer = load_checkpoint(checkpoint, model, optimizer)
                     start_epoch = checkpoint["extra_state"]["epoch"] + 1
-                    lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1)
+                    lr_schedule = get_lr_schedule(
+                        config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1
+                    )
                 else:  # start a new training with model weights loaded from a pre-trained model
                     model = load_checkpoint(checkpoint, model)
 
@@ -1375,7 +1427,6 @@ def run_hpo(config, args):
     import ray
     from ray import tune
     from ray.train.torch import TorchTrainer
-
     from raytune.pt_search_space import raytune_num_samples, search_space
     from raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
@@ -1424,7 +1475,9 @@ def run_hpo(config, args):
 
     if tune.Tuner.can_restore(str(expdir)):
         # resume unfinished HPO run
-        tuner = tune.Tuner.restore(str(expdir), trainable=trainer, resume_errored=True, restart_errored=False, resume_unfinished=True)
+        tuner = tune.Tuner.restore(
+            str(expdir), trainable=trainer, resume_errored=True, restart_errored=False, resume_unfinished=True
+        )
     else:
         # start new HPO run
         search_space = {"train_loop_config": search_space}  # the ray TorchTrainer only takes a single arg: train_loop_config
@@ -1465,4 +1518,6 @@ def run_hpo(config, args):
     print(result_df.columns)
 
     logging.info("Total time of Tuner.fit(): {}".format(end - start))
-    logging.info("Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config))
+    logging.info(
+        "Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config)
+    )
