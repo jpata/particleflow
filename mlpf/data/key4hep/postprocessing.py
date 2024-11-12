@@ -596,7 +596,7 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
     # collect hits of st=1 daughters to the st=1 particles
     mask_status1 = gen_features["generatorStatus"] == 1
 
-    if gen_features["index"] is not None:
+    if gen_features["index"] is not None:  # if there are even daughters
         genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(
             gen_features, genparticle_to_hit, genparticle_to_trk
         )
