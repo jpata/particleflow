@@ -633,6 +633,8 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
 
     if mask_visible.sum() == 0:
         return None
+    else:
+        print("mask_visible.sum()", mask_visible.sum())
 
     gen_features = awkward.Record({feat: gen_features[feat][mask_visible] for feat in gen_features.keys()})
 
