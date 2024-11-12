@@ -2,8 +2,7 @@ from pathlib import Path
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
-from mlpf.heptfds.clic_pf_edm4hep.utils_edm import (
+from utils_edm import (
     X_FEATURES_CL,
     X_FEATURES_TRK,
     Y_FEATURES,
