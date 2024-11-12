@@ -635,7 +635,7 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
         print("hop")
         return None
     print(mask_visible.shape)
-
+    mask_visible = mask_visible.reshape(-1, 1)
     gen_features = awkward.Record({feat: gen_features[feat][mask_visible] for feat in gen_features.keys()})
 
     genparticle_to_hit = filter_adj(genparticle_to_hit, genpart_idx_all_to_filtered)
