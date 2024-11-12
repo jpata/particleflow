@@ -638,7 +638,8 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
     for feat in gen_features.keys():
         print("feat", gen_features[feat].to_numpy().shape, gen_features[feat].to_numpy())
         break
-    # if len(mask_visible) == 1:
+    if len(np.array(mask_visible)) == 1:
+        return None
 
     gen_features = awkward.Record({feat: gen_features[feat][mask_visible] for feat in gen_features.keys()})
 
