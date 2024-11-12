@@ -35,6 +35,9 @@ class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cld_edm4hep/ ./
     """
 
+    # create configs 1 ... NUM_SPLITS + 1 that allow to parallelize the dataset building
+    BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, NUM_SPLITS + 1)]
+
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
         super(CldEdmTtbarPf, self).__init__(*args, **kwargs)
