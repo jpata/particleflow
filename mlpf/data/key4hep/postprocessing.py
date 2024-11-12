@@ -595,7 +595,11 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
 
     # collect hits of st=1 daughters to the st=1 particles
     mask_status1 = gen_features["generatorStatus"] == 1
-    genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
+
+    if gen_features["index"] is not None:
+        genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(
+            gen_features, genparticle_to_hit, genparticle_to_trk
+        )
 
     n_gp = awkward.count(gen_features["PDG"])
     n_track = awkward.count(track_features["type"])
@@ -632,22 +636,16 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
 
     if np.array(mask_visible).sum() == 0:
+        print("event does not have even one 'visible' particle. will skip event")
         return None
 
     if len(np.array(mask_visible)) == 1:
-        print("mask_visible", mask_visible)
-
-        for feat in gen_features.keys():
-            print("feat", feat)
-            print("gen_features[feat]", gen_features[feat])
-            print("try", gen_features[feat][mask_visible])
-            # break
-
-        # return None
-
-    gen_features = awkward.Record(
-        {feat: gen_features[feat][mask_visible] for feat in gen_features.keys() if len(gen_features[feat]) != 0}
-    )
+        # event has only one particle (then index will be empty because no daughters)
+        gen_features = awkward.Record(
+            {feat: (gen_features[feat][mask_visible] if feat != "index" else None) for feat in gen_features.keys()}
+        )
+    else:
+        gen_features = awkward.Record({feat: gen_features[feat][mask_visible] for feat in gen_features.keys()})
 
     genparticle_to_hit = filter_adj(genparticle_to_hit, genpart_idx_all_to_filtered)
     genparticle_to_trk = filter_adj(genparticle_to_trk, genpart_idx_all_to_filtered)
