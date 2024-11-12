@@ -76,7 +76,7 @@ class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_tt_ecm365"))
+        return split_sample(Path(path / "p8_ee_tt_ecm365"), self.builder_config, num_splits=NUM_SPLITS)
 
     def _generate_examples(self, files):
         return generate_examples(files)
