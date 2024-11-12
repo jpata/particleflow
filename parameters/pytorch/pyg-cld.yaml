@@ -1,7 +1,7 @@
 backend: pytorch
 
 save_attention: yes
-dataset: cld
+dataset: clic
 sort_data: no
 data_dir:
 gpus: 1
