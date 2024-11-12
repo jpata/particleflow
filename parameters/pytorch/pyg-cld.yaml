@@ -1,16 +1,17 @@
 backend: pytorch
 
+save_attention: yes
 dataset: cld
 sort_data: no
 data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-num_epochs: 100
+num_epochs: 30
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: gnn_lsh
+conv_type: attention  # gnn_lsh, attention, mamba, flashattention
 ntrain:
 ntest:
 nvalid:
@@ -26,16 +27,16 @@ val_freq:  # run an extra validation run every val_freq training steps
 model:
   trainable: all
   learned_representation_mode: last #last, concat
-  input_encoding: joint #split, joint
-  pt_mode: linear
+  input_encoding: split #split, joint
+  pt_mode: direct-elemtype-split
   eta_mode: linear
   sin_phi_mode: linear
   cos_phi_mode: linear
-  energy_mode: linear
+  energy_mode: direct-elemtype-split
 
   gnn_lsh:
     conv_type: gnn_lsh
-    embedding_dim: 256
+    embedding_dim: 512
     width: 512
     num_convs: 8
     activation: "elu"
@@ -51,15 +52,16 @@ model:
   attention:
     conv_type: attention
     num_convs: 6
-    dropout_ff: 0.0
+    dropout_ff: 0.1
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
-    dropout_conv_reg_mha: 0.0
-    dropout_conv_reg_ff: 0.0
+    dropout_conv_reg_mha: 0.1
+    dropout_conv_reg_ff: 0.1
     activation: "relu"
-    head_dim: 16
+    head_dim: 32
     num_heads: 32
-    attention_type: flash
+    attention_type: math
+    use_pre_layernorm: True
 
   mamba:
     conv_type: mamba
@@ -80,8 +82,8 @@ lr_schedule_config:
     pct_start: 0.3
 
 raytune:
-  local_dir: # Note: please specify an absolute path
-  sched: asha # asha, hyperband
+  local_dir:  # Note: please specify an absolute path
+  sched:  # asha, hyperband
   search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
   default_mode: "min"
@@ -105,7 +107,8 @@ train_dataset:
       batch_size: 1
       samples:
         cld_edm_ttbar_pf:
-          version: 2.0.0
+          version: 2.3.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
   cld:
@@ -113,8 +116,10 @@ valid_dataset:
       batch_size: 1
       samples:
         cld_edm_ttbar_pf:
-          version: 2.0.0
+          version: 2.3.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
-  cld_edm_ttbar_pf:
-    version: 2.0.0
+  clic_edm_qq_pf:
+    version: 2.3.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
