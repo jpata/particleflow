@@ -645,7 +645,9 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
 
         # return None
 
-    gen_features = awkward.Record({feat: gen_features[feat][mask_visible] for feat in gen_features.keys()})
+    gen_features = awkward.Record(
+        {feat: gen_features[feat][mask_visible] for feat in gen_features.keys() if len(gen_features[feat]) != 0}
+    )
 
     genparticle_to_hit = filter_adj(genparticle_to_hit, genpart_idx_all_to_filtered)
     genparticle_to_trk = filter_adj(genparticle_to_trk, genpart_idx_all_to_filtered)
