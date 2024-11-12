@@ -1,16 +1,17 @@
 backend: pytorch
 
+save_attention: yes
 dataset: clic
 sort_data: no
 data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-num_epochs: 10
+num_epochs: 30
 patience: 20
 lr: 0.0001
-lr_schedule: constant  # constant, cosinedecay, onecycle
-conv_type: gnn_lsh
+lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
+conv_type: attention  # gnn_lsh, attention, mamba, flashattention
 ntrain:
 ntest:
 nvalid:
@@ -26,22 +27,21 @@ val_freq:  # run an extra validation run every val_freq training steps
 model:
   trainable: all
   learned_representation_mode: last #last, concat
-  input_encoding: joint #split, joint
-  pt_mode: linear
+  input_encoding: split #split, joint
+  pt_mode: direct-elemtype-split
   eta_mode: linear
   sin_phi_mode: linear
   cos_phi_mode: linear
-  energy_mode: linear
+  energy_mode: direct-elemtype-split
 
   gnn_lsh:
     conv_type: gnn_lsh
     embedding_dim: 512
     width: 512
-    num_convs: 3
-    dropout: 0.0
+    num_convs: 8
     activation: "elu"
     # gnn-lsh specific parameters
-    bin_size: 640
+    bin_size: 32
     max_num_bins: 200
     distance_dim: 128
     layernorm: True
@@ -49,30 +49,19 @@ model:
     ffn_dist_hidden_dim: 128
     ffn_dist_num_layers: 2
 
-  gravnet:
-    conv_type: gravnet
-    embedding_dim: 512
-    width: 512
-    num_convs: 3
-    dropout: 0.0
-    activation: "elu"
-    # gravnet specific parameters
-    k: 16
-    propagate_dimensions: 32
-    space_dimensions: 4
-
   attention:
     conv_type: attention
-    num_convs: 2
-    dropout_ff: 0.3
-    dropout_conv_id_mha: 0.3
-    dropout_conv_id_ff: 0.3
-    dropout_conv_reg_mha: 0.3
-    dropout_conv_reg_ff: 0.3
-    activation: "elu"
-    head_dim: 16
-    num_heads: 16
-    attention_type: flash
+    num_convs: 6
+    dropout_ff: 0.1
+    dropout_conv_id_mha: 0.0
+    dropout_conv_id_ff: 0.0
+    dropout_conv_reg_mha: 0.1
+    dropout_conv_reg_ff: 0.1
+    activation: "relu"
+    head_dim: 32
+    num_heads: 32
+    attention_type: math
+    use_pre_layernorm: True
 
   mamba:
     conv_type: mamba
@@ -93,8 +82,8 @@ lr_schedule_config:
     pct_start: 0.3
 
 raytune:
-  local_dir: # Note: please specify an absolute path
-  sched: asha # asha, hyperband
+  local_dir:  # Note: please specify an absolute path
+  sched:  # asha, hyperband
   search_alg:  # bayes, bohb, hyperopt, nevergrad, scikit
   default_metric: "val_loss"
   default_mode: "min"
@@ -118,15 +107,14 @@ train_dataset:
       batch_size: 1
       samples:
         clic_edm_qq_pf:
-          version: 1.5.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         clic_edm_ttbar_pf:
-          version: 1.5.0
-        clic_edm_ttbar_pu10_pf:
-          version: 1.5.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         clic_edm_ww_fullhad_pf:
-          version: 1.5.0
-        clic_edm_zh_tautau_pf:
-          version: 1.5.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
   clic:
@@ -134,16 +122,22 @@ valid_dataset:
       batch_size: 1
       samples:
         clic_edm_qq_pf:
-          version: 1.5.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
+        clic_edm_ttbar_pf:
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
+        clic_edm_ww_fullhad_pf:
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
   clic_edm_qq_pf:
-    version: 1.5.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
   clic_edm_ttbar_pf:
-    version: 1.5.0
-  clic_edm_ttbar_pu10_pf:
-    version: 1.5.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
   clic_edm_ww_fullhad_pf:
-    version: 1.5.0
-  clic_edm_zh_tautau_pf:
-    version: 1.5.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]

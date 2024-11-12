@@ -37,7 +37,7 @@ model:
     embedding_dim: 512
     width: 512
     num_convs: 2
-    dropout: 0.0
+    dropout_ff: 0.0
     activation: "elu"
     # gnn-lsh specific parameters
     bin_size: 256
@@ -72,6 +72,7 @@ model:
     head_dim: 16
     num_heads: 16
     attention_type: flash
+    use_pre_layernorm: True
 
   mamba:
     conv_type: mamba

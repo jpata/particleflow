@@ -1,5 +1,6 @@
 import pickle
 import sys
+import tqdm
 
 from DataFormats.FWLite import Events, Handle
 
@@ -109,6 +110,21 @@ if __name__ == "__main__":
         )
     )
 
+    expressions.append(
+        Expression(
+            "prunedGenParticles",
+            "vector<reco::GenParticle>",
+            [
+                ("pt", "[o.pt() for o in obj]"),
+                ("eta", "[o.eta() for o in obj]"),
+                ("phi", "[o.phi() for o in obj]"),
+                ("energy", "[o.energy() for o in obj]"),
+                ("pdgId", "[o.pdgId() for o in obj]"),
+                ("status", "[o.status() for o in obj]"),
+            ],
+        )
+    )
+
     evids = []
     for iev, event in enumerate(events):
         eid = event.object().id()
@@ -118,7 +134,7 @@ if __name__ == "__main__":
 
     # loop over events in a well-defined order
     all_results = []
-    for _, iev in evids:
+    for _, iev in tqdm.tqdm(evids):
         event.to(iev)
 
         eid = event.object().id()

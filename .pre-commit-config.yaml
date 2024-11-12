@@ -1,6 +1,6 @@
 default_language_version:
     python: python3
-exclude: ^(scripts/delphes/tev14_pythia8_*.)|^(images)|^(scripts/fcc/clicRec_e4h_input.py)|^(scripts/fcc/clic_steer.py)|^(scripts/fcc/pythia.py)|^(scripts/fcc/PandoraSettings/.*)|^(mlpf/data_cms/prepare_args.py)
+exclude: ^(images)|^(mlpf/data/clic/clicRec_e4h_input.py)|^(mlpf/data/clic/clic_steer.py)|^(mlpf/data/clic/pythia.py)|^(mlpf/data/clic/PandoraSettings/.*)|^(mlpf/data/cms/prepare_args.py)
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -35,7 +35,7 @@ repos:
       # pre-commit's default_language_version, see
       # https://pre-commit.com/#top_level-default_language_version
       language_version: python3
-      args: [--line-length=125]
+      args: [--line-length=150]
 
 - repo: https://github.com/PyCQA/flake8
   rev: 6.0.0
@@ -45,5 +45,5 @@ repos:
 
     # E203 is not PEP8 compliant
     # E402 due to logging.basicConfig in pipeline.py
-    args: ['--max-line-length=125',  # github viewer width
+    args: ['--max-line-length=150',
            '--extend-ignore=E203,E402,W605']

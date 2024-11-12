@@ -27,13 +27,14 @@ module --force purge; module load modules/2.2-20230808
 module load slurm gcc cmake cuda/12.1.1 cudnn/8.9.2.26-12.x nccl openmpi apptainer
 
 nvidia-smi
-source ~/miniconda3/bin/activate pytorch
+export PYTHONPATH=`pwd`
+source ~/miniforge3/bin/activate mlpf
 which python3
 python3 --version
 
 
 echo 'Starting training.'
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -u mlpf/pyg_pipeline.py --train \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python3 -u mlpf/pipeline.py --train \
     --config $1 \
     --prefix $2 \
     --gpus 8 \

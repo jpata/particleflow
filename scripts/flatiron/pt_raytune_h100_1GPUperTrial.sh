@@ -4,7 +4,7 @@
 #SBATCH -N 2
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
-#SBATCH --constraint=h100,ib
+#SBATCH --constraint=ib-h100p
 #SBATCH --gpus-per-task=8
 #SBATCH --cpus-per-task=64
 
@@ -26,7 +26,8 @@ module --force purge; module load modules/2.2-20230808
 module load slurm gcc cmake cuda/12.1.1 cudnn/8.9.2.26-12.x nccl openmpi apptainer
 
 nvidia-smi
-source ~/miniconda3/bin/activate pytorch
+export PYTHONPATH=`pwd`
+source ~/miniforge3/bin/activate mlpf
 which python3
 python3 --version
 
@@ -71,7 +72,7 @@ echo All Ray workers started.
 ##############################################################################################
 # call your code below
 
-python3 -u mlpf/pyg_pipeline.py --train \
+python3 -u mlpf/pipeline.py --train \
     --config $1 \
     --hpo $2 \
     --ray-cpus $((SLURM_CPUS_PER_TASK/8)) \

@@ -3,9 +3,7 @@ import pickle
 import tqdm
 
 import awkward as ak
-import fastjet
 import numpy as np
-import vector
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 ELEM_LABELS_CMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
@@ -37,7 +35,8 @@ CLASS_NAMES_CMS = [
     "mu",
 ]
 CLASS_NAMES_LONG_CMS = [
-    "none" "charged hadron",
+    "none",
+    "charged hadron",
     "neutral hadron",
     "hfem",
     "hfhad",
@@ -52,7 +51,7 @@ X_FEATURES = [
     "eta",
     "sin_phi",
     "cos_phi",
-    "e",
+    "energy",
     "layer",
     "depth",
     "charge",
@@ -111,19 +110,41 @@ Y_FEATURES = [
     "eta",
     "sin_phi",
     "cos_phi",
-    "e",
+    "energy",
+    "ispu",
+    "generatorStatus",
+    "simulatorStatus",
+    "cp_to_track",
+    "cp_to_cluster",
     "jet_idx",
 ]
 
+# split each dataset into equal parts for faster building
+NUM_SPLITS = 10
 
-def prepare_data_cms(fn, with_jet_idx=True):
+
+def map_pdgid_to_candid(pdgid, charge):
+    if pdgid == 0:
+        return 0
+
+    if pdgid in [22, 11, 13]:
+        return pdgid
+
+    # charged hadron
+    if abs(charge) > 0:
+        return 211
+
+    # neutral hadron
+    return 130
+
+
+def prepare_data_cms(fn):
     Xs = []
-    ygens = []
+    ytargets = []
     ycands = []
-
-    # prepare jet definition and min jet pt for clustering gen jets
-    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-    min_jet_pt = 5.0  # GeV
+    genmets = []
+    genjets = []
+    targetjets = []
 
     if fn.endswith(".pkl"):
         data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
@@ -132,25 +153,25 @@ def prepare_data_cms(fn, with_jet_idx=True):
 
     for event in data:
         Xelem = event["Xelem"]
-        ygen = event["ygen"]
+        ytarget = event["ytarget"]
         ycand = event["ycand"]
+        genmet = event["genmet"][0][0]
+        genjet = event["genjet"]
+        targetjet = event["targetjet"]
 
         # remove PS and BREM from inputs
         msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
 
         Xelem = ak.Array(Xelem[~msk_ps])
-        ygen = ak.Array(ygen[~msk_ps])
+        ytarget = ak.Array(ytarget[~msk_ps])
         ycand = ak.Array(ycand[~msk_ps])
 
         Xelem["sin_phi"] = np.sin(Xelem["phi"])
         Xelem["cos_phi"] = np.cos(Xelem["phi"])
         Xelem["typ_idx"] = np.array([ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]], dtype=np.float32)
-        ygen["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ygen["typ"]], dtype=np.float32)
-        ycand["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["typ"]], dtype=np.float32)
-
-        if with_jet_idx:
-            ygen["jet_idx"] = np.zeros(len(ygen["typ"]), dtype=np.float32)
-            ycand["jet_idx"] = np.zeros(len(ycand["typ"]), dtype=np.float32)
+        pids_remapped = [map_pdgid_to_candid(abs(int(pid)), q) for (pid, q) in zip(ytarget["pid"], ytarget["charge"])]
+        ytarget["typ_idx"] = np.array([CLASS_LABELS_CMS.index(pid) for pid in pids_remapped], dtype=np.float32)
+        ycand["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["pid"]], dtype=np.float32)
 
         Xelem_flat = ak.to_numpy(
             np.stack(
@@ -158,9 +179,9 @@ def prepare_data_cms(fn, with_jet_idx=True):
                 axis=-1,
             )
         )
-        ygen_flat = ak.to_numpy(
+        ytarget_flat = ak.to_numpy(
             np.stack(
-                [ygen[k] for k in Y_FEATURES],
+                [ytarget[k] for k in Y_FEATURES],
                 axis=-1,
             )
         )
@@ -173,65 +194,47 @@ def prepare_data_cms(fn, with_jet_idx=True):
 
         X = Xelem_flat
         ycand = ycand_flat
-        ygen = ygen_flat
-
-        if with_jet_idx:
-            # prepare gen candidates for clustering
-            cls_id = ygen[..., 0]
-            valid = cls_id != 0
-            # save mapping of index after masking -> index before masking as numpy array
-            # inspired from:
-            # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
-            cumsum = np.cumsum(valid) - 1
-            _, index_mapping = np.unique(cumsum, return_index=True)
-
-            pt = ygen[valid, Y_FEATURES.index("pt")]
-            eta = ygen[valid, Y_FEATURES.index("eta")]
-            phi = np.arctan2(
-                ygen[valid, Y_FEATURES.index("sin_phi")],
-                ygen[valid, Y_FEATURES.index("cos_phi")],
-            )
-            e = ygen[valid, Y_FEATURES.index("e")]
-            vec = vector.awk(ak.zip({"pt": pt, "eta": eta, "phi": phi, "e": e}))
-
-            # cluster jets, sort jet indices in descending order by pt
-            cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-            jets = vector.awk(cluster.inclusive_jets(min_pt=min_jet_pt))
-            sorted_jet_idx = ak.argsort(jets.pt, axis=-1, ascending=False).to_list()
-            # retrieve corresponding indices of constituents
-            constituent_idx = cluster.constituent_index(min_pt=min_jet_pt).to_list()
-
-            # add index information to ygen and ycand
-            # index jets in descending order by pt starting from 1:
-            # 0 is null (unclustered),
-            # 1 is 1st highest-pt jet,
-            # 2 is 2nd highest-pt jet, ...
-            for jet_idx in sorted_jet_idx:
-                jet_constituents = [
-                    index_mapping[idx] for idx in constituent_idx[jet_idx]
-                ]  # map back to constituent index *before* masking
-                ygen[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1  # jet index starts from 1
-                ycand[jet_constituents, Y_FEATURES.index("jet_idx")] = jet_idx + 1
+        ytarget = ytarget_flat
 
         Xs.append(X)
-        ygens.append(ygen)
+        ytargets.append(ytarget)
         ycands.append(ycand)
+        genmets.append(genmet)
+        genjets.append(genjet)
+        targetjets.append(targetjet)
 
-    return Xs, ygens, ycands
+    return Xs, ytargets, ycands, genmets, genjets, targetjets
 
 
-def split_sample(path, test_frac=0.8):
+def split_list(lst, x):
+    # Calculate the size of each sublist (except potentially the last)
+    sublist_size = len(lst) // x
+
+    # Create x-1 sublists of equal size
+    result = [lst[i * sublist_size : (i + 1) * sublist_size] for i in range(x - 1)]
+
+    # Add the remaining elements to the last sublist
+    result.append(lst[(x - 1) * sublist_size :])
+
+    return result
+
+
+def split_sample(path, builder_config, num_splits=NUM_SPLITS, train_frac=0.9):
     files = sorted(list(path.glob("*.pkl*")))
-    print("Found {} files in {}".format(files, path))
+    print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
-    idx_split = int(test_frac * len(files))
-    files_train = files[:idx_split]
-    files_test = files[idx_split:]
+    idx_test = int(train_frac * len(files))
+    files_train = files[:idx_test]
+    files_test = files[idx_test:]
     assert len(files_train) > 0
     assert len(files_test) > 0
+
+    split_index = int(builder_config.name) - 1
+    files_train_split = split_list(files_train, num_splits)
+    files_test_split = split_list(files_test, num_splits)
     return {
-        "train": generate_examples(files_train),
-        "test": generate_examples(files_test),
+        "train": generate_examples(files_train_split[split_index]),
+        "test": generate_examples(files_test_split[split_index]),
     }
 
 
@@ -239,15 +242,14 @@ def generate_examples(files):
     """Yields examples."""
 
     for fi in tqdm.tqdm(files):
-        Xs, ygens, ycands = prepare_data_cms(str(fi))
+        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
         for ii in range(len(Xs)):
-            x = Xs[ii]
-            yg = ygens[ii]
-            yc = ycands[ii]
+            x = Xs[ii].astype(np.float32)
+            yg = ytargets[ii].astype(np.float32)
+            yc = ycands[ii].astype(np.float32)
+            gm = genmets[ii].astype(np.float32)
+            gj = genjets[ii].astype(np.float32)
+            tj = targetjets[ii].astype(np.float32)
 
             uniqs, counts = np.unique(yg[:, 0], return_counts=True)
-            yield str(fi) + "_" + str(ii), {
-                "X": x,
-                "ygen": yg,
-                "ycand": yc,
-            }
+            yield str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj, "targetjets": tj}
