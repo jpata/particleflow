@@ -102,7 +102,7 @@ raytune:
     n_random_steps: 10
 
 train_dataset:
-  cld:
+  clic:
     physical:
       batch_size: 1
       samples:
@@ -111,7 +111,7 @@ train_dataset:
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
-  cld:
+  clic:
     physical:
       batch_size: 1
       samples:
@@ -120,6 +120,6 @@ valid_dataset:
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
-  clic_edm_qq_pf:
+  cld_edm_ttbar_pf:
     version: 2.3.0
     splits: [1,2,3,4,5,6,7,8,9,10]
