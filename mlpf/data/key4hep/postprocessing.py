@@ -635,10 +635,11 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
         print("only one particle exists in the event, will skip the event.")
 
         for feat in gen_features.keys():
+            print("feat", feat)
             print("gen_features[feat]", gen_features[feat])
             print("mask_visible", mask_visible)
             print("try", gen_features[feat][mask_visible])
-            break
+            # break
 
         # return None
 
