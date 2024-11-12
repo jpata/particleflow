@@ -631,13 +631,15 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
     idx_all_masked = np.where(mask_visible)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
 
+    if np.array(mask_visible).sum() == 0:
+        return None
+
     if len(np.array(mask_visible)) == 1:
-        print("only one particle exists in the event, will skip the event.")
+        print("mask_visible", mask_visible)
 
         for feat in gen_features.keys():
             print("feat", feat)
             print("gen_features[feat]", gen_features[feat])
-            print("mask_visible", mask_visible)
             print("try", gen_features[feat][mask_visible])
             # break
 
