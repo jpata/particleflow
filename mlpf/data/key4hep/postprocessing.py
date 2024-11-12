@@ -636,7 +636,7 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
 
     print("mask_visible", mask_visible)
     for feat in gen_features.keys():
-        print("feat", gen_features[feat].to_numpy().shape)
+        print("feat", gen_features[feat].to_numpy().shape, gen_features[feat].to_numpy())
         break
     # if len(mask_visible) == 1:
 
