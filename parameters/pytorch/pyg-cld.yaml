@@ -107,7 +107,7 @@ train_dataset:
       batch_size: 1
       samples:
         cld_edm_ttbar_pf:
-          version: 2.3.0
+          version: 2.5.0
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
@@ -116,10 +116,10 @@ valid_dataset:
       batch_size: 1
       samples:
         cld_edm_ttbar_pf:
-          version: 2.3.0
+          version: 2.5.0
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
   cld_edm_ttbar_pf:
-    version: 2.3.0
+    version: 2.5.0
     splits: [1,2,3,4,5,6,7,8,9,10]
