@@ -631,11 +631,10 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
     idx_all_masked = np.where(mask_visible)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
 
-    if np.array(mask_visible).sum() == 0:
-        print("hop")
-        return None
-    print(mask_visible.shape)
-    mask_visible = mask_visible.reshape(-1, 1)
+    if len(mask_visible) == 1:
+        mask_visible = mask_visible.reshape(-1, 1)
+        print(mask_visible.shape)
+
     gen_features = awkward.Record({feat: gen_features[feat][mask_visible] for feat in gen_features.keys()})
 
     genparticle_to_hit = filter_adj(genparticle_to_hit, genpart_idx_all_to_filtered)
