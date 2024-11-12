@@ -631,7 +631,9 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
     idx_all_masked = np.where(mask_visible)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
 
-    print("mask_visible", mask_visible)
+    if mask_visible.sum() == 0:
+        return None
+
     gen_features = awkward.Record({feat: gen_features[feat][mask_visible] for feat in gen_features.keys()})
 
     genparticle_to_hit = filter_adj(genparticle_to_hit, genpart_idx_all_to_filtered)
@@ -1124,6 +1126,8 @@ def process_one_file(fn, ofn, dataset):
             iev,
             collectionIDs,
         )
+        if gpdata is None:
+            continue
 
         # find the reconstructable genparticles and associate them to the best track/cluster
         gpdata_cleaned, gp_to_obj = assign_genparticles_to_obj_and_merge(gpdata)
