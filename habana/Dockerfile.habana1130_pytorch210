@@ -3,27 +3,6 @@ LABEL maintainer="Javier Duarte <jduarte@ucsd.edu>"
 
 RUN apt-get update && \
     apt-get install -qq -y graphviz graphviz-dev
-    
+
 COPY requirements_base.txt .
 RUN pip install -r requirements_base.txt
-RUN pip install --verbose torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-2.1.0+cpu.html
-RUN pip install transformers datasets
-RUN pip install onnx onnxruntime onnxscript
-RUN pip install torch_runstats
-RUN pip install scikit-image
-RUN pip install absl-py
-RUN pip install sporco
-RUN pip install Ninja
-RUN pip install ml-collections
-RUN pip install keras-core
-RUN pip install keras-cv
-RUN pip install tensorflow-datasets
-RUN pip install packaging ninja
-# RUN MAX_JOBS=4 pip install flash-attn --no-build-isolation
-RUN pip install triton
-RUN pip install hls4ml[profiling]
-RUN pip install open3d-cpu
-RUN pip install ray[default] ray[train] ray[tune]
-# RUN pip install causal-conv1d
-# RUN pip install mamba-ssm
-RUN pip install comet_ml
