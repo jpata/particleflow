@@ -529,9 +529,9 @@ def train_and_valid(
                 ypred["cls_id"][batch.mask].detach().cpu().numpy(),
                 labels=range(13),
             )
-            # save the events of the first validation batch for quick checks
-            if (rank == 0 or rank == "cpu") and itrain == 0:
-                validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
+            # # save the events of the first validation batch for quick checks
+            # if (rank == 0 or rank == "cpu") and itrain == 0:
+            #     validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
                 loss = mlpf_loss(ytarget, ypred, batch)
