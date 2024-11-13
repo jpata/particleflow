@@ -1118,6 +1118,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info(f"Running predictions on {sample}")
             torch.cuda.empty_cache()
 
+            print(config["dataset"])
             # FIXME: import this from a central place
             if config["dataset"] == "clic":
                 import fastjet
