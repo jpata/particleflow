@@ -1118,14 +1118,13 @@ def run(rank, world_size, config, args, outdir, logfile):
             _logger.info(f"Running predictions on {sample}")
             torch.cuda.empty_cache()
 
-            print(config["dataset"])
             # FIXME: import this from a central place
             if config["dataset"] == "clic":
                 import fastjet
 
                 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
                 jet_ptcut = 5
-            if config["dataset"] == "cms":
+            elif config["dataset"] == "cms":
                 import fastjet
 
                 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
