@@ -318,7 +318,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet
         comet_experiment.log_figure(figure_name= f'PU Hist - Epoch {epoch} Batch {itrain}')
         plt.close()
 
-        plt.scatter(x, y, alpha=0.5, color='blue')
+        plt.scatter(pred_pu, targ_pu, alpha=0.5, color='blue')
         plt.xlabel('Predicted PU')
         plt.ylabel('Target PU')
         plt.title(f'Scatter Plot of Predicted vs Target PU (Epoch {epoch})')
