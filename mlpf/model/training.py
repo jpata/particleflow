@@ -739,26 +739,6 @@ def train_mlpf(
     for epoch in range(start_epoch, num_epochs + 1):
         t0 = time.time()
 
-        losses_v = train_and_valid(
-            rank,
-            world_size,
-            outdir,
-            model,
-            optimizer,
-            train_loader=train_loader,
-            valid_loader=valid_loader,
-            trainable=trainable,
-            is_train=False,
-            lr_schedule=None,
-            comet_experiment=comet_experiment,
-            comet_step_freq=comet_step_freq,
-            epoch=epoch,
-            dtype=dtype,
-            tensorboard_writer=tensorboard_writer_valid,
-            save_attention=save_attention,
-        )
-        t_valid = time.time()
-
         # training step, edit here to profile a specific epoch
         if epoch == -1:
             with profile(
@@ -801,25 +781,25 @@ def train_mlpf(
             )
         t_train = time.time()  # epoch time excluding validation
 
-        # losses_v = train_and_valid(
-        #     rank,
-        #     world_size,
-        #     outdir,
-        #     model,
-        #     optimizer,
-        #     train_loader=train_loader,
-        #     valid_loader=valid_loader,
-        #     trainable=trainable,
-        #     is_train=False,
-        #     lr_schedule=None,
-        #     comet_experiment=comet_experiment,
-        #     comet_step_freq=comet_step_freq,
-        #     epoch=epoch,
-        #     dtype=dtype,
-        #     tensorboard_writer=tensorboard_writer_valid,
-        #     save_attention=save_attention,
-        # )
-        # t_valid = time.time()
+        losses_v = train_and_valid(
+            rank,
+            world_size,
+            outdir,
+            model,
+            optimizer,
+            train_loader=train_loader,
+            valid_loader=valid_loader,
+            trainable=trainable,
+            is_train=False,
+            lr_schedule=None,
+            comet_experiment=comet_experiment,
+            comet_step_freq=comet_step_freq,
+            epoch=epoch,
+            dtype=dtype,
+            tensorboard_writer=tensorboard_writer_valid,
+            save_attention=save_attention,
+        )
+        t_valid = time.time()
 
         if comet_experiment:
             comet_experiment.log_metrics(losses_t, prefix="epoch_train_loss", epoch=epoch)
