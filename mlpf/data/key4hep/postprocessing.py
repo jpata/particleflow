@@ -499,7 +499,7 @@ def track_to_features(dataset, prop_data, iev):
 
     ret["dEdx"] = track_arr["SiTracks_Refitted_dQdx/SiTracks_Refitted_dQdx.dQdx.value"]
     ret["dEdxError"] = track_arr["SiTracks_Refitted_dQdx/SiTracks_Refitted_dQdx.dQdx.error"]
-    ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted/SiTracks_Refitted.Nholes"] # TODO: fix
+    ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted/SiTracks_Refitted.Nholes"]  # TODO: fix
 
     n_tr = len(ret["type"])
 
@@ -1057,6 +1057,7 @@ def process_one_file(fn, ofn, dataset):
                 "_PandoraClusters_hits/_PandoraClusters_hits.index",
                 "_PandoraClusters_hits/_PandoraClusters_hits.collectionID",
                 "PandoraPFOs",
+                "SiTracks_Refitted_dQdx",  # TODO: new
             ]
         )
         calohit_links = arrs.arrays(
