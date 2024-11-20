@@ -264,10 +264,15 @@ def get_calohit_matrix_and_genadj(dataset, hit_data, calohit_links, iev, collect
         calohit_to_gen_calo_idx = calohit_links["CalohitMCTruthLink#0.index"][iev]
         calohit_to_gen_gen_idx = calohit_links["CalohitMCTruthLink#1.index"][iev]
     elif dataset == "fcc":
-        calohit_to_gen_calo_colid = calohit_links["_CalohitMCTruthLink_rec/_CalohitMCTruthLink_rec.collectionID"][iev]
-        calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_sim/_CalohitMCTruthLink_sim.collectionID"][iev]
-        calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_rec/_CalohitMCTruthLink_rec.index"][iev]
-        calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_sim/_CalohitMCTruthLink_sim.index"][iev]
+        # calohit_to_gen_calo_colid = calohit_links["_CalohitMCTruthLink_rec/_CalohitMCTruthLink_rec.collectionID"][iev]
+        # calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_sim/_CalohitMCTruthLink_sim.collectionID"][iev]
+        # calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_rec/_CalohitMCTruthLink_rec.index"][iev]
+        # calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_sim/_CalohitMCTruthLink_sim.index"][iev]
+
+        calohit_to_gen_calo_colid = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID"][iev]
+        calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"][iev]
+        calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index"][iev]
+        calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]        
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
 
