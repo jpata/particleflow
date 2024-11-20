@@ -493,11 +493,7 @@ def track_to_features(dataset, prop_data, iev):
     # feats_from_track = ["type", "chi2", "ndf", "dEdx", "dEdxError", "radiusOfInnermostHit"]
     # ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
 
-    track_arr = prop_data[[track_coll] + ["SiTracks_Refitted_dQdx"]][iev]
-    print("track_arr", track_arr)
-
-    track_arr = prop_data[track_coll][iev]
-    print("track_arr", track_arr)
+    track_arr = {**prop_data[track_coll][iev], **prop_data["SiTracks_Refitted_dQdx"][iev]}
 
     feats_from_track = ["type", "chi2", "ndf"]
     ret = {feat: track_arr[track_coll + "/" + track_coll + "." + feat] for feat in feats_from_track}
