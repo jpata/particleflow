@@ -500,7 +500,7 @@ def track_to_features(dataset, prop_data, iev):
     track_arr = prop_data["SiTracks_Refitted_dQdx"][iev]
     ret["dEdx"] = track_arr["SiTracks_Refitted_dQdx.dQdx.value"]
     ret["dEdxError"] = track_arr["SiTracks_Refitted_dQdx.dQdx.error"]
-    ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted.error"]  # TODO: fix
+    ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted_dQdx.dQdx.error"]  # TODO: fix
 
     n_tr = len(ret["type"])
 
