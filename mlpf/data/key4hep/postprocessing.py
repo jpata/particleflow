@@ -498,9 +498,9 @@ def track_to_features(dataset, prop_data, iev):
     ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
 
     track_arr = prop_data["SiTracks_Refitted_dQdx"][iev]
-    ret["dEdx"] = track_arr["SiTracks_Refitted_dQdx/SiTracks_Refitted_dQdx.dQdx.value"]
-    ret["dEdxError"] = track_arr["SiTracks_Refitted_dQdx/SiTracks_Refitted_dQdx.dQdx.error"]
-    ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted/SiTracks_Refitted.Nholes"]  # TODO: fix
+    ret["dEdx"] = track_arr["SiTracks_Refitted_dQdx.dQdx.value"]
+    ret["dEdxError"] = track_arr["SiTracks_Refitted_dQdx.dQdx.error"]
+    ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted.Nholes"]  # TODO: fix
 
     n_tr = len(ret["type"])
 
