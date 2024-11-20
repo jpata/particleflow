@@ -272,7 +272,7 @@ def get_calohit_matrix_and_genadj(dataset, hit_data, calohit_links, iev, collect
         calohit_to_gen_calo_colid = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"][iev]
         calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID"][iev]
         calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]
-        calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index"][iev]        
+        calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index"][iev]
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
 
@@ -490,8 +490,17 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
 
 def track_to_features(dataset, prop_data, iev):
     track_arr = prop_data[track_coll][iev]
-    feats_from_track = ["type", "chi2", "ndf", "dEdx", "dEdxError", "radiusOfInnermostHit"]
+
+    # feats_from_track = ["type", "chi2", "ndf", "dEdx", "dEdxError", "radiusOfInnermostHit"]
+    # ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
+
+    feats_from_track = ["type", "chi2", "ndf"]
     ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
+
+    ret["dEdx"] = track_arr["SiTracks_Refitted_dQdx/SiTracks_Refitted_dQdx.dQdx.value"]
+    ret["dEdxError"] = track_arr["SiTracks_Refitted_dQdx/SiTracks_Refitted_dQdx.dQdx.error"]
+    ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted/SiTracks_Refitted.Nholes"] # TODO: fix
+
     n_tr = len(ret["type"])
 
     # get the index of the first track state
