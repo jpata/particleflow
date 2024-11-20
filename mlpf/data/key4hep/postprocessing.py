@@ -402,8 +402,10 @@ def genparticle_track_adj(dataset, sitrack_links, iev):
         trk_to_gen_trkidx = sitrack_links["SiTracksMCTruthLink#0.index"][iev]
         trk_to_gen_genidx = sitrack_links["SiTracksMCTruthLink#1.index"][iev]
     elif dataset == "fcc":
-        trk_to_gen_trkidx = sitrack_links["_SiTracksMCTruthLink_rec/_SiTracksMCTruthLink_rec.index"][iev]
-        trk_to_gen_genidx = sitrack_links["_SiTracksMCTruthLink_sim/_SiTracksMCTruthLink_sim.index"][iev]
+        # trk_to_gen_trkidx = sitrack_links["_SiTracksMCTruthLink_rec/_SiTracksMCTruthLink_rec.index"][iev]
+        # trk_to_gen_genidx = sitrack_links["_SiTracksMCTruthLink_sim/_SiTracksMCTruthLink_sim.index"][iev]
+        trk_to_gen_trkidx = sitrack_links["_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index"][iev]
+        trk_to_gen_genidx = sitrack_links["_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index"][iev]
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
 
