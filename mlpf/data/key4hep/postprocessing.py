@@ -514,16 +514,16 @@ def track_to_features(dataset, prop_data, iev):
             # pick the state AtFirstHit
             # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
 
-            ibegin = prop_data["SiTracks_Refitted/SiTracks_Refitted.trackStates_begin"].array()[iev][itrack]
-            iend = prop_data["SiTracks_Refitted/SiTracks_Refitted.trackStates_end"].array()[iev][itrack]
+            ibegin = prop_data["SiTracks_Refitted.trackStates_begin"].array()[iev][itrack]
+            iend = prop_data["SiTracks_Refitted.trackStates_end"].array()[iev][itrack]
 
-            refX = prop_data["_SiTracks_Refitted_trackStates/_SiTracks_Refitted_trackStates.referencePoint.x"].array()[iev][
+            refX = prop_data["_SiTracks_Refitted_trackStates.referencePoint.x"].array()[iev][
                 ibegin:iend
             ]
-            refY = prop_data["_SiTracks_Refitted_trackStates/_SiTracks_Refitted_trackStates.referencePoint.y"].array()[iev][
+            refY = prop_data["_SiTracks_Refitted_trackStates.referencePoint.y"].array()[iev][
                 ibegin:iend
             ]
-            location = prop_data["_SiTracks_Refitted_trackStates/_SiTracks_Refitted_trackStates.location"].array()[iev][
+            location = prop_data["_SiTracks_Refitted_trackStates.location"].array()[iev][
                 ibegin:iend
             ]
 
