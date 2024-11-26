@@ -507,7 +507,6 @@ def track_to_features(dataset, prop_data, iev):
         # ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted_dQdx.dQdx.error"]  # TODO: fix
 
         num_tracks = len(track_arr["SiTracks_Refitted_dQdx.dQdx.value"])
-        print("num_tracks", num_tracks)
         innermost_radius = []
         for itrack in range(num_tracks):
 
@@ -515,6 +514,9 @@ def track_to_features(dataset, prop_data, iev):
             # pick the state AtFirstHit
             # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
             track_arr = prop_data[track_coll][iev]
+            print(track_arr)
+            print(track_coll + "." + "trackStates_begin")
+
             ibegin = track_arr[track_coll + "." + "trackStates_begin"].array()[iev][itrack]
             iend = track_arr[track_coll + "." + "trackStates_end"].array()[iev][itrack]
 
