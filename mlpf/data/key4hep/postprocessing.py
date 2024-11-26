@@ -504,34 +504,34 @@ def track_to_features(dataset, prop_data, iev):
         track_arr = prop_data["SiTracks_Refitted_dQdx"][iev]
         ret["dEdx"] = track_arr["SiTracks_Refitted_dQdx.dQdx.value"]
         ret["dEdxError"] = track_arr["SiTracks_Refitted_dQdx.dQdx.error"]
-        ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted_dQdx.dQdx.error"]  # TODO: fix
+        # ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted_dQdx.dQdx.error"]  # TODO: fix
 
-        # num_tracks = len(track_arr[track_coll + "." + "type"])
-        # innermost_radius = []
-        # for itrack in range(num_tracks):
+        num_tracks = len(track_arr[track_coll + "." + "type"])
+        innermost_radius = []
+        for itrack in range(num_tracks):
 
-        #     # select the track states corresponding to itrack
-        #     # pick the state AtFirstHit
-        #     # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
+            # select the track states corresponding to itrack
+            # pick the state AtFirstHit
+            # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
 
-        #     ibegin = prop_data["SiTracks_Refitted/SiTracks_Refitted.trackStates_begin"].array()[iev][itrack]
-        #     iend = prop_data["SiTracks_Refitted/SiTracks_Refitted.trackStates_end"].array()[iev][itrack]
+            ibegin = prop_data["SiTracks_Refitted/SiTracks_Refitted.trackStates_begin"].array()[iev][itrack]
+            iend = prop_data["SiTracks_Refitted/SiTracks_Refitted.trackStates_end"].array()[iev][itrack]
 
-        #     refX = prop_data["_SiTracks_Refitted_trackStates/_SiTracks_Refitted_trackStates.referencePoint.x"].array()[iev][
-        #         ibegin:iend
-        #     ]
-        #     refY = prop_data["_SiTracks_Refitted_trackStates/_SiTracks_Refitted_trackStates.referencePoint.y"].array()[iev][
-        #         ibegin:iend
-        #     ]
-        #     location = prop_data["_SiTracks_Refitted_trackStates/_SiTracks_Refitted_trackStates.location"].array()[iev][
-        #         ibegin:iend
-        #     ]
+            refX = prop_data["_SiTracks_Refitted_trackStates/_SiTracks_Refitted_trackStates.referencePoint.x"].array()[iev][
+                ibegin:iend
+            ]
+            refY = prop_data["_SiTracks_Refitted_trackStates/_SiTracks_Refitted_trackStates.referencePoint.y"].array()[iev][
+                ibegin:iend
+            ]
+            location = prop_data["_SiTracks_Refitted_trackStates/_SiTracks_Refitted_trackStates.location"].array()[iev][
+                ibegin:iend
+            ]
 
-        #     istate = np.argmax(location == 2)  # 2 refers to AtFirstHit
+            istate = np.argmax(location == 2)  # 2 refers to AtFirstHit
 
-        #     innermost_radius.append(math.sqrt(refX[istate] ** 2 + refY[istate] ** 2))
+            innermost_radius.append(math.sqrt(refX[istate] ** 2 + refY[istate] ** 2))
 
-        # ret["radiusOfInnermostHit"] = np.array(innermost_radius)
+        ret["radiusOfInnermostHit"] = np.array(innermost_radius)
 
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
