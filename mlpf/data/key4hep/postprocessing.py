@@ -513,13 +513,14 @@ def track_to_features(dataset, prop_data, iev):
             # select the track states corresponding to itrack
             # pick the state AtFirstHit
             # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
-            print(prop_data["SiTracks_Refitted"][0].fields())
-            ibegin = prop_data["SiTracks_Refitted.trackStates_begin"].array()[iev][itrack]
-            iend = prop_data["SiTracks_Refitted.trackStates_end"].array()[iev][itrack]
+            track_arr = prop_data[track_coll][iev]
+            ibegin = track_arr[track_coll + "." + "trackStates_begin"].array()[iev][itrack]
+            iend = track_arr[track_coll + "." + "trackStates_end"].array()[iev][itrack]
 
-            refX = prop_data["_SiTracks_Refitted_trackStates.referencePoint.x"].array()[iev][ibegin:iend]
-            refY = prop_data["_SiTracks_Refitted_trackStates.referencePoint.y"].array()[iev][ibegin:iend]
-            location = prop_data["_SiTracks_Refitted_trackStates.location"].array()[iev][ibegin:iend]
+            track_arr = prop_data["_SiTracks_Refitted_trackStates"][iev]
+            refX = track_arr["_SiTracks_Refitted_trackStates" + "." + "referencePoint.x"].array()[iev][ibegin:iend]
+            refY = track_arr["_SiTracks_Refitted_trackStates" + "." + "referencePoint.y"].array()[iev][ibegin:iend]
+            location = track_arr["_SiTracks_Refitted_trackStates" + "." + "location"].array()[iev][ibegin:iend]
 
             istate = np.argmax(location == 2)  # 2 refers to AtFirstHit
 
