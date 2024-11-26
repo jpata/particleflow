@@ -514,7 +514,11 @@ def track_to_features(dataset, prop_data, iev):
         if dataset == "clic":
             ret[k] = awkward.to_numpy(prop_data["SiTracks_1"]["SiTracks_1." + k][iev][trackstate_idx])
         elif dataset == "fcc":
-            ret[k] = awkward.to_numpy(prop_data["_SiTracks_trackStates"]["_SiTracks_trackStates." + k][iev][trackstate_idx])
+            # ret[k] = awkward.to_numpy(prop_data["_SiTracks_trackStates"]["_SiTracks_trackStates." + k][iev][trackstate_idx])
+            ret[k] = awkward.to_numpy(
+                prop_data["_SiTracks_Refitted_trackStates"]["_SiTracks_Refitted_trackStates." + k][iev][trackstate_idx]
+            )
+
         else:
             raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
 
@@ -1055,7 +1059,8 @@ def process_one_file(fn, ofn, dataset):
                 "MCParticles.daughters_end",
                 "_MCParticles_daughters/_MCParticles_daughters.index",  # similar to "MCParticles#1.index" in clic
                 track_coll,
-                "_SiTracks_trackStates",
+                # "_SiTracks_trackStates",
+                "_SiTracks_Refitted_trackStates",
                 "PandoraClusters",
                 "_PandoraClusters_hits/_PandoraClusters_hits.index",
                 "_PandoraClusters_hits/_PandoraClusters_hits.collectionID",
