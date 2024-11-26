@@ -498,30 +498,29 @@ def track_to_features(dataset, prop_data, iev):
 
     elif dataset == "fcc":
         track_arr = prop_data[track_coll][iev]
+        # the following are needed since they are no longer defined under SiTracks_Refitted
+        track_arr_dQdx = prop_data["SiTracks_Refitted_dQdx"][iev]
+        track_arr_trackStates = prop_data["_SiTracks_Refitted_trackStates"][iev]
+
         feats_from_track = ["type", "chi2", "ndf"]
         ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
 
-        track_arr = prop_data["SiTracks_Refitted_dQdx"][iev]
-        ret["dEdx"] = track_arr["SiTracks_Refitted_dQdx.dQdx.value"]
-        ret["dEdxError"] = track_arr["SiTracks_Refitted_dQdx.dQdx.error"]
-        # ret["radiusOfInnermostHit"] = track_arr["SiTracks_Refitted_dQdx.dQdx.error"]  # TODO: fix
+        ret["dEdx"] = track_arr_dQdx["SiTracks_Refitted_dQdx.dQdx.value"]
+        ret["dEdxError"] = track_arr_dQdx["SiTracks_Refitted_dQdx.dQdx.error"]
 
-        num_tracks = len(track_arr["SiTracks_Refitted_dQdx.dQdx.value"])
+        num_tracks = len(track_arr_dQdx["SiTracks_Refitted_dQdx.dQdx.value"])
         innermost_radius = []
         for itrack in range(num_tracks):
 
             # select the track states corresponding to itrack
             # pick the state AtFirstHit
             # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
-            track_arr = prop_data[track_coll][iev]
-
             ibegin = track_arr[track_coll + "." + "trackStates_begin"][itrack]
             iend = track_arr[track_coll + "." + "trackStates_end"][itrack]
 
-            track_arr = prop_data["_SiTracks_Refitted_trackStates"][iev]
-            refX = track_arr["_SiTracks_Refitted_trackStates" + "." + "referencePoint.x"][ibegin:iend]
-            refY = track_arr["_SiTracks_Refitted_trackStates" + "." + "referencePoint.y"][ibegin:iend]
-            location = track_arr["_SiTracks_Refitted_trackStates" + "." + "location"][ibegin:iend]
+            refX = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "referencePoint.x"][ibegin:iend]
+            refY = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "referencePoint.y"][ibegin:iend]
+            location = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "location"][ibegin:iend]
 
             istate = np.argmax(location == 2)  # 2 refers to AtFirstHit
 
