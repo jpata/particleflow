@@ -513,7 +513,7 @@ def track_to_features(dataset, prop_data, iev):
             # select the track states corresponding to itrack
             # pick the state AtFirstHit
             # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
-            print(prop_data["SiTracks_Refitted"].keys())
+            print(prop_data["SiTracks_Refitted"].fields())
             ibegin = prop_data["SiTracks_Refitted.trackStates_begin"].array()[iev][itrack]
             iend = prop_data["SiTracks_Refitted.trackStates_end"].array()[iev][itrack]
 
