@@ -147,7 +147,7 @@ def predict_one_batch_args(args):
 
 @torch.no_grad()
 def run_predictions(
-    world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=15.0, jet_etacut=0.5, jet_match_dr=0.1, dir_name=""
+    world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=15.0, jet_etacut=2.5, jet_match_dr=0.1, dir_name=""
 ):
     """Runs inference on the given sample and stores the output as .parquet files."""
     if world_size > 1:
