@@ -183,7 +183,7 @@ def unpack_target(y, model):
 
 def unpack_predictions(preds):
     ret = {}
-    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"] = preds
+    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret["ispu"] = preds
 
     # unpacking
     ret["pt"] = ret["momentum"][..., 0]
