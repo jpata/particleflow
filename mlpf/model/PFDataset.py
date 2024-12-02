@@ -116,9 +116,7 @@ class PFDataset:
             builder = tfds.builder(name, data_dir=data_dir)
         except Exception:
             _logger.error(
-                "Could not find dataset {} in {}, please check that you have downloaded the correct version of the dataset".format(
-                    name, data_dir
-                )
+                "Could not find dataset {} in {}, please check that you have downloaded the correct version of the dataset".format(name, data_dir)
             )
             sys.exit(1)
         self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort)
@@ -157,9 +155,7 @@ class PFBatch:
 class Collater:
     def __init__(self, per_particle_keys_to_get, per_event_keys_to_get, **kwargs):
         super(Collater, self).__init__(**kwargs)
-        self.per_particle_keys_to_get = (
-            per_particle_keys_to_get  # these quantities are a variable-length tensor per each event
-        )
+        self.per_particle_keys_to_get = per_particle_keys_to_get  # these quantities are a variable-length tensor per each event
         self.per_event_keys_to_get = per_event_keys_to_get  # these quantities are one value (scalar) per event
 
     def __call__(self, inputs):
@@ -167,9 +163,7 @@ class Collater:
 
         # per-particle quantities need to be padded across events of different size
         for key_to_get in self.per_particle_keys_to_get:
-            ret[key_to_get] = torch.nn.utils.rnn.pad_sequence(
-                [torch.tensor(inp[key_to_get]).to(torch.float32) for inp in inputs], batch_first=True
-            )
+            ret[key_to_get] = torch.nn.utils.rnn.pad_sequence([torch.tensor(inp[key_to_get]).to(torch.float32) for inp in inputs], batch_first=True)
 
         # per-event quantities can be stacked across events
         for key_to_get in self.per_event_keys_to_get:
@@ -266,9 +260,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(
-                    ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "genjets", "targetjets"], ["genmet"]
-                ),
+                collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "genjets", "targetjets"], ["genmet"]),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
