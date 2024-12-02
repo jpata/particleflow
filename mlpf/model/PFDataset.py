@@ -228,6 +228,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                 split_configs = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["splits"]
                 print("split_configs", split_configs)
 
+                nevents = None
                 if not (config[f"n{split}"] is None):
                     nevents = config[f"n{split}"] // len(split_configs)
 
