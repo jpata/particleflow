@@ -12,29 +12,29 @@ from utils_edm import (
 )
 
 _DESCRIPTION = """
-CLD EDM4HEP dataset with ee -> ttbar at 365 GeV.
+CLIC EDM4HEP dataset with single photon gun samples.
   - X: reconstructed tracks and clusters, variable number N per event
   - ygen: stable generator particles, zero-padded to N per event
   - ycand: baseline particle flow particles, zero-padded to N per event
 """
 
 _CITATION = """
-FIXME
+Pata, Joosep, Wulff, Eric, Duarte, Javier, Mokhtar, Farouk, Zhang, Mengke, Girone, Maria, & Southwick, David. (2023).
+Simulated datasets for detector and particle flow reconstruction: CLIC detector (1.1) [Data set].
+Zenodo. https://doi.org/10.5281/zenodo.8260741
 """
 
 
-class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
+class ClicEdmGamma(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version("2.5.0")
     RELEASE_NOTES = {
-        "2.0.0": "Initial release",
-        "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",
         "2.5.0": "Use 10 splits, skip 2.4.0 to unify with CMS datasets",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
 
     The processed tensorflow_dataset can also be downloaded from:
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cld_edm4hep/ ./
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep/ ./
     """
 
     # create configs 1 ... NUM_SPLITS + 1 that allow to parallelize the dataset building
@@ -42,7 +42,7 @@ class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(CldEdmTtbarPf, self).__init__(*args, **kwargs)
+        super(ClicEdmGamma, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
@@ -65,8 +65,7 @@ class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
                     "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                 }
             ),
-            supervised_keys=None,
-            homepage="",
+            homepage="https://github.com/jpata/particleflow",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(
                 x_features_track=X_FEATURES_TRK,
@@ -77,7 +76,7 @@ class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_tt_ecm365"), self.builder_config, num_splits=NUM_SPLITS)
+        return split_sample(Path(path / "gamma//"), self.builder_config, num_splits=NUM_SPLITS)
 
     def _generate_examples(self, files):
         return generate_examples(files)
