@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --partition gpu
 #SBATCH --gres gpu:mig:1
-#SBATCH --mem-per-gpu 100G
+#SBATCH --mem-per-gpu 300G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
 IMG=/home/software/singularity/pytorch.simg:2024-08-18
 cd ~/particleflow
 
-WEIGHTS=experiments/pyg-cms_20241101_090645_682892/checkpoints/checkpoint-08-2.986092.pth
+WEIGHTS=experiments/pyg-cms_20241101_090645_682892/checkpoints/checkpoint-18-2.778778.pth
 DATASET=$1
 env
 singularity exec -B /scratch/persistent --nv \
