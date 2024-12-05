@@ -10,29 +10,30 @@ import torch
 import tqdm
 import vector
 from jet_utils import match_two_jet_collections
-from plotting.plot_utils import (
-    get_class_names,
+from plotting.plot_utils import (  # plot_elements,
     compute_met_and_ratio,
+    get_class_names,
     load_eval_data,
-    plot_jets,
     plot_jet_ratio,
     plot_jet_response_binned,
-    plot_jet_response_binned_vstarget,
     plot_jet_response_binned_eta,
+    plot_jet_response_binned_vstarget,
+    plot_jets,
     plot_met,
     plot_met_ratio,
     plot_met_response_binned,
     plot_num_elements,
-    plot_particles,
     plot_particle_ratio,
-    # plot_elements,
+    plot_particles,
 )
 
 from .logger import _logger
 from .utils import unpack_predictions, unpack_target
 
 
-def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
+def predict_one_batch(
+    conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_etacut, jet_match_dr, outpath, dir_name, sample
+):
 
     # skip prediction if output exists
     outfile = f"{outpath}/preds{dir_name}/{sample}/pred_{rank}_{i}.parquet"
@@ -62,7 +63,8 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     ycand = unpack_target(batch.ycand.to(torch.float32), model)
     ypred = unpack_predictions(ypred)
 
-    genjets_msk = batch.genjets[:, :, 0].cpu() > jet_ptcut
+    genjets_msk = (batch.genjets[:, :, 0].cpu() > jet_ptcut) & (abs(batch.genjets[:, :, 1]).cpu() < jet_etacut)
+
     genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
     genjets = vector.awk(
         awkward.zip(
@@ -125,7 +127,15 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     )
 
     awkward.to_parquet(
-        awkward.Array({"inputs": Xs, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets, "genmet": batch.genmet.cpu()}),
+        awkward.Array(
+            {
+                "inputs": Xs,
+                "particles": awkvals,
+                "jets": jets_coll,
+                "matched_jets": matched_jets,
+                "genmet": batch.genmet.cpu(),
+            }
+        ),
         outfile,
     )
     _logger.info(f"Saved predictions at {outfile}")
@@ -136,7 +146,9 @@ def predict_one_batch_args(args):
 
 
 @torch.no_grad()
-def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=15.0, jet_match_dr=0.1, dir_name=""):
+def run_predictions(
+    world_size, rank, model, loader, sample, outpath, jetdef, jet_ptcut=15.0, jet_etacut=2.5, jet_match_dr=0.1, dir_name=""
+):
     """Runs inference on the given sample and stores the output as .parquet files."""
     if world_size > 1:
         conv_type = model.module.conv_type
@@ -153,7 +165,9 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
 
     ti = time.time()
     for i, batch in iterator:
-        predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample)
+        predict_one_batch(
+            conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_etacut, jet_match_dr, outpath, dir_name, sample
+        )
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 
