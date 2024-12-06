@@ -23,7 +23,7 @@ ELEM_TYPES_NONZERO = {
 }
 
 CLASS_LABELS = {
-    "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],
+    "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],  # we never actually predict 15/taus (not there in targets)
     "clic": [0, 211, 130, 22, 11, 13],
     "clic_hits": [0, 211, 130, 22, 11, 13],
 }
