@@ -123,6 +123,10 @@ def mlpf_loss(y, ypred, batch):
     loss_regression_cos_phi[batch.mask == 0] *= 0
     loss_regression_energy[batch.mask == 0] *= 0
 
+    target_pt = torch.exp(y["pt"]) * batch.X[:, :, 1]
+    loss_regression_pt *= target_pt
+    loss_regression_energy *= target_pt
+
     # average over all target particles
     loss["Regression_pt"] = loss_regression_pt.sum() / npart
     loss["Regression_eta"] = loss_regression_eta.sum() / npart

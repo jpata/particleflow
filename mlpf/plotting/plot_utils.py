@@ -1422,7 +1422,7 @@ def plot_jet_response_binned_vstarget(yvals, epoch=None, cp_dir=None, comet_expe
     pf_response = yvals["jet_ratio_target_to_cand_pt"]
     mlpf_response = yvals["jet_ratio_target_to_pred_pt"]
 
-    genjet_bins = [10, 20, 40, 60, 80, 100, 200]
+    genjet_bins = [10, 20, 40, 60, 80, 100, 200, 400, 800]
 
     x_vals = []
     pf_vals = []
@@ -1532,7 +1532,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     pf_response = yvals["jet_ratio_gen_to_cand_pt"]
     mlpf_response = yvals["jet_ratio_gen_to_pred_pt"]
 
-    genjet_bins = [10, 20, 40, 60, 80, 100, 200]
+    genjet_bins = [10, 20, 40, 60, 80, 100, 200, 400, 800]
 
     x_vals = []
     target_vals = []
