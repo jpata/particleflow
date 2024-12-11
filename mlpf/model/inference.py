@@ -158,7 +158,7 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
     _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
 
 
-def make_plots(outpath, sample, dataset, dir_name=""):
+def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
     """Uses the predictions stored as .parquet files (see above) to make plots."""
 
     mplhep.style.use(mplhep.styles.CMS)
@@ -168,7 +168,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     plots_path = Path(f"{outpath}/plots{dir_name}/{sample}/")
     pred_path = Path(f"{outpath}/preds{dir_name}/{sample}/")
 
-    yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
+    yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), ntest_files)
 
     plot_num_elements(X, cp_dir=plots_path)
 

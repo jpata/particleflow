@@ -123,9 +123,10 @@ def mlpf_loss(y, ypred, batch):
     loss_regression_cos_phi[batch.mask == 0] *= 0
     loss_regression_energy[batch.mask == 0] *= 0
 
+    # add weight based on target pt
     target_pt = torch.exp(y["pt"]) * batch.X[:, :, 1]
-    loss_regression_pt *= target_pt
-    loss_regression_energy *= target_pt
+    loss_regression_pt *= torch.sqrt(target_pt)
+    loss_regression_energy *= torch.sqrt(target_pt)
 
     # average over all target particles
     loss["Regression_pt"] = loss_regression_pt.sum() / npart
@@ -914,7 +915,10 @@ def run(rank, world_size, config, args, outdir, logfile):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
-        start_epoch = checkpoint["extra_state"]["epoch"] + 1
+
+        # check if we reached the first epoch in the checkpoint
+        if "epoch" in checkpoint["extra_state"]:
+            start_epoch = checkpoint["extra_state"]["epoch"] + 1
 
         for k in model.state_dict().keys():
             shp0 = model.state_dict()[k].shape
@@ -1107,9 +1111,11 @@ def run(rank, world_size, config, args, outdir, logfile):
 
     if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
         if args.make_plots:
+
+            ntest_files = 1000
             for sample in args.test_datasets:
                 _logger.info(f"Plotting distributions for {sample}")
-                make_plots(outdir, sample, config["dataset"], testdir_name)
+                make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)
 
     if world_size > 1:
         dist.destroy_process_group()

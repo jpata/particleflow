@@ -4,7 +4,7 @@
 #SBATCH --mem-per-gpu 250G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-IMG=/home/software/singularity/pytorch.simg:2024-08-18
+IMG=/home/software/singularity/pytorch.simg:2024-12-03
 cd ~/particleflow
 
 ulimit -n 10000
@@ -12,6 +12,6 @@ singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=`pwd` \
     --env KERAS_BACKEND=torch \
     $IMG python3 mlpf/pipeline.py --gpus 1 \
-    --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms-nopu.yaml \
+    --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
     --train --test --make-plots --conv-type attention \
-    --gpu-batch-multiplier 5 --checkpoint-freq 1 --num-workers 8 --prefetch-factor 50 --comet --num-epochs 30 --lr 0.00001 --load experiments/pyg-cms_20241101_090645_682892/checkpoints/checkpoint-18-2.778778.pth
+    --gpu-batch-multiplier 5 --checkpoint-freq 1 --num-workers 5 --prefetch-factor 30 --comet --num-epochs 5 --ntrain 10000 --ntest 10000 --nvalid 10000
