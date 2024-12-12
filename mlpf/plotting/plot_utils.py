@@ -77,6 +77,11 @@ CLASS_NAMES_CLIC = [
     r"$\mu^\pm$",
 ]
 
+CLASS_LABELS = {
+    "cms": CLASS_LABELS_CMS,
+    "clic": CLASS_LABELS_CLIC,
+}
+
 labels = {
     "met": "$p_{\mathrm{T}}^{\mathrm{miss}}$ [GeV]",
     "gen_met": "$p_{\mathrm{T,truth}}^\mathrm{miss}$ [GeV]",
@@ -1120,6 +1125,53 @@ def plot_particle_multiplicity(X, yvals, class_names, epoch=None, cp_dir=None, c
             comet_experiment=comet_experiment,
         )
 
+def plot_particle_response(X, yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):
+    msk_cand = yvals["cand_cls_id"] != 0
+    msk_pred = yvals["pred_cls_id"] != 0
+    msk_target = yvals["target_cls_id"] != 0
+
+    typ_ids = np.unique(awkward.values_astype(awkward.flatten(X[:, :, 0]), np.int64))
+
+    for typ in typ_ids:
+        if typ == 0:
+            continue
+        msk_typ = X[:, :, 0]==typ
+
+        for idx_elem_feature, val in [
+            (1, "pt"), (2, "eta"), (3, "sin_phi"), (4, "cos_phi"), (5, "energy")
+            ]:
+            elem_x = awkward.to_numpy(awkward.flatten(X[:, :, idx_elem_feature][msk_target & msk_typ]))
+            target_x = awkward.to_numpy(awkward.flatten(yvals["target_" + val][msk_target & msk_typ]))
+            ratio_elem_target = elem_x / target_x
+
+            #cases where targets and PF candidates exist
+            target_x = awkward.to_numpy(awkward.flatten(yvals["target_" + val][msk_target & msk_cand & msk_typ]))
+            cand_x = awkward.to_numpy(awkward.flatten(yvals["cand_" + val][msk_target & msk_cand & msk_typ]))
+            ratio_cand_target = cand_x / target_x
+
+            #cases where targets and MLPF candidates exist
+            target_x = awkward.to_numpy(awkward.flatten(yvals["target_" + val][msk_target & msk_pred & msk_typ]))
+            pred_x = awkward.to_numpy(awkward.flatten(yvals["pred_" + val][msk_target & msk_pred & msk_typ]))
+            ratio_pred_target = pred_x / target_x
+            
+            plt.figure()
+            ax = plt.axes()
+            b = np.linspace(0, 5, 100)
+            plt.hist(ratio_elem_target, bins=b, label="PFElements", histtype="step", lw=2)
+            plt.hist(ratio_cand_target, bins=b, label="PF", histtype="step", lw=2)
+            plt.hist(ratio_pred_target, bins=b, label="MLPF", histtype="step", lw=2)
+            plt.legend(loc="best")
+            EXPERIMENT_LABELS[dataset](ax)
+            sample_label(ax, sample)
+            ax.text(0.03, 0.88, "PFELement {}".format(typ), transform=ax.transAxes)
+            plt.xlabel("Reconstructed / target particle "+val)
+            save_img(
+                "particle_{}_ratio_typ{}.png".format(val, typ),
+                epoch,
+                cp_dir=cp_dir,
+                comet_experiment=comet_experiment,
+            )
+            plt.clf()
 
 def plot_particle_ratio(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):
     msk_cand = yvals["cand_cls_id"] != 0
@@ -1147,18 +1199,21 @@ def plot_particle_ratio(yvals, class_names, epoch=None, cp_dir=None, comet_exper
     for cls_id in cls_ids:
         if cls_id == 0:
             continue
+        particle_label_nice = pid_to_text[CLASS_LABELS[dataset][cls_id]]
         plt.figure()
         ax = plt.axes()
         b = np.linspace(0, 3, 100)
+        plt.plot([], [])
         plt.hist(ratio_cand_pt[target_cls_id1 == cls_id], bins=b, label="PF", histtype="step")
         plt.hist(ratio_pred_pt[target_cls_id2 == cls_id], bins=b, label="MLPF", histtype="step")
         plt.legend(loc="best")
 
         EXPERIMENT_LABELS[dataset](ax)
         sample_label(ax, sample)
+        ax.text(0.03, 0.88, particle_label_nice, transform=ax.transAxes)
         plt.xlabel("Reconstructed / target $p_T$")
         save_img(
-            "particle_pt_ratio_{}.png".format(cls_id),
+            "particle_pt_ratio_cls{}.png".format(cls_id),
             epoch,
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
@@ -1168,14 +1223,16 @@ def plot_particle_ratio(yvals, class_names, epoch=None, cp_dir=None, comet_exper
         plt.figure()
         ax = plt.axes()
         b = np.linspace(0, 3, 100)
+        plt.plot([], [])
         plt.hist(ratio_cand_e[target_cls_id1 == cls_id], bins=b, label="PF", histtype="step")
         plt.hist(ratio_pred_e[target_cls_id2 == cls_id], bins=b, label="MLPF", histtype="step")
         plt.legend(loc="best")
         EXPERIMENT_LABELS[dataset](ax)
         sample_label(ax, sample)
+        ax.text(0.03, 0.88, particle_label_nice, transform=ax.transAxes)
         plt.xlabel("Reconstructed / target $E$")
         save_img(
-            "particle_e_ratio_{}.png".format(cls_id),
+            "particle_e_ratio_cls{}.png".format(cls_id),
             epoch,
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
@@ -1248,6 +1305,13 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     plt.figure()
     ax = plt.gca()
     plt.hist(
+        target_pt,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="Target",
+    )
+    plt.hist(
         cand_pt,
         bins=b,
         histtype="step",
@@ -1260,13 +1324,6 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         histtype="step",
         lw=2,
         label="MLPF",
-    )
-    plt.hist(
-        target_pt,
-        bins=b,
-        histtype="step",
-        lw=2,
-        label="Target",
     )
     plt.xscale("log")
     plt.yscale("log")
@@ -1287,6 +1344,13 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     plt.figure()
     ax = plt.gca()
     plt.hist(
+        target_pt,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="Target",
+    )
+    plt.hist(
         cand_pt,
         bins=b,
         histtype="step",
@@ -1299,13 +1363,6 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         histtype="step",
         lw=2,
         label="MLPF",
-    )
-    plt.hist(
-        target_pt,
-        bins=b,
-        histtype="step",
-        lw=2,
-        label="Target",
     )
     plt.yscale("log")
     plt.xlabel("Particle $p_T$ [GeV]")
@@ -1335,6 +1392,13 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     plt.figure()
     ax = plt.gca()
     plt.hist(
+        target_pt,
+        bins=b,
+        histtype="step",
+        lw=2,
+        label="Target",
+    )
+    plt.hist(
         cand_pt,
         bins=b,
         histtype="step",
@@ -1347,13 +1411,6 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         histtype="step",
         lw=2,
         label="MLPF",
-    )
-    plt.hist(
-        target_pt,
-        bins=b,
-        histtype="step",
-        lw=2,
-        label="Target",
     )
     plt.xlabel(r"Particle $\eta$")
     plt.ylabel("Number of particles / bin")
