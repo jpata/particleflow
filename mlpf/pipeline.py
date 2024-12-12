@@ -19,6 +19,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 import yaml
 from mlpf.model.training import device_agnostic_run, override_config, run_hpo, run_ray_training
+from mlpf.model.PFDataset import SHARING_STRATEGY
 from utils import create_experiment_dir
 
 parser = argparse.ArgumentParser()
@@ -105,6 +106,11 @@ def main():
     # Ignore divide by 0 errors
     np.seterr(divide="ignore", invalid="ignore")
     matplotlib.use("agg")
+
+    # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
+    import torch
+
+    torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
 
     # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()
