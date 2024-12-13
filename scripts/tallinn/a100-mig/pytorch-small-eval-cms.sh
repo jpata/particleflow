@@ -7,12 +7,12 @@
 IMG=/home/software/singularity/pytorch.simg:2024-08-18
 cd ~/particleflow
 
-WEIGHTS=experiments/pyg-cms_20241211_084104_360393/checkpoints/checkpoint-02-3.719580.pth
+WEIGHTS=/local/joosep/mlpf/results/cms/pyg-cms_20241101_090645_682892/checkpoints/checkpoint-18-2.778778.pth
 DATASET=$1
 env
 singularity exec -B /local -B /scratch/persistent --nv \
      --env PYTHONPATH=`pwd` \
      --env KERAS_BACKEND=torch \
-     $IMG python mlpf/pipeline.py --gpus 1 \
+     $IMG python mlpf/pipeline.py --gpus 0 \
      --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
-     --test --make-plots --gpu-batch-multiplier 2 --load $WEIGHTS --ntest 500 --dtype bfloat16 --num-workers 8 --prefetch-factor 10 --test-datasets $DATASET
+     --make-plots --gpu-batch-multiplier 2 --load $WEIGHTS --ntest 50000 --dtype bfloat16 --num-workers 8 --prefetch-factor 10 --test-datasets $DATASET

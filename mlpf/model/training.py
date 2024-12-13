@@ -1112,7 +1112,7 @@ def run(rank, world_size, config, args, outdir, logfile):
     if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
         if args.make_plots:
 
-            ntest_files = 1000
+            ntest_files = 10000
             for sample in args.test_datasets:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)
