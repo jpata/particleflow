@@ -663,9 +663,10 @@ def train_mlpf(
     comet_step_freq=None,
     val_freq=None,
     save_attention=False,
+    checkpoint_dir="",
 ):
     """
-    Will run a full training by calling train().
+    Will loop over the epoch by calling train_and_valid().
 
     Args:
         rank: 'cpu' or int representing the gpu device id
@@ -702,9 +703,6 @@ def train_mlpf(
         losses["train"][loss], losses["valid"][loss] = [], []
 
     stale_epochs, best_val_loss = torch.tensor(0, device=rank), float("inf")
-
-    checkpoint_dir = Path(outdir) / "checkpoints"
-    checkpoint_dir.mkdir(exist_ok=True)
 
     for epoch in range(start_epoch, num_epochs + 1):
         t0 = time.time()
@@ -948,6 +946,9 @@ def run(rank, world_size, config, args, outdir, logfile):
         model = MLPF(**model_kwargs)
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
+    checkpoint_dir = Path(outdir) / "checkpoints"
+    checkpoint_dir.mkdir(exist_ok=True)
+
     model.to(rank)
     configure_model_trainable(model, config["model"]["trainable"], True)
 
@@ -1024,9 +1025,10 @@ def run(rank, world_size, config, args, outdir, logfile):
             comet_step_freq=config["comet_step_freq"],
             val_freq=config["val_freq"],
             save_attention=config["save_attention"],
+            checkpoint_dir=checkpoint_dir,
         )
 
-        checkpoint = torch.load(f"{outdir}/best_weights.pth", map_location=torch.device(rank))
+        checkpoint = torch.load(f"{checkpoint_dir}/best_weights.pth", map_location=torch.device(rank))
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
     if not (config["load"] is None):
@@ -1295,6 +1297,7 @@ def train_ray_trial(config, args, outdir=None):
         comet_step_freq=config["comet_step_freq"],
         dtype=getattr(torch, config["dtype"]),
         val_freq=config["val_freq"],
+        checkpoint_dir=checkpoint_dir,
     )
 
 
