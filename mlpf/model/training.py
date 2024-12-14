@@ -428,7 +428,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             tensorboard_writer.add_figure(attn_name, fig, global_step=epoch)
 
 
-def train_and_valid(
+def one_epoch(
     rank,
     world_size,
     outdir,
@@ -568,7 +568,7 @@ def train_and_valid(
                     intermediate_losses_t[loss_] = intermediate_losses_t[loss_].cpu().item() / itrain
 
                 # compute intermediate validation loss
-                intermediate_losses_v = train_and_valid(
+                intermediate_losses_v = one_epoch(
                     rank,
                     world_size,
                     outdir,
@@ -643,7 +643,7 @@ def train_and_valid(
     return epoch_loss
 
 
-def train_mlpf(
+def train_all_epochs(
     rank,
     world_size,
     model,
@@ -666,7 +666,7 @@ def train_mlpf(
     checkpoint_dir="",
 ):
     """
-    Will loop over the epoch by calling train_and_valid().
+    Will loop over the epoch by calling one_epoch().
 
     Args:
         rank: 'cpu' or int representing the gpu device id
@@ -711,7 +711,7 @@ def train_mlpf(
         if epoch == -1:
             with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True) as prof:
                 with record_function("model_train"):
-                    losses_t = train_and_valid(
+                    losses_t = one_epoch(
                         rank,
                         world_size,
                         outdir,
@@ -728,7 +728,7 @@ def train_mlpf(
                     )
             prof.export_chrome_trace("trace.json")
         else:
-            losses_t = train_and_valid(
+            losses_t = one_epoch(
                 rank,
                 world_size,
                 outdir,
@@ -749,7 +749,7 @@ def train_mlpf(
             )
         t_train = time.time()  # epoch time excluding validation
 
-        losses_v = train_and_valid(
+        losses_v = one_epoch(
             rank,
             world_size,
             outdir,
@@ -901,6 +901,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
     start_epoch = 1
+    checkpoint_dir = os.path.join(outdir, "checkpoints")
 
     if config["load"]:  # load a pre-trained model
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
@@ -945,9 +946,6 @@ def run(rank, world_size, config, args, outdir, logfile):
         }
         model = MLPF(**model_kwargs)
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
-
-    checkpoint_dir = Path(outdir) / "checkpoints"
-    checkpoint_dir.mkdir(exist_ok=True)
 
     model.to(rank)
     configure_model_trainable(model, config["model"]["trainable"], True)
@@ -1005,7 +1003,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         last_epoch = -1 if start_epoch == 1 else start_epoch - 1
         lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch)
 
-        train_mlpf(
+        train_all_epochs(
             rank,
             world_size,
             model,
@@ -1278,7 +1276,7 @@ def train_ray_trial(config, args, outdir=None):
                 else:  # start a new training with model weights loaded from a pre-trained model
                     model = load_checkpoint(checkpoint, model)
 
-    train_mlpf(
+    train_all_epochs(
         rank,
         world_size,
         model,
@@ -1297,7 +1295,7 @@ def train_ray_trial(config, args, outdir=None):
         comet_step_freq=config["comet_step_freq"],
         dtype=getattr(torch, config["dtype"]),
         val_freq=config["val_freq"],
-        checkpoint_dir=checkpoint_dir,
+        checkpoint_dir=os.path.join(outdir, "checkpoints"),
     )
 
 
