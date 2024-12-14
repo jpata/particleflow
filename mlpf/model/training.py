@@ -35,7 +35,6 @@ from mlpf.model.logger import _logger, _configLogger
 from mlpf.model.utils import (
     unpack_predictions,
     unpack_target,
-    get_model_state_dict,
     load_checkpoint,
     save_checkpoint,
     CLASS_LABELS,
@@ -546,7 +545,7 @@ def train_and_valid(
                     loss_accum = 0.0
 
                     extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
-                    save_checkpoint(f"{outdir}/step_weights.pth", model, optimizer, extra_state)
+                    save_checkpoint(f"{outdir}/checkpoints/step_weights.pth", model, optimizer, extra_state)
 
             if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
                 # this loss is not normalized to batch size
@@ -777,11 +776,7 @@ def train_mlpf(
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]
                 stale_epochs = 0
-                torch.save(
-                    {"model_state_dict": get_model_state_dict(model), "optimizer_state_dict": optimizer.state_dict()},
-                    f"{outdir}/best_weights.pth",
-                )
-                save_checkpoint(f"{outdir}/best_weights.pth", model, optimizer, extra_state)
+                save_checkpoint(f"{outdir}/checkpoints/best_weights.pth", model, optimizer, extra_state)
             else:
                 stale_epochs += 1
 
@@ -1112,7 +1107,8 @@ def run(rank, world_size, config, args, outdir, logfile):
     if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
         if args.make_plots:
 
-            ntest_files = 10000
+            ntest_files = -1
+            # ntest_files = 10000
             for sample in args.test_datasets:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)
