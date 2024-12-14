@@ -28,7 +28,6 @@ class TFDSDataSource:
             item = [item]
         records = self.ds.data_source.__getitems__(item)
         ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
-        del records
 
         if len(item) == 1:
             ret = ret[0]
