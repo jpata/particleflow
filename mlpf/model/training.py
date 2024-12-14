@@ -446,6 +446,7 @@ def train_and_valid(
     dtype=torch.float32,
     tensorboard_writer=None,
     save_attention=False,
+    checkpoint_dir="",
 ):
     """
     Performs training over a given epoch. Will run a validation step every N_STEPS and after the last training batch.
@@ -545,7 +546,7 @@ def train_and_valid(
                     loss_accum = 0.0
 
                     extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
-                    save_checkpoint(f"{outdir}/checkpoints/step_weights.pth", model, optimizer, extra_state)
+                    save_checkpoint(f"{checkpoint_dir}/step_weights.pth", model, optimizer, extra_state)
 
             if not (comet_experiment is None) and (itrain % comet_step_freq == 0):
                 # this loss is not normalized to batch size
@@ -578,6 +579,7 @@ def train_and_valid(
                     is_train=False,
                     epoch=epoch,
                     dtype=dtype,
+                    checkpoint_dir=checkpoint_dir,
                 )
                 intermediate_metrics = dict(
                     loss=intermediate_losses_t["Total"],
@@ -701,6 +703,9 @@ def train_mlpf(
 
     stale_epochs, best_val_loss = torch.tensor(0, device=rank), float("inf")
 
+    checkpoint_dir = Path(outdir) / "checkpoints"
+    checkpoint_dir.mkdir(exist_ok=True)
+
     for epoch in range(start_epoch, num_epochs + 1):
         t0 = time.time()
 
@@ -721,6 +726,7 @@ def train_mlpf(
                         lr_schedule=lr_schedule,
                         val_freq=val_freq,
                         dtype=dtype,
+                        checkpoint_dir=checkpoint_dir,
                     )
             prof.export_chrome_trace("trace.json")
         else:
@@ -741,6 +747,7 @@ def train_mlpf(
                 val_freq=val_freq,
                 dtype=dtype,
                 tensorboard_writer=tensorboard_writer_train,
+                checkpoint_dir=checkpoint_dir,
             )
         t_train = time.time()  # epoch time excluding validation
 
@@ -761,6 +768,7 @@ def train_mlpf(
             dtype=dtype,
             tensorboard_writer=tensorboard_writer_valid,
             save_attention=save_attention,
+            checkpoint_dir=checkpoint_dir,
         )
         t_valid = time.time()
 
@@ -776,13 +784,11 @@ def train_mlpf(
             if losses_v["Total"] < best_val_loss:
                 best_val_loss = losses_v["Total"]
                 stale_epochs = 0
-                save_checkpoint(f"{outdir}/checkpoints/best_weights.pth", model, optimizer, extra_state)
+                save_checkpoint(f"{checkpoint_dir}/best_weights.pth", model, optimizer, extra_state)
             else:
                 stale_epochs += 1
 
             if checkpoint_freq and (epoch != 0) and (epoch % checkpoint_freq == 0):
-                checkpoint_dir = Path(outdir) / "checkpoints"
-                checkpoint_dir.mkdir(exist_ok=True)
                 checkpoint_path = "{}/checkpoint-{:02d}-{:.6f}.pth".format(checkpoint_dir, epoch, losses_v["Total"])
                 save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
