@@ -902,6 +902,7 @@ def run(rank, world_size, config, args, outdir, logfile):
 
     start_epoch = 1
     checkpoint_dir = os.path.join(outdir, "checkpoints")
+    os.mkdirs(checkpoint_dir, exist_ok=True)
 
     if config["load"]:  # load a pre-trained model
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
@@ -1264,17 +1265,19 @@ def train_ray_trial(config, args, outdir=None):
     start_epoch = 1
     lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=-1)
 
+    checkpoint_dir = os.path.join(outdir, "checkpoints")
+    os.mkdirs(checkpoint_dir, exist_ok=True)
+
     checkpoint = ray.train.get_checkpoint()
     if checkpoint:
-        with checkpoint.as_directory() as checkpoint_dir:
-            with checkpoint.as_directory() as checkpoint_dir:
-                checkpoint = torch.load(Path(checkpoint_dir) / "checkpoint.pth", map_location=torch.device(rank))
-                if args.resume_training:
-                    model, optimizer = load_checkpoint(checkpoint, model, optimizer)
-                    start_epoch = checkpoint["extra_state"]["epoch"] + 1
-                    lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1)
-                else:  # start a new training with model weights loaded from a pre-trained model
-                    model = load_checkpoint(checkpoint, model)
+        with checkpoint.as_directory() as _checkpoint_dir:
+            checkpoint = torch.load(Path(_checkpoint_dir) / "checkpoint.pth", map_location=torch.device(rank))
+            if args.resume_training:
+                model, optimizer = load_checkpoint(checkpoint, model, optimizer)
+                start_epoch = checkpoint["extra_state"]["epoch"] + 1
+                lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1)
+            else:  # start a new training with model weights loaded from a pre-trained model
+                model = load_checkpoint(checkpoint, model)
 
     train_all_epochs(
         rank,
@@ -1295,7 +1298,7 @@ def train_ray_trial(config, args, outdir=None):
         comet_step_freq=config["comet_step_freq"],
         dtype=getattr(torch, config["dtype"]),
         val_freq=config["val_freq"],
-        checkpoint_dir=os.path.join(outdir, "checkpoints"),
+        checkpoint_dir=checkpoint_dir,
     )
 
 
