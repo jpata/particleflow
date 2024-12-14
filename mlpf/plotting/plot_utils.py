@@ -1125,6 +1125,7 @@ def plot_particle_multiplicity(X, yvals, class_names, epoch=None, cp_dir=None, c
             comet_experiment=comet_experiment,
         )
 
+
 def plot_particle_response(X, yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):
     msk_cand = yvals["cand_cls_id"] != 0
     msk_pred = yvals["pred_cls_id"] != 0
@@ -1135,25 +1136,23 @@ def plot_particle_response(X, yvals, class_names, epoch=None, cp_dir=None, comet
     for typ in typ_ids:
         if typ == 0:
             continue
-        msk_typ = X[:, :, 0]==typ
+        msk_typ = X[:, :, 0] == typ
 
-        for idx_elem_feature, val in [
-            (1, "pt"), (2, "eta"), (3, "sin_phi"), (4, "cos_phi"), (5, "energy")
-            ]:
+        for idx_elem_feature, val in [(1, "pt"), (2, "eta"), (3, "sin_phi"), (4, "cos_phi"), (5, "energy")]:
             elem_x = awkward.to_numpy(awkward.flatten(X[:, :, idx_elem_feature][msk_target & msk_typ]))
             target_x = awkward.to_numpy(awkward.flatten(yvals["target_" + val][msk_target & msk_typ]))
             ratio_elem_target = elem_x / target_x
 
-            #cases where targets and PF candidates exist
+            # cases where targets and PF candidates exist
             target_x = awkward.to_numpy(awkward.flatten(yvals["target_" + val][msk_target & msk_cand & msk_typ]))
             cand_x = awkward.to_numpy(awkward.flatten(yvals["cand_" + val][msk_target & msk_cand & msk_typ]))
             ratio_cand_target = cand_x / target_x
 
-            #cases where targets and MLPF candidates exist
+            # cases where targets and MLPF candidates exist
             target_x = awkward.to_numpy(awkward.flatten(yvals["target_" + val][msk_target & msk_pred & msk_typ]))
             pred_x = awkward.to_numpy(awkward.flatten(yvals["pred_" + val][msk_target & msk_pred & msk_typ]))
             ratio_pred_target = pred_x / target_x
-            
+
             plt.figure()
             ax = plt.axes()
             b = np.linspace(0, 5, 100)
@@ -1164,7 +1163,7 @@ def plot_particle_response(X, yvals, class_names, epoch=None, cp_dir=None, comet
             EXPERIMENT_LABELS[dataset](ax)
             sample_label(ax, sample)
             ax.text(0.03, 0.88, "PFELement {}".format(typ), transform=ax.transAxes)
-            plt.xlabel("Reconstructed / target particle "+val)
+            plt.xlabel("Reconstructed / target particle " + val)
             save_img(
                 "particle_{}_ratio_typ{}.png".format(val, typ),
                 epoch,
@@ -1172,6 +1171,7 @@ def plot_particle_response(X, yvals, class_names, epoch=None, cp_dir=None, comet
                 comet_experiment=comet_experiment,
             )
             plt.clf()
+
 
 def plot_particle_ratio(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):
     msk_cand = yvals["cand_cls_id"] != 0

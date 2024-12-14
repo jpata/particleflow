@@ -25,7 +25,7 @@ from plotting.plot_utils import (
     plot_num_elements,
     plot_particles,
     plot_particle_ratio,
-    plot_particle_response
+    plot_particle_response,
     # plot_elements,
 )
 
