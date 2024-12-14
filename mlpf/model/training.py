@@ -902,8 +902,8 @@ def run(rank, world_size, config, args, outdir, logfile):
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
     start_epoch = 1
-    checkpoint_dir = os.path.join(outdir, "checkpoints")
-    os.mkdir(checkpoint_dir, exist_ok=True)
+    checkpoint_dir = Path(outdir) / "checkpoints"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     if config["load"]:  # load a pre-trained model
         with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
@@ -1267,7 +1267,8 @@ def train_ray_trial(config, args, outdir=None):
     lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=-1)
 
     checkpoint_dir = os.path.join(outdir, "checkpoints")
-    os.mkdir(checkpoint_dir, exist_ok=True)
+    checkpoint_dir = Path(outdir) / "checkpoints"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     checkpoint = ray.train.get_checkpoint()
     if checkpoint:
