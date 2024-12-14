@@ -5,11 +5,11 @@ import numpy as np
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
-import copy
 
 from mlpf.model.logger import _logger
 
 
+# https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
 SHARING_STRATEGY = "file_descriptor"
 
 
@@ -27,7 +27,7 @@ class TFDSDataSource:
         if isinstance(item, int):
             item = [item]
         records = self.ds.data_source.__getitems__(item)
-        ret = [copy.deepcopy(self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders)) for record in records]
+        ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
         del records
 
         if len(item) == 1:
@@ -221,9 +221,6 @@ class InterleavedIterator(object):
                 len_ += len(self.data_loaders_iter[iloader])
             self._len = len_
             return len_
-
-
-# https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
 
 
 def set_worker_sharing_strategy(worker_id: int) -> None:
