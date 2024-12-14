@@ -1,14 +1,14 @@
+import sys
 from types import SimpleNamespace
 
+import numpy as np
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
+import copy
 
 from mlpf.model.logger import _logger
 
-import numpy as np
-import sys
-import copy
 
 SHARING_STRATEGY = "file_descriptor"
 
@@ -241,12 +241,16 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                 split_configs = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["splits"]
                 print("split_configs", split_configs)
 
+                nevents = None
+                if not (config[f"n{split}"] is None):
+                    nevents = config[f"n{split}"] // len(split_configs)
+
                 for split_config in split_configs:
                     ds = PFDataset(
                         config["data_dir"],
                         f"{sample}/{split_config}:{version}",
                         split,
-                        num_samples=config[f"n{split}"],
+                        num_samples=nevents,
                         sort=config["sort_data"],
                     ).ds
 
