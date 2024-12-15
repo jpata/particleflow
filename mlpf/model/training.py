@@ -924,15 +924,13 @@ def run(rank, world_size, config, args, outdir, logfile):
                 raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
 
         if len(missing_keys) > 0:
-            _logger.warning(f"The following keys are missing in the checkpoint file {missing_keys}", color="red")
-            while True:
-                prompt = input("Do you want to try loading the model checkpoint with relaxed constraints? [y/n]")
-                if prompt == "n":
-                    raise KeyError
-                elif prompt == "y":
-                    _logger.warning(f"Optimizer checkpoint will not be loaded", color="bold")
-                    strict = False
-                    break
+            _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
+            if args.relaxed_load:
+                _logger.warning(f"Optimizer checkpoint will not be loaded", color="bold")
+                strict = False
+            else:
+                _logger.warning(f"Use option --relaxed-load if you insist to ignore the missing parameters")
+                raise KeyError
 
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
