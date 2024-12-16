@@ -753,7 +753,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         if args.make_plots:
 
             ntest_files = -1
-            # ntest_files = 10000
+            # ntest_files = 1000
             for sample in args.test_datasets:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)
