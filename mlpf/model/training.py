@@ -917,7 +917,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             shp0 = model.state_dict()[k].shape
             try:
                 shp1 = checkpoint["model_state_dict"][k].shape
-            except KeyError as e:
+            except KeyError:
                 missing_keys.append(k)
                 continue
             if shp0 != shp1:
@@ -926,10 +926,10 @@ def run(rank, world_size, config, args, outdir, logfile):
         if len(missing_keys) > 0:
             _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
             if args.relaxed_load:
-                _logger.warning(f"Optimizer checkpoint will not be loaded", color="bold")
+                _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
                 strict = False
             else:
-                _logger.warning(f"Use option --relaxed-load if you insist to ignore the missing parameters")
+                _logger.warning("Use option --relaxed-load if you insist to ignore the missing parameters")
                 raise KeyError
 
         if (rank == 0) or (rank == "cpu"):
