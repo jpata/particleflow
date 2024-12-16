@@ -912,16 +912,32 @@ def run(rank, world_size, config, args, outdir, logfile):
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
         start_epoch = checkpoint["extra_state"]["epoch"] + 1
 
+        missing_keys, strict = [], True
         for k in model.state_dict().keys():
             shp0 = model.state_dict()[k].shape
-            shp1 = checkpoint["model_state_dict"][k].shape
+            try:
+                shp1 = checkpoint["model_state_dict"][k].shape
+            except KeyError:
+                missing_keys.append(k)
+                continue
             if shp0 != shp1:
                 raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
 
+        if len(missing_keys) > 0:
+            _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
+            if args.relaxed_load:
+                _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
+                strict = False
+            else:
+                _logger.warning("Use option --relaxed-load if you insist to ignore the missing parameters")
+                raise KeyError
+
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
-
-        model, optimizer = load_checkpoint(checkpoint, model, optimizer)
+        if strict:
+            model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
+        else:
+            model = load_checkpoint(checkpoint, model, None, strict)
     else:  # instantiate a new model in the outdir created
         model_kwargs = {
             "input_dim": len(X_FEATURES[config["dataset"]]),
