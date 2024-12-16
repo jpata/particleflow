@@ -304,7 +304,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
 if __name__ == "__main__":
 
     perjob = 50
-    numjobs = 16
+    numjobs = 8
     is_test = False
 
     args = []

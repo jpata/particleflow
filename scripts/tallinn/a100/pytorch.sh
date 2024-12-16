@@ -14,4 +14,4 @@ singularity exec -B /scratch/persistent --nv \
     $IMG python3 mlpf/pipeline.py --gpus 1 \
     --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
     --train --conv-type attention \
-    --gpu-batch-multiplier 5 --checkpoint-freq 1 --num-workers 8 --prefetch-factor 50 --comet --num-epochs 10 --load experiments/pyg-cms_20241212_101648_120237/checkpoints/checkpoint-05-3.498507.pth
+    --gpu-batch-multiplier 5 --checkpoint-freq 1 --num-workers 8 --prefetch-factor 50 --comet
