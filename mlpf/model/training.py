@@ -86,12 +86,17 @@ def mlpf_loss(y, ypred, batch):
     nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
 
+
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
     y["momentum"] = y["momentum"] * msk_true_particle
+
 
     # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
     ypred["cls_binary"] = ypred["cls_binary"].permute((0, 2, 1))
     ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
+    ypred["ispu"] = ypred["ispu"].permute((0, 2, 1))
+    ypred["ispu"] = torch.squeeze(ypred["ispu"], dim = 1)
+
 
     # binary loss for particle / no-particle classification
     # loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
@@ -100,6 +105,11 @@ def mlpf_loss(y, ypred, batch):
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_pid_classification[y["cls_id"] == 0] *= 0
+   
+    loss_pu = torch.nn.functional.binary_cross_entropy_with_logits(ypred["ispu"], y["ispu"], reduction="none")
+
+    loss_pu[y["cls_id"] == 0] *= 0
+    loss_pu[batch.mask == 0] *= 0
 
     # compare particle momentum, only for cases where there was a true particle
     loss_regression_pt = torch.nn.functional.mse_loss(ypred["pt"], y["pt"], reduction="none")
@@ -133,6 +143,7 @@ def mlpf_loss(y, ypred, batch):
     # average over all elements that were not padded
     loss["Classification_binary"] = loss_binary_classification.sum() / nelem
     loss["Classification"] = loss_pid_classification.sum() / nelem
+    loss["ispu"] = loss_pu.sum() / nelem
 
     # compute predicted pt from model output
     pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], axis=-1) * msk_pred_particle
@@ -165,6 +176,7 @@ def mlpf_loss(y, ypred, batch):
         + loss["Regression_sin_phi"]
         + loss["Regression_cos_phi"]
         + loss["Regression_energy"]
+        + loss["ispu"]
     )
 
     # store these separately but detached
@@ -176,6 +188,7 @@ def mlpf_loss(y, ypred, batch):
     loss["Regression_cos_phi"] = loss["Regression_cos_phi"].detach()
     loss["Regression_energy"] = loss["Regression_energy"].detach()
     loss["Sliced_Wasserstein_Loss"] = loss["Sliced_Wasserstein_Loss"].detach()
+    loss["ispu"] = loss["ispu"].detach()
 
     # print out losses for debugging
     # for k in sorted(loss.keys()):
@@ -277,20 +290,40 @@ def configure_model_trainable(model, trainable, is_training):
         model.eval()
 
 
-def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir):
+def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet_experiment, epoch, outdir, itrain):
     X = batch.X[batch.mask].cpu()
     ytarget_flat = batch.ytarget[batch.mask].cpu()
     ypred_binary = ypred_raw[0][batch.mask].detach().cpu()
     ypred_binary_cls = torch.argmax(ypred_binary, axis=-1)
     ypred_cls = ypred_raw[1][batch.mask].detach().cpu()
     ypred_p4 = ypred_raw[2][batch.mask].detach().cpu()
+    ypred_pu = ypred_raw[3][batch.mask].detach().cpu()
 
     arr = torch.concatenate(
-        [X, ytarget_flat, ypred_binary, ypred_cls, ypred_p4],
+        [X, ytarget_flat, ypred_binary, ypred_cls, ypred_p4, ypred_pu],
         axis=-1,
     ).numpy()
     df = pandas.DataFrame(arr)
-    df.to_parquet(f"{outdir}/batch0_epoch{epoch}.parquet")
+    df.to_parquet(f"{outdir}/batch{itrain}_epoch{epoch}.parquet")
+    if comet_experiment:
+        pred_pu = torch.nn.functional.sigmoid(torch.asarray(arr[:,84]))
+        targ_pu = arr[:,62]
+        plt.hist(pred_pu, bins=30, alpha=0.7, label='Predicted', range=(0,1), color='blue')
+        plt.hist(targ_pu, bins=30, alpha=0.7, label='Target', range=(0,1), color='orange')
+        plt.xlabel('Pileupiness')
+        plt.ylabel('Frequency')
+        plt.title(f'Predicted and Target PU (Epoch {epoch})')
+        plt.yscale('log')
+        plt.legend()
+        comet_experiment.log_figure(figure_name= f'PU Hist - Epoch {epoch} Batch {itrain}')
+        plt.close()
+
+        plt.scatter(pred_pu, targ_pu, alpha=0.5, color='blue')
+        plt.xlabel('Predicted PU')
+        plt.ylabel('Target PU')
+        plt.title(f'Scatter Plot of Predicted vs Target PU (Epoch {epoch})')
+        comet_experiment.log_figure(figure_name=f'Scatter PU - Epoch {epoch} Batch {itrain}')
+        plt.close()
 
     if tensorboard_writer:
         sig_prob = torch.softmax(ypred_binary, axis=-1)[:, 1].to(torch.float32)
@@ -333,6 +366,8 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             pt_target = ytarget_flat[msk, 2]
             pt_pred = ypred_p4[msk, 0]
             b = np.linspace(-2, 2, 100)
+
+
             plt.hist2d(pt_target, pt_pred, bins=b, cmap="hot", norm=matplotlib.colors.LogNorm())
             plt.plot([-4, 4], [-4, 4], color="black", ls="--")
             plt.xlabel("log [pt_target/pt_elem]")
@@ -506,8 +541,8 @@ def train_and_valid(
                 ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
             )
             # save the events of the first validation batch for quick checks
-            if (rank == 0 or rank == "cpu") and itrain == 0:
-                validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
+            if (rank == 0 or rank == "cpu") and (itrain == 1 or itrain == 0 or itrain == 2):
+                validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet_experiment, epoch, outdir, itrain)
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
                 loss = mlpf_loss(ytarget, ypred, batch)
@@ -688,6 +723,7 @@ def train_mlpf(
         "Regression_sin_phi",
         "Regression_cos_phi",
         "Regression_energy",
+        "ispu",
     ]
 
     losses = {}
@@ -1219,7 +1255,6 @@ def train_ray_trial(config, args, outdir=None):
     optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
     trainable_params, nontrainable_params, table = count_parameters(model)
-    print(table)
 
     if (rank == 0) or (rank == "cpu"):
         with open(os.path.join(outdir, "num_params.csv"), "w", newline="") as f:
@@ -1480,5 +1515,4 @@ def run_hpo(config, args):
     print(result_df)
     print(result_df.columns)
 
-    logging.info("Total time of Tuner.fit(): {}".format(end - start))
     logging.info("Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config))
