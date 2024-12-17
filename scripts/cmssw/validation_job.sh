@@ -11,12 +11,12 @@ OUTDIR=$CMSSW_BASE/out/
 WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 
 # uncomment the following when running at T2_EE_Estonia
-source /cvmfs/cms.cern.ch/cmsset_default.sh
-cd /scratch/persistent/joosep/CMSSW_14_1_0
-eval `scram runtime -sh`
-cd $PREVDIR
-export OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}_fcd442/
-export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
+# source /cvmfs/cms.cern.ch/cmsset_default.sh
+# cd /scratch/persistent/joosep/CMSSW_14_1_0
+# eval `scram runtime -sh`
+# cd $PREVDIR
+# export OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}_af9b3f/
+# export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
 set -e
