@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
     X = np.array(np.random.randn(batch_size, bin_size, num_features), getattr(np, args.input_dtype))
     for i in range(10):
-        onnx_sess.run(None, {"Xfeat_normed": X, "mask": X[..., 0] != 0})
+        onnx_sess.run(None, {"Xfeat_normed": X, "mask": (X[..., 0] != 0).astype(np.float32)})
 
     for bin_mul in [
         10,
@@ -104,7 +104,7 @@ if __name__ == "__main__":
             # transfer data to GPU, run model, transfer data back
             t0 = time.time()
             # pred_onx = onnx_sess.run(None, {"Xfeat_normed": X, "l_mask_": X[..., 0]==0})
-            pred_onx = onnx_sess.run(None, {"Xfeat_normed": X, "mask": X[..., 0] != 0})
+            pred_onx = onnx_sess.run(None, {"Xfeat_normed": X, "mask": (X[..., 0] != 0).astype(np.float32)})
             t1 = time.time()
             dt = (t1 - t0) / batch_size
             times.append(dt)

@@ -9,6 +9,10 @@ import torch.utils.data
 from mlpf.model.logger import _logger
 
 
+# https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
+SHARING_STRATEGY = "file_descriptor"
+
+
 class TFDSDataSource:
     def __init__(self, ds, sort):
         self.ds = ds
@@ -24,6 +28,7 @@ class TFDSDataSource:
             item = [item]
         records = self.ds.data_source.__getitems__(item)
         ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
+
         if len(item) == 1:
             ret = ret[0]
 
@@ -217,6 +222,10 @@ class InterleavedIterator(object):
             return len_
 
 
+def set_worker_sharing_strategy(worker_id: int) -> None:
+    torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
+
+
 def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
     loaders = {}
     for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
@@ -268,6 +277,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                 # pin_memory=use_cuda,
                 # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
+                worker_init_fn=set_worker_sharing_strategy,
             )
 
             loaders[split].append(loader)

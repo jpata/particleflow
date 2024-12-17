@@ -24,7 +24,7 @@ CONDITIONS=auto:phase1_2021_realistic ERA=Run3 GEOM=DB.Extended CUSTOM=
 FILENAME=`sed -n "${NJOB}p" $INPUT_FILELIST`
 NTHREADS=1
 
-WORKDIR=/scratch/$USER/${SLURM_JOB_ID}
+WORKDIR=/scratch/$USER/job_${SLURM_JOB_ID}_${NJOB}
 mkdir -p $WORKDIR
 cd $WORKDIR
 

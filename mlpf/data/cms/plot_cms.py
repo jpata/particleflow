@@ -304,7 +304,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
 if __name__ == "__main__":
 
     perjob = 50
-    numjobs = 16
+    numjobs = 8
     is_test = False
 
     args = []
@@ -332,7 +332,7 @@ if __name__ == "__main__":
                 ijob += 1
 
     # process only pkl files
-    maxfiles = -1
+    maxfiles = 1000
     path = "/scratch/persistent/joosep/"
     for pu_config in ["nopu", "pu55to75"]:
         for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:

@@ -18,7 +18,9 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import yaml
-from mlpf.model.training import device_agnostic_run, override_config, run_hpo, run_ray_training
+from mlpf.model.training import device_agnostic_run, override_config
+from mlpf.model.distributed_ray import run_hpo, run_ray_training
+from mlpf.model.PFDataset import SHARING_STRATEGY
 from utils import create_experiment_dir
 
 parser = argparse.ArgumentParser()
@@ -33,7 +35,7 @@ parser.add_argument("--gpu-batch-multiplier", type=int, default=None, help="Incr
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
 parser.add_argument("--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume")
-parser.add_argument("--load", type=str, default=None, help="load checkpoint and start new training from epoch 1")
+parser.add_argument("--load", type=str, default=None, help="load checkpoint and continue training from previous epoch")
 parser.add_argument(
     "--relaxed-load",
     action="store_true",
@@ -111,6 +113,11 @@ def main():
     # Ignore divide by 0 errors
     np.seterr(divide="ignore", invalid="ignore")
     matplotlib.use("agg")
+
+    # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
+    import torch
+
+    torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
 
     # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()
