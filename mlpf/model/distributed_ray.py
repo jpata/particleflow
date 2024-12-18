@@ -30,7 +30,7 @@ def run_ray_training(config, args, outdir):
     from ray import tune
     from ray.train.torch import TorchTrainer
 
-    if not args.local:
+    if not args.ray_local:
         ray.init(address="auto")
 
     if args.resume_training:
@@ -55,7 +55,7 @@ def run_ray_training(config, args, outdir):
         sync_config=ray.train.SyncConfig(sync_artifacts=True),
     )
     trainable = tune.with_parameters(train_ray_trial, args=args, outdir=outdir)
-    # Resume from checkpoint if a checkpoitn is found in outdir
+    # Resume from checkpoint if a checkpoint is found in outdir
     if TorchTrainer.can_restore(outdir):
         _logger.info(f"Restoring Ray Trainer from {outdir}", color="bold")
         trainer = TorchTrainer.restore(outdir, train_loop_per_worker=trainable, scaling_config=scaling_config)
@@ -72,15 +72,10 @@ def run_ray_training(config, args, outdir):
         )
     result = trainer.fit()
 
-    _logger.info("Final loss: {}".format(result.metrics["loss"]), color="bold")
-    _logger.info("Final cls_loss: {}".format(result.metrics["cls_loss"]), color="bold")
-    _logger.info("Final reg_pt_loss: {}".format(result.metrics["reg_pt_loss"]), color="bold")
-    # _logger.info("Final charge_loss: {}".format(result.metrics["charge_loss"]), color="bold")
-
-    _logger.info("Final val_loss: {}".format(result.metrics["val_loss"]), color="bold")
-    _logger.info("Final val_cls_loss: {}".format(result.metrics["val_cls_loss"]), color="bold")
-    _logger.info("Final val_reg_pt_loss: {}".format(result.metrics["val_reg_pt_loss"]), color="bold")
-    # _logger.info("Final val_charge_loss: {}".format(result.metrics["val_charge_loss"]), color="bold")
+    for loss_key in sorted([k for k in result.metrics.keys() if k.startswith("train_")]):
+        _logger.info("Final {}: {}".format(loss_key, result.metrics[loss_key]), color="bold")
+        loss_key = loss_key.replace("train_", "valid_")
+        _logger.info("Final {}: {}".format(loss_key, result.metrics[loss_key]), color="bold")
 
 
 def set_searchspace_and_run_trial(search_space, config, args):
@@ -138,7 +133,7 @@ def run_hpo(config, args):
     with open((dirname / "config.yaml"), "w") as file:
         yaml.dump(config, file)
 
-    if not args.local:
+    if not args.ray_local:
         _logger.info("Inititalizing ray...")
         ray.init(
             address=os.environ["ip_head"],
