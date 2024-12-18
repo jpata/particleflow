@@ -256,7 +256,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                     dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
 
-            shuffle = split=="train"
+            shuffle = split == "train"
             if world_size > 1:
                 sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=shuffle)
             else:
