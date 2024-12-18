@@ -4,14 +4,12 @@ import pickle as pkl
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import logging
 import tqdm
 import yaml
 import json
 import sklearn
 import sklearn.metrics
 import numpy as np
-import csv
 from typing import Union, List
 
 # comet needs to be imported before torch
@@ -20,7 +18,6 @@ from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.tensorboard import SummaryWriter
 
 from mlpf.model.logger import _logger, _configLogger
@@ -43,10 +40,10 @@ from mlpf.model.mlpf import MLPF
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
-from mlpf.model.plots import validation_plots, log_confusion_matrices
+from mlpf.model.plots import validation_plots
 
 
-def configure_model_trainable(model: MLPF, trainable: Union[str,List[str]], is_training: bool):
+def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         raise Exception("configure trainability before distributing the model")
     if is_training:
@@ -54,11 +51,11 @@ def configure_model_trainable(model: MLPF, trainable: Union[str,List[str]], is_t
         if trainable != "all":
             model.eval()
 
-            #first set all parameters as non-trainable
+            # first set all parameters as non-trainable
             for param in model.parameters():
                 param.requires_grad = False
 
-            #now explicitly enable specific layers
+            # now explicitly enable specific layers
             for layer in trainable:
                 layer = getattr(model, layer)
                 layer.train()
@@ -67,45 +64,47 @@ def configure_model_trainable(model: MLPF, trainable: Union[str,List[str]], is_t
     else:
         model.eval()
 
+
 def train_step(batch, model, optimizer, lr_schedule, loss_fn):
     """Single training step logic
-    
+
     Args:
         batch: The input batch data
         model: The neural network model
         optimizer: The optimizer
         lr_schedule: Learning rate scheduler
         loss_fn: Loss function to use
-        
+
     Returns:
         dict: Dictionary containing all computed losses
     """
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
-    
+
     loss = loss_fn(ytarget, ypred, batch)
-    
+
     # Clear gradients
     for param in model.parameters():
         param.grad = None
-        
+
     # Backward pass and optimization
     loss["Total"].backward()
     optimizer.step()
     if lr_schedule:
         lr_schedule.step()
-        
+
     return loss
+
 
 def eval_step(batch, model, loss_fn):
     """Single evaluation step logic
-    
+
     Args:
         batch: The input batch data
         model: The neural network model
         loss_fn: Loss function to use
-        
+
     Returns:
         tuple: (losses dict, predictions dict, targets dict)
     """
@@ -114,14 +113,14 @@ def eval_step(batch, model, loss_fn):
         ypred = unpack_predictions(ypred_raw)
         ytarget = unpack_target(batch.ytarget, model)
         loss = loss_fn(ytarget, ypred, batch)
-        
+
     return loss, ypred_raw, ypred, ytarget
 
 
 def train_epoch(
     rank: Union[int, str],
     world_size: int,
-    model: MLPF, 
+    model: MLPF,
     optimizer,
     train_loader,
     lr_schedule,
@@ -134,7 +133,7 @@ def train_epoch(
     dtype=torch.float32,
 ):
     """Run one training epoch
-    
+
     Args:
         rank: Device rank (GPU id or 'cpu')
         world_size: Number of devices being used
@@ -149,68 +148,61 @@ def train_epoch(
         checkpoint_dir: Directory to save checkpoints
         device_type: 'cuda' or 'cpu'
         dtype: Torch dtype for computations
-        
+
     Returns:
         dict: Dictionary of epoch losses
     """
     model.train()
     epoch_loss = {}
-    loss_accum = 0.0
-    
+
     # Only show progress bar on rank 0
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(train_loader)
     else:
-        iterator = tqdm.tqdm(
-            enumerate(train_loader), 
-            total=len(train_loader),
-            desc=f"Epoch {epoch} train loop on rank={rank}"
-        )
+        iterator = tqdm.tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch} train loop on rank={rank}")
 
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
-        
+
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             loss = train_step(batch, model, optimizer, lr_schedule, mlpf_loss)
-            
+
         # Accumulate losses
         for loss_name in loss:
             if loss_name not in epoch_loss:
                 epoch_loss[loss_name] = 0.0
             epoch_loss[loss_name] += loss[loss_name].detach()
-            
+
         # Log step metrics
         step = (epoch - 1) * len(train_loader) + itrain
-        if tensorboard_writer is not None:
+        if tensorboard_writer is not None and step % 100 == 0:
             log_open_files_to_tensorboard(tensorboard_writer, step)
             log_step_to_tensorboard(batch, loss["Total"].detach().cpu().item(), lr_schedule, tensorboard_writer, step)
             tensorboard_writer.flush()
 
             # Save checkpoint
-            extra_state = {
-                "step": step,
-                "lr_schedule_state_dict": lr_schedule.state_dict()
-            }
+            extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
             save_checkpoint(f"{checkpoint_dir}/step_weights.pth", model, optimizer, extra_state)
-            
+
         if comet_experiment is not None and (itrain % comet_step_freq == 0):
             comet_experiment.log_metrics(loss, prefix="train", step=step)
             comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
-            
+
     # Average losses across steps
     num_steps = torch.tensor(len(train_loader), device=rank)
     if world_size > 1:
         torch.distributed.all_reduce(num_steps)
-        
+
     for loss_name in epoch_loss:
         if world_size > 1:
             torch.distributed.all_reduce(epoch_loss[loss_name])
         epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
-        
+
     if world_size > 1:
         dist.barrier()
-        
+
     return epoch_loss
+
 
 def eval_epoch(
     rank: Union[int, str],
@@ -223,14 +215,14 @@ def eval_epoch(
     save_attention=False,
     outdir=None,
     device_type="cuda",
-    dtype=torch.float32
+    dtype=torch.float32,
 ):
     """Run one evaluation epoch
-    
+
     Args:
         rank: Device rank (GPU id or 'cpu')
         world_size: Number of devices being used
-        model: The neural network model  
+        model: The neural network model
         valid_loader: Validation data loader
         epoch: Current epoch number
         tensorboard_writer: TensorBoard writer object
@@ -239,107 +231,82 @@ def eval_epoch(
         outdir: Output directory path
         device_type: 'cuda' or 'cpu'
         dtype: Torch dtype for computations
-        
+
     Returns:
         dict: Dictionary of epoch losses
     """
     model.eval()
     epoch_loss = {}
-    
+
     # Confusion matrix tracking
     cm_X_target = np.zeros((13, 13))
     cm_X_pred = np.zeros((13, 13))
     cm_id = np.zeros((13, 13))
-    
+
     # Only show progress bar on rank 0
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(valid_loader)
     else:
-        iterator = tqdm.tqdm(
-            enumerate(valid_loader),
-            total=len(valid_loader),
-            desc=f"Epoch {epoch} eval loop on rank={rank}"
-        )
-        
+        iterator = tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader), desc=f"Epoch {epoch} eval loop on rank={rank}")
+
     for ival, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
-        
+
         # Save attention on first batch if requested
         if save_attention and (rank == 0 or rank == "cpu") and ival == 0:
             set_save_attention(model, outdir, True)
         else:
             set_save_attention(model, outdir, False)
-            
+
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             loss, ypred_raw, ypred, ytarget = eval_step(batch, model, mlpf_loss)
-            
+
         # Update confusion matrices
         cm_X_target += sklearn.metrics.confusion_matrix(
-            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
-            ytarget["cls_id"][batch.mask].detach().cpu().numpy(),
-            labels=range(13)
+            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ytarget["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
         )
         cm_X_pred += sklearn.metrics.confusion_matrix(
-            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
-            ypred["cls_id"][batch.mask].detach().cpu().numpy(),
-            labels=range(13)
+            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
         )
         cm_id += sklearn.metrics.confusion_matrix(
-            ytarget["cls_id"][batch.mask].detach().cpu().numpy(),
-            ypred["cls_id"][batch.mask].detach().cpu().numpy(),
-            labels=range(13)
+            ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
         )
-        
+
         # Save validation plots for first batch
         if (rank == 0 or rank == "cpu") and ival == 0:
             validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
-            
+
         # Accumulate losses
         for loss_name in loss:
             if loss_name not in epoch_loss:
                 epoch_loss[loss_name] = 0.0
             epoch_loss[loss_name] += loss[loss_name].detach()
-            
+
     # Log confusion matrices
     if comet_experiment:
         comet_experiment.log_confusion_matrix(
-            matrix=cm_X_target,
-            title="Element to target",
-            row_label="X",
-            column_label="target",
-            epoch=epoch,
-            file_name="cm_X_target.json"
+            matrix=cm_X_target, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_target.json"
         )
         comet_experiment.log_confusion_matrix(
-            matrix=cm_X_pred,
-            title="Element to pred",
-            row_label="X",
-            column_label="pred",
-            epoch=epoch,
-            file_name="cm_X_pred.json"
+            matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", epoch=epoch, file_name="cm_X_pred.json"
         )
         comet_experiment.log_confusion_matrix(
-            matrix=cm_id,
-            title="Target to pred",
-            row_label="target",
-            column_label="pred",
-            epoch=epoch,
-            file_name="cm_id.json"
+            matrix=cm_id, title="Target to pred", row_label="target", column_label="pred", epoch=epoch, file_name="cm_id.json"
         )
-            
+
     # Average losses across steps
     num_steps = torch.tensor(len(valid_loader), device=rank)
     if world_size > 1:
         torch.distributed.all_reduce(num_steps)
-        
+
     for loss_name in epoch_loss:
         if world_size > 1:
             torch.distributed.all_reduce(epoch_loss[loss_name])
         epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
-        
+
     if world_size > 1:
         dist.barrier()
-        
+
     return epoch_loss
 
 
@@ -366,14 +333,14 @@ def train_all_epochs(
     checkpoint_dir="",
 ):
     """Main training loop that handles all epochs and validation
-    
+
     Args:
         rank: Device rank (GPU id or 'cpu')
         world_size: Number of devices being used
         model: The neural network model
         optimizer: The optimizer
         train_loader: Training data loader
-        valid_loader: Validation data loader  
+        valid_loader: Validation data loader
         num_epochs: Total number of epochs to train
         patience: Early stopping patience
         outdir: Output directory for logs and checkpoints
@@ -468,12 +435,9 @@ def train_all_epochs(
         if (rank == 0) or (rank == "cpu"):
             # Log learning rate
             tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
-            
+
             # Prepare checkpoint state
-            extra_state = {
-                "epoch": epoch,
-                "lr_schedule_state_dict": lr_schedule.state_dict()
-            }
+            extra_state = {"epoch": epoch, "lr_schedule_state_dict": lr_schedule.state_dict()}
 
             # Save best model if validation loss improved
             if losses_valid["Total"] < best_val_loss:
@@ -507,7 +471,7 @@ def train_all_epochs(
                 "valid": losses_valid,
                 "epoch_train_time": train_time,
                 "epoch_valid_time": valid_time,
-                "epoch_total_time": total_time
+                "epoch_total_time": total_time,
             }
             with open(f"{history_path}/epoch_{epoch}.json", "w") as f:
                 json.dump(stats, f)
@@ -527,7 +491,7 @@ def train_all_epochs(
                 f"epoch_valid_time={valid_time/60:.2f}m "
                 f"epoch_total_time={total_time/60:.2f}m "
                 f"eta={eta:.1f}m",
-                color="bold"
+                color="bold",
             )
 
             # Flush tensorboard
@@ -536,14 +500,16 @@ def train_all_epochs(
 
         # Ray training specific logging
         if use_ray:
+            import ray
+
             metrics = {
                 "loss": losses_train["Total"],
                 "val_loss": losses_valid["Total"],
                 "epoch": epoch,
                 **{f"train_{k}": v for k, v in losses_train.items()},
-                **{f"valid_{k}": v for k, v in losses_valid.items()}
+                **{f"valid_{k}": v for k, v in losses_valid.items()},
             }
-            
+
             if (rank == 0) or (rank == "cpu"):
                 with TemporaryDirectory() as temp_checkpoint_dir:
                     temp_checkpoint_dir = Path(temp_checkpoint_dir)
@@ -571,6 +537,7 @@ def train_all_epochs(
     if (rank == 0) or (rank == "cpu"):
         tensorboard_writer_train.close()
         tensorboard_writer_valid.close()
+
 
 def run(rank, world_size, config, args, outdir, logfile):
     if (rank == 0) or (rank == "cpu"):  # keep writing the logs
