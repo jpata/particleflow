@@ -256,8 +256,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                     dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
 
-            # with many datasets from many splits, shuffle=True keeps a lot of open files
-            shuffle = False
+            shuffle = split=="train"
             if world_size > 1:
                 sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=shuffle)
             else:
@@ -283,5 +282,5 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
 
             loaders[split].append(loader)
 
-        loaders[split] = InterleavedIterator(loaders[split])  # will interleave maximum of three dataloaders
+        loaders[split] = InterleavedIterator(loaders[split])
     return loaders
