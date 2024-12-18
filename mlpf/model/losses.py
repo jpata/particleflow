@@ -121,22 +121,13 @@ def mlpf_loss(y, ypred, batch):
         + loss["Regression_cos_phi"]
         + loss["Regression_energy"]
     )
+    loss_opt = loss["Total"]
 
     # store these separately but detached
-    loss["Classification_binary"] = loss["Classification_binary"].detach()
-    loss["Classification"] = loss["Classification"].detach()
-    loss["Regression_pt"] = loss["Regression_pt"].detach()
-    loss["Regression_eta"] = loss["Regression_eta"].detach()
-    loss["Regression_sin_phi"] = loss["Regression_sin_phi"].detach()
-    loss["Regression_cos_phi"] = loss["Regression_cos_phi"].detach()
-    loss["Regression_energy"] = loss["Regression_energy"].detach()
-    loss["Sliced_Wasserstein_Loss"] = loss["Sliced_Wasserstein_Loss"].detach()
+    for k in loss.keys():
+        loss[k] = loss[k].detach().cpu().item()
 
-    # print out losses for debugging
-    # for k in sorted(loss.keys()):
-    #     print(k, loss[k].item())
-
-    return loss
+    return loss_opt, loss
 
 
 # from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py

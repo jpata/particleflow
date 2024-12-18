@@ -82,19 +82,19 @@ def train_step(batch, model, optimizer, lr_schedule, loss_fn):
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
 
-    loss = loss_fn(ytarget, ypred, batch)
+    loss_opt, losses_detached = loss_fn(ytarget, ypred, batch)
 
     # Clear gradients
     for param in model.parameters():
         param.grad = None
 
     # Backward pass and optimization
-    loss["Total"].backward()
+    loss_opt.backward()
     optimizer.step()
     if lr_schedule:
         lr_schedule.step()
 
-    return loss
+    return losses_detached
 
 
 def eval_step(batch, model, loss_fn):
@@ -112,9 +112,9 @@ def eval_step(batch, model, loss_fn):
         ypred_raw = model(batch.X, batch.mask)
         ypred = unpack_predictions(ypred_raw)
         ytarget = unpack_target(batch.ytarget, model)
-        loss = loss_fn(ytarget, ypred, batch)
+        _, losses_detached = loss_fn(ytarget, ypred, batch)
 
-    return loss, ypred_raw, ypred, ytarget
+    return losses_detached, ypred_raw, ypred, ytarget
 
 
 def train_epoch(
@@ -171,16 +171,16 @@ def train_epoch(
         for loss_name in loss:
             if loss_name not in epoch_loss:
                 epoch_loss[loss_name] = 0.0
-            epoch_loss[loss_name] += loss[loss_name].detach()
+            epoch_loss[loss_name] += loss[loss_name]
 
         # Log step metrics
         step = (epoch - 1) * len(train_loader) + itrain
         if tensorboard_writer is not None and step % 100 == 0:
             log_open_files_to_tensorboard(tensorboard_writer, step)
-            log_step_to_tensorboard(batch, loss["Total"].detach().cpu().item(), lr_schedule, tensorboard_writer, step)
+            log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
             tensorboard_writer.flush()
 
-            # Save checkpoint
+            # Save step checkpoint
             extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
             save_checkpoint(f"{checkpoint_dir}/step_weights.pth", model, optimizer, extra_state)
 
@@ -189,14 +189,14 @@ def train_epoch(
             comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
     # Average losses across steps
-    num_steps = torch.tensor(len(train_loader), device=rank)
+    num_steps = len(train_loader)
     if world_size > 1:
         torch.distributed.all_reduce(num_steps)
 
     for loss_name in epoch_loss:
         if world_size > 1:
             torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
+        epoch_loss[loss_name] = epoch_loss[loss_name] / num_steps
 
     if world_size > 1:
         dist.barrier()
@@ -280,7 +280,7 @@ def eval_epoch(
         for loss_name in loss:
             if loss_name not in epoch_loss:
                 epoch_loss[loss_name] = 0.0
-            epoch_loss[loss_name] += loss[loss_name].detach()
+            epoch_loss[loss_name] += loss[loss_name]
 
     # Log confusion matrices
     if comet_experiment:
@@ -295,14 +295,14 @@ def eval_epoch(
         )
 
     # Average losses across steps
-    num_steps = torch.tensor(len(valid_loader), device=rank)
+    num_steps = len(valid_loader)
     if world_size > 1:
         torch.distributed.all_reduce(num_steps)
 
     for loss_name in epoch_loss:
         if world_size > 1:
             torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
+        epoch_loss[loss_name] = epoch_loss[loss_name] / num_steps
 
     if world_size > 1:
         dist.barrier()
@@ -366,21 +366,6 @@ def train_all_epochs(
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
     t0_initial = time.time()
-
-    # Track all losses
-    losses_of_interest = [
-        "Total",
-        "Classification",
-        "Classification_binary",
-        "Regression_pt",
-        "Regression_eta",
-        "Regression_sin_phi",
-        "Regression_cos_phi",
-        "Regression_energy",
-    ]
-    losses = {"train": {}, "valid": {}}
-    for loss in losses_of_interest:
-        losses["train"][loss], losses["valid"][loss] = [], []
 
     # Early stopping setup
     stale_epochs = torch.tensor(0, device=rank)
@@ -453,15 +438,9 @@ def train_all_epochs(
                 save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
             # Update loss history
-            for loss in losses_of_interest:
-                losses["train"][loss].append(losses_train[loss])
-                losses["valid"][loss].append(losses_valid[loss])
+            for loss in losses_train:
                 tensorboard_writer_train.add_scalar(f"epoch/loss_{loss}", losses_train[loss], epoch)
                 tensorboard_writer_valid.add_scalar(f"epoch/loss_{loss}", losses_valid[loss], epoch)
-
-            # Save loss history
-            with open(f"{outdir}/mlpf_losses.pkl", "wb") as f:
-                pkl.dump(losses, f)
 
             # Save epoch stats to JSON
             history_path = Path(outdir) / "history"
