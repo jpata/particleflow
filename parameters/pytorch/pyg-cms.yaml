@@ -56,7 +56,7 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 4
+    num_convs: 3
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
