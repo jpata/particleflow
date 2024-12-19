@@ -74,9 +74,9 @@ def mlpf_loss(y, ypred, batch):
     loss_regression_energy[batch.mask == 0] *= 0
 
     # add weight based on target pt
-    # sqrt_target_pt = torch.sqrt(torch.exp(y["pt"]) * batch.X[:, :, 1])
-    # loss_regression_pt *= sqrt_target_pt
-    # loss_regression_energy *= sqrt_target_pt
+    sqrt_target_pt = torch.sqrt(torch.exp(y["pt"]) * batch.X[:, :, 1])
+    loss_regression_pt *= sqrt_target_pt
+    loss_regression_energy *= sqrt_target_pt
 
     # average over all target particles
     loss["Regression_pt"] = loss_regression_pt.sum() / npart
