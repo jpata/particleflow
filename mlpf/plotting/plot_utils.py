@@ -617,7 +617,12 @@ def plot_jet_ratio(
     if bins is None:
         bins = np.linspace(0, 5, 500)
 
+    ret_dict = {}
     p = med_iqr(yvals["jet_ratio_gen_to_target_pt"])
+    ret_dict["jet_ratio_gen_to_target_pt"] = {
+        "med": p[0], "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_target_pt"])/awkward.count(yvals["jets_gen_pt"])
+    }
     plt.hist(
         yvals["jet_ratio_gen_to_target_pt"],
         bins=bins,
@@ -627,6 +632,10 @@ def plot_jet_ratio(
     )
 
     p = med_iqr(yvals["jet_ratio_gen_to_cand_pt"])
+    ret_dict["jet_ratio_gen_to_cand_pt"] = {
+        "med": p[0], "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_cand_pt"])/awkward.count(yvals["jets_gen_pt"])
+    }
     plt.hist(
         yvals["jet_ratio_gen_to_cand_pt"],
         bins=bins,
@@ -636,6 +645,10 @@ def plot_jet_ratio(
     )
 
     p = med_iqr(yvals["jet_ratio_gen_to_pred_pt"])
+    ret_dict["jet_ratio_gen_to_pred_pt"] = {
+        "med": p[0], "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_pt"])/awkward.count(yvals["jets_gen_pt"])
+    }
     plt.hist(
         yvals["jet_ratio_gen_to_pred_pt"],
         bins=bins,
@@ -671,6 +684,10 @@ def plot_jet_ratio(
     ax = plt.axes()
 
     p = med_iqr(yvals["jet_ratio_target_to_cand_pt"])
+    ret_dict["jet_ratio_target_to_cand_pt"] = {
+        "med": p[0], "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_target_to_cand_pt"])/awkward.count(yvals["jets_target_pt"])
+    }
     plt.plot([], [])
     plt.hist(
         yvals["jet_ratio_target_to_cand_pt"],
@@ -680,6 +697,10 @@ def plot_jet_ratio(
         label="PF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
     p = med_iqr(yvals["jet_ratio_target_to_pred_pt"])
+    ret_dict["jet_ratio_target_to_pred_pt"] = {
+        "med": p[0], "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_target_to_pred_pt"])/awkward.count(yvals["jets_target_pt"])
+    }
     plt.hist(
         yvals["jet_ratio_target_to_pred_pt"],
         bins=bins,
@@ -698,6 +719,7 @@ def plot_jet_ratio(
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
     )
+    return ret_dict
 
 
 def plot_met(met_ratio, epoch=None, cp_dir=None, comet_experiment=None, title=None, sample=None, dataset=None):

@@ -155,13 +155,15 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
     ti = time.time()
     for i, batch in iterator:
         predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample)
+    tf = time.time()
+    time_total_min = (tf - ti)/60.0
 
-    _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
+    _logger.info(f"Time taken to make predictions on device {rank} is: {time_total_min:.2f} min")
 
 
 def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
-    """Uses the predictions stored as .parquet files (see above) to make plots."""
-
+    """Uses the predictions stored as .parquet files from run_predictions to make plots."""
+    ret_dict = {}
     mplhep.style.use(mplhep.styles.CMS)
     class_names = get_class_names(sample)
     os.system(f"mkdir -p {outpath}/plots{dir_name}/{sample}")
@@ -181,7 +183,7 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
         dataset=dataset,
         sample=sample,
     )
-    plot_jet_ratio(
+    ret_dict["jet_ratio"] = plot_jet_ratio(
         yvals,
         cp_dir=plots_path,
         bins=np.linspace(0, 5, 500),
@@ -230,3 +232,5 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
     plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
     plot_particle_ratio(yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
     plot_particle_response(X, yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
+
+    return ret_dict

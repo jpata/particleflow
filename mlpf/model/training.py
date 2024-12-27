@@ -44,6 +44,9 @@ from mlpf.model.plots import validation_plots
 
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
+    """Set only the given layers as trainable in the model
+    """
+
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         raise Exception("configure trainability before distributing the model")
     if is_training:
@@ -76,7 +79,7 @@ def train_step(batch, model, optimizer, lr_schedule, loss_fn):
         loss_fn: Loss function to use
 
     Returns:
-        dict: Dictionary containing all computed losses
+        dict: Dictionary containing all computed losses with gradient detached
     """
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
@@ -320,6 +323,7 @@ def train_all_epochs(
     num_epochs,
     patience,
     outdir,
+    config,
     trainable="all",
     dtype=torch.float32,
     start_epoch=1,
@@ -418,6 +422,21 @@ def train_all_epochs(
 
         # Handle checkpointing and early stopping on rank 0
         if (rank == 0) or (rank == "cpu"):
+
+            #evaluate the model at this epoch on test datasets, make plots, track metrics
+            testdir_name = f"_epoch_{epoch}"
+            for sample in config["test_dataset"]:
+                run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+                plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
+
+                #track the following jet metrics in tensorboard
+                for k in ["med", "iqr", "match_frac"]:
+                    tensorboard_writer_valid.add_scalar(
+                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
+                        plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
+                        epoch
+                    )
+
             # Log learning rate
             tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
 
@@ -432,7 +451,7 @@ def train_all_epochs(
             else:
                 stale_epochs += 1
 
-            # Periodic checkpointing
+            # Periodic epoch checkpointing
             if checkpoint_freq and (epoch % checkpoint_freq == 0):
                 checkpoint_path = f"{checkpoint_dir}/checkpoint-{epoch:02d}-{losses_valid['Total']:.6f}.pth"
                 save_checkpoint(checkpoint_path, model, optimizer, extra_state)
@@ -508,8 +527,7 @@ def train_all_epochs(
         # Synchronize processes
         if world_size > 1:
             dist.barrier()
-
-    # Training completed
+    # End loop over epochs, training completed
     _logger.info(f"Training completed. Total time on device {rank}: {(time.time() - t0_initial)/60:.3f}min")
 
     # Clean up
@@ -517,8 +535,82 @@ def train_all_epochs(
         tensorboard_writer_train.close()
         tensorboard_writer_valid.close()
 
+def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype):
+    batch_size = config["gpu_batch_multiplier"]
+    version = config["test_dataset"][sample]["version"]
 
-def run(rank, world_size, config, args, outdir, logfile):
+    split_configs = config["test_dataset"][sample]["splits"]
+    _logger.info("split_configs={}".format(split_configs))
+
+    dataset = []
+
+    ntest = None
+    if not (config["ntest"] is None):
+        ntest = config["ntest"] // len(split_configs)
+
+    for split_config in split_configs:
+        ds = PFDataset(config["data_dir"], f"{sample}/{split_config}:{version}", "test", num_samples=ntest).ds
+        dataset.append(ds)
+    ds = torch.utils.data.ConcatDataset(dataset)
+
+    if (rank == 0) or (rank == "cpu"):
+        _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
+
+    if world_size > 1:
+        sampler = torch.utils.data.distributed.DistributedSampler(ds)
+    else:
+        sampler = torch.utils.data.RandomSampler(ds)
+
+    test_loader = torch.utils.data.DataLoader(
+        ds,
+        batch_size=batch_size,
+        collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]),
+        sampler=sampler,
+        num_workers=config["num_workers"],
+        prefetch_factor=config["prefetch_factor"],
+        # pin_memory=use_cuda,
+        # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+    )
+
+    if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
+        if (rank == 0) or (rank == "cpu"):
+            os.system(f"mkdir -p {outdir}/preds{testdir_name}/{sample}")
+
+    _logger.info(f"Running predictions on {sample}")
+    torch.cuda.empty_cache()
+
+    # FIXME: import this from a central place
+    if config["dataset"] == "clic":
+        import fastjet
+
+        jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
+        jet_ptcut = 5
+    elif config["dataset"] == "cms":
+        import fastjet
+
+        jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+        jet_ptcut = 3
+    else:
+        raise Exception("not implemented")
+
+    device_type = "cuda" if isinstance(rank, int) else "cpu"
+    with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
+        run_predictions(
+            world_size,
+            rank,
+            model,
+            test_loader,
+            sample,
+            outdir,
+            jetdef,
+            jet_ptcut=jet_ptcut,
+            jet_match_dr=0.1,
+            dir_name=testdir_name,
+        )
+    if world_size > 1:
+        dist.barrier()  # block until all workers finished executing run_predictions()
+
+def run(rank, world_size, config, outdir, logfile):
     if (rank == 0) or (rank == "cpu"):  # keep writing the logs
         _configLogger("mlpf", filename=logfile)
 
@@ -566,7 +658,7 @@ def run(rank, world_size, config, args, outdir, logfile):
 
         if len(missing_keys) > 0:
             _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
-            if args.relaxed_load:
+            if config["relaxed_load"]:
                 _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
                 strict = False
             else:
@@ -612,13 +704,13 @@ def run(rank, world_size, config, args, outdir, logfile):
         _logger.info(f"Total parameters: {trainable_params + nontrainable_params}")
         _logger.info(table.to_string(index=False))
 
-    if args.train:
+    if config["train"]:
         if (rank == 0) or (rank == "cpu"):
-            save_HPs(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
+            save_HPs(config, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
             _logger.info("Creating experiment dir {}".format(outdir))
             _logger.info(f"Model directory {outdir}", color="bold")
 
-        if args.comet:
+        if config["comet"]:
             comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
             comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
             comet_experiment.log_parameter("run_id", Path(outdir).name)
@@ -662,6 +754,7 @@ def run(rank, world_size, config, args, outdir, logfile):
             config["num_epochs"],
             config["patience"],
             outdir,
+            config,
             trainable=config["model"]["trainable"],
             dtype=dtype,
             start_epoch=start_epoch,
@@ -683,88 +776,15 @@ def run(rank, world_size, config, args, outdir, logfile):
     else:
         testdir_name = "_best_weights"
 
-    if args.test:
-        for sample in args.test_datasets:
-            batch_size = config["gpu_batch_multiplier"]
-            version = config["test_dataset"][sample]["version"]
+    if config["test"]:
+        for sample in config["test_dataset"]:
+            run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
 
-            split_configs = config["test_dataset"][sample]["splits"]
-            print("split_configs", split_configs)
-
-            dataset = []
-
-            ntest = None
-            if not (config["ntest"] is None):
-                ntest = config["ntest"] // len(split_configs)
-
-            for split_config in split_configs:
-                ds = PFDataset(config["data_dir"], f"{sample}/{split_config}:{version}", "test", num_samples=ntest).ds
-                dataset.append(ds)
-            ds = torch.utils.data.ConcatDataset(dataset)
-
-            if (rank == 0) or (rank == "cpu"):
-                _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
-
-            if world_size > 1:
-                sampler = torch.utils.data.distributed.DistributedSampler(ds)
-            else:
-                sampler = torch.utils.data.RandomSampler(ds)
-
-            test_loader = torch.utils.data.DataLoader(
-                ds,
-                batch_size=batch_size,
-                collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]),
-                sampler=sampler,
-                num_workers=config["num_workers"],
-                prefetch_factor=config["prefetch_factor"],
-                # pin_memory=use_cuda,
-                # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
-            )
-
-            if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
-                if (rank == 0) or (rank == "cpu"):
-                    os.system(f"mkdir -p {outdir}/preds{testdir_name}/{sample}")
-
-            _logger.info(f"Running predictions on {sample}")
-            torch.cuda.empty_cache()
-
-            # FIXME: import this from a central place
-            if config["dataset"] == "clic":
-                import fastjet
-
-                jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
-                jet_ptcut = 5
-            elif config["dataset"] == "cms":
-                import fastjet
-
-                jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-                jet_ptcut = 3
-            else:
-                raise Exception("not implemented")
-
-            device_type = "cuda" if isinstance(rank, int) else "cpu"
-            with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-                run_predictions(
-                    world_size,
-                    rank,
-                    model,
-                    test_loader,
-                    sample,
-                    outdir,
-                    jetdef,
-                    jet_ptcut=jet_ptcut,
-                    jet_match_dr=0.1,
-                    dir_name=testdir_name,
-                )
-            if world_size > 1:
-                dist.barrier()  # block until all workers finished executing run_predictions()
-
-    if (rank == 0) or (rank == "cpu"):  # make plots only on a single machine
-        if args.make_plots:
-
+    # make plots only on a single machine
+    if (rank == 0) or (rank == "cpu"):
+        if config["make_plots"]:
             ntest_files = -1
-            # ntest_files = 1000
-            for sample in args.test_datasets:
+            for sample in config["test_dataset"]:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)
 
@@ -772,11 +792,12 @@ def run(rank, world_size, config, args, outdir, logfile):
         dist.destroy_process_group()
 
 
-def override_config(config, args):
-    """override config with values from argparse Namespace"""
+def override_config(config: dict, args):
+    """override config dictionary with values from argparse Namespace"""
     for arg in vars(args):
         arg_value = getattr(args, arg)
-        if arg_value is not None:
+        if (arg_value is not None) and (arg in config):
+            _logger.info("overriding config item {}={} with {} from cmdline".format(arg, config[arg], arg_value))
             config[arg] = arg_value
 
     if not (args.attention_type is None):
@@ -786,14 +807,14 @@ def override_config(config, args):
         for model in ["gnn_lsh", "attention", "attention", "mamba"]:
             config["model"][model]["num_convs"] = args.num_convs
 
-    if len(args.test_datasets) == 0:
-        args.test_datasets = config["test_dataset"]
+    if len(args.test_datasets) != 0:
+        config["test_dataset"] = args.test_datasets
 
     return config
 
-
-def device_agnostic_run(config, args, world_size, outdir):
-    if args.train:
+#Run either on CPU, single GPU or multi-GPU using pytorch
+def device_agnostic_run(config, world_size, outdir):
+    if config["train"]:
         logfile = f"{outdir}/train.log"
     else:
         logfile = f"{outdir}/test.log"
@@ -812,16 +833,16 @@ def device_agnostic_run(config, args, world_size, outdir):
 
             mp.spawn(
                 run,
-                args=(world_size, config, args, outdir, logfile),
+                args=(world_size, config, outdir, logfile),
                 nprocs=world_size,
                 join=True,
             )
         elif world_size == 1:
             rank = 0
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
-            run(rank, world_size, config, args, outdir, logfile)
+            run(rank, world_size, config, outdir, logfile)
 
     else:
         rank = "cpu"
         _logger.info("Will use cpu", color="purple")
-        run(rank, world_size, config, args, outdir, logfile)
+        run(rank, world_size, config, outdir, logfile)

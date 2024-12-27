@@ -179,7 +179,7 @@ def main():
         if args.ray_train:
             run_ray_training(config, args, outdir)
         else:
-            device_agnostic_run(config, args, world_size, outdir)
+            device_agnostic_run(config, world_size, outdir)
 
 
 if __name__ == "__main__":
