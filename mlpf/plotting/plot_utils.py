@@ -620,8 +620,9 @@ def plot_jet_ratio(
     ret_dict = {}
     p = med_iqr(yvals["jet_ratio_gen_to_target_pt"])
     ret_dict["jet_ratio_gen_to_target_pt"] = {
-        "med": p[0], "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_target_pt"])/awkward.count(yvals["jets_gen_pt"])
+        "med": p[0],
+        "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_target_pt"]) / awkward.count(yvals["jets_gen_pt"]),
     }
     plt.hist(
         yvals["jet_ratio_gen_to_target_pt"],
@@ -633,8 +634,9 @@ def plot_jet_ratio(
 
     p = med_iqr(yvals["jet_ratio_gen_to_cand_pt"])
     ret_dict["jet_ratio_gen_to_cand_pt"] = {
-        "med": p[0], "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_cand_pt"])/awkward.count(yvals["jets_gen_pt"])
+        "med": p[0],
+        "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_cand_pt"]) / awkward.count(yvals["jets_gen_pt"]),
     }
     plt.hist(
         yvals["jet_ratio_gen_to_cand_pt"],
@@ -646,8 +648,9 @@ def plot_jet_ratio(
 
     p = med_iqr(yvals["jet_ratio_gen_to_pred_pt"])
     ret_dict["jet_ratio_gen_to_pred_pt"] = {
-        "med": p[0], "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_pt"])/awkward.count(yvals["jets_gen_pt"])
+        "med": p[0],
+        "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_pt"]) / awkward.count(yvals["jets_gen_pt"]),
     }
     plt.hist(
         yvals["jet_ratio_gen_to_pred_pt"],
@@ -685,8 +688,9 @@ def plot_jet_ratio(
 
     p = med_iqr(yvals["jet_ratio_target_to_cand_pt"])
     ret_dict["jet_ratio_target_to_cand_pt"] = {
-        "med": p[0], "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_target_to_cand_pt"])/awkward.count(yvals["jets_target_pt"])
+        "med": p[0],
+        "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_target_to_cand_pt"]) / awkward.count(yvals["jets_target_pt"]),
     }
     plt.plot([], [])
     plt.hist(
@@ -698,8 +702,9 @@ def plot_jet_ratio(
     )
     p = med_iqr(yvals["jet_ratio_target_to_pred_pt"])
     ret_dict["jet_ratio_target_to_pred_pt"] = {
-        "med": p[0], "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_target_to_pred_pt"])/awkward.count(yvals["jets_target_pt"])
+        "med": p[0],
+        "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_target_to_pred_pt"]) / awkward.count(yvals["jets_target_pt"]),
     }
     plt.hist(
         yvals["jet_ratio_target_to_pred_pt"],

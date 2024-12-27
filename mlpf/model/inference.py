@@ -156,7 +156,7 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
     for i, batch in iterator:
         predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample)
     tf = time.time()
-    time_total_min = (tf - ti)/60.0
+    time_total_min = (tf - ti) / 60.0
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {time_total_min:.2f} min")
 

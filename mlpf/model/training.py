@@ -44,8 +44,7 @@ from mlpf.model.plots import validation_plots
 
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
-    """Set only the given layers as trainable in the model
-    """
+    """Set only the given layers as trainable in the model"""
 
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         raise Exception("configure trainability before distributing the model")
@@ -423,18 +422,18 @@ def train_all_epochs(
         # Handle checkpointing and early stopping on rank 0
         if (rank == 0) or (rank == "cpu"):
 
-            #evaluate the model at this epoch on test datasets, make plots, track metrics
+            # evaluate the model at this epoch on test datasets, make plots, track metrics
             testdir_name = f"_epoch_{epoch}"
             for sample in config["test_dataset"]:
                 run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
                 plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
 
-                #track the following jet metrics in tensorboard
+                # track the following jet metrics in tensorboard
                 for k in ["med", "iqr", "match_frac"]:
                     tensorboard_writer_valid.add_scalar(
                         "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
                         plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
-                        epoch
+                        epoch,
                     )
 
             # Log learning rate
@@ -535,6 +534,7 @@ def train_all_epochs(
         tensorboard_writer_train.close()
         tensorboard_writer_valid.close()
 
+
 def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype):
     batch_size = config["gpu_batch_multiplier"]
     version = config["test_dataset"][sample]["version"]
@@ -609,6 +609,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
         )
     if world_size > 1:
         dist.barrier()  # block until all workers finished executing run_predictions()
+
 
 def run(rank, world_size, config, outdir, logfile):
     if (rank == 0) or (rank == "cpu"):  # keep writing the logs
@@ -812,7 +813,8 @@ def override_config(config: dict, args):
 
     return config
 
-#Run either on CPU, single GPU or multi-GPU using pytorch
+
+# Run either on CPU, single GPU or multi-GPU using pytorch
 def device_agnostic_run(config, world_size, outdir):
     if config["train"]:
         logfile = f"{outdir}/train.log"
