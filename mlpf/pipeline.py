@@ -1,6 +1,5 @@
 """
-Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
-
+PyTorch supervised training of MLPF using DistributedDataParallel or Ray Train.
 Authors: Farouk Mokhtar, Joosep Pata, Eric Wulff
 """
 
@@ -8,8 +7,6 @@ import argparse
 import logging
 import os
 from pathlib import Path
-import matplotlib
-import numpy as np
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
@@ -110,10 +107,6 @@ def get_outdir(resume_training, load):
 
 
 def main():
-    # Ignore divide by 0 errors
-    np.seterr(divide="ignore", invalid="ignore")
-    matplotlib.use("agg")
-
     # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
     import torch
 
@@ -179,7 +172,7 @@ def main():
         if args.ray_train:
             run_ray_training(config, args, outdir)
         else:
-            device_agnostic_run(config, args, world_size, outdir)
+            device_agnostic_run(config, world_size, outdir)
 
 
 if __name__ == "__main__":

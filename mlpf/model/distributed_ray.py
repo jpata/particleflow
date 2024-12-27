@@ -252,7 +252,7 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info(table)
 
     if (rank == 0) or (rank == "cpu"):
-        save_HPs(args, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
+        save_HPs(config, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
@@ -312,6 +312,7 @@ def train_ray_trial(config, args, outdir=None):
         config["num_epochs"],
         config["patience"],
         outdir,
+        config,
         trainable=config["model"]["trainable"],
         start_epoch=start_epoch,
         lr_schedule=lr_schedule,
