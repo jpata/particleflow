@@ -82,13 +82,16 @@ class TFDSDataSource:
             ret["X"][:, 1][msk_ho] = np.sqrt(e**2 - (np.tanh(eta) * e) ** 2)
 
         # transform pt -> log(pt / elem pt), same for energy
-        target_pt = np.log(ret["ytarget"][:, 2] / ret["X"][:, 1])
+        # where target does not exist, set to 0
+        with np.errstate(divide="ignore"):
+            target_pt = np.log(ret["ytarget"][:, 2] / ret["X"][:, 1])
         target_pt[np.isnan(target_pt)] = 0
         target_pt[np.isinf(target_pt)] = 0
         ret["ytarget_pt_orig"] = ret["ytarget"][:, 2].copy()
         ret["ytarget"][:, 2] = target_pt
 
-        target_e = np.log(ret["ytarget"][:, 6] / ret["X"][:, 5])
+        with np.errstate(divide="ignore"):
+            target_e = np.log(ret["ytarget"][:, 6] / ret["X"][:, 5])
         target_e[ret["ytarget"][:, 0] == 0] = 0
         target_e[np.isnan(target_e)] = 0
         target_e[np.isinf(target_e)] = 0
