@@ -359,6 +359,15 @@ def train_all_epochs(
         save_attention: Whether to save attention weights
         checkpoint_dir: Directory to save checkpoints
     """
+
+    # run per-worker setup here so all processes / threads get configured.
+    # Ignore divide by 0 errors
+    np.seterr(divide="ignore", invalid="ignore")
+    # disable GUI
+    import matplotlib
+
+    matplotlib.use("agg")
+
     # Setup tensorboard writers
     if (rank == 0) or (rank == "cpu"):
         tensorboard_writer_train = SummaryWriter(f"{outdir}/runs/train")
