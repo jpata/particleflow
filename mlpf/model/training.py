@@ -816,7 +816,7 @@ def override_config(config: dict, args):
         for model in ["gnn_lsh", "attention", "attention", "mamba"]:
             config["model"][model]["num_convs"] = args.num_convs
 
-    config["enabled_test_datasets"] = config["test_dataset"].keys()
+    config["enabled_test_datasets"] = list(config["test_dataset"].keys())
     if len(args.test_datasets) != 0:
         config["enabled_test_datasets"] = args.test_datasets
 
