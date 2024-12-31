@@ -430,21 +430,6 @@ def train_all_epochs(
 
         # Handle checkpointing and early stopping on rank 0
         if (rank == 0) or (rank == "cpu"):
-
-            # evaluate the model at this epoch on test datasets, make plots, track metrics
-            testdir_name = f"_epoch_{epoch}"
-            for sample in config["test_dataset"]:
-                run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
-                plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
-
-                # track the following jet metrics in tensorboard
-                for k in ["med", "iqr", "match_frac"]:
-                    tensorboard_writer_valid.add_scalar(
-                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
-                        plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
-                        epoch,
-                    )
-
             # Log learning rate
             tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
 
@@ -503,6 +488,20 @@ def train_all_epochs(
             # Flush tensorboard
             tensorboard_writer_train.flush()
             tensorboard_writer_valid.flush()
+
+            # evaluate the model at this epoch on test datasets, make plots, track metrics
+            testdir_name = f"_epoch_{epoch}"
+            for sample in config["enabled_test_datasets"]:
+                run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+                plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
+
+                # track the following jet metrics in tensorboard
+                for k in ["med", "iqr", "match_frac"]:
+                    tensorboard_writer_valid.add_scalar(
+                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
+                        plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
+                        epoch,
+                    )
 
         # Ray training specific logging
         if use_ray:
@@ -787,14 +786,14 @@ def run(rank, world_size, config, outdir, logfile):
         testdir_name = "_best_weights"
 
     if config["test"]:
-        for sample in config["test_dataset"]:
+        for sample in config["enabled_test_datasets"]:
             run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
 
     # make plots only on a single machine
     if (rank == 0) or (rank == "cpu"):
         if config["make_plots"]:
             ntest_files = -1
-            for sample in config["test_dataset"]:
+            for sample in config["enabled_test_datasets"]:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)
 
@@ -817,8 +816,13 @@ def override_config(config: dict, args):
         for model in ["gnn_lsh", "attention", "attention", "mamba"]:
             config["model"][model]["num_convs"] = args.num_convs
 
+    config["enabled_test_datasets"] = config["test_dataset"].keys()
     if len(args.test_datasets) != 0:
-        config["test_dataset"] = args.test_datasets
+        config["enabled_test_datasets"] = args.test_datasets
+
+    config["train"] = args.train
+    config["test"] = args.test
+    config["make_plots"] = args.make_plots
 
     return config
 
