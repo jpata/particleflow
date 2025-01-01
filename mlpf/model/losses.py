@@ -4,6 +4,8 @@ import torch
 from torch.nn import functional as F
 from torch import Tensor, nn
 
+from mlpf.model.logger import _logger, _configLogger
+
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     # create normalized random basis vectors
@@ -122,10 +124,15 @@ def mlpf_loss(y, ypred, batch):
         + loss["Regression_energy"]
     )
     loss_opt = loss["Total"]
+    if torch.isnan(loss_opt):
+         _logger.error(ypred)
+         _logger.error(sqrt_target_pt)
+         _logger.error(loss)
+         raise Exception("Loss became NaN")
 
     # store these separately but detached
     for k in loss.keys():
-        loss[k] = loss[k].detach().cpu().item()
+        loss[k] = loss[k].detach()
 
     return loss_opt, loss
 

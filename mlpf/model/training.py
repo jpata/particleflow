@@ -191,14 +191,14 @@ def train_epoch(
             comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
     # Average losses across steps
-    num_steps = len(train_loader)
+    num_steps = torch.tensor(float(len(train_loader)), device=rank, dtype=torch.float32)
     if world_size > 1:
         torch.distributed.all_reduce(num_steps)
 
     for loss_name in epoch_loss:
         if world_size > 1:
             torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name] / num_steps
+        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
 
     if world_size > 1:
         dist.barrier()
@@ -297,14 +297,14 @@ def eval_epoch(
         )
 
     # Average losses across steps
-    num_steps = len(valid_loader)
+    num_steps = torch.tensor(float(len(valid_loader)), device=rank, dtype=torch.float32)
     if world_size > 1:
         torch.distributed.all_reduce(num_steps)
 
     for loss_name in epoch_loss:
         if world_size > 1:
             torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name] / num_steps
+        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
 
     if world_size > 1:
         dist.barrier()
