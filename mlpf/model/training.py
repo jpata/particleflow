@@ -67,57 +67,24 @@ def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_
         model.eval()
 
 
-def train_step(batch, model, optimizer, lr_schedule, loss_fn):
-    """Single training step logic
-
-    Args:
-        batch: The input batch data
-        model: The neural network model
-        optimizer: The optimizer
-        lr_schedule: Learning rate scheduler
-        loss_fn: Loss function to use
-
-    Returns:
-        dict: Dictionary containing all computed losses with gradient detached
-    """
+def model_step(batch, model, loss_fn):
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
-
     loss_opt, losses_detached = loss_fn(ytarget, ypred, batch)
+    return loss_opt, losses_detached, ypred_raw, ypred, ytarget
 
+def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
     # Clear gradients
     for param in model.parameters():
         param.grad = None
 
     # Backward pass and optimization
-    loss_opt.backward()
-    optimizer.step()
+    scaler.scale(loss_opt).backward()
+    scaler.step(optimizer)
+    scaler.update()
     if lr_schedule:
         lr_schedule.step()
-
-    return losses_detached
-
-
-def eval_step(batch, model, loss_fn):
-    """Single evaluation step logic
-
-    Args:
-        batch: The input batch data
-        model: The neural network model
-        loss_fn: Loss function to use
-
-    Returns:
-        tuple: (losses dict, predictions dict, targets dict)
-    """
-    with torch.no_grad():
-        ypred_raw = model(batch.X, batch.mask)
-        ypred = unpack_predictions(ypred_raw)
-        ytarget = unpack_target(batch.ytarget, model)
-        _, losses_detached = loss_fn(ytarget, ypred, batch)
-
-    return losses_detached, ypred_raw, ypred, ytarget
-
 
 def train_epoch(
     rank: Union[int, str],
@@ -133,6 +100,7 @@ def train_epoch(
     checkpoint_dir="",
     device_type="cuda",
     dtype=torch.float32,
+    scaler=None
 ):
     """Run one training epoch
 
@@ -167,7 +135,9 @@ def train_epoch(
         batch = batch.to(rank, non_blocking=True)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-            loss = train_step(batch, model, optimizer, lr_schedule, mlpf_loss)
+            loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss)
+
+        optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
 
         # Accumulate losses
         for loss_name in loss:
@@ -261,7 +231,8 @@ def eval_epoch(
             set_save_attention(model, outdir, False)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-            loss, ypred_raw, ypred, ytarget = eval_step(batch, model, mlpf_loss)
+            with torch.no_grad():
+                loss_opt, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
 
         # Update confusion matrices
         cm_X_target += sklearn.metrics.confusion_matrix(
@@ -383,6 +354,8 @@ def train_all_epochs(
     stale_epochs = torch.tensor(0, device=rank)
     best_val_loss = float("inf")
 
+    scaler = torch.amp.GradScaler()
+
     for epoch in range(start_epoch, num_epochs + 1):
         epoch_start_time = time.time()
 
@@ -401,6 +374,7 @@ def train_all_epochs(
             checkpoint_dir=checkpoint_dir,
             device_type=device_type,
             dtype=dtype,
+            scaler=scaler
         )
         train_time = time.time() - epoch_start_time
 
