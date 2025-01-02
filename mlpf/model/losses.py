@@ -4,7 +4,7 @@ import torch
 from torch.nn import functional as F
 from torch import Tensor, nn
 
-from mlpf.model.logger import _logger, _configLogger
+from mlpf.model.logger import _logger
 
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
@@ -125,10 +125,10 @@ def mlpf_loss(y, ypred, batch):
     )
     loss_opt = loss["Total"]
     if torch.isnan(loss_opt):
-         _logger.error(ypred)
-         _logger.error(sqrt_target_pt)
-         _logger.error(loss)
-         raise Exception("Loss became NaN")
+        _logger.error(ypred)
+        _logger.error(sqrt_target_pt)
+        _logger.error(loss)
+        raise Exception("Loss became NaN")
 
     # store these separately but detached
     for k in loss.keys():

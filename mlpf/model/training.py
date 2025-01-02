@@ -74,6 +74,7 @@ def model_step(batch, model, loss_fn):
     loss_opt, losses_detached = loss_fn(ytarget, ypred, batch)
     return loss_opt, losses_detached, ypred_raw, ypred, ytarget
 
+
 def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
     # Clear gradients
     for param in model.parameters():
@@ -85,6 +86,7 @@ def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
     scaler.update()
     if lr_schedule:
         lr_schedule.step()
+
 
 def train_epoch(
     rank: Union[int, str],
@@ -100,7 +102,7 @@ def train_epoch(
     checkpoint_dir="",
     device_type="cuda",
     dtype=torch.float32,
-    scaler=None
+    scaler=None,
 ):
     """Run one training epoch
 
@@ -374,7 +376,7 @@ def train_all_epochs(
             checkpoint_dir=checkpoint_dir,
             device_type=device_type,
             dtype=dtype,
-            scaler=scaler
+            scaler=scaler,
         )
         train_time = time.time() - epoch_start_time
 
