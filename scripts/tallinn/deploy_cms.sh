@@ -3,8 +3,8 @@
 
 rm -f files_to_copy.txt
 maxfiles=100
-path=/local/joosep/mlpf/results/cms/pyg-cms_20241101_090645_682892/./preds_checkpoint-18-2.778778
-targetpath=/home/joosep/huggingface/particleflow/cms/v2.1.0/pyg-cms_20241101_090645_682892/
+path=/local/joosep/mlpf/results/cms/pyg-cms_20241212_101648_120237/./preds_checkpoint-05-3.498507
+targetpath=/scratch/persistent/joosep/huggingface/particleflow/cms/v2.2.0/pyg-cms_20241212_101648_120237/
 
 samplestocopy=(
     "cms_pf_qcd"

@@ -67,56 +67,25 @@ def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_
         model.eval()
 
 
-def train_step(batch, model, optimizer, lr_schedule, loss_fn):
-    """Single training step logic
-
-    Args:
-        batch: The input batch data
-        model: The neural network model
-        optimizer: The optimizer
-        lr_schedule: Learning rate scheduler
-        loss_fn: Loss function to use
-
-    Returns:
-        dict: Dictionary containing all computed losses with gradient detached
-    """
+def model_step(batch, model, loss_fn):
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
-
     loss_opt, losses_detached = loss_fn(ytarget, ypred, batch)
+    return loss_opt, losses_detached, ypred_raw, ypred, ytarget
 
+
+def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
     # Clear gradients
     for param in model.parameters():
         param.grad = None
 
     # Backward pass and optimization
-    loss_opt.backward()
-    optimizer.step()
+    scaler.scale(loss_opt).backward()
+    scaler.step(optimizer)
+    scaler.update()
     if lr_schedule:
         lr_schedule.step()
-
-    return losses_detached
-
-
-def eval_step(batch, model, loss_fn):
-    """Single evaluation step logic
-
-    Args:
-        batch: The input batch data
-        model: The neural network model
-        loss_fn: Loss function to use
-
-    Returns:
-        tuple: (losses dict, predictions dict, targets dict)
-    """
-    with torch.no_grad():
-        ypred_raw = model(batch.X, batch.mask)
-        ypred = unpack_predictions(ypred_raw)
-        ytarget = unpack_target(batch.ytarget, model)
-        _, losses_detached = loss_fn(ytarget, ypred, batch)
-
-    return losses_detached, ypred_raw, ypred, ytarget
 
 
 def train_epoch(
@@ -133,6 +102,7 @@ def train_epoch(
     checkpoint_dir="",
     device_type="cuda",
     dtype=torch.float32,
+    scaler=None,
 ):
     """Run one training epoch
 
@@ -167,7 +137,9 @@ def train_epoch(
         batch = batch.to(rank, non_blocking=True)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-            loss = train_step(batch, model, optimizer, lr_schedule, mlpf_loss)
+            loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss)
+
+        optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
 
         # Accumulate losses
         for loss_name in loss:
@@ -191,14 +163,14 @@ def train_epoch(
             comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
     # Average losses across steps
-    num_steps = len(train_loader)
+    num_steps = torch.tensor(float(len(train_loader)), device=rank, dtype=torch.float32)
     if world_size > 1:
         torch.distributed.all_reduce(num_steps)
 
     for loss_name in epoch_loss:
         if world_size > 1:
             torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name] / num_steps
+        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
 
     if world_size > 1:
         dist.barrier()
@@ -261,7 +233,8 @@ def eval_epoch(
             set_save_attention(model, outdir, False)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-            loss, ypred_raw, ypred, ytarget = eval_step(batch, model, mlpf_loss)
+            with torch.no_grad():
+                loss_opt, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
 
         # Update confusion matrices
         cm_X_target += sklearn.metrics.confusion_matrix(
@@ -297,14 +270,14 @@ def eval_epoch(
         )
 
     # Average losses across steps
-    num_steps = len(valid_loader)
+    num_steps = torch.tensor(float(len(valid_loader)), device=rank, dtype=torch.float32)
     if world_size > 1:
         torch.distributed.all_reduce(num_steps)
 
     for loss_name in epoch_loss:
         if world_size > 1:
             torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name] / num_steps
+        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
 
     if world_size > 1:
         dist.barrier()
@@ -383,6 +356,8 @@ def train_all_epochs(
     stale_epochs = torch.tensor(0, device=rank)
     best_val_loss = float("inf")
 
+    scaler = torch.amp.GradScaler()
+
     for epoch in range(start_epoch, num_epochs + 1):
         epoch_start_time = time.time()
 
@@ -401,6 +376,7 @@ def train_all_epochs(
             checkpoint_dir=checkpoint_dir,
             device_type=device_type,
             dtype=dtype,
+            scaler=scaler,
         )
         train_time = time.time() - epoch_start_time
 
@@ -430,21 +406,6 @@ def train_all_epochs(
 
         # Handle checkpointing and early stopping on rank 0
         if (rank == 0) or (rank == "cpu"):
-
-            # evaluate the model at this epoch on test datasets, make plots, track metrics
-            testdir_name = f"_epoch_{epoch}"
-            for sample in config["test_dataset"]:
-                run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
-                plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
-
-                # track the following jet metrics in tensorboard
-                for k in ["med", "iqr", "match_frac"]:
-                    tensorboard_writer_valid.add_scalar(
-                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
-                        plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
-                        epoch,
-                    )
-
             # Log learning rate
             tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
 
@@ -503,6 +464,20 @@ def train_all_epochs(
             # Flush tensorboard
             tensorboard_writer_train.flush()
             tensorboard_writer_valid.flush()
+
+            # evaluate the model at this epoch on test datasets, make plots, track metrics
+            testdir_name = f"_epoch_{epoch}"
+            for sample in config["enabled_test_datasets"]:
+                run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+                plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
+
+                # track the following jet metrics in tensorboard
+                for k in ["med", "iqr", "match_frac"]:
+                    tensorboard_writer_valid.add_scalar(
+                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
+                        plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
+                        epoch,
+                    )
 
         # Ray training specific logging
         if use_ray:
@@ -787,14 +762,14 @@ def run(rank, world_size, config, outdir, logfile):
         testdir_name = "_best_weights"
 
     if config["test"]:
-        for sample in config["test_dataset"]:
+        for sample in config["enabled_test_datasets"]:
             run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
 
     # make plots only on a single machine
     if (rank == 0) or (rank == "cpu"):
         if config["make_plots"]:
             ntest_files = -1
-            for sample in config["test_dataset"]:
+            for sample in config["enabled_test_datasets"]:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)
 
@@ -817,8 +792,13 @@ def override_config(config: dict, args):
         for model in ["gnn_lsh", "attention", "attention", "mamba"]:
             config["model"][model]["num_convs"] = args.num_convs
 
+    config["enabled_test_datasets"] = list(config["test_dataset"].keys())
     if len(args.test_datasets) != 0:
-        config["test_dataset"] = args.test_datasets
+        config["enabled_test_datasets"] = args.test_datasets
+
+    config["train"] = args.train
+    config["test"] = args.test
+    config["make_plots"] = args.make_plots
 
     return config
 

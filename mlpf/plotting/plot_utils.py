@@ -136,6 +136,7 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_single_pi0": r"single neutral pion particle gun events",
     "cms_pf_single_proton": r"single proton particle gun events",
     "cms_pf_single_tau": r"single tau particle gun events",
+    "cms_pf_single_k0": r"single K0 particle gun events",
     "cms_pf_sms_t1tttt": r"sms t1tttt events",
 }
 
@@ -418,7 +419,7 @@ def compute_3dmomentum_and_ratio(yvals):
     }
 
 
-def save_img(outfile, epoch, cp_dir=None, comet_experiment=None):
+def save_img(outfile, epoch=None, cp_dir=None, comet_experiment=None):
     if cp_dir:
         image_path = str(cp_dir / outfile)
         plt.savefig(image_path, dpi=100, bbox_inches="tight")
