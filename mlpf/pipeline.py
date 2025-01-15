@@ -15,10 +15,11 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import yaml
-from mlpf.model.training import device_agnostic_run, override_config
+from utils import create_experiment_dir
+
 from mlpf.model.distributed_ray import run_hpo, run_ray_training
 from mlpf.model.PFDataset import SHARING_STRATEGY
-from utils import create_experiment_dir
+from mlpf.model.training import device_agnostic_run, override_config
 
 parser = argparse.ArgumentParser()
 
@@ -28,10 +29,14 @@ parser.add_argument("--config", type=str, default=None, help="yaml config")
 parser.add_argument("--prefix", type=str, default=None, help="prefix appended to result dir name")
 parser.add_argument("--data-dir", type=str, default=None, help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=int, default=None, help="to use CPU set to 0; else e.g., 4")
-parser.add_argument("--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor")
+parser.add_argument(
+    "--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor"
+)
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
-parser.add_argument("--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume")
+parser.add_argument(
+    "--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume"
+)
 parser.add_argument("--load", type=str, default=None, help="load checkpoint and continue training from previous epoch")
 parser.add_argument(
     "--relaxed-load",
@@ -52,7 +57,9 @@ parser.add_argument(
     help="which graph layer to use",
     choices=["attention", "gnn_lsh", "mamba"],
 )
-parser.add_argument("--num-convs", type=int, default=None, help="number of cross-particle convolution (GNN, attention, Mamba) layers")
+parser.add_argument(
+    "--num-convs", type=int, default=None, help="number of cross-particle convolution (GNN, attention, Mamba) layers"
+)
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
@@ -85,6 +92,13 @@ parser.add_argument(
     choices=["math", "efficient", "flash", "flash_external"],
 )
 parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
+
+parser.add_argument(
+    "--finetune",
+    action="store_true",
+    default=None,
+    help="will load and run a training and log the result in the --prefix directory",
+)
 
 
 def get_outdir(resume_training, load):
@@ -158,7 +172,7 @@ def main():
         run_hpo(config, args)
     else:
         outdir = get_outdir(args.resume_training, config["load"])
-        if outdir is None:
+        if (outdir is None) or (args.finetune):
             outdir = create_experiment_dir(
                 prefix=(args.prefix or "") + Path(args.config).stem + "_",
                 experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
