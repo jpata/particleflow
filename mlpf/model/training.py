@@ -658,9 +658,10 @@ def run(rank, world_size, config, outdir, logfile):
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
-        # check if we reached the first epoch in the checkpoint
-        if "epoch" in checkpoint["extra_state"]:
-            start_epoch = checkpoint["extra_state"]["epoch"] + 1
+        if not config["finetune"]:  # for --finetune we want to start the count from scratch
+            # check if we reached the first epoch in the checkpoint
+            if "epoch" in checkpoint["extra_state"]:
+                start_epoch = checkpoint["extra_state"]["epoch"] + 1
 
         missing_keys, strict = [], True
         for k in model.state_dict().keys():
