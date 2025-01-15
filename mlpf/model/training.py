@@ -1,46 +1,45 @@
+import json
 import os
 import os.path as osp
 import pickle as pkl
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import tqdm
-import yaml
-import json
+from typing import List, Union
+
+import numpy as np
 import sklearn
 import sklearn.metrics
-import numpy as np
-from typing import Union, List
-
-# comet needs to be imported before torch
-from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
-
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import tqdm
+import yaml
 from torch.utils.tensorboard import SummaryWriter
 
-from mlpf.model.logger import _logger, _configLogger
+from mlpf.model.inference import make_plots, run_predictions
+from mlpf.model.logger import _configLogger, _logger
+from mlpf.model.losses import mlpf_loss
+from mlpf.model.mlpf import MLPF, set_save_attention
+from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard
+from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
+from mlpf.model.plots import validation_plots
 from mlpf.model.utils import (
-    unpack_predictions,
-    unpack_target,
+    CLASS_LABELS,
+    ELEM_TYPES_NONZERO,
+    X_FEATURES,
+    count_parameters,
+    get_lr_schedule,
     load_checkpoint,
     save_checkpoint,
-    CLASS_LABELS,
-    X_FEATURES,
-    ELEM_TYPES_NONZERO,
     save_HPs,
-    get_lr_schedule,
-    count_parameters,
+    unpack_predictions,
+    unpack_target,
 )
-from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard
-from mlpf.model.inference import make_plots, run_predictions
-from mlpf.model.mlpf import set_save_attention
-from mlpf.model.mlpf import MLPF
-from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
-from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
-from mlpf.model.plots import validation_plots
+
+# comet needs to be imported before torch
+from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
 
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
@@ -131,7 +130,9 @@ def train_epoch(
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(train_loader)
     else:
-        iterator = tqdm.tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch} train loop on rank={rank}")
+        iterator = tqdm.tqdm(
+            enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch} train loop on rank={rank}"
+        )
 
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
@@ -221,7 +222,9 @@ def eval_epoch(
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(valid_loader)
     else:
-        iterator = tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader), desc=f"Epoch {epoch} eval loop on rank={rank}")
+        iterator = tqdm.tqdm(
+            enumerate(valid_loader), total=len(valid_loader), desc=f"Epoch {epoch} eval loop on rank={rank}"
+        )
 
     for ival, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
@@ -238,13 +241,19 @@ def eval_epoch(
 
         # Update confusion matrices
         cm_X_target += sklearn.metrics.confusion_matrix(
-            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ytarget["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
+            ytarget["cls_id"][batch.mask].detach().cpu().numpy(),
+            labels=range(13),
         )
         cm_X_pred += sklearn.metrics.confusion_matrix(
-            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
+            ypred["cls_id"][batch.mask].detach().cpu().numpy(),
+            labels=range(13),
         )
         cm_id += sklearn.metrics.confusion_matrix(
-            ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+            ytarget["cls_id"][batch.mask].detach().cpu().numpy(),
+            ypred["cls_id"][batch.mask].detach().cpu().numpy(),
+            labels=range(13),
         )
 
         # Save validation plots for first batch
@@ -260,13 +269,28 @@ def eval_epoch(
     # Log confusion matrices
     if comet_experiment:
         comet_experiment.log_confusion_matrix(
-            matrix=cm_X_target, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_target.json"
+            matrix=cm_X_target,
+            title="Element to target",
+            row_label="X",
+            column_label="target",
+            epoch=epoch,
+            file_name="cm_X_target.json",
         )
         comet_experiment.log_confusion_matrix(
-            matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", epoch=epoch, file_name="cm_X_pred.json"
+            matrix=cm_X_pred,
+            title="Element to pred",
+            row_label="X",
+            column_label="pred",
+            epoch=epoch,
+            file_name="cm_X_pred.json",
         )
         comet_experiment.log_confusion_matrix(
-            matrix=cm_id, title="Target to pred", row_label="target", column_label="pred", epoch=epoch, file_name="cm_id.json"
+            matrix=cm_id,
+            title="Target to pred",
+            row_label="target",
+            column_label="pred",
+            epoch=epoch,
+            file_name="cm_id.json",
         )
 
     # Average losses across steps
@@ -548,7 +572,9 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
-        collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]),
+        collate_fn=Collater(
+            ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]
+        ),
         sampler=sampler,
         num_workers=config["num_workers"],
         prefetch_factor=config["prefetch_factor"],
@@ -614,8 +640,14 @@ def run(rank, world_size, config, outdir, logfile):
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     if config["load"]:  # load a pre-trained model
-        with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
-            model_kwargs = pkl.load(f)
+
+        if config["finetune"]:
+            with open(f"{Path(config['load']).parent}/model_kwargs.pkl", "rb") as f:
+                model_kwargs = pkl.load(f)
+        else:
+            with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
+                model_kwargs = pkl.load(f)
+
         _logger.info("model_kwargs: {}".format(model_kwargs))
 
         if config["conv_type"] == "attention":
@@ -696,7 +728,9 @@ def run(rank, world_size, config, outdir, logfile):
             _logger.info(f"Model directory {outdir}", color="bold")
 
         if config["comet"]:
-            comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
+            comet_experiment = create_comet_experiment(
+                config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
+            )
             comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
             comet_experiment.log_parameter("run_id", Path(outdir).name)
             comet_experiment.log_parameter("world_size", world_size)
