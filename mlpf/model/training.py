@@ -1,45 +1,46 @@
-import json
 import os
 import os.path as osp
 import pickle as pkl
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List, Union
-
-import numpy as np
-import sklearn
-import sklearn.metrics
-import torch
-import torch.distributed as dist
-import torch.multiprocessing as mp
 import tqdm
 import yaml
-from torch.utils.tensorboard import SummaryWriter
-
-from mlpf.model.inference import make_plots, run_predictions
-from mlpf.model.logger import _configLogger, _logger
-from mlpf.model.losses import mlpf_loss
-from mlpf.model.mlpf import MLPF, set_save_attention
-from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard
-from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
-from mlpf.model.plots import validation_plots
-from mlpf.model.utils import (
-    CLASS_LABELS,
-    ELEM_TYPES_NONZERO,
-    X_FEATURES,
-    count_parameters,
-    get_lr_schedule,
-    load_checkpoint,
-    save_checkpoint,
-    save_HPs,
-    unpack_predictions,
-    unpack_target,
-)
-from mlpf.utils import create_comet_experiment
+import json
+import sklearn
+import sklearn.metrics
+import numpy as np
+from typing import Union, List
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
+
+import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.utils.tensorboard import SummaryWriter
+
+from mlpf.model.logger import _logger, _configLogger
+from mlpf.model.utils import (
+    unpack_predictions,
+    unpack_target,
+    load_checkpoint,
+    save_checkpoint,
+    CLASS_LABELS,
+    X_FEATURES,
+    ELEM_TYPES_NONZERO,
+    save_HPs,
+    get_lr_schedule,
+    count_parameters,
+)
+from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard
+from mlpf.model.inference import make_plots, run_predictions
+from mlpf.model.mlpf import set_save_attention
+from mlpf.model.mlpf import MLPF
+from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
+from mlpf.model.losses import mlpf_loss
+from mlpf.utils import create_comet_experiment
+from mlpf.model.plots import validation_plots
 
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
@@ -237,24 +238,18 @@ def eval_epoch(
 
         # Update confusion matrices
         cm_X_target += sklearn.metrics.confusion_matrix(
-            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
-            ytarget["cls_id"][batch.mask].detach().cpu().numpy(),
-            labels=range(13),
+            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ytarget["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
         )
         cm_X_pred += sklearn.metrics.confusion_matrix(
-            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(),
-            ypred["cls_id"][batch.mask].detach().cpu().numpy(),
-            labels=range(13),
+            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
         )
         cm_id += sklearn.metrics.confusion_matrix(
-            ytarget["cls_id"][batch.mask].detach().cpu().numpy(),
-            ypred["cls_id"][batch.mask].detach().cpu().numpy(),
-            labels=range(13),
+            ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
         )
 
         # Save validation plots for first batch
-        # if (rank == 0 or rank == "cpu") and ival == 0:
-        #     validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
+        if (rank == 0 or rank == "cpu") and ival == 0:
+            validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
 
         # Accumulate losses
         for loss_name in loss:
@@ -265,28 +260,13 @@ def eval_epoch(
     # Log confusion matrices
     if comet_experiment:
         comet_experiment.log_confusion_matrix(
-            matrix=cm_X_target,
-            title="Element to target",
-            row_label="X",
-            column_label="target",
-            epoch=epoch,
-            file_name="cm_X_target.json",
+            matrix=cm_X_target, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_target.json"
         )
         comet_experiment.log_confusion_matrix(
-            matrix=cm_X_pred,
-            title="Element to pred",
-            row_label="X",
-            column_label="pred",
-            epoch=epoch,
-            file_name="cm_X_pred.json",
+            matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", epoch=epoch, file_name="cm_X_pred.json"
         )
         comet_experiment.log_confusion_matrix(
-            matrix=cm_id,
-            title="Target to pred",
-            row_label="target",
-            column_label="pred",
-            epoch=epoch,
-            file_name="cm_id.json",
+            matrix=cm_id, title="Target to pred", row_label="target", column_label="pred", epoch=epoch, file_name="cm_id.json"
         )
 
     # Average losses across steps
@@ -485,19 +465,19 @@ def train_all_epochs(
             tensorboard_writer_train.flush()
             tensorboard_writer_valid.flush()
 
-            # # evaluate the model at this epoch on test datasets, make plots, track metrics
-            # testdir_name = f"_epoch_{epoch}"
-            # for sample in config["enabled_test_datasets"]:
-            #     run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
-            #     plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
+            # evaluate the model at this epoch on test datasets, make plots, track metrics
+            testdir_name = f"_epoch_{epoch}"
+            for sample in config["enabled_test_datasets"]:
+                run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+                plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
 
-            #     # track the following jet metrics in tensorboard
-            #     for k in ["med", "iqr", "match_frac"]:
-            #         tensorboard_writer_valid.add_scalar(
-            #             "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
-            #             plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
-            #             epoch,
-            #         )
+                # track the following jet metrics in tensorboard
+                for k in ["med", "iqr", "match_frac"]:
+                    tensorboard_writer_valid.add_scalar(
+                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
+                        plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
+                        epoch,
+                    )
 
         # Ray training specific logging
         if use_ray:
