@@ -614,8 +614,29 @@ def run(rank, world_size, config, outdir, logfile):
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     if config["load"]:  # load a pre-trained model
-        with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
-            model_kwargs = pkl.load(f)
+
+        if config["finetune"]:
+            # outdir is now the new directory for finetuning so must retrieve model_kwargs from the load dir
+            def get_relevant_directory(path):
+                # Get the parent directory of the given path
+                parent_dir = os.path.dirname(path)
+
+                # Get the parent of the parent directory
+                grandparent_dir = os.path.dirname(parent_dir)
+
+                # Check if the parent directory is "checkpoints"
+                if os.path.basename(parent_dir) == "checkpoints":
+                    return grandparent_dir
+                else:
+                    return parent_dir
+
+            with open(f"{get_relevant_directory(config['load'])}/model_kwargs.pkl", "rb") as f:
+                model_kwargs = pkl.load(f)
+
+        else:
+            with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
+                model_kwargs = pkl.load(f)
+
         _logger.info("model_kwargs: {}".format(model_kwargs))
 
         if config["conv_type"] == "attention":
@@ -626,9 +647,10 @@ def run(rank, world_size, config, outdir, logfile):
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
-        # check if we reached the first epoch in the checkpoint
-        if "epoch" in checkpoint["extra_state"]:
-            start_epoch = checkpoint["extra_state"]["epoch"] + 1
+        if not config["finetune"]:  # for --finetune we want to start the count from scratch
+            # check if we reached the first epoch in the checkpoint
+            if "epoch" in checkpoint["extra_state"]:
+                start_epoch = checkpoint["extra_state"]["epoch"] + 1
 
         missing_keys, strict = [], True
         for k in model.state_dict().keys():

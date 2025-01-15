@@ -86,6 +86,13 @@ parser.add_argument(
 )
 parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
 
+parser.add_argument(
+    "--finetune",
+    action="store_true",
+    default=None,
+    help="will load and run a training and log the result in the --prefix directory",
+)
+
 
 def get_outdir(resume_training, load):
     outdir = None
@@ -96,10 +103,8 @@ def get_outdir(resume_training, load):
         if pload.name == "checkpoint.pth":
             # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
             outdir = str(pload.parent.parent.parent)
-        elif pload.name == "best_weights.pth":
-            outdir = str(pload.parent)
         else:
-            # the checkpoint is likely from a DDP run and we need to step up one dir less
+            # the checkpoint is likely not from a Ray Train run and we need to step up one dir less
             outdir = str(pload.parent.parent)
     if not (outdir is None):
         assert os.path.isfile("{}/model_kwargs.pkl".format(outdir))
@@ -158,7 +163,7 @@ def main():
         run_hpo(config, args)
     else:
         outdir = get_outdir(args.resume_training, config["load"])
-        if outdir is None:
+        if (outdir is None) or (args.finetune):
             outdir = create_experiment_dir(
                 prefix=(args.prefix or "") + Path(args.config).stem + "_",
                 experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
