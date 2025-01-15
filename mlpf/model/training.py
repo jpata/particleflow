@@ -130,9 +130,7 @@ def train_epoch(
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(train_loader)
     else:
-        iterator = tqdm.tqdm(
-            enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch} train loop on rank={rank}"
-        )
+        iterator = tqdm.tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch} train loop on rank={rank}")
 
     for itrain, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
@@ -222,9 +220,7 @@ def eval_epoch(
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(valid_loader)
     else:
-        iterator = tqdm.tqdm(
-            enumerate(valid_loader), total=len(valid_loader), desc=f"Epoch {epoch} eval loop on rank={rank}"
-        )
+        iterator = tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader), desc=f"Epoch {epoch} eval loop on rank={rank}")
 
     for ival, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
@@ -572,9 +568,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
-        collate_fn=Collater(
-            ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]
-        ),
+        collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]),
         sampler=sampler,
         num_workers=config["num_workers"],
         prefetch_factor=config["prefetch_factor"],
@@ -744,9 +738,7 @@ def run(rank, world_size, config, outdir, logfile):
             _logger.info(f"Model directory {outdir}", color="bold")
 
         if config["comet"]:
-            comet_experiment = create_comet_experiment(
-                config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir
-            )
+            comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
             comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
             comet_experiment.log_parameter("run_id", Path(outdir).name)
             comet_experiment.log_parameter("world_size", world_size)
