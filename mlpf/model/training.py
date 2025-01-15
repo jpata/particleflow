@@ -489,19 +489,19 @@ def train_all_epochs(
             tensorboard_writer_train.flush()
             tensorboard_writer_valid.flush()
 
-            # evaluate the model at this epoch on test datasets, make plots, track metrics
-            testdir_name = f"_epoch_{epoch}"
-            for sample in config["enabled_test_datasets"]:
-                run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
-                plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
+            # # evaluate the model at this epoch on test datasets, make plots, track metrics
+            # testdir_name = f"_epoch_{epoch}"
+            # for sample in config["enabled_test_datasets"]:
+            #     run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+            #     plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
 
-                # track the following jet metrics in tensorboard
-                for k in ["med", "iqr", "match_frac"]:
-                    tensorboard_writer_valid.add_scalar(
-                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
-                        plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
-                        epoch,
-                    )
+            #     # track the following jet metrics in tensorboard
+            #     for k in ["med", "iqr", "match_frac"]:
+            #         tensorboard_writer_valid.add_scalar(
+            #             "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
+            #             plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
+            #             epoch,
+            #         )
 
         # Ray training specific logging
         if use_ray:
