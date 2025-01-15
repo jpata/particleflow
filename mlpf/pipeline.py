@@ -104,12 +104,8 @@ def get_outdir(resume_training, load):
         if pload.name == "checkpoint.pth":
             # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
             outdir = str(pload.parent.parent.parent)
-        elif pload.name == "best_weights.pth":
-            # outdir = str(pload.parent)
-            # TODO: double check (this is needed if best_weights.pth gets produced under checkpoints/)
-            outdir = str(pload.parent.parent)
         else:
-            # the checkpoint is likely from a DDP run and we need to step up one dir less
+            # the checkpoint is likely not from a Ray Train run and we need to step up one dir less
             outdir = str(pload.parent.parent)
     if not (outdir is None):
         assert os.path.isfile("{}/model_kwargs.pkl".format(outdir))
