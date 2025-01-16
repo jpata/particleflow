@@ -781,7 +781,7 @@ def run(rank, world_size, config, outdir, logfile):
         checkpoint = torch.load(f"{checkpoint_dir}/best_weights.pth", map_location=torch.device(rank))
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
-    if not config["finetuning"]:
+    if not config["finetune"]:
         if not (config["load"] is None):
             testdir_name = "_" + Path(config["load"]).stem
         else:
