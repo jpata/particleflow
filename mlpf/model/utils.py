@@ -257,14 +257,14 @@ def print_optimizer_stats(optimizer, stage):
                     print(f"    {key}: {value}")
 
 
-def load_checkpoint(checkpoint, model, optimizer=None):
+def load_checkpoint(checkpoint, model, optimizer=None, strict=True):
     if optimizer:
         print_optimizer_stats(optimizer, "Before loading")
 
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        model.module.load_state_dict(checkpoint["model_state_dict"])
+        model.module.load_state_dict(checkpoint["model_state_dict"], strict=strict)
     else:
-        model.load_state_dict(checkpoint["model_state_dict"])
+        model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
 
     if optimizer:
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])

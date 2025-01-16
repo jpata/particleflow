@@ -86,17 +86,14 @@ def mlpf_loss(y, ypred, batch):
     nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
 
-
     ypred["momentum"] = ypred["momentum"] * msk_true_particle
     y["momentum"] = y["momentum"] * msk_true_particle
-
 
     # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
     ypred["cls_binary"] = ypred["cls_binary"].permute((0, 2, 1))
     ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
     ypred["ispu"] = ypred["ispu"].permute((0, 2, 1))
     ypred["ispu"] = torch.squeeze(ypred["ispu"], dim = 1)
-
 
     # binary loss for particle / no-particle classification
     # loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
@@ -105,11 +102,9 @@ def mlpf_loss(y, ypred, batch):
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_pid_classification[y["cls_id"] == 0] *= 0
-   
-    loss_pu = torch.nn.functional.binary_cross_entropy_with_logits(ypred["ispu"], y["ispu"], reduction="none")
 
-    loss_pu[y["cls_id"] == 0] *= 0
-    loss_pu[batch.mask == 0] *= 0
+    # can be either classification or regression depends on what we want
+    loss_pu = torch.nn.functional.binary_cross_entropy_with_logits(ypred["ispu"], y["ispu"], reduction="none")
 
     # compare particle momentum, only for cases where there was a true particle
     loss_regression_pt = torch.nn.functional.mse_loss(ypred["pt"], y["pt"], reduction="none")
@@ -123,6 +118,7 @@ def mlpf_loss(y, ypred, batch):
     loss_regression_sin_phi[y["cls_id"] == 0] *= 0
     loss_regression_cos_phi[y["cls_id"] == 0] *= 0
     loss_regression_energy[y["cls_id"] == 0] *= 0
+    loss_pu[y["cls_id"] == 0] *= 0
 
     # set the loss to 0 on padded elements in the batch
     loss_binary_classification[batch.mask == 0] *= 0
@@ -132,6 +128,7 @@ def mlpf_loss(y, ypred, batch):
     loss_regression_sin_phi[batch.mask == 0] *= 0
     loss_regression_cos_phi[batch.mask == 0] *= 0
     loss_regression_energy[batch.mask == 0] *= 0
+    loss_pu[batch.mask == 0] *= 0
 
     # average over all target particles
     loss["Regression_pt"] = loss_regression_pt.sum() / npart
@@ -305,27 +302,35 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet
     ).numpy()
     df = pandas.DataFrame(arr)
     df.to_parquet(f"{outdir}/batch{itrain}_epoch{epoch}.parquet")
-    if comet_experiment:
-        pred_pu = torch.nn.functional.sigmoid(torch.asarray(arr[:,84]))
-        targ_pu = arr[:,62]
-        plt.hist(pred_pu, bins=30, alpha=0.7, label='Predicted', range=(0,1), color='blue')
-        plt.hist(targ_pu, bins=30, alpha=0.7, label='Target', range=(0,1), color='orange')
-        plt.xlabel('Pileupiness')
-        plt.ylabel('Frequency')
-        plt.title(f'Predicted and Target PU (Epoch {epoch})')
-        plt.yscale('log')
-        plt.legend()
-        comet_experiment.log_figure(figure_name= f'PU Hist - Epoch {epoch} Batch {itrain}')
-        plt.close()
-
-        plt.scatter(pred_pu, targ_pu, alpha=0.5, color='blue')
-        plt.xlabel('Predicted PU')
-        plt.ylabel('Target PU')
-        plt.title(f'Scatter Plot of Predicted vs Target PU (Epoch {epoch})')
-        comet_experiment.log_figure(figure_name=f'Scatter PU - Epoch {epoch} Batch {itrain}')
-        plt.close()
+#    if comet_experiment:
 
     if tensorboard_writer:
+        putarget = ytarget_flat[ytarget_flat[:, 0] != 0, 7]
+        pupred = torch.squeeze(ypred_pu[ypred_binary_cls != 0], dim=1)
+        pupred = torch.nn.functional.sigmoid(pupred).float().numpy()
+
+        fig = plt.figure()
+        b = np.linspace(0, 1, 50)
+        plt.hist(pupred, bins=b, histtype="step", label='Predicted')
+        plt.hist(putarget, bins=b, histtype="step", label='Target')
+        plt.xlabel('Pileupiness')
+        plt.yscale('log')
+        plt.legend()
+        tensorboard_writer.add_figure(f"pu batch {itrain}", fig, global_step=epoch)
+
+        #for scatter plot, we need to keep same len for target and pred
+        putarget = ytarget_flat[(ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0), 7]
+        pupred = torch.squeeze(ypred_pu[(ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)], dim=1)
+        pupred = torch.nn.functional.sigmoid(pupred).float().numpy()
+
+        fig = plt.figure()
+        plt.scatter(pupred, putarget, alpha=0.5)
+        plt.xlim(-0.1, 1.1)
+        plt.ylim(-0.1, 1.1)
+        plt.xlabel('Predicted PU')
+        plt.ylabel('Target PU')
+        tensorboard_writer.add_figure(f"pu scatter plot batch {itrain}", fig, global_step=epoch)
+
         sig_prob = torch.softmax(ypred_binary, axis=-1)[:, 1].to(torch.float32)
         for xcls in np.unique(X[:, 0]):
             fig = plt.figure()
@@ -366,8 +371,6 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet
             pt_target = ytarget_flat[msk, 2]
             pt_pred = ypred_p4[msk, 0]
             b = np.linspace(-2, 2, 100)
-
-
             plt.hist2d(pt_target, pt_pred, bins=b, cmap="hot", norm=matplotlib.colors.LogNorm())
             plt.plot([-4, 4], [-4, 4], color="black", ls="--")
             plt.xlabel("log [pt_target/pt_elem]")
@@ -540,8 +543,9 @@ def train_and_valid(
             cm_id += sklearn.metrics.confusion_matrix(
                 ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
             )
-            # save the events of the first validation batch for quick checks
-            if (rank == 0 or rank == "cpu") and (itrain == 1 or itrain == 0 or itrain == 2):
+            # save the events of the first three validation batches for quick checks
+            # originally we only save one batch but might be useful to save more to check both batches with and without PU
+            if (rank == 0 or rank == "cpu") and (itrain <= 2):
                 validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet_experiment, epoch, outdir, itrain)
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
@@ -948,16 +952,33 @@ def run(rank, world_size, config, args, outdir, logfile):
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
         start_epoch = checkpoint["extra_state"]["epoch"] + 1
 
+        missing_keys, strict = [], True
         for k in model.state_dict().keys():
             shp0 = model.state_dict()[k].shape
-            shp1 = checkpoint["model_state_dict"][k].shape
+            try:
+                shp1 = checkpoint["model_state_dict"][k].shape
+            except KeyError as e:
+                missing_keys.append(k)
+                continue
             if shp0 != shp1:
                 raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
 
+        if len(missing_keys) > 0:
+            _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
+            if args.relaxed_load:
+                _logger.warning(f"Optimizer checkpoint will not be loaded", color="bold")
+                strict = False
+            else:
+                _logger.warning(f"Use option --relaxed-load if you insist to ignore the missing parameters")
+                raise KeyError
+
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
+        if strict:
+            model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
+        else:
+            model = load_checkpoint(checkpoint, model, None, strict)
 
-        model, optimizer = load_checkpoint(checkpoint, model, optimizer)
     else:  # instantiate a new model in the outdir created
         model_kwargs = {
             "input_dim": len(X_FEATURES[config["dataset"]]),
@@ -983,6 +1004,7 @@ def run(rank, world_size, config, args, outdir, logfile):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
     trainable_params, nontrainable_params, table = count_parameters(model)
+    print(table)
 
     if (rank == 0) or (rank == "cpu"):
         _logger.info(model)
@@ -1485,4 +1507,5 @@ def run_hpo(config, args):
     print(result_df)
     print(result_df.columns)
 
+    logging.info("Total time of Tuner.fit(): {}".format(end - start))
     logging.info("Best hyperparameters found according to {} were: {}".format(config["raytune"]["default_metric"], best_config))

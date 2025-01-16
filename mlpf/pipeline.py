@@ -42,6 +42,7 @@ parser.add_argument("--num-workers", type=int, default=None, help="number of pro
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
 parser.add_argument("--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume")
 parser.add_argument("--load", type=str, default=None, help="load checkpoint and start new training from epoch 1")
+parser.add_argument("--relaxed-load", action="store_true", default=None, help="load parameters from the checkpoint model with the same name as the existing model, ignoring any missing parameters")
 
 parser.add_argument("--train", action="store_true", default=None, help="initiates a training")
 parser.add_argument("--test", action="store_true", default=None, help="tests the model")
