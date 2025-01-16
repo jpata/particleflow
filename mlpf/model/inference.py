@@ -185,7 +185,6 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     plots_path = Path(f"{outpath}/plots{dir_name}/{sample}/")
     pred_path = Path(f"{outpath}/preds{dir_name}/{sample}/")
 
-    print(str(pred_path / "*.parquet"))
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
 
     plot_num_elements(X, cp_dir=plots_path)

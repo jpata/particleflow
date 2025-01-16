@@ -287,7 +287,7 @@ def configure_model_trainable(model, trainable, is_training):
         model.eval()
 
 
-def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet_experiment, epoch, outdir, itrain):
+def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir, itrain):
     X = batch.X[batch.mask].cpu()
     ytarget_flat = batch.ytarget[batch.mask].cpu()
     ypred_binary = ypred_raw[0][batch.mask].detach().cpu()
@@ -302,7 +302,6 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet
     ).numpy()
     df = pandas.DataFrame(arr)
     df.to_parquet(f"{outdir}/batch{itrain}_epoch{epoch}.parquet")
-#    if comet_experiment:
 
     if tensorboard_writer:
         putarget = ytarget_flat[ytarget_flat[:, 0] != 0, 7]
@@ -313,10 +312,10 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet
         b = np.linspace(0, 1, 50)
         plt.hist(pupred, bins=b, histtype="step", label='Predicted')
         plt.hist(putarget, bins=b, histtype="step", label='Target')
-        plt.xlabel('Pileupiness')
+        plt.xlabel('pileupiness')
         plt.yscale('log')
         plt.legend()
-        tensorboard_writer.add_figure(f"pu batch {itrain}", fig, global_step=epoch)
+        tensorboard_writer.add_figure(f"PU batch {itrain}", fig, global_step=epoch)
 
         #for scatter plot, we need to keep same len for target and pred
         putarget = ytarget_flat[(ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0), 7]
@@ -327,9 +326,9 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet
         plt.scatter(pupred, putarget, alpha=0.5)
         plt.xlim(-0.1, 1.1)
         plt.ylim(-0.1, 1.1)
-        plt.xlabel('Predicted PU')
-        plt.ylabel('Target PU')
-        tensorboard_writer.add_figure(f"pu scatter plot batch {itrain}", fig, global_step=epoch)
+        plt.xlabel('predicted PU')
+        plt.ylabel('target PU')
+        tensorboard_writer.add_figure(f"PU scatter plot batch {itrain}", fig, global_step=epoch)
 
         sig_prob = torch.softmax(ypred_binary, axis=-1)[:, 1].to(torch.float32)
         for xcls in np.unique(X[:, 0]):
@@ -546,7 +545,7 @@ def train_and_valid(
             # save the events of the first three validation batches for quick checks
             # originally we only save one batch but might be useful to save more to check both batches with and without PU
             if (rank == 0 or rank == "cpu") and (itrain <= 2):
-                validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, comet_experiment, epoch, outdir, itrain)
+                validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir, itrain)
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             if is_train:
                 loss = mlpf_loss(ytarget, ypred, batch)
