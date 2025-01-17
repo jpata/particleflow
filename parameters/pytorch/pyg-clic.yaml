@@ -1,5 +1,7 @@
-backend: pytorch
-
+train: yes
+test: yes
+make_plots: yes
+comet: yes
 save_attention: yes
 dataset: clic
 sort_data: no
@@ -7,7 +9,8 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-num_epochs: 30
+finetune:
+num_epochs: 10
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
@@ -51,13 +54,13 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 6
-    dropout_ff: 0.1
+    num_convs: 3
+    dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
-    dropout_conv_reg_mha: 0.1
-    dropout_conv_reg_ff: 0.1
-    activation: "gelu"
+    dropout_conv_reg_mha: 0.0
+    dropout_conv_reg_ff: 0.0
+    activation: "relu"
     head_dim: 32
     num_heads: 32
     attention_type: math
@@ -107,11 +110,14 @@ train_dataset:
       batch_size: 1
       samples:
         clic_edm_qq_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         clic_edm_ttbar_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         clic_edm_ww_fullhad_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
   clic:
@@ -119,16 +125,22 @@ valid_dataset:
       batch_size: 1
       samples:
         clic_edm_qq_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         clic_edm_ttbar_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         clic_edm_ww_fullhad_pf:
-          version: 2.3.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
   clic_edm_qq_pf:
-    version: 2.3.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
   clic_edm_ttbar_pf:
-    version: 2.3.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
   clic_edm_ww_fullhad_pf:
-    version: 2.3.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]

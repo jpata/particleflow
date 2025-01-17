@@ -20,7 +20,7 @@ def write_script(infiles, outpath):
     for inf in infiles:
         s += [
             "singularity exec -B /local /home/software/singularity/pytorch.simg:2024-08-18 python3 "
-            + f"scripts/clic/postprocessing.py --input {inf} --outpath {outpath}"
+            + f"mlpf/data/clic/postprocessing.py --input {inf} --outpath {outpath}"
         ]
     ret = "\n".join(s)
 

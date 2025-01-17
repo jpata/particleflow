@@ -23,7 +23,7 @@ ELEM_TYPES_NONZERO = {
 }
 
 CLASS_LABELS = {
-    "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],
+    "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],  # we never actually predict 15/taus (not there in targets)
     "clic": [0, 211, 130, 22, 11, 13],
     "clic_hits": [0, 211, 130, 22, 11, 13],
 }
@@ -215,7 +215,7 @@ def unpack_predictions(preds):
     return ret
 
 
-def save_HPs(args, mlpf, model_kwargs, outdir):
+def save_HPs(config, mlpf, model_kwargs, outdir):
     """Simple function to store the model parameters and training hyperparameters."""
 
     with open(f"{outdir}/model_kwargs.pkl", "wb") as f:  # dump model architecture
@@ -224,7 +224,9 @@ def save_HPs(args, mlpf, model_kwargs, outdir):
     num_mlpf_parameters = sum(p.numel() for p in mlpf.parameters() if p.requires_grad)
 
     with open(f"{outdir}/hyperparameters.json", "w") as fp:  # dump hyperparameters
-        json.dump({**{"Num of mlpf parameters": num_mlpf_parameters}, **vars(args)}, fp)
+        outdict = {"num_mlpf_params": num_mlpf_parameters}
+        outdict.update(config)
+        json.dump(outdict, fp)
 
 
 def get_model_state_dict(model):

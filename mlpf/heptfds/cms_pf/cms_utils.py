@@ -114,10 +114,28 @@ Y_FEATURES = [
     "ispu",
     "generatorStatus",
     "simulatorStatus",
-    "gp_to_track",
-    "gp_to_cluster",
+    "cp_to_track",
+    "cp_to_cluster",
     "jet_idx",
 ]
+
+# split each dataset into equal parts for faster building
+NUM_SPLITS = 10
+
+
+def map_pdgid_to_candid(pdgid, charge):
+    if pdgid == 0:
+        return 0
+
+    if pdgid in [22, 11, 13]:
+        return pdgid
+
+    # charged hadron
+    if abs(charge) > 0:
+        return 211
+
+    # neutral hadron
+    return 130
 
 
 def prepare_data_cms(fn):
@@ -151,7 +169,8 @@ def prepare_data_cms(fn):
         Xelem["sin_phi"] = np.sin(Xelem["phi"])
         Xelem["cos_phi"] = np.cos(Xelem["phi"])
         Xelem["typ_idx"] = np.array([ELEM_LABELS_CMS.index(int(i)) for i in Xelem["typ"]], dtype=np.float32)
-        ytarget["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ytarget["pid"]], dtype=np.float32)
+        pids_remapped = [map_pdgid_to_candid(abs(int(pid)), q) for (pid, q) in zip(ytarget["pid"], ytarget["charge"])]
+        ytarget["typ_idx"] = np.array([CLASS_LABELS_CMS.index(pid) for pid in pids_remapped], dtype=np.float32)
         ycand["typ_idx"] = np.array([CLASS_LABELS_CMS.index(abs(int(i))) for i in ycand["pid"]], dtype=np.float32)
 
         Xelem_flat = ak.to_numpy(
@@ -187,18 +206,35 @@ def prepare_data_cms(fn):
     return Xs, ytargets, ycands, genmets, genjets, targetjets
 
 
-def split_sample(path, test_frac=0.9):
+def split_list(lst, x):
+    # Calculate the size of each sublist (except potentially the last)
+    sublist_size = len(lst) // x
+
+    # Create x-1 sublists of equal size
+    result = [lst[i * sublist_size : (i + 1) * sublist_size] for i in range(x - 1)]
+
+    # Add the remaining elements to the last sublist
+    result.append(lst[(x - 1) * sublist_size :])
+
+    return result
+
+
+def split_sample(path, builder_config, num_splits=NUM_SPLITS, train_frac=0.9):
     files = sorted(list(path.glob("*.pkl*")))
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
-    idx_split = int(test_frac * len(files))
-    files_train = files[:idx_split]
-    files_test = files[idx_split:]
+    idx_test = int(train_frac * len(files))
+    files_train = files[:idx_test]
+    files_test = files[idx_test:]
     assert len(files_train) > 0
     assert len(files_test) > 0
+
+    split_index = int(builder_config.name) - 1
+    files_train_split = split_list(files_train, num_splits)
+    files_test_split = split_list(files_test, num_splits)
     return {
-        "train": generate_examples(files_train),
-        "test": generate_examples(files_test),
+        "train": generate_examples(files_train_split[split_index]),
+        "test": generate_examples(files_test_split[split_index]),
     }
 
 

@@ -98,7 +98,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
-        _logger.info("using attention_type={}".format(attention_type))
+        _logger.info("layer {} using attention_type={}".format(self.name, attention_type))
         # params for torch sdp_kernel
         if self.enable_ctx_manager:
             self.attn_params = {

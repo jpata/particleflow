@@ -9,8 +9,29 @@ on:
   workflow_dispatch:
 
 jobs:
+  remove-unneeded-software:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - run: |
+          sudo rm -rf \
+            "$AGENT_TOOLSDIRECTORY" \
+            /opt/google/chrome \
+            /opt/microsoft/msedge \
+            /opt/microsoft/powershell \
+            /opt/pipx \
+            /usr/lib/mono \
+            /usr/local/julia* \
+            /usr/local/lib/android \
+            /usr/local/lib/node_modules \
+            /usr/local/share/chromium \
+            /usr/local/share/powershell \
+            /usr/share/dotnet \
+            /usr/share/swift
+
   deps-torch:
     runs-on: ubuntu-22.04
+    needs: [remove-unneeded-software]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4

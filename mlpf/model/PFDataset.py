@@ -1,12 +1,16 @@
+import sys
 from types import SimpleNamespace
 
+import numpy as np
 import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
 
 from mlpf.model.logger import _logger
 
-import numpy as np
+
+# https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
+SHARING_STRATEGY = "file_descriptor"
 
 
 class TFDSDataSource:
@@ -24,6 +28,7 @@ class TFDSDataSource:
             item = [item]
         records = self.ds.data_source.__getitems__(item)
         ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
+
         if len(item) == 1:
             ret = ret[0]
 
@@ -77,13 +82,16 @@ class TFDSDataSource:
             ret["X"][:, 1][msk_ho] = np.sqrt(e**2 - (np.tanh(eta) * e) ** 2)
 
         # transform pt -> log(pt / elem pt), same for energy
-        target_pt = np.log(ret["ytarget"][:, 2] / ret["X"][:, 1])
+        # where target does not exist, set to 0
+        with np.errstate(divide="ignore"):
+            target_pt = np.log(ret["ytarget"][:, 2] / ret["X"][:, 1])
         target_pt[np.isnan(target_pt)] = 0
         target_pt[np.isinf(target_pt)] = 0
         ret["ytarget_pt_orig"] = ret["ytarget"][:, 2].copy()
         ret["ytarget"][:, 2] = target_pt
 
-        target_e = np.log(ret["ytarget"][:, 6] / ret["X"][:, 5])
+        with np.errstate(divide="ignore"):
+            target_e = np.log(ret["ytarget"][:, 6] / ret["X"][:, 5])
         target_e[ret["ytarget"][:, 0] == 0] = 0
         target_e[np.isnan(target_e)] = 0
         target_e[np.isinf(target_e)] = 0
@@ -112,8 +120,13 @@ class PFDataset:
         if split == "valid":
             split = "test"
 
-        builder = tfds.builder(name, data_dir=data_dir)
-
+        try:
+            builder = tfds.builder(name, data_dir=data_dir)
+        except Exception:
+            _logger.error(
+                "Could not find dataset {} in {}, please check that you have downloaded the correct version of the dataset".format(name, data_dir)
+            )
+            sys.exit(1)
         self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort)
 
         if num_samples and num_samples < len(self.ds):
@@ -212,6 +225,10 @@ class InterleavedIterator(object):
             return len_
 
 
+def set_worker_sharing_strategy(worker_id: int) -> None:
+    torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
+
+
 def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
     loaders = {}
     for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
@@ -220,19 +237,26 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
             dataset = []
             for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
                 version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
+                split_configs = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["splits"]
+                print("split_configs", split_configs)
 
-                ds = PFDataset(
-                    config["data_dir"],
-                    f"{sample}:{version}",
-                    split,
-                    num_samples=config[f"n{split}"],
-                    sort=config["sort_data"],
-                ).ds
+                nevents = None
+                if not (config[f"n{split}"] is None):
+                    nevents = config[f"n{split}"] // len(split_configs)
 
-                if (rank == 0) or (rank == "cpu"):
-                    _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")
+                for split_config in split_configs:
+                    ds = PFDataset(
+                        config["data_dir"],
+                        f"{sample}/{split_config}:{version}",
+                        split,
+                        num_samples=nevents,
+                        sort=config["sort_data"],
+                    ).ds
 
-                dataset.append(ds)
+                    if (rank == 0) or (rank == "cpu"):
+                        _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")
+
+                    dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
 
             shuffle = split == "train"
@@ -256,9 +280,10 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                 # pin_memory=use_cuda,
                 # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
+                worker_init_fn=set_worker_sharing_strategy,
             )
 
             loaders[split].append(loader)
 
-        loaders[split] = InterleavedIterator(loaders[split])  # will interleave maximum of three dataloaders
+        loaders[split] = InterleavedIterator(loaders[split])
     return loaders

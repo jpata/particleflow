@@ -1,5 +1,7 @@
-backend: pytorch
-
+train: yes
+test: yes
+make_plots: yes
+comet: yes
 save_attention: no
 dataset: cms
 sort_data: yes
@@ -7,7 +9,8 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-num_epochs: 100
+finetune:
+num_epochs: 5
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
@@ -56,15 +59,15 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 4
+    num_convs: 3
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "gelu"
-    head_dim: 32
-    num_heads: 32
+    activation: "relu"
+    head_dim: 16
+    num_heads: 16
     attention_type: flash
     use_pre_layernorm: True
 
@@ -110,16 +113,26 @@ train_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 2.4.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd:
-          version: 2.4.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
+        cms_pf_ztt:
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
     physical_nopu:
       batch_size: 8
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.4.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd_nopu:
-          version: 2.4.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
+        cms_pf_ztt_nopu:
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
   cms:
@@ -127,23 +140,43 @@ valid_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 2.4.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd:
-          version: 2.4.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
+        cms_pf_ztt:
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
     physical_nopu:
       batch_size: 8
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.4.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd_nopu:
-          version: 2.4.0
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
+        cms_pf_ztt_nopu:
+          version: 2.5.0
+          splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
   cms_pf_ttbar:
-    version: 2.4.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_qcd:
-    version: 2.4.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
+  cms_pf_ztt:
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ttbar_nopu:
-    version: 2.4.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_qcd_nopu:
-    version: 2.4.0
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]
+  cms_pf_ztt_nopu:
+    version: 2.5.0
+    splits: [1,2,3,4,5,6,7,8,9,10]

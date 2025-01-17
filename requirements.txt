@@ -1,4 +1,3 @@
-apache-beam
 array-record
 autopep8
 awkward
@@ -12,9 +11,9 @@ jupyter-book
 keras
 keras-tuner
 matplotlib
+mlcroissant
 mplhep
 networkx
-nevergrad
 notebook
 numba
 numpy

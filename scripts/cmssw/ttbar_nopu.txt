@@ -1,0 +1,9 @@
+/store/relval/CMSSW_14_1_0/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/0c0bd756-c218-4400-a3d2-35c811ba6006.root
+/store/relval/CMSSW_14_1_0/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/57164fec-b73e-486c-b49d-17e33406b276.root
+/store/relval/CMSSW_14_1_0/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/834295e5-9cae-4a48-b001-94927405573e.root
+/store/relval/CMSSW_14_1_0/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/94781e16-2b2e-4104-81e1-c6304c8ce57e.root
+/store/relval/CMSSW_14_1_0/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/bc1fed68-5402-4db4-8e7b-43da703bd5c3.root
+/store/relval/CMSSW_14_1_0/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/cb5d91b7-e45d-4118-9dc2-79cc8fdea97f.root
+/store/relval/CMSSW_14_1_0/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/d12256b4-ac8a-45b1-ab29-2e7d7c934bb3.root
+/store/relval/CMSSW_14_1_0/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/eec38c20-57a6-47bd-a6fb-b0fe7d62d55b.root
+/store/relval/CMSSW_14_1_0/RelValTTbar_14TeV/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/f2874643-11e5-4bf4-be98-6274da47a6ba.root

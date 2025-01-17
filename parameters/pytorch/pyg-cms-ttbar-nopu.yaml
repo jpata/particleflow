@@ -1,5 +1,7 @@
-backend: pytorch
-
+train: yes
+test: yes
+make_plots: yes
+comet: no
 save_attention: no
 dataset: cms
 sort_data: yes
@@ -7,6 +9,7 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
+finetune:
 num_epochs: 100
 patience: 20
 lr: 0.0001
@@ -56,13 +59,13 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 4
+    num_convs: 6
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "gelu"
+    activation: "relu"
     head_dim: 32
     num_heads: 32
     attention_type: flash
@@ -107,19 +110,25 @@ raytune:
 train_dataset:
   cms:
     physical_nopu:
-      batch_size: 8
+      batch_size: 1
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.4.0
+          version: 2.5.0
+          splits: [1]
 
 valid_dataset:
   cms:
     physical_nopu:
-      batch_size: 8
+      batch_size: 1
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.4.0
+          version: 2.5.0
+          splits: [1]
 
 test_dataset:
   cms_pf_ttbar_nopu:
-    version: 2.4.0
+    version: 2.5.0
+    splits: [1]
+  cms_pf_qcd_nopu:
+    version: 2.5.0
+    splits: [1]
