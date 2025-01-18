@@ -55,7 +55,7 @@ def mlpf_loss(y, ypred, batch):
     loss_pid_classification[y["cls_id"] == 0] *= 0
 
     # compare particle "PU-ness", only for cases where there was a true particle
-    loss_pu = torch.squeeze(torch.nn.functional.binary_cross_entropy_with_logits(ypred["ispu"], y["ispu"], reduction="none"), dim = 1)
+    loss_pu = torch.squeeze(torch.nn.functional.binary_cross_entropy_with_logits(ypred["ispu"], y["ispu"], reduction="none"), dim=1)
     loss_pu[y["cls_id"] == 0] *= 0
 
     # compare particle momentum, only for cases where there was a true particle
