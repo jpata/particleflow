@@ -45,7 +45,7 @@ from mlpf.model.plots import validation_plots
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
     """Set only the given layers as trainable in the model"""
-    
+
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         raise Exception("configure trainability before distributing the model")
     if is_training:
@@ -65,6 +65,7 @@ def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_
                     param.requires_grad = True
     else:
         model.eval()
+
 
 def model_step(batch, model, loss_fn):
     ypred_raw = model(batch.X, batch.mask)
