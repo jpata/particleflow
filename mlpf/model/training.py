@@ -703,6 +703,7 @@ def run(rank, world_size, config, outdir, logfile):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
     trainable_params, nontrainable_params, table = count_parameters(model)
+    print(table)
 
     if (rank == 0) or (rank == "cpu"):
         _logger.info(model)

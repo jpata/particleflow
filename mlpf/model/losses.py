@@ -44,6 +44,7 @@ def mlpf_loss(y, ypred, batch):
     # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
     ypred["cls_binary"] = ypred["cls_binary"].permute((0, 2, 1))
     ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
+    ypred["ispu"] = ypred["ispu"].permute((0, 2, 1))
 
     # binary loss for particle / no-particle classification
     # loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
@@ -52,6 +53,10 @@ def mlpf_loss(y, ypred, batch):
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
     loss_pid_classification[y["cls_id"] == 0] *= 0
+
+    # compare particle "PU-ness", only for cases where there was a true particle
+    loss_pu = torch.nn.functional.binary_cross_entropy_with_logits(torch.squeeze(ypred["ispu"], dim=1), y["ispu"], reduction="none")
+    loss_pu[y["cls_id"] == 0] *= 0
 
     # compare particle momentum, only for cases where there was a true particle
     loss_regression_pt = torch.nn.functional.mse_loss(ypred["pt"], y["pt"], reduction="none")
@@ -69,6 +74,7 @@ def mlpf_loss(y, ypred, batch):
     # set the loss to 0 on padded elements in the batch
     loss_binary_classification[batch.mask == 0] *= 0
     loss_pid_classification[batch.mask == 0] *= 0
+    loss_pu[batch.mask == 0] *= 0
     loss_regression_pt[batch.mask == 0] *= 0
     loss_regression_eta[batch.mask == 0] *= 0
     loss_regression_sin_phi[batch.mask == 0] *= 0
@@ -90,6 +96,7 @@ def mlpf_loss(y, ypred, batch):
     # average over all elements that were not padded
     loss["Classification_binary"] = loss_binary_classification.sum() / nelem
     loss["Classification"] = loss_pid_classification.sum() / nelem
+    loss["ispu"] = loss_pu.sum() / nelem
 
     # compute predicted pt from model output
     pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], axis=-1) * msk_pred_particle
@@ -117,6 +124,7 @@ def mlpf_loss(y, ypred, batch):
     loss["Total"] = (
         loss["Classification_binary"]
         + loss["Classification"]
+        + loss["ispu"]
         + loss["Regression_pt"]
         + loss["Regression_eta"]
         + loss["Regression_sin_phi"]
