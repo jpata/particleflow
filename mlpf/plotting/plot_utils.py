@@ -672,7 +672,7 @@ def plot_jet_ratio(
         bins=bins,
         histtype="step",
         lw=2,
-        label="MLPF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
+        label="MLPF, no PU $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
     plt.xlabel(labels["reco_gen_jet_ratio"])
