@@ -314,7 +314,7 @@ def load_eval_data(path, max_files=None):
         yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
         yvals[typ + "_pz"] = yvals[typ + "_pt"] * np.sinh(yvals[typ + "_eta"])
 
-    for typ in ["gen", "cand", "pred", "target"]:
+    for typ in ["gen", "cand", "pred", "target", "pred_nopu"]:
         # Get the jet vectors
         jetvec = vector.awk(data["jets"][typ])
         jetvec = awkward.Array(jetvec, with_name="Momentum4D")
@@ -333,8 +333,7 @@ def load_eval_data(path, max_files=None):
 def compute_jet_ratio(data, yvals):
     ret = {}
     # flatten across event dimension
-
-    for match1, match2 in [("gen", "pred"), ("gen", "cand"), ("gen", "target"), ("target", "pred"), ("target", "cand")]:
+    for match1, match2 in [("gen", "pred"), ("gen", "pred_nopu"), ("gen", "cand"), ("gen", "target"), ("target", "pred"), ("target", "cand")]:
         for val in ["pt", "eta"]:
             ret[f"jet_{match1}_to_{match2}_{match1}{val}"] = awkward.to_numpy(
                 awkward.flatten(
@@ -656,6 +655,20 @@ def plot_jet_ratio(
     }
     plt.hist(
         yvals["jet_ratio_gen_to_pred_pt"],
+        bins=bins,
+        histtype="step",
+        lw=2,
+        label="MLPF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
+    )
+
+    p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
+    ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = {
+        "med": p[0],
+        "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"]) / awkward.count(yvals["jets_gen_pt"]),
+    }
+    plt.hist(
+        yvals["jet_ratio_gen_to_pred_nopu_pt"],
         bins=bins,
         histtype="step",
         lw=2,

@@ -99,8 +99,10 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
     # now cluster jets
-    for typ, ydata in zip(["cand", "target", "pred"], [awkvals["cand"], awkvals["target"], awkvals["pred"]]):
+    for typ, ydata in zip(["cand", "target", "pred", "pred_nopu"], [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]]):
         msk = ydata["cls_id"] != 0
+        if typ == "pred_nopu":
+            msk = msk & (ydata["ispu"][:, :, 0] < 0.5)
         vec = vector.awk(
             awkward.zip(
                 {
@@ -117,6 +119,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     matched_jets = awkward.Array(
         {
+            "gen_to_pred_nopu": match_two_jet_collections(jets_coll, "gen", "pred_nopu", jet_match_dr),
             "gen_to_pred": match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr),
             "gen_to_cand": match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr),
             "gen_to_target": match_two_jet_collections(jets_coll, "gen", "target", jet_match_dr),
