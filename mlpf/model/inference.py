@@ -26,7 +26,7 @@ from plotting.plot_utils import (
     plot_particles,
     plot_particle_ratio,
     plot_particle_response,
-    # plot_elements,
+    plot_pu_fraction,
 )
 
 from .logger import _logger
@@ -232,5 +232,6 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
     plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
     plot_particle_ratio(yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
     plot_particle_response(X, yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_pu_fraction(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
 
     return ret_dict

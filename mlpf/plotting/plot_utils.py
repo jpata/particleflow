@@ -11,6 +11,7 @@ import sklearn
 import sklearn.metrics
 import tqdm
 import vector
+import torch
 
 SAMPLE_LABEL_CMS = {
     "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
@@ -2058,6 +2059,29 @@ def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experi
     plt.ylim(bottom=0)
     save_img(
         "mom_response_med_iqr.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
+
+
+def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, comet_experiment=None):
+    plt.figure()
+    ax = plt.axes()
+    bins = np.linspace(0, 1, 100)
+    target_ispu = awkward.flatten(yvals["target_ispu"])
+    pred_ispu = torch.sigmoid(torch.Tensor(awkward.flatten(yvals["pred_ispu"][:, :, 0]))).numpy()
+    plt.hist(target_ispu, bins=bins, label="target", histtype="step")
+    plt.hist(pred_ispu, bins=bins, label="MLPF", histtype="step")
+    plt.legend(loc=1, fontsize=16)
+    plt.xlabel("PU fraction")
+    plt.yscale("log")
+    if dataset:
+        EXPERIMENT_LABELS[dataset](ax)
+    if sample:
+        sample_label(ax, sample)
+    save_img(
+        "pu_frac.png",
         epoch,
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
