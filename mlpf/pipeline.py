@@ -39,7 +39,6 @@ parser.add_argument(
     default=None,
     help="load parameters from the checkpoint model with the same name as the existing model, ignoring any missing parameters",
 )
-
 parser.add_argument("--train", action="store_true", default=None, help="initiates a training")
 parser.add_argument("--test", action="store_true", default=None, help="tests the model")
 parser.add_argument("--num-epochs", type=int, default=None, help="number of training epochs")

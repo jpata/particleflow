@@ -26,7 +26,7 @@ from plotting.plot_utils import (
     plot_particles,
     plot_particle_ratio,
     plot_particle_response,
-    # plot_elements,
+    plot_pu_fraction,
 )
 
 from .logger import _logger
@@ -99,8 +99,10 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
     # now cluster jets
-    for typ, ydata in zip(["cand", "target", "pred"], [awkvals["cand"], awkvals["target"], awkvals["pred"]]):
+    for typ, ydata in zip(["cand", "target", "pred", "pred_nopu"], [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]]):
         msk = ydata["cls_id"] != 0
+        if typ == "pred_nopu":
+            msk = msk & (ydata["ispu"][:, :, 0] < 0.5)
         vec = vector.awk(
             awkward.zip(
                 {
@@ -117,6 +119,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     matched_jets = awkward.Array(
         {
+            "gen_to_pred_nopu": match_two_jet_collections(jets_coll, "gen", "pred_nopu", jet_match_dr),
             "gen_to_pred": match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr),
             "gen_to_cand": match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr),
             "gen_to_target": match_two_jet_collections(jets_coll, "gen", "target", jet_match_dr),
@@ -232,5 +235,6 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
     plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
     plot_particle_ratio(yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
     plot_particle_response(X, yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_pu_fraction(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
 
     return ret_dict

@@ -11,6 +11,7 @@ import sklearn
 import sklearn.metrics
 import tqdm
 import vector
+import torch
 
 SAMPLE_LABEL_CMS = {
     "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
@@ -313,7 +314,7 @@ def load_eval_data(path, max_files=None):
         yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
         yvals[typ + "_pz"] = yvals[typ + "_pt"] * np.sinh(yvals[typ + "_eta"])
 
-    for typ in ["gen", "cand", "pred", "target"]:
+    for typ in ["gen", "cand", "pred", "target", "pred_nopu"]:
         # Get the jet vectors
         jetvec = vector.awk(data["jets"][typ])
         jetvec = awkward.Array(jetvec, with_name="Momentum4D")
@@ -332,8 +333,7 @@ def load_eval_data(path, max_files=None):
 def compute_jet_ratio(data, yvals):
     ret = {}
     # flatten across event dimension
-
-    for match1, match2 in [("gen", "pred"), ("gen", "cand"), ("gen", "target"), ("target", "pred"), ("target", "cand")]:
+    for match1, match2 in [("gen", "pred"), ("gen", "pred_nopu"), ("gen", "cand"), ("gen", "target"), ("target", "pred"), ("target", "cand")]:
         for val in ["pt", "eta"]:
             ret[f"jet_{match1}_to_{match2}_{match1}{val}"] = awkward.to_numpy(
                 awkward.flatten(
@@ -659,6 +659,20 @@ def plot_jet_ratio(
         histtype="step",
         lw=2,
         label="MLPF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
+    )
+
+    p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
+    ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = {
+        "med": p[0],
+        "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"]) / awkward.count(yvals["jets_gen_pt"]),
+    }
+    plt.hist(
+        yvals["jet_ratio_gen_to_pred_nopu_pt"],
+        bins=bins,
+        histtype="step",
+        lw=2,
+        label="MLPF, no PU $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
     plt.xlabel(labels["reco_gen_jet_ratio"])
@@ -2058,6 +2072,29 @@ def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experi
     plt.ylim(bottom=0)
     save_img(
         "mom_response_med_iqr.png",
+        epoch,
+        cp_dir=cp_dir,
+        comet_experiment=comet_experiment,
+    )
+
+
+def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, comet_experiment=None):
+    plt.figure()
+    ax = plt.axes()
+    bins = np.linspace(0, 1, 100)
+    target_ispu = awkward.flatten(yvals["target_ispu"])
+    pred_ispu = torch.sigmoid(torch.Tensor(awkward.flatten(yvals["pred_ispu"][:, :, 0]))).numpy()
+    plt.hist(target_ispu, bins=bins, label="target", histtype="step")
+    plt.hist(pred_ispu, bins=bins, label="MLPF", histtype="step")
+    plt.legend(loc=1, fontsize=16)
+    plt.xlabel("PU fraction")
+    plt.yscale("log")
+    if dataset:
+        EXPERIMENT_LABELS[dataset](ax)
+    if sample:
+        sample_label(ax, sample)
+    save_img(
+        "pu_frac.png",
         epoch,
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
