@@ -101,8 +101,10 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     # now cluster jets
     for typ, ydata in zip(["cand", "target", "pred", "pred_nopu"], [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]]):
         msk = ydata["cls_id"] != 0
+        # placeholder cut on the PU frac prediction
         if typ == "pred_nopu":
-            msk = msk & (ydata["ispu"][:, :, 0] < 0.5)
+            msk1 = ydata["ispu"] < 0.5
+            msk = msk & msk1
         vec = vector.awk(
             awkward.zip(
                 {
