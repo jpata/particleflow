@@ -67,8 +67,9 @@ def log_open_files_to_tensorboard(tensorboard_writer, step):
 
             if "soft_limit_usage_percent" in metrics:
                 tensorboard_writer.add_scalar("system/soft_limit_usage_percent", metrics["soft_limit_usage_percent"], step)
-    except Exception as e:
+    except Exception:
         _logger.error("Error monitoring open files, this can happen in singularity on lxplus")
+
 
 def log_step_to_tensorboard(batch, loss_accum, lr_schedule, tensorboard_writer, step):
     # get the number of elements, excluding padded elements
