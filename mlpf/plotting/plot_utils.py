@@ -293,7 +293,7 @@ def load_eval_data(path, max_files=None):
     if max_files is not None:
         filelist = filelist[:max_files]
 
-    for fi in tqdm.tqdm(filelist):
+    for fi in tqdm.tqdm(filelist, desc="Loading eval data"):
         dd = awkward.from_parquet(fi)
         yvals.append(dd)
         filenames.append(fi)

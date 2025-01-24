@@ -404,7 +404,7 @@ def train_all_epochs(
             comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), epoch=epoch)
             comet_experiment.log_epoch_end(epoch)
 
-        # Handle checkpointing and early stopping on rank 0
+        # Handle checkpointing and logging on rank 0
         if (rank == 0) or (rank == "cpu"):
             # Log learning rate
             tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
@@ -465,10 +465,12 @@ def train_all_epochs(
             tensorboard_writer_train.flush()
             tensorboard_writer_valid.flush()
 
-            # evaluate the model at this epoch on test datasets, make plots, track metrics
-            testdir_name = f"_epoch_{epoch}"
+        # evaluate the model at this epoch on test datasets, make plots, track metrics
+        testdir_name = f"_epoch_{epoch}"
+        for sample in config["enabled_test_datasets"]:
+            run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+        if (rank == 0) or (rank == "cpu"):  # plot only on rank 0
             for sample in config["enabled_test_datasets"]:
-                run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
                 plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
 
                 # track the following jet metrics in tensorboard
