@@ -153,7 +153,7 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(loader)
     else:
-        iterator = tqdm.tqdm(enumerate(loader), total=len(loader))
+        iterator = tqdm.tqdm(enumerate(loader), total=len(loader), desc=f"Running predictions on sample {sample} on rank={rank}")
 
     ti = time.time()
     for i, batch in iterator:
