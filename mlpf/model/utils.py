@@ -197,8 +197,6 @@ def unpack_predictions(preds):
     # when a particle was predicted, get the particle ID
     ret["cls_id"][ret["cls_id"] == 1] = torch.argmax(ret["cls_id_onehot"], axis=-1)[ret["cls_id"] == 1]
 
-    ret["ispu"] = torch.sigmoid(ret["ispu"][:, :, 0])
-
     # get the predicted particle ID
     # ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
 

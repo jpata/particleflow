@@ -55,6 +55,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     # transform log (E/elemE) -> E
     ypred[2][..., 4] = torch.exp(ypred[2][..., 4]) * batch.X[..., 5]
     ypred[2][..., 4][pred_cls == 0] = 0
+    ypred["ispu"] = torch.sigmoid(ypred["ispu"][:, :, 0])
 
     batch.ytarget[..., 2] = batch.ytarget_pt_orig
     batch.ytarget[..., 6] = batch.ytarget_e_orig
