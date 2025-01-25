@@ -1,6 +1,7 @@
+import random
+
 import awkward as ak
 import numpy as np
-import random
 
 NUM_SPLITS = 10
 
@@ -120,7 +121,12 @@ def split_sample_several(paths, builder_config, num_splits=NUM_SPLITS, test_frac
 
 
 def prepare_data_clic(fn):
-    ret = ak.from_parquet(fn)
+    try:
+        ret = ak.from_parquet(fn)
+    except Exception:
+        print(f"file {fn} seems to be corrupt. will skip it.")
+        return None
+
     X_track = ret["X_track"]
     X_cluster = ret["X_cluster"]
 
@@ -207,7 +213,12 @@ def prepare_data_clic(fn):
 
 def generate_examples(files):
     for fi in files:
-        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_clic(fi)
+        out = prepare_data_clic(fi)
+        if out is None:
+            continue
+        else:
+            Xs, ytargets, ycands, genmets, genjets, targetjets = out
+
         for iev in range(len(Xs)):
             gm = genmets[iev][0]
             gj = genjets[iev]
