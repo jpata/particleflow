@@ -63,3 +63,19 @@ The following datasets are available to reproduce the studies. They include full
   - paper: https://doi.org/10.1140/epjc/s10052-021-09158-w
   - code: https://doi.org/10.5281/zenodo.4559587
   - dataset: https://doi.org/10.5281/zenodo.4559324
+
+# Citations and reuse
+
+You are welcome to reuse the code in your work in accordance with the [license](https://github.com/jpata/particleflow/blob/main/LICENSE).
+
+For academic work, please consider citing the following papers:
+- https://doi.org/10.1140/epjc/s10052-021-09158-w
+- https://doi.org/10.1038/s42005-024-01599-5
+- http://dx.doi.org/10.1088/1742-6596/2438/1/012100
+- http://cds.cern.ch/record/2842375
+
+If you use the code in a significant way for research purposes, please consider citing the tagged version that you used:
+- Joosep Pata, Eric Wulff, Farouk Mokhtar, Javier Duarte, Aadi Tepper, Ka Wa Ho, & Lars Sørlie. (2025). jpata/particleflow: v2.2.0 (v2.2.0). Zenodo. https://doi.org/10.5281/zenodo.14650991
+
+If you use the datasets prepared by the MLPF team for academic work, please cite the appropriate dataset via the zenodo links (see above).
+At the moment, we are unable to release work-in-progress datasets before the corresponding academic publication is out.
