@@ -25,7 +25,8 @@ from plotting.plot_utils import (
     plot_num_elements,
     plot_particles,
     plot_particle_ratio,
-    # plot_elements,
+    plot_particle_response,
+    plot_pu_fraction,
 )
 
 from .logger import _logger
@@ -98,8 +99,10 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
     # now cluster jets
-    for typ, ydata in zip(["cand", "target", "pred"], [awkvals["cand"], awkvals["target"], awkvals["pred"]]):
+    for typ, ydata in zip(["cand", "target", "pred", "pred_nopu"], [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]]):
         msk = ydata["cls_id"] != 0
+        if typ == "pred_nopu":
+            msk = msk & (ydata["ispu"][:, :, 0] < 0.5)
         vec = vector.awk(
             awkward.zip(
                 {
@@ -116,6 +119,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     matched_jets = awkward.Array(
         {
+            "gen_to_pred_nopu": match_two_jet_collections(jets_coll, "gen", "pred_nopu", jet_match_dr),
             "gen_to_pred": match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr),
             "gen_to_cand": match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr),
             "gen_to_target": match_two_jet_collections(jets_coll, "gen", "target", jet_match_dr),
@@ -149,18 +153,20 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(loader)
     else:
-        iterator = tqdm.tqdm(enumerate(loader), total=len(loader))
+        iterator = tqdm.tqdm(enumerate(loader), total=len(loader), desc=f"Running predictions on sample {sample} on rank={rank}")
 
     ti = time.time()
     for i, batch in iterator:
         predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample)
+    tf = time.time()
+    time_total_min = (tf - ti) / 60.0
 
-    _logger.info(f"Time taken to make predictions on device {rank} is: {((time.time() - ti) / 60):.2f} min")
+    _logger.info(f"Time taken to make predictions on device {rank} is: {time_total_min:.2f} min")
 
 
-def make_plots(outpath, sample, dataset, dir_name=""):
-    """Uses the predictions stored as .parquet files (see above) to make plots."""
-
+def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
+    """Uses the predictions stored as .parquet files from run_predictions to make plots."""
+    ret_dict = {}
     mplhep.style.use(mplhep.styles.CMS)
     class_names = get_class_names(sample)
     os.system(f"mkdir -p {outpath}/plots{dir_name}/{sample}")
@@ -168,7 +174,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
     plots_path = Path(f"{outpath}/plots{dir_name}/{sample}/")
     pred_path = Path(f"{outpath}/preds{dir_name}/{sample}/")
 
-    yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), -1)
+    yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), ntest_files)
 
     plot_num_elements(X, cp_dir=plots_path)
 
@@ -180,7 +186,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
         dataset=dataset,
         sample=sample,
     )
-    plot_jet_ratio(
+    ret_dict["jet_ratio"] = plot_jet_ratio(
         yvals,
         cp_dir=plots_path,
         bins=np.linspace(0, 5, 500),
@@ -228,3 +234,7 @@ def make_plots(outpath, sample, dataset, dir_name=""):
 
     plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
     plot_particle_ratio(yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_particle_response(X, yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
+    plot_pu_fraction(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+
+    return ret_dict

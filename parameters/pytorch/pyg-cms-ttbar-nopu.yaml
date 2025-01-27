@@ -1,5 +1,7 @@
-backend: pytorch
-
+train: yes
+test: yes
+make_plots: yes
+comet: no
 save_attention: no
 dataset: cms
 sort_data: yes
@@ -7,6 +9,7 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
+finetune:
 num_epochs: 100
 patience: 20
 lr: 0.0001
@@ -124,5 +127,8 @@ valid_dataset:
 
 test_dataset:
   cms_pf_ttbar_nopu:
+    version: 2.5.0
+    splits: [1]
+  cms_pf_qcd_nopu:
     version: 2.5.0
     splits: [1]

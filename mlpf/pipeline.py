@@ -1,6 +1,5 @@
 """
-Developing a PyTorch Geometric supervised training of MLPF using DistributedDataParallel.
-
+PyTorch supervised training of MLPF using DistributedDataParallel or Ray Train.
 Authors: Farouk Mokhtar, Joosep Pata, Eric Wulff
 """
 
@@ -8,8 +7,6 @@ import argparse
 import logging
 import os
 from pathlib import Path
-import matplotlib
-import numpy as np
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
@@ -18,7 +15,9 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import yaml
-from mlpf.model.training import device_agnostic_run, override_config, run_hpo, run_ray_training
+from mlpf.model.training import device_agnostic_run, override_config
+from mlpf.model.distributed_ray import run_hpo, run_ray_training
+from mlpf.model.PFDataset import SHARING_STRATEGY
 from utils import create_experiment_dir
 
 parser = argparse.ArgumentParser()
@@ -33,8 +32,13 @@ parser.add_argument("--gpu-batch-multiplier", type=int, default=None, help="Incr
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
 parser.add_argument("--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume")
-parser.add_argument("--load", type=str, default=None, help="load checkpoint and start new training from epoch 1")
-
+parser.add_argument("--load", type=str, default=None, help="load checkpoint and continue training from previous epoch")
+parser.add_argument(
+    "--relaxed-load",
+    action="store_true",
+    default=None,
+    help="load parameters from the checkpoint model with the same name as the existing model, ignoring any missing parameters",
+)
 parser.add_argument("--train", action="store_true", default=None, help="initiates a training")
 parser.add_argument("--test", action="store_true", default=None, help="tests the model")
 parser.add_argument("--num-epochs", type=int, default=None, help="number of training epochs")
@@ -56,9 +60,9 @@ parser.add_argument("--val-freq", type=int, default=None, help="run extra valida
 parser.add_argument("--checkpoint-freq", type=int, default=None, help="epoch frequency for checkpointing")
 parser.add_argument("--hpo", type=str, default=None, help="perform hyperparameter optimization, name of HPO experiment")
 parser.add_argument("--ray-train", action="store_true", help="run training using Ray Train")
-parser.add_argument("--local", action="store_true", default=None, help="perform HPO locally, without a Ray cluster")
-parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs per trial for HPO")
-parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs per trial for HPO")
+parser.add_argument("--ray-local", action="store_true", default=None, help="run ray-train locally")
+parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs for ray-train")
+parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs for ray-train")
 parser.add_argument("--raytune-num-samples", type=int, default=None, help="Number of samples to draw from search space")
 parser.add_argument("--comet", action="store_true", help="use comet ml logging")
 parser.add_argument("--comet-offline", action="store_true", help="save comet logs locally")
@@ -81,6 +85,13 @@ parser.add_argument(
 )
 parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
 
+parser.add_argument(
+    "--finetune",
+    action="store_true",
+    default=None,
+    help="will load and run a training and log the result in the --prefix directory",
+)
+
 
 def get_outdir(resume_training, load):
     outdir = None
@@ -91,10 +102,8 @@ def get_outdir(resume_training, load):
         if pload.name == "checkpoint.pth":
             # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
             outdir = str(pload.parent.parent.parent)
-        elif pload.name == "best_weights.pth":
-            outdir = str(pload.parent)
         else:
-            # the checkpoint is likely from a DDP run and we need to step up one dir less
+            # the checkpoint is likely not from a Ray Train run and we need to step up one dir less
             outdir = str(pload.parent.parent)
     if not (outdir is None):
         assert os.path.isfile("{}/model_kwargs.pkl".format(outdir))
@@ -102,9 +111,10 @@ def get_outdir(resume_training, load):
 
 
 def main():
-    # Ignore divide by 0 errors
-    np.seterr(divide="ignore", invalid="ignore")
-    matplotlib.use("agg")
+    # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
+    import torch
+
+    torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
 
     # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()
@@ -152,7 +162,7 @@ def main():
         run_hpo(config, args)
     else:
         outdir = get_outdir(args.resume_training, config["load"])
-        if outdir is None:
+        if (outdir is None) or (args.finetune):
             outdir = create_experiment_dir(
                 prefix=(args.prefix or "") + Path(args.config).stem + "_",
                 experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
@@ -166,7 +176,7 @@ def main():
         if args.ray_train:
             run_ray_training(config, args, outdir)
         else:
-            device_agnostic_run(config, args, world_size, outdir)
+            device_agnostic_run(config, world_size, outdir)
 
 
 if __name__ == "__main__":

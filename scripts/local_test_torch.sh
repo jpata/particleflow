@@ -38,5 +38,5 @@ python mlpf/pipeline.py --config parameters/pytorch/pyg-cms.yaml --data-dir ./te
 
 # test Ray Train training
 python mlpf/pipeline.py --config parameters/pytorch/pyg-cms.yaml --data-dir ${PWD}/tensorflow_datasets/ \
-	--prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --ray-train --ray-cpus 2 --local --conv-type attention \
+	--prefix MLPF_test_ --num-epochs 2 --nvalid 1 --gpus 0 --train --ray-train --ray-cpus 2 --ray-local --conv-type attention \
 	--pipeline --dtype float32 --attention-type math --num-convs 1 --experiments-dir ${PWD}/experiments
