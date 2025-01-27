@@ -79,4 +79,4 @@ If you use the code in a significant way for research purposes, please consider 
 If you use the datasets prepared by the MLPF team for academic work, please cite the [appropriate dataset](https://zenodo.org/search?q=mlpf&f=allversions%3Atrue&f=resource_type%3Adataset&l=list&p=1&s=10&sort=version) via the zenodo link, as well as the corresponding paper.
 
 At the moment, we are unable to release work-in-progress datasets before the corresponding academic publication is out.
-If you have a collaboration idea that does not fit into the above categories, please [get in touch](https://github.com/jpata/particleflow/discussions/categories/ideas)!
+If you have a collaboration idea that does not fit into the above categories, please [get in touch](https://github.com/jpata/particleflow/discussions/categories/general)!
