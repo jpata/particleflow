@@ -7,7 +7,7 @@
 IMG=/home/software/singularity/pytorch.simg:2024-08-18
 cd ~/particleflow
 
-WEIGHTS=experiments/pyg-cms_20241212_101648_120237/checkpoints/checkpoint-05-3.498507.pth
+WEIGHTS=
 DATASET=$1
 env
 singularity exec -B /local -B /scratch/persistent --nv \
