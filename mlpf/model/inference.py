@@ -116,14 +116,12 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         print("pt", ydata["pt"])
         
         cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
-        print("cluster", cluster.constituents)
         jets = cluster.inclusive_jets(min_pt=jet_ptcut)
         jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e}))
 
         # Prepare to collect indices
         ydata[f"particle_to_{typ}_jet_index"] = awkward.zeros_like(ydata["pt"]) - 1  # Initialize with -1 to indicate unclustered
 
-        print("up", cluster.inclusive_jets(min_pt=jet_ptcut).constituents)
         # Loop through each jet
         particle_to_jet_index = []
         for iev in range(len(jets)):
