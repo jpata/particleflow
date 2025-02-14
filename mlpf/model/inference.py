@@ -120,7 +120,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e}))
 
         # Prepare to collect indices
-        ydata[f"particle_to_{typ}_jet_index"] = np.full(len(vec), -1)  # Initialize with -1 to indicate unclustered
+        ydata[f"particle_to_{typ}_jet_index"] = awkward.zeros_like(ydata["pt"]) - 1  # Initialize with -1 to indicate unclustered
 
         # Loop through each jet
         for jet_index, jet in enumerate(jets):
