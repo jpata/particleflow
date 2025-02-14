@@ -97,22 +97,22 @@ parser.add_argument(
 def get_outdir(resume_training, load):
     outdir = None
     if not (resume_training is None):
-        print("resume_training")
         outdir = resume_training
     if not (load is None):
-        print("load")
         pload = Path(load)
         if pload.name == "checkpoint.pth":
-            print("raytrain")
             # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
             outdir = str(pload.parent.parent.parent)
         else:
-            print("no ray train")
+            print("pload", str(pload))
+            print("pload.parent", str(pload.parent))
+            
             # the checkpoint is likely not from a Ray Train run and we need to step up one dir less
             outdir = str(pload.parent.parent)
+
     print("outdir", outdir)
     if not (outdir is None):
-        
+
         assert os.path.isfile("{}/model_kwargs.pkl".format(outdir))
     return outdir
 
