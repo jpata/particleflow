@@ -118,6 +118,8 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e}))
 
         # Creating an array to hold which jet each particle is associated with
+        print("ydata['pt']", ydata['pt'].shape)
+        print("cluster.constituent_index(vec.to_xyzt())", cluster.constituent_index(vec.to_xyzt())].shape)
         ydata[f"{typ}_jet_index"] = cluster.constituent_index(vec.to_xyzt())
 
     matched_jets = awkward.Array(
