@@ -328,7 +328,10 @@ def load_eval_data(path, max_files=None):
     yvals.update(compute_jet_ratio(data, yvals))
     yvals["gen_met"] = data["genmet"]
 
+    # added by Farouk on Feb 14 for fine-tuning result study
     yvals["matched_jets_gen_to_pred"] = data["matched_jets"]["gen_to_pred"]
+    yvals["matched_jets_gen_to_cand"] = data["matched_jets"]["gen_to_cand"]
+    yvals["matched_jets_gen_to_target"] = data["matched_jets"]["gen_to_target"]
     return yvals, X, filenames
 
 
