@@ -15,10 +15,11 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import yaml
-from mlpf.model.training import device_agnostic_run, override_config
+from utils import create_experiment_dir
+
 from mlpf.model.distributed_ray import run_hpo, run_ray_training
 from mlpf.model.PFDataset import SHARING_STRATEGY
-from utils import create_experiment_dir
+from mlpf.model.training import device_agnostic_run, override_config
 
 parser = argparse.ArgumentParser()
 
@@ -96,16 +97,22 @@ parser.add_argument(
 def get_outdir(resume_training, load):
     outdir = None
     if not (resume_training is None):
+        print("resume_training")
         outdir = resume_training
     if not (load is None):
+        print("load")
         pload = Path(load)
         if pload.name == "checkpoint.pth":
+            print("raytrain")
             # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
             outdir = str(pload.parent.parent.parent)
         else:
+            print("no ray train")
             # the checkpoint is likely not from a Ray Train run and we need to step up one dir less
             outdir = str(pload.parent.parent)
+    print("outdir", outdir)
     if not (outdir is None):
+        
         assert os.path.isfile("{}/model_kwargs.pkl".format(outdir))
     return outdir
 
