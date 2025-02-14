@@ -247,9 +247,9 @@ def eval_epoch(
             ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
         )
 
-        # # Save validation plots for first batch
-        # if (rank == 0 or rank == "cpu") and ival == 0:
-        #     validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
+        # Save validation plots for first batch
+        if (rank == 0 or rank == "cpu") and ival == 0:
+            validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
 
         # Accumulate losses
         for loss_name in loss:
@@ -473,13 +473,13 @@ def train_all_epochs(
             for sample in config["enabled_test_datasets"]:
                 plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
 
-            #     # track the following jet metrics in tensorboard
-            #     for k in ["med", "iqr", "match_frac"]:
-            #         tensorboard_writer_valid.add_scalar(
-            #             "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
-            #             plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
-            #             epoch,
-            #         )
+                # track the following jet metrics in tensorboard
+                for k in ["med", "iqr", "match_frac"]:
+                    tensorboard_writer_valid.add_scalar(
+                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
+                        plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
+                        epoch,
+                    )
 
         # Ray training specific logging
         if use_ray:
@@ -781,11 +781,8 @@ def run(rank, world_size, config, outdir, logfile):
         checkpoint = torch.load(f"{checkpoint_dir}/best_weights.pth", map_location=torch.device(rank))
         model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
-    if not config["finetune"]:
-        if not (config["load"] is None):
-            testdir_name = "_" + Path(config["load"]).stem
-        else:
-            testdir_name = "_best_weights"
+    if not (config["load"] is None):
+        testdir_name = "_" + Path(config["load"]).stem
     else:
         testdir_name = "_best_weights"
 
