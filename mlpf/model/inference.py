@@ -124,7 +124,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
         # Loop through each jet
         for jet_index, jet in enumerate(jets):
-            print("jet", jet)
+            print("jet", jet[0].constituents)
             for particle in jet.constituents():  # Get constituents for the given jet
                 particle_index = vec.index(particle)  # This assumes 'vec' can be indexed to find 'particle'
                 ydata[f"particle_to_{typ}_jet_index"][particle_index] = jet_index  # Assign jet index
