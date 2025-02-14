@@ -15,11 +15,10 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 
 import yaml
-from utils import create_experiment_dir
-
+from mlpf.model.training import device_agnostic_run, override_config
 from mlpf.model.distributed_ray import run_hpo, run_ray_training
 from mlpf.model.PFDataset import SHARING_STRATEGY
-from mlpf.model.training import device_agnostic_run, override_config
+from utils import create_experiment_dir
 
 parser = argparse.ArgumentParser()
 
