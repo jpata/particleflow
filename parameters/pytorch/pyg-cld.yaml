@@ -9,7 +9,7 @@ data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
-relaxed_load: True
+relaxed_load:
 finetune:
 num_epochs: 10
 patience: 20
