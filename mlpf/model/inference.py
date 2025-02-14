@@ -120,11 +120,10 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         # Prepare to collect indices
         ydata[f"particle_to_{typ}_jet_index"] = np.full(len(vec), -1)  # Initialize with -1 to indicate unclustered
 
-        # Loop through each jet and assign each constituent to this jet's index
+        # Loop through each jet
         for jet_index, jet in enumerate(jets):
-            constituents = jet.constituents()  # Get the constituents of the jet
-            for constituent in constituents:
-                particle_index = constituent.user_index()  # Get the original index of the particle
+            for particle in cluster.constituents(jet):  # Get constituents for the given jet
+                particle_index = vec.index(particle)  # This assumes 'vec' can be indexed to find 'particle'
                 ydata[f"particle_to_{typ}_jet_index"][particle_index] = jet_index  # Assign jet index
 
     matched_jets = awkward.Array(
