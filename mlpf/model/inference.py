@@ -117,10 +117,15 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         jets = cluster.inclusive_jets(min_pt=jet_ptcut)
         jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e}))
 
-        # Creating an array to hold which jet each particle is associated with
-        print("ydata['pt']", ydata['pt'].shape)
-        print("cluster.constituent_index(vec.to_xyzt())", cluster.constituent_index(vec.to_xyzt())].shape)
-        ydata[f"{typ}_jet_index"] = cluster.constituent_index(vec.to_xyzt())
+        # Prepare to collect indices
+        ydata[f"particle_to_{typ}_jet_index"] = np.full(len(vec), -1)  # Initialize with -1 to indicate unclustered
+
+        # Loop through each jet and assign each constituent to this jet's index
+        for jet_index, jet in enumerate(jets):
+            constituents = jet.constituents()  # Get the constituents of the jet
+            for constituent in constituents:
+                particle_index = constituent.user_index()  # Get the original index of the particle
+                ydata[f"particle_to_{typ}_jet_index"][particle_index] = jet_index  # Assign jet index
 
     matched_jets = awkward.Array(
         {
