@@ -332,6 +332,10 @@ def load_eval_data(path, max_files=None):
     yvals["matched_jets_gen_to_pred"] = data["matched_jets"]["gen_to_pred"]
     yvals["matched_jets_gen_to_cand"] = data["matched_jets"]["gen_to_cand"]
     yvals["matched_jets_gen_to_target"] = data["matched_jets"]["gen_to_target"]
+
+    yvals["particle_jet_index_pred"] = data["particle_jet_index"]["pred"]
+    yvals["particle_jet_index_cand"] = data["particle_jet_index"]["cand"]
+    yvals["particle_jet_index_target"] = data["particle_jet_index"]["target"]
     return yvals, X, filenames
 
 
