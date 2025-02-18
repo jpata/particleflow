@@ -99,6 +99,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
     # now cluster jets
+    particle_jet_index = {}
     for typ, ydata in zip(["cand", "target", "pred", "pred_nopu"], [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]]):
         msk = ydata["cls_id"] != 0
         if typ == "pred_nopu":
@@ -118,7 +119,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         jets = cluster.inclusive_jets(min_pt=jet_ptcut)
         jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e}))
 
-        ydata["index"] = cluster.constituent_index(min_pt=jet_ptcut)
+        particle_jet_index[typ] = cluster.constituent_index(min_pt=jet_ptcut)
 
     matched_jets = awkward.Array(
         {
@@ -132,7 +133,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     )
 
     awkward.to_parquet(
-        awkward.Array({"inputs": Xs, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets, "genmet": batch.genmet.cpu()}),
+        awkward.Array({"inputs": Xs, "particles": awkvals, "jets": jets_coll, "matched_jets": matched_jets, "genmet": batch.genmet.cpu(), "particle_jet_index": particle_jet_index,}),
         outfile,
     )
     _logger.info(f"Saved predictions at {outfile}")
