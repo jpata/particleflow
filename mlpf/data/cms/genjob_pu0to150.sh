@@ -7,7 +7,7 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/20240823_simcluster/pu0to200/
+OUTDIR=/local/joosep/mlpf/cms/20240823_simcluster/pu0to150/
 CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_2_2/
 MLPF_PATH=/home/joosep/particleflow/
 

@@ -6,7 +6,6 @@ import os
 outdir = "/local/joosep/mlpf/cms/20240823_simcluster"
 
 samples = [
-    ("TTbar_14TeV_TuneCUETP8M1_cfi",                                100000, 100050, "genjob_pu0to200.sh", outdir + "/pu0to200"),
     #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 110010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
     #    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",                200000, 210010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
     #    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                        300000, 310010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
@@ -28,6 +27,7 @@ samples = [
     #    ("SingleProtonMinusFlatPt0p7To1000_cfi",                  1500000,1501010, "genjob_nopu.sh", outdir + "/nopu"),
     #    ("SingleTauFlatPt1To1000_cfi",                            1600000,1601010, "genjob_nopu.sh", outdir + "/nopu"),
     #    ("SingleK0FlatPt1To1000_pythia8_cfi",                     1700000,1710010, "genjob_nopu.sh", outdir + "/nopu"),
+    #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 100050, "genjob_pu0to150.sh", outdir + "/pu0to150"),
 ]
 
 if __name__ == "__main__":
