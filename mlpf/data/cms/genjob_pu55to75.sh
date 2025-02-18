@@ -8,7 +8,7 @@ set -e
 set -x
 
 OUTDIR=/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/
-CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_1_0_pre3
+CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_1_0/
 MLPF_PATH=/home/joosep/particleflow/
 
 #seed must be greater than 0

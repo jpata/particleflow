@@ -1,13 +1,14 @@
 #!/bin/bash
-#SBATCH --partition short
+#SBATCH --partition main
+#SBATCH --time 04:00:00
 #SBATCH --cpus-per-task 1
 #SBATCH --mem-per-cpu 6G
 #SBATCH -o slurm-%x-%j-%N.out
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/20240823_simcluster/nopu/
-CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_1_0/
+OUTDIR=/local/joosep/mlpf/cms/20240823_simcluster/pu0to200/
+CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_2_2/
 MLPF_PATH=/home/joosep/particleflow/
 
 #seed must be greater than 0
@@ -19,10 +20,10 @@ WORKDIR=/scratch/local/joosep/$SLURM_JOBID/$SAMPLE/$SEED
 mkdir -p $WORKDIR
 mkdir -p $OUTDIR
 
-PILEUP=NoPileUp
-PILEUP_INPUT=
+PILEUP=Run3_Flat0To150_PoissonOOTPU
+PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data/cms/pu_files_local.txt
 
-N=100
+N=50
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -46,6 +47,7 @@ cmsDriver.py $SAMPLE \
   --datatier GEN-SIM \
   --geometry DB:Extended \
   --pileup $PILEUP \
+  --pileup_input $PILEUP_INPUT \
   --no_exec \
   --fileout step2_phase1_new.root \
   --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step2 \
@@ -76,7 +78,6 @@ cmsRun step2_phase1_new.py > /dev/null
 
 cmsRun step3_phase1_new.py > /dev/null
 #cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
-
 mv pfntuple.root pfntuple_${SEED}.root
 cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
 

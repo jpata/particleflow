@@ -180,3 +180,6 @@ test_dataset:
   cms_pf_ztt_nopu:
     version: 2.5.0
     splits: [1,2,3,4,5,6,7,8,9,10]
+  cms_pf_single_ele:
+    version: 2.5.0
+    splits: [1]

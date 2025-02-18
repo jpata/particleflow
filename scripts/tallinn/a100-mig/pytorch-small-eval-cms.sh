@@ -4,10 +4,10 @@
 #SBATCH --mem-per-gpu 100G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-IMG=/home/software/singularity/pytorch.simg:2024-08-18
+IMG=/home/software/singularity/pytorch.simg:2024-12-03
 cd ~/particleflow
 
-WEIGHTS=experiments/pyg-cms_20250122_185427_365548/checkpoints/checkpoint-06-3.547059.pth
+WEIGHTS=experiments/pyg-cms_20250122_185427_365548/checkpoints/checkpoint-10-3.541986.pth
 DATASET=$1
 env
 singularity exec -B /local -B /scratch/persistent --nv \

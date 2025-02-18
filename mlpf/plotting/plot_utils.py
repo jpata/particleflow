@@ -129,7 +129,7 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_qcd_nopu": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$",
     "cms_pf_vbf_nopu": r"VBF",
     "cms_pf_multi_particle_gun": r"multi particle gun events",
-    "cms_pf_single_electron": r"single electron particle gun events",
+    "cms_pf_single_ele": r"single electron particle gun events",
     "cms_pf_single_gamma": r"single photon gun events",
     "cms_pf_single_mu": r"single muon particle gun events",
     "cms_pf_single_pi": r"single pion particle gun events",
