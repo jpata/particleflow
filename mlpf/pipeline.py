@@ -24,7 +24,9 @@ parser = argparse.ArgumentParser()
 
 # add default=None to all arparse arguments to ensure they do not override
 # values loaded from the config file given by --config unless explicitly given
-parser.add_argument("--experiment-dir", type=str, default=None, help="The directory where to save the weights and configs. if None, create a new one.")
+parser.add_argument(
+    "--experiment-dir", type=str, default=None, help="The directory where to save the weights and configs. if None, create a new one."
+)
 parser.add_argument("--config", type=str, default=None, help="yaml config")
 parser.add_argument("--prefix", type=str, default=None, help="prefix prepended to the experiment dir name")
 parser.add_argument("--data-dir", type=str, default=None, help="path to `tensorflow_datasets/`")
@@ -80,7 +82,7 @@ parser.add_argument(
 )
 parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
 
-#options only used for the ray-based training
+# options only used for the ray-based training
 parser.add_argument("--ray-train", action="store_true", help="run training using Ray Train")
 parser.add_argument("--ray-local", action="store_true", default=None, help="run ray-train locally")
 parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs for ray-train")
