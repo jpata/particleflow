@@ -272,7 +272,7 @@ class CombinedGraphLayer(nn.Module):
         if self.dropout:
             self.dropout_layer = torch.nn.Dropout(self.dropout)
 
-    def forward(self, x, msk):
+    def forward(self, x, msk, initial_embedding):
         n_elems = x.shape[1]
         bins_to_pad_to = -torch.floor_divide(-n_elems, self.bin_size)
 

@@ -10,7 +10,7 @@ gpus: 1
 gpu_batch_multiplier: 1
 load:
 finetune:
-num_epochs: 5
+num_epochs: 10
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
@@ -180,3 +180,6 @@ test_dataset:
   cms_pf_ztt_nopu:
     version: 2.5.0
     splits: [1,2,3,4,5,6,7,8,9,10]
+  cms_pf_single_ele:
+    version: 2.5.0
+    splits: [1]

@@ -11,7 +11,6 @@ import sklearn
 import sklearn.metrics
 import tqdm
 import vector
-import torch
 
 SAMPLE_LABEL_CMS = {
     "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
@@ -130,7 +129,7 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_qcd_nopu": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$",
     "cms_pf_vbf_nopu": r"VBF",
     "cms_pf_multi_particle_gun": r"multi particle gun events",
-    "cms_pf_single_electron": r"single electron particle gun events",
+    "cms_pf_single_ele": r"single electron particle gun events",
     "cms_pf_single_gamma": r"single photon gun events",
     "cms_pf_single_mu": r"single muon particle gun events",
     "cms_pf_single_pi": r"single pion particle gun events",
@@ -2083,7 +2082,7 @@ def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, 
     ax = plt.axes()
     bins = np.linspace(0, 1, 100)
     target_ispu = awkward.flatten(yvals["target_ispu"])
-    pred_ispu = torch.sigmoid(torch.Tensor(awkward.flatten(yvals["pred_ispu"][:, :, 0]))).numpy()
+    pred_ispu = awkward.flatten(yvals["pred_ispu"])
     plt.hist(target_ispu, bins=bins, label="target", histtype="step")
     plt.hist(pred_ispu, bins=bins, label="MLPF", histtype="step")
     plt.legend(loc=1, fontsize=16)
