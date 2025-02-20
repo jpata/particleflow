@@ -39,8 +39,8 @@ python mlpf/pipeline.py --config parameters/pytorch/pyg-cms.yaml --data-dir ./te
 #continue training from previous epoch, save to the same experiment dir
 python mlpf/pipeline.py --config parameters/pytorch/pyg-cms.yaml --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ --num-epochs 3 --nvalid 1 --gpus 0 --train --test --make-plots --conv-type attention \
-  --pipeline --dtype float32 --attention-type math --num-convs 1 --load ${PWD}/experiments/pyg*/checkpoints/checkpoint-02-*.pth \
-  --experiment-dir ${PWD}/experiments/pyg*
+  --pipeline --dtype float32 --attention-type math --num-convs 1 --load ${PWD}/experiments/MLPF_test_*/checkpoints/checkpoint-02-*.pth \
+  --experiment-dir ${PWD}/experiments/MLPF_test_*
 
 # test Ray Train training
 python mlpf/pipeline.py --config parameters/pytorch/pyg-cms.yaml --data-dir ${PWD}/tensorflow_datasets/ \
