@@ -24,14 +24,14 @@ parser = argparse.ArgumentParser()
 
 # add default=None to all arparse arguments to ensure they do not override
 # values loaded from the config file given by --config unless explicitly given
+parser.add_argument("--experiment-dir", type=str, default=None, help="The directory where to save the weights and configs. if None, create a new one.")
 parser.add_argument("--config", type=str, default=None, help="yaml config")
-parser.add_argument("--prefix", type=str, default=None, help="prefix appended to result dir name")
+parser.add_argument("--prefix", type=str, default=None, help="prefix prepended to the experiment dir name")
 parser.add_argument("--data-dir", type=str, default=None, help="path to `tensorflow_datasets/`")
 parser.add_argument("--gpus", type=int, default=None, help="to use CPU set to 0; else e.g., 4")
 parser.add_argument("--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor")
 parser.add_argument("--num-workers", type=int, default=None, help="number of processes to load the data")
 parser.add_argument("--prefetch-factor", type=int, default=None, help="number of samples to fetch & prefetch at every call")
-parser.add_argument("--resume-training", type=str, default=None, help="training dir containing the checkpointed training to resume")
 parser.add_argument("--load", type=str, default=None, help="load checkpoint and continue training from previous epoch")
 parser.add_argument(
     "--relaxed-load",
@@ -59,11 +59,6 @@ parser.add_argument("--nvalid", type=int, default=None, help="validation samples
 parser.add_argument("--val-freq", type=int, default=None, help="run extra validation every val_freq training steps")
 parser.add_argument("--checkpoint-freq", type=int, default=None, help="epoch frequency for checkpointing")
 parser.add_argument("--hpo", type=str, default=None, help="perform hyperparameter optimization, name of HPO experiment")
-parser.add_argument("--ray-train", action="store_true", help="run training using Ray Train")
-parser.add_argument("--ray-local", action="store_true", default=None, help="run ray-train locally")
-parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs for ray-train")
-parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs for ray-train")
-parser.add_argument("--raytune-num-samples", type=int, default=None, help="Number of samples to draw from search space")
 parser.add_argument("--comet", action="store_true", help="use comet ml logging")
 parser.add_argument("--comet-offline", action="store_true", help="save comet logs locally")
 parser.add_argument("--comet-step-freq", type=int, default=None, help="step frequency for saving comet metrics")
@@ -85,29 +80,12 @@ parser.add_argument(
 )
 parser.add_argument("--test-datasets", nargs="+", default=[], help="test samples to process")
 
-parser.add_argument(
-    "--finetune",
-    action="store_true",
-    default=None,
-    help="will load and run a training and log the result in the --prefix directory",
-)
-
-
-def get_outdir(resume_training, load):
-    outdir = None
-    if not (resume_training is None):
-        outdir = resume_training
-    if not (load is None):
-        pload = Path(load)
-        if pload.name == "checkpoint.pth":
-            # the checkpoint is likely from a Ray Train run and we need to step one dir higher up
-            outdir = str(pload.parent.parent.parent)
-        else:
-            # the checkpoint is likely not from a Ray Train run and we need to step up one dir less
-            outdir = str(pload.parent.parent)
-    if not (outdir is None):
-        assert os.path.isfile("{}/model_kwargs.pkl".format(outdir))
-    return outdir
+#options only used for the ray-based training
+parser.add_argument("--ray-train", action="store_true", help="run training using Ray Train")
+parser.add_argument("--ray-local", action="store_true", default=None, help="run ray-train locally")
+parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs for ray-train")
+parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs for ray-train")
+parser.add_argument("--raytune-num-samples", type=int, default=None, help="Number of samples to draw from search space")
 
 
 def main():
@@ -118,13 +96,6 @@ def main():
 
     # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()
-
-    if args.resume_training and not args.ray_train:
-        raise NotImplementedError(
-            "Resuming an interrupted training is only supported in our \
-                Ray Train-based training. Consider using `--load` instead, \
-                which starts a new training using model weights from a pre-trained checkpoint."
-        )
 
     logging.basicConfig(level=logging.INFO)
     world_size = args.gpus if args.gpus > 0 else 1  # will be 1 for both cpu (args.gpu < 1) and single-gpu (1)
@@ -161,22 +132,22 @@ def main():
     if args.hpo:
         run_hpo(config, args)
     else:
-        outdir = get_outdir(args.resume_training, config["load"])
-        if (outdir is None) or (args.finetune):
-            outdir = create_experiment_dir(
+        experiment_dir = args.experiment_dir
+        if experiment_dir is None:
+            experiment_dir = create_experiment_dir(
                 prefix=(args.prefix or "") + Path(args.config).stem + "_",
                 experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
             )
 
         # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
         config_filename = "train-config.yaml" if args.train else "test-config.yaml"
-        with open((Path(outdir) / config_filename), "w") as file:
+        with open((Path(experiment_dir) / config_filename), "w") as file:
             yaml.dump(config, file)
 
         if args.ray_train:
-            run_ray_training(config, args, outdir)
+            run_ray_training(config, args, experiment_dir)
         else:
-            device_agnostic_run(config, world_size, outdir)
+            device_agnostic_run(config, world_size, experiment_dir)
 
 
 if __name__ == "__main__":
