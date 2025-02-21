@@ -11,7 +11,6 @@ import sklearn
 import sklearn.metrics
 import tqdm
 import vector
-import torch
 
 SAMPLE_LABEL_CMS = {
     "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
@@ -130,7 +129,7 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_qcd_nopu": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$",
     "cms_pf_vbf_nopu": r"VBF",
     "cms_pf_multi_particle_gun": r"multi particle gun events",
-    "cms_pf_single_electron": r"single electron particle gun events",
+    "cms_pf_single_ele": r"single electron particle gun events",
     "cms_pf_single_gamma": r"single photon gun events",
     "cms_pf_single_mu": r"single muon particle gun events",
     "cms_pf_single_pi": r"single pion particle gun events",
@@ -294,7 +293,7 @@ def load_eval_data(path, max_files=None):
     if max_files is not None:
         filelist = filelist[:max_files]
 
-    for fi in tqdm.tqdm(filelist):
+    for fi in tqdm.tqdm(filelist, desc="Loading eval data"):
         dd = awkward.from_parquet(fi)
         yvals.append(dd)
         filenames.append(fi)
@@ -2104,4 +2103,5 @@ def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, 
             epoch,
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
+
     )
