@@ -167,7 +167,7 @@ def unpack_target(y, model):
         if i >= 2:  # skip the cls and charge as they are defined above
             ret[feat] = y[..., i].to(dtype=torch.float32)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
-
+    ret["ispu"] = (ret["ispu"] != 0).to(torch.float)
     # do some sanity checks
     # assert torch.all(ret["pt"] >= 0.0)  # pt
     # assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
@@ -184,7 +184,6 @@ def unpack_target(y, model):
 def unpack_predictions(preds):
     ret = {}
     ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret["ispu"] = preds
-
     # unpacking
     ret["pt"] = ret["momentum"][..., 0]
     ret["eta"] = ret["momentum"][..., 1]

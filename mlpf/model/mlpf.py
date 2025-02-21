@@ -411,7 +411,6 @@ class MLPF(nn.Module):
         preds_binary_particle = self.nn_binary_particle(final_embedding_id)
         preds_pid = self.nn_pid(final_embedding_id)
         preds_pu = self.nn_pu(final_embedding_id)
-
         # pred_charge = self.nn_charge(final_embedding_id)
 
         # regression input
