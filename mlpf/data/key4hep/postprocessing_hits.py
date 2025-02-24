@@ -405,6 +405,8 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
                 "ygen_hit": ygen_hit,
                 "ycand_track": ycand_track,
                 "ycand_hit": ycand_hit,
+                "gp_to_track": None,
+                "gp_to_calohit": None,
             }
         this_ev = awkward.Record(this_ev)
         ret.append(this_ev)
