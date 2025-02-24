@@ -6,6 +6,7 @@ import os
 import sys
 import multiprocessing
 import tqdm
+import argparse
 from scipy.sparse import coo_matrix
 
 from postprocessing import map_pdgid_to_candid, map_charged_to_neutral, map_neutral_to_charged, sanitize
@@ -154,7 +155,7 @@ def get_recoptcl_to_obj(n_rps, reco_arr, gpdata, idx_rp_to_track, idx_rp_to_clus
     return track_to_rp, calohit_to_rp
 
 
-def process_one_file(fn, ofn, dataset):
+def process_one_file(fn, ofn, dataset, store_matrix=True):
 
     # output exists, do not recreate
     if os.path.isfile(ofn):
@@ -385,16 +386,26 @@ def process_one_file(fn, ofn, dataset):
         sanitize(ycand_track)
         sanitize(ycand_hit)
 
-        this_ev = {
-            "X_track": X_track,
-            "X_hit": X_hit,
-            "ygen_track": ygen_track,
-            "ygen_hit": ygen_hit,
-            "ycand_track": ycand_track,
-            "ycand_hit": ycand_hit,
-            "gp_to_track": gp_to_track,
-            "gp_to_calohit": gp_to_calohit,
-        }
+        if store_matrix:
+            this_ev = {
+                "X_track": X_track,
+                "X_hit": X_hit,
+                "ygen_track": ygen_track,
+                "ygen_hit": ygen_hit,
+                "ycand_track": ycand_track,
+                "ycand_hit": ycand_hit,
+                "gp_to_track": gp_to_track,
+                "gp_to_calohit": gp_to_calohit,
+            }
+        else:
+            this_ev = {
+                "X_track": X_track,
+                "X_hit": X_hit,
+                "ygen_track": ygen_track,
+                "ygen_hit": ygen_hit,
+                "ycand_track": ycand_track,
+                "ycand_hit": ycand_hit,
+            }
         this_ev = awkward.Record(this_ev)
         ret.append(this_ev)
 
@@ -426,7 +437,17 @@ def process_sample(samp):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 2:
-        process_sample(sys.argv[1])
-    if len(sys.argv) == 3:
-        process_one_file(sys.argv[1], sys.argv[2], sys.argv[3])
+    parser = argparse.ArgumentParser(description="A simple calculator using argparse.")
+    parser.add_argument("--fn", type=str, default=None, help="input file (root)")
+    parser.add_argument("--ofn", type=str, default=None, help="output file (parquet)")
+    parser.add_argument("--samples", type=str, default=None, help="sample name to specify many files")
+    parser.add_argument("--dataset", type=str, default="clic", help="sample name to specify many files")
+
+    parser.add_argument("--store-matrix", action="store_true", help="store track and hit association matrices")   
+     
+    args = parser.parse_args()
+    
+    if args.samples is not None:
+        process_sample(args.samples)
+    else:
+        process_one_file(args.fn, args.ofn, args.dataset, args.store_matrix)
