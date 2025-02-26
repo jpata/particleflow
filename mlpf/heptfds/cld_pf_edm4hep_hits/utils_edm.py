@@ -80,13 +80,16 @@ def prepare_data_clic(fn):
 
     X_track = ret["X_track"]
     X_hit = ret["X_hit"]
-
+    tracks_assoc_mats = ret["gp_to_track"]
+    
     assert len(X_track) == len(X_hit)
     nev = len(X_track)
 
     Xs = []
     ygens = []
     ycands = []
+    gp_to_tracks = []
+    gp_to_hits = []
     for iev in range(nev):
 
         X1 = ak.to_numpy(X_track[iev])
@@ -99,6 +102,14 @@ def prepare_data_clic(fn):
         ygen_hit = ak.to_numpy(ret["ygen_hit"][iev])
         ycand_track = ak.to_numpy(ret["ycand_track"][iev])
         ycand_hit = ak.to_numpy(ret["ycand_hit"][iev])
+        
+        if tracks_assoc_mats is not None:
+            gp_to_track = ak.to_numpy(ret["gp_to_track"][iev])
+            gp_to_calohit = ak.to_numpy(ret["gp_to_calohit"][iev])
+            
+            gp_to_tracks.append(gp_to_track)
+            gp_to_hits.append(gp_to_calohit)
+        
         if ygen_track.shape[0] == 0:
             ygen_track = np.zeros((0, 7), dtype=np.float32)
         if ycand_track.shape[0] == 0:
@@ -132,18 +143,28 @@ def prepare_data_clic(fn):
         Xs.append(X)
         ygens.append(ygen)
         ycands.append(ycand)
-    return Xs, ygens, ycands
+
+    return Xs, ygens, ycands, gp_to_tracks, gp_to_hits
 
 
 def generate_examples(files):
     for fi in tqdm.tqdm(files):
-        Xs, ygens, ycands = prepare_data_clic(fi)
+        Xs, ygens, ycands, gp_to_tracks, gp_to_hits = prepare_data_clic(fi)
         for iev in range(len(Xs)):
-            yield str(fi) + "_" + str(iev), {
-                "X": Xs[iev].astype(np.float32),
-                "ygen": ygens[iev].astype(np.float32),
-                "ycand": ycands[iev].astype(np.float32),
-            }
+            if gp_to_tracks == []:
+                yield str(fi) + "_" + str(iev), {
+                    "X": Xs[iev].astype(np.float32),
+                    "ygen": ygens[iev].astype(np.float32),
+                    "ycand": ycands[iev].astype(np.float32),
+                }
+            else:
+                yield str(fi) + "_" + str(iev), {
+                    "X": Xs[iev].astype(np.float32),
+                    "ygen": ygens[iev].astype(np.float32),
+                    "ycand": ycands[iev].astype(np.float32),
+                    "gp_to_tracks": gp_to_tracks[iev].astype(np.float32),
+                    "gp_to_hits": gp_to_hits[iev].astype(np.float32),
+                }
 
 
 if __name__ == "__main__":
