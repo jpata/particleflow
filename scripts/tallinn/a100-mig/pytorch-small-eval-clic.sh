@@ -13,4 +13,4 @@ singularity exec -B /scratch/persistent --nv \
      --env KERAS_BACKEND=torch \
      $IMG  python3 mlpf/pipeline.py --gpus 1 \
      --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-clic.yaml \
-     --test --make-plots --gpu-batch-multiplier 100 --load $WEIGHTS --dtype bfloat16 --num-workers 0 --ntest 20000
+     --test --make-plots --gpu-batch-multiplier 100 --load $WEIGHTS --dtype bfloat16 --num-workers 0

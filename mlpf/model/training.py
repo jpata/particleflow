@@ -647,7 +647,7 @@ def run(rank, world_size, config, outdir, logfile):
 
         if len(missing_keys) > 0:
             _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
-            if config["relaxed_load"]:
+            if config.get("relaxed_load", True):
                 _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
                 strict = False
             else:
