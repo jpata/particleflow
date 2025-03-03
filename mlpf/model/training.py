@@ -635,6 +635,7 @@ def run(rank, world_size, config, outdir, logfile):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
+        import pdb;pdb.set_trace()
         if config["start_epoch"] is None:
             start_epoch = int(os.path.basename(config["load"]).split("-")[1]) + 1
         else:
@@ -804,7 +805,10 @@ def override_config(config: dict, args):
     config["test"] = args.test
     config["make_plots"] = args.make_plots
 
-    config["start_epoch"] = int(args.start_epoch)
+    if not args.start_epoch is None:
+        args.start_epoch = int(args.start_epoch)
+    config["start_epoch"] = args.start_epoch
+
     if config["load"] is None:
         if config["start_epoch"] is None:
             config["start_epoch"] = 1
