@@ -44,6 +44,7 @@ parser.add_argument(
 parser.add_argument("--train", action="store_true", default=None, help="initiates a training")
 parser.add_argument("--test", action="store_true", default=None, help="tests the model")
 parser.add_argument("--num-epochs", type=int, default=None, help="number of training epochs")
+parser.add_argument("--start-epoch", type=None, default=None, help="the initial epoch counter for LR decay and logging")
 parser.add_argument("--patience", type=int, default=None, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=None, help="learning rate")
 parser.add_argument(
