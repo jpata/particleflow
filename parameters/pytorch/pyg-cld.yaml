@@ -3,7 +3,7 @@ test: yes
 make_plots: yes
 comet: yes
 save_attention: yes
-dataset: clic
+dataset: cld
 sort_data: no
 data_dir:
 gpus: 1
@@ -24,7 +24,7 @@ checkpoint_freq:
 comet_name: particleflow-pt
 comet_offline: False
 comet_step_freq: 100
-dtype: float32
+dtype: bfloat16
 val_freq:  # run an extra validation run every val_freq training steps
 
 model:
@@ -39,9 +39,9 @@ model:
 
   gnn_lsh:
     conv_type: gnn_lsh
-    embedding_dim: 512
-    width: 512
-    num_convs: 8
+    embedding_dim: 1024
+    width: 1024
+    num_convs: 3
     activation: "elu"
     # gnn-lsh specific parameters
     bin_size: 32
@@ -63,7 +63,7 @@ model:
     activation: "relu"
     head_dim: 32
     num_heads: 32
-    attention_type: math
+    attention_type: flash
     use_pre_layernorm: True
 
   mamba:
@@ -105,7 +105,7 @@ raytune:
     n_random_steps: 10
 
 train_dataset:
-  clic:
+  cld:
     physical:
       batch_size: 1
       samples:
@@ -114,7 +114,7 @@ train_dataset:
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
-  clic:
+  cld:
     physical:
       batch_size: 1
       samples:

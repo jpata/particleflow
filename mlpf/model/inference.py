@@ -201,8 +201,17 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
         yvals,
         cp_dir=plots_path,
         bins=np.linspace(0.5, 1.5, 500),
-        logy=False,
+        logy=True,
         file_modifier="_bins_0p5_1p5",
+        dataset=dataset,
+        sample=sample,
+    )
+    plot_jet_ratio(
+        yvals,
+        cp_dir=plots_path,
+        bins=np.linspace(0, 2, 500),
+        logy=True,
+        file_modifier="_bins_0_2",
         dataset=dataset,
         sample=sample,
     )
