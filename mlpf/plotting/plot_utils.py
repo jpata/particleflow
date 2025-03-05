@@ -2079,11 +2079,11 @@ def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experi
 
 def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, comet_experiment=None):
     bins = np.linspace(0, 1, 100)
-    neutural = (yvals['target_cls_id'] == 4) | (yvals['target_cls_id'] == 5)
-    charged = (yvals['target_cls_id'] == 1) | (yvals['target_cls_id'] == 2) | (yvals['target_cls_id'] == 3)
-    hf = (yvals['target_cls_id'] == 6) | (yvals['target_cls_id'] == 7)
+    neutural = (yvals["target_cls_id"] == 4) | (yvals["target_cls_id"] == 5)
+    charged = (yvals["target_cls_id"] == 1) | (yvals["target_cls_id"] == 2) | (yvals["target_cls_id"] == 3)
+    hf = (yvals["target_cls_id"] == 6) | (yvals["target_cls_id"] == 7)
     types = [neutural, charged, hf]
-    for type_, name in zip(types, ['n', 'c', 'h']):
+    for type_, name in zip(types, ["n", "c", "h"]):
         plt.figure()
         ax = plt.axes()
         pred_ispu = awkward.flatten(awkward.argmax(yvals["pred_ispu"][type_], axis=2))
@@ -2102,5 +2102,4 @@ def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, 
             epoch,
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
-
-    )
+        )
