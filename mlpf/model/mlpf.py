@@ -358,7 +358,7 @@ class MLPF(nn.Module):
         # DNN that acts on the node level to predict the PID
         self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, dropout_ff)
         self.nn_pid = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
-        self.nn_pu = ffn(decoding_dim, 1, width, self.act, dropout_ff)
+        self.nn_pu = ffn(decoding_dim, 2, width, self.act, dropout_ff)
 
         # elementwise DNN for node momentum regression
         embed_dim = decoding_dim
@@ -411,6 +411,7 @@ class MLPF(nn.Module):
         preds_binary_particle = self.nn_binary_particle(final_embedding_id)
         preds_pid = self.nn_pid(final_embedding_id)
         preds_pu = self.nn_pu(final_embedding_id)
+
         # pred_charge = self.nn_charge(final_embedding_id)
 
         # regression input
