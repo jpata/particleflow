@@ -1,6 +1,5 @@
 import os
 import os.path as osp
-import pickle as pkl
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -628,7 +627,7 @@ def run(rank, world_size, config, outdir, logfile):
         "learned_representation_mode": config["model"]["learned_representation_mode"],
         **config["model"][config["conv_type"]],
     }
-    
+
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     if config["load"]:
         model = MLPF(**model_kwargs).to(torch.device(rank))
@@ -665,7 +664,7 @@ def run(rank, world_size, config, outdir, logfile):
 
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
-        #if we are rewinding the epoch counter to 1, then we also want to set the learning rate to the initial value
+        # if we are rewinding the epoch counter to 1, then we also want to set the learning rate to the initial value
         if start_epoch == 1:
             for g in optimizer.param_groups:
                 if g["lr"] != config["lr"]:
@@ -804,14 +803,13 @@ def override_config(config: dict, args):
     config["test"] = args.test
     config["make_plots"] = args.make_plots
 
-    if not args.start_epoch is None:
+    if args.start_epoch is not None:
         args.start_epoch = int(args.start_epoch)
     config["start_epoch"] = args.start_epoch
 
     if config["load"] is None:
         if config["start_epoch"] is None:
             config["start_epoch"] = 1
-        
 
     return config
 
