@@ -635,7 +635,6 @@ def run(rank, world_size, config, outdir, logfile):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
-        import pdb;pdb.set_trace()
         if config["start_epoch"] is None:
             start_epoch = int(os.path.basename(config["load"]).split("-")[1]) + 1
         else:
