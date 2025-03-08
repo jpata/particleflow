@@ -13,38 +13,38 @@ from postprocessing import map_pdgid_to_candid, map_charged_to_neutral, map_neut
 
 from postprocessing import track_coll, mc_coll, particle_feature_order, track_feature_order, hit_feature_order
 
-# track_feature_order = [
-#     "elemtype",
-#     "pt",
-#     "eta",
-#     "sin_phi",
-#     "cos_phi",
-#     "p",
-#     "chi2",
-#     "ndf",
-#     "dEdx",
-#     "dEdxError",
-#     "radiusOfInnermostHit",
-#     "tanLambda",
-#     "D0",
-#     "omega",
-#     "Z0",
-#     "time",
-# ]
-# hit_feature_order = [
-#     "elemtype",
-#     "et",
-#     "eta",
-#     "sin_phi",
-#     "cos_phi",
-#     "energy",
-#     "position.x",
-#     "position.y",
-#     "position.z",
-#     "time",
-#     "subdetector",
-#     "type",
-# ]
+track_feature_order = [
+    "elemtype",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "p",
+    "chi2",
+    "ndf",
+    "dEdx",
+    "dEdxError",
+    "radiusOfInnermostHit",
+    "tanLambda",
+    "D0",
+    "omega",
+    "Z0",
+    "time",
+]
+hit_feature_order = [
+    "elemtype",
+    "et",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "position.x",
+    "position.y",
+    "position.z",
+    "time",
+    "subdetector",
+    "type",
+]
 
 from postprocessing import (
     get_genparticles_and_adjacencies,
@@ -154,6 +154,18 @@ def get_recoptcl_to_obj(n_rps, reco_arr, gpdata, idx_rp_to_track, idx_rp_to_clus
                 break
     return track_to_rp, calohit_to_rp
 
+def permute_association_matrix(old_mat, used_gps):
+    i = 0
+    temp_mat = list()
+    new_mat = np.zeros((old_mat.shape))
+    for used_gps_idx in range(len(used_gps)):
+        if used_gps[used_gps_idx] == 1:
+            new_mat[i] = old_mat[used_gps_idx]
+            i += 1
+        else:
+            temp_mat.append(old_mat[used_gps_idx])
+    new_mat[i:, :] = np.array(temp_mat)
+    return new_mat
 
 def process_one_file(fn, ofn, dataset, store_matrix=True):
 
@@ -345,6 +357,9 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
         # assign all track-associated genparticles to a track
         track_to_gp_all = assign_to_recoobj(n_tracks, track_to_gp, used_gps)
 
+        gp_to_track = permute_association_matrix(gp_to_track, used_gps)
+        gp_to_calohit = permute_association_matrix(gp_to_calohit, used_gps)
+        
         # assign all calohit-associated genparticles to a calohit
         hit_to_gp_all = assign_to_recoobj(n_hits, hit_to_gp, used_gps)
         if not np.all(used_gps == 1):
@@ -419,7 +434,7 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
     awkward.to_parquet(ret, ofn)
 
 
-def process_sample(samp):
+def process_sample(samp, config):
     inp = "/local/joosep/clic_edm4hep/"
     outp = "/local/joosep/mlpf_hits/clic_edm4hep/"
 
@@ -434,22 +449,22 @@ def process_sample(samp):
     args = []
     for inf in infiles:
         of = inf.replace(inpath_samp, outpath_samp).replace(".root", ".parquet")
-        args.append((inf, of))
+        args.append((inf, of, config.dataset, config.store_matrix))
     pool.starmap(process_one_file, args)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="A simple calculator using argparse.")
+    parser = argparse.ArgumentParser()
     parser.add_argument("--fn", type=str, default=None, help="input file (root)")
     parser.add_argument("--ofn", type=str, default=None, help="output file (parquet)")
     parser.add_argument("--samples", type=str, default=None, help="sample name to specify many files")
     parser.add_argument("--dataset", type=str, default="clic", help="sample name to specify many files")
 
     parser.add_argument("--store-matrix", action="store_true", help="store track and hit association matrices")   
-     
+    
     args = parser.parse_args()
     
     if args.samples is not None:
-        process_sample(args.samples)
+        process_sample(args.samples, args)
     else:
         process_one_file(args.fn, args.ofn, args.dataset, args.store_matrix)

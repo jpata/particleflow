@@ -153,6 +153,18 @@ def get_recoptcl_to_obj(n_rps, reco_arr, gpdata, idx_rp_to_track, idx_rp_to_clus
                 break
     return track_to_rp, calohit_to_rp
 
+def permute_association_matrix(old_mat, used_gps):
+    i = 0
+    temp_mat = list()
+    new_mat = np.zeros((old_mat.shape))
+    for used_gps_idx in range(len(used_gps)):
+        if used_gps[used_gps_idx] == 1:
+            new_mat[i] = old_mat[used_gps_idx]
+            i += 1
+        else:
+            temp_mat.append(old_mat[used_gps_idx])
+    new_mat[i:, :] = np.array(temp_mat)
+    return new_mat
 
 def process_one_file(fn, ofn):
 
