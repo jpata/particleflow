@@ -189,7 +189,17 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
 
         prop_data = arrs.arrays(
             [
-                mc_coll,
+                "MCParticles.PDG",
+                "MCParticles.momentum.x",
+                "MCParticles.momentum.y",
+                "MCParticles.momentum.z",
+                "MCParticles.mass",
+                "MCParticles.charge",
+                "MCParticles.generatorStatus",
+                "MCParticles.simulatorStatus",
+                "MCParticles.daughters_begin",
+                "MCParticles.daughters_end",
+                "MCParticles#1.index",
                 track_coll,
                 "SiTracks_1",
                 "PandoraClusters",
@@ -198,6 +208,7 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
                 "MergedRecoParticles",
             ]
         )
+
         calohit_links = arrs.arrays(
             [
                 "CalohitMCTruthLink.weight",
@@ -231,7 +242,7 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
             "HCALOther": arrs["HCALOther"].array(),
             "MUON": arrs["MUON"].array(),
         }
-    elif dataset == "fcc":
+    elif dataset == "fcc" or dataset == "cld":
         collectionIDs = {
             k: v
             for k, v in zip(
@@ -305,7 +316,7 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
         
         if dataset == "clic":
             reco_type = np.abs(reco_arr["type"])
-        elif dataset == "fcc":
+        elif dataset == "fcc" or dataset == "cld":
             reco_type = np.abs(reco_arr["PDG"])
         else:
             raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")

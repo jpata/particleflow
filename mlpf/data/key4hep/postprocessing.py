@@ -11,14 +11,14 @@ import glob
 import math
 
 import awkward
-import fastjet
+# import fastjet
 import numpy as np
 import tqdm
 import uproot
 import vector
 from scipy.sparse import coo_matrix
 
-jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
+# jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
 jet_ptcut = 5
 
 track_coll = "SiTracks_Refitted"
@@ -258,7 +258,7 @@ def get_calohit_matrix_and_genadj(dataset, hit_data, calohit_links, iev, collect
         calohit_to_gen_gen_colid = calohit_links["CalohitMCTruthLink#1.collectionID"][iev]
         calohit_to_gen_calo_idx = calohit_links["CalohitMCTruthLink#0.index"][iev]
         calohit_to_gen_gen_idx = calohit_links["CalohitMCTruthLink#1.index"][iev]
-    elif dataset == "fcc":
+    elif dataset == "fcc" or dataset == "cld":
         calohit_to_gen_calo_colid = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"][iev]
         calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID"][iev]
         calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]
@@ -298,7 +298,7 @@ def hit_cluster_adj(dataset, prop_data, hit_idx_local_to_global, iev):
         idx_arr = prop_data["PandoraClusters#1"]["PandoraClusters#1.index"][iev]
         hits_begin = prop_data["PandoraClusters"]["PandoraClusters.hits_begin"][iev]
         hits_end = prop_data["PandoraClusters"]["PandoraClusters.hits_end"][iev]
-    elif dataset == "fcc":
+    elif dataset == "fcc" or dataset == "cld":
         coll_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.collectionID"][iev]
         idx_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.index"][iev]
         hits_begin = prop_data["PandoraClusters"]["PandoraClusters.hits_begin"][iev]
@@ -335,7 +335,7 @@ def gen_to_features(dataset, prop_data, iev):
 
     if dataset == "clic":
         gen_arr = prop_data[iev]
-    elif dataset == "fcc":
+    elif dataset == "fcc" or dataset == "cld":
         gen_arr = prop_data[mc_coll][iev]
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
@@ -376,7 +376,7 @@ def gen_to_features(dataset, prop_data, iev):
 
     if dataset == "clic":
         ret["index"] = prop_data["MCParticles#1.index"][iev]
-    elif dataset == "fcc":
+    elif dataset == "fcc" or dataset == "cld":
         ret["index"] = prop_data["_MCParticles_daughters/_MCParticles_daughters.index"][iev]
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
@@ -389,7 +389,7 @@ def genparticle_track_adj(dataset, sitrack_links, iev):
     if dataset == "clic":
         trk_to_gen_trkidx = sitrack_links["SiTracksMCTruthLink#0.index"][iev]
         trk_to_gen_genidx = sitrack_links["SiTracksMCTruthLink#1.index"][iev]
-    elif dataset == "fcc":
+    elif dataset == "fcc" or dataset == "cld":
         trk_to_gen_trkidx = sitrack_links["_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index"][iev]
         trk_to_gen_genidx = sitrack_links["_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index"][iev]
     else:
@@ -482,7 +482,7 @@ def track_to_features(dataset, prop_data, iev):
         feats_from_track = ["type", "chi2", "ndf", "dEdx", "dEdxError", "radiusOfInnermostHit"]
         ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
 
-    elif dataset == "fcc":
+    elif dataset == "fcc" or dataset == "cld":
         track_arr = prop_data[track_coll][iev]
         # the following are needed since they are no longer defined under SiTracks_Refitted
         track_arr_dQdx = prop_data["SiTracks_Refitted_dQdx"][iev]
@@ -527,7 +527,7 @@ def track_to_features(dataset, prop_data, iev):
 
         if dataset == "clic":
             ret[k] = awkward.to_numpy(prop_data["SiTracks_1"]["SiTracks_1." + k][iev][trackstate_idx])
-        elif dataset == "fcc":
+        elif dataset == "fcc" or dataset == "cld":
             ret[k] = awkward.to_numpy(prop_data["_SiTracks_Refitted_trackStates"]["_SiTracks_Refitted_trackStates." + k][iev][trackstate_idx])
 
         else:
@@ -872,7 +872,7 @@ def get_reco_properties(dataset, prop_data, iev):
     if dataset == "clic":
         reco_arr = prop_data["MergedRecoParticles"][iev]
         reco_arr = {k.replace("MergedRecoParticles.", ""): reco_arr[k] for k in reco_arr.fields}
-    elif dataset == "fcc":
+    elif dataset == "fcc" or dataset == "cld":
         reco_arr = prop_data["PandoraPFOs"][iev]
         reco_arr = {k.replace("PandoraPFOs.", ""): reco_arr[k] for k in reco_arr.fields}
     else:
@@ -888,7 +888,7 @@ def get_reco_properties(dataset, prop_data, iev):
 
     if dataset == "clic":
         msk = reco_arr["type"] != 0
-    elif dataset == "fcc":
+    elif dataset == "fcc" or dataset == "cld":
         msk = reco_arr["PDG"] != 0
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
@@ -947,16 +947,16 @@ def compute_met(p4):
     return met
 
 
-def compute_jets(particles_p4, min_pt=jet_ptcut, with_indices=False):
-    cluster = fastjet.ClusterSequence(particles_p4, jetdef)
-    jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
-    jets = vector.awk(awkward.zip({"energy": jets["t"], "px": jets["x"], "py": jets["y"], "pz": jets["z"]}))
-    jets = awkward.Array({"pt": jets.pt, "eta": jets.eta, "phi": jets.phi, "energy": jets.energy})
-    ret = jets
-    if with_indices:
-        indices = cluster.constituent_index(min_pt=min_pt)
-        ret = jets, indices
-    return ret
+# def compute_jets(particles_p4, min_pt=jet_ptcut, with_indices=False):
+#     cluster = fastjet.ClusterSequence(particles_p4, jetdef)
+#     jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
+#     jets = vector.awk(awkward.zip({"energy": jets["t"], "px": jets["x"], "py": jets["y"], "pz": jets["z"]}))
+#     jets = awkward.Array({"pt": jets.pt, "eta": jets.eta, "phi": jets.phi, "energy": jets.energy})
+#     ret = jets
+#     if with_indices:
+#         indices = cluster.constituent_index(min_pt=min_pt)
+#         ret = jets, indices
+#     return ret
 
 
 def process_one_file(fn, ofn, dataset):
@@ -1031,7 +1031,7 @@ def process_one_file(fn, ofn, dataset):
             "HCALOther": arrs["HCALOther"].array(),
             "MUON": arrs["MUON"].array(),
         }
-    elif dataset == "fcc":
+    elif dataset == "fcc" or dataset == "cld":
         collectionIDs = {
             k: v
             for k, v in zip(
@@ -1111,7 +1111,7 @@ def process_one_file(fn, ofn, dataset):
         )
     )
     met_st1 = compute_met(mc_st1_p4)
-    genjets_st1 = compute_jets(mc_st1_p4)
+    # genjets_st1 = compute_jets(mc_st1_p4)
 
     ret = []
     for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
@@ -1121,7 +1121,7 @@ def process_one_file(fn, ofn, dataset):
 
         if dataset == "clic":
             reco_type = np.abs(reco_arr["type"])
-        elif dataset == "fcc":
+        elif dataset == "fcc" or dataset == "cld":
             reco_type = np.abs(reco_arr["PDG"])
         else:
             raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
@@ -1244,12 +1244,12 @@ def process_one_file(fn, ofn, dataset):
                 }
             )
         )
-        target_jets, target_jets_indices = compute_jets(ytarget_p4, with_indices=True)
-        sorted_jet_idx = awkward.argsort(target_jets.pt, axis=-1, ascending=False).to_list()
-        target_jets_indices = target_jets_indices.to_list()
-        for jet_idx in sorted_jet_idx:
-            jet_constituents = [index_mapping[idx] for idx in target_jets_indices[jet_idx]]  # map back to constituent index *before* masking
-            ytarget_constituents[jet_constituents] = jet_idx
+        # target_jets, target_jets_indices = compute_jets(ytarget_p4, with_indices=True)
+        # sorted_jet_idx = awkward.argsort(target_jets.pt, axis=-1, ascending=False).to_list()
+        # target_jets_indices = target_jets_indices.to_list()
+        # for jet_idx in sorted_jet_idx:
+        #     jet_constituents = [index_mapping[idx] for idx in target_jets_indices[jet_idx]]  # map back to constituent index *before* masking
+        #     ytarget_constituents[jet_constituents] = jet_idx
         ytarget_track_constituents = ytarget_constituents[: len(ytarget_track)]
         ytarget_cluster_constituents = ytarget_constituents[len(ytarget_track) :]
         ytarget_track[:, particle_feature_order.index("jet_idx")] = ytarget_track_constituents
@@ -1264,8 +1264,8 @@ def process_one_file(fn, ofn, dataset):
                 "ycand_track": ycand_track,
                 "ycand_cluster": ycand_cluster,
                 "genmet": met_st1[iev],
-                "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
-                "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
+                # "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
+                # "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
             }
         )
         ret.append(this_ev)
