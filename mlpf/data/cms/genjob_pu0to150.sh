@@ -7,7 +7,7 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/
+OUTDIR=/local/joosep/mlpf/cms/20240823_simcluster/pu0to150/
 CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_2_2/
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -20,7 +20,7 @@ WORKDIR=/scratch/local/joosep/$SLURM_JOBID/$SAMPLE/$SEED
 mkdir -p $WORKDIR
 mkdir -p $OUTDIR
 
-PILEUP=Run3_Flat55To75_PoissonOOTPU
+PILEUP=Run3_Flat0To150_PoissonOOTPU
 PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data/cms/pu_files_local.txt
 
 N=50
