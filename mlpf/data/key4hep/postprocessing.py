@@ -1264,8 +1264,8 @@ def process_one_file(fn, ofn, dataset):
                 "ycand_track": ycand_track,
                 "ycand_cluster": ycand_cluster,
                 "genmet": met_st1[iev],
-                # "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
-                # "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
+                "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
+                "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
             }
         )
         ret.append(this_ev)
