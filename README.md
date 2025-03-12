@@ -10,12 +10,13 @@ MLPF focuses on developing full event reconstruction based on computationally sc
 ### Dataset compatibility table
 The following table specifies which version of the jpata/particleflow software should be used with which version of the tensorflow datasets.
 
-| Code  | CMS dataset | CLIC dataset |
-| ----- | ----------- | ------------ |
-| [1.9.0](https://github.com/jpata/particleflow/releases/v1.9.0) | 2.4.0    | 2.2.0    |
-| [2.0.0](https://github.com/jpata/particleflow/releases/v2.0.0) | 2.4.0    | 2.3.0    |
-| [2.1.0](https://github.com/jpata/particleflow/releases/v2.1.0) | 2.5.0    | 2.5.0    |
-| [2.2.0](https://github.com/jpata/particleflow/releases/v2.2.0) | 2.5.0    | 2.5.0    |
+| Code  | CMS dataset | CLIC dataset | CLD dataset |
+| ----- | ----------- | ------------ | ----------- |
+| [1.9.0](https://github.com/jpata/particleflow/releases/v1.9.0) | 2.4.0    | 2.2.0    | NA |
+| [2.0.0](https://github.com/jpata/particleflow/releases/v2.0.0) | 2.4.0    | 2.3.0    | NA |
+| [2.1.0](https://github.com/jpata/particleflow/releases/v2.1.0) | 2.5.0    | 2.5.0    | NA |
+| [2.2.0](https://github.com/jpata/particleflow/releases/v2.2.0) | 2.5.0    | 2.5.0    | 2.5.0 |
+| [2.3.0](https://github.com/jpata/particleflow/releases/v2.3.0) | 2.5.0    | 2.5.0    | 2.5.0 |
 
 ## MLPF on open datasets
 
