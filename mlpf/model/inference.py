@@ -104,7 +104,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         msk = ydata["cls_id"] != 0
         # placeholder cut on the PU frac prediction
         if typ == "pred_nopu":
-            msk1 = ydata["ispu"] < 0.5
+            msk1 = awkward.argmax(ydata["ispu"], axis=2) == 0
             msk = msk & msk1
         vec = vector.awk(
             awkward.zip(
