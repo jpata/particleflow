@@ -33,9 +33,6 @@ def run_ray_training(config, args, outdir):
     if not args.ray_local:
         ray.init(address="auto")
 
-    if args.resume_training:
-        outdir = args.resume_training  # continue training in the same directory
-
     _configLogger("mlpf", filename=f"{outdir}/train.log")
 
     use_gpu = args.gpus > 0
@@ -149,9 +146,6 @@ def run_hpo(config, args):
         use_gpu=True,
         resources_per_worker={"CPU": args.ray_cpus // (args.gpus) - 1, "GPU": 1},  # -1 to avoid blocking
     )
-
-    if tune.Tuner.can_restore(str(expdir)):
-        args.resume_training = True
 
     trainable = tune.with_parameters(set_searchspace_and_run_trial, config=config, args=args)
     trainer = TorchTrainer(train_loop_per_worker=trainable, scaling_config=scaling_config)
@@ -295,12 +289,9 @@ def train_ray_trial(config, args, outdir=None):
     if checkpoint:
         with checkpoint.as_directory() as _checkpoint_dir:
             checkpoint = torch.load(Path(_checkpoint_dir) / "checkpoint.pth", map_location=torch.device(rank))
-            if args.resume_training:
-                model, optimizer = load_checkpoint(checkpoint, model, optimizer)
-                start_epoch = checkpoint["extra_state"]["epoch"] + 1
-                lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1)
-            else:  # start a new training with model weights loaded from a pre-trained model
-                model = load_checkpoint(checkpoint, model)
+            model, optimizer = load_checkpoint(checkpoint, model, optimizer)
+            start_epoch = checkpoint["extra_state"]["epoch"] + 1
+            lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1)
 
     train_all_epochs(
         rank,

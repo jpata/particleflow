@@ -80,6 +80,7 @@ CLASS_NAMES_CLIC = [
 CLASS_LABELS = {
     "cms": CLASS_LABELS_CMS,
     "clic": CLASS_LABELS_CLIC,
+    "cld": CLASS_LABELS_CLIC,
 }
 
 labels = {
@@ -138,6 +139,12 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_single_tau": r"single tau particle gun events",
     "cms_pf_single_k0": r"single K0 particle gun events",
     "cms_pf_sms_t1tttt": r"sms t1tttt events",
+}
+
+GENJET_BINS_PT_DATASET = {
+    "clic": [10, 20, 40, 60, 80, 100, 200],
+    "cld": [10, 20, 40, 60, 80, 100, 200],
+    "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
 }
 
 
@@ -660,19 +667,19 @@ def plot_jet_ratio(
         label="MLPF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
-    p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
-    ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = {
-        "med": p[0],
-        "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"]) / awkward.count(yvals["jets_gen_pt"]),
-    }
-    plt.hist(
-        yvals["jet_ratio_gen_to_pred_nopu_pt"],
-        bins=bins,
-        histtype="step",
-        lw=2,
-        label="MLPF, no PU $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
-    )
+    # p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
+    # ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = {
+    #     "med": p[0],
+    #     "iqr": p[1],
+    #     "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"]) / awkward.count(yvals["jets_gen_pt"]),
+    # }
+    # plt.hist(
+    #     yvals["jet_ratio_gen_to_pred_nopu_pt"],
+    #     bins=bins,
+    #     histtype="step",
+    #     lw=2,
+    #     label="MLPF, no PU $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
+    # )
 
     plt.xlabel(labels["reco_gen_jet_ratio"])
     plt.ylabel("Matched jets / bin")
@@ -1520,7 +1527,7 @@ def plot_jet_response_binned_vstarget(yvals, epoch=None, cp_dir=None, comet_expe
     pf_response = yvals["jet_ratio_target_to_cand_pt"]
     mlpf_response = yvals["jet_ratio_target_to_pred_pt"]
 
-    genjet_bins = [10, 20, 40, 60, 80, 100, 200, 400, 800]
+    genjet_bins = GENJET_BINS_PT_DATASET[dataset]
 
     x_vals = []
     pf_vals = []
@@ -1630,7 +1637,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     pf_response = yvals["jet_ratio_gen_to_cand_pt"]
     mlpf_response = yvals["jet_ratio_gen_to_pred_pt"]
 
-    genjet_bins = [10, 20, 40, 60, 80, 100, 200, 400, 800]
+    genjet_bins = GENJET_BINS_PT_DATASET[dataset]
 
     x_vals = []
     target_vals = []
@@ -1713,6 +1720,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.ylabel("Response median")
     plt.xlabel(labels["gen_jet"])
     plt.tight_layout()
+    plt.ylim(0.9, 1.1)
     plt.axhline(1.0, color="black", ls="--", lw=0.5)
 
     EXPERIMENT_LABELS[dataset](ax)
