@@ -148,3 +148,4 @@ def generate_examples(files):
 
 if __name__ == "__main__":
     fn = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/reco_p8_ee_qq_ecm380_111398.parquet"
+    ret = prepare_data_clic(fn)

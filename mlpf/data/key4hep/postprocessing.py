@@ -11,14 +11,14 @@ import glob
 import math
 
 import awkward
-# import fastjet
+import fastjet
 import numpy as np
 import tqdm
 import uproot
 import vector
 from scipy.sparse import coo_matrix
 
-# jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
+jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
 jet_ptcut = 5
 
 track_coll = "SiTracks_Refitted"
@@ -625,7 +625,7 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
 
     # collect hits of st=1 daughters to the st=1 particles
     mask_status1 = gen_features["generatorStatus"] == 1
-
+    
     if gen_features["index"] is not None:  # if there are even daughters
         genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
 
@@ -633,7 +633,7 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
     n_track = awkward.count(track_features["type"])
     n_hit = awkward.count(hit_features["type"])
     n_cluster = awkward.count(cluster_features["type"])
-
+    
     if len(genparticle_to_trk[0]) > 0:
         gp_to_track = coo_matrix((genparticle_to_trk[2], (genparticle_to_trk[0], genparticle_to_trk[1])), shape=(n_gp, n_track)).max(axis=1).todense()
     else:
@@ -947,16 +947,16 @@ def compute_met(p4):
     return met
 
 
-# def compute_jets(particles_p4, min_pt=jet_ptcut, with_indices=False):
-#     cluster = fastjet.ClusterSequence(particles_p4, jetdef)
-#     jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
-#     jets = vector.awk(awkward.zip({"energy": jets["t"], "px": jets["x"], "py": jets["y"], "pz": jets["z"]}))
-#     jets = awkward.Array({"pt": jets.pt, "eta": jets.eta, "phi": jets.phi, "energy": jets.energy})
-#     ret = jets
-#     if with_indices:
-#         indices = cluster.constituent_index(min_pt=min_pt)
-#         ret = jets, indices
-#     return ret
+def compute_jets(particles_p4, min_pt=jet_ptcut, with_indices=False):
+    cluster = fastjet.ClusterSequence(particles_p4, jetdef)
+    jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
+    jets = vector.awk(awkward.zip({"energy": jets["t"], "px": jets["x"], "py": jets["y"], "pz": jets["z"]}))
+    jets = awkward.Array({"pt": jets.pt, "eta": jets.eta, "phi": jets.phi, "energy": jets.energy})
+    ret = jets
+    if with_indices:
+        indices = cluster.constituent_index(min_pt=min_pt)
+        ret = jets, indices
+    return ret
 
 
 def process_one_file(fn, ofn, dataset):
@@ -1111,7 +1111,7 @@ def process_one_file(fn, ofn, dataset):
         )
     )
     met_st1 = compute_met(mc_st1_p4)
-    # genjets_st1 = compute_jets(mc_st1_p4)
+    genjets_st1 = compute_jets(mc_st1_p4)
 
     ret = []
     for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
@@ -1244,12 +1244,12 @@ def process_one_file(fn, ofn, dataset):
                 }
             )
         )
-        # target_jets, target_jets_indices = compute_jets(ytarget_p4, with_indices=True)
-        # sorted_jet_idx = awkward.argsort(target_jets.pt, axis=-1, ascending=False).to_list()
-        # target_jets_indices = target_jets_indices.to_list()
-        # for jet_idx in sorted_jet_idx:
-        #     jet_constituents = [index_mapping[idx] for idx in target_jets_indices[jet_idx]]  # map back to constituent index *before* masking
-        #     ytarget_constituents[jet_constituents] = jet_idx
+        target_jets, target_jets_indices = compute_jets(ytarget_p4, with_indices=True)
+        sorted_jet_idx = awkward.argsort(target_jets.pt, axis=-1, ascending=False).to_list()
+        target_jets_indices = target_jets_indices.to_list()
+        for jet_idx in sorted_jet_idx:
+            jet_constituents = [index_mapping[idx] for idx in target_jets_indices[jet_idx]]  # map back to constituent index *before* masking
+            ytarget_constituents[jet_constituents] = jet_idx
         ytarget_track_constituents = ytarget_constituents[: len(ytarget_track)]
         ytarget_cluster_constituents = ytarget_constituents[len(ytarget_track) :]
         ytarget_track[:, particle_feature_order.index("jet_idx")] = ytarget_track_constituents
