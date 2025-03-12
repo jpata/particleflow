@@ -75,7 +75,7 @@ def split_sample_several(paths, test_frac=0.8):
     }
 
 
-def prepare_data_clic(fn):
+def prepare_data_cld(fn):
     ret = ak.from_parquet(fn)
 
     X_track = ret["X_track"]
@@ -169,4 +169,4 @@ def generate_examples(files):
 
 if __name__ == "__main__":
     fn = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/reco_p8_ee_qq_ecm380_111398.parquet"
-    ret = prepare_data_clic(fn)
+    ret = prepare_data_cld(fn)
