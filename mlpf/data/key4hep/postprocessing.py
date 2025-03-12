@@ -258,7 +258,7 @@ def get_calohit_matrix_and_genadj(dataset, hit_data, calohit_links, iev, collect
         calohit_to_gen_gen_colid = calohit_links["CalohitMCTruthLink#1.collectionID"][iev]
         calohit_to_gen_calo_idx = calohit_links["CalohitMCTruthLink#0.index"][iev]
         calohit_to_gen_gen_idx = calohit_links["CalohitMCTruthLink#1.index"][iev]
-    elif dataset == "fcc" or dataset == "cld":
+    elif dataset == "fcc":
         calohit_to_gen_calo_colid = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"][iev]
         calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID"][iev]
         calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]
@@ -298,7 +298,7 @@ def hit_cluster_adj(dataset, prop_data, hit_idx_local_to_global, iev):
         idx_arr = prop_data["PandoraClusters#1"]["PandoraClusters#1.index"][iev]
         hits_begin = prop_data["PandoraClusters"]["PandoraClusters.hits_begin"][iev]
         hits_end = prop_data["PandoraClusters"]["PandoraClusters.hits_end"][iev]
-    elif dataset == "fcc" or dataset == "cld":
+    elif dataset == "fcc":
         coll_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.collectionID"][iev]
         idx_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.index"][iev]
         hits_begin = prop_data["PandoraClusters"]["PandoraClusters.hits_begin"][iev]
@@ -335,7 +335,7 @@ def gen_to_features(dataset, prop_data, iev):
 
     if dataset == "clic":
         gen_arr = prop_data[iev]
-    elif dataset == "fcc" or dataset == "cld":
+    elif dataset == "fcc":
         gen_arr = prop_data[mc_coll][iev]
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
@@ -376,7 +376,7 @@ def gen_to_features(dataset, prop_data, iev):
 
     if dataset == "clic":
         ret["index"] = prop_data["MCParticles#1.index"][iev]
-    elif dataset == "fcc" or dataset == "cld":
+    elif dataset == "fcc":
         ret["index"] = prop_data["_MCParticles_daughters/_MCParticles_daughters.index"][iev]
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
@@ -389,7 +389,7 @@ def genparticle_track_adj(dataset, sitrack_links, iev):
     if dataset == "clic":
         trk_to_gen_trkidx = sitrack_links["SiTracksMCTruthLink#0.index"][iev]
         trk_to_gen_genidx = sitrack_links["SiTracksMCTruthLink#1.index"][iev]
-    elif dataset == "fcc" or dataset == "cld":
+    elif dataset == "fcc":
         trk_to_gen_trkidx = sitrack_links["_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index"][iev]
         trk_to_gen_genidx = sitrack_links["_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index"][iev]
     else:
@@ -482,7 +482,7 @@ def track_to_features(dataset, prop_data, iev):
         feats_from_track = ["type", "chi2", "ndf", "dEdx", "dEdxError", "radiusOfInnermostHit"]
         ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
 
-    elif dataset == "fcc" or dataset == "cld":
+    elif dataset == "fcc":
         track_arr = prop_data[track_coll][iev]
         # the following are needed since they are no longer defined under SiTracks_Refitted
         track_arr_dQdx = prop_data["SiTracks_Refitted_dQdx"][iev]
@@ -527,7 +527,7 @@ def track_to_features(dataset, prop_data, iev):
 
         if dataset == "clic":
             ret[k] = awkward.to_numpy(prop_data["SiTracks_1"]["SiTracks_1." + k][iev][trackstate_idx])
-        elif dataset == "fcc" or dataset == "cld":
+        elif dataset == "fcc":
             ret[k] = awkward.to_numpy(prop_data["_SiTracks_Refitted_trackStates"]["_SiTracks_Refitted_trackStates." + k][iev][trackstate_idx])
 
         else:
@@ -872,7 +872,7 @@ def get_reco_properties(dataset, prop_data, iev):
     if dataset == "clic":
         reco_arr = prop_data["MergedRecoParticles"][iev]
         reco_arr = {k.replace("MergedRecoParticles.", ""): reco_arr[k] for k in reco_arr.fields}
-    elif dataset == "fcc" or dataset == "cld":
+    elif dataset == "fcc":
         reco_arr = prop_data["PandoraPFOs"][iev]
         reco_arr = {k.replace("PandoraPFOs.", ""): reco_arr[k] for k in reco_arr.fields}
     else:
@@ -888,7 +888,7 @@ def get_reco_properties(dataset, prop_data, iev):
 
     if dataset == "clic":
         msk = reco_arr["type"] != 0
-    elif dataset == "fcc" or dataset == "cld":
+    elif dataset == "fcc":
         msk = reco_arr["PDG"] != 0
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
@@ -1031,7 +1031,7 @@ def process_one_file(fn, ofn, dataset):
             "HCALOther": arrs["HCALOther"].array(),
             "MUON": arrs["MUON"].array(),
         }
-    elif dataset == "fcc" or dataset == "cld":
+    elif dataset == "fcc":
         collectionIDs = {
             k: v
             for k, v in zip(
@@ -1121,7 +1121,7 @@ def process_one_file(fn, ofn, dataset):
 
         if dataset == "clic":
             reco_type = np.abs(reco_arr["type"])
-        elif dataset == "fcc" or dataset == "cld":
+        elif dataset == "fcc":
             reco_type = np.abs(reco_arr["PDG"])
         else:
             raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")

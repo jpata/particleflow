@@ -242,7 +242,7 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
             "HCALOther": arrs["HCALOther"].array(),
             "MUON": arrs["MUON"].array(),
         }
-    elif dataset == "fcc" or dataset == "cld":
+    elif dataset == "fcc":
         collectionIDs = {
             k: v
             for k, v in zip(
@@ -316,7 +316,7 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
         
         if dataset == "clic":
             reco_type = np.abs(reco_arr["type"])
-        elif dataset == "fcc" or dataset == "cld":
+        elif dataset == "fcc":
             reco_type = np.abs(reco_arr["PDG"])
         else:
             raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
