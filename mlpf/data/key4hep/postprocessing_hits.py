@@ -154,6 +154,7 @@ def get_recoptcl_to_obj(n_rps, reco_arr, gpdata, idx_rp_to_track, idx_rp_to_clus
                 break
     return track_to_rp, calohit_to_rp
 
+# permute rows of the track/hit association matrix to order the gps as in tfds format
 def permute_association_matrix(old_mat, used_gps):
     i = 0
     temp_mat = list()
