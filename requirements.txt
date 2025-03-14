@@ -1,3 +1,4 @@
+apache-beam
 array-record
 autopep8
 awkward
@@ -42,4 +43,3 @@ tqdm
 uproot
 vector
 zenodo_get
-apache-beam
