@@ -625,7 +625,7 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
 
     # collect hits of st=1 daughters to the st=1 particles
     mask_status1 = gen_features["generatorStatus"] == 1
-    
+
     if gen_features["index"] is not None:  # if there are even daughters
         genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
 
@@ -633,7 +633,7 @@ def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links
     n_track = awkward.count(track_features["type"])
     n_hit = awkward.count(hit_features["type"])
     n_cluster = awkward.count(cluster_features["type"])
-    
+
     if len(genparticle_to_trk[0]) > 0:
         gp_to_track = coo_matrix((genparticle_to_trk[2], (genparticle_to_trk[0], genparticle_to_trk[1])), shape=(n_gp, n_track)).max(axis=1).todense()
     else:

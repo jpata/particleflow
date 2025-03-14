@@ -3,7 +3,6 @@ import awkward
 import uproot
 import glob
 import os
-import sys
 import multiprocessing
 import tqdm
 import argparse
@@ -12,39 +11,6 @@ from scipy.sparse import coo_matrix
 from postprocessing import map_pdgid_to_candid, map_charged_to_neutral, map_neutral_to_charged, sanitize
 
 from postprocessing import track_coll, mc_coll, particle_feature_order, track_feature_order, hit_feature_order
-
-track_feature_order = [
-    "elemtype",
-    "pt",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "p",
-    "chi2",
-    "ndf",
-    "dEdx",
-    "dEdxError",
-    "radiusOfInnermostHit",
-    "tanLambda",
-    "D0",
-    "omega",
-    "Z0",
-    "time",
-]
-hit_feature_order = [
-    "elemtype",
-    "et",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "position.x",
-    "position.y",
-    "position.z",
-    "time",
-    "subdetector",
-    "type",
-]
 
 from postprocessing import (
     get_genparticles_and_adjacencies,
@@ -154,6 +120,7 @@ def get_recoptcl_to_obj(n_rps, reco_arr, gpdata, idx_rp_to_track, idx_rp_to_clus
                 break
     return track_to_rp, calohit_to_rp
 
+
 # permute rows of the track/hit association matrix to order the gps as in tfds format
 def permute_association_matrix(old_mat, used_gps):
     i = 0
@@ -167,6 +134,7 @@ def permute_association_matrix(old_mat, used_gps):
             temp_mat.append(old_mat[used_gps_idx])
     new_mat[i:, :] = np.array(temp_mat)
     return new_mat
+
 
 def process_one_file(fn, ofn, dataset, store_matrix=True):
 
@@ -314,7 +282,7 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
 
         # get the reco particles
         reco_arr = get_reco_properties(dataset, prop_data, iev)
-        
+
         if dataset == "clic":
             reco_type = np.abs(reco_arr["type"])
         elif dataset == "fcc":
@@ -371,7 +339,7 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
 
         gp_to_track = permute_association_matrix(gp_to_track, used_gps)
         gp_to_calohit = permute_association_matrix(gp_to_calohit, used_gps)
-        
+
         # assign all calohit-associated genparticles to a calohit
         hit_to_gp_all = assign_to_recoobj(n_hits, hit_to_gp, used_gps)
         if not np.all(used_gps == 1):
@@ -472,10 +440,10 @@ if __name__ == "__main__":
     parser.add_argument("--samples", type=str, default=None, help="sample name to specify many files")
     parser.add_argument("--dataset", type=str, default="clic", help="sample name to specify many files")
 
-    parser.add_argument("--store-matrix", action="store_true", help="store track and hit association matrices")   
-    
+    parser.add_argument("--store-matrix", action="store_true", help="store track and hit association matrices")
+
     args = parser.parse_args()
-    
+
     if args.samples is not None:
         process_sample(args.samples, args)
     else:

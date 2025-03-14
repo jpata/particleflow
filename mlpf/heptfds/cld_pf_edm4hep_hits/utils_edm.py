@@ -81,7 +81,7 @@ def prepare_data_cld(fn):
     X_track = ret["X_track"]
     X_hit = ret["X_hit"]
     tracks_assoc_mats = ret["gp_to_track"]
-    
+
     assert len(X_track) == len(X_hit)
     nev = len(X_track)
 
@@ -102,14 +102,14 @@ def prepare_data_cld(fn):
         ygen_hit = ak.to_numpy(ret["ygen_hit"][iev])
         ycand_track = ak.to_numpy(ret["ycand_track"][iev])
         ycand_hit = ak.to_numpy(ret["ycand_hit"][iev])
-        
+
         if tracks_assoc_mats is not None:
             gp_to_track = ak.to_numpy(ret["gp_to_track"][iev])
             gp_to_calohit = ak.to_numpy(ret["gp_to_calohit"][iev])
-            
+
             gp_to_tracks.append(gp_to_track)
             gp_to_hits.append(gp_to_calohit)
-        
+
         if ygen_track.shape[0] == 0:
             ygen_track = np.zeros((0, 7), dtype=np.float32)
         if ycand_track.shape[0] == 0:
@@ -149,7 +149,7 @@ def prepare_data_cld(fn):
 
 def generate_examples(files):
     for fi in tqdm.tqdm(files):
-        Xs, ygens, ycands, gp_to_tracks, gp_to_hits = prepare_data_clic(fi)
+        Xs, ygens, ycands, gp_to_tracks, gp_to_hits = prepare_data_cld(fi)
         for iev in range(len(Xs)):
             if gp_to_tracks == []:
                 yield str(fi) + "_" + str(iev), {
