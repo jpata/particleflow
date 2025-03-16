@@ -167,7 +167,7 @@ def unpack_target(y, model):
         if i >= 2:  # skip the cls and charge as they are defined above
             ret[feat] = y[..., i].to(dtype=torch.float32)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
-
+    ret["ispu"] = (ret["ispu"] == 1).to(dtype=torch.float32)
     # do some sanity checks
     # assert torch.all(ret["pt"] >= 0.0)  # pt
     # assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
@@ -259,22 +259,19 @@ def print_optimizer_stats(optimizer, stage):
                     print(f"    {key}: {value}")
 
 
-def load_checkpoint(checkpoint, model, optimizer=None, strict=True):
-    if optimizer:
-        print_optimizer_stats(optimizer, "Before loading")
-
+def load_checkpoint(checkpoint, model, optimizer, strict=True):
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         model.module.load_state_dict(checkpoint["model_state_dict"], strict=strict)
     else:
         model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
 
-    if optimizer:
+    if strict:
+        print_optimizer_stats(optimizer, "Before loading optimizer state")
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         logging.info("Loaded optimizer state")
-        print_optimizer_stats(optimizer, "After loading")
-        return model, optimizer
-    else:
-        return model
+        print_optimizer_stats(optimizer, "After loading optimizer state")
+
+    return model, optimizer
 
 
 def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):

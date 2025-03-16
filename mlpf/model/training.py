@@ -1,6 +1,5 @@
 import os
 import os.path as osp
-import pickle as pkl
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -618,45 +617,30 @@ def run(rank, world_size, config, outdir, logfile):
     checkpoint_dir = Path(outdir) / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    if config["load"]:  # load a pre-trained model
+    model_kwargs = {
+        "input_dim": len(X_FEATURES[config["dataset"]]),
+        "num_classes": len(CLASS_LABELS[config["dataset"]]),
+        "input_encoding": config["model"]["input_encoding"],
+        "pt_mode": config["model"]["pt_mode"],
+        "eta_mode": config["model"]["eta_mode"],
+        "sin_phi_mode": config["model"]["sin_phi_mode"],
+        "cos_phi_mode": config["model"]["cos_phi_mode"],
+        "energy_mode": config["model"]["energy_mode"],
+        "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
+        "learned_representation_mode": config["model"]["learned_representation_mode"],
+        **config["model"][config["conv_type"]],
+    }
 
-        if config["finetune"]:
-            # outdir is now the new directory for finetuning so must retrieve model_kwargs from the load dir
-            def get_relevant_directory(path):
-                # Get the parent directory of the given path
-                parent_dir = os.path.dirname(path)
-
-                # Get the parent of the parent directory
-                grandparent_dir = os.path.dirname(parent_dir)
-
-                # Check if the parent directory is "checkpoints"
-                if os.path.basename(parent_dir) == "checkpoints":
-                    return grandparent_dir
-                else:
-                    return parent_dir
-
-            with open(f"{get_relevant_directory(config['load'])}/model_kwargs.pkl", "rb") as f:
-                model_kwargs = pkl.load(f)
-
-        else:
-            with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
-                model_kwargs = pkl.load(f)
-
-        _logger.info("model_kwargs: {}".format(model_kwargs))
-
-        if config["conv_type"] == "attention":
-            model_kwargs["attention_type"] = config["model"]["attention"]["attention_type"]
-
-        # model = MLPF(**model_kwargs).to(torch.device(rank))
+    # load a pre-trained checkpoint (continue an aborted training or fine-tune)
+    if config["load"]:
         model = MLPF(**model_kwargs).to(torch.device("hpu"))
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
-
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
-        if not config["finetune"]:  # for --finetune we want to start the count from scratch
-            # check if we reached the first epoch in the checkpoint
-            if "epoch" in checkpoint["extra_state"]:
-                start_epoch = checkpoint["extra_state"]["epoch"] + 1
+        if config["start_epoch"] is None:
+            start_epoch = int(os.path.basename(config["load"]).split("-")[1]) + 1
+        else:
+            start_epoch = config["start_epoch"]
 
         missing_keys, strict = [], True
         for k in model.state_dict().keys():
@@ -671,7 +655,7 @@ def run(rank, world_size, config, outdir, logfile):
 
         if len(missing_keys) > 0:
             _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
-            if config["relaxed_load"]:
+            if config.get("relaxed_load", True):
                 _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
                 strict = False
             else:
@@ -680,28 +664,21 @@ def run(rank, world_size, config, outdir, logfile):
 
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
-        if strict:
-            model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
-        else:
-            model = load_checkpoint(checkpoint, model, None, strict)
+
+        model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
+
+        # if we are rewinding the epoch counter to 1, then we also want to set the learning rate to the initial value
+        if start_epoch == 1:
+            for g in optimizer.param_groups:
+                if g["lr"] != config["lr"]:
+                    _logger.info("optimizer param group lr changed {} -> {}".format(g["lr"], config["lr"]))
+                    g["lr"] = config["lr"]
+
     else:  # instantiate a new model in the outdir created
-        model_kwargs = {
-            "input_dim": len(X_FEATURES[config["dataset"]]),
-            "num_classes": len(CLASS_LABELS[config["dataset"]]),
-            "input_encoding": config["model"]["input_encoding"],
-            "pt_mode": config["model"]["pt_mode"],
-            "eta_mode": config["model"]["eta_mode"],
-            "sin_phi_mode": config["model"]["sin_phi_mode"],
-            "cos_phi_mode": config["model"]["cos_phi_mode"],
-            "energy_mode": config["model"]["energy_mode"],
-            "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
-            "learned_representation_mode": config["model"]["learned_representation_mode"],
-            **config["model"][config["conv_type"]],
-        }
         model = MLPF(**model_kwargs)
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
-    model.to(rank)
+    model.to(torch.device("hpu"))
     configure_model_trainable(model, config["model"]["trainable"], True)
 
     if world_size > 1:
@@ -828,6 +805,14 @@ def override_config(config: dict, args):
     config["train"] = args.train
     config["test"] = args.test
     config["make_plots"] = args.make_plots
+
+    if args.start_epoch is not None:
+        args.start_epoch = int(args.start_epoch)
+    config["start_epoch"] = args.start_epoch
+
+    if config["load"] is None:
+        if config["start_epoch"] is None:
+            config["start_epoch"] = 1
 
     return config
 

@@ -80,6 +80,7 @@ CLASS_NAMES_CLIC = [
 CLASS_LABELS = {
     "cms": CLASS_LABELS_CMS,
     "clic": CLASS_LABELS_CLIC,
+    "cld": CLASS_LABELS_CLIC,
 }
 
 labels = {
@@ -138,6 +139,12 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_single_tau": r"single tau particle gun events",
     "cms_pf_single_k0": r"single K0 particle gun events",
     "cms_pf_sms_t1tttt": r"sms t1tttt events",
+}
+
+GENJET_BINS_PT_DATASET = {
+    "clic": [10, 20, 40, 60, 80, 100, 200],
+    "cld": [10, 20, 40, 60, 80, 100, 200],
+    "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
 }
 
 
@@ -660,19 +667,19 @@ def plot_jet_ratio(
         label="MLPF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
-    p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
-    ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = {
-        "med": p[0],
-        "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"]) / awkward.count(yvals["jets_gen_pt"]),
-    }
-    plt.hist(
-        yvals["jet_ratio_gen_to_pred_nopu_pt"],
-        bins=bins,
-        histtype="step",
-        lw=2,
-        label="MLPF, no PU $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
-    )
+    # p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
+    # ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = {
+    #     "med": p[0],
+    #     "iqr": p[1],
+    #     "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"]) / awkward.count(yvals["jets_gen_pt"]),
+    # }
+    # plt.hist(
+    #     yvals["jet_ratio_gen_to_pred_nopu_pt"],
+    #     bins=bins,
+    #     histtype="step",
+    #     lw=2,
+    #     label="MLPF, no PU $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
+    # )
 
     plt.xlabel(labels["reco_gen_jet_ratio"])
     plt.ylabel("Matched jets / bin")
@@ -1520,7 +1527,7 @@ def plot_jet_response_binned_vstarget(yvals, epoch=None, cp_dir=None, comet_expe
     pf_response = yvals["jet_ratio_target_to_cand_pt"]
     mlpf_response = yvals["jet_ratio_target_to_pred_pt"]
 
-    genjet_bins = [10, 20, 40, 60, 80, 100, 200, 400, 800]
+    genjet_bins = GENJET_BINS_PT_DATASET[dataset]
 
     x_vals = []
     pf_vals = []
@@ -1630,7 +1637,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     pf_response = yvals["jet_ratio_gen_to_cand_pt"]
     mlpf_response = yvals["jet_ratio_gen_to_pred_pt"]
 
-    genjet_bins = [10, 20, 40, 60, 80, 100, 200, 400, 800]
+    genjet_bins = GENJET_BINS_PT_DATASET[dataset]
 
     x_vals = []
     target_vals = []
@@ -1713,6 +1720,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.ylabel("Response median")
     plt.xlabel(labels["gen_jet"])
     plt.tight_layout()
+    plt.ylim(0.9, 1.1)
     plt.axhline(1.0, color="black", ls="--", lw=0.5)
 
     EXPERIMENT_LABELS[dataset](ax)
@@ -2078,23 +2086,28 @@ def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experi
 
 
 def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, comet_experiment=None):
-    plt.figure()
-    ax = plt.axes()
     bins = np.linspace(0, 1, 100)
-    target_ispu = awkward.flatten(yvals["target_ispu"])
-    pred_ispu = awkward.flatten(yvals["pred_ispu"])
-    plt.hist(target_ispu, bins=bins, label="target", histtype="step")
-    plt.hist(pred_ispu, bins=bins, label="MLPF", histtype="step")
-    plt.legend(loc=1, fontsize=16)
-    plt.xlabel("PU fraction")
-    plt.yscale("log")
-    if dataset:
-        EXPERIMENT_LABELS[dataset](ax)
-    if sample:
-        sample_label(ax, sample)
-    save_img(
-        "pu_frac.png",
-        epoch,
-        cp_dir=cp_dir,
-        comet_experiment=comet_experiment,
-    )
+    neutural = (yvals["target_cls_id"] == 4) | (yvals["target_cls_id"] == 5)
+    charged = (yvals["target_cls_id"] == 1) | (yvals["target_cls_id"] == 2) | (yvals["target_cls_id"] == 3)
+    hf = (yvals["target_cls_id"] == 6) | (yvals["target_cls_id"] == 7)
+    types = [neutural, charged, hf]
+    for type_, name in zip(types, ["n", "c", "h"]):
+        plt.figure()
+        ax = plt.axes()
+        pred_ispu = awkward.flatten(awkward.argmax(yvals["pred_ispu"][type_], axis=2))
+        target_ispu = awkward.flatten(yvals["target_ispu"][type_])
+        plt.hist(target_ispu, bins=bins, label="target", histtype="step")
+        plt.hist(pred_ispu, bins=bins, label="MLPF", histtype="step")
+        plt.legend(loc=1, fontsize=16)
+        plt.xlabel("PU fraction")
+        plt.yscale("log")
+        if dataset:
+            EXPERIMENT_LABELS[dataset](ax)
+        if sample:
+            sample_label(ax, sample)
+        save_img(
+            f"pu_frac_{name}.png",
+            epoch,
+            cp_dir=cp_dir,
+            comet_experiment=comet_experiment,
+        )

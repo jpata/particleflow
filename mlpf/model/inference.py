@@ -105,7 +105,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         msk = ydata["cls_id"] != 0
         # placeholder cut on the PU frac prediction
         if typ == "pred_nopu":
-            msk1 = ydata["ispu"] < 0.5
+            msk1 = awkward.argmax(ydata["ispu"], axis=2) == 0
             msk = msk & msk1
         vec = vector.awk(
             awkward.zip(
@@ -202,8 +202,17 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
         yvals,
         cp_dir=plots_path,
         bins=np.linspace(0.5, 1.5, 500),
-        logy=False,
+        logy=True,
         file_modifier="_bins_0p5_1p5",
+        dataset=dataset,
+        sample=sample,
+    )
+    plot_jet_ratio(
+        yvals,
+        cp_dir=plots_path,
+        bins=np.linspace(0, 2, 500),
+        logy=True,
+        file_modifier="_bins_0_2",
         dataset=dataset,
         sample=sample,
     )
