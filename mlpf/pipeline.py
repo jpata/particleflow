@@ -114,13 +114,12 @@ def get_outdir(resume_training, load):
 def main():
     # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
     import torch
-    if args.habana:
-        import habana_frameworks.torch.core as htcore
-
     torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
 
     # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()
+    if args.habana:
+        import habana_frameworks.torch.core as htcore
 
     if args.resume_training and not args.ray_train:
         raise NotImplementedError(
