@@ -11,7 +11,7 @@ matplotlib
 mlcroissant
 mplhep
 notebook
-numba
+numba==0.60.0
 onnx
 onnxruntime
 papermill
@@ -20,7 +20,7 @@ pre-commit
 protobuf
 pyarrow
 ray[tune]
-scikit-learn==1.5.2
+scikit-learn
 scikit-optimize
 scipy
 seaborn
