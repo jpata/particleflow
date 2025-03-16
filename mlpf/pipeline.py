@@ -91,6 +91,7 @@ parser.add_argument(
     default=None,
     help="will load and run a training and log the result in the --prefix directory",
 )
+parser.add_argument("--habana", action="store_true", default=None, help="use Habana Gaudi processor")
 
 
 def get_outdir(resume_training, load):
@@ -113,6 +114,8 @@ def get_outdir(resume_training, load):
 def main():
     # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
     import torch
+    if args.habana:
+        import habana_frameworks.torch.core as htcore
 
     torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
 
@@ -176,7 +179,7 @@ def main():
         if args.ray_train:
             run_ray_training(config, args, outdir)
         else:
-            device_agnostic_run(config, world_size, outdir)
+            device_agnostic_run(config, world_size, outdir, args.habana)
 
 
 if __name__ == "__main__":

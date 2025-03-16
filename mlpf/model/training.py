@@ -76,13 +76,16 @@ def model_step(batch, model, loss_fn):
 
 
 def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
+    import habana_frameworks.torch.core as htcore
     # Clear gradients
     for param in model.parameters():
         param.grad = None
 
     # Backward pass and optimization
     scaler.scale(loss_opt).backward()
+    htcore.mark_step()
     scaler.step(optimizer)
+    htcore.mark_step()
     scaler.update()
     if lr_schedule:
         lr_schedule.step()
@@ -644,7 +647,8 @@ def run(rank, world_size, config, outdir, logfile):
         if config["conv_type"] == "attention":
             model_kwargs["attention_type"] = config["model"]["attention"]["attention_type"]
 
-        model = MLPF(**model_kwargs).to(torch.device(rank))
+        # model = MLPF(**model_kwargs).to(torch.device(rank))
+        model = MLPF(**model_kwargs).to(torch.device("hpu"))
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
@@ -829,7 +833,7 @@ def override_config(config: dict, args):
 
 
 # Run either on CPU, single GPU or multi-GPU using pytorch
-def device_agnostic_run(config, world_size, outdir):
+def device_agnostic_run(config, world_size, outdir, habana=False):
     if config["train"]:
         logfile = f"{outdir}/train.log"
     else:
