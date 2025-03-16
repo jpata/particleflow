@@ -841,15 +841,20 @@ def device_agnostic_run(config, world_size, outdir, habana=False):
     _configLogger("mlpf", filename=logfile)
 
     if config["gpus"]:
+        if habana:
+            import habana_frameworks.torch.hpu as torch_device
+        else:
+            import torch.cuda as torch_device
         assert (
-            world_size <= torch.cuda.device_count()
-        ), f"--gpus is too high (specified {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"
+            world_size <= torch_device.device_count()
+        ), f"--gpus is too high (specified {world_size} gpus but only {torch_device.device_count()} gpus are available)"
 
-        torch.cuda.empty_cache()
+        if not habana:
+            torch.cuda.empty_cache()
         if world_size > 1:
             _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus", color="purple")
             for rank in range(world_size):
-                _logger.info(torch.cuda.get_device_name(rank), color="purple")
+                _logger.info(torch_device.get_device_name(rank), color="purple")
 
             mp.spawn(
                 run,
@@ -859,7 +864,7 @@ def device_agnostic_run(config, world_size, outdir, habana=False):
             )
         elif world_size == 1:
             rank = 0
-            _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
+            _logger.info(f"Will use single-gpu: {torch_device.get_device_name(rank)}", color="purple")
             run(rank, world_size, config, outdir, logfile)
 
     else:
