@@ -1,8 +1,0 @@
-FROM vault.habana.ai/gaudi-docker/1.15.1/ubuntu22.04/habanalabs/pytorch-installer-2.2.0:latest
-LABEL maintainer="Javier Duarte <jduarte@ucsd.edu>"
-
-RUN apt-get update && \
-    apt-get install -qq -y graphviz graphviz-dev
-
-COPY requirements_base.txt .
-RUN pip install -r requirements_base.txt

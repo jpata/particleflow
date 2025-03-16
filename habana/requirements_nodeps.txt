@@ -1,6 +1,0 @@
-git+https://github.com/jpata/hep_tfds.git@31baf14defc53dcd1d7555e4a3945083e45e9304
-keras-tuner
-kt-legacy
-tensorflow-text
-tf-models-official
-tf2onnx
