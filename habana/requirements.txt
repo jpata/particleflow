@@ -25,6 +25,7 @@ scikit-optimize
 scipy
 seaborn
 setGPU
+tensorflow-cpu==2.11.1
 tensorflow-datasets
 uproot
 vector
