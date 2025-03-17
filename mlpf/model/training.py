@@ -67,7 +67,9 @@ def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_
 
 
 def model_step(batch, model, loss_fn):
+    import habana_frameworks.torch.core as htcore
     ypred_raw = model(batch.X, batch.mask)
+    htcore.mark_step()
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
     loss_opt, losses_detached = loss_fn(ytarget, ypred, batch)
@@ -75,13 +77,16 @@ def model_step(batch, model, loss_fn):
 
 
 def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
+    import habana_frameworks.torch.core as htcore
     # Clear gradients
     for param in model.parameters():
         param.grad = None
 
     # Backward pass and optimization
     scaler.scale(loss_opt).backward()
+    htcore.mark_step()
     scaler.step(optimizer)
+    htcore.mark_step()
     scaler.update()
     if lr_schedule:
         lr_schedule.step()
@@ -133,7 +138,7 @@ def train_epoch(
         iterator = tqdm.tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch} train loop on rank={rank}")
 
     for itrain, batch in iterator:
-        batch = batch.to(rank, non_blocking=True)
+        batch = batch.to("hpu", non_blocking=True)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss)
@@ -341,14 +346,14 @@ def train_all_epochs(
     matplotlib.use("agg")
 
     # Setup tensorboard writers
-    if (rank == 0) or (rank == "cpu"):
+    if (rank == 0) or (rank == "cpu") or (rank == "hpu"):
         tensorboard_writer_train = SummaryWriter(f"{outdir}/runs/train")
         tensorboard_writer_valid = SummaryWriter(f"{outdir}/runs/valid")
     else:
         tensorboard_writer_train = None
         tensorboard_writer_valid = None
 
-    device_type = "cuda" if isinstance(rank, int) else "cpu"
+    device_type = "hpu"
     t0_initial = time.time()
 
     # Early stopping setup
@@ -578,7 +583,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     else:
         raise Exception("not implemented")
 
-    device_type = "cuda" if isinstance(rank, int) else "cpu"
+    device_type = "hpu"
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
         run_predictions(
             world_size,
@@ -630,7 +635,7 @@ def run(rank, world_size, config, outdir, logfile):
 
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     if config["load"]:
-        model = MLPF(**model_kwargs).to(torch.device(rank))
+        model = MLPF(**model_kwargs).to(torch.device("hpu"))
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
@@ -675,7 +680,7 @@ def run(rank, world_size, config, outdir, logfile):
         model = MLPF(**model_kwargs)
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
 
-    model.to(rank)
+    model.to(torch.device("hpu"))
     configure_model_trainable(model, config["model"]["trainable"], True)
 
     if world_size > 1:
@@ -815,7 +820,7 @@ def override_config(config: dict, args):
 
 
 # Run either on CPU, single GPU or multi-GPU using pytorch
-def device_agnostic_run(config, world_size, outdir):
+def device_agnostic_run(config, world_size, outdir, habana=False):
     if config["train"]:
         logfile = f"{outdir}/train.log"
     else:
@@ -823,15 +828,20 @@ def device_agnostic_run(config, world_size, outdir):
     _configLogger("mlpf", filename=logfile)
 
     if config["gpus"]:
+        if habana:
+            import habana_frameworks.torch.hpu as torch_device
+        else:
+            import torch.cuda as torch_device
         assert (
-            world_size <= torch.cuda.device_count()
-        ), f"--gpus is too high (specified {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"
+            world_size <= torch_device.device_count()
+        ), f"--gpus is too high (specified {world_size} gpus but only {torch_device.device_count()} gpus are available)"
 
-        torch.cuda.empty_cache()
+        if not habana:
+            torch.cuda.empty_cache()
         if world_size > 1:
             _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus", color="purple")
             for rank in range(world_size):
-                _logger.info(torch.cuda.get_device_name(rank), color="purple")
+                _logger.info(torch_device.get_device_name(rank), color="purple")
 
             mp.spawn(
                 run,
@@ -841,7 +851,7 @@ def device_agnostic_run(config, world_size, outdir):
             )
         elif world_size == 1:
             rank = 0
-            _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
+            _logger.info(f"Will use single-gpu: {torch_device.get_device_name(rank)}", color="purple")
             run(rank, world_size, config, outdir, logfile)
 
     else:

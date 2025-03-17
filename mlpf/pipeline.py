@@ -90,15 +90,18 @@ parser.add_argument("--ray-cpus", type=int, default=None, help="CPUs for ray-tra
 parser.add_argument("--ray-gpus", type=int, default=None, help="GPUs for ray-train")
 parser.add_argument("--raytune-num-samples", type=int, default=None, help="Number of samples to draw from search space")
 
+# option for habana training
+parser.add_argument("--habana", action="store_true", default=None, help="use Habana Gaudi device for training")
 
 def main():
     # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
     import torch
-
     torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
 
     # plt.rcParams['text.usetex'] = True
     args = parser.parse_args()
+    if args.habana:
+        import habana_frameworks.torch.core as htcore
 
     logging.basicConfig(level=logging.INFO)
     world_size = args.gpus if args.gpus > 0 else 1  # will be 1 for both cpu (args.gpu < 1) and single-gpu (1)
@@ -150,7 +153,7 @@ def main():
         if args.ray_train:
             run_ray_training(config, args, experiment_dir)
         else:
-            device_agnostic_run(config, world_size, experiment_dir)
+            device_agnostic_run(config, world_size, experiment_dir, args.habana)
 
 
 if __name__ == "__main__":

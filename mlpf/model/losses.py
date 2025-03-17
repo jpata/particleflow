@@ -112,7 +112,7 @@ def mlpf_loss(y, ypred, batch):
     was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), axis=-1), ypred["momentum"]], axis=-1) * batch.mask.unsqueeze(
         axis=-1
     )
-    was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], axis=-1) * batch.mask.unsqueeze(
+    was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long), num_classes=2), y["momentum"]], axis=-1) * batch.mask.unsqueeze(
         axis=-1
     )
 
