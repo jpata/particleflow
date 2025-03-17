@@ -433,6 +433,7 @@ def process_sample(samp, config):
     pool.starmap(process_one_file, args)
 
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--fn", type=str, default=None, help="input file (root)")
@@ -447,4 +448,16 @@ if __name__ == "__main__":
     if args.samples is not None:
         process_sample(args.samples, args)
     else:
-        process_one_file(args.fn, args.ofn, args.dataset, args.store_matrix)
+        # process_one_file(args.fn, args.ofn, args.dataset, args.store_matrix)
+
+        if os.path.isdir(args.fn) is True:
+            print("Will process all files in " + args.fn)
+
+            flist = glob.glob(args.fn + "/*.root")
+            for infile in flist:
+                outfile = os.path.join(args.ofn, os.path.basename(infile).split(".")[0] + ".parquet")
+                process_one_file(infile, outfile, args.dataset, args.store_matrix)
+        else:
+            infile = args.fn
+            outfile = os.path.join(args.ofn, os.path.basename(infile).split(".")[0] + ".parquet")
+            process_one_file(infile, outfile, args.dataset, args.store_matrix)
