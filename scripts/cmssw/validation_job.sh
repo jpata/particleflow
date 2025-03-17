@@ -12,11 +12,10 @@ WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 
 # uncomment the following when running at T2_EE_Estonia
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-cd /scratch/persistent/joosep/CMSSW_14_2_2
+cd /scratch/persistent/joosep/CMSSW_15_0_1
 eval `scram runtime -sh`
 cd $PREVDIR
-export OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}_test/
-
+export OUTDIR=/scratch/local/$USER/mlpf/results/cms/${CMSSW_VERSION}/
 export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
@@ -25,7 +24,7 @@ set -x
 
 CONDITIONS=auto:phase1_2023_realistic ERA=Run3 GEOM=DB.Extended CUSTOM=
 FILENAME=`sed -n "${NJOB}p" $INPUT_FILELIST`
-NTHREADS=1
+NTHREADS=8
 
 mkdir -p $WORKDIR
 cd $WORKDIR
@@ -35,16 +34,25 @@ env
 if [ $JOBTYPE == "mlpf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
-	--datatier RECOSIM,MINIAODSIM --nThreads 1 -n 1 --era $ERA \
+	--datatier RECOSIM,MINIAODSIM --nThreads $NTHREADS -n -1 --era $ERA \
 	--eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
-	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf
+	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec
+    echo "process.mlpfProducer.use_cuda = True" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 elif [ $JOBTYPE == "pf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
-	--datatier RECOSIM,MINIAODSIM --nThreads 1 -n 1 --era $ERA \
+	--datatier RECOSIM,MINIAODSIM --nThreads $NTHREADS -n -1 --era $ERA \
 	--eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
-	--filein $FILENAME --fileout file:step3.root
+	--filein $FILENAME --fileout file:step3.root --no_exec
 fi
+
+echo """
+process.Timing = cms.Service(\"Timing\",
+    summaryOnly = cms.untracked.bool(False),
+    useJobReport = cms.untracked.bool(True)
+)""" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+
+cmsRun step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 
 #BTV/PF NANO recipe
 cmsDriver.py step3_btv -s NANO:@BTV --mc --conditions $CONDITIONS --era $ERA \
