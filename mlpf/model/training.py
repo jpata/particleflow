@@ -67,7 +67,9 @@ def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_
 
 
 def model_step(batch, model, loss_fn):
+    import habana_frameworks.torch.core as htcore
     ypred_raw = model(batch.X, batch.mask)
+    htcore.mark_step()
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
     loss_opt, losses_detached = loss_fn(ytarget, ypred, batch)
@@ -136,7 +138,7 @@ def train_epoch(
         iterator = tqdm.tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch} train loop on rank={rank}")
 
     for itrain, batch in iterator:
-        batch = batch.to(rank, non_blocking=True)
+        batch = batch.to("hpu", non_blocking=True)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss)
@@ -344,14 +346,14 @@ def train_all_epochs(
     matplotlib.use("agg")
 
     # Setup tensorboard writers
-    if (rank == 0) or (rank == "cpu"):
+    if (rank == 0) or (rank == "cpu") or (rank == "hpu"):
         tensorboard_writer_train = SummaryWriter(f"{outdir}/runs/train")
         tensorboard_writer_valid = SummaryWriter(f"{outdir}/runs/valid")
     else:
         tensorboard_writer_train = None
         tensorboard_writer_valid = None
 
-    device_type = "cuda" if isinstance(rank, int) else "cpu"
+    device_type = "hpu"
     t0_initial = time.time()
 
     # Early stopping setup
@@ -581,7 +583,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     else:
         raise Exception("not implemented")
 
-    device_type = "cuda" if isinstance(rank, int) else "cpu"
+    device_type = "hpu"
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
         run_predictions(
             world_size,
