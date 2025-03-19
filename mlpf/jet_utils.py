@@ -72,7 +72,7 @@ def match_jets_vec(j1, j2, deltaR_cut):
     delta_eta = eta1[:, None] - eta2[None, :]  # Broadcasting
     delta_phi = np.subtract.outer(phi1, phi2)  # Outer difference
     delta_phi = np.abs(delta_phi)  # Absolute difference
-    delta_phi = np.where(delta_phi > np.pi, 2*np.pi - delta_phi, delta_phi)  # Handle 360 degree wrap-around
+    delta_phi = np.where(delta_phi > np.pi, 2 * np.pi - delta_phi, delta_phi)  # Handle 360 degree wrap-around
 
     # Calculate deltaR using the broadcasting
     deltaR = np.sqrt(delta_eta**2 + delta_phi**2)

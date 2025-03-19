@@ -92,7 +92,7 @@ def prepare_data_cld_hits(fn):
     gp_to_hits = []
     genmets = []
     genjets = []
-    targetjets = []    
+    targetjets = []
     for iev in range(nev):
 
         X1 = ak.to_numpy(X_track[iev])
@@ -152,7 +152,7 @@ def prepare_data_cld_hits(fn):
         ycands.append(ycand)
         genmets.append(genmet)
         genjets.append(genjet)
-        targetjets.append(targetjet)        
+        targetjets.append(targetjet)
 
     return Xs, ytargets, ycands, genmets, genjets, targetjets, gp_to_tracks, gp_to_hits
 
@@ -171,7 +171,7 @@ def generate_examples(files):
                     "ycand": ycands[iev].astype(np.float32),
                     "genmet": gm,
                     "genjets": gj.astype(np.float32),
-                    "targetjets": tj.astype(np.float32),                    
+                    "targetjets": tj.astype(np.float32),
                 }
             else:
                 yield str(fi) + "_" + str(iev), {
@@ -180,7 +180,7 @@ def generate_examples(files):
                     "ycand": ycands[iev].astype(np.float32),
                     "genmet": gm,
                     "genjets": gj.astype(np.float32),
-                    "targetjets": tj.astype(np.float32),                    
+                    "targetjets": tj.astype(np.float32),
                     "gp_to_tracks": gp_to_tracks[iev].astype(np.float32),
                     "gp_to_hits": gp_to_hits[iev].astype(np.float32),
                 }
