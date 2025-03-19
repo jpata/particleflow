@@ -3,6 +3,8 @@ import numpy as np
 import tqdm
 import random
 
+NUM_SPLITS = 10
+
 # from fcc/postprocessing_hits.py
 X_FEATURES_TRK = [
     "elemtype",
@@ -42,10 +44,21 @@ Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
 labels = [0, 211, 130, 22, 11, 13]
 
 
-def split_sample(path, test_frac=0.8, max_files=0):
+def split_list(lst, x):
+    # Calculate the size of each sublist (except potentially the last)
+    sublist_size = len(lst) // x
+
+    # Create x-1 sublists of equal size
+    result = [lst[i * sublist_size : (i + 1) * sublist_size] for i in range(x - 1)]
+
+    # Add the remaining elements to the last sublist
+    result.append(lst[(x - 1) * sublist_size :])
+
+    return result
+
+
+def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     files = sorted(list(path.glob("*.parquet")))
-    if max_files > 0:
-        files = files[:max_files]
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
     idx_split = int(test_frac * len(files))
@@ -53,13 +66,19 @@ def split_sample(path, test_frac=0.8, max_files=0):
     files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
+
+    split_index = int(builder_config.name) - 1
+    files_train_split = split_list(files_train, num_splits)
+    files_test_split = split_list(files_test, num_splits)
+
     return {
-        "train": generate_examples(files_train),
-        "test": generate_examples(files_test),
+        "train": generate_examples(files_train_split[split_index]),
+        "test": generate_examples(files_test_split[split_index]),
     }
 
 
-def split_sample_several(paths, test_frac=0.8):
+# merge and shuffle several samples (e.g. e+, e-), split into test/train
+def split_sample_several(paths, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     files = sum([list(path.glob("*.parquet")) for path in paths], [])
     random.shuffle(files)
     print("Found {} files".format(len(files)))
@@ -69,9 +88,14 @@ def split_sample_several(paths, test_frac=0.8):
     files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
+
+    split_index = int(builder_config.name) - 1
+    files_train_split = split_list(files_train, num_splits)
+    files_test_split = split_list(files_test, num_splits)
+
     return {
-        "train": generate_examples(files_train),
-        "test": generate_examples(files_test),
+        "train": generate_examples(files_train_split[split_index]),
+        "test": generate_examples(files_test_split[split_index]),
     }
 
 
