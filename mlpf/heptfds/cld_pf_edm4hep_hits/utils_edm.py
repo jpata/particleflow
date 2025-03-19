@@ -40,7 +40,7 @@ X_FEATURES_CH = [
 ]
 X_FEAT_NUM = max(len(X_FEATURES_TRK), len(X_FEATURES_CH))
 
-Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
+Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy", "jet_idx"]
 labels = [0, 211, 130, 22, 11, 13]
 
 
