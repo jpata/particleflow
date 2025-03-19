@@ -119,7 +119,7 @@ def split_sample_several(paths, builder_config, num_splits=NUM_SPLITS, test_frac
     }
 
 
-def prepare_data_clic(fn):
+def prepare_data_cld(fn):
     ret = ak.from_parquet(fn)
     X_track = ret["X_track"]
     X_cluster = ret["X_cluster"]
@@ -207,7 +207,7 @@ def prepare_data_clic(fn):
 
 def generate_examples(files):
     for fi in files:
-        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_clic(fi)
+        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cld(fi)
         for iev in range(len(Xs)):
             gm = genmets[iev][0]
             gj = genjets[iev]

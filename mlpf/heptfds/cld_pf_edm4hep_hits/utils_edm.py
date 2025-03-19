@@ -75,7 +75,7 @@ def split_sample_several(paths, test_frac=0.8):
     }
 
 
-def prepare_data_cld(fn):
+def prepare_data_cld_hits(fn):
     ret = ak.from_parquet(fn)
 
     X_track = ret["X_track"]
@@ -149,7 +149,7 @@ def prepare_data_cld(fn):
 
 def generate_examples(files):
     for fi in tqdm.tqdm(files):
-        Xs, ygens, ycands, gp_to_tracks, gp_to_hits = prepare_data_cld(fi)
+        Xs, ygens, ycands, gp_to_tracks, gp_to_hits = prepare_data_cld_hits(fi)
         for iev in range(len(Xs)):
             if gp_to_tracks == []:
                 yield str(fi) + "_" + str(iev), {
@@ -169,4 +169,4 @@ def generate_examples(files):
 
 if __name__ == "__main__":
     fn = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/reco_p8_ee_qq_ecm380_111398.parquet"
-    ret = prepare_data_cld(fn)
+    ret = prepare_data_cld_hits(fn)
