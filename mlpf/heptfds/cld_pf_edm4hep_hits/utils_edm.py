@@ -161,18 +161,18 @@ def prepare_data_cld_hits(fn):
 
         # concatenate tracks and hits in features and targets
         X = np.concatenate([X1, X2])
-        ygen = np.concatenate([ytarget_track, ytarget_hit])
+        ytarget = np.concatenate([ytarget_track, ytarget_hit])
         ycand = np.concatenate([ycand_track, ycand_hit])
-        assert ygen.shape[0] == X.shape[0]
+        assert ytarget.shape[0] == X.shape[0]
         assert ycand.shape[0] == X.shape[0]
 
         # replace PID with index in labels array
-        arr = np.array([labels.index(p) for p in ygen[:, 0]])
-        ygen[:, 0][:] = arr[:]
+        arr = np.array([labels.index(p) for p in ytarget[:, 0]])
+        ytarget[:, 0][:] = arr[:]
         arr = np.array([labels.index(p) for p in ycand[:, 0]])
         ycand[:, 0][:] = arr[:]
         Xs.append(X)
-        ytargets.append(ygen)
+        ytargets.append(ytarget)
         ycands.append(ycand)
         genmets.append(genmet)
         genjets.append(genjet)
@@ -191,7 +191,7 @@ def generate_examples(files):
             if gp_to_tracks == []:
                 yield str(fi) + "_" + str(iev), {
                     "X": Xs[iev].astype(np.float32),
-                    "ygen": ytargets[iev].astype(np.float32),
+                    "ytarget": ytargets[iev].astype(np.float32),
                     "ycand": ycands[iev].astype(np.float32),
                     "genmet": gm,
                     "genjets": gj.astype(np.float32),
@@ -200,7 +200,7 @@ def generate_examples(files):
             else:
                 yield str(fi) + "_" + str(iev), {
                     "X": Xs[iev].astype(np.float32),
-                    "ygen": ytargets[iev].astype(np.float32),
+                    "ytarget": ytargets[iev].astype(np.float32),
                     "ycand": ycands[iev].astype(np.float32),
                     "genmet": gm,
                     "genjets": gj.astype(np.float32),
