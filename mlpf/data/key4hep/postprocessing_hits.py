@@ -11,7 +11,7 @@ from scipy.sparse import coo_matrix
 
 from postprocessing import map_pdgid_to_candid, map_charged_to_neutral, map_neutral_to_charged, sanitize
 
-from postprocessing import track_coll, mc_coll, particle_feature_order, track_feature_order, hit_feature_order, compute_met, compute_jets
+from postprocessing import track_coll, mc_coll, particle_feature_order, track_feature_order, compute_met, compute_jets
 
 from postprocessing import (
     get_genparticles_and_adjacencies,
@@ -20,6 +20,21 @@ from postprocessing import (
     get_particle_feature_matrix,
     get_feature_matrix,
 )
+
+hit_feature_order = [
+    "elemtype",
+    "et",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "position.x",
+    "position.y",
+    "position.z",
+    "time",
+    "subdetector",
+    "type",
+]
 
 
 def build_dummy_array(num, dtype=np.int64):
