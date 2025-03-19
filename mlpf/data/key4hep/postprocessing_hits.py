@@ -463,6 +463,9 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
         ret.append(this_ev)
 
     ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
+    if not store_matrix:
+        ret["gp_to_track"] = None
+        ret["gp_to_calohit"] = None
     awkward.to_parquet(ret, ofn)
 
 
