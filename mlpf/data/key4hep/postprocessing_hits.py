@@ -462,11 +462,7 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
         this_ev = awkward.Record(this_ev)
         ret.append(this_ev)
 
-    ret = {k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields}
-    for k in ret.keys():
-        if len(awkward.flatten(ret[k])) == 0:
-            ret[k] = build_dummy_array(len(ret[k]), np.float32)
-    ret = awkward.Record(ret)
+    ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
     awkward.to_parquet(ret, ofn)
 
 
