@@ -60,37 +60,6 @@ def match_jets(jets1, jets2, deltaR_cut):
     return jet_inds_1_ev, jet_inds_2_ev
 
 
-# a vectorized version of the above
-def match_jets_vec(j1, j2, deltaR_cut):
-    # Extract eta and phi arrays for both jet collections
-    eta1 = j1.eta.to_numpy()
-    phi1 = j1.phi.to_numpy()
-    eta2 = j2.eta.to_numpy()
-    phi2 = j2.phi.to_numpy()
-
-    # Calculate differences in eta and phi between each pair of jets
-    delta_eta = eta1[:, None] - eta2[None, :]  # Broadcasting
-    delta_phi = np.subtract.outer(phi1, phi2)  # Outer difference
-    delta_phi = np.abs(delta_phi)  # Absolute difference
-    delta_phi = np.where(delta_phi > np.pi, 2 * np.pi - delta_phi, delta_phi)  # Handle 360 degree wrap-around
-
-    # Calculate deltaR using the broadcasting
-    deltaR = np.sqrt(delta_eta**2 + delta_phi**2)
-
-    # For each jet in j1, find the jet in j2 with the smallest deltaR that is below the cut
-    min_indices = np.argmin(deltaR, axis=1)  # Index of min deltaR for each jet in j1
-    min_deltas = np.min(deltaR, axis=1)  # Minimum deltaR for each jet in j1
-
-    # Filter pairs where the closest jet falls within the deltaR_cut
-    mask = min_deltas < deltaR_cut  # Boolean array where true indicates a match within the cut
-
-    # Get indices of jets in j1 and their matches in j2
-    jet_inds_1 = np.arange(len(j1))[mask]  # Indices of jets in j1 that have a match
-    jet_inds_2 = min_indices[mask]  # Indices of matching jets in j2
-
-    return jet_inds_1, jet_inds_2
-
-
 def squeeze_if_one(arr):
     if arr.shape[-1] == 1:
         return np.squeeze(arr, axis=-1)
@@ -129,7 +98,7 @@ def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
 
     vec1 = to_p4_sph(to_p4(jets_coll[name1]))
     vec2 = to_p4_sph(to_p4(jets_coll[name2]))
-    ret = match_jets_vec(vec1, vec2, jet_match_dr)
+    ret = match_jets(vec1, vec2, jet_match_dr)
     j1_idx = awkward.from_iter(ret[0])
     j2_idx = awkward.from_iter(ret[1])
 
