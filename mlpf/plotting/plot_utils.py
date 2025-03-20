@@ -629,7 +629,7 @@ def plot_jet_ratio(
         bins=bins,
         histtype="step",
         lw=2,
-        label="target $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
+        label="Target $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
     p = med_iqr(yvals["jet_ratio_gen_to_cand_pt"])
@@ -875,7 +875,7 @@ def plot_met_ratio(
         bins=bins,
         histtype="step",
         lw=2,
-        label="target $({:.2f}, IQR={:.2f})$".format(p[0], p[1]),
+        label="Target $({:.2f}, IQR={:.2f})$".format(p[0], p[1]),
     )
 
     p = med_iqr(met_ratio["ratio_cand"][mask])
@@ -1586,7 +1586,7 @@ def plot_jet_response_binned_vstarget(yvals, epoch=None, cp_dir=None, comet_expe
     plt.plot(x_vals, pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, mlpf_vals[:, 1], marker="o", label="MLPF")
     plt.legend(loc=1, fontsize=16, title=title)
-    plt.ylabel("Response median")
+    plt.ylabel("jet $p_T$ response M")
     plt.xlabel(labels["target_jet"])
     plt.tight_layout()
     plt.axhline(1.0, color="black", ls="--", lw=0.5)
@@ -1606,7 +1606,7 @@ def plot_jet_response_binned_vstarget(yvals, epoch=None, cp_dir=None, comet_expe
     plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
     plt.legend(loc=1, fontsize=16, title=title)
-    plt.ylabel("Response IQR / median")
+    plt.ylabel("jet $p_T$ response IQR/M")
     plt.xlabel(labels["target_jet"])
     plt.ylim(bottom=0)
     plt.tight_layout()
@@ -1710,7 +1710,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.plot(x_vals, pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, mlpf_vals[:, 1], marker="o", label="MLPF")
     plt.legend(loc=1, fontsize=16, title=title)
-    plt.ylabel("Response median")
+    plt.ylabel("jet $p_T$ response M")
     plt.xlabel(labels["gen_jet"])
     plt.tight_layout()
     plt.axhline(1.0, color="black", ls="--", lw=0.5)
@@ -1730,7 +1730,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
     plt.legend(loc=1, fontsize=16, title=title)
-    plt.ylabel("Response IQR / median")
+    plt.ylabel("jet $p_T$ response IQR/M")
     plt.xlabel(labels["gen_jet"])
     plt.tight_layout()
     plt.ylim(bottom=0)
@@ -1834,7 +1834,7 @@ def plot_jet_response_binned_eta(yvals, epoch=None, cp_dir=None, comet_experimen
     plt.plot(x_vals, target_vals[:, 1], marker="o", label="Target")
     plt.plot(x_vals, pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, mlpf_vals[:, 1], marker="o", label="MLPF")
-    plt.ylabel("Response median")
+    plt.ylabel("jet $p_T$ response M")
     plt.xlabel(labels["gen_jet_eta"])
     plt.tight_layout()
     plt.legend(loc=1, fontsize=16, title=title)
@@ -1855,7 +1855,7 @@ def plot_jet_response_binned_eta(yvals, epoch=None, cp_dir=None, comet_experimen
     plt.plot(x_vals, (target_vals[:, 2] - target_vals[:, 0]) / target_vals[:, 1], marker="o", label="Target")
     plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
-    plt.ylabel("Response IQR / median")
+    plt.ylabel("jet $p_T$ response IQR/M")
     plt.xlabel(labels["gen_jet_eta"])
     plt.tight_layout()
     plt.legend(loc=1, fontsize=16, title=title)
@@ -1956,7 +1956,7 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.plot(x_vals, target_vals[:, 1], marker="o", label="Target")
     plt.plot(x_vals, pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, mlpf_vals[:, 1], marker="o", label="MLPF")
-    plt.ylabel("Response median")
+    plt.ylabel("MET response M")
     plt.legend(loc=1, fontsize=16, title=title)
     plt.xlabel(labels["gen_met"])
     plt.tight_layout()
@@ -1977,7 +1977,7 @@ def plot_met_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.plot(x_vals, (target_vals[:, 2] - target_vals[:, 0]) / target_vals[:, 1], marker="o", label="Target")
     plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(x_vals, (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1], marker="o", label="MLPF")
-    plt.ylabel("Response IQR / median")
+    plt.ylabel("MET response IQR/M")
     plt.legend(loc=1, fontsize=16, title=title)
     plt.xlabel(labels["gen_met"])
     plt.tight_layout()
@@ -2083,7 +2083,7 @@ def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, 
     bins = np.linspace(0, 1, 100)
     target_ispu = awkward.flatten(yvals["target_ispu"])
     pred_ispu = awkward.flatten(yvals["pred_ispu"])
-    plt.hist(target_ispu, bins=bins, label="target", histtype="step")
+    plt.hist(target_ispu, bins=bins, label="Target", histtype="step")
     plt.hist(pred_ispu, bins=bins, label="MLPF", histtype="step")
     plt.legend(loc=1, fontsize=16)
     plt.xlabel("PU fraction")

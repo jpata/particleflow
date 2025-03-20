@@ -667,7 +667,7 @@ def run(rank, world_size, config, outdir, logfile):
 
         if len(missing_keys) > 0:
             _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
-            if config["relaxed_load"]:
+            if config.get("relaxed_load", True):
                 _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
                 strict = False
             else:
@@ -793,7 +793,7 @@ def run(rank, world_size, config, outdir, logfile):
     # make plots only on a single machine
     if (rank == 0) or (rank == "cpu"):
         if config["make_plots"]:
-            ntest_files = -1
+            ntest_files = 100
             for sample in config["enabled_test_datasets"]:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)
