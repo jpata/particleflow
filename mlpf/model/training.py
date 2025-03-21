@@ -565,7 +565,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     torch.cuda.empty_cache()
 
     # FIXME: import this from a central place
-    if config["dataset"] == "clic":
+    if (config["dataset"] == "clic") or (config["dataset"] == "clic_hits"):
         import fastjet
 
         jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)

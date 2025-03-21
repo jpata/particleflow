@@ -3,6 +3,8 @@ import numpy as np
 import tqdm
 import random
 
+NUM_SPLITS = 10
+
 # from fcc/postprocessing_hits.py
 X_FEATURES_TRK = [
     "elemtype",
@@ -38,14 +40,39 @@ X_FEATURES_CH = [
 ]
 X_FEAT_NUM = max(len(X_FEATURES_TRK), len(X_FEATURES_CH))
 
-Y_FEATURES = ["PDG", "charge", "pt", "eta", "sin_phi", "cos_phi", "energy"]
+Y_FEATURES = [
+    "PDG",
+    "charge",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "ispu",
+    "generatorStatus",
+    "simulatorStatus",
+    "gp_to_track",
+    "gp_to_cluster",
+    "jet_idx",
+]
 labels = [0, 211, 130, 22, 11, 13]
 
 
-def split_sample(path, test_frac=0.8, max_files=0):
+def split_list(lst, x):
+    # Calculate the size of each sublist (except potentially the last)
+    sublist_size = len(lst) // x
+
+    # Create x-1 sublists of equal size
+    result = [lst[i * sublist_size : (i + 1) * sublist_size] for i in range(x - 1)]
+
+    # Add the remaining elements to the last sublist
+    result.append(lst[(x - 1) * sublist_size :])
+
+    return result
+
+
+def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     files = sorted(list(path.glob("*.parquet")))
-    if max_files > 0:
-        files = files[:max_files]
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
     idx_split = int(test_frac * len(files))
@@ -53,13 +80,19 @@ def split_sample(path, test_frac=0.8, max_files=0):
     files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
+
+    split_index = int(builder_config.name) - 1
+    files_train_split = split_list(files_train, num_splits)
+    files_test_split = split_list(files_test, num_splits)
+
     return {
-        "train": generate_examples(files_train),
-        "test": generate_examples(files_test),
+        "train": generate_examples(files_train_split[split_index]),
+        "test": generate_examples(files_test_split[split_index]),
     }
 
 
-def split_sample_several(paths, test_frac=0.8):
+# merge and shuffle several samples (e.g. e+, e-), split into test/train
+def split_sample_several(paths, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     files = sum([list(path.glob("*.parquet")) for path in paths], [])
     random.shuffle(files)
     print("Found {} files".format(len(files)))
@@ -69,13 +102,18 @@ def split_sample_several(paths, test_frac=0.8):
     files_test = files[idx_split:]
     assert len(files_train) > 0
     assert len(files_test) > 0
+
+    split_index = int(builder_config.name) - 1
+    files_train_split = split_list(files_train, num_splits)
+    files_test_split = split_list(files_test, num_splits)
+
     return {
-        "train": generate_examples(files_train),
-        "test": generate_examples(files_test),
+        "train": generate_examples(files_train_split[split_index]),
+        "test": generate_examples(files_test_split[split_index]),
     }
 
 
-def prepare_data_cld(fn):
+def prepare_data_cld_hits(fn):
     ret = ak.from_parquet(fn)
 
     X_track = ret["X_track"]
@@ -86,10 +124,13 @@ def prepare_data_cld(fn):
     nev = len(X_track)
 
     Xs = []
-    ygens = []
+    ytargets = []
     ycands = []
     gp_to_tracks = []
     gp_to_hits = []
+    genmets = []
+    genjets = []
+    targetjets = []
     for iev in range(nev):
 
         X1 = ak.to_numpy(X_track[iev])
@@ -98,10 +139,14 @@ def prepare_data_cld(fn):
         if len(X1) == 0 and len(X2) == 0:
             continue
 
-        ygen_track = ak.to_numpy(ret["ygen_track"][iev])
-        ygen_hit = ak.to_numpy(ret["ygen_hit"][iev])
+        ytarget_track = ak.to_numpy(ret["ytarget_track"][iev])
+        ytarget_hit = ak.to_numpy(ret["ytarget_hit"][iev])
         ycand_track = ak.to_numpy(ret["ycand_track"][iev])
         ycand_hit = ak.to_numpy(ret["ycand_hit"][iev])
+
+        genmet = ak.to_numpy(ret["genmet"][iev])
+        genjet = ak.to_numpy(ret["genjet"][iev])
+        targetjet = ak.to_numpy(ret["targetjet"][iev])
 
         if tracks_assoc_mats is not None:
             gp_to_track = ak.to_numpy(ret["gp_to_track"][iev])
@@ -110,16 +155,16 @@ def prepare_data_cld(fn):
             gp_to_tracks.append(gp_to_track)
             gp_to_hits.append(gp_to_calohit)
 
-        if ygen_track.shape[0] == 0:
-            ygen_track = np.zeros((0, 7), dtype=np.float32)
+        if ytarget_track.shape[0] == 0:
+            ytarget_track = np.zeros((0, 7), dtype=np.float32)
         if ycand_track.shape[0] == 0:
             ycand_track = np.zeros((0, 7), dtype=np.float32)
-        if ygen_hit.shape[0] == 0:
-            ygen_hit = np.zeros((0, 7), dtype=np.float32)
+        if ytarget_hit.shape[0] == 0:
+            ytarget_hit = np.zeros((0, 7), dtype=np.float32)
         if ycand_hit.shape[0] == 0:
             ycand_hit = np.zeros((0, 7), dtype=np.float32)
 
-        if len(ygen_track) == 0 and len(ygen_hit) == 0:
+        if len(ytarget_track) == 0 and len(ytarget_hit) == 0:
             continue
         if len(ycand_track) == 0 and len(ycand_hit) == 0:
             continue
@@ -130,38 +175,50 @@ def prepare_data_cld(fn):
 
         # concatenate tracks and hits in features and targets
         X = np.concatenate([X1, X2])
-        ygen = np.concatenate([ygen_track, ygen_hit])
+        ytarget = np.concatenate([ytarget_track, ytarget_hit])
         ycand = np.concatenate([ycand_track, ycand_hit])
-        assert ygen.shape[0] == X.shape[0]
+        assert ytarget.shape[0] == X.shape[0]
         assert ycand.shape[0] == X.shape[0]
 
         # replace PID with index in labels array
-        arr = np.array([labels.index(p) for p in ygen[:, 0]])
-        ygen[:, 0][:] = arr[:]
+        arr = np.array([labels.index(p) for p in ytarget[:, 0]])
+        ytarget[:, 0][:] = arr[:]
         arr = np.array([labels.index(p) for p in ycand[:, 0]])
         ycand[:, 0][:] = arr[:]
         Xs.append(X)
-        ygens.append(ygen)
+        ytargets.append(ytarget)
         ycands.append(ycand)
+        genmets.append(genmet)
+        genjets.append(genjet)
+        targetjets.append(targetjet)
 
-    return Xs, ygens, ycands, gp_to_tracks, gp_to_hits
+    return Xs, ytargets, ycands, genmets, genjets, targetjets, gp_to_tracks, gp_to_hits
 
 
 def generate_examples(files):
     for fi in tqdm.tqdm(files):
-        Xs, ygens, ycands, gp_to_tracks, gp_to_hits = prepare_data_cld(fi)
+        Xs, ytargets, ycands, genmets, genjets, targetjets, gp_to_tracks, gp_to_hits = prepare_data_cld_hits(fi)
         for iev in range(len(Xs)):
+            gm = genmets[iev][0]
+            gj = genjets[iev]
+            tj = targetjets[iev]
             if gp_to_tracks == []:
                 yield str(fi) + "_" + str(iev), {
                     "X": Xs[iev].astype(np.float32),
-                    "ygen": ygens[iev].astype(np.float32),
+                    "ytarget": ytargets[iev].astype(np.float32),
                     "ycand": ycands[iev].astype(np.float32),
+                    "genmet": gm,
+                    "genjets": gj.astype(np.float32),
+                    "targetjets": tj.astype(np.float32),
                 }
             else:
                 yield str(fi) + "_" + str(iev), {
                     "X": Xs[iev].astype(np.float32),
-                    "ygen": ygens[iev].astype(np.float32),
+                    "ytarget": ytargets[iev].astype(np.float32),
                     "ycand": ycands[iev].astype(np.float32),
+                    "genmet": gm,
+                    "genjets": gj.astype(np.float32),
+                    "targetjets": tj.astype(np.float32),
                     "gp_to_tracks": gp_to_tracks[iev].astype(np.float32),
                     "gp_to_hits": gp_to_hits[iev].astype(np.float32),
                 }
@@ -169,4 +226,4 @@ def generate_examples(files):
 
 if __name__ == "__main__":
     fn = "/local/joosep/mlpf_hits/clic_edm4hep_2023_02_27/p8_ee_qq_ecm380/reco_p8_ee_qq_ecm380_111398.parquet"
-    ret = prepare_data_cld(fn)
+    ret = prepare_data_cld_hits(fn)
