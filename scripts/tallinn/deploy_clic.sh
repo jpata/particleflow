@@ -3,7 +3,7 @@
 
 rm -f files_to_copy.txt
 maxfiles=100
-path=experiments/pyg-clic_20250130_214007_333962/./preds_checkpoint-10-1.932789
+path=experiments/pyg-clic_20250306_105311_290722/./preds_checkpoint-10-1.932789
 targetpath=/scratch/persistent/joosep/huggingface/particleflow/clic/clusters/v2.3.0/pyg-clic_20250130_214007_333962/
 
 mkdir -p $targetpath
