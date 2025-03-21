@@ -109,7 +109,7 @@ train_dataset:
     physical:
       batch_size: 1
       samples:
-        cld_hits_edm_ttbar_pf_small/:
+        cld_hits_edm_ttbar_pf_small:
           version: 2.5.0
           splits: [1,2,3,4,5,6,7,8,9,10]
 
@@ -118,11 +118,11 @@ valid_dataset:
     physical:
       batch_size: 1
       samples:
-        cld_hits_edm_ttbar_pf_small/:
+        cld_hits_edm_ttbar_pf_small:
           version: 2.5.0
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
-  cld_hits_edm_ttbar_pf_small/:
+  clic:
     version: 2.5.0
     splits: [1,2,3,4,5,6,7,8,9,10]
