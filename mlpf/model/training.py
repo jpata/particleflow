@@ -793,7 +793,7 @@ def run(rank, world_size, config, outdir, logfile):
     # make plots only on a single machine
     if (rank == 0) or (rank == "cpu"):
         if config["make_plots"]:
-            ntest_files = 100
+            ntest_files = -1
             for sample in config["enabled_test_datasets"]:
                 _logger.info(f"Plotting distributions for {sample}")
                 make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)

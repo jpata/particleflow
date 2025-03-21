@@ -206,6 +206,15 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
         dataset=dataset,
         sample=sample,
     )
+    plot_jet_ratio(
+        yvals,
+        cp_dir=plots_path,
+        bins=np.linspace(0.0, 2.0, 500),
+        logy=True,
+        file_modifier="_bins_0_2",
+        dataset=dataset,
+        sample=sample,
+    )
     plot_jet_response_binned(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
     plot_jet_response_binned_vstarget(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
     plot_jet_response_binned_eta(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
