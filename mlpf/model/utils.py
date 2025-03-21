@@ -14,12 +14,14 @@ import logging
 ELEM_TYPES = {
     "cms": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
     "clic": [0, 1, 2],
+    "clic_hits": [0, 1, 2],
 }
 
 # Some element types are defined, but do not exist in the dataset at all
 ELEM_TYPES_NONZERO = {
     "cms": [1, 4, 5, 6, 8, 9, 10, 11],
     "clic": [1, 2],
+    "clic_hits": [1, 2],
 }
 
 CLASS_LABELS = {
