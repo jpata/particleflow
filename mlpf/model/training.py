@@ -246,9 +246,9 @@ def eval_epoch(
             ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
         )
 
-        # Save validation plots for first batch
-        if (rank == 0 or rank == "cpu") and ival == 0:
-            validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
+        # # Save validation plots for first batch
+        # if (rank == 0 or rank == "cpu") and ival == 0:
+        #     validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
 
         # Accumulate losses
         for loss_name in loss:
