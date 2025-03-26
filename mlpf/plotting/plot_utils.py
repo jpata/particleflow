@@ -80,6 +80,7 @@ CLASS_NAMES_CLIC = [
 CLASS_LABELS = {
     "cms": CLASS_LABELS_CMS,
     "clic": CLASS_LABELS_CLIC,
+    "clic_hits": CLASS_LABELS_CLIC,
     "cld": CLASS_LABELS_CLIC,
 }
 
@@ -143,6 +144,7 @@ EVALUATION_DATASET_NAMES = {
 
 GENJET_BINS_PT_DATASET = {
     "clic": [10, 20, 40, 60, 80, 100, 200],
+    "clic_hits": [10, 20, 40, 60, 80, 100, 200],
     "cld": [10, 20, 40, 60, 80, 100, 200],
     "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
 }
@@ -269,6 +271,7 @@ def cld_label(ax):
 EXPERIMENT_LABELS = {
     "cms": cms_label,
     "clic": clic_label,
+    "clic_hits": clic_label,
     "cld": cld_label,
 }
 
