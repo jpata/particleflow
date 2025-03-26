@@ -1,6 +1,7 @@
 import numpy as np
 import awkward
 import uproot
+import vector
 import glob
 import os
 import multiprocessing
@@ -10,7 +11,7 @@ from scipy.sparse import coo_matrix
 
 from postprocessing import map_pdgid_to_candid, map_charged_to_neutral, map_neutral_to_charged, sanitize
 
-from postprocessing import track_coll, mc_coll, particle_feature_order, track_feature_order, hit_feature_order
+from postprocessing import track_coll, mc_coll, particle_feature_order, track_feature_order, compute_met, compute_jets
 
 from postprocessing import (
     get_genparticles_and_adjacencies,
@@ -19,6 +20,21 @@ from postprocessing import (
     get_particle_feature_matrix,
     get_feature_matrix,
 )
+
+hit_feature_order = [
+    "elemtype",
+    "et",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "position.x",
+    "position.y",
+    "position.z",
+    "time",
+    "subdetector",
+    "type",
+]
 
 
 def build_dummy_array(num, dtype=np.int64):
@@ -277,6 +293,23 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
     else:
         raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
 
+    # Compute truth MET and jets from status=1 pythia particles
+    mc_pdg = np.abs(prop_data["MCParticles.PDG"])
+    mc_st1_mask = (prop_data["MCParticles.generatorStatus"] == 1) & (mc_pdg != 12) & (mc_pdg != 14) & (mc_pdg != 16)
+    mc_st1_p4 = vector.awk(
+        awkward.zip(
+            {
+                "px": prop_data["MCParticles.momentum.x"][mc_st1_mask],
+                "py": prop_data["MCParticles.momentum.y"][mc_st1_mask],
+                "pz": prop_data["MCParticles.momentum.z"][mc_st1_mask],
+                "mass": prop_data["MCParticles.mass"][mc_st1_mask],
+            }
+        )
+    )
+
+    met_st1 = compute_met(mc_st1_p4)
+    genjets_st1 = compute_jets(mc_st1_p4)
+
     ret = []
     for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
 
@@ -369,26 +402,61 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
 
         X_track = get_feature_matrix(gpdata.track_features, track_feature_order)
         X_hit = get_feature_matrix(gpdata.hit_features, hit_feature_order)
-        ygen_track = gps_track
-        ygen_hit = gps_hit
+        ytarget_track = gps_track
+        ytarget_hit = gps_hit
         ycand_track = rps_track
         ycand_hit = rps_hit
 
         sanitize(X_track)
         sanitize(X_hit)
-        sanitize(ygen_track)
-        sanitize(ygen_hit)
+        sanitize(ytarget_track)
+        sanitize(ytarget_hit)
         sanitize(ycand_track)
         sanitize(ycand_hit)
+
+        # cluster target particles to jets, save per-particle jet index
+        ytarget = np.concatenate([ytarget_track, ytarget_hit], axis=0)
+        ytarget_constituents = -1 * np.ones(len(ytarget), dtype=np.int64)
+        valid = ytarget[:, 0] != 0
+        # save mapping of index after masking -> index before masking as numpy array
+        # inspired from:
+        # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
+        cumsum = np.cumsum(valid) - 1
+        _, index_mapping = np.unique(cumsum, return_index=True)
+        ytarget = ytarget[valid]
+        ytarget_p4 = ytarget[:, 2:7]
+        ytarget_p4 = vector.awk(
+            awkward.zip(
+                {
+                    "pt": ytarget_p4[:, 0],
+                    "eta": ytarget_p4[:, 1],
+                    "phi": np.arctan2(ytarget_p4[:, 2], ytarget_p4[:, 3]),
+                    "energy": ytarget_p4[:, 4],
+                }
+            )
+        )
+        target_jets, target_jets_indices = compute_jets(ytarget_p4, with_indices=True)
+        sorted_jet_idx = awkward.argsort(target_jets.pt, axis=-1, ascending=False).to_list()
+        target_jets_indices = target_jets_indices.to_list()
+        for jet_idx in sorted_jet_idx:
+            jet_constituents = [index_mapping[idx] for idx in target_jets_indices[jet_idx]]  # map back to constituent index *before* masking
+            ytarget_constituents[jet_constituents] = jet_idx
+        ytarget_track_constituents = ytarget_constituents[: len(ytarget_track)]
+        ytarget_cluster_constituents = ytarget_constituents[len(ytarget_track) :]
+        ytarget_track[:, particle_feature_order.index("jet_idx")] = ytarget_track_constituents
+        ytarget_hit[:, particle_feature_order.index("jet_idx")] = ytarget_cluster_constituents
 
         if store_matrix:
             this_ev = {
                 "X_track": X_track,
                 "X_hit": X_hit,
-                "ygen_track": ygen_track,
-                "ygen_hit": ygen_hit,
+                "ytarget_track": ytarget_track,
+                "ytarget_hit": ytarget_hit,
                 "ycand_track": ycand_track,
                 "ycand_hit": ycand_hit,
+                "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
+                "genmet": met_st1[iev],
+                "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
                 "gp_to_track": gp_to_track,
                 "gp_to_calohit": gp_to_calohit,
             }
@@ -396,21 +464,23 @@ def process_one_file(fn, ofn, dataset, store_matrix=True):
             this_ev = {
                 "X_track": X_track,
                 "X_hit": X_hit,
-                "ygen_track": ygen_track,
-                "ygen_hit": ygen_hit,
+                "ytarget_track": ytarget_track,
+                "ytarget_hit": ytarget_hit,
                 "ycand_track": ycand_track,
                 "ycand_hit": ycand_hit,
+                "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
+                "genmet": met_st1[iev],
+                "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
                 "gp_to_track": None,
                 "gp_to_calohit": None,
             }
         this_ev = awkward.Record(this_ev)
         ret.append(this_ev)
 
-    ret = {k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields}
-    for k in ret.keys():
-        if len(awkward.flatten(ret[k])) == 0:
-            ret[k] = build_dummy_array(len(ret[k]), np.float32)
-    ret = awkward.Record(ret)
+    ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
+    if not store_matrix:
+        ret["gp_to_track"] = None
+        ret["gp_to_calohit"] = None
     awkward.to_parquet(ret, ofn)
 
 
@@ -438,7 +508,7 @@ if __name__ == "__main__":
     parser.add_argument("--fn", type=str, default=None, help="input file (root)")
     parser.add_argument("--ofn", type=str, default=None, help="output file (parquet)")
     parser.add_argument("--samples", type=str, default=None, help="sample name to specify many files")
-    parser.add_argument("--dataset", type=str, default="clic", help="sample name to specify many files")
+    parser.add_argument("--dataset", type=str, help="Which detector dataset?", required=True, choices=["clic", "fcc"])
 
     parser.add_argument("--store-matrix", action="store_true", help="store track and hit association matrices")
 
@@ -447,4 +517,14 @@ if __name__ == "__main__":
     if args.samples is not None:
         process_sample(args.samples, args)
     else:
-        process_one_file(args.fn, args.ofn, args.dataset, args.store_matrix)
+        if os.path.isdir(args.fn) is True:
+            print("Will process all files in " + args.fn)
+
+            flist = glob.glob(args.fn + "/*.root")
+            for infile in flist:
+                outfile = os.path.join(args.ofn, os.path.basename(infile).split(".")[0] + ".parquet")
+                process_one_file(infile, outfile, args.dataset, args.store_matrix)
+        else:
+            infile = args.fn
+            outfile = os.path.join(args.ofn, os.path.basename(infile).split(".")[0] + ".parquet")
+            process_one_file(infile, outfile, args.dataset, args.store_matrix)
