@@ -1,5 +1,11 @@
 #!/bin/bash
 
+END=`wc -l scripts/cmssw/jetmet0.txt | cut -f1 -d' '`
+for ifile in $(seq 1 $END); do
+    sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job_data.sh mlpf scripts/cmssw/jetmet0.txt JetMET0 $ifile
+    sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job_data.sh pf scripts/cmssw/jetmet0.txt JetMET0 $ifile
+done
+
 END=`wc -l scripts/cmssw/qcd_pu.txt | cut -f1 -d' '`
 for ifile in $(seq 1 $END); do
     sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job.sh mlpf scripts/cmssw/qcd_pu_local.txt QCD_PU $ifile
