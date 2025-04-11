@@ -12,7 +12,7 @@ WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 
 # uncomment the following when running at T2_EE_Estonia
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-cd /scratch/persistent/joosep/CMSSW_15_0_1
+cd /scratch/persistent/joosep/CMSSW_15_0_1_pu
 eval `scram runtime -sh`
 cd $PREVDIR
 export OUTDIR=/scratch/local/$USER/mlpf/results/cms/${CMSSW_VERSION}/
