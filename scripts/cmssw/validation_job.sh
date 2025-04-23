@@ -55,30 +55,26 @@ process.Timing = cms.Service(\"Timing\",
 cmsRun step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 
 #BTV/PF NANO recipe
-cmsDriver.py step3_btv -s NANO:@BTV --mc --conditions $CONDITIONS --era $ERA \
+cmsDriver.py step4_btv -s NANO:@BTV --mc --conditions $CONDITIONS --era $ERA \
     --eventcontent NANOAODSIM --datatier NANOAODSIM \
     --customise_commands="process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000" \
-    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step3_NANO_btv.root
+    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step4_NANO_btv.root
 #JME NANO recipe
-cmsDriver.py step3_jme -s NANO:@JME --mc --conditions $CONDITIONS --era $ERA \
+cmsDriver.py step4_jme -s NANO:@JME --mc --conditions $CONDITIONS --era $ERA \
     --eventcontent NANOAODSIM --datatier NANOAODSIM \
     --customise_commands="process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000" \
-    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step3_NANO_jme.root
+    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step4_NANO_jme.root
 
-cmsRun step3_btv_NANO.py
-cmsRun step3_jme_NANO.py
+cmsRun step4_btv_NANO.py
+cmsRun step4_jme_NANO.py
 
 ls *.root
 
 mkdir -p $OUTDIR/${SAMPLE}_${JOBTYPE}
 
-#convert CMSSW EDM to pkl for easy plotting
-# python3 $PREVDIR/mlpf/plotting/cms_fwlite.py step3_inMINIAODSIM.root step3.pkl
-
 # cp step3.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
 cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
-cp step3_NANO_btv.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_NANO_btv_${NJOB}.root
-cp step3_NANO_jme.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_NANO_jme_${NJOB}.root
-# cp step3.pkl $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.pkl
+cp step4_NANO_btv.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_btv_${NJOB}.root
+cp step4_NANO_jme.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_jme_${NJOB}.root
 
 rm -Rf $WORKDIR
