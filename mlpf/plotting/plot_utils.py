@@ -2094,7 +2094,7 @@ def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, 
     for type_, name in zip(types, ["n", "c", "h"]):
         plt.figure()
         ax = plt.axes()
-        pred_ispu = awkward.flatten(awkward.argmax(yvals["pred_ispu"][type_], axis=2))
+        pred_ispu = awkward.flatten(yvals["pred_ispu"][type_])
         target_ispu = awkward.flatten(yvals["target_ispu"][type_])
         plt.hist(target_ispu, bins=bins, label="target", histtype="step")
         plt.hist(pred_ispu, bins=bins, label="MLPF", histtype="step")
