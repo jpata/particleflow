@@ -12,7 +12,7 @@ WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 
 # uncomment the following when running at T2_EE_Estonia
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-cd /scratch/persistent/joosep/CMSSW_15_0_1
+cd /scratch/persistent/joosep/CMSSW_15_0_1_pu
 eval `scram runtime -sh`
 cd $PREVDIR
 export OUTDIR=/scratch/local/$USER/mlpf/results/cms/${CMSSW_VERSION}/
@@ -74,7 +74,7 @@ mkdir -p $OUTDIR/${SAMPLE}_${JOBTYPE}
 
 # cp step3.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
 cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
-cp step4_NANO_btv.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_btv_${NJOB}.root
-cp step4_NANO_jme.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_jme_${NJOB}.root
+cp step4_NANO_btv.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_NANO_btv_${NJOB}.root
+cp step4_NANO_jme.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_NANO_jme_${NJOB}.root
 
 rm -Rf $WORKDIR
