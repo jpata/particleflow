@@ -38,7 +38,7 @@ samples = [
     # "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/QCDForPF_14TeV_TuneCUETP8M1_cfi",
     # "/local/joosep/mlpf/cms/20240823_simcluster/pu55to75/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
     # NoPU
-    # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/TTbar_14TeV_TuneCUETP8M1_cfi",
+    "/local/joosep/mlpf/cms/20240823_simcluster/nopu/TTbar_14TeV_TuneCUETP8M1_cfi",
     # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/QCDForPF_14TeV_TuneCUETP8M1_cfi",
     # "/local/joosep/mlpf/cms/20240823_simcluster/nopu/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
     # Single particle gun

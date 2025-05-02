@@ -174,11 +174,20 @@ def split_caloparticles(g, elem_type):
     cps = [(g.nodes[n]["pt"], n) for n in g.nodes if n[0] == "cp"]
     for _, cp in cps:
 
+        # exceptionally, we do not want to split electrons among tracks (type 1)
+        # electrons are always expected to be reconstructed from GSF
+        if g.nodes[cp]["pid"] == 11:
+            continue
+
         # get all associated elements with type==elem_type that received a contribution from this caloparticle
         sucs = [(suc, g.edges[cp, suc]["weight"], g.nodes[suc]["energy"]) for suc in g.successors(cp) if g.nodes[suc]["typ"] == elem_type]
         sum_sucs_w = sum([s[1] for s in sucs])
         sucs = [s[0] for s in sucs]
+
         if len(sucs) > 1:
+            # print(g.nodes[cp]["pid"], g.nodes[cp]["pt"], g.nodes[cp]["eta"], g.nodes[cp]["phi"])
+            # for suc in sucs:
+            #     print("  ", g.edges[(cp, suc)]["weight"], g.nodes[suc]["pt"], g.nodes[suc]["eta"], g.nodes[suc]["phi"], g.nodes[suc]["typ"])
             lv = vector.obj(
                 pt=g.nodes[cp]["pt"],
                 eta=g.nodes[cp]["eta"],
@@ -213,12 +222,17 @@ def split_caloparticles(g, elem_type):
             g.remove_node(cp)
 
 
-def find_representative_elements(g, elem_to_cp, cp_to_elem, elem_type):
+def find_representative_elements(g, elem_to_cp, cp_to_elem, elem_type, pid_type=0):
     unused_elems = []
     elems = [(g.nodes[e]["pt"], e) for e in g.nodes if e[0] == "elem" and g.nodes[e]["typ"] == elem_type]
     elems_sorted = sorted(elems, key=lambda x: x[0], reverse=True)
     for _, elem in elems_sorted:
         cps = list(g.predecessors(elem))
+
+        # pick only specific PIDs
+        if pid_type != 0:
+            cps = [cp for cp in cps if g.nodes[cp]["pid"] == pid_type]
+
         cps_weight = [(g.edges[(cp, elem)]["weight"], cp) for cp in cps if cp not in cp_to_elem if cp[0] == "cp"]
         cps_weight_sorted = sorted(cps_weight, key=lambda x: x[0], reverse=True)
         if len(cps_weight_sorted) > 0:
@@ -230,7 +244,19 @@ def find_representative_elements(g, elem_to_cp, cp_to_elem, elem_type):
 
 
 def prepare_normalized_table(g, iev):
+    # for GSF, keep only links from electrons, because CMSSW expects to reconstruct
+    # only electrons from GSF (and vice versa, only GSF should give rise to electrons)
+    elem_gsf = [n for n in g.nodes if n[0] == "elem" and g.nodes[n]["typ"] == 6]
+    for gsf in elem_gsf:
+        to_remove = []
+        for pred in g.predecessors(gsf):
+            if g.nodes[pred]["pid"] != 11:
+                to_remove += [(pred, gsf)]
+        for edge in to_remove:
+            g.remove_edge(edge[0], edge[1])
+
     # if there's more than one track per caloparticle, the caloparticle should be distributed among the tracks
+    # otherwise, we end up in a case where some tracks are expected to yield no particles, which is confusing for the model to learn
     split_caloparticles(g, 1)
     print("split, met={:.2f}".format(compute_gen_met(g)))
 
@@ -258,8 +284,8 @@ def prepare_normalized_table(g, iev):
     cp_to_elem = {}  # map of caloparticle -> element
 
     # assign caloparticles in reverse pt order uniquely to best element
+    find_representative_elements(g, elem_to_cp, cp_to_elem, 6)  # gsf first, to ensure electrons get associated to gsf
     find_representative_elements(g, elem_to_cp, cp_to_elem, 1)  # tracks
-    find_representative_elements(g, elem_to_cp, cp_to_elem, 6)  # gsf
     find_representative_elements(g, elem_to_cp, cp_to_elem, 4)  # ecal
     find_representative_elements(g, elem_to_cp, cp_to_elem, 5)  # hcal
     find_representative_elements(g, elem_to_cp, cp_to_elem, 8)  # HF
