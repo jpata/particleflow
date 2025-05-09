@@ -1,0 +1,13 @@
+name: Test ARC
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: arc-jpata-particleflow-custom-runner-1
+    steps:
+      - run: nvidia-smi
