@@ -12,4 +12,5 @@ jobs:
     steps:
       - run: hostname
       - run: pwd
+      - run: sleep 120
       - run: nvidia-smi
