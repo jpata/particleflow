@@ -667,19 +667,19 @@ def plot_jet_ratio(
         label="MLPF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
-    # p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
-    # ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = {
-    #     "med": p[0],
-    #     "iqr": p[1],
-    #     "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"]) / awkward.count(yvals["jets_gen_pt"]),
-    # }
-    # plt.hist(
-    #     yvals["jet_ratio_gen_to_pred_nopu_pt"],
-    #     bins=bins,
-    #     histtype="step",
-    #     lw=2,
-    #     label="MLPF, no PU $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
-    # )
+    p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
+    ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = {
+        "med": p[0],
+        "iqr": p[1],
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"]) / awkward.count(yvals["jets_gen_pt"]),
+    }
+    plt.hist(
+        yvals["jet_ratio_gen_to_pred_nopu_pt"],
+        bins=bins,
+        histtype="step",
+        lw=2,
+        label="MLPF, no PU $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
+    )
 
     plt.xlabel(labels["reco_gen_jet_ratio"])
     plt.ylabel("Matched jets / bin")
