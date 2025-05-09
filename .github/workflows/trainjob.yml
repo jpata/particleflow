@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    runs-on: arc-jpata-particleflow-custom-runner-1
+    runs-on: jpata-particleflow-custom-gpu1
     steps:
       - run: hostname
       - run: pwd
