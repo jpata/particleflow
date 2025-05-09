@@ -20,9 +20,11 @@ _CITATION = """
 class CmsPfZtt(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     """DatasetBuilder for cms_pf_ztt dataset."""
 
-    VERSION = tfds.core.Version("2.5.0")
+    VERSION = tfds.core.Version("2.6.0")
     RELEASE_NOTES = {
         "2.5.0": "Remove neutrinos from genjets, split to 10",
+        "2.5.1": "Associate ele with GSF first",
+        "2.6.0": "Regenerate with 20250508_cmssw_15_0_5_d3c6d1",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ztt ~/tensorflow_datasets/

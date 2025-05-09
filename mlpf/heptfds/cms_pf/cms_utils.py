@@ -1,9 +1,12 @@
 import bz2
 import pickle
-import tqdm
 
 import awkward as ak
 import numpy as np
+
+import tensorflow_datasets as tfds
+
+tfds.disable_progress_bar()
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 ELEM_LABELS_CMS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
@@ -146,10 +149,14 @@ def prepare_data_cms(fn):
     genjets = []
     targetjets = []
 
-    if fn.endswith(".pkl"):
-        data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
-    elif fn.endswith(".pkl.bz2"):
-        data = pickle.load(bz2.BZ2File(fn, "rb"))
+    try:
+        if fn.endswith(".pkl"):
+            data = pickle.load(open(fn, "rb"), encoding="iso-8859-1")
+        elif fn.endswith(".pkl.bz2"):
+            data = pickle.load(bz2.BZ2File(fn, "rb"))
+    except Exception as e:
+        print("Could not open file {}: {}".format(fn, e))
+        return Xs, ytargets, ycands, genmets, genjets, targetjets
 
     for event in data:
         Xelem = event["Xelem"]
@@ -241,8 +248,11 @@ def split_sample(path, builder_config, num_splits=NUM_SPLITS, train_frac=0.9):
 def generate_examples(files):
     """Yields examples."""
 
-    for fi in tqdm.tqdm(files):
+    for fi in files:
+        print("started reading file", fi)
         Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
+        if len(Xs) == 0:
+            print("Error: file {} is broken".format(fi))
         for ii in range(len(Xs)):
             x = Xs[ii].astype(np.float32)
             yg = ytargets[ii].astype(np.float32)

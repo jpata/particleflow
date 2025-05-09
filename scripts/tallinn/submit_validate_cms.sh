@@ -12,9 +12,9 @@
 #     sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job.sh pf scripts/tallinn/qcd_pu.txt QCD_PU $ifile
 # done
 #
-END=`wc -l scripts/cmssw/ttbar_pu.txt | cut -f1 -d' '`
+END=`wc -l scripts/tallinn/ttbar_pu_cmssw_12_3_0.txt | cut -f1 -d' '`
 for ifile in $(seq 1 $END); do
-    sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job.sh mlpf scripts/tallinn/ttbar_pu.txt TTbar_PU $ifile
+    sbatch scripts/tallinn/cmssw-slc7.sh scripts/cmssw/validation_job.sh mlpf scripts/tallinn/ttbar_pu_cmssw_12_3_0.txt TTbar_PU $ifile
     # sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job.sh pf scripts/tallinn/ttbar_pu.txt TTbar_PU $ifile
 done
 

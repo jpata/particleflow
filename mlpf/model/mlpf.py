@@ -431,7 +431,9 @@ class MLPF(nn.Module):
 
         # ensure created particle has positive mass^2 by computing energy from pt and adding a positive-only correction
         pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
+        # sinh does not exist on opset13, required for CMSSW_12_3_0_pre6
         pz_real = pt_real * torch.sinh(preds_eta.detach())
+        # pz_real = pt_real * (torch.exp(preds_eta.detach()) - torch.exp(-preds_eta.detach()))/2.0
         e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
         e_real[~mask] = 0
         e_real[torch.isinf(e_real)] = 0
