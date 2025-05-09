@@ -314,9 +314,10 @@ if __name__ == "__main__":
     maxfiles = 500
     path = "/local/joosep/mlpf/cms/"
     for pu_config in ["nopu", "pu55to75"]:
-        for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:
-            rootfiles = sorted(glob.glob(f"{path}/20240823_simcluster/{pu_config}/{sample_folder}/root/pfntuple_*.root"))
-            pklfiles = sorted(glob.glob(f"{path}/20240823_simcluster/{pu_config}/{sample_folder}/raw/pfntuple_*.pkl.bz2"))
+        # for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:
+        for sample_folder in ["TTbar_14TeV_TuneCUETP8M1_cfi"]:
+            rootfiles = sorted(glob.glob(f"{path}/20250508_cmssw_15_0_5_d3c6d1/{pu_config}/{sample_folder}/root/pfntuple_*.root"))
+            pklfiles = sorted(glob.glob(f"{path}/20250508_cmssw_15_0_5_d3c6d1/{pu_config}/{sample_folder}/raw/pfntuple_*.pkl.bz2"))
 
             rootfiles_d = {fn.split("/")[-1].split(".")[0]: fn for fn in rootfiles}
             pklfiles_d = {fn.split("/")[-1].split(".")[0]: fn for fn in pklfiles}
@@ -333,10 +334,11 @@ if __name__ == "__main__":
 
     # process only pkl files
     maxfiles = 1000
-    path = "/scratch/persistent/joosep/"
+    path = "/local/joosep/mlpf/cms/"
     for pu_config in ["nopu", "pu55to75"]:
-        for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:
-            pklfiles = sorted(glob.glob(f"{path}/20240823_simcluster/{pu_config}/{sample_folder}/raw/pfntuple_*.pkl.bz2"))[:maxfiles]
+        # for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:
+        for sample_folder in ["TTbar_14TeV_TuneCUETP8M1_cfi"]:
+            pklfiles = sorted(glob.glob(f"{path}/20250508_cmssw_15_0_5_d3c6d1/{pu_config}/{sample_folder}/raw/pfntuple_*.pkl.bz2"))[:maxfiles]
             for ck in chunks(pklfiles, perjob):
                 args.append((f"{pu_config}/{sample_folder}", [], ck, "out{}.pkl".format(ijob)))
                 ijob += 1
