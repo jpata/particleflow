@@ -12,7 +12,7 @@ WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 
 # uncomment the following when running at T2_EE_Estonia
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-cd /scratch/persistent/joosep/CMSSW_12_3_0_pre6
+cd /scratch/persistent/joosep/CMSSW_15_0_5/
 eval `scram runtime -sh`
 cd $PREVDIR
 export OUTDIR=/scratch/local/$USER/mlpf/results/cms/${CMSSW_VERSION}/
@@ -37,7 +37,7 @@ if [ $JOBTYPE == "mlpf" ]; then
 	--datatier RECOSIM,MINIAODSIM --nThreads $NTHREADS -n -1 --era $ERA \
 	--eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec
-    #echo "process.mlpfProducer.use_cuda = True" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+    echo "process.mlpfProducer.use_cuda = True" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 elif [ $JOBTYPE == "pf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
@@ -46,11 +46,11 @@ elif [ $JOBTYPE == "pf" ]; then
 	--filein $FILENAME --fileout file:step3.root --no_exec
 fi
 
-#echo """
-#process.Timing = cms.Service(\"Timing\",
-#    summaryOnly = cms.untracked.bool(False),
-#    useJobReport = cms.untracked.bool(True)
-#)""" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+echo """
+process.Timing = cms.Service(\"Timing\",
+    summaryOnly = cms.untracked.bool(False),
+    useJobReport = cms.untracked.bool(True)
+)""" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 
 cmsRun step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 
