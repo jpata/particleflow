@@ -7,9 +7,9 @@
 IMG=/home/software/singularity/pytorch.simg:2024-12-03
 cd ~/particleflow
 
-WEIGHTS=experiments/pyg-cms_20250410_144744_012331/checkpoints/checkpoint-10-3.539432.pth
-EXPDIR=experiments/pyg-cms_20250410_144744_012331
-DATASET=$1
+WEIGHTS=experiments/pyg-cms_20250509_174543_084917/checkpoints/checkpoint-15-3.366837.pth
+EXPDIR=experiments/pyg-cms_20250509_174543_084917/
+DATASET=cms_pf_ttbar
 env
 singularity exec -B /local -B /scratch/persistent --nv \
      --env PYTHONPATH=`pwd` \
