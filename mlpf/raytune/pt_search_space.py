@@ -1,7 +1,7 @@
-from ray.tune import choice  # grid_search, choice, loguniform, quniform
+from ray.tune import grid_search  # grid_search, choice, loguniform, quniform
 
-raytune_num_samples = 400  # Number of random samples to draw from search space. Set to 1 for grid search.
-samp = choice
+raytune_num_samples = 1  # Number of random samples to draw from search space. Set to 1 for grid search.
+samp = grid_search
 
 # gnn scan
 search_space = {
@@ -11,17 +11,19 @@ search_space = {
     # "nvalid": samp([500]),
     # "num_epochs": samp([10]),
     # optimizer parameters
-    "lr": samp([1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3]),
-    # "lr_schedule": samp(["onecycle"]),
-    # "pct_start": samp([0.0, 0.05, 0.1]),
-    "gpu_batch_multiplier": samp([1, 4, 8, 16]),
+    "optimizer": samp(["adamw", "lamb"]),
+    "lr": samp([2e-4, 4e-4, 8e-4]),
+    "weight_decay": samp([0.001, 0.01, 0.03, 0.1]),
+    "lr_schedule": samp(["cosinedecay"]),
+    # "pct_start": samp([0.05, 0.1, 0.2]),
+    # "gpu_batch_multiplier": samp([256]),
     # "patience": samp([9999]),
     # model arch parameters
-    "activation": samp(["elu", "relu", "relu6", "leakyrelu"]),
+    # "activation": samp(["elu", "relu", "relu6", "leakyrelu"]),
     # "conv_type": samp(["attention"]),  # can be "gnn_lsh", "gravnet", "attention"
     # "embedding_dim": samp([32, 64, 128, 252, 512, 1024]),
     # "width": samp([32, 64, 128, 256, 512, 1024]),
-    "num_convs": samp([1, 2, 3, 4, 5]),
+    # "num_convs": samp([1, 2, 3, 4, 5]),
     # "dropout": samp([0.0, 0.01, 0.1, 0.4]),
     # only for gnn-lsh
     # "bin_size": samp([80, 160, 320, 640]),
@@ -37,14 +39,14 @@ search_space = {
     # "expand": samp([2]),
     # "num_heads": samp([2, 4, 6, 8, 10, 12]),
     # attention specifica parameters
-    "num_heads": samp([4, 8, 16, 32, 64]),
-    "head_dim": samp([4, 8, 16, 32, 64]),
+    # "num_heads": samp([4, 8, 16, 32, 64]),
+    # "head_dim": samp([4, 8, 16, 32, 64]),
     # "attention_type": samp(["flash"]),  # flash, efficient, math
 }
 
 
 def set_hps_from_search_space(search_space, config):
-    varaible_names = ["lr", "lr_schedule", "gpu_batch_multiplier", "ntrain", "ntest", "nvalid", "num_epochs", "patience"]
+    varaible_names = ["optimizer", "lr", "weight_decay", "lr_schedule", "gpu_batch_multiplier", "ntrain", "ntest", "nvalid", "num_epochs", "patience"]
     for var in varaible_names:
         if var in search_space.keys():
             config[var] = search_space[var]
