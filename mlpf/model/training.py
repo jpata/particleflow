@@ -112,7 +112,7 @@ def get_optimizer(model, config):
     if config["optimizer"] == "adamw":
         return torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
     elif config["optimizer"] == "lamb":
-        return Lamb(model.parameters(), lr=config["lr"],  weight_decay=wd)
+        return Lamb(model.parameters(), lr=config["lr"], weight_decay=wd)
     elif config["optimizer"] == "sgd":
         return torch.optim.SGD(model.parameters(), lr=config["lr"], weight_decay=wd)
     else:
@@ -525,8 +525,9 @@ def train_all_epochs(
                         )
                     # Add jet metrics entry to the JSON logging file
                     additional_stats = {
-                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k):
-                        plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k]
+                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k): plot_metrics["jet_ratio"][
+                            "jet_ratio_target_to_pred_pt"
+                        ][k]
                     }
                     with open(f"{history_path}/epoch_{epoch}.json", "r+") as f:
                         data = json.load(f)
