@@ -11,7 +11,7 @@ def chunks(lst, n):
 def write_script(infiles, outfiles):
     s = []
     s += ["#!/bin/bash"]
-    s += ["#SBATCH --partition main"]
+    s += ["#SBATCH --partition short"]
     s += ["#SBATCH --cpus-per-task 1"]
     s += ["#SBATCH --mem-per-cpu 4G"]
     s += ["#SBATCH -o logs/slurm-%x-%j-%N.out"]
@@ -27,6 +27,7 @@ def write_script(infiles, outfiles):
             + f" python3 mlpf/data/cms/postprocessing2.py --input {inf} --outpath {outpath}"
         ]
         s += [f"  bzip2 -z {outf_no_bzip}"]
+        s += [f"  bzip2 -t {outf}"]
         s += ["fi"]
     ret = "\n".join(s)
     return ret
@@ -46,7 +47,7 @@ samples = [
 ichunk = 1
 for sample in samples:
     infiles = sorted(list(glob.glob(f"{sample}/root/pfntuple*.root")))
-    for infiles_chunk in chunks(infiles, 10):
+    for infiles_chunk in chunks(infiles, 5):
         outfiles_chunk = [inf.replace(".root", ".pkl.bz2").replace("/root/", "/raw/") for inf in infiles_chunk]
         os.makedirs(os.path.dirname(outfiles_chunk[0]), exist_ok=True)
         scr = write_script(infiles_chunk, outfiles_chunk)
