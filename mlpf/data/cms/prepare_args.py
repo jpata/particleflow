@@ -3,7 +3,7 @@ from __future__ import print_function
 
 import os
 
-outdir = "/local/joosep/mlpf/cms/20240823_simcluster"
+outdir = "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/"
 
 samples = [
     #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 110010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
@@ -15,8 +15,8 @@ samples = [
     #    ("SinglePiMinusFlatPt0p7To1000_cfi",                       800000, 801010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
     #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 720010, "genjob_nopu.sh", outdir + "/nopu"),
     #    ("VBF_TuneCP5_14TeV_pythia8_cfi",                          900000, 920010, "genjob_nopu.sh", outdir + "/nopu"),
-    #    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                       1000000,1020010, "genjob_nopu.sh", outdir + "/nopu"),
-    #    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",               1100000,1120010, "genjob_nopu.sh", outdir + "/nopu"),
+    #    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                       1000000,1030010, "genjob_nopu.sh", outdir + "/nopu"),
+    #    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",               1100000,1130010, "genjob_nopu.sh", outdir + "/nopu"),
     #    ("MultiParticlePFGun50_cfi",                               800000, 801000, "genjob_nopu.sh", outdir + "/nopu"),
     #    ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 910010, "genjob_nopu.sh", outdir + "/nopu"),
     #    ("SingleGammaFlatPt1To1000_pythia8_cfi",                  1000000,1010010, "genjob_nopu.sh", outdir + "/nopu"),
@@ -40,5 +40,5 @@ if __name__ == "__main__":
             p = this_outdir + "/" + samp + "/root/pfntuple_{}.root".format(seed)
             if not os.path.isfile(p):
                 print(
-                    f"sbatch --mem-per-cpu 8G --partition main --time 20:00:00 --cpus-per-task 1 scripts/tallinn/cmssw-el8.sh mlpf/data/cms/{script} {samp} {seed}"
+                    f"sbatch --exclude comp-d-[001-044],comp-u-[001-050] --mem-per-cpu 8G --partition main --time 20:00:00 --cpus-per-task 1 scripts/tallinn/cmssw-el8.sh mlpf/data/cms/{script} {samp} {seed}"
                 )
