@@ -10,4 +10,6 @@ jobs:
   test:
     runs-on: arc-jpata-particleflow-custom-runner-1
     steps:
+      - run: hostname
+      - run: pwd
       - run: nvidia-smi
