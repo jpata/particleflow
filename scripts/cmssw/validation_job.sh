@@ -39,7 +39,7 @@ if [ $JOBTYPE == "mlpf" ]; then
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec
     echo "process.mlpfProducer.use_cuda = True" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
     echo "process.puppi.applyMLPF = True" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
-    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint15_pudisc_1xa100_fp32_fused_20250509.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint20_pudisc_1xa100_fp32_fused_20250510.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 elif [ $JOBTYPE == "pf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
@@ -57,10 +57,10 @@ process.Timing = cms.Service(\"Timing\",
 cmsRun step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 
 #Plain NANO recipe
-cmsDriver.py step4 -s NANO --mc --conditions $CONDITIONS --era $ERA \
-    --eventcontent NANOAODSIM --datatier NANOAODSIM \
-    --customise_commands="process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000" \
-    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step4_NANO.root
+#cmsDriver.py step4 -s NANO --mc --conditions $CONDITIONS --era $ERA \
+#    --eventcontent NANOAODSIM --datatier NANOAODSIM \
+#    --customise_commands="process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000" \
+#    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step4_NANO.root
 #BTV/PF NANO recipe
 cmsDriver.py step4_btv -s NANO:@BTV --mc --conditions $CONDITIONS --era $ERA \
     --eventcontent NANOAODSIM --datatier NANOAODSIM \
@@ -81,8 +81,8 @@ ls *.root
 mkdir -p $OUTDIR/${SAMPLE}_${JOBTYPE}
 
 # cp step3.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
-cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
-cp step4_NANO.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_${NJOB}.root
+# cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
+# cp step4_NANO.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_${NJOB}.root
 cp step4_NANO_btv.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_btv_${NJOB}.root
 cp step4_NANO_jme.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_jme_${NJOB}.root
 

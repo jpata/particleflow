@@ -10,7 +10,7 @@ gpus: 1
 gpu_batch_multiplier: 1
 load:
 finetune:
-num_epochs: 15
+num_epochs: 20
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
