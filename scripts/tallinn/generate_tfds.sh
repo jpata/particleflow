@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition short
+#SBATCH --partition gpu
 #SBATCH --mem-per-cpu 40G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
