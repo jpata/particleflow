@@ -48,6 +48,7 @@ ip=$(srun --nodes=1 --ntasks=1 -w $node_1 hostname --ip-address) # making redis-
 port=6379
 ip_head=$ip:$port
 export ip_head
+export head_node_ip=$node_1
 echo "IP Head: $ip_head"
 
 echo "STARTING HEAD at $node_1"

@@ -40,6 +40,7 @@ from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloader
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
 from mlpf.model.plots import validation_plots
+from mlpf.optimizers.lamb import Lamb
 
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
@@ -84,7 +85,38 @@ def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
     scaler.step(optimizer)
     scaler.update()
     if lr_schedule:
-        lr_schedule.step()
+        # ReduceLROnPlateau scheduler should only be updated after each full epoch
+        if not isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            lr_schedule.step()
+
+
+def get_optimizer(model, config):
+    """
+    Returns the optimizer for the given model based on the configuration provided.
+    Parameters:
+    model (torch.nn.Module): The model for which the optimizer is to be created.
+    config (dict): Configuration dictionary containing optimizer settings.
+                   Must include the key "lr" for learning rate.
+                   Optionally includes the key "optimizer" to specify the type of optimizer.
+                   Supported values for "optimizer" are "adamw", "lamb", and "sgd".
+                   If "optimizer" is not provided, "adamw" is used by default.
+    Returns:
+    torch.optim.Optimizer: The optimizer specified in the configuration.
+    Raises:
+    ValueError: If the specified optimizer type is not supported.
+    """
+
+    wd = config["weight_decay"] if "weight_decay" in config else 0.01
+    if "optimizer" not in config:
+        return torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
+    if config["optimizer"] == "adamw":
+        return torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
+    elif config["optimizer"] == "lamb":
+        return Lamb(model.parameters(), lr=config["lr"], weight_decay=wd)
+    elif config["optimizer"] == "sgd":
+        return torch.optim.SGD(model.parameters(), lr=config["lr"], weight_decay=wd)
+    else:
+        raise ValueError(f"Unsupported optimizer type: {config['optimizer']}")
 
 
 def train_epoch(
@@ -396,6 +428,12 @@ def train_all_epochs(
         valid_time = time.time() - train_time - epoch_start_time
         total_time = time.time() - epoch_start_time
 
+        if lr_schedule:
+            # ReduceLROnPlateau scheduler should only be updated after each full epoch
+            # Other schedulers are updated after each step inside the optimizer_step() function
+            if isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                lr_schedule.step(losses_valid["Total"])
+
         # Log metrics
         if comet_experiment:
             comet_experiment.log_metrics(losses_train, prefix="epoch_train_loss", epoch=epoch)
@@ -479,6 +517,24 @@ def train_all_epochs(
                         plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
                         epoch,
                     )
+                    if comet_experiment:
+                        comet_experiment.log_metric(
+                            "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
+                            plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
+                            epoch=epoch,
+                        )
+                    # Add jet metrics entry to the JSON logging file
+                    additional_stats = {
+                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k): plot_metrics["jet_ratio"][
+                            "jet_ratio_target_to_pred_pt"
+                        ][k]
+                    }
+                    with open(f"{history_path}/epoch_{epoch}.json", "r+") as f:
+                        data = json.load(f)
+                        data.update(additional_stats)
+                        f.seek(0)
+                        json.dump(data, f)
+                        f.truncate()
 
         # Ray training specific logging
         if use_ray:
@@ -631,7 +687,8 @@ def run(rank, world_size, config, outdir, logfile):
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     if config["load"]:
         model = MLPF(**model_kwargs).to(torch.device(rank))
-        optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
+        optimizer = get_optimizer(model, config)
+
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
         if config["start_epoch"] is None:
@@ -673,7 +730,7 @@ def run(rank, world_size, config, outdir, logfile):
 
     else:  # instantiate a new model in the outdir created
         model = MLPF(**model_kwargs)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
+        optimizer = get_optimizer(model, config)
 
     model.to(rank)
     configure_model_trainable(model, config["model"]["trainable"], True)
