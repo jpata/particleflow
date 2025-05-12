@@ -13,7 +13,7 @@ import tqdm
 import vector
 
 SAMPLE_LABEL_CMS = {
-    "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
+    "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\bar{\mathrm{t}}$+PU events",
     "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi": r"$Z\rightarrow \tau \tau$+PU events",
     "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi": r"high-$p_T$ QCD+PU events",
     "QCDForPF_14TeV_TuneCUETP8M1_cfi": r"QCD+PU events",
@@ -26,7 +26,7 @@ SAMPLE_LABEL_CMS = {
     "SingleProtonMinusFlatPt0p7To1000_cfi": r"single proton events",
     "SingleTauFlatPt1To1000_cfi": r"single $\tau^\pm$ events",
     "RelValQCD_FlatPt_15_3000HS_14": r"QCD $15 < p_T < 3000$ GeV + PU events",
-    "RelValTTbar_14TeV": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
+    "RelValTTbar_14TeV": r"$\mathrm{t}\bar{\mathrm{t}}$+PU events",
 }
 
 pid_to_text = {
@@ -113,11 +113,12 @@ def get_class_names(sample_name):
         raise Exception("Unknown sample name: {}".format(sample_name))
 
 
+# overline results in misalignment
 EVALUATION_DATASET_NAMES = {
-    "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
-    "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
-    "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$, PU10",
-    "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$, PU10",
+    "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "clic_edm_qq_pf": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
@@ -125,8 +126,8 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$+PU",
     "cms_pf_ztt_nopu": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$",
     "cms_pf_vbf": r"VBF+PU",
-    "cms_pf_ttbar": r"$\mathrm{t}\overline{\mathrm{t}}$+PU",
-    "cms_pf_ttbar_nopu": r"$\mathrm{t}\overline{\mathrm{t}}$",
+    "cms_pf_ttbar": r"$\mathrm{t}\bar{\mathrm{t}}$+PU",
+    "cms_pf_ttbar_nopu": r"$\mathrm{t}\bar{\mathrm{t}}$",
     "cms_pf_qcd_nopu": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$",
     "cms_pf_vbf_nopu": r"VBF",
     "cms_pf_multi_particle_gun": r"multi particle gun events",

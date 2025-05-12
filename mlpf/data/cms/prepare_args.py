@@ -6,17 +6,21 @@ import os
 outdir = "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/"
 
 samples = [
+    #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 100050, "genjob_pu0to150.sh", outdir + "/pu0to150"),
+
     #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 110010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
-    #    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",                200000, 210010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
+    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",                200000, 210010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
     #    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                        300000, 310010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
     #    ("SMS-T1tttt_mGl-1500_mLSP-100_TuneCP5_14TeV_pythia8_cfi", 500000, 520010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
     #    ("ZpTT_1500_14TeV_TuneCP5_cfi",                            600000, 620010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
     #    ("VBF_TuneCP5_14TeV_pythia8_cfi",                          700000, 705010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
     #    ("SinglePiMinusFlatPt0p7To1000_cfi",                       800000, 801010, "genjob_pu55to75.sh", outdir + "/pu55to75"),
-    #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 720010, "genjob_nopu.sh", outdir + "/nopu"),
-    #    ("VBF_TuneCP5_14TeV_pythia8_cfi",                          900000, 920010, "genjob_nopu.sh", outdir + "/nopu"),
-    #    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                       1000000,1030010, "genjob_nopu.sh", outdir + "/nopu"),
-    #    ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",               1100000,1130010, "genjob_nopu.sh", outdir + "/nopu"),
+
+    # ("TTbar_14TeV_TuneCUETP8M1_cfi",                           700000, 720010, "genjob_nopu.sh", outdir + "/nopu"),
+    # ("VBF_TuneCP5_14TeV_pythia8_cfi",                          900000, 920010, "genjob_nopu.sh", outdir + "/nopu"),
+    ("QCDForPF_14TeV_TuneCUETP8M1_cfi",                       1000000,1050010, "genjob_nopu.sh", outdir + "/nopu"),
+    # ("ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",               1100000,1130010, "genjob_nopu.sh", outdir + "/nopu"),
+
     #    ("MultiParticlePFGun50_cfi",                               800000, 801000, "genjob_nopu.sh", outdir + "/nopu"),
     #    ("SingleElectronFlatPt1To1000_pythia8_cfi",                900000, 910010, "genjob_nopu.sh", outdir + "/nopu"),
     #    ("SingleGammaFlatPt1To1000_pythia8_cfi",                  1000000,1010010, "genjob_nopu.sh", outdir + "/nopu"),
@@ -27,7 +31,6 @@ samples = [
     #    ("SingleProtonMinusFlatPt0p7To1000_cfi",                  1500000,1501010, "genjob_nopu.sh", outdir + "/nopu"),
     #    ("SingleTauFlatPt1To1000_cfi",                            1600000,1601010, "genjob_nopu.sh", outdir + "/nopu"),
     #    ("SingleK0FlatPt1To1000_pythia8_cfi",                     1700000,1710010, "genjob_nopu.sh", outdir + "/nopu"),
-    #    ("TTbar_14TeV_TuneCUETP8M1_cfi",                           100000, 100050, "genjob_pu0to150.sh", outdir + "/pu0to150"),
 ]
 
 if __name__ == "__main__":

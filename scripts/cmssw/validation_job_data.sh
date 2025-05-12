@@ -38,6 +38,17 @@ if [ $JOBTYPE == "mlpf" ]; then
 	--eventcontent RECO,MINIAOD --geometry=$GEOM \
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec --data
     echo "process.mlpfProducer.use_cuda = True" >> step3_RAW2DIGI_L1Reco_RECO_PAT.py
+    echo "process.puppi.applyMLPF = False" >> step3_RAW2DIGI_L1Reco_RECO_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint20_pudisc_1xa100_fp32_fused_20250510.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_PAT.py
+elif [ $JOBTYPE == "mlpfpu" ]; then
+    cmsDriver.py step3 --conditions $CONDITIONS \
+        -s RAW2DIGI,L1Reco,RECO,PAT --scenario pp \
+	--datatier RECO,MINIAOD --nThreads $NTHREADS -n -1 --era $ERA \
+	--eventcontent RECO,MINIAOD --geometry=$GEOM \
+	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec --data
+    echo "process.mlpfProducer.use_cuda = True" >> step3_RAW2DIGI_L1Reco_RECO_PAT.py
+    echo "process.puppi.applyMLPF = True" >> step3_RAW2DIGI_L1Reco_RECO_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint20_pudisc_1xa100_fp32_fused_20250510.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_PAT.py
 elif [ $JOBTYPE == "pf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,PAT --scenario pp \

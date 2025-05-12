@@ -1,17 +1,18 @@
 #!/bin/bash
 
-
 rm -f files_to_copy.txt
 maxfiles=100
-path=/home/joosep/particleflow/experiments/pyg-cms_20250410_144744_012331/./preds_checkpoint-10-3.539432/
-targetpath=/scratch/persistent/joosep/huggingface/particleflow/cms/v2.4.0/pyg-cms_20250410_144744_012331/
+path=/home/joosep/particleflow/experiments/pyg-cms_20250510_121014_108409/./preds_checkpoint-20-3.352647
+targetpath=/scratch/persistent/joosep/huggingface/particleflow/cms/v2.4.1/pyg-cms_20250510_121014_108409/
 
 mkdir -p $targetpath
+cp $path/../* $targetpath/
+cp -R $path/../checkpoints $targetpath/
+cp -R $path/../history $targetpath/
+cp -R $path/../runs $targetpath/
 
 samplestocopy=(
-    "cms_pf_qcd"
     "cms_pf_ttbar"
-    "cms_pf_ztt"
 )
 
 for sample in "${samplestocopy[@]}"; do

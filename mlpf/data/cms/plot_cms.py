@@ -42,7 +42,7 @@ def to_bh(data, bins, cumulative=False):
     h1.fill(data)
     if cumulative:
         h1[:] = np.sum(h1.values()) - np.cumsum(h1)
-    h1[:] = sum_overflow_into_last_bin(h1.values(flow=True)[:])
+    # h1[:] = sum_overflow_into_last_bin(h1.values(flow=True)[:])
     return h1
 
 
@@ -215,7 +215,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     ret = {}
 
     # particle distributions
-    b = np.logspace(-4, 4, 100)
+    b = np.logspace(-1, 3, 100)
     if len(rootfiles) > 0:
         ret[f"{sample_folder}/particles_pt_pythia"] = to_bh(ak.flatten(particles_pythia[mask_pythia_nonu]["gen_pt"]), bins=b)
         ret[f"{sample_folder}/particles_pt_caloparticle"] = to_bh(ak.flatten(particles_cp[mask_cp]["caloparticle_pt"]), bins=b)

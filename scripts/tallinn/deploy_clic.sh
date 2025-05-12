@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 rm -f files_to_copy.txt
 maxfiles=100
 path=experiments/pyg-clic_20250306_105311_290722/./preds_checkpoint-10-1.932789

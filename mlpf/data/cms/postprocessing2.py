@@ -837,6 +837,7 @@ def make_graph(ev, iev):
 
 def process(args):
     infile = args.input
+    print("opening {}".format(infile))
     outpath = os.path.join(args.outpath, os.path.basename(infile).split(".")[0])
     tf = uproot.open(infile)
 
