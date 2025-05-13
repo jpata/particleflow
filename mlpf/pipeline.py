@@ -48,6 +48,21 @@ parser.add_argument("--start-epoch", type=None, default=None, help="the initial 
 parser.add_argument("--patience", type=int, default=None, help="patience before early stopping")
 parser.add_argument("--lr", type=float, default=None, help="learning rate")
 parser.add_argument(
+    "--lr-schedule",
+    type=str,
+    default=None,
+    help="learning rate schedule to use",
+    choices=["constant", "cosinedecay", "onecycle", "reduce_lr_on_plateau"],
+)
+parser.add_argument(
+    "--optimizer",
+    type=str,
+    default=None,
+    help="optimizer to use for training",
+    choices=["adamw", "sgd", "lamb"],
+)
+parser.add_argument("--weight-decay", type=float, default=None, help="weight decay for the optimizer")
+parser.add_argument(
     "--conv-type",
     type=str,
     default=None,
