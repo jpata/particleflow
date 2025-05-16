@@ -34,13 +34,14 @@ def write_script(infiles, outfiles):
 
 samples = [
     # PU
-    "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/",
-    "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/pu55to75/QCDForPF_14TeV_TuneCUETP8M1_cfi",
-    "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/pu55to75/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/",
+    # "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/pu55to75/QCDForPF_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/pu55to75/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
     # NoPU
-    # "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/TTbar_14TeV_TuneCUETP8M1_cfi",
-    "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/QCDForPF_14TeV_TuneCUETP8M1_cfi",
-    # "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
+    "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/TTbar_14TeV_TuneCUETP8M1_cfi",
+    # "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/QCDForPF_14TeV_TuneCUETP8M1_cfi",
+    "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
+    "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/ZpTT_1500_14TeV_TuneCP5_cfi",
 ]
 
 
@@ -52,7 +53,7 @@ ichunk = 1
 for sample in samples:
     infiles = sorted(list(glob.glob(f"{sample}/root/pfntuple*.root")))
     infiles = [inf for inf in infiles if not os.path.isfile(inf_to_outf(inf))]
-    for infiles_chunk in chunks(infiles, 5):
+    for infiles_chunk in chunks(infiles, 10):
         outfiles_chunk = [inf_to_outf(inf) for inf in infiles_chunk]
         os.makedirs(os.path.dirname(outfiles_chunk[0]), exist_ok=True)
         scr = write_script(infiles_chunk, outfiles_chunk)

@@ -32,3 +32,15 @@
 #     sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job.sh mlpfpu scripts/tallinn/ttbar_nopu.txt TTbar_noPU $ifile
 #     sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job.sh pf scripts/tallinn/ttbar_nopu.txt TTbar_noPU $ifile
 # done
+
+END=`wc -l scripts/tallinn/muon0.txt | cut -f1 -d' '`
+for ifile in $(seq 1 $END); do
+    sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job_data.sh mlpfpu scripts/tallinn/muon0.txt Muon0 $ifile
+    sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job_data.sh pf scripts/tallinn/muon0.txt Muon0 $ifile
+done
+
+END=`wc -l scripts/tallinn/zmm.txt | cut -f1 -d' '`
+for ifile in $(seq 1 $END); do
+    sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job_data.sh mlpfpu scripts/tallinn/zmm.txt Zmm $ifile
+    sbatch scripts/tallinn/cmssw-el8-gpu.sh scripts/cmssw/validation_job_data.sh pf scripts/tallinn/zmm.txt Zmm $ifile
+done
