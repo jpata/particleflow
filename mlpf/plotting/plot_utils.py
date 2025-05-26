@@ -256,7 +256,7 @@ def experiment_label(ax, experiment="CMS", tag1="Simulation Preliminary", tag2="
 
 
 def cms_label(ax):
-    return experiment_label(ax, experiment="CMS", tag1="Simulation (Private Work)", tag2="Run 3 (14 TeV)", x1=0.13)
+    return experiment_label(ax, experiment="CMS", tag1="Simulation (Preliminary)", tag2="Run 3 (14 TeV)", x1=0.13)
 
 
 def clic_label(ax):
@@ -274,9 +274,9 @@ EXPERIMENT_LABELS = {
 }
 
 
-def sample_label(ax, sample, additional_text="", x=0.03, y=0.97):
+def sample_label(ax, sample, additional_text="", x=0.03, y=0.97, fontsize=None):
     text = EVALUATION_DATASET_NAMES[sample]
-    plt.text(x, y, text + additional_text, ha="left", va="top", transform=ax.transAxes)
+    plt.text(x, y, text + additional_text, ha="left", va="top", transform=ax.transAxes, fontsize=fontsize)
 
 
 def particle_label(ax, pid):
