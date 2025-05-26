@@ -12,14 +12,12 @@ done
 END=`wc -l scripts/tallinn/qcd_pu.txt | cut -f1 -d' '`
 for ifile in $(seq 1 $END); do
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh ${USE_CUDA} mlpfpu scripts/tallinn/qcd_pu.txt QCD_PU $ifile
-    # sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh mlpf scripts/tallinn/qcd_pu.txt QCD_PU $ifile
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh ${USE_CUDA} pf scripts/tallinn/qcd_pu.txt QCD_PU $ifile
 done
 
 END=`wc -l scripts/tallinn/ttbar_pu.txt | cut -f1 -d' '`
 for ifile in $(seq 1 $END); do
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh ${USE_CUDA} mlpfpu scripts/tallinn/ttbar_pu.txt TTbar_PU_mlpfpu $ifile
-    # sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh mlpf scripts/tallinn/ttbar_pu.txt TTbar_PU $ifile
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh ${USE_CUDA} pf scripts/tallinn/ttbar_pu.txt TTbar_PU $ifile
 done
 
