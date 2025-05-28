@@ -16,7 +16,7 @@ source /cvmfs/cms.cern.ch/cmsset_default.sh
 cd /scratch/persistent/joosep/CMSSW_15_0_5
 eval `scram runtime -sh`
 cd $PREVDIR
-export OUTDIR=/scratch/local/$USER/mlpf/results/cms/${CMSSW_VERSION}/
+export OUTDIR=/scratch/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.5.0_p01_603dc5/
 export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
@@ -40,7 +40,7 @@ if [ $JOBTYPE == "mlpf" ]; then
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec
     echo "process.mlpfProducer.use_cuda = ${USE_CUDA}" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
     echo "process.puppi.applyMLPF = False" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
-    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint20_pudisc_1xa100_fp32_fused_20250510.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint8_pudisc_1xa100_fp32_fused_20250527.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 elif [ $JOBTYPE == "mlpfpu" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
@@ -49,7 +49,7 @@ elif [ $JOBTYPE == "mlpfpu" ]; then
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec
     echo "process.mlpfProducer.use_cuda = ${USE_CUDA}" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
     echo "process.puppi.applyMLPF = True" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
-    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint20_pudisc_1xa100_fp32_fused_20250510.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint8_pudisc_1xa100_fp32_fused_20250527.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 elif [ $JOBTYPE == "pf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
@@ -58,11 +58,11 @@ elif [ $JOBTYPE == "pf" ]; then
 	--filein $FILENAME --fileout file:step3.root --no_exec
 fi
 
-echo """
-process.Timing = cms.Service(\"Timing\",
-    summaryOnly = cms.untracked.bool(False),
-    useJobReport = cms.untracked.bool(True)
-)""" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+#echo """
+#process.Timing = cms.Service(\"Timing\",
+#    summaryOnly = cms.untracked.bool(False),
+#    useJobReport = cms.untracked.bool(True)
+#)""" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 
 cmsRun step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 
@@ -84,7 +84,7 @@ cmsDriver.py step4_jme -s NANO:@JME --mc --conditions $CONDITIONS --era $ERA \
 
 #cmsRun step4_NANO.py
 cmsRun step4_btv_NANO.py
-cmsRun step4_jme_NANO.py
+# cmsRun step4_jme_NANO.py
 
 ls *.root
 
@@ -94,6 +94,6 @@ mkdir -p $OUTDIR/${SAMPLE}_${JOBTYPE}
 # cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
 # cp step4_NANO.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_${NJOB}.root
 cp step4_NANO_btv.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_btv_${NJOB}.root
-cp step4_NANO_jme.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_jme_${NJOB}.root
+# cp step4_NANO_jme.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_jme_${NJOB}.root
 
 rm -Rf $WORKDIR
