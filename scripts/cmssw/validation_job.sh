@@ -16,7 +16,7 @@ source /cvmfs/cms.cern.ch/cmsset_default.sh
 cd /scratch/persistent/joosep/CMSSW_15_0_5
 eval `scram runtime -sh`
 cd $PREVDIR
-export OUTDIR=/scratch/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.5.0_p01_603dc5/
+export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.5.0_p01_603dc5/
 export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands

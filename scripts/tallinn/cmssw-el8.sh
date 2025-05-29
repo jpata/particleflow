@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -p main
-#SBATCH --cpus-per-task=4
-#SBATCH --mem-per-cpu=2G
+#SBATCH --cpus-per-task=8
+#SBATCH --mem-per-cpu=3G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
 source /cvmfs/cms.cern.ch/cmsset_default.sh
