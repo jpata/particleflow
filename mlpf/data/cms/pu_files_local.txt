@@ -1,4 +1,3 @@
-file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_0_6/RelValMinBias_14TeV/GEN-SIM/140X_mcRun3_2024_realistic_v10_STD_2024_MinBias-v2/2590000
 file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_0_6/RelValMinBias_14TeV/GEN-SIM/140X_mcRun3_2024_realistic_v10_STD_2024_MinBias-v2/2590000/78690f43-ec22-49a7-8889-40743b53d2b8.root
 file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_0_6/RelValMinBias_14TeV/GEN-SIM/140X_mcRun3_2024_realistic_v10_STD_2024_MinBias-v2/2590000/ae524eae-0c04-49d6-ab27-944efe81f04f.root
 file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_0_6/RelValMinBias_14TeV/GEN-SIM/140X_mcRun3_2024_realistic_v10_STD_2024_MinBias-v2/2590000/20394926-521a-4e8f-ad9a-4be041a29895.root
