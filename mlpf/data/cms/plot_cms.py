@@ -42,7 +42,7 @@ def to_bh(data, bins, cumulative=False):
     h1.fill(data)
     if cumulative:
         h1[:] = np.sum(h1.values()) - np.cumsum(h1)
-    h1[:] = sum_overflow_into_last_bin(h1.values(flow=True)[:])
+    # h1[:] = sum_overflow_into_last_bin(h1.values(flow=True)[:])
     return h1
 
 
@@ -215,7 +215,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     ret = {}
 
     # particle distributions
-    b = np.logspace(-4, 4, 100)
+    b = np.logspace(-1, 3, 100)
     if len(rootfiles) > 0:
         ret[f"{sample_folder}/particles_pt_pythia"] = to_bh(ak.flatten(particles_pythia[mask_pythia_nonu]["gen_pt"]), bins=b)
         ret[f"{sample_folder}/particles_pt_caloparticle"] = to_bh(ak.flatten(particles_cp[mask_cp]["caloparticle_pt"]), bins=b)
@@ -313,10 +313,12 @@ if __name__ == "__main__":
     # process pkl and ROOT files together
     maxfiles = 500
     path = "/local/joosep/mlpf/cms/"
-    for pu_config in ["nopu", "pu55to75"]:
+    # for pu_config in ["nopu", "pu55to75"]:
+    for pu_config in ["pu55to75"]:
         for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:
-            rootfiles = sorted(glob.glob(f"{path}/20240823_simcluster/{pu_config}/{sample_folder}/root/pfntuple_*.root"))
-            pklfiles = sorted(glob.glob(f"{path}/20240823_simcluster/{pu_config}/{sample_folder}/raw/pfntuple_*.pkl.bz2"))
+            # for sample_folder in ["TTbar_14TeV_TuneCUETP8M1_cfi"]:
+            rootfiles = sorted(glob.glob(f"{path}/20250508_cmssw_15_0_5_d3c6d1/{pu_config}/{sample_folder}/root/pfntuple_*.root"))
+            pklfiles = sorted(glob.glob(f"{path}/20250508_cmssw_15_0_5_d3c6d1/{pu_config}/{sample_folder}/raw/pfntuple_*.pkl.bz2"))
 
             rootfiles_d = {fn.split("/")[-1].split(".")[0]: fn for fn in rootfiles}
             pklfiles_d = {fn.split("/")[-1].split(".")[0]: fn for fn in pklfiles}
@@ -333,10 +335,12 @@ if __name__ == "__main__":
 
     # process only pkl files
     maxfiles = 1000
-    path = "/scratch/persistent/joosep/"
-    for pu_config in ["nopu", "pu55to75"]:
+    path = "/local/joosep/mlpf/cms/"
+    # for pu_config in ["nopu", "pu55to75"]:
+    for pu_config in ["pu55to75"]:
         for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:
-            pklfiles = sorted(glob.glob(f"{path}/20240823_simcluster/{pu_config}/{sample_folder}/raw/pfntuple_*.pkl.bz2"))[:maxfiles]
+            # for sample_folder in ["TTbar_14TeV_TuneCUETP8M1_cfi"]:
+            pklfiles = sorted(glob.glob(f"{path}/20250508_cmssw_15_0_5_d3c6d1/{pu_config}/{sample_folder}/raw/pfntuple_*.pkl.bz2"))[:maxfiles]
             for ck in chunks(pklfiles, perjob):
                 args.append((f"{pu_config}/{sample_folder}", [], ck, "out{}.pkl".format(ijob)))
                 ijob += 1

@@ -1,4 +1,4 @@
-""" PyTorch Lamb optimizer w/ behaviour similar to NVIDIA FusedLamb
+"""PyTorch Lamb optimizer w/ behaviour similar to NVIDIA FusedLamb
 
 This optimizer code was adapted from the following (starting with latest)
 * https://github.com/HabanaAI/Model-References/blob/2b435114fe8e31f159b1d3063b8280ae37af7423/PyTorch/nlp/bert/pretraining/lamb.py
@@ -14,6 +14,7 @@ Original copyrights for above sources are below.
 
 Modifications Copyright 2021 Ross Wightman
 """
+
 # Copyright (c) 2021, Habana Labs Ltd.  All rights reserved.
 
 # Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.

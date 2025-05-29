@@ -1,0 +1,9 @@
+file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_1_0/RelValZMM_14/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v1/2580000/2e7a840d-88a5-4a81-93a8-1f7f1c6972f9.root
+file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_1_0/RelValZMM_14/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v1/2580000/3366ab2f-0f6c-4e37-a10e-03cb223909cd.root
+file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_1_0/RelValZMM_14/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v1/2580000/397aa281-53f5-47c7-af70-098168747e1c.root
+file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_1_0/RelValZMM_14/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v1/2580000/3d9e2aa5-77db-4341-aaa4-2cff3226b026.root
+file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_1_0/RelValZMM_14/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v1/2580000/42787811-0057-4a20-836c-d0e55413a2e0.root
+file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_1_0/RelValZMM_14/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v1/2580000/c326317a-b645-4859-ba86-1165a8db4300.root
+file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_1_0/RelValZMM_14/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v1/2580000/d7a6b2b7-e4ea-41c8-b422-23d755c7b77b.root
+file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_1_0/RelValZMM_14/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v1/2580000/eeda3205-3d78-471e-87d8-a7f4f6f5d0a2.root
+file:/scratch/persistent/joosep/cms/store/relval/CMSSW_14_1_0/RelValZMM_14/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v1/2580000/f1e7a2e1-0174-49d8-9ddb-2a5dec0716b1.root

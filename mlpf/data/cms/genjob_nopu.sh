@@ -1,13 +1,9 @@
 #!/bin/bash
-#SBATCH --partition short
-#SBATCH --cpus-per-task 1
-#SBATCH --mem-per-cpu 6G
-#SBATCH -o slurm-%x-%j-%N.out
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/20240823_simcluster/nopu/
-CMSSWDIR=/scratch/persistent/joosep/CMSSW_14_2_2/
+OUTDIR=/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/
+CMSSWDIR=/scratch/persistent/joosep/CMSSW_15_0_5/
 MLPF_PATH=/home/joosep/particleflow/
 
 #seed must be greater than 0
@@ -39,6 +35,7 @@ cd $WORKDIR
 #Generate the MC
 cmsDriver.py $SAMPLE \
   --conditions auto:phase1_2023_realistic \
+  --beamspot Realistic25ns13p6TeVEarly2023Collision \
   -n $N \
   --era Run3_2023 \
   --eventcontent FEVTDEBUGHLT \
@@ -54,6 +51,7 @@ cmsDriver.py $SAMPLE \
 #Run the reco sequences
 cmsDriver.py step3 \
   --conditions auto:phase1_2023_realistic \
+  --beamspot Realistic25ns13p6TeVEarly2023Collision \
   --era Run3_2023 \
   -n -1 \
   --eventcontent FEVTDEBUGHLT \
@@ -76,7 +74,6 @@ cmsRun step2_phase1_new.py > /dev/null
 
 cmsRun step3_phase1_new.py > /dev/null
 #cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
-
 mv pfntuple.root pfntuple_${SEED}.root
 cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
 
