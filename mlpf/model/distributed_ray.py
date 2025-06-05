@@ -12,7 +12,7 @@ from mlpf.model.mlpf import MLPF
 from mlpf.model.logger import _logger, _configLogger
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.utils import create_comet_experiment
-from mlpf.model.training import train_all_epochs
+from mlpf.model.training import train_all_epochs, get_optimizer
 
 from mlpf.model.utils import (
     load_checkpoint,
@@ -229,7 +229,7 @@ def train_ray_trial(config, args, outdir=None):
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # optimizer should be created after distributing the model to devices with ray.train.torch.prepare_model(model)
     model = ray.train.torch.prepare_model(model)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
+    optimizer = get_optimizer(model, config)
 
     trainable_params, nontrainable_params, table = count_parameters(model)
     print(table)

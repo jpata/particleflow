@@ -4,7 +4,7 @@ exclude: ^(images)|^(mlpf/data/clic/clicRec_e4h_input.py)|^(mlpf/data/clic/clic_
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.4.0
+  rev: v5.0.0
   hooks:
   - id: trailing-whitespace
   - id: check-added-large-files
@@ -27,7 +27,7 @@ repos:
 #    args: ['--profile', 'black', '--filter-files']
 
 - repo: https://github.com/psf/black
-  rev: 22.12.0
+  rev: 25.1.0
   hooks:
     - id: black
       # It is recommended to specify the latest version of Python
@@ -38,7 +38,7 @@ repos:
       args: [--line-length=150]
 
 - repo: https://github.com/PyCQA/flake8
-  rev: 6.0.0
+  rev: 7.2.0
   hooks:
   - id: flake8
     # black-compatible flake-8 config

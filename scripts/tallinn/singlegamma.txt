@@ -1,0 +1,2 @@
+/store/relval/CMSSW_14_1_0/RelValSingleGammaFlatPt8To150/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/09e9fbb5-17b4-4f35-83ee-f03f7048da63.root
+/store/relval/CMSSW_14_1_0/RelValSingleGammaFlatPt8To150/GEN-SIM-DIGI-RAW/140X_mcRun3_2024_realistic_v21_STD_Recycled_2024_noPU-v2/2580000/53631e7e-00a0-4171-a1d5-9e25d0070242.root
