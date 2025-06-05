@@ -80,6 +80,7 @@ CLASS_NAMES_CLIC = [
 CLASS_LABELS = {
     "cms": CLASS_LABELS_CMS,
     "clic": CLASS_LABELS_CLIC,
+    "clic_hits": CLASS_LABELS_CLIC,
     "cld": CLASS_LABELS_CLIC,
 }
 
@@ -115,10 +116,11 @@ def get_class_names(sample_name):
 
 # overline results in misalignment
 EVALUATION_DATASET_NAMES = {
-    "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
-    "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
-    "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$, PU10",
-    "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "cld_hits_edm_ttbar_pf_small": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$, PU10",
+    "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
     "clic_edm_qq_pf": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
@@ -144,6 +146,7 @@ EVALUATION_DATASET_NAMES = {
 
 GENJET_BINS_PT_DATASET = {
     "clic": [10, 20, 40, 60, 80, 100, 200],
+    "clic_hits": [10, 20, 40, 60, 80, 100, 200],
     "cld": [10, 20, 40, 60, 80, 100, 200],
     "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
 }
@@ -270,6 +273,7 @@ def cld_label(ax):
 EXPERIMENT_LABELS = {
     "cms": cms_label,
     "clic": clic_label,
+    "clic_hits": clic_label,
     "cld": cld_label,
 }
 

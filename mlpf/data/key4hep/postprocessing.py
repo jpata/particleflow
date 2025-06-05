@@ -80,20 +80,6 @@ cluster_feature_order = [
     "sigma_y",
     "sigma_z",
 ]
-hit_feature_order = [
-    "elemtype",
-    "et",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "position.x",
-    "position.y",
-    "position.z",
-    "time",
-    "subdetector",
-    "type",
-]
 
 
 def deltaphi(phi1, phi2):
