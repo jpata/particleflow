@@ -84,13 +84,13 @@ CLASS_LABELS = {
 }
 
 labels = {
-    "met": "$p_{\mathrm{T}}^{\mathrm{miss}}$ [GeV]",
-    "gen_met": "$p_{\mathrm{T,truth}}^\mathrm{miss}$ [GeV]",
-    "gen_mom": "$p_{\mathrm{truth}}$ [GeV]",
-    "gen_jet": "jet $p_{\mathrm{T,truth}}$ [GeV]",
-    "target_jet": "jet $p_{\mathrm{T,target}}$ [GeV]",
-    "gen_jet_eta": "jet $\eta_{\mathrm{truth}}$ [GeV]",
-    "reco_met": "$p_{\mathrm{T,reco}}^\mathrm{miss}$ [GeV]",
+    "met": "$p_{\mathrm{T}}^{\mathrm{miss}}$ (GeV)",
+    "gen_met": "$p_{\mathrm{T,truth}}^\mathrm{miss}$ (GeV)",
+    "gen_mom": "$p_{\mathrm{truth}}$ (GeV)",
+    "gen_jet": "jet $p_{\mathrm{T,truth}}$ (GeV)",
+    "target_jet": "jet $p_{\mathrm{T,target}}$ (GeV)",
+    "gen_jet_eta": "jet $\eta_{\mathrm{truth}}$ (GeV)",
+    "reco_met": "$p_{\mathrm{T,reco}}^\mathrm{miss}$ (GeV)",
     "reco_gen_met_ratio": "$p_{\mathrm{T,reco}}^\mathrm{miss} / p_{\\mathrm{T,truth}}^\mathrm{miss}$",
     "reco_gen_mom_ratio": "$p_{\mathrm{reco}} / p_{\\mathrm{truth}}$",
     "reco_gen_jet_ratio": "jet $p_{\mathrm{T,reco}} / p_{\\mathrm{T,truth}}$",
@@ -99,6 +99,11 @@ labels = {
     "gen_mom_range": "${} \less p_{{\mathrm{{truth}}}}\leq {}$",
     "gen_jet_range": "${} \less p_{{\mathrm{{T,truth}}}} \leq {}$",
     "gen_jet_range_eta": "${} \less \eta_{{\mathrm{{truth}}}} \leq {}$",
+    "pt_response": "$p_{\mathrm{T}}/p_{\mathrm{T,ref}}$",
+    "pt_response_iqr_median": "$p_{\mathrm{T}}/p_{\mathrm{T,ref}}$ resolution",
+    "pt_response_median": "$p_{\mathrm{T}}/p_{\mathrm{T,ref}}$ scale",
+    "pt": "$p_{\mathrm{T}}$ (GeV)",
+    "match_frac": "Match frac.",
 }
 
 
@@ -256,7 +261,7 @@ def experiment_label(ax, experiment="CMS", tag1="Simulation Preliminary", tag2="
 
 
 def cms_label(ax):
-    return experiment_label(ax, experiment="CMS", tag1="Simulation (Preliminary)", tag2="Run 3 (14 TeV)", x1=0.13)
+    return experiment_label(ax, experiment="CMS", tag1="Simulation Preliminary", tag2="Run 3 (14 TeV)", x1=0.13)
 
 
 def clic_label(ax):
@@ -1054,7 +1059,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.hist(sum_cand_energy, bins=b, label="PF", histtype="step", lw=2)
         plt.hist(sum_pred_energy, bins=b, label="MLPF", histtype="step", lw=2)
         plt.hist(sum_gen_energy, bins=b, label="Truth", histtype="step", lw=2)
-        plt.xlabel("total energy / event [GeV]")
+        plt.xlabel("total energy / event (GeV)")
         plt.ylabel("events / bin")
         if title:
             plt.title(title + ", " + clname)
@@ -1070,8 +1075,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.figure()
         plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
         plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
-        plt.xlabel("total true energy / event [GeV]")
-        plt.ylabel("total PF energy / event [GeV]")
+        plt.xlabel("total true energy / event (GeV)")
+        plt.ylabel("total PF energy / event (GeV)")
         if title:
             plt.title(title + ", " + clname)
         save_img(
@@ -1085,8 +1090,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.figure()
         plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
         plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
-        plt.xlabel("total true energy / event [GeV]")
-        plt.ylabel("total MLPF energy / event [GeV]")
+        plt.xlabel("total true energy / event (GeV)")
+        plt.ylabel("total MLPF energy / event (GeV)")
         if title:
             plt.title(title + ", " + clname)
         save_img(
@@ -1110,8 +1115,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
             color="black",
             ls="--",
         )
-        plt.xlabel("total true energy / event [GeV]")
-        plt.ylabel("total reconstructed energy / event [GeV]")
+        plt.xlabel("total true energy / event (GeV)")
+        plt.ylabel("total reconstructed energy / event (GeV)")
         if title:
             plt.title(title + ", " + clname + ", PF")
         save_img(
@@ -1132,8 +1137,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
             color="black",
             ls="--",
         )
-        plt.xlabel("total true energy / event [GeV]")
-        plt.ylabel("total reconstructed energy / event [GeV]")
+        plt.xlabel("total true energy / event (GeV)")
+        plt.ylabel("total reconstructed energy / event (GeV)")
         if title:
             plt.title(title + ", " + clname + ", MLPF")
         save_img(
@@ -1376,7 +1381,7 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     )
     plt.xscale("log")
     plt.yscale("log")
-    plt.xlabel("Particle $p_T$ [GeV]")
+    plt.xlabel("Particle $p_T$ (GeV)")
     plt.ylabel("Number of particles / bin")
     plt.legend(loc="best")
 
@@ -1414,7 +1419,7 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         label="MLPF",
     )
     plt.yscale("log")
-    plt.xlabel("Particle $p_T$ [GeV]")
+    plt.xlabel("Particle $p_T$ (GeV)")
     plt.ylabel("Number of particles / bin")
     plt.legend(loc="best")
 
@@ -1486,8 +1491,8 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     plt.hist2d(target_pt, cand_pt, bins=(b, b), cmap="hot_r")
     plt.xscale("log")
     plt.yscale("log")
-    plt.xlabel("Target particle $p_T$ [GeV]")
-    plt.ylabel("Reconstructed particle $p_T$ [GeV]")
+    plt.xlabel("Target particle $p_T$ (GeV)")
+    plt.ylabel("Reconstructed particle $p_T$ (GeV)")
     plt.plot([10**-1, 10**2], [10**-1, 10**2], color="black", ls="--")
 
     EXPERIMENT_LABELS[dataset](ax)
@@ -1507,8 +1512,8 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     plt.hist2d(target_pt, pred_pt, bins=(b, b), cmap="hot_r")
     plt.xscale("log")
     plt.yscale("log")
-    plt.xlabel("Target particle $p_T$ [GeV]")
-    plt.ylabel("Reconstructed particle $p_T$ [GeV]")
+    plt.xlabel("Target particle $p_T$ (GeV)")
+    plt.ylabel("Reconstructed particle $p_T$ (GeV)")
     plt.plot([10**-1, 10**2], [10**-1, 10**2], color="black", ls="--")
 
     EXPERIMENT_LABELS[dataset](ax)
