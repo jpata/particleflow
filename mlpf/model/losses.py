@@ -6,6 +6,17 @@ from torch import Tensor, nn
 
 from mlpf.model.logger import _logger
 
+LOSS_DICT_NAMES = [
+    "Classification_binary",
+    "Classification",
+    "ispu",
+    "Regression_pt",
+    "Regression_eta",
+    "Regression_sin_phi",
+    "Regression_cos_phi",
+    "Regression_energy",
+]
+
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     # create normalized random basis vectors
@@ -55,8 +66,13 @@ def mlpf_loss(y, ypred, batch):
     loss_pid_classification[y["cls_id"] == 0] *= 0
 
     # compare particle "PU-ness", only for cases where there was a true particle
+
     loss_pu = torch.nn.functional.cross_entropy(ypred["ispu"], y["ispu"].long(), reduction="none")
     loss_pu[y["cls_id"] == 0] *= 0
+    
+    #do not compute PU loss if no PU samples in this batch
+    if y["ispu"].long().sum() == 0:
+       loss_pu *= 0
 
     # compare particle momentum, only for cases where there was a true particle
     loss_regression_pt = torch.nn.functional.mse_loss(ypred["pt"], y["pt"], reduction="none")
@@ -121,17 +137,9 @@ def mlpf_loss(y, ypred, batch):
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
     # this is the final loss to be optimized
-    loss["Total"] = (
-        loss["Classification_binary"]
-        + loss["Classification"]
-        + loss["ispu"]
-        + loss["Regression_pt"]
-        + loss["Regression_eta"]
-        + loss["Regression_sin_phi"]
-        + loss["Regression_cos_phi"]
-        + loss["Regression_energy"]
-    )
+    loss["Total"] = sum([loss[k] for k in LOSS_DICT_NAMES])
     loss_opt = loss["Total"]
+
     if torch.isnan(loss_opt):
         _logger.error(ypred)
         _logger.error(sqrt_target_pt)

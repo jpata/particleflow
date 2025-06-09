@@ -266,7 +266,11 @@ class MLPF(nn.Module):
         dropout_conv_id_mha=0.0,
         dropout_conv_id_ff=0.0,
         use_pre_layernorm=False,
+        feature_stds_by_type=None,  # Renamed and expecting dict
+        feature_means_by_type=None, # Renamed and expecting dict
     ):
+        # Add feature_mean and feature_std to __init__
+        # These will be used for input feature normalization
         super(MLPF, self).__init__()
 
         self.conv_type = conv_type
@@ -284,6 +288,32 @@ class MLPF(nn.Module):
         self.elemtypes_nonzero = elemtypes_nonzero
 
         self.use_pre_layernorm = use_pre_layernorm
+
+        # Register per-element-type buffers for feature normalization
+        self.has_feature_normalization = False
+        if feature_means_by_type is not None and feature_stds_by_type is not None:
+            self.has_feature_normalization = True
+            for elem_type_val in self.elemtypes_nonzero:
+                str_elem_type = str(int(elem_type_val)) # Buffer names must be valid strings
+                if elem_type_val in feature_means_by_type and elem_type_val in feature_stds_by_type:
+                    mean_val = feature_means_by_type[elem_type_val]
+                    std_val = feature_stds_by_type[elem_type_val]
+                    if mean_val is not None and std_val is not None:
+                        # mean_val/std_val are (1,1,num_features), squeeze to (num_features,) for buffer
+                        self.register_buffer(f"feature_mean_{str_elem_type}", mean_val.squeeze(0).squeeze(0))
+                        self.register_buffer(f"feature_std_{str_elem_type}", std_val.squeeze(0).squeeze(0))
+                    else: # Should not happen if dicts are not None and elem_type_val is a key
+                        self.register_buffer(f"feature_mean_{str_elem_type}", None)
+                        self.register_buffer(f"feature_std_{str_elem_type}", None)
+                else:
+                    _logger.warning(f"Missing normalization stats for elem_type {elem_type_val} in provided dictionaries.")
+                    self.register_buffer(f"feature_mean_{str_elem_type}", None)
+                    self.register_buffer(f"feature_std_{str_elem_type}", None)
+        else: # If the dictionaries themselves are None, register all buffers as None
+            for elem_type_val in self.elemtypes_nonzero:
+                str_elem_type = str(int(elem_type_val))
+                self.register_buffer(f"feature_mean_{str_elem_type}", None)
+                self.register_buffer(f"feature_std_{str_elem_type}", None)
 
         if self.conv_type == "attention":
             embedding_dim = num_heads * head_dim
@@ -378,7 +408,30 @@ class MLPF(nn.Module):
 
     # @torch.compile
     def forward(self, X_features, mask):
-        Xfeat_normed = X_features
+        # X_features: (batch_size, num_elements, num_input_features)
+
+        Xfeat_normed = X_features.clone() # Start with a copy, apply normalization in place
+
+        if self.has_feature_normalization:
+            elem_type_col = X_features[..., 0]  # Shape: (batch_size, num_elements)
+            for elem_type_val in self.elemtypes_nonzero:
+                str_elem_type = str(int(elem_type_val))
+                mean_val = getattr(self, f"feature_mean_{str_elem_type}", None)
+                std_val = getattr(self, f"feature_std_{str_elem_type}", None)
+
+                if mean_val is not None and std_val is not None:
+                    # mean_val, std_val are stored as (num_input_features,)
+                    # type_mask identifies elements of the current type
+                    type_mask = (elem_type_col == elem_type_val) # Shape: (batch_size, num_elements)
+
+                    if type_mask.any():
+                        # Apply normalization to the slice of X_features corresponding to type_mask
+                        # X_features[type_mask] will be (N_type_elements, num_input_features)
+                        # Reshape mean/std to (1, num_input_features) for broadcasting
+                        Xfeat_normed[type_mask] = (X_features[type_mask] - mean_val.view(1, -1)) / \
+                                                  (std_val.view(1, -1) + 1e-8)
+        else:
+            Xfeat_normed = X_features # No normalization, use original features
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
@@ -435,8 +488,8 @@ class MLPF(nn.Module):
 
         # ensure created particle has positive mass^2 by computing energy from pt and adding a positive-only correction
         pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
-        # sinh does not exist on opset13, required for CMSSW_12_3_0_pre6
         pz_real = pt_real * torch.sinh(preds_eta.detach())
+        # sinh does not exist on opset13, required for CMSSW_12_3_0_pre6
         # pz_real = pt_real * (torch.exp(preds_eta.detach()) - torch.exp(-preds_eta.detach()))/2.0
         e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
         e_real[~mask] = 0

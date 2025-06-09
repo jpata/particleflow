@@ -36,10 +36,10 @@ from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_ten
 from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.mlpf import set_save_attention
 from mlpf.model.mlpf import MLPF
-from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
-from mlpf.model.losses import mlpf_loss
+from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders, PFBatch
+from mlpf.model.losses import mlpf_loss, LOSS_DICT_NAMES
 from mlpf.utils import create_comet_experiment
-from mlpf.model.plots import validation_plots
+from mlpf.model.plots import validation_plots, log_loss_correlation_plots, log_epoch_loss_evolution_ratios
 from mlpf.optimizers.lamb import Lamb
 
 
@@ -157,6 +157,15 @@ def train_epoch(
     """
     model.train()
     epoch_loss = {}
+    epoch_sum_batch_avg_ispu = torch.tensor(0.0, device=rank)
+
+    # For plotting loss correlations on rank 0 / cpu
+    epoch_losses_for_plotting = {}
+    COMPONENTS_TO_PLOT_CORRELATION = [
+        "Classification_binary", "Classification", "ispu",
+        "Regression_pt", "Regression_eta", "Regression_sin_phi",
+        "Regression_cos_phi", "Regression_energy"
+    ]
 
     # Only show progress bar on rank 0
     if (world_size > 1) and (rank != 0):
@@ -168,15 +177,32 @@ def train_epoch(
         batch = batch.to(rank, non_blocking=True)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-            loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss)
+            loss_opt, loss, _, _, ytarget = model_step(batch, model, mlpf_loss)
 
         optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
 
-        # Accumulate losses
-        for loss_name in loss:
+        # Accumulate losses for averaging
+        for loss_name in loss:  # loss here is losses_detached from model_step
             if loss_name not in epoch_loss:
                 epoch_loss[loss_name] = 0.0
             epoch_loss[loss_name] += loss[loss_name]
+
+        # Accumulate losses for plotting correlations (only on rank 0 / cpu)
+        if tensorboard_writer is not None:
+            total_loss_item = loss_opt.detach().cpu().item()
+            for comp_name in COMPONENTS_TO_PLOT_CORRELATION:
+                if comp_name in loss:  # loss here is losses_detached
+                    comp_val_item = loss[comp_name].cpu().item()
+                    if comp_name not in epoch_losses_for_plotting:
+                        epoch_losses_for_plotting[comp_name] = []
+                    epoch_losses_for_plotting[comp_name].append((total_loss_item, comp_val_item))
+
+
+        # Accumulate avg_ispu
+        masked_ispu = ytarget["ispu"][batch.mask]
+        if masked_ispu.numel() > 0:
+            batch_avg_ispu = masked_ispu.float().mean()
+            epoch_sum_batch_avg_ispu += batch_avg_ispu
 
         # Log step metrics
         step = (epoch - 1) * len(train_loader) + itrain
@@ -201,11 +227,19 @@ def train_epoch(
     for loss_name in epoch_loss:
         if world_size > 1:
             torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
+        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item() # type: ignore
+
+    if world_size > 1:
+        torch.distributed.all_reduce(epoch_sum_batch_avg_ispu)
+    avg_target_ispu_over_steps = epoch_sum_batch_avg_ispu.cpu().item() / num_steps.cpu().item()  # type: ignore
+    if tensorboard_writer is not None:  # Log on rank 0 or cpu
+        tensorboard_writer.add_scalar("epoch/avg_target_ispu_per_step", avg_target_ispu_over_steps, epoch)
+        # Log correlation plots
+        log_loss_correlation_plots(epoch_losses_for_plotting, epoch, tensorboard_writer, "train")
+        tensorboard_writer.flush()  # Ensure plots are written
 
     if world_size > 1:
         dist.barrier()
-
     return epoch_loss
 
 
@@ -242,6 +276,15 @@ def eval_epoch(
     """
     model.eval()
     epoch_loss = {}
+    epoch_sum_batch_avg_ispu = torch.tensor(0.0, device=rank)
+
+    # For plotting loss correlations on rank 0 / cpu
+    epoch_losses_for_plotting = {}
+    COMPONENTS_TO_PLOT_CORRELATION = [
+        "Classification_binary", "Classification", "ispu",
+        "Regression_pt", "Regression_eta", "Regression_sin_phi",
+        "Regression_cos_phi", "Regression_energy"
+    ]
 
     # Confusion matrix tracking
     cm_X_target = np.zeros((13, 13))
@@ -265,7 +308,7 @@ def eval_epoch(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
-                loss_opt, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
+                loss_opt, losses_detached, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
 
         # Update confusion matrices
         cm_X_target += sklearn.metrics.confusion_matrix(
@@ -283,10 +326,26 @@ def eval_epoch(
             validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
 
         # Accumulate losses
-        for loss_name in loss:
+        for loss_name in losses_detached:
             if loss_name not in epoch_loss:
                 epoch_loss[loss_name] = 0.0
-            epoch_loss[loss_name] += loss[loss_name]
+            epoch_loss[loss_name] += losses_detached[loss_name]
+
+        # Accumulate losses for plotting correlations (only on rank 0 / cpu)
+        if tensorboard_writer is not None:
+            total_loss_item = loss_opt.detach().cpu().item()
+            for comp_name in COMPONENTS_TO_PLOT_CORRELATION:
+                if comp_name in losses_detached:
+                    comp_val_item = losses_detached[comp_name].cpu().item()
+                    if comp_name not in epoch_losses_for_plotting:
+                        epoch_losses_for_plotting[comp_name] = []
+                    epoch_losses_for_plotting[comp_name].append((total_loss_item, comp_val_item))
+ 
+        # Accumulate avg_ispu
+        masked_ispu = ytarget["ispu"][batch.mask]
+        if masked_ispu.numel() > 0:
+            batch_avg_ispu = masked_ispu.float().mean()
+            epoch_sum_batch_avg_ispu += batch_avg_ispu
 
     # Log confusion matrices
     if comet_experiment:
@@ -308,11 +367,19 @@ def eval_epoch(
     for loss_name in epoch_loss:
         if world_size > 1:
             torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
+        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item() # type: ignore
+
+    if world_size > 1:
+        torch.distributed.all_reduce(epoch_sum_batch_avg_ispu)
+    avg_target_ispu_over_steps = epoch_sum_batch_avg_ispu.cpu().item() / num_steps.cpu().item()  # type: ignore
+    if tensorboard_writer is not None:  # Log on rank 0 or cpu
+        tensorboard_writer.add_scalar("epoch/avg_target_ispu_per_step", avg_target_ispu_over_steps, epoch)
+        # Log correlation plots
+        log_loss_correlation_plots(epoch_losses_for_plotting, epoch, tensorboard_writer, "valid")
+        tensorboard_writer.flush()  # Ensure plots are written
 
     if world_size > 1:
         dist.barrier()
-
     return epoch_loss
 
 
@@ -386,6 +453,18 @@ def train_all_epochs(
     # Early stopping setup
     stale_epochs = torch.tensor(0, device=rank)
     best_val_loss = float("inf")
+
+    # For epoch-wise loss evolution plotting (ratios of component to total)
+    if (rank == 0) or (rank == "cpu"):
+        train_epoch_loss_history = {} # Will be populated with {loss_name: [epoch1_val, epoch2_val, ...]}
+        valid_epoch_loss_history = {}
+        # Define components for which to plot the ratio evolution
+        COMPONENTS_FOR_EVOLUTION_RATIO_PLOT = [
+            "Classification_binary", "Classification", "ispu",
+            "Regression_pt", "Regression_eta", "Regression_sin_phi",
+            "Regression_cos_phi", "Regression_energy"
+        ] # This should ideally match the keys from LOSS_DICT_NAMES if they are the ones desired
+
 
     scaler = torch.amp.GradScaler()
 
@@ -465,7 +544,26 @@ def train_all_epochs(
             # Update loss history
             for loss in losses_train:
                 tensorboard_writer_train.add_scalar(f"epoch/loss_{loss}", losses_train[loss], epoch)
+            for loss in losses_valid: # Ensure validation losses are also logged as scalars
                 tensorboard_writer_valid.add_scalar(f"epoch/loss_{loss}", losses_valid[loss], epoch)
+
+            # Update and log epoch-wise loss evolution plots
+            for key, value in losses_train.items():
+                train_epoch_loss_history.setdefault(key, []).append(value)
+            for key, value in losses_valid.items():
+                valid_epoch_loss_history.setdefault(key, []).append(value)
+
+            if tensorboard_writer_train and train_epoch_loss_history.get("Total"):
+                log_epoch_loss_evolution_ratios(
+                    train_epoch_loss_history, start_epoch, epoch, tensorboard_writer_train, "train",
+                    COMPONENTS_FOR_EVOLUTION_RATIO_PLOT
+                )
+            if tensorboard_writer_valid and valid_epoch_loss_history.get("Total"):
+                log_epoch_loss_evolution_ratios(
+                    valid_epoch_loss_history, start_epoch, epoch, tensorboard_writer_valid, "valid",
+                    COMPONENTS_FOR_EVOLUTION_RATIO_PLOT
+                )
+
 
             # Save epoch stats to JSON
             history_path = Path(outdir) / "history"
@@ -576,6 +674,83 @@ def train_all_epochs(
         tensorboard_writer_valid.close()
 
 
+def calculate_normalization_coefficients(loader, rank, world_size, device, num_features, elemtypes_nonzero, dtype_stats=torch.float64):
+    """
+    Calculates the mean and standard deviation of input features from a DataLoader,
+    separately for each element type specified in elemtypes_nonzero.
+
+    Args:
+        loader: DataLoader for the training dataset.
+        rank: Device rank (GPU id or 'cpu').
+        world_size: Number of devices being used for DDP.
+        device: The torch device to perform calculations on.
+        num_features: The number of input features in X.
+        elemtypes_nonzero: A list of element type values for which to calculate statistics.
+        dtype_stats: The dtype to use for sum and sum_sq accumulators for precision.
+
+    Returns:
+        Tuple (means_X_dict, stds_X_dict): Dictionaries mapping element type to
+                                           tensors for mean and std of shape (1, 1, num_features).
+                                           Returns ({}, {}) if no elemtypes_nonzero or no data.
+    """
+    _logger.info(f"Rank {rank}: Calculating per-element-type normalization coefficients from training data...")
+
+    if not elemtypes_nonzero:
+        _logger.warning(f"Rank {rank}: elemtypes_nonzero is empty. Cannot calculate normalization coefficients.")
+        return {}, {}
+
+    # Initialize dictionaries to store sums and counts for each element type
+    sums_X = {etype: torch.zeros(num_features, device=device, dtype=dtype_stats) for etype in elemtypes_nonzero}
+    sums_X_sq = {etype: torch.zeros(num_features, device=device, dtype=dtype_stats) for etype in elemtypes_nonzero}
+    counts_X = {etype: torch.tensor(0, device=device, dtype=torch.long) for etype in elemtypes_nonzero}
+
+    # Only show progress bar on rank 0 or if not DDP
+    if (world_size > 1 and rank != 0):
+        iterator = loader
+    else:
+        iterator = tqdm.tqdm(loader, desc=f"Per-type norm coeff calculation on rank={rank}")
+
+    for batch_data in iterator:
+        batch_data = batch_data.to(device, non_blocking=True)
+        # X_masked has shape (N_unmasked_elements, num_features)
+        X_masked = batch_data.X[batch_data.mask]
+        if X_masked.nelement() > 0:
+            elem_types_in_batch = X_masked[:, 0]  # Element type is the first feature
+
+            for elem_type_val in elemtypes_nonzero:
+                type_mask_batch = (elem_types_in_batch == elem_type_val)
+                X_for_type = X_masked[type_mask_batch]
+
+                if X_for_type.nelement() > 0:
+                    sums_X[elem_type_val] += X_for_type.sum(dim=0).to(dtype_stats)
+                    sums_X_sq[elem_type_val] += (X_for_type**2).sum(dim=0).to(dtype_stats)
+                    counts_X[elem_type_val] += X_for_type.shape[0]
+
+    if world_size > 1:
+        for elem_type_val in elemtypes_nonzero:
+            dist.all_reduce(sums_X[elem_type_val], op=dist.ReduceOp.SUM)
+            dist.all_reduce(sums_X_sq[elem_type_val], op=dist.ReduceOp.SUM)
+            dist.all_reduce(counts_X[elem_type_val], op=dist.ReduceOp.SUM)
+
+    means_X_dict = {}
+    stds_X_dict = {}
+
+    for elem_type_val in elemtypes_nonzero:
+        if counts_X[elem_type_val].item() == 0:
+            _logger.warning(f"Rank {rank}: No data found for elem_type {elem_type_val} to calculate normalization. Setting mean=0, std=1.")
+            means_X_dict[elem_type_val] = torch.zeros((1, 1, num_features), device=device, dtype=torch.float32)
+            stds_X_dict[elem_type_val] = torch.ones((1, 1, num_features), device=device, dtype=torch.float32)
+        else:
+            mean_val = sums_X[elem_type_val] / counts_X[elem_type_val].to(dtype_stats)
+            var_val = (sums_X_sq[elem_type_val] / counts_X[elem_type_val].to(dtype_stats)) - (mean_val**2)
+            std_val = torch.sqrt(torch.max(var_val, torch.zeros_like(var_val))) # ensure non-negative variance
+
+            means_X_dict[elem_type_val] = mean_val.unsqueeze(0).unsqueeze(0).to(torch.float32)
+            stds_X_dict[elem_type_val] = std_val.unsqueeze(0).unsqueeze(0).to(torch.float32)
+
+    _logger.info(f"Rank {rank}: Per-element-type normalization coefficients calculated.")
+    return means_X_dict, stds_X_dict
+
 def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype):
     batch_size = config["gpu_batch_multiplier"]
     version = config["test_dataset"][sample]["version"]
@@ -670,6 +845,24 @@ def run(rank, world_size, config, outdir, logfile):
     checkpoint_dir = Path(outdir) / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+    feature_means_by_type, feature_stds_by_type = None, None
+    # Calculate normalization coefficients before model initialization if training
+    # In my tests so far, this didn't really improve the training, but leaving it here for future testing
+    # if config["train"]:
+    #     # Need data loaders to calculate normalization
+    #     temp_loaders = get_interleaved_dataloaders(
+    #         world_size,
+    #         rank,
+    #         config,
+    #         use_cuda,
+    #         use_ray=False,
+    #     )
+    #     num_input_features = len(X_FEATURES[config["dataset"]])
+    #     elem_types_for_norm = ELEM_TYPES_NONZERO[config["dataset"]]
+    #     feature_means_by_type, feature_stds_by_type = calculate_normalization_coefficients(
+    #         temp_loaders["train"], rank, world_size, torch.device(rank), num_input_features, elem_types_for_norm
+    #     )
+
     model_kwargs = {
         "input_dim": len(X_FEATURES[config["dataset"]]),
         "num_classes": len(CLASS_LABELS[config["dataset"]]),
@@ -681,12 +874,14 @@ def run(rank, world_size, config, outdir, logfile):
         "energy_mode": config["model"]["energy_mode"],
         "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
         "learned_representation_mode": config["model"]["learned_representation_mode"],
+        "feature_means_by_type": feature_means_by_type,
+        "feature_stds_by_type": feature_stds_by_type,
         **config["model"][config["conv_type"]],
     }
 
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     if config["load"]:
-        model = MLPF(**model_kwargs).to(torch.device(rank))
+        model = MLPF(**model_kwargs) # feature_mean/std will be loaded from checkpoint if they were saved
         optimizer = get_optimizer(model, config)
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
@@ -696,6 +891,11 @@ def run(rank, world_size, config, outdir, logfile):
         else:
             start_epoch = config["start_epoch"]
 
+        # If loading a checkpoint, the feature_mean and feature_std should ideally come from it.
+        # MLPF's state_dict will handle loading them if they were saved as buffers.
+        # We pass the newly computed ones to MLPF constructor; if checkpoint has them, they'll be overwritten by load_state_dict.
+        # If checkpoint doesn't have them (older model), it will use the newly computed ones.
+        model.to(torch.device(rank))
         missing_keys, strict = [], True
         for k in model.state_dict().keys():
             shp0 = model.state_dict()[k].shape
@@ -732,7 +932,7 @@ def run(rank, world_size, config, outdir, logfile):
         model = MLPF(**model_kwargs)
         optimizer = get_optimizer(model, config)
 
-    model.to(rank)
+    model.to(torch.device(rank)) # Ensure model is on the correct device before DDP
     configure_model_trainable(model, config["model"]["trainable"], True)
 
     if world_size > 1:
@@ -778,13 +978,16 @@ def run(rank, world_size, config, outdir, logfile):
         else:
             comet_experiment = None
 
-        loaders = get_interleaved_dataloaders(
-            world_size,
-            rank,
-            config,
-            use_cuda,
-            use_ray=False,
-        )
+        # Use existing loaders if already created for normalization, else create them
+        if 'temp_loaders' in locals() and temp_loaders is not None:
+            loaders = temp_loaders
+            del temp_loaders # free up memory
+        else:
+            loaders = get_interleaved_dataloaders(
+                world_size, rank, config, use_cuda, use_ray=False
+            )
+
+
         steps_per_epoch = len(loaders["train"])
         last_epoch = -1 if start_epoch == 1 else start_epoch - 1
         lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch)
