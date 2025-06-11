@@ -1,12 +1,12 @@
 #!/bin/bash
 
 USE_CUDA=False
-SUBSCRIPT=scripts/tallinn/cmssw-el8.sh
+SUBSCRIPT=scripts/tallinn/cmssw-el8-gpu.sh
 
 END=`wc -l scripts/tallinn/jetmet0.txt | cut -f1 -d' '`
-for ifile in $(seq 1 $END); do
+for ifile in $(seq 1 1); do
     sbatch $SUBSCRIPT scripts/cmssw/validation_job_data.sh ${USE_CUDA} mlpfpu scripts/tallinn/jetmet0.txt JetMET0 $ifile
-    sbatch $SUBSCRIPT scripts/cmssw/validation_job_data.sh ${USE_CUDA} pf scripts/tallinn/jetmet0.txt JetMET0 $ifile
+    sbatch $SUBSCRIPT scripts/cmssw/validation_job_data.sh False pf scripts/tallinn/jetmet0.txt JetMET0 $ifile
 done
 
 END=`wc -l scripts/tallinn/qcd_pu.txt | cut -f1 -d' '`
@@ -28,10 +28,12 @@ for ifile in $(seq 1 $END); do
 done
 
 
+
 END=`wc -l scripts/tallinn/ttbar_nopu.txt | cut -f1 -d' '`
-for ifile in $(seq 1 $END); do
-    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh ${USE_CUDA} mlpfpu scripts/tallinn/ttbar_nopu.txt TTbar_noPU $ifile
-    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh ${USE_CUDA} pf scripts/tallinn/ttbar_nopu.txt TTbar_noPU $ifile
+for ifile in $(seq 1 1); do
+    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh True mlpfpu scripts/tallinn/ttbar_nopu.txt TTbar_noPU_gpu $ifile
+    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpfpu scripts/tallinn/ttbar_nopu.txt TTbar_noPU_cpu $ifile
+    # sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/ttbar_nopu.txt TTbar_noPU $ifile
 done
 
 END=`wc -l scripts/tallinn/zmm_nopu.txt | cut -f1 -d' '`
