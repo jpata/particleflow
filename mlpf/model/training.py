@@ -278,9 +278,9 @@ def eval_epoch(
             ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
         )
 
-        # Save validation plots for first batch
-        if (rank == 0 or rank == "cpu") and ival == 0:
-            validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
+        # # Save validation plots for first batch
+        # if (rank == 0 or rank == "cpu") and ival == 0:
+        #     validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
 
         # Accumulate losses
         for loss_name in loss:
@@ -621,7 +621,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     torch.cuda.empty_cache()
 
     # FIXME: import this from a central place
-    if config["dataset"] == "clic":
+    if (config["dataset"] == "clic") or (config["dataset"] == "clic_hits"):
         import fastjet
 
         jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
