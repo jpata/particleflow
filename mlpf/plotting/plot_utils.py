@@ -102,6 +102,7 @@ labels = {
     "pt_response": "$p_{\mathrm{T}}/p_{\mathrm{T,ref}}$",
     "pt_response_iqr_median": "$p_{\mathrm{T}}/p_{\mathrm{T,ref}}$ resolution",
     "pt_response_median": "$p_{\mathrm{T}}/p_{\mathrm{T,ref}}$ scale",
+    "met_response": "$p_{\mathrm{T}}^{\mathrm{miss}}/p_{\mathrm{T,ref}}^{\mathrm{miss}}$",
     "pt": "$p_{\mathrm{T}}$ (GeV)",
     "match_frac": "Match frac.",
 }
