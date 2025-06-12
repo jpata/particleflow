@@ -55,7 +55,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             msk = X[:, 0] == xcls
             pt_target = ytarget_flat[msk & (ytarget_flat[:, 0] != 0), 2]
             pt_pred = ypred_p4[msk & (ypred_binary_cls != 0), 0]
-            b = np.linspace(-2, 2, 100) # Re-using b from energy plot, this is fine.
+            b = np.linspace(-2, 2, 100)  # Re-using b from energy plot, this is fine.
             plt.hist(pt_target, bins=b, histtype="step", label="target")
             plt.hist(pt_pred, bins=b, histtype="step", label="pred")
             plt.xlabel("log [pt/pt_elem]")
@@ -257,8 +257,14 @@ def log_epoch_loss_evolution_ratios(epoch_loss_history, first_epoch_in_history, 
         if num_data_points > 0:
             last_total_loss = total_losses_over_epochs[-1]
             last_component_loss = component_losses_over_epochs[-1]
-            ax.annotate(f"Epoch {current_epoch_logged}", (last_total_loss, last_component_loss),
-                        textcoords="offset points", xytext=(0,10), ha='center', color="red")
+            ax.annotate(
+                f"Epoch {current_epoch_logged}",
+                (last_total_loss, last_component_loss),
+                textcoords="offset points",
+                xytext=(0, 10),
+                ha="center",
+                color="red",
+            )
 
         try:
             writer.add_figure(f"epoch_loss_evolution/{plot_prefix}/{component_name}_vs_Total_scatter", fig, global_step=current_epoch_logged)
