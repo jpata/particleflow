@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --partition gpu
 #SBATCH --gres gpu:mig:1
-#SBATCH --mem-per-cpu=20G
+#SBATCH --mem-per-cpu=30G
 #SBATCH --cpus-per-task=1
 #SBATCH -o logs/slurm-%x-%j-%N.out
 

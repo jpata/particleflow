@@ -16,7 +16,7 @@ source /cvmfs/cms.cern.ch/cmsset_default.sh
 cd /scratch/persistent/joosep/CMSSW_15_0_5
 eval `scram runtime -sh`
 cd $PREVDIR
-export OUTDIR=/scratch/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.5.0_p01_b25f9f/
+export OUTDIR=/home/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.5.0_p01_f8ae2f/
 export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
@@ -26,7 +26,7 @@ set -x
 CONDITIONS=auto:phase1_2023_realistic ERA=Run3 GEOM=DB.Extended CUSTOM=
 FILENAME=`sed -n "${NJOB}p" $INPUT_FILELIST`
 NTHREADS=8
-NEV=10
+NEV=-1
 
 mkdir -p $WORKDIR
 cd $WORKDIR
@@ -59,11 +59,11 @@ elif [ $JOBTYPE == "pf" ]; then
 	--filein $FILENAME --fileout file:step3.root --no_exec
 fi
 
-#echo """
-#process.Timing = cms.Service(\"Timing\",
-#    summaryOnly = cms.untracked.bool(False),
-#    useJobReport = cms.untracked.bool(True)
-#)""" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+# echo """
+# process.Timing = cms.Service(\"Timing\",
+#     summaryOnly = cms.untracked.bool(False),
+#     useJobReport = cms.untracked.bool(True)
+# )""" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 
 cmsRun step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 
@@ -89,12 +89,12 @@ cmsRun step4_btv_NANO.py
 
 ls *.root
 
-mkdir -p $OUTDIR/${SAMPLE}_${JOBTYPE}
+mkdir -p $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}
 
-cp step3.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
-cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
+# cp step3.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
+# cp step3_inMINIAODSIM.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
 # cp step4_NANO.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_${NJOB}.root
-cp step4_NANO_btv.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_btv_${NJOB}.root
+cp step4_NANO_btv.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step4_NANO_btv_${NJOB}.root
 # cp step4_NANO_jme.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_jme_${NJOB}.root
 
 rm -Rf $WORKDIR
