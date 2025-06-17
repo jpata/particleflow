@@ -57,7 +57,7 @@ for nconvs, width in nconvs_width_list:
         "num_classes": len(CLASS_LABELS[config["dataset"]]),
         "input_encoding": config["model"]["input_encoding"],
         "pt_mode": config["model"]["pt_mode"],
-        "feature_mean": None, # Not needed for parameter counting
+        "feature_mean": None,  # Not needed for parameter counting
         "feature_std": None,  # Not needed for parameter counting
         "eta_mode": config["model"]["eta_mode"],
         "sin_phi_mode": config["model"]["sin_phi_mode"],

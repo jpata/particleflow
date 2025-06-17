@@ -12,7 +12,7 @@ from mlpf.model.mlpf import MLPF
 from mlpf.model.logger import _logger, _configLogger
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.utils import create_comet_experiment
-from mlpf.model.training import train_all_epochs, get_optimizer, calculate_normalization_coefficients
+from mlpf.model.training import train_all_epochs, get_optimizer
 
 from mlpf.model.utils import (
     load_checkpoint,

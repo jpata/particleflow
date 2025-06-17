@@ -69,10 +69,10 @@ def mlpf_loss(y, ypred, batch):
 
     loss_pu = torch.nn.functional.cross_entropy(ypred["ispu"], y["ispu"].long(), reduction="none")
     loss_pu[y["cls_id"] == 0] *= 0
-    
-    #do not compute PU loss if no PU samples in this batch
+
+    # do not compute PU loss if no PU samples in this batch
     if y["ispu"].long().sum() == 0:
-       loss_pu *= 0
+        loss_pu *= 0
 
     # compare particle momentum, only for cases where there was a true particle
     loss_regression_pt = torch.nn.functional.mse_loss(ypred["pt"], y["pt"], reduction="none")

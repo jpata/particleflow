@@ -300,7 +300,7 @@ class MLPF(nn.Module):
         dropout_conv_id_ff=0.0,
         use_pre_layernorm=False,
         feature_stds_by_type=None,  # Renamed and expecting dict
-        feature_means_by_type=None, # Renamed and expecting dict
+        feature_means_by_type=None,  # Renamed and expecting dict
     ):
         # Add feature_mean and feature_std to __init__
         # These will be used for input feature normalization
@@ -327,7 +327,7 @@ class MLPF(nn.Module):
         if feature_means_by_type is not None and feature_stds_by_type is not None:
             self.has_feature_normalization = True
             for elem_type_val in self.elemtypes_nonzero:
-                str_elem_type = str(int(elem_type_val)) # Buffer names must be valid strings
+                str_elem_type = str(int(elem_type_val))  # Buffer names must be valid strings
                 if elem_type_val in feature_means_by_type and elem_type_val in feature_stds_by_type:
                     mean_val = feature_means_by_type[elem_type_val]
                     std_val = feature_stds_by_type[elem_type_val]
@@ -335,14 +335,14 @@ class MLPF(nn.Module):
                         # mean_val/std_val are (1,1,num_features), squeeze to (num_features,) for buffer
                         self.register_buffer(f"feature_mean_{str_elem_type}", mean_val.squeeze(0).squeeze(0))
                         self.register_buffer(f"feature_std_{str_elem_type}", std_val.squeeze(0).squeeze(0))
-                    else: # Should not happen if dicts are not None and elem_type_val is a key
+                    else:  # Should not happen if dicts are not None and elem_type_val is a key
                         self.register_buffer(f"feature_mean_{str_elem_type}", None)
                         self.register_buffer(f"feature_std_{str_elem_type}", None)
                 else:
                     _logger.warning(f"Missing normalization stats for elem_type {elem_type_val} in provided dictionaries.")
                     self.register_buffer(f"feature_mean_{str_elem_type}", None)
                     self.register_buffer(f"feature_std_{str_elem_type}", None)
-        else: # If the dictionaries themselves are None, register all buffers as None
+        else:  # If the dictionaries themselves are None, register all buffers as None
             for elem_type_val in self.elemtypes_nonzero:
                 str_elem_type = str(int(elem_type_val))
                 self.register_buffer(f"feature_mean_{str_elem_type}", None)
@@ -437,7 +437,7 @@ class MLPF(nn.Module):
     def forward(self, X_features, mask):
         # X_features: (batch_size, num_elements, num_input_features)
 
-        Xfeat_normed = X_features.clone() # Start with a copy, apply normalization in place
+        Xfeat_normed = X_features.clone()  # Start with a copy, apply normalization in place
 
         if self.has_feature_normalization:
             elem_type_col = X_features[..., 0]  # Shape: (batch_size, num_elements)
@@ -449,16 +449,15 @@ class MLPF(nn.Module):
                 if mean_val is not None and std_val is not None:
                     # mean_val, std_val are stored as (num_input_features,)
                     # type_mask identifies elements of the current type
-                    type_mask = (elem_type_col == elem_type_val) # Shape: (batch_size, num_elements)
+                    type_mask = elem_type_col == elem_type_val  # Shape: (batch_size, num_elements)
 
                     if type_mask.any():
                         # Apply normalization to the slice of X_features corresponding to type_mask
                         # X_features[type_mask] will be (N_type_elements, num_input_features)
                         # Reshape mean/std to (1, num_input_features) for broadcasting
-                        Xfeat_normed[type_mask] = (X_features[type_mask] - mean_val.view(1, -1)) / \
-                                                  (std_val.view(1, -1) + 1e-8)
+                        Xfeat_normed[type_mask] = (X_features[type_mask] - mean_val.view(1, -1)) / (std_val.view(1, -1) + 1e-8)
         else:
-            Xfeat_normed = X_features # No normalization, use original features
+            Xfeat_normed = X_features  # No normalization, use original features
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
