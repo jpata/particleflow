@@ -978,15 +978,9 @@ def run(rank, world_size, config, outdir, logfile):
         else:
             comet_experiment = None
 
-        # Use existing loaders if already created for normalization, else create them
-        if 'temp_loaders' in locals() and temp_loaders is not None:
-            loaders = temp_loaders
-            del temp_loaders # free up memory
-        else:
-            loaders = get_interleaved_dataloaders(
-                world_size, rank, config, use_cuda, use_ray=False
-            )
-
+        loaders = get_interleaved_dataloaders(
+            world_size, rank, config, use_cuda, use_ray=False
+        )
 
         steps_per_epoch = len(loaders["train"])
         last_epoch = -1 if start_epoch == 1 else start_epoch - 1
@@ -1052,7 +1046,7 @@ def override_config(config: dict, args):
         config["model"]["attention"]["attention_type"] = args.attention_type
 
     if not (args.num_convs is None):
-        for model in ["gnn_lsh", "attention", "attention", "mamba"]:
+        for model in ["litemla", "attention"]:
             config["model"][model]["num_convs"] = args.num_convs
 
     config["enabled_test_datasets"] = list(config["test_dataset"].keys())
@@ -1070,7 +1064,6 @@ def override_config(config: dict, args):
     if config["load"] is None:
         if config["start_epoch"] is None:
             config["start_epoch"] = 1
-
     return config
 
 

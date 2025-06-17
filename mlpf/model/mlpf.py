@@ -7,9 +7,9 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.model.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
+from mlpf.model.litemla import LiteMLA
 
 ATT_MAT_IDX = 0
-
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # From https://github.com/rwightman/pytorch-image-models/blob/
@@ -161,6 +161,39 @@ class PreLnSelfAttentionLayer(nn.Module):
         x = x * mask_
         return x
 
+class PreLnLiteMLALayer(nn.Module):
+    def __init__(
+        self,
+        name="",
+        embedding_dim=128,
+        num_heads=2,
+        width=128,
+        dropout_ff=0.1,
+        activation="relu"
+    ):
+        super(PreLnLiteMLALayer, self).__init__()
+        self.name = name
+
+        self.act = get_activation(activation)
+        self.mha = LiteMLA(embedding_dim, embedding_dim)
+        self.norm0 = torch.nn.LayerNorm(embedding_dim)
+        self.norm1 = torch.nn.LayerNorm(embedding_dim)
+        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
+        self.dropout = torch.nn.Dropout(dropout_ff)
+
+    def forward(self, x, mask, initial_embedding):
+        mask_ = mask.unsqueeze(-1)
+        x = self.norm0(x * mask_)
+
+        mha_out = self.mha(x)
+        mha_out = mha_out * mask_
+
+        mha_out = x + mha_out
+        x = self.norm1(mha_out)
+        x = mha_out + self.seq(x)
+        x = self.dropout(x)
+        x = x * mask_
+        return x
 
 def ffn(input_dim, output_dim, width, act, dropout):
     return nn.Sequential(
@@ -315,7 +348,7 @@ class MLPF(nn.Module):
                 self.register_buffer(f"feature_mean_{str_elem_type}", None)
                 self.register_buffer(f"feature_std_{str_elem_type}", None)
 
-        if self.conv_type == "attention":
+        if self.conv_type == "attention" or self.conv_type == "litemla":
             embedding_dim = num_heads * head_dim
             width = num_heads * head_dim
 
@@ -366,23 +399,17 @@ class MLPF(nn.Module):
                             # learnable_queries=lastlayer,
                         )
                     )
-            elif self.conv_type == "gnn_lsh":
+            elif self.conv_type == "litemla":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(self.num_convs):
-                    gnn_conf = {
-                        "inout_dim": embedding_dim,
-                        "bin_size": self.bin_size,
-                        "max_num_bins": max_num_bins,
-                        "distance_dim": distance_dim,
-                        "layernorm": layernorm,
-                        "num_node_messages": num_node_messages,
-                        "dropout": dropout_ff,
-                        "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
-                        "ffn_dist_num_layers": ffn_dist_num_layers,
+                    mla_conf = {
+                        "embedding_dim": embedding_dim,
+                        "dropout_ff": dropout_ff,
+                        "activation": activation,
                     }
-                    self.conv_id.append(CombinedGraphLayer(**gnn_conf))
-                    self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
+                    self.conv_id.append(PreLnLiteMLALayer(**mla_conf))
+                    self.conv_reg.append(PreLnLiteMLALayer(**mla_conf))
 
         if self.learned_representation_mode == "concat":
             decoding_dim = self.num_convs * embedding_dim

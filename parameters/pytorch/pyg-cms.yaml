@@ -14,7 +14,7 @@ num_epochs: 10
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: attention
+conv_type: litemla
 ntrain:
 ntest:
 nvalid:
@@ -40,22 +40,18 @@ model:
   cos_phi_mode: linear
   energy_mode: direct-elemtype-split
 
-
-  gnn_lsh:
-    conv_type: gnn_lsh
-    embedding_dim: 512
-    width: 512
-    num_convs: 8
+  litemla:
+    conv_type: litemla
+    num_convs: 3
     dropout_ff: 0.0
-    activation: "elu"
-    # gnn-lsh specific parameters
-    bin_size: 320
-    max_num_bins: 200
-    distance_dim: 128
-    layernorm: True
-    num_node_messages: 2
-    ffn_dist_hidden_dim: 128
-    ffn_dist_num_layers: 2
+    dropout_conv_id_mha: 0.0
+    dropout_conv_id_ff: 0.0
+    dropout_conv_reg_mha: 0.0
+    dropout_conv_reg_ff: 0.0
+    activation: "relu"
+    head_dim: 16
+    num_heads: 16
+    use_pre_layernorm: True
 
   attention:
     conv_type: attention
@@ -70,18 +66,6 @@ model:
     num_heads: 16
     attention_type: flash
     use_pre_layernorm: True
-
-  mamba:
-    conv_type: mamba
-    embedding_dim: 1024
-    width: 1024
-    num_convs: 4
-    dropout_ff: 0.0
-    activation: "elu"
-    # mamba specific paramters
-    d_state: 32
-    d_conv: 4
-    expand: 2
 
 lr_schedule_config:
   onecycle:
