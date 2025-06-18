@@ -79,13 +79,13 @@ class PreLnSelfAttentionLayer(nn.Module):
         name="",
         activation="elu",
         embedding_dim=128,
-        num_heads=2,
-        width=128,
-        dropout_mha=0.1,
-        dropout_ff=0.1,
-        attention_type="efficient",
-        learnable_queries=False,
-        elems_as_queries=False,
+        num_heads=2, # Kept for signature consistency, may be unused by specific attention
+        width=128, # For self.seq, if used
+        dropout_mha=0.1, # For MHA dropout, if applicable
+        dropout_ff=0.1, # For self.dropout, if used
+        attention_type="efficient", # For standard MHA
+        learnable_queries=False, # For standard MHA
+        elems_as_queries=False, # For standard MHA
     ):
         super(PreLnSelfAttentionLayer, self).__init__()
         self.name = name
@@ -166,28 +166,42 @@ class PreLnLiteMLALayer(nn.Module):
         self,
         name="",
         embedding_dim=128,
-        num_heads=2,
-        width=128,
-        dropout_ff=0.1,
-        activation="relu"
+        num_heads=2, # Unused by LiteMLA directly, but kept for signature consistency
+        width=128, # For self.seq, if used
+        dropout_ff=0.1, # For self.dropout, if used on output
+        activation="relu", # For self.seq, if used
+        # LiteMLA specific kwargs should be passed from MLPF config
+        **litemla_kwargs 
     ):
         super(PreLnLiteMLALayer, self).__init__()
         self.name = name
+        self.embedding_dim = embedding_dim 
 
-        self.act = get_activation(activation)
-        self.mha = LiteMLA(embedding_dim, embedding_dim)
+        self.act = get_activation(activation) # For self.seq
+        # LiteMLA takes in_channels, out_channels, and its specific args
+        self.mha = LiteMLA(in_channels=embedding_dim, out_channels=embedding_dim, **litemla_kwargs)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
+        # self.seq and self.dropout are defined but may not be used if LiteMLA output is binned
         self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
 
-    def forward(self, x, mask, initial_embedding):
-        mask_ = mask.unsqueeze(-1)
-        x = self.norm0(x * mask_)
-        mha_out = self.mha(x)
-        mha_out = mha_out * mask_
-        x = x + mha_out
-        x = self.dropout(x)
-        x = x * mask_
+    def forward(self, x, x_coords, mask, initial_embedding):
+        # x: (B, N, F_in) unbinned features
+        # x_coords: (B, N, 3) unbinned coordinates for binning
+        # mask: (B, N) unbinned mask
+        # initial_embedding: (B, N, F_in) - currently unused by LiteMLA in this setup
+
+        # Apply LayerNorm to the unbinned input features
+        x_normed = self.norm0(x * mask.unsqueeze(-1))
+
+        # LiteMLA processes unbinned features and coords, and returns an unbinned tensor
+        # mha_out: (B, N, F_out)
+        mha_out = self.mha(x_normed, x_coords, mask)
+
+        # Apply residual connection and dropout as mha_out is now unbinned
+        # Note: self.seq is currently not used in a typical transformer block structure here.
+        x = x + self.dropout(mha_out) # Apply dropout to MHA output before residual
+        x = x * mask.unsqueeze(-1) # Re-apply mask
         return x
 
 def ffn(input_dim, output_dim, width, act, dropout):
@@ -403,8 +417,14 @@ class MLPF(nn.Module):
                         "dropout_ff": dropout_ff,
                         "activation": activation,
                     }
-                    self.conv_id.append(PreLnLiteMLALayer(**mla_conf))
-                    self.conv_reg.append(PreLnLiteMLALayer(**mla_conf))
+                    # # Pass LiteMLA specific configurations from the main config file
+                    # if "litemla" in config["model"]:
+                    #      mla_conf.update(config["model"]["litemla"])
+
+                    self.conv_id.append(PreLnLiteMLALayer(name=f"conv_id_{i}", **mla_conf))
+                    reg_mla_conf = mla_conf.copy() # Make a copy for reg stream if params differ
+                    reg_mla_conf["name"] = f"conv_reg_{i}"
+                    self.conv_reg.append(PreLnLiteMLALayer(**reg_mla_conf))
 
         if self.learned_representation_mode == "concat":
             decoding_dim = self.num_convs * embedding_dim
@@ -428,7 +448,7 @@ class MLPF(nn.Module):
             self.final_norm_id = torch.nn.LayerNorm(decoding_dim)
             self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
 
-    # @torch.compile
+    @torch.compile
     def forward(self, X_features, mask):
         # X_features: (batch_size, num_elements, num_input_features)
 
@@ -468,13 +488,29 @@ class MLPF(nn.Module):
                 elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
                 embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
 
+            # Prepare coordinate tensor for LiteMLA if used
+            x_coords = None
+            if self.conv_type == "litemla":
+                # Assuming eta at index 2, sin_phi at 3, cos_phi at 4 in X_features
+                # This slicing should be made robust, e.g., by getting indices from a config or X_FEATURES
+                x_coords = Xfeat_normed[..., 2:5] # Pass normed coordinates or original? Let's use normed for now.
+                                                 # Or, more likely, original X_features[..., 2:5]
+                                                 # For consistency with ElementBinner, let's use original X_features values for coords.
+                x_coords = X_features[..., 2:5]
+
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
-                out_padded = conv(conv_input, mask, embedding_id)
+                if self.conv_type == "litemla":
+                    out_padded = conv(conv_input, x_coords, mask, embedding_id) # LiteMLA now returns unbinned data
+                else: # attention
+                    out_padded = conv(conv_input, mask, embedding_id)
                 embeddings_id.append(out_padded)
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-                out_padded = conv(conv_input, mask, embedding_reg)
+                if self.conv_type == "litemla":
+                    out_padded = conv(conv_input, x_coords, mask, embedding_reg) # LiteMLA now returns unbinned data
+                else: # attention
+                    out_padded = conv(conv_input, mask, embedding_reg)
                 embeddings_reg.append(out_padded)
 
         # id input
