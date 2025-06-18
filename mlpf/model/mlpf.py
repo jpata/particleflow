@@ -177,20 +177,15 @@ class PreLnLiteMLALayer(nn.Module):
         self.act = get_activation(activation)
         self.mha = LiteMLA(embedding_dim, embedding_dim)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
-        self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
 
     def forward(self, x, mask, initial_embedding):
         mask_ = mask.unsqueeze(-1)
         x = self.norm0(x * mask_)
-
         mha_out = self.mha(x)
         mha_out = mha_out * mask_
-
-        mha_out = x + mha_out
-        x = self.norm1(mha_out)
-        x = mha_out + self.seq(x)
+        x = x + mha_out
         x = self.dropout(x)
         x = x * mask_
         return x

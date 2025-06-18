@@ -223,6 +223,7 @@ class LiteMLA(nn.Module):
         return out
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        #(batch, num_elems, input_feature_dim) -> (batch, input_feature_dim, num_elems)
         x = x.transpose(2,1)
         x = torch.unsqueeze(x, -1)
         # generate multi-scale q, k, v
@@ -235,5 +236,7 @@ class LiteMLA(nn.Module):
         H, W = list(qkv.size())[-2:]
         out = self.relu_linear_att(qkv).to(qkv.dtype)
         out = self.proj(out)
+        
+        #(batch, output_feature_dim, num_elems) -> (batch, num_elems, output_feature_dim)
         out = out.transpose(2,1).squeeze(-1)
         return out
