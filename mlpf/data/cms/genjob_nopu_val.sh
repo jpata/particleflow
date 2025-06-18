@@ -2,7 +2,7 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/20250618_cmssw_15_0_5_f8ae2f/pu55to75_val/
+OUTDIR=/local/joosep/mlpf/cms/20250618_cmssw_15_0_5_f8ae2f/nopu_val/
 CMSSWDIR=/scratch/persistent/joosep/CMSSW_15_0_5/
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -15,10 +15,10 @@ WORKDIR=/scratch/local/joosep/$SLURM_JOBID/$SAMPLE/$SEED
 mkdir -p $WORKDIR
 mkdir -p $OUTDIR/$SAMPLE/root
 
-PILEUP=Run3_Flat55To75_PoissonOOTPU
-PILEUP_INPUT=filelist:${MLPF_PATH}/mlpf/data/cms/pu_files_local_val.txt
+PILEUP=NoPileUp
+PILEUP_INPUT=
 
-N=50
+N=100
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -43,7 +43,6 @@ cmsDriver.py $SAMPLE \
   --datatier GEN-SIM-DIGI-RAW \
   --geometry DB:Extended \
   --pileup $PILEUP \
-  --pileup_input $PILEUP_INPUT \
   --no_exec \
   --fileout step2_phase1_new.root \
   --python_filename=step2_phase1_new.py

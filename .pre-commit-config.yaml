@@ -47,5 +47,5 @@ repos:
 
     # E203 is not PEP8 compliant
     # E402 due to logging.basicConfig in pipeline.py
-    args: ['--max-line-length=150',
+    args: ['--max-line-length=180',
            '--extend-ignore=E203,E402,W605']
