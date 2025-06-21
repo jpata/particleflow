@@ -67,6 +67,22 @@ model:
     attention_type: flash
     use_pre_layernorm: True
 
+  gnn_lsh:
+    conv_type: gnn_lsh
+    embedding_dim: 256
+    width: 256
+    num_convs: 3
+    activation: "elu"
+    # gnn-lsh specific parameters
+    bin_size: 128
+    max_num_bins: 200
+    distance_dim: 128
+    layernorm: True
+    num_node_messages: 2
+    ffn_dist_hidden_dim: 128
+    ffn_dist_num_layers: 2
+
+
 lr_schedule_config:
   onecycle:
     pct_start: 0.3
