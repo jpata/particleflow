@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import math
+
 
 class ElementBinner(nn.Module):
     """
@@ -11,6 +11,7 @@ class ElementBinner(nn.Module):
     - sin(phi) at index 3
     - cos(phi) at index 4
     """
+
     def __init__(self, eta_bin_edges, phi_bin_edges, max_elems_per_bin: int):
         """
         Args:
@@ -48,7 +49,6 @@ class ElementBinner(nn.Module):
         self.register_buffer("eta_all_edges", torch.tensor(eta_bin_edges, dtype=torch.float32))
         self.register_buffer("phi_all_edges", torch.tensor(phi_bin_edges, dtype=torch.float32))
 
-
     def forward(self, x_features: torch.Tensor, x_coords: torch.Tensor, mask: torch.Tensor = None):
         """
         Args:
@@ -67,19 +67,19 @@ class ElementBinner(nn.Module):
         """
         B, N, F = x_features.shape
         device = x_features.device
-        dtype = x_features.dtype
+        # dtype = x_features.dtype
 
         if mask is None:
             mask = torch.ones(B, N, dtype=torch.bool, device=device)
 
         if x_coords.shape[0] != B or x_coords.shape[1] != N or x_coords.shape[2] != 3:
             raise ValueError(f"x_coords shape mismatch. Expected ({B}, {N}, 3), got {x_coords.shape}")
-        
+
         # Extract relevant features
-        eta_vals = x_coords[..., 0]       # (B, N)
-        sin_phi_vals = x_coords[..., 1]   # (B, N)
-        cos_phi_vals = x_coords[..., 2]   # (B, N)
-        phi_vals = torch.atan2(sin_phi_vals, cos_phi_vals) # (B, N)
+        eta_vals = x_coords[..., 0]  # (B, N)
+        sin_phi_vals = x_coords[..., 1]  # (B, N)
+        cos_phi_vals = x_coords[..., 2]  # (B, N)
+        phi_vals = torch.atan2(sin_phi_vals, cos_phi_vals)  # (B, N)
 
         # Determine bin indices for each element
         # torch.searchsorted returns indices from 0 to len(search_edges).
@@ -87,32 +87,30 @@ class ElementBinner(nn.Module):
         # If search_edges[k-1] <= value < search_edges[k] -> k
         # If value >= search_edges[-1] -> len(search_edges)
         # This directly gives 0 to num_bins-1, which is what we want.
-        eta_bin_ids = torch.searchsorted(self.eta_search_edges, eta_vals.contiguous(), right=False) # (B, N)
-        phi_bin_ids = torch.searchsorted(self.phi_search_edges, phi_vals.contiguous(), right=False) # (B, N)
+        eta_bin_ids = torch.searchsorted(self.eta_search_edges, eta_vals.contiguous(), right=False)  # (B, N)
+        phi_bin_ids = torch.searchsorted(self.phi_search_edges, phi_vals.contiguous(), right=False)  # (B, N)
 
         # Flatten active elements and their corresponding bin/batch information
         active_x_features = x_features[mask]  # (num_active_total, F)
-        if active_x_features.numel() == 0: # Handle case with no active elements
+        if active_x_features.numel() == 0:  # Handle case with no active elements
             output_tensor = torch.zeros(B, self.num_eta_bins, self.num_phi_bins, self.max_elems_per_bin, F, device=device, dtype=x_features.dtype)
             output_binned_mask = torch.zeros(B, self.num_eta_bins, self.num_phi_bins, self.max_elems_per_bin, device=device, dtype=torch.bool)
             empty_indices = torch.empty(0, dtype=torch.long, device=device)
             return output_tensor, output_binned_mask, (empty_indices, empty_indices)
 
-        active_eta_bin_ids = eta_bin_ids[mask]    # (num_active_total)
-        active_phi_bin_ids = phi_bin_ids[mask]    # (num_active_total)
+        active_eta_bin_ids = eta_bin_ids[mask]  # (num_active_total)
+        active_phi_bin_ids = phi_bin_ids[mask]  # (num_active_total)
 
         # Create batch indices for active elements
-        batch_indices_for_active = torch.arange(B, device=device, dtype=torch.long).unsqueeze(1).expand(B, N)[mask] # (num_active_total)
+        batch_indices_for_active = torch.arange(B, device=device, dtype=torch.long).unsqueeze(1).expand(B, N)[mask]  # (num_active_total)
         # Create original element indices (within N) for active elements
-        element_indices_in_N_for_active = torch.arange(N, device=device, dtype=torch.long).unsqueeze(0).expand(B, N)[mask] # (num_active_total)
+        element_indices_in_N_for_active = torch.arange(N, device=device, dtype=torch.long).unsqueeze(0).expand(B, N)[mask]  # (num_active_total)
 
         # Create a global group ID for each active element. This ID uniquely identifies
         # which (batch, eta_bin, phi_bin) an element belongs to.
         # This flattens the batch and eta/phi bin dimensions into a single dimension for easier processing.
         # Max value of this ID will be B * num_eta_bins * num_phi_bins - 1
-        group_ids = batch_indices_for_active * (self.num_eta_bins * self.num_phi_bins) + \
-                    active_eta_bin_ids * self.num_phi_bins + \
-                    active_phi_bin_ids
+        group_ids = batch_indices_for_active * (self.num_eta_bins * self.num_phi_bins) + active_eta_bin_ids * self.num_phi_bins + active_phi_bin_ids
 
         num_total_bins_in_batch = B * self.num_eta_bins * self.num_phi_bins
 
@@ -145,21 +143,17 @@ class ElementBinner(nn.Module):
         final_group_ids = sorted_group_ids[keep_mask]
         final_within_group_indices = within_group_indices[keep_mask]
         final_active_x_features_kept = sorted_active_x_features[keep_mask]
-        
+
         # Get original batch and element indices for the elements that were kept
         final_batch_indices_kept = batch_indices_for_active[sorted_perm][keep_mask]
         final_element_indices_in_N_kept = element_indices_in_N_for_active[sorted_perm][keep_mask]
-        
+
         # Scatter the final active elements into the output tensor
         output_flat_tensor[final_group_ids, final_within_group_indices, :] = final_active_x_features_kept
         output_flat_binned_mask[final_group_ids, final_within_group_indices] = True
 
         # Reshape the flat output tensors to the desired output shape
-        output_tensor = output_flat_tensor.view(
-            B, self.num_eta_bins, self.num_phi_bins, self.max_elems_per_bin, F
-        )
-        output_binned_mask = output_flat_binned_mask.view(
-            B, self.num_eta_bins, self.num_phi_bins, self.max_elems_per_bin
-        )
+        output_tensor = output_flat_tensor.view(B, self.num_eta_bins, self.num_phi_bins, self.max_elems_per_bin, F)
+        output_binned_mask = output_flat_binned_mask.view(B, self.num_eta_bins, self.num_phi_bins, self.max_elems_per_bin)
 
         return output_tensor, output_binned_mask, (final_batch_indices_kept, final_element_indices_in_N_kept)

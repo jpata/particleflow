@@ -46,10 +46,10 @@ class TFDSDataSource:
             if current_len % self.pad_to_multiple != 0:
                 num_to_pad = self.pad_to_multiple - (current_len % self.pad_to_multiple)
                 for key_to_pad in ["X", "ycand", "ytarget"]:
-                    if key_to_pad in ret: # Ensure key exists
+                    if key_to_pad in ret:  # Ensure key exists
                         array_to_pad = ret[key_to_pad]
-                        pad_width = ((0, num_to_pad), (0, 0)) # Pad only the first axis
-                        ret[key_to_pad] = np.pad(array_to_pad, pad_width, mode='constant', constant_values=0)
+                        pad_width = ((0, num_to_pad), (0, 0))  # Pad only the first axis
+                        ret[key_to_pad] = np.pad(array_to_pad, pad_width, mode="constant", constant_values=0)
 
         if self.ds.dataset_info.name.startswith("cms_"):
             # track, target label neutral hadron -> reconstruct as charged hadron
