@@ -1058,9 +1058,7 @@ def override_config(config: dict, args):
         for model in ["litemla", "attention"]:
             config["model"][model]["num_convs"] = args.num_convs
 
-    config["enabled_test_datasets"] = list(config["test_dataset"].keys())
-    if len(args.test_datasets) != 0:
-        config["enabled_test_datasets"] = args.test_datasets
+    config["enabled_test_datasets"] = args.test_datasets
 
     config["train"] = args.train
     config["test"] = args.test

@@ -417,14 +417,28 @@ class MLPF(nn.Module):
                         "dropout_ff": dropout_ff,
                         "activation": activation,
                     }
-                    # # Pass LiteMLA specific configurations from the main config file
-                    # if "litemla" in config["model"]:
-                    #      mla_conf.update(config["model"]["litemla"])
 
                     self.conv_id.append(PreLnLiteMLALayer(name=f"conv_id_{i}", **mla_conf))
                     reg_mla_conf = mla_conf.copy() # Make a copy for reg stream if params differ
                     reg_mla_conf["name"] = f"conv_reg_{i}"
                     self.conv_reg.append(PreLnLiteMLALayer(**reg_mla_conf))
+            elif self.conv_type == "gnn_lsh":
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList() # GNN-LSH uses num_node_messages as num_convs
+                for i in range(self.num_convs): # Iterate num_node_messages times
+                    gnn_lsh_params = {
+                        "inout_dim": embedding_dim,
+                        "bin_size": self.bin_size,
+                        "max_num_bins": max_num_bins,
+                        "distance_dim": distance_dim,
+                        "layernorm": layernorm,
+                        "num_node_messages": num_node_messages,
+                        "dropout": dropout_ff,
+                        "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
+                        "ffn_dist_num_layers": ffn_dist_num_layers,
+                    }
+                    self.conv_id.append(CombinedGraphLayer(**gnn_lsh_params))
+                    self.conv_reg.append(CombinedGraphLayer(**gnn_lsh_params))
 
         if self.learned_representation_mode == "concat":
             decoding_dim = self.num_convs * embedding_dim
