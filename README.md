@@ -56,6 +56,7 @@ The following datasets are available to reproduce the studies. They include full
   - ACAT 2021:
     - J. Phys. Conf. Ser. 2438 012100, http://dx.doi.org/10.1088/1742-6596/2438/1/012100
     - CERN-CMS-DP-2021-030, https://cds.cern.ch/record/2792320
+    - https://twiki.cern.ch/twiki/bin/view/Main/DraftDPSNoteMLPFACAT2021
 
 ## Initial development with Delphes
 
@@ -76,6 +77,8 @@ For academic work, please consider citing the following papers:
 - initial idea with scalable GNN, code [v1.1](https://zenodo.org/records/4559587): https://doi.org/10.1140/epjc/s10052-021-09158-w
 - improved event-level performance in full simulation, code [v1.6.2](https://zenodo.org/records/10928968): https://doi.org/10.1038/s42005-024-01599-5
 - studies in CMS: https://cds.cern.ch/record/2792320, http://dx.doi.org/10.1088/1742-6596/2438/1/012100, http://cds.cern.ch/record/2842375
+- fine-tuning from CLIC to CLD, code [v2.3.0](https://github.com/jpata/particleflow/releases/tag/v2.3.0): https://doi.org/10.1103/PhysRevD.111.092015
+- CMS full simulation in 2025, code [v2.4.0](https://github.com/jpata/particleflow/releases/tag/v2.4.0): [https://doi.org/10.1103/PhysRevD.111.092015](https://cds.cern.ch/record/2937578)
 
 If you use the code in a significant way for research purposes, please consider citing the [tagged version](https://zenodo.org/search?q=parent.id%3A4452541&f=allversions%3Atrue&l=list&p=1&s=10&sort=version) that you used, for example:
 - Joosep Pata, Eric Wulff, Farouk Mokhtar, Javier Duarte, Aadi Tepper, Ka Wa Ho, & Lars Sørlie. (2025). jpata/particleflow: v2.2.0 (v2.2.0). Zenodo. https://doi.org/10.5281/zenodo.14650991
