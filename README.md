@@ -49,6 +49,8 @@ The following datasets are available to reproduce the studies. They include full
   <img src="images/cms/ak4jet_puppi_pt_ttbar.png" alt="PUPPI jets in ttbar" width="300"/>
 </p>
 
+  - EPS-HEP 2025:
+    - CERN-CMS-DP-2025-033, https://cds.cern.ch/record/2937578, https://twiki.cern.ch/twiki/bin/view/CMS/DraftDPSNoteMLPFEPS2025
   - ACAT 2022:
     - CERN-CMS-DP-2022-061, http://cds.cern.ch/record/2842375
   - ACAT 2021:
