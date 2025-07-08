@@ -7,6 +7,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.model.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
+from mlpf.model.litemla import LiteMLA
 
 ATT_MAT_IDX = 0
 
@@ -79,13 +80,13 @@ class PreLnSelfAttentionLayer(nn.Module):
         name="",
         activation="elu",
         embedding_dim=128,
-        num_heads=2,
-        width=128,
-        dropout_mha=0.1,
-        dropout_ff=0.1,
-        attention_type="efficient",
-        learnable_queries=False,
-        elems_as_queries=False,
+        num_heads=2,  # Kept for signature consistency, may be unused by specific attention
+        width=128,  # For self.seq, if used
+        dropout_mha=0.1,  # For MHA dropout, if applicable
+        dropout_ff=0.1,  # For self.dropout, if used
+        attention_type="efficient",  # For standard MHA
+        learnable_queries=False,  # For standard MHA
+        elems_as_queries=False,  # For standard MHA
     ):
         super(PreLnSelfAttentionLayer, self).__init__()
         self.name = name
@@ -159,6 +160,50 @@ class PreLnSelfAttentionLayer(nn.Module):
         x = mha_out + self.seq(x)
         x = self.dropout(x)
         x = x * mask_
+        return x
+
+
+class PreLnLiteMLALayer(nn.Module):
+    def __init__(
+        self,
+        name="",
+        embedding_dim=128,
+        num_heads=2,  # Unused by LiteMLA directly, but kept for signature consistency
+        width=128,  # For self.seq, if used
+        dropout_ff=0.1,  # For self.dropout, if used on output
+        activation="relu",  # For self.seq, if used
+        # LiteMLA specific kwargs should be passed from MLPF config
+        **litemla_kwargs,
+    ):
+        super(PreLnLiteMLALayer, self).__init__()
+        self.name = name
+        self.embedding_dim = embedding_dim
+
+        self.act = get_activation(activation)  # For self.seq
+        # LiteMLA takes in_channels, out_channels, and its specific args
+        self.mha = LiteMLA(in_channels=embedding_dim, out_channels=embedding_dim, **litemla_kwargs)
+        self.norm0 = torch.nn.LayerNorm(embedding_dim)
+        # self.seq and self.dropout are defined but may not be used if LiteMLA output is binned
+        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
+        self.dropout = torch.nn.Dropout(dropout_ff)
+
+    def forward(self, x, x_coords, mask, initial_embedding):
+        # x: (B, N, F_in) unbinned features
+        # x_coords: (B, N, 3) unbinned coordinates for binning
+        # mask: (B, N) unbinned mask
+        # initial_embedding: (B, N, F_in) - currently unused by LiteMLA in this setup
+
+        # Apply LayerNorm to the unbinned input features
+        x_normed = self.norm0(x * mask.unsqueeze(-1))
+
+        # LiteMLA processes unbinned features and coords, and returns an unbinned tensor
+        # mha_out: (B, N, F_out)
+        mha_out = self.mha(x_normed, x_coords, mask)
+
+        # Apply residual connection and dropout as mha_out is now unbinned
+        # Note: self.seq is currently not used in a typical transformer block structure here.
+        x = x + self.dropout(mha_out)  # Apply dropout to MHA output before residual
+        x = x * mask.unsqueeze(-1)  # Re-apply mask
         return x
 
 
@@ -266,7 +311,11 @@ class MLPF(nn.Module):
         dropout_conv_id_mha=0.0,
         dropout_conv_id_ff=0.0,
         use_pre_layernorm=False,
+        feature_stds_by_type=None,  # Renamed and expecting dict
+        feature_means_by_type=None,  # Renamed and expecting dict
     ):
+        # Add feature_mean and feature_std to __init__
+        # These will be used for input feature normalization
         super(MLPF, self).__init__()
 
         self.conv_type = conv_type
@@ -285,7 +334,33 @@ class MLPF(nn.Module):
 
         self.use_pre_layernorm = use_pre_layernorm
 
-        if self.conv_type == "attention":
+        # Register per-element-type buffers for feature normalization
+        self.has_feature_normalization = False
+        if feature_means_by_type is not None and feature_stds_by_type is not None:
+            self.has_feature_normalization = True
+            for elem_type_val in self.elemtypes_nonzero:
+                str_elem_type = str(int(elem_type_val))  # Buffer names must be valid strings
+                if elem_type_val in feature_means_by_type and elem_type_val in feature_stds_by_type:
+                    mean_val = feature_means_by_type[elem_type_val]
+                    std_val = feature_stds_by_type[elem_type_val]
+                    if mean_val is not None and std_val is not None:
+                        # mean_val/std_val are (1,1,num_features), squeeze to (num_features,) for buffer
+                        self.register_buffer(f"feature_mean_{str_elem_type}", mean_val.squeeze(0).squeeze(0))
+                        self.register_buffer(f"feature_std_{str_elem_type}", std_val.squeeze(0).squeeze(0))
+                    else:  # Should not happen if dicts are not None and elem_type_val is a key
+                        self.register_buffer(f"feature_mean_{str_elem_type}", None)
+                        self.register_buffer(f"feature_std_{str_elem_type}", None)
+                else:
+                    _logger.warning(f"Missing normalization stats for elem_type {elem_type_val} in provided dictionaries.")
+                    self.register_buffer(f"feature_mean_{str_elem_type}", None)
+                    self.register_buffer(f"feature_std_{str_elem_type}", None)
+        else:  # If the dictionaries themselves are None, register all buffers as None
+            for elem_type_val in self.elemtypes_nonzero:
+                str_elem_type = str(int(elem_type_val))
+                self.register_buffer(f"feature_mean_{str_elem_type}", None)
+                self.register_buffer(f"feature_std_{str_elem_type}", None)
+
+        if self.conv_type == "attention" or self.conv_type == "litemla":
             embedding_dim = num_heads * head_dim
             width = num_heads * head_dim
 
@@ -336,11 +411,25 @@ class MLPF(nn.Module):
                             # learnable_queries=lastlayer,
                         )
                     )
-            elif self.conv_type == "gnn_lsh":
+            elif self.conv_type == "litemla":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(self.num_convs):
-                    gnn_conf = {
+                    mla_conf = {
+                        "embedding_dim": embedding_dim,
+                        "dropout_ff": dropout_ff,
+                        "activation": activation,
+                    }
+
+                    self.conv_id.append(PreLnLiteMLALayer(name=f"conv_id_{i}", **mla_conf))
+                    reg_mla_conf = mla_conf.copy()  # Make a copy for reg stream if params differ
+                    reg_mla_conf["name"] = f"conv_reg_{i}"
+                    self.conv_reg.append(PreLnLiteMLALayer(**reg_mla_conf))
+            elif self.conv_type == "gnn_lsh":
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList()  # GNN-LSH uses num_node_messages as num_convs
+                for i in range(self.num_convs):  # Iterate num_node_messages times
+                    gnn_lsh_params = {
                         "inout_dim": embedding_dim,
                         "bin_size": self.bin_size,
                         "max_num_bins": max_num_bins,
@@ -351,8 +440,8 @@ class MLPF(nn.Module):
                         "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
                         "ffn_dist_num_layers": ffn_dist_num_layers,
                     }
-                    self.conv_id.append(CombinedGraphLayer(**gnn_conf))
-                    self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
+                    self.conv_id.append(CombinedGraphLayer(**gnn_lsh_params))
+                    self.conv_reg.append(CombinedGraphLayer(**gnn_lsh_params))
 
         if self.learned_representation_mode == "concat":
             decoding_dim = self.num_convs * embedding_dim
@@ -376,9 +465,31 @@ class MLPF(nn.Module):
             self.final_norm_id = torch.nn.LayerNorm(decoding_dim)
             self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
 
-    # @torch.compile
+    @torch.compile
     def forward(self, X_features, mask):
-        Xfeat_normed = X_features
+        # X_features: (batch_size, num_elements, num_input_features)
+
+        Xfeat_normed = X_features.clone()  # Start with a copy, apply normalization in place
+
+        if self.has_feature_normalization:
+            elem_type_col = X_features[..., 0]  # Shape: (batch_size, num_elements)
+            for elem_type_val in self.elemtypes_nonzero:
+                str_elem_type = str(int(elem_type_val))
+                mean_val = getattr(self, f"feature_mean_{str_elem_type}", None)
+                std_val = getattr(self, f"feature_std_{str_elem_type}", None)
+
+                if mean_val is not None and std_val is not None:
+                    # mean_val, std_val are stored as (num_input_features,)
+                    # type_mask identifies elements of the current type
+                    type_mask = elem_type_col == elem_type_val  # Shape: (batch_size, num_elements)
+
+                    if type_mask.any():
+                        # Apply normalization to the slice of X_features corresponding to type_mask
+                        # X_features[type_mask] will be (N_type_elements, num_input_features)
+                        # Reshape mean/std to (1, num_input_features) for broadcasting
+                        Xfeat_normed[type_mask] = (X_features[type_mask] - mean_val.view(1, -1)) / (std_val.view(1, -1) + 1e-8)
+        else:
+            Xfeat_normed = X_features  # No normalization, use original features
 
         embeddings_id, embeddings_reg = [], []
         if self.num_convs != 0:
@@ -394,13 +505,29 @@ class MLPF(nn.Module):
                 elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
                 embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
 
+            # Prepare coordinate tensor for LiteMLA if used
+            x_coords = None
+            if self.conv_type == "litemla":
+                # Assuming eta at index 2, sin_phi at 3, cos_phi at 4 in X_features
+                # This slicing should be made robust, e.g., by getting indices from a config or X_FEATURES
+                x_coords = Xfeat_normed[..., 2:5]  # Pass normed coordinates or original? Let's use normed for now.
+                # Or, more likely, original X_features[..., 2:5]
+                # For consistency with ElementBinner, let's use original X_features values for coords.
+                x_coords = X_features[..., 2:5]
+
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
-                out_padded = conv(conv_input, mask, embedding_id)
+                if self.conv_type == "litemla":
+                    out_padded = conv(conv_input, x_coords, mask, embedding_id)  # LiteMLA now returns unbinned data
+                else:  # attention
+                    out_padded = conv(conv_input, mask, embedding_id)
                 embeddings_id.append(out_padded)
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-                out_padded = conv(conv_input, mask, embedding_reg)
+                if self.conv_type == "litemla":
+                    out_padded = conv(conv_input, x_coords, mask, embedding_reg)  # LiteMLA now returns unbinned data
+                else:  # attention
+                    out_padded = conv(conv_input, mask, embedding_reg)
                 embeddings_reg.append(out_padded)
 
         # id input
@@ -435,8 +562,8 @@ class MLPF(nn.Module):
 
         # ensure created particle has positive mass^2 by computing energy from pt and adding a positive-only correction
         pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
-        # sinh does not exist on opset13, required for CMSSW_12_3_0_pre6
         pz_real = pt_real * torch.sinh(preds_eta.detach())
+        # sinh does not exist on opset13, required for CMSSW_12_3_0_pre6
         # pz_real = pt_real * (torch.exp(preds_eta.detach()) - torch.exp(-preds_eta.detach()))/2.0
         e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
         e_real[~mask] = 0

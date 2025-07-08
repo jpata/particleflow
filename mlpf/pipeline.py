@@ -67,7 +67,7 @@ parser.add_argument(
     type=str,
     default=None,
     help="which graph layer to use",
-    choices=["attention", "gnn_lsh", "mamba"],
+    choices=["attention", "litemla", "gnn_lsh"],
 )
 parser.add_argument("--num-convs", type=int, default=None, help="number of cross-particle convolution (GNN, attention, Mamba) layers")
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
@@ -116,6 +116,7 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
     world_size = args.gpus if args.gpus > 0 else 1  # will be 1 for both cpu (args.gpu < 1) and single-gpu (1)
 
     with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
