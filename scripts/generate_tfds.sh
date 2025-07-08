@@ -22,6 +22,10 @@ export CMD="singularity exec -B /local -B /scratch/persistent $IMG tfds build"
 #     $CMD mlpf/heptfds/cms_pf/ztt --config $i --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/pu55to75 --overwrite &> logs/tfds_ztt.log$i &
 # done
 # $CMD mlpf/heptfds/cms_pf/singleele --data_dir $DATA_DIR --manual_dir $MANUAL_DIR/nopu --overwrite --config 1 &> logs/tfds_singleele.log &
+## run 13p6 TeV validation sample
+# for i in `seq 1 10`; do
+#   $CMD mlpf/heptfds/cms_pf/qcd_13p6 --config $i --data_dir $DATA_DIR --manual_dir /local/joosep/mlpf/cms/20250630_cmssw_15_0_5_f8ae2f/pu55to75_val --overwrite &> logs/tfds_qcd.log$i &
+# done
 # wait
 
 # CLIC cluster-based
