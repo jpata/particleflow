@@ -1,6 +1,6 @@
 default_language_version:
     python: python3
-exclude: ^(images)|^(mlpf/data/clic/clicRec_e4h_input.py)|^(mlpf/data/clic/clic_steer.py)|^(mlpf/data/clic/pythia.py)|^(mlpf/data/clic/PandoraSettings/.*)|^(mlpf/data/cms/prepare_args.py)
+exclude: ^(images)|^(mlpf/data/clic/clicRec_e4h_input.py)|^(mlpf/data/clic/clic_steer.py)|^(mlpf/data/clic/pythia.py)|^(mlpf/data/clic/PandoraSettings/.*)|^(mlpf/data/cms/prepare_args.py)|^(scripts/tallinn/.*txt)
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -18,6 +18,8 @@ repos:
   - id: requirements-txt-fixer
   - id: mixed-line-ending
     args: ['--fix=no']
+  - id: check-added-large-files
+    args: ["--maxkb=2000"]
 
 #This is giving different results on github CI vs. locally and I can't understand why
 #- repo: https://github.com/PyCQA/isort
@@ -45,5 +47,5 @@ repos:
 
     # E203 is not PEP8 compliant
     # E402 due to logging.basicConfig in pipeline.py
-    args: ['--max-line-length=150',
+    args: ['--max-line-length=180',
            '--extend-ignore=E203,E402,W605']

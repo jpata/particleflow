@@ -46,6 +46,12 @@ def to_bh(data, bins, cumulative=False):
     return h1
 
 
+def to_bh_2d(data0, data1, bins):
+    h1 = bh.Histogram(bh.axis.Variable(bins), bh.axis.Variable(bins))
+    h1.fill(data0, data1)
+    return h1
+
+
 def compute_met(pt, phi, mask=None):
     if mask is None:
         mask = np.ones_like(pt, dtype=bool)
@@ -292,6 +298,8 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     ret[f"{sample_folder}/met_target_pumask"] = to_bh(ytarget_nopu_met, bins=b)
     ret[f"{sample_folder}/met_cand"] = to_bh(ycand_met, bins=b)
 
+    ret[f"{sample_folder}/met_pythia_vs_target_pumask"] = to_bh_2d(genmet_cmssw, ytarget_nopu_met, bins=b)
+
     # print output
     # for k in sorted(ret.keys()):
     #     print(k, ret[k].__class__.__name__)
@@ -333,7 +341,7 @@ if __name__ == "__main__":
                 ijob += 1
 
     # process only pkl files
-    maxfiles = 1000
+    maxfiles = 5000
     path = "/local/joosep/mlpf/cms/"
     for pu_config in ["nopu", "pu55to75"]:
         for sample_folder in ["QCDForPF_14TeV_TuneCUETP8M1_cfi", "TTbar_14TeV_TuneCUETP8M1_cfi", "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"]:

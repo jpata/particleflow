@@ -1,5 +1,4 @@
 import time
-
 import numpy as np
 import onnxruntime as rt
 import resource
@@ -96,7 +95,7 @@ if __name__ == "__main__":
         mem_used = []
 
         # average over 100 events
-        for i in range(100):
+        for i in range(10):
 
             # allocate array in system memory
             X = np.array(np.random.randn(batch_size, num_elems, num_features), getattr(np, args.input_dtype))
