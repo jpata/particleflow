@@ -2,7 +2,7 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/20250618_cmssw_15_0_5_f8ae2f/pu55to75_val/
+OUTDIR=/local/joosep/mlpf/cms/20250630_cmssw_15_0_5_f8ae2f/pu55to75_val/
 CMSSWDIR=/scratch/persistent/joosep/CMSSW_15_0_5/
 MLPF_PATH=/home/joosep/particleflow/
 
@@ -46,7 +46,23 @@ cmsDriver.py $SAMPLE \
   --pileup_input $PILEUP_INPUT \
   --no_exec \
   --fileout step2_phase1_new.root \
+  --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step2 \
   --python_filename=step2_phase1_new.py
+
+cmsDriver.py step3 \
+  --conditions auto:phase1_2024_realistic \
+  --beamspot Realistic2024ppRefCollision \
+  --era Run3_2024 \
+  -n -1 \
+  --eventcontent FEVTDEBUGHLT \
+  -s RAW2DIGI,L1Reco,RECO,RECOSIM \
+  --datatier GEN-SIM-RECO \
+  --geometry DB:Extended \
+  --no_exec \
+  --filein file:step2_phase1_new.root \
+  --fileout step3_phase1_new.root \
+  --customise Validation/RecoParticleFlow/customize_pfanalysis.customize_step3 \
+  --python_filename=step3_phase1_new.py
 
 pwd
 ls -lrt
@@ -54,5 +70,9 @@ ls -lrt
 echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> step2_phase1_new.py
 cmsRun step2_phase1_new.py > /dev/null
 cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
+
+cmsRun step3_phase1_new.py > /dev/null
+#cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
+cp pfntuple.root $OUTDIR/$SAMPLE/root/pfntuple_${SEED}.root
 
 rm -Rf /scratch/local/joosep/$SLURM_JOBID
