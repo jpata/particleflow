@@ -16,7 +16,7 @@ source /cvmfs/cms.cern.ch/cmsset_default.sh
 cd /scratch/persistent/joosep/CMSSW_15_0_5
 eval `scram runtime -sh`
 cd $PREVDIR
-export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.5.0_p01_f8ae2f/
+export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.5.0_p01_f8ae2f_test/
 export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
@@ -92,9 +92,12 @@ ls *.root
 mkdir -p $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}
 
 # cp step3.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
-# cp step3_inMINIAODSIM.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
+#cp step3_inMINIAODSIM.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
 # cp step4_NANO.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_${NJOB}.root
 cp step4_NANO_btv.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step4_NANO_btv_${NJOB}.root
 cp step4_NANO_jme.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step4_NANO_jme_${NJOB}.root
+
+python3 ~/particleflow/mlpf/plotting/cms_fwlite.py step3_inMINIAODSIM.root step3_inMINIAODSIM.pkl
+cp step3_inMINIAODSIM.pkl $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.pkl
 
 rm -Rf $WORKDIR
