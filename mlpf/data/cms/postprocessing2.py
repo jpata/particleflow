@@ -257,7 +257,7 @@ def prepare_normalized_table(g, iev):
 
     # if there's more than one track per caloparticle, the caloparticle should be distributed among the tracks
     # otherwise, we end up in a case where some tracks are expected to yield no particles, which is confusing for the model to learn
-    split_caloparticles(g, 1)
+    # split_caloparticles(g, 1)
     print("split, met={:.2f}".format(compute_gen_met(g)))
 
     if save_debugging_pickle:
