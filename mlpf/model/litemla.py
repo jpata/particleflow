@@ -143,10 +143,10 @@ class LiteMLA(nn.Module):
         scales: tuple[int, ...] = (5,),
         eps=1.0e-15,
         # ElementBinner parameters with defaults
-        eta_bin_edges: list[float] = list(np.linspace(-5, 5, 10)),
-        phi_bin_edges: list[float] = list(np.linspace(-math.pi, math.pi, 10)),
-        max_elems_per_bin: int = 10,
-        bin_agg_mlp_layer_dims: Optional[list[int]] = [32, 32],
+        eta_bin_edges: list[float] = list(np.linspace(-5, 5, 20)),
+        phi_bin_edges: list[float] = list(np.linspace(-math.pi, math.pi, 20)),
+        max_elems_per_bin: int = 32,
+        bin_agg_mlp_layer_dims: Optional[list[int]] = [128, 128],
     ):
         super(LiteMLA, self).__init__()
         self.eps = eps
