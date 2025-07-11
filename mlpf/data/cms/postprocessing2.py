@@ -203,7 +203,6 @@ def split_caloparticles(g, elem_type):
         sucs = [s[0] for s in sucs]
 
         if len(sucs) > 1:
-            # print('*'*100)
             # print('calo', 'pid: ', g.nodes[cp]["pid"], 'pt: ',  g.nodes[cp]["pt"], 'eta: ', g.nodes[cp]["eta"], 'phi: ', g.nodes[cp]["phi"], 'E: ', g.nodes[cp]["energy"])
             # for suc in sucs:
             #    print('  ', g.edges[(cp, suc)]["weight"], g.nodes[suc]["pt"], g.nodes[suc]["eta"], g.nodes[suc]["phi"], g.nodes[suc]["typ"])
