@@ -99,6 +99,19 @@ particle_feature_order = [
 ]
 
 
+def delta_r(e1, e2, p1, p2):
+    delta = e1 - e2
+    dphi = p1 - p2
+    if (dphi > math.pi) or (dphi <= math.pi):
+        if dphi > 0:
+            n = int(dphi / (2 * math.pi) + 0.5)
+            dphi -= 2 * math.pi * n
+        else:
+            n = int(0.5 - dphi / (2 * math.pi))
+            dphi += 2 * math.pi * n
+    return math.sqrt(delta * delta + dphi * dphi)
+
+
 def compute_jets(particles_p4, min_pt=jet_ptcut, with_indices=False):
     cluster = fastjet.ClusterSequence(particles_p4, jetdef)
     jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
@@ -179,15 +192,21 @@ def split_caloparticles(g, elem_type):
         if g.nodes[cp]["pid"] == 11:
             continue
 
-        # get all associated elements with type==elem_type that received a contribution from this caloparticle
-        sucs = [(suc, g.edges[cp, suc]["weight"], g.nodes[suc]["energy"]) for suc in g.successors(cp) if g.nodes[suc]["typ"] == elem_type]
+        # get all associated elements with type==elem_type and dela_r < 0.4 to the caloparticle that received a contribution from this caloparticle
+        sucs = [
+            (suc, g.edges[cp, suc]["weight"], g.nodes[suc]["energy"])
+            for suc in g.successors(cp)
+            if (g.nodes[suc]["typ"] == elem_type)
+            and (delta_r(g.nodes[suc]["eta"], g.nodes[cp]["eta"], g.nodes[suc]["phi"], g.nodes[cp]["phi"]) < 0.4)
+        ]
         sum_sucs_w = sum([s[1] for s in sucs])
         sucs = [s[0] for s in sucs]
 
         if len(sucs) > 1:
-            # print(g.nodes[cp]["pid"], g.nodes[cp]["pt"], g.nodes[cp]["eta"], g.nodes[cp]["phi"])
+            # print('calo', 'pid: ', g.nodes[cp]["pid"], 'pt: ',  g.nodes[cp]["pt"], 'eta: ', g.nodes[cp]["eta"], 'phi: ', g.nodes[cp]["phi"], 'E: ', g.nodes[cp]["energy"])
             # for suc in sucs:
-            #     print("  ", g.edges[(cp, suc)]["weight"], g.nodes[suc]["pt"], g.nodes[suc]["eta"], g.nodes[suc]["phi"], g.nodes[suc]["typ"])
+            #    print('  ', g.edges[(cp, suc)]["weight"], g.nodes[suc]["pt"], g.nodes[suc]["eta"], g.nodes[suc]["phi"], g.nodes[suc]["typ"])
+            #    print('dr to sc: ', delta_r(g.nodes[suc]["eta"], g.nodes[cp]["eta"], g.nodes[cp]["phi"], g.nodes[suc]["phi"]))
             lv = vector.obj(
                 pt=g.nodes[cp]["pt"],
                 eta=g.nodes[cp]["eta"],
@@ -757,10 +776,12 @@ def make_graph(ev, iev):
 
     # sometimes, the SimClusters are clearly leaving tracks, but the simulation links between the tracks and SimClusters don't seem to exist.
     # add any remaining links between SimClusters and tracks using delta-R proximity with dR<0.05
-    # note: this is in general a hack for missing simulation information, currently has issues with phi wraparound
+    # note: this is in general a hack for missing simulation information
+    # since KDTree in sklearn does not support custom metrics, to fix the delta phi wrap around problem, delta phi is approximated by dphi~2*sin(dphi/2) for small dphi
+    # i.e. we compute approximate dphi as the distance on the x-y plane between the unit vectors of two particles
     elems = [n for n in g.nodes if n[0] == "elem" and g.nodes[n]["typ"] == 1]
     scs = [node for node in g.nodes if node[0] == "sc"]
-    sc_coords = np.array([[g.nodes[n]["eta"] for n in scs], [g.nodes[n]["phi"] for n in scs]])
+    sc_coords = np.array([[g.nodes[n]["eta"] for n in scs], [math.sin(g.nodes[n]["phi"]) for n in scs], [math.cos(g.nodes[n]["phi"]) for n in scs]])
     if len(sc_coords.T) > 0:
         tree = KDTree(sc_coords.T, leaf_size=32)
         for elem in elems:
@@ -769,7 +790,7 @@ def make_graph(ev, iev):
             if len(list(g.predecessors(elem))) == 0 and g.nodes[elem]["pt"] > 1.0:
                 eta = g.nodes[elem]["eta"]
                 phi = g.nodes[elem]["phi"]
-                nearby_scs = tree.query_radius([[eta, phi]], 0.05)[0]
+                nearby_scs = tree.query_radius([[eta, math.sin(phi), math.cos(phi)]], 0.05)[0]
                 for isc in nearby_scs:
                     if scs[isc] in g.nodes:
                         if (scs[isc], elem) not in g.edges:
