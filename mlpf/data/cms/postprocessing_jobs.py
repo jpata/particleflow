@@ -41,12 +41,11 @@ samples = [
     "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/TTbar_14TeV_TuneCUETP8M1_cfi",
     "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/QCDForPF_14TeV_TuneCUETP8M1_cfi",
     "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi",
-    # "/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/ZpTT_1500_14TeV_TuneCP5_cfi",
 ]
 
 
 def inf_to_outf(inf):
-    return inf.replace(".root", ".pkl.bz2").replace("/root/", "/raw2/")
+    return inf.replace(".root", ".pkl.bz2").replace("/root/", "/raw3/")
 
 
 ichunk = 1

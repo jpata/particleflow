@@ -192,7 +192,7 @@ def split_caloparticles(g, elem_type):
         if g.nodes[cp]["pid"] == 11:
             continue
 
-        # get all associated elements with type==elem_type and dela_r < 0.4 to the caloparticle that received a contribution from this caloparticle
+        # get all associated elements with type==elem_type and delta_r < 0.4 to the caloparticle that received a contribution from this caloparticle
         sucs = [
             (suc, g.edges[cp, suc]["weight"], g.nodes[suc]["energy"])
             for suc in g.successors(cp)
@@ -276,7 +276,7 @@ def prepare_normalized_table(g, iev):
 
     # if there's more than one track per caloparticle, the caloparticle should be distributed among the tracks
     # otherwise, we end up in a case where some tracks are expected to yield no particles, which is confusing for the model to learn
-    # split_caloparticles(g, 1)
+    split_caloparticles(g, 1)
     print("split, met={:.2f}".format(compute_gen_met(g)))
 
     if save_debugging_pickle:
