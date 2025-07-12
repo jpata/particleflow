@@ -113,25 +113,25 @@ train_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_ztt:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
     physical_nopu:
       batch_size: 8
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd_nopu:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_ztt_nopu:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
@@ -140,46 +140,46 @@ valid_dataset:
       batch_size: 1
       samples:
         cms_pf_ttbar:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_ztt:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
     physical_nopu:
       batch_size: 8
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd_nopu:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_ztt_nopu:
-          version: 2.6.0
+          version: 2.7.0
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
   cms_pf_ttbar:
-    version: 2.6.0
+    version: 2.7.0
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_qcd:
-    version: 2.6.0
+    version: 2.7.0
     splits: [1,2,3,4,5,6,7,8,9,10]
 #  cms_pf_qcd13p6:
-#    version: 2.6.0
+#    version: 2.7.0
 #    splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ztt:
-    version: 2.6.0
+    version: 2.7.0
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ttbar_nopu:
-    version: 2.6.0
+    version: 2.7.0
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_qcd_nopu:
-    version: 2.6.0
+    version: 2.7.0
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ztt_nopu:
-    version: 2.6.0
+    version: 2.7.0
     splits: [1,2,3,4,5,6,7,8,9,10]
