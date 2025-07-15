@@ -22,7 +22,7 @@ _CITATION = """
 class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_ttbar_nopu dataset."""
 
-    VERSION = tfds.core.Version("2.7.0")
+    VERSION = tfds.core.Version("2.7.1")
     RELEASE_NOTES = {
         "1.7.1": "First version",
         "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
@@ -34,6 +34,7 @@ class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
         "2.5.1": "Associate ele with GSF first",
         "2.6.0": "Regenerate with 20250508_cmssw_15_0_5_d3c6d1",
         "2.7.0": "Remove split_caloparticle",
+        "2.7.1": "Use fixed split_caloparticle",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar_nopu ~/tensorflow_datasets/
@@ -70,7 +71,7 @@ class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path / sample_dir / "raw2", self.builder_config, num_splits=cms_utils.NUM_SPLITS)
+        return cms_utils.split_sample(path / sample_dir / "raw3", self.builder_config, num_splits=cms_utils.NUM_SPLITS)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)

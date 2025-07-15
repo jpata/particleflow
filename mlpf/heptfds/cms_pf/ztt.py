@@ -21,12 +21,13 @@ _CITATION = """
 class CmsPfZtt(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     """DatasetBuilder for cms_pf_ztt dataset."""
 
-    VERSION = tfds.core.Version("2.7.0")
+    VERSION = tfds.core.Version("2.7.1")
     RELEASE_NOTES = {
         "2.5.0": "Remove neutrinos from genjets, split to 10",
         "2.5.1": "Associate ele with GSF first",
         "2.6.0": "Regenerate with 20250508_cmssw_15_0_5_d3c6d1",
         "2.7.0": "Remove split_caloparticle",
+        "2.7.1": "Use fixed split_caloparticle",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ztt ~/tensorflow_datasets/
@@ -63,7 +64,7 @@ class CmsPfZtt(tfds.core.GeneratorBasedBuilder, skip_registration=True):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path / sample_dir / "raw2", self.builder_config, num_splits=cms_utils.NUM_SPLITS)
+        return cms_utils.split_sample(path / sample_dir / "raw3", self.builder_config, num_splits=cms_utils.NUM_SPLITS)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)
