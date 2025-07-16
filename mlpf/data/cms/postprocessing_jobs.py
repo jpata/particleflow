@@ -45,7 +45,7 @@ samples = [
 
 
 def inf_to_outf(inf):
-    return inf.replace(".root", ".pkl.bz2").replace("/root/", "/raw3/")
+    return inf.replace(".root", ".pkl.bz2").replace("/root/", "/raw/")
 
 
 ichunk = 1
