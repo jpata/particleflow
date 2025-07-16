@@ -2,7 +2,7 @@
 
 SUB=scripts/tallinn/generate_tfds.sh
 
-# export DATA_DIR=/local/joosep/mlpf/tensorflow_datasets/cms2/
+# export DATA_DIR=/local/joosep/mlpf/tensorflow_datasets/cms/2.7.1/
 # export MANUAL_DIR=/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/
 # for i in `seq 1 10`; do
 #     sbatch $SUB cms_pf/qcd_nopu $i nopu

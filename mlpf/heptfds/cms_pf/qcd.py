@@ -21,7 +21,7 @@ _CITATION = """
 class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd dataset."""
 
-    VERSION = tfds.core.Version("2.6.0")
+    VERSION = tfds.core.Version("2.7.1")
     RELEASE_NOTES = {
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
         "1.3.1": "Remove PS again",
@@ -38,6 +38,8 @@ class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
         "2.5.0": "Remove neutrinos from genjets, split to 10",
         "2.5.1": "Associate ele with GSF first",
         "2.6.0": "Regenerate with 20250508_cmssw_15_0_5_d3c6d1",
+        "2.7.0": "Remove split_caloparticle",
+        "2.7.1": "Use fixed split_caloparticle",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_qcd ~/tensorflow_datasets/

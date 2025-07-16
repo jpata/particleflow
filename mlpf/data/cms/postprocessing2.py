@@ -192,7 +192,7 @@ def split_caloparticles(g, elem_type):
         if g.nodes[cp]["pid"] == 11:
             continue
 
-        # get all associated elements with type==elem_type and dela_r < 0.4 to the caloparticle that received a contribution from this caloparticle
+        # get all associated elements with type==elem_type and delta_r < 0.4 to the caloparticle that received a contribution from this caloparticle
         sucs = [
             (suc, g.edges[cp, suc]["weight"], g.nodes[suc]["energy"])
             for suc in g.successors(cp)
