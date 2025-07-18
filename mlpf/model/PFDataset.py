@@ -14,13 +14,14 @@ SHARING_STRATEGY = "file_descriptor"
 
 
 class TFDSDataSource:
-    def __init__(self, ds, sort):
+    def __init__(self, ds, sort, pad_to_multiple=None):
         self.ds = ds
         tmp = self.ds.dataset_info
         self.ds.dataset_info = SimpleNamespace()
         self.ds.dataset_info.name = tmp.name
         self.ds.dataset_info.features = tmp.features
         self.sort = sort
+        self.pad_to_multiple = pad_to_multiple
         self.rep = self.ds.__repr__()
 
     def __getitem__(self, item):
@@ -38,6 +39,17 @@ class TFDSDataSource:
             ret["X"] = ret["X"][sortidx]
             ret["ycand"] = ret["ycand"][sortidx]
             ret["ytarget"] = ret["ytarget"][sortidx]
+
+        # Pad elements to the nearest multiple if specified
+        if self.pad_to_multiple and self.pad_to_multiple > 0:
+            current_len = ret["X"].shape[0]
+            if current_len % self.pad_to_multiple != 0:
+                num_to_pad = self.pad_to_multiple - (current_len % self.pad_to_multiple)
+                for key_to_pad in ["X", "ycand", "ytarget"]:
+                    if key_to_pad in ret:  # Ensure key exists
+                        array_to_pad = ret[key_to_pad]
+                        pad_width = ((0, num_to_pad), (0, 0))  # Pad only the first axis
+                        ret[key_to_pad] = np.pad(array_to_pad, pad_width, mode="constant", constant_values=0)
 
         if self.ds.dataset_info.name.startswith("cms_"):
             # track, target label neutral hadron -> reconstruct as charged hadron
@@ -110,7 +122,7 @@ class TFDSDataSource:
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name, split, num_samples=None, sort=False):
+    def __init__(self, data_dir, name, split, num_samples=None, sort=False, pad_to_multiple=512):
         """
         Args
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
@@ -127,7 +139,7 @@ class PFDataset:
                 "Could not find dataset {} in {}, please check that you have downloaded the correct version of the dataset".format(name, data_dir)
             )
             sys.exit(1)
-        self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort)
+        self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort, pad_to_multiple=pad_to_multiple)
 
         if num_samples and num_samples < len(self.ds):
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
@@ -251,6 +263,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                         split,
                         num_samples=nevents,
                         sort=config["sort_data"],
+                        pad_to_multiple=config.get("pad_to_multiple_elements", None),
                     ).ds
 
                     if (rank == 0) or (rank == "cpu"):
@@ -287,3 +300,4 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
 
         loaders[split] = InterleavedIterator(loaders[split])
     return loaders
+

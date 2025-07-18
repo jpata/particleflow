@@ -26,6 +26,7 @@ comet_offline: False
 comet_step_freq: 10
 dtype: bfloat16
 val_freq:  # run an extra validation run every val_freq training steps
+pad_to_multiple: 256
 
 model:
   trainable: all
