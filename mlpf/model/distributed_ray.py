@@ -31,7 +31,13 @@ def run_ray_training(config, args, outdir):
     from ray.train.torch import TorchTrainer
 
     if not args.ray_local:
-        ray.init(address="auto")
+        _logger.info("Inititalizing ray...")
+        _logger.info("IP: " + os.environ["head_node_ip"])
+        ray.init(
+            address=os.environ["ip_head"],
+            _node_ip_address=os.environ["head_node_ip"],
+        )
+        _logger.info("Done.")
 
     _configLogger("mlpf", filename=f"{outdir}/train.log")
 
@@ -132,6 +138,7 @@ def run_hpo(config, args):
 
     if not args.ray_local:
         _logger.info("Inititalizing ray...")
+        _logger.info(os.environ["ip_head"], os.environ["head_node_ip"])
         ray.init(
             address=os.environ["ip_head"],
             _node_ip_address=os.environ["head_node_ip"],

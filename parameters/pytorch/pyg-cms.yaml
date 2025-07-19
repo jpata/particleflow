@@ -66,8 +66,8 @@ model:
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "relu"
-    head_dim: 16
+    activation: "elu"
+    head_dim: 32
     num_heads: 16
     attention_type: flash
     use_pre_layernorm: True

@@ -11,33 +11,25 @@
 #SBATCH --no-requeue
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
+module use /appl/local/containers/ai-modules
+module load singularity-AI-bindings
+module load aws-ofi-rccl
+
 cd /scratch/project_465001293/joosep/particleflow
 
-#module load LUMI/24.03 partition/G
-
-export IMG=/scratch/project_465001293/joosep/pytorch2.7.1-rocm6.4.1-particleflow.simg
-export PYTHONPATH=`pwd`
+export IMG=/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.0.sif
 export TFDS_DATA_DIR=/scratch/project_465001293/joosep/tensorflow_datasets
-#export MIOPEN_DISABLE_CACHE=true
 export MIOPEN_USER_DB_PATH=/tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
 export MIOPEN_CUSTOM_CACHE_DIR=${MIOPEN_USER_DB_PATH}
-export TF_CPP_MAX_VLOG_LEVEL=-1 #to suppress ROCm fusion is enabled messages
 export ROCM_PATH=/opt/rocm
-#export NCCL_DEBUG=INFO
-#export MIOPEN_ENABLE_LOGGING=1
-#export MIOPEN_ENABLE_LOGGING_CMD=1
-#export MIOPEN_LOG_LEVEL=4
 export KERAS_BACKEND=torch
-
+export NCCL_SOCKET_IFNAME=hsn0,hsn1,hsn2,hsn3
+export NCCL_NET_GDR_LEVEL=PHB
+export NCCL_DEBUG=INFO
+export PYTHONPATH=`pwd`
 env
 
-#    --env LD_LIBRARY_PATH=/opt/rocm/lib/ \
-#TF training
 singularity exec \
-    --rocm \
     -B /scratch/project_465001293 \
     -B /tmp \
-    --env CUDA_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES \
-     $IMG python3 mlpf/pipeline.py --gpus 8 \
-     --data-dir $TFDS_DATA_DIR --config parameters/pytorch/pyg-cms.yaml \
-     --train --gpu-batch-multiplier 12 --num-workers 4 --prefetch-factor 10 --checkpoint-freq 1 --conv-type attention --dtype bfloat16 --optimizer lamb --lr 0.002
+     $IMG ./scripts/lumi/train.sh
