@@ -122,9 +122,12 @@ class PreLnSelfAttentionLayer(nn.Module):
 
     def forward(self, x, mask, initial_embedding):
         mask_ = mask.unsqueeze(-1)
-        x = self.norm0(x * mask_)
+        
+        # --- 1. First sub-layer: Multi-Head Attention ---
+        residual = x
+        x_norm = self.norm0(x)  # Normalize first
 
-        q = x
+        q = x_norm
         if self.learnable_queries:
             q = self.queries.expand(*x.shape) * mask_
         elif self.elems_as_queries:
@@ -134,30 +137,38 @@ class PreLnSelfAttentionLayer(nn.Module):
         if self.attention_type == "math":
             key_padding_mask = ~mask
 
-        # default path, for FlashAttn/Math backend
+        # Keep the existing logic for ONNX export and context manager
         if self.enable_ctx_manager:
             with sdpa_kernel(self.attn_params[self.attention_type]):
-                mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=key_padding_mask)[0]
+                mha_out = self.mha(q, x_norm, x_norm, need_weights=False, key_padding_mask=key_padding_mask)[0]
 
+                # Optional: attention matrix saving logic
                 if self.save_attention:
-                    att_mat = self.mha(q, x, x, need_weights=True, key_padding_mask=key_padding_mask)[1]
+                    att_mat = self.mha(q, x_norm, x_norm, need_weights=True, key_padding_mask=key_padding_mask)[1]
                     att_mat = att_mat.detach().cpu().numpy()
                     np.savez(
                         open("{}/attn_{}_{}.npz".format(self.outdir, self.name, self.att_mat_idx), "wb"),
                         att=att_mat,
                         in_proj_weight=self.mha.in_proj_weight.detach().cpu().numpy(),
                     )
-
-        # path for ONNX export
         else:
-            mha_out = self.mha(q, x, x, need_weights=False, key_padding_mask=key_padding_mask)[0]
+            # Path for ONNX export
+            mha_out = self.mha(q, x_norm, x_norm, need_weights=False, key_padding_mask=key_padding_mask)[0]
 
-        mha_out = mha_out * mask_
+        # First residual connection (add to original, un-normalized input)
+        x = residual + mha_out
 
-        mha_out = x + mha_out
-        x = self.norm1(mha_out)
-        x = mha_out + self.seq(x)
-        x = self.dropout(x)
+        # --- 2. Second sub-layer: Feed-Forward Network ---
+        residual = x
+        x_norm = self.norm1(x)  # Normalize first
+        
+        ffn_out = self.seq(x_norm)
+        ffn_out = self.dropout(ffn_out)
+
+        # Second residual connection
+        x = residual + ffn_out
+
+        # Apply final mask to zero-out padded elements
         x = x * mask_
         return x
 
