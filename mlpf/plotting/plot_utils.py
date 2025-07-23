@@ -128,14 +128,14 @@ EVALUATION_DATASET_NAMES = {
     "clic_edm_qq_pf": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
-    "cms_pf_qcd": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$, PU 55-75",
-    "cms_pf_qcd_nopu": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$, no PU",
-    "cms_pf_ttbar": r"$\mathrm{t}\bar{\mathrm{t}}$, PU 55-75",
-    "cms_pf_ttbar_nopu": r"$\mathrm{t}\bar{\mathrm{t}}$, no PU",
-    "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$, PU 55-75",
-    "cms_pf_ztt_nopu": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$",
-    "cms_pf_photonjet": r"$\gamma$ + jets, PU 55-75",
-    "cms_pf_photonjet_nopu": r"$\gamma$ + jets, no PU",
+    "cms_pf_qcd": r"QCD multijets, pileup 55-75",
+    "cms_pf_qcd_nopu": r"QCD multijets, no pileup",
+    "cms_pf_ttbar": r"$\mathrm{t}\bar{\mathrm{t}}$, pileup 55-75",
+    "cms_pf_ttbar_nopu": r"$\mathrm{t}\bar{\mathrm{t}}$, no pileup",
+    "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$, pileup 55-75",
+    "cms_pf_ztt_nopu": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$, no pileup",
+    "cms_pf_photonjet": r"$\gamma$ + jets, pileup 55-75",
+    "cms_pf_photonjet_nopu": r"$\gamma$ + jets, no pileup",
 }
 
 GENJET_BINS_PT_DATASET = {
