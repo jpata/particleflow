@@ -733,6 +733,7 @@ def run(rank, world_size, config, outdir, logfile):
         optimizer = get_optimizer(model, config)
 
     model.to(rank)
+    model.compile()
     configure_model_trainable(model, config["model"]["trainable"], True)
 
     if world_size > 1:

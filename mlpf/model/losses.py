@@ -86,6 +86,7 @@ def mlpf_loss(y, ypred, batch):
     loss_regression_energy[batch.mask == 0] *= 0
 
     # add weight based on target pt
+    sqrt_elem_pt = torch.sqrt(batch.X[:, :, 1])
     sqrt_target_pt = torch.sqrt(torch.exp(y["pt"]) * batch.X[:, :, 1])
     loss_regression_pt *= sqrt_target_pt
     loss_regression_energy *= sqrt_target_pt
@@ -98,6 +99,7 @@ def mlpf_loss(y, ypred, batch):
     loss["Regression_energy"] = loss_regression_energy.sum() / npart
 
     # average over all elements that were not padded
+    # loss["Classification_binary"] = (sqrt_elem_pt*loss_binary_classification).sum() / nelem
     loss["Classification_binary"] = loss_binary_classification.sum() / nelem
     loss["Classification"] = loss_pid_classification.sum() / nelem
     loss["ispu"] = loss_pu.sum() / nelem
