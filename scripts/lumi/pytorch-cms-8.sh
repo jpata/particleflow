@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=300G
+#SBATCH --mem=400G
 #SBATCH --gpus-per-task=8
 #SBATCH --partition=standard-g
 #SBATCH --no-requeue
