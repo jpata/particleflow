@@ -1,10 +1,9 @@
 #!/bin/bash
 
-
 rm -f files_to_copy.txt
 maxfiles=100
-path=experiments/pyg-clic_20250106_193536_269746/./preds_checkpoint-04-2.043485
-targetpath=/scratch/persistent/joosep/huggingface/particleflow/clic/clusters/v2.2.0/pyg-clic_20250106_193536_269746/
+path=experiments/pyg-clic_20250306_105311_290722/./preds_checkpoint-10-1.932789
+targetpath=/scratch/persistent/joosep/huggingface/particleflow/clic/clusters/v2.3.0/pyg-clic_20250130_214007_333962/
 
 mkdir -p $targetpath
 cp $path/../* $targetpath/

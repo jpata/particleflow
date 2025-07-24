@@ -1,8 +1,9 @@
 #!/bin/bash
-JOBTYPE=$1
-INPUT_FILELIST=$2
-SAMPLE=$3
-NJOB=$4
+USE_CUDA=$1
+JOBTYPE=$2
+INPUT_FILELIST=$3
+SAMPLE=$4
+NJOB=$5
 
 PREVDIR=`pwd`
 
@@ -12,10 +13,10 @@ WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 
 # uncomment the following when running at T2_EE_Estonia
 source /cvmfs/cms.cern.ch/cmsset_default.sh
-cd /scratch/persistent/joosep/CMSSW_14_1_0
+cd /scratch/persistent/joosep/CMSSW_15_0_5
 eval `scram runtime -sh`
 cd $PREVDIR
-export OUTDIR=/local/joosep/mlpf/results/cms/${CMSSW_VERSION}_74d149_btvnano/
+export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.5.0_p01_f8ae2f_test/
 export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
@@ -24,7 +25,8 @@ set -x
 
 CONDITIONS=auto:phase1_2023_realistic ERA=Run3 GEOM=DB.Extended CUSTOM=
 FILENAME=`sed -n "${NJOB}p" $INPUT_FILELIST`
-NTHREADS=1
+NTHREADS=4
+NEV=-1
 
 mkdir -p $WORKDIR
 cd $WORKDIR
@@ -34,42 +36,68 @@ env
 if [ $JOBTYPE == "mlpf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
-	--datatier RECOSIM,MINIAODSIM --nThreads 1 -n -1 --era $ERA \
+	--datatier RECOSIM,MINIAODSIM --nThreads $NTHREADS -n $NEV --era $ERA \
 	--eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
-	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf
+	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec
+    echo "process.mlpfProducer.use_cuda = ${USE_CUDA}" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+    echo "process.puppi.applyMLPF = False" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint8_pudisc_1xa100_fp32_fused_20250527.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+elif [ $JOBTYPE == "mlpfpu" ]; then
+    cmsDriver.py step3 --conditions $CONDITIONS \
+        -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
+	--datatier RECOSIM,MINIAODSIM --nThreads $NTHREADS -n $NEV --era $ERA \
+	--eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
+	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec
+    echo "process.mlpfProducer.use_cuda = ${USE_CUDA}" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+    echo "process.puppi.applyMLPF = True" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint8_pudisc_1xa100_fp32_fused_20250527.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 elif [ $JOBTYPE == "pf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
-	--datatier RECOSIM,MINIAODSIM --nThreads 1 -n -1 --era $ERA \
+	--datatier RECOSIM,MINIAODSIM --nThreads $NTHREADS -n $NEV --era $ERA \
 	--eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
-	--filein $FILENAME --fileout file:step3.root
+	--filein $FILENAME --fileout file:step3.root --no_exec
 fi
 
-#BTV/PF NANO recipe
-cmsDriver.py step3_btv -s NANO:@BTV --mc --conditions $CONDITIONS --era $ERA \
-    --eventcontent NANOAODSIM --datatier NANOAODSIM \
-    --customise_commands="process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000" \
-    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step3_NANO_btv.root
-#JME NANO recipe
-cmsDriver.py step3_jme -s NANO:@JME --mc --conditions $CONDITIONS --era $ERA \
-    --eventcontent NANOAODSIM --datatier NANOAODSIM \
-    --customise_commands="process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000" \
-    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step3_NANO_jme.root
+# echo """
+# process.Timing = cms.Service(\"Timing\",
+#     summaryOnly = cms.untracked.bool(False),
+#     useJobReport = cms.untracked.bool(True)
+# )""" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 
-cmsRun step3_btv_NANO.py
-cmsRun step3_jme_NANO.py
+cmsRun step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+
+#Plain NANO recipe
+#cmsDriver.py step4 -s NANO --mc --conditions $CONDITIONS --era $ERA \
+#    --eventcontent NANOAODSIM --datatier NANOAODSIM \
+#    --customise_commands="process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000" \
+#    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step4_NANO.root
+#BTV/PF NANO recipe
+cmsDriver.py step4_btv -s NANO:@BTV --mc --conditions $CONDITIONS --era $ERA \
+    --eventcontent NANOAODSIM --datatier NANOAODSIM \
+    --customise_commands="process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000" \
+    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step4_NANO_btv.root
+#JME NANO recipe
+cmsDriver.py step4_jme -s NANO:@JME --mc --conditions $CONDITIONS --era $ERA \
+    --eventcontent NANOAODSIM --datatier NANOAODSIM \
+    --customise_commands="process.add_(cms.Service('InitRootHandlers', EnableIMT = cms.untracked.bool(False)));process.MessageLogger.cerr.FwkReport.reportEvery=1000" \
+    -n -1 --no_exec --filein file:step3_inMINIAODSIM.root --fileout file:step4_NANO_jme.root
+
+#cmsRun step4_NANO.py
+cmsRun step4_btv_NANO.py
+cmsRun step4_jme_NANO.py
 
 ls *.root
 
-mkdir -p $OUTDIR/${SAMPLE}_${JOBTYPE}
+mkdir -p $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}
 
-#convert CMSSW EDM to pkl for easy plotting
-# python3 $PREVDIR/mlpf/plotting/cms_fwlite.py step3_inMINIAODSIM.root step3.pkl
+# cp step3.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
+#cp step3_inMINIAODSIM.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
+# cp step4_NANO.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step4_NANO_${NJOB}.root
+cp step4_NANO_btv.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step4_NANO_btv_${NJOB}.root
+cp step4_NANO_jme.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step4_NANO_jme_${NJOB}.root
 
-# cp step3.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
-cp step3_inMINIAODSIM.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
-cp step3_NANO_btv.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_NANO_btv_${NJOB}.root
-cp step3_NANO_jme.root $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_NANO_jme_${NJOB}.root
-# cp step3.pkl $OUTDIR/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.pkl
+python3 ~/particleflow/mlpf/plotting/cms_fwlite.py step3_inMINIAODSIM.root step3_inMINIAODSIM.pkl
+cp step3_inMINIAODSIM.pkl $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.pkl
 
 rm -Rf $WORKDIR

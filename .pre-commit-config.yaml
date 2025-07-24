@@ -1,10 +1,10 @@
 default_language_version:
     python: python3
-exclude: ^(images)|^(mlpf/data/clic/clicRec_e4h_input.py)|^(mlpf/data/clic/clic_steer.py)|^(mlpf/data/clic/pythia.py)|^(mlpf/data/clic/PandoraSettings/.*)|^(mlpf/data/cms/prepare_args.py)
+exclude: ^(images)|^(mlpf/data/clic/clicRec_e4h_input.py)|^(mlpf/data/clic/clic_steer.py)|^(mlpf/data/clic/pythia.py)|^(mlpf/data/clic/PandoraSettings/.*)|^(mlpf/data/cms/prepare_args.py)|^(scripts/tallinn/.*txt)
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.4.0
+  rev: v5.0.0
   hooks:
   - id: trailing-whitespace
   - id: check-added-large-files
@@ -18,6 +18,8 @@ repos:
   - id: requirements-txt-fixer
   - id: mixed-line-ending
     args: ['--fix=no']
+  - id: check-added-large-files
+    args: ["--maxkb=2000"]
 
 #This is giving different results on github CI vs. locally and I can't understand why
 #- repo: https://github.com/PyCQA/isort
@@ -27,7 +29,7 @@ repos:
 #    args: ['--profile', 'black', '--filter-files']
 
 - repo: https://github.com/psf/black
-  rev: 22.12.0
+  rev: 25.1.0
   hooks:
     - id: black
       # It is recommended to specify the latest version of Python
@@ -38,12 +40,12 @@ repos:
       args: [--line-length=150]
 
 - repo: https://github.com/PyCQA/flake8
-  rev: 6.0.0
+  rev: 7.2.0
   hooks:
   - id: flake8
     # black-compatible flake-8 config
 
     # E203 is not PEP8 compliant
     # E402 due to logging.basicConfig in pipeline.py
-    args: ['--max-line-length=150',
+    args: ['--max-line-length=180',
            '--extend-ignore=E203,E402,W605']

@@ -1,4 +1,5 @@
 """CMS PF TTbar dataset."""
+
 import cms_utils
 import tensorflow as tf
 
@@ -21,7 +22,7 @@ _CITATION = """
 class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_ttbar_nopu dataset."""
 
-    VERSION = tfds.core.Version("2.5.0")
+    VERSION = tfds.core.Version("2.7.1")
     RELEASE_NOTES = {
         "1.7.1": "First version",
         "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
@@ -30,6 +31,10 @@ class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
         "2.3.0": "Additional stats",
         "2.4.0": "Add gp_to_track, gp_to_cluster, jet_idx",
         "2.5.0": "Remove neutrinos from genjets, split to 10",
+        "2.5.1": "Associate ele with GSF first",
+        "2.6.0": "Regenerate with 20250508_cmssw_15_0_5_d3c6d1",
+        "2.7.0": "Remove split_caloparticle",
+        "2.7.1": "Use fixed split_caloparticle",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar_nopu ~/tensorflow_datasets/

@@ -1,17 +1,22 @@
 #!/bin/bash
 
-
 rm -f files_to_copy.txt
 maxfiles=100
-path=/local/joosep/mlpf/results/cms/pyg-cms_20241212_101648_120237/./preds_checkpoint-05-3.498507
-targetpath=/scratch/persistent/joosep/huggingface/particleflow/cms/v2.2.0/pyg-cms_20241212_101648_120237/
+path=/home/joosep/particleflow/experiments/pyg-cms_20250517_232752_544969/./preds_checkpoint-08-3.863894
+targetpath=/scratch/persistent/joosep/huggingface/particleflow/cms/v2.5.0/pyg-cms_20250517_232752_544969/
+
+mkdir -p $targetpath
+cp $path/../* $targetpath/
+cp -R $path/../checkpoints $targetpath/
+cp -R $path/../history $targetpath/
+cp -R $path/../runs $targetpath/
 
 samplestocopy=(
-    "cms_pf_qcd"
-    "cms_pf_qcd_nopu"
     "cms_pf_ttbar"
-    "cms_pf_ttbar_nopu"
+    "cms_pf_qcd"
     "cms_pf_ztt"
+    "cms_pf_ttbar_nopu"
+    "cms_pf_qcd_nopu"
     "cms_pf_ztt_nopu"
 )
 

@@ -8,6 +8,8 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from mlpf.model.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
 
+ATT_MAT_IDX = 0
+
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # From https://github.com/rwightman/pytorch-image-models/blob/
@@ -113,7 +115,9 @@ class PreLnSelfAttentionLayer(nn.Module):
             self.queries = nn.Parameter(torch.zeros(1, 1, embedding_dim), requires_grad=True)
             trunc_normal_(self.queries, std=0.02)
 
+        # options for saving the attention matrix
         self.save_attention = False
+        self.att_mat_idx = 0
         self.outdir = ""
 
     def forward(self, x, mask, initial_embedding):
@@ -139,7 +143,7 @@ class PreLnSelfAttentionLayer(nn.Module):
                     att_mat = self.mha(q, x, x, need_weights=True, key_padding_mask=key_padding_mask)[1]
                     att_mat = att_mat.detach().cpu().numpy()
                     np.savez(
-                        open("{}/attn_{}.npz".format(self.outdir, self.name), "wb"),
+                        open("{}/attn_{}_{}.npz".format(self.outdir, self.name, self.att_mat_idx), "wb"),
                         att=att_mat,
                         in_proj_weight=self.mha.in_proj_weight.detach().cpu().numpy(),
                     )
@@ -358,7 +362,7 @@ class MLPF(nn.Module):
         # DNN that acts on the node level to predict the PID
         self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, dropout_ff)
         self.nn_pid = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
-        self.nn_pu = ffn(decoding_dim, 1, width, self.act, dropout_ff)
+        self.nn_pu = ffn(decoding_dim, 2, width, self.act, dropout_ff)
 
         # elementwise DNN for node momentum regression
         embed_dim = decoding_dim
@@ -430,7 +434,9 @@ class MLPF(nn.Module):
 
         # ensure created particle has positive mass^2 by computing energy from pt and adding a positive-only correction
         pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
+        # sinh does not exist on opset13, required for CMSSW_12_3_0_pre6
         pz_real = pt_real * torch.sinh(preds_eta.detach())
+        # pz_real = pt_real * (torch.exp(preds_eta.detach()) - torch.exp(-preds_eta.detach()))/2.0
         e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
         e_real[~mask] = 0
         e_real[torch.isinf(e_real)] = 0

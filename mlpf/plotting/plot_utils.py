@@ -11,10 +11,9 @@ import sklearn
 import sklearn.metrics
 import tqdm
 import vector
-import torch
 
 SAMPLE_LABEL_CMS = {
-    "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
+    "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\bar{\mathrm{t}}$+PU events",
     "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi": r"$Z\rightarrow \tau \tau$+PU events",
     "QCD_Pt_3000_7000_14TeV_TuneCUETP8M1_cfi": r"high-$p_T$ QCD+PU events",
     "QCDForPF_14TeV_TuneCUETP8M1_cfi": r"QCD+PU events",
@@ -27,7 +26,7 @@ SAMPLE_LABEL_CMS = {
     "SingleProtonMinusFlatPt0p7To1000_cfi": r"single proton events",
     "SingleTauFlatPt1To1000_cfi": r"single $\tau^\pm$ events",
     "RelValQCD_FlatPt_15_3000HS_14": r"QCD $15 < p_T < 3000$ GeV + PU events",
-    "RelValTTbar_14TeV": r"$\mathrm{t}\overline{\mathrm{t}}$+PU events",
+    "RelValTTbar_14TeV": r"$\mathrm{t}\bar{\mathrm{t}}$+PU events",
 }
 
 pid_to_text = {
@@ -81,16 +80,17 @@ CLASS_NAMES_CLIC = [
 CLASS_LABELS = {
     "cms": CLASS_LABELS_CMS,
     "clic": CLASS_LABELS_CLIC,
+    "cld": CLASS_LABELS_CLIC,
 }
 
 labels = {
-    "met": "$p_{\mathrm{T}}^{\mathrm{miss}}$ [GeV]",
-    "gen_met": "$p_{\mathrm{T,truth}}^\mathrm{miss}$ [GeV]",
-    "gen_mom": "$p_{\mathrm{truth}}$ [GeV]",
-    "gen_jet": "jet $p_{\mathrm{T,truth}}$ [GeV]",
-    "target_jet": "jet $p_{\mathrm{T,target}}$ [GeV]",
-    "gen_jet_eta": "jet $\eta_{\mathrm{truth}}$ [GeV]",
-    "reco_met": "$p_{\mathrm{T,reco}}^\mathrm{miss}$ [GeV]",
+    "met": "$p_{\mathrm{T}}^{\mathrm{miss}}$ (GeV)",
+    "gen_met": "$p_{\mathrm{T,truth}}^\mathrm{miss}$ (GeV)",
+    "gen_mom": "$p_{\mathrm{truth}}$ (GeV)",
+    "gen_jet": "jet $p_{\mathrm{T,truth}}$ (GeV)",
+    "target_jet": "jet $p_{\mathrm{T,target}}$ (GeV)",
+    "gen_jet_eta": "jet $\eta_{\mathrm{truth}}$ (GeV)",
+    "reco_met": "$p_{\mathrm{T,reco}}^\mathrm{miss}$ (GeV)",
     "reco_gen_met_ratio": "$p_{\mathrm{T,reco}}^\mathrm{miss} / p_{\\mathrm{T,truth}}^\mathrm{miss}$",
     "reco_gen_mom_ratio": "$p_{\mathrm{reco}} / p_{\\mathrm{truth}}$",
     "reco_gen_jet_ratio": "jet $p_{\mathrm{T,reco}} / p_{\\mathrm{T,truth}}$",
@@ -99,6 +99,12 @@ labels = {
     "gen_mom_range": "${} \less p_{{\mathrm{{truth}}}}\leq {}$",
     "gen_jet_range": "${} \less p_{{\mathrm{{T,truth}}}} \leq {}$",
     "gen_jet_range_eta": "${} \less \eta_{{\mathrm{{truth}}}} \leq {}$",
+    "pt_response": "$p_{\mathrm{T}}/p_{\mathrm{T,ref}}$",
+    "pt_response_iqr_median": "$p_{\mathrm{T}}/p_{\mathrm{T,ref}}$ resolution",
+    "pt_response_median": "$p_{\mathrm{T}}/p_{\mathrm{T,ref}}$ scale",
+    "met_response": "$p_{\mathrm{T}}^{\mathrm{miss}}/p_{\mathrm{T,ref}}^{\mathrm{miss}}$",
+    "pt": "$p_{\mathrm{T}}$ (GeV)",
+    "match_frac": "Match frac.",
 }
 
 
@@ -113,32 +119,29 @@ def get_class_names(sample_name):
         raise Exception("Unknown sample name: {}".format(sample_name))
 
 
+# overline results in misalignment
 EVALUATION_DATASET_NAMES = {
-    "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
-    "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
-    "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$, PU10",
-    "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\overline{\mathrm{t}}$",
+    "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$, PU10",
+    "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "clic_edm_qq_pf": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
-    "cms_pf_qcd": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$+PU",
-    "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$+PU",
+    "cms_pf_qcd": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$, PU 55-75",
+    "cms_pf_qcd_nopu": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$, no PU",
+    "cms_pf_ttbar": r"$\mathrm{t}\bar{\mathrm{t}}$, PU 55-75",
+    "cms_pf_ttbar_nopu": r"$\mathrm{t}\bar{\mathrm{t}}$, no PU",
+    "cms_pf_ztt": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$, PU 55-75",
     "cms_pf_ztt_nopu": r"$\mathrm{Z}\rightarrow \mathrm{\tau}\mathrm{\tau}$",
-    "cms_pf_vbf": r"VBF+PU",
-    "cms_pf_ttbar": r"$\mathrm{t}\overline{\mathrm{t}}$+PU",
-    "cms_pf_ttbar_nopu": r"$\mathrm{t}\overline{\mathrm{t}}$",
-    "cms_pf_qcd_nopu": r"QCD $p_T \in [15, 3000]\ \mathrm{GeV}$",
-    "cms_pf_vbf_nopu": r"VBF",
-    "cms_pf_multi_particle_gun": r"multi particle gun events",
-    "cms_pf_single_electron": r"single electron particle gun events",
-    "cms_pf_single_gamma": r"single photon gun events",
-    "cms_pf_single_mu": r"single muon particle gun events",
-    "cms_pf_single_pi": r"single pion particle gun events",
-    "cms_pf_single_pi0": r"single neutral pion particle gun events",
-    "cms_pf_single_proton": r"single proton particle gun events",
-    "cms_pf_single_tau": r"single tau particle gun events",
-    "cms_pf_single_k0": r"single K0 particle gun events",
-    "cms_pf_sms_t1tttt": r"sms t1tttt events",
+    "cms_pf_photonjet": r"$\gamma$ + jets, PU 55-75",
+    "cms_pf_photonjet_nopu": r"$\gamma$ + jets, no PU",
+}
+
+GENJET_BINS_PT_DATASET = {
+    "clic": [10, 20, 40, 60, 80, 100, 200],
+    "cld": [10, 20, 40, 60, 80, 100, 200],
+    "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
 }
 
 
@@ -249,7 +252,7 @@ def experiment_label(ax, experiment="CMS", tag1="Simulation Preliminary", tag2="
 
 
 def cms_label(ax):
-    return experiment_label(ax, experiment="CMS", tag1="Simulation (Private Work)", tag2="Run 3 (14 TeV)", x1=0.13)
+    return experiment_label(ax, experiment="CMS", tag1="Simulation Preliminary", tag2="Run 3 (14 TeV)", x1=0.13)
 
 
 def clic_label(ax):
@@ -267,9 +270,9 @@ EXPERIMENT_LABELS = {
 }
 
 
-def sample_label(ax, sample, additional_text="", x=0.03, y=0.97):
+def sample_label(ax, sample, additional_text="", x=0.03, y=0.97, fontsize=None):
     text = EVALUATION_DATASET_NAMES[sample]
-    plt.text(x, y, text + additional_text, ha="left", va="top", transform=ax.transAxes)
+    plt.text(x, y, text + additional_text, ha="left", va="top", transform=ax.transAxes, fontsize=fontsize)
 
 
 def particle_label(ax, pid):
@@ -294,7 +297,7 @@ def load_eval_data(path, max_files=None):
     if max_files is not None:
         filelist = filelist[:max_files]
 
-    for fi in tqdm.tqdm(filelist):
+    for fi in tqdm.tqdm(filelist, desc="Loading eval data"):
         dd = awkward.from_parquet(fi)
         yvals.append(dd)
         filenames.append(fi)
@@ -1047,7 +1050,7 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.hist(sum_cand_energy, bins=b, label="PF", histtype="step", lw=2)
         plt.hist(sum_pred_energy, bins=b, label="MLPF", histtype="step", lw=2)
         plt.hist(sum_gen_energy, bins=b, label="Truth", histtype="step", lw=2)
-        plt.xlabel("total energy / event [GeV]")
+        plt.xlabel("total energy / event (GeV)")
         plt.ylabel("events / bin")
         if title:
             plt.title(title + ", " + clname)
@@ -1063,8 +1066,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.figure()
         plt.hist2d(sum_gen_energy, sum_cand_energy, bins=(b, b), cmap="hot_r")
         plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
-        plt.xlabel("total true energy / event [GeV]")
-        plt.ylabel("total PF energy / event [GeV]")
+        plt.xlabel("total true energy / event (GeV)")
+        plt.ylabel("total PF energy / event (GeV)")
         if title:
             plt.title(title + ", " + clname)
         save_img(
@@ -1078,8 +1081,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
         plt.figure()
         plt.hist2d(sum_gen_energy, sum_pred_energy, bins=(b, b), cmap="hot_r")
         plt.plot([min_e, max_e], [min_e, max_e], color="black", ls="--")
-        plt.xlabel("total true energy / event [GeV]")
-        plt.ylabel("total MLPF energy / event [GeV]")
+        plt.xlabel("total true energy / event (GeV)")
+        plt.ylabel("total MLPF energy / event (GeV)")
         if title:
             plt.title(title + ", " + clname)
         save_img(
@@ -1103,8 +1106,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
             color="black",
             ls="--",
         )
-        plt.xlabel("total true energy / event [GeV]")
-        plt.ylabel("total reconstructed energy / event [GeV]")
+        plt.xlabel("total true energy / event (GeV)")
+        plt.ylabel("total reconstructed energy / event (GeV)")
         if title:
             plt.title(title + ", " + clname + ", PF")
         save_img(
@@ -1125,8 +1128,8 @@ def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experimen
             color="black",
             ls="--",
         )
-        plt.xlabel("total true energy / event [GeV]")
-        plt.ylabel("total reconstructed energy / event [GeV]")
+        plt.xlabel("total true energy / event (GeV)")
+        plt.ylabel("total reconstructed energy / event (GeV)")
         if title:
             plt.title(title + ", " + clname + ", MLPF")
         save_img(
@@ -1369,7 +1372,7 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     )
     plt.xscale("log")
     plt.yscale("log")
-    plt.xlabel("Particle $p_T$ [GeV]")
+    plt.xlabel("Particle $p_T$ (GeV)")
     plt.ylabel("Number of particles / bin")
     plt.legend(loc="best")
 
@@ -1407,7 +1410,7 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
         label="MLPF",
     )
     plt.yscale("log")
-    plt.xlabel("Particle $p_T$ [GeV]")
+    plt.xlabel("Particle $p_T$ (GeV)")
     plt.ylabel("Number of particles / bin")
     plt.legend(loc="best")
 
@@ -1479,8 +1482,8 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     plt.hist2d(target_pt, cand_pt, bins=(b, b), cmap="hot_r")
     plt.xscale("log")
     plt.yscale("log")
-    plt.xlabel("Target particle $p_T$ [GeV]")
-    plt.ylabel("Reconstructed particle $p_T$ [GeV]")
+    plt.xlabel("Target particle $p_T$ (GeV)")
+    plt.ylabel("Reconstructed particle $p_T$ (GeV)")
     plt.plot([10**-1, 10**2], [10**-1, 10**2], color="black", ls="--")
 
     EXPERIMENT_LABELS[dataset](ax)
@@ -1500,8 +1503,8 @@ def plot_particles(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=
     plt.hist2d(target_pt, pred_pt, bins=(b, b), cmap="hot_r")
     plt.xscale("log")
     plt.yscale("log")
-    plt.xlabel("Target particle $p_T$ [GeV]")
-    plt.ylabel("Reconstructed particle $p_T$ [GeV]")
+    plt.xlabel("Target particle $p_T$ (GeV)")
+    plt.ylabel("Reconstructed particle $p_T$ (GeV)")
     plt.plot([10**-1, 10**2], [10**-1, 10**2], color="black", ls="--")
 
     EXPERIMENT_LABELS[dataset](ax)
@@ -1521,7 +1524,7 @@ def plot_jet_response_binned_vstarget(yvals, epoch=None, cp_dir=None, comet_expe
     pf_response = yvals["jet_ratio_target_to_cand_pt"]
     mlpf_response = yvals["jet_ratio_target_to_pred_pt"]
 
-    genjet_bins = [10, 20, 40, 60, 80, 100, 200, 400, 800]
+    genjet_bins = GENJET_BINS_PT_DATASET[dataset]
 
     x_vals = []
     pf_vals = []
@@ -1631,7 +1634,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     pf_response = yvals["jet_ratio_gen_to_cand_pt"]
     mlpf_response = yvals["jet_ratio_gen_to_pred_pt"]
 
-    genjet_bins = [10, 20, 40, 60, 80, 100, 200, 400, 800]
+    genjet_bins = GENJET_BINS_PT_DATASET[dataset]
 
     x_vals = []
     target_vals = []
@@ -1714,6 +1717,7 @@ def plot_jet_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=No
     plt.ylabel("Response median")
     plt.xlabel(labels["gen_jet"])
     plt.tight_layout()
+    plt.ylim(0.9, 1.1)
     plt.axhline(1.0, color="black", ls="--", lw=0.5)
 
     EXPERIMENT_LABELS[dataset](ax)
@@ -2080,15 +2084,14 @@ def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experi
 
 def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, comet_experiment=None):
     bins = np.linspace(0, 1, 100)
-    neutural = (yvals['target_cls_id'] == 4) | (yvals['target_cls_id'] == 5)
-    charged = (yvals['target_cls_id'] == 1) | (yvals['target_cls_id'] == 2) | (yvals['target_cls_id'] == 3)
-    hf = (yvals['target_cls_id'] == 6) | (yvals['target_cls_id'] == 7)
+    neutural = (yvals["target_cls_id"] == 4) | (yvals["target_cls_id"] == 5)
+    charged = (yvals["target_cls_id"] == 1) | (yvals["target_cls_id"] == 2) | (yvals["target_cls_id"] == 3)
+    hf = (yvals["target_cls_id"] == 6) | (yvals["target_cls_id"] == 7)
     types = [neutural, charged, hf]
-    for type_, name in zip(types, ['n', 'c', 'h']):
+    for type_, name in zip(types, ["n", "c", "h"]):
         plt.figure()
         ax = plt.axes()
         pred_ispu = awkward.flatten(yvals["pred_ispu"][type_])
-        pred_ispu = (pred_ispu != 0)
         target_ispu = awkward.flatten(yvals["target_ispu"][type_])
         plt.hist(target_ispu, bins=bins, label="target", histtype="step")
         plt.hist(pred_ispu, bins=bins, label="MLPF", histtype="step")
@@ -2104,4 +2107,4 @@ def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, 
             epoch,
             cp_dir=cp_dir,
             comet_experiment=comet_experiment,
-    )
+        )

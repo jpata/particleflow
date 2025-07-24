@@ -29,72 +29,72 @@ if __name__ == "__main__":
     events = Events(filename)
 
     expressions = []
-    expressions.append(
-        Expression(
-            "slimmedJets",
-            "vector<pat::Jet>",
-            [
-                ("pt", "[o.pt() for o in obj]"),
-                ("eta", "[o.eta() for o in obj]"),
-                ("phi", "[o.phi() for o in obj]"),
-                ("energy", "[o.energy() for o in obj]"),
-            ],
-        )
-    )
-    expressions.append(
-        Expression(
-            "slimmedJetsPuppi",
-            "vector<pat::Jet>",
-            [
-                ("pt", "[o.pt() for o in obj]"),
-                ("eta", "[o.eta() for o in obj]"),
-                ("phi", "[o.phi() for o in obj]"),
-                ("energy", "[o.energy() for o in obj]"),
-            ],
-        )
-    )
-    expressions.append(
-        Expression(
-            "slimmedMETs",
-            "vector<pat::MET>",
-            [
-                ("pt", "[o.pt() for o in obj]"),
-                ("phi", "[o.phi() for o in obj]"),
-            ],
-        )
-    )
-    expressions.append(
-        Expression(
-            "slimmedMETsPuppi",
-            "vector<pat::MET>",
-            [
-                ("pt", "[o.pt() for o in obj]"),
-                ("phi", "[o.phi() for o in obj]"),
-            ],
-        )
-    )
-    expressions.append(
-        Expression(
-            "slimmedGenJets",
-            "vector<reco::GenJet>",
-            [
-                ("pt", "[o.pt() for o in obj]"),
-                ("eta", "[o.eta() for o in obj]"),
-                ("phi", "[o.phi() for o in obj]"),
-                ("energy", "[o.energy() for o in obj]"),
-            ],
-        )
-    )
-    expressions.append(
-        Expression(
-            "genMetTrue",
-            "vector<reco::GenMET>",
-            [
-                ("pt", "[o.pt() for o in obj]"),
-                ("phi", "[o.phi() for o in obj]"),
-            ],
-        )
-    )
+    #    expressions.append(
+    #        Expression(
+    #            "slimmedJets",
+    #            "vector<pat::Jet>",
+    #            [
+    #                ("pt", "[o.pt() for o in obj]"),
+    #                ("eta", "[o.eta() for o in obj]"),
+    #                ("phi", "[o.phi() for o in obj]"),
+    #                ("energy", "[o.energy() for o in obj]"),
+    #            ],
+    #        )
+    #    )
+    #    expressions.append(
+    #        Expression(
+    #            "slimmedJetsPuppi",
+    #            "vector<pat::Jet>",
+    #            [
+    #                ("pt", "[o.pt() for o in obj]"),
+    #                ("eta", "[o.eta() for o in obj]"),
+    #                ("phi", "[o.phi() for o in obj]"),
+    #                ("energy", "[o.energy() for o in obj]"),
+    #            ],
+    #        )
+    #    )
+    #    expressions.append(
+    #        Expression(
+    #            "slimmedMETs",
+    #            "vector<pat::MET>",
+    #            [
+    #                ("pt", "[o.pt() for o in obj]"),
+    #                ("phi", "[o.phi() for o in obj]"),
+    #            ],
+    #        )
+    #    )
+    #    expressions.append(
+    #        Expression(
+    #            "slimmedMETsPuppi",
+    #            "vector<pat::MET>",
+    #            [
+    #                ("pt", "[o.pt() for o in obj]"),
+    #                ("phi", "[o.phi() for o in obj]"),
+    #            ],
+    #        )
+    #    )
+    #    expressions.append(
+    #        Expression(
+    #            "slimmedGenJets",
+    #            "vector<reco::GenJet>",
+    #            [
+    #                ("pt", "[o.pt() for o in obj]"),
+    #                ("eta", "[o.eta() for o in obj]"),
+    #                ("phi", "[o.phi() for o in obj]"),
+    #                ("energy", "[o.energy() for o in obj]"),
+    #            ],
+    #        )
+    #    )
+    #    expressions.append(
+    #        Expression(
+    #            "genMetTrue",
+    #            "vector<reco::GenMET>",
+    #            [
+    #                ("pt", "[o.pt() for o in obj]"),
+    #                ("phi", "[o.phi() for o in obj]"),
+    #            ],
+    #        )
+    #    )
 
     expressions.append(
         Expression(
@@ -112,8 +112,8 @@ if __name__ == "__main__":
 
     expressions.append(
         Expression(
-            "prunedGenParticles",
-            "vector<reco::GenParticle>",
+            "packedGenParticles",
+            "vector<pat::PackedGenParticle>",
             [
                 ("pt", "[o.pt() for o in obj]"),
                 ("eta", "[o.eta() for o in obj]"),
@@ -121,6 +121,7 @@ if __name__ == "__main__":
                 ("energy", "[o.energy() for o in obj]"),
                 ("pdgId", "[o.pdgId() for o in obj]"),
                 ("status", "[o.status() for o in obj]"),
+                ("motherIdx", "[o.motherRef().key() if o.numberOfMothers()>0 else -1 for o in obj]"),
             ],
         )
     )

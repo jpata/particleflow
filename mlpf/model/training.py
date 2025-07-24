@@ -1,6 +1,5 @@
 import os
 import os.path as osp
-import pickle as pkl
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -41,6 +40,7 @@ from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloader
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
 from mlpf.model.plots import validation_plots
+from mlpf.optimizers.lamb import Lamb
 
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
@@ -85,7 +85,38 @@ def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
     scaler.step(optimizer)
     scaler.update()
     if lr_schedule:
-        lr_schedule.step()
+        # ReduceLROnPlateau scheduler should only be updated after each full epoch
+        if not isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            lr_schedule.step()
+
+
+def get_optimizer(model, config):
+    """
+    Returns the optimizer for the given model based on the configuration provided.
+    Parameters:
+    model (torch.nn.Module): The model for which the optimizer is to be created.
+    config (dict): Configuration dictionary containing optimizer settings.
+                   Must include the key "lr" for learning rate.
+                   Optionally includes the key "optimizer" to specify the type of optimizer.
+                   Supported values for "optimizer" are "adamw", "lamb", and "sgd".
+                   If "optimizer" is not provided, "adamw" is used by default.
+    Returns:
+    torch.optim.Optimizer: The optimizer specified in the configuration.
+    Raises:
+    ValueError: If the specified optimizer type is not supported.
+    """
+
+    wd = config["weight_decay"] if "weight_decay" in config else 0.01
+    if "optimizer" not in config:
+        return torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
+    if config["optimizer"] == "adamw":
+        return torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
+    elif config["optimizer"] == "lamb":
+        return Lamb(model.parameters(), lr=config["lr"], weight_decay=wd)
+    elif config["optimizer"] == "sgd":
+        return torch.optim.SGD(model.parameters(), lr=config["lr"], weight_decay=wd)
+    else:
+        raise ValueError(f"Unsupported optimizer type: {config['optimizer']}")
 
 
 def train_epoch(
@@ -397,6 +428,12 @@ def train_all_epochs(
         valid_time = time.time() - train_time - epoch_start_time
         total_time = time.time() - epoch_start_time
 
+        if lr_schedule:
+            # ReduceLROnPlateau scheduler should only be updated after each full epoch
+            # Other schedulers are updated after each step inside the optimizer_step() function
+            if isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                lr_schedule.step(losses_valid["Total"])
+
         # Log metrics
         if comet_experiment:
             comet_experiment.log_metrics(losses_train, prefix="epoch_train_loss", epoch=epoch)
@@ -404,7 +441,7 @@ def train_all_epochs(
             comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), epoch=epoch)
             comet_experiment.log_epoch_end(epoch)
 
-        # Handle checkpointing and early stopping on rank 0
+        # Handle checkpointing and logging on rank 0
         if (rank == 0) or (rank == "cpu"):
             # Log learning rate
             tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
@@ -465,10 +502,12 @@ def train_all_epochs(
             tensorboard_writer_train.flush()
             tensorboard_writer_valid.flush()
 
-            # evaluate the model at this epoch on test datasets, make plots, track metrics
-            testdir_name = f"_epoch_{epoch}"
+        # evaluate the model at this epoch on test datasets, make plots, track metrics
+        testdir_name = f"_epoch_{epoch}"
+        for sample in config["enabled_test_datasets"]:
+            run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+        if (rank == 0) or (rank == "cpu"):  # plot only on rank 0
             for sample in config["enabled_test_datasets"]:
-                run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
                 plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
 
                 # track the following jet metrics in tensorboard
@@ -478,6 +517,24 @@ def train_all_epochs(
                         plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
                         epoch,
                     )
+                    if comet_experiment:
+                        comet_experiment.log_metric(
+                            "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
+                            plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
+                            epoch=epoch,
+                        )
+                    # Add jet metrics entry to the JSON logging file
+                    additional_stats = {
+                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k): plot_metrics["jet_ratio"][
+                            "jet_ratio_target_to_pred_pt"
+                        ][k]
+                    }
+                    with open(f"{history_path}/epoch_{epoch}.json", "r+") as f:
+                        data = json.load(f)
+                        data.update(additional_stats)
+                        f.seek(0)
+                        json.dump(data, f)
+                        f.truncate()
 
         # Ray training specific logging
         if use_ray:
@@ -613,44 +670,31 @@ def run(rank, world_size, config, outdir, logfile):
     checkpoint_dir = Path(outdir) / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    if config["load"]:  # load a pre-trained model
+    model_kwargs = {
+        "input_dim": len(X_FEATURES[config["dataset"]]),
+        "num_classes": len(CLASS_LABELS[config["dataset"]]),
+        "input_encoding": config["model"]["input_encoding"],
+        "pt_mode": config["model"]["pt_mode"],
+        "eta_mode": config["model"]["eta_mode"],
+        "sin_phi_mode": config["model"]["sin_phi_mode"],
+        "cos_phi_mode": config["model"]["cos_phi_mode"],
+        "energy_mode": config["model"]["energy_mode"],
+        "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
+        "learned_representation_mode": config["model"]["learned_representation_mode"],
+        **config["model"][config["conv_type"]],
+    }
 
-        if config["finetune"]:
-            # outdir is now the new directory for finetuning so must retrieve model_kwargs from the load dir
-            def get_relevant_directory(path):
-                # Get the parent directory of the given path
-                parent_dir = os.path.dirname(path)
-
-                # Get the parent of the parent directory
-                grandparent_dir = os.path.dirname(parent_dir)
-
-                # Check if the parent directory is "checkpoints"
-                if os.path.basename(parent_dir) == "checkpoints":
-                    return grandparent_dir
-                else:
-                    return parent_dir
-
-            with open(f"{get_relevant_directory(config['load'])}/model_kwargs.pkl", "rb") as f:
-                model_kwargs = pkl.load(f)
-
-        else:
-            with open(f"{outdir}/model_kwargs.pkl", "rb") as f:
-                model_kwargs = pkl.load(f)
-
-        _logger.info("model_kwargs: {}".format(model_kwargs))
-
-        if config["conv_type"] == "attention":
-            model_kwargs["attention_type"] = config["model"]["attention"]["attention_type"]
-
+    # load a pre-trained checkpoint (continue an aborted training or fine-tune)
+    if config["load"]:
         model = MLPF(**model_kwargs).to(torch.device(rank))
-        optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
+        optimizer = get_optimizer(model, config)
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
-        if not config["finetune"]:  # for --finetune we want to start the count from scratch
-            # check if we reached the first epoch in the checkpoint
-            if "epoch" in checkpoint["extra_state"]:
-                start_epoch = checkpoint["extra_state"]["epoch"] + 1
+        if config["start_epoch"] is None:
+            start_epoch = int(os.path.basename(config["load"]).split("-")[1]) + 1
+        else:
+            start_epoch = config["start_epoch"]
 
         missing_keys, strict = [], True
         for k in model.state_dict().keys():
@@ -665,7 +709,7 @@ def run(rank, world_size, config, outdir, logfile):
 
         if len(missing_keys) > 0:
             _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
-            if config["relaxed_load"]:
+            if config.get("relaxed_load", True):
                 _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
                 strict = False
             else:
@@ -674,26 +718,19 @@ def run(rank, world_size, config, outdir, logfile):
 
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
-        if strict:
-            model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
-        else:
-            model = load_checkpoint(checkpoint, model, None, strict)
+
+        model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
+
+        # if we are rewinding the epoch counter to 1, then we also want to set the learning rate to the initial value
+        if start_epoch == 1:
+            for g in optimizer.param_groups:
+                if g["lr"] != config["lr"]:
+                    _logger.info("optimizer param group lr changed {} -> {}".format(g["lr"], config["lr"]))
+                    g["lr"] = config["lr"]
+
     else:  # instantiate a new model in the outdir created
-        model_kwargs = {
-            "input_dim": len(X_FEATURES[config["dataset"]]),
-            "num_classes": len(CLASS_LABELS[config["dataset"]]),
-            "input_encoding": config["model"]["input_encoding"],
-            "pt_mode": config["model"]["pt_mode"],
-            "eta_mode": config["model"]["eta_mode"],
-            "sin_phi_mode": config["model"]["sin_phi_mode"],
-            "cos_phi_mode": config["model"]["cos_phi_mode"],
-            "energy_mode": config["model"]["energy_mode"],
-            "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
-            "learned_representation_mode": config["model"]["learned_representation_mode"],
-            **config["model"][config["conv_type"]],
-        }
         model = MLPF(**model_kwargs)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=config["lr"])
+        optimizer = get_optimizer(model, config)
 
     model.to(rank)
     configure_model_trainable(model, config["model"]["trainable"], True)
@@ -822,6 +859,14 @@ def override_config(config: dict, args):
     config["train"] = args.train
     config["test"] = args.test
     config["make_plots"] = args.make_plots
+
+    if args.start_epoch is not None:
+        args.start_epoch = int(args.start_epoch)
+    config["start_epoch"] = args.start_epoch
+
+    if config["load"] is None:
+        if config["start_epoch"] is None:
+            config["start_epoch"] = 1
 
     return config
 

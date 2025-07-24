@@ -167,7 +167,7 @@ def unpack_target(y, model):
         if i >= 2:  # skip the cls and charge as they are defined above
             ret[feat] = y[..., i].to(dtype=torch.float32)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
-    ret["ispu"] = (ret["ispu"] != 0).to(torch.float)
+    ret["ispu"] = (ret["ispu"] == 1).to(dtype=torch.float32)
     # do some sanity checks
     # assert torch.all(ret["pt"] >= 0.0)  # pt
     # assert torch.all(torch.abs(ret["sin_phi"]) <= 1.0)  # sin_phi
@@ -258,22 +258,19 @@ def print_optimizer_stats(optimizer, stage):
                     print(f"    {key}: {value}")
 
 
-def load_checkpoint(checkpoint, model, optimizer=None, strict=True):
-    if optimizer:
-        print_optimizer_stats(optimizer, "Before loading")
-
+def load_checkpoint(checkpoint, model, optimizer, strict=True):
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         model.module.load_state_dict(checkpoint["model_state_dict"], strict=strict)
     else:
         model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
 
-    if optimizer:
+    if strict:
+        print_optimizer_stats(optimizer, "Before loading optimizer state")
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         logging.info("Loaded optimizer state")
-        print_optimizer_stats(optimizer, "After loading")
-        return model, optimizer
-    else:
-        return model
+        print_optimizer_stats(optimizer, "After loading optimizer state")
+
+    return model, optimizer
 
 
 def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
@@ -312,6 +309,18 @@ def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-
         )
     elif config["lr_schedule"] == "cosinedecay":
         lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=config["lr"] * 0.1)
+    elif config["lr_schedule"] == "reduce_lr_on_plateau":
+        lr_schedule = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            opt,
+            mode=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("mode", "min"),
+            factor=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("factor", 0.1),
+            patience=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("patience", 10),
+            threshold=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("threshold", 1e-4),
+            threshold_mode=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("threshold_mode", "rel"),
+            cooldown=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("cooldown", 0),
+            min_lr=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("min_lr", 0),
+            eps=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("eps", 1e-8),
+        )
     else:
         raise ValueError("Supported values for lr_schedule are 'constant', 'onecycle' and 'cosinedecay'.")
     return lr_schedule

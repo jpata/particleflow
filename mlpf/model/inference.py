@@ -62,6 +62,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     ytarget = unpack_target(batch.ytarget.to(torch.float32), model)
     ycand = unpack_target(batch.ycand.to(torch.float32), model)
     ypred = unpack_predictions(ypred)
+    ypred["ispu"] = torch.softmax(ypred["ispu"], axis=-1)[:, :, -1]
 
     genjets_msk = batch.genjets[:, :, 0].cpu() > jet_ptcut
     genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
@@ -101,8 +102,10 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     # now cluster jets
     for typ, ydata in zip(["cand", "target", "pred", "pred_nopu"], [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]]):
         msk = ydata["cls_id"] != 0
+        # placeholder cut on the PU frac prediction
         if typ == "pred_nopu":
-            msk = msk & (ydata["ispu"][:, :, 0] < 0.5)
+            msk1 = ydata["ispu"] < 0.8
+            msk = msk & msk1
         vec = vector.awk(
             awkward.zip(
                 {
@@ -153,7 +156,7 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
     if (world_size > 1) and (rank != 0):
         iterator = enumerate(loader)
     else:
-        iterator = tqdm.tqdm(enumerate(loader), total=len(loader))
+        iterator = tqdm.tqdm(enumerate(loader), total=len(loader), desc=f"Running predictions on sample {sample} on rank={rank}")
 
     ti = time.time()
     for i, batch in iterator:
@@ -198,8 +201,17 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
         yvals,
         cp_dir=plots_path,
         bins=np.linspace(0.5, 1.5, 500),
-        logy=False,
+        logy=True,
         file_modifier="_bins_0p5_1p5",
+        dataset=dataset,
+        sample=sample,
+    )
+    plot_jet_ratio(
+        yvals,
+        cp_dir=plots_path,
+        bins=np.linspace(0, 2, 500),
+        logy=True,
+        file_modifier="_bins_0_2",
         dataset=dataset,
         sample=sample,
     )
