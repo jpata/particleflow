@@ -118,21 +118,20 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     arrs_awk["pythia"]["phi"] = ak.from_regular([np.array(p["pythia"][:, 3]) for p in pickle_data])
     arrs_awk["pythia"]["energy"] = ak.from_regular([np.array(p["pythia"][:, 4]) for p in pickle_data])
 
-    pu_mask = arrs_awk["ytarget"]["ispu"] < 0.5
+    pu_mask = (arrs_awk["ytarget"]["ispu"] < 0.5) & (arrs_awk["ytarget"]["pt"] > 0.5) & (np.abs(arrs_awk["ytarget"]["eta"]) < 5)  # & msk_nohadron
     if len(rootfiles) > 0:
         abs_pid = np.abs(particles_pythia["gen_pdgid"])
+
         mask_pythia_nonu = (
-            (particles_pythia["gen_status"] == 1)
+            ((particles_pythia["gen_status"] == 1))
             & (abs_pid != 12)
             & (abs_pid != 14)
-            & (abs_pid != 16)  # |
-            # ((particles_pythia["gen_status"]==2) & (ak.num(particles_pythia["gen_daughters"], axis=2) == 0))
+            & (abs_pid != 16)
+            & (particles_pythia["gen_pt"] > 0.5)  # filter very low-pt stuff that is out of acceptance
+            & (np.abs(particles_pythia["gen_eta"]) < 5)  # filter very forward stuff that is out of acceptance
         )
-        mask_cp = np.abs(particles_cp["caloparticle_eta"]) < 5
 
-        # MET from MLPF targets and from PF particles
-        # ypythia_met = compute_met(particles_pythia["gen_pt"], particles_pythia["gen_phi"], mask_pythia_nonu)
-        # ycaloparticle_met = compute_met(particles_cp["caloparticle_pt"], particles_cp["caloparticle_phi"], mask_cp)
+        mask_cp = (np.abs(particles_cp["caloparticle_eta"]) < 5) & (particles_cp["caloparticle_pt"] > 0.5)
 
     # dummy mask
     ytarget_met = compute_met(arrs_awk["ytarget"]["pt"], arrs_awk["ytarget"]["phi"])
@@ -292,12 +291,11 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     ratio = ak.flatten((jets_coll["ycand"][genjet_to_ycand["ycand"]].pt / jets_coll["genjet"][genjet_to_ycand["genjet"]].pt))
     ret[f"{sample_folder}/jets_pt_ratio2_cand"] = to_bh(ratio, bins=b)
 
-    b = np.logspace(-1, 3, 100)
+    b = np.logspace(-1, 3, 200)
     ret[f"{sample_folder}/met_pythia"] = to_bh(genmet_cmssw, bins=b)
     ret[f"{sample_folder}/met_target"] = to_bh(ytarget_met, bins=b)
     ret[f"{sample_folder}/met_target_pumask"] = to_bh(ytarget_nopu_met, bins=b)
     ret[f"{sample_folder}/met_cand"] = to_bh(ycand_met, bins=b)
-
     ret[f"{sample_folder}/met_pythia_vs_target_pumask"] = to_bh_2d(genmet_cmssw, ytarget_nopu_met, bins=b)
 
     # print output
