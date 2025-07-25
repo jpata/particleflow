@@ -1,5 +1,6 @@
 import bz2
 import pickle
+import datetime
 
 import awkward as ak
 import numpy as np
@@ -249,7 +250,7 @@ def generate_examples(files):
     """Yields examples."""
 
     for fi in files:
-        print("started reading file", fi)
+        print(datetime.datetime.now(), "started reading file", fi)
         Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
         if len(Xs) == 0:
             print("Error: file {} is broken".format(fi))
