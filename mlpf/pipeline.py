@@ -71,7 +71,6 @@ def get_parser():
     parser_train.add_argument("--test-datasets", nargs="+", default=[], help="Test samples to process after training")
     parser_train.add_argument("--make-plots", action="store_true", help="Generate plots of test predictions")
 
-
     # --- 'test' command parser ---
     parser_test = subparsers.add_parser("test", help="Run evaluation on a trained model")
     parser_test.add_argument("--load", type=str, required=True, help="Path to a saved model checkpoint to test")
@@ -86,7 +85,6 @@ def get_parser():
     parser_test.add_argument("--attention-type", type=str, default=None, choices=["math", "efficient", "flash"])
     parser_test.add_argument("--test-datasets", nargs="+", default=[], help="Test samples to process")
     parser_test.add_argument("--make-plots", action="store_true", help="Generate plots of test predictions")
-
 
     # --- 'ray-train' command parser ---
     parser_ray = subparsers.add_parser("ray-train", help="Run distributed training with Ray Train")
@@ -105,7 +103,6 @@ def get_parser():
     parser_ray.add_argument("--test-datasets", nargs="+", default=[], help="Test samples to process after training")
     parser_ray.add_argument("--make-plots", action="store_true", help="Generate plots of test predictions")
     parser_ray.add_argument("--start-epoch", type=int, default=None, help="The initial epoch counter")
-
 
     # --- 'ray-hpo' command parser ---
     parser_hpo = subparsers.add_parser("ray-hpo", help="Run hyperparameter optimization with Ray Tune")
@@ -136,7 +133,7 @@ def main():
     # --- Manually set action flags based on the command, for override_config ---
     if args.command == "train":
         args.train = True
-        args.test = True # By default, run testing after training
+        args.test = True  # By default, run testing after training
         args.hpo = None
         args.ray_train = False
     elif args.command == "test":
@@ -153,10 +150,9 @@ def main():
     elif args.command == "ray-hpo":
         args.train = True
         args.test = False
-        args.hpo = args.name # Set hpo to the experiment name
+        args.hpo = args.name  # Set hpo to the experiment name
         args.ray_train = False
         args.gpus = args.ray_gpus
-
 
     # override some options for the pipeline test
     if args.pipeline:
@@ -201,7 +197,6 @@ def main():
             yaml.dump(config, file)
 
         if args.command == "ray-train":
-            import os
             run_ray_training(config, args, experiment_dir)
         elif args.command in ["train", "test"]:
             world_size = args.gpus if args.gpus > 0 else 1
