@@ -337,7 +337,7 @@ def train_all_epochs(
     comet_step_freq=None,
     val_freq=None,
     save_attention=False,
-    checkpoint_dir="",
+    checkpoint_dir: str = "",
 ):
     """Main training loop that handles all epochs and validation
 
@@ -758,24 +758,25 @@ def run(rank, world_size, config, outdir, logfile):
 
         if config["comet"]:
             comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
-            comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
-            comet_experiment.log_parameter("run_id", Path(outdir).name)
-            comet_experiment.log_parameter("world_size", world_size)
-            comet_experiment.log_parameter("rank", rank)
-            comet_experiment.log_parameters(config, prefix="config:")
-            comet_experiment.set_model_graph(model)
-            comet_experiment.log_parameter(trainable_params, "trainable_params")
-            comet_experiment.log_parameter(nontrainable_params, "nontrainable_params")
-            comet_experiment.log_parameter(trainable_params + nontrainable_params, "total_trainable_params")
-            comet_experiment.log_code("mlpf/model/training.py")
-            comet_experiment.log_code("mlpf/model/mlpf.py")
-            comet_experiment.log_code("mlpf/model/utils.py")
-            comet_experiment.log_code("mlpf/pipeline.py")
-            # save overridden config then log to comet
-            config_filename = "overridden_config.yaml"
-            with open((Path(outdir) / config_filename), "w") as file:
-                yaml.dump(config, file)
-            comet_experiment.log_code(str(Path(outdir) / config_filename))
+            if comet_experiment is not None:
+                comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
+                comet_experiment.log_parameter("run_id", Path(outdir).name)
+                comet_experiment.log_parameter("world_size", world_size)
+                comet_experiment.log_parameter("rank", rank)
+                comet_experiment.log_parameters(config, prefix="config:")
+                comet_experiment.set_model_graph(model)
+                comet_experiment.log_parameter(trainable_params, "trainable_params")
+                comet_experiment.log_parameter(nontrainable_params, "nontrainable_params")
+                comet_experiment.log_parameter(trainable_params + nontrainable_params, "total_trainable_params")
+                comet_experiment.log_code("mlpf/model/training.py")
+                comet_experiment.log_code("mlpf/model/mlpf.py")
+                comet_experiment.log_code("mlpf/model/utils.py")
+                comet_experiment.log_code("mlpf/pipeline.py")
+                # save overridden config, then log to comet
+                config_filename = "overridden_config.yaml"
+                with open((Path(outdir) / config_filename), "w") as file:
+                    yaml.dump(config, file)
+                comet_experiment.log_code(str(Path(outdir) / config_filename))
         else:
             comet_experiment = None
 
@@ -811,7 +812,7 @@ def run(rank, world_size, config, outdir, logfile):
             comet_step_freq=config["comet_step_freq"],
             val_freq=config["val_freq"],
             save_attention=config["save_attention"],
-            checkpoint_dir=checkpoint_dir,
+            checkpoint_dir=str(checkpoint_dir),
         )
 
         checkpoint = torch.load(f"{checkpoint_dir}/best_weights.pth", map_location=torch.device(rank))

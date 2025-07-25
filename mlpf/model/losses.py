@@ -22,7 +22,6 @@ def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     ret = torch.sqrt(torch.sum(torch.pow(A_sorted - B_sorted, 2), axis=[-1, -2]))
     return ret
 
-
 def mlpf_loss(y, ypred, batch):
     """
     Args

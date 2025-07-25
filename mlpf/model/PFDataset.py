@@ -283,7 +283,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "genjets", "targetjets"], ["genmet"]),
+                collate_fn=Collater(["X", "ytarget"], ["genmet"]),
                 sampler=sampler,
                 num_workers=config["num_workers"],
                 prefetch_factor=config["prefetch_factor"],
@@ -291,6 +291,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                 # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
                 worker_init_fn=set_worker_sharing_strategy,
+                # persistent_workers=True,
             )
 
             loaders[split].append(loader)
