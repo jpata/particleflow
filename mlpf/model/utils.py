@@ -204,11 +204,11 @@ def unpack_predictions(preds):
     # particle properties
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
     p4_tensor_list = [
-            ret["pt"].unsqueeze(dim=-1),
-            ret["eta"].unsqueeze(dim=-1),
-            ret["phi"].unsqueeze(dim=-1),
-            ret["energy"].unsqueeze(dim=-1),
-        ]
+        ret["pt"].unsqueeze(dim=-1),
+        ret["eta"].unsqueeze(dim=-1),
+        ret["phi"].unsqueeze(dim=-1),
+        ret["energy"].unsqueeze(dim=-1),
+    ]
     ret["p4"] = torch.cat(p4_tensor_list, dim=-1)
 
     return ret

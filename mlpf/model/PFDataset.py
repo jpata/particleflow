@@ -298,4 +298,3 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
 
         loaders[split] = InterleavedIterator(loaders[split])
     return loaders
-

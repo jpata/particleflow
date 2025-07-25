@@ -10,17 +10,18 @@ from mlpf.model.logger import _logger
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     # create normalized random basis vectors
     theta = torch.randn(num_projections, y_true.shape[-1]).to(device=y_true.device)
-    theta = theta / torch.sqrt(torch.sum(theta**2, axis=1, keepdims=True))
+    theta = theta / torch.sqrt(torch.sum(theta**2, dim=1, keepdims=True))
 
     # project the features with the random basis
     A = torch.matmul(y_true, torch.transpose(theta, -1, -2))
     B = torch.matmul(y_pred, torch.transpose(theta, -1, -2))
 
-    A_sorted = torch.sort(A, axis=-2).values
-    B_sorted = torch.sort(B, axis=-2).values
+    A_sorted = torch.sort(A, dim=-2).values
+    B_sorted = torch.sort(B, dim=-2).values
 
-    ret = torch.sqrt(torch.sum(torch.pow(A_sorted - B_sorted, 2), axis=[-1, -2]))
+    ret = torch.sqrt(torch.sum(torch.pow(A_sorted - B_sorted, 2), dim=[-1, -2]))
     return ret
+
 
 def mlpf_loss(y, ypred, batch):
     """
@@ -32,8 +33,8 @@ def mlpf_loss(y, ypred, batch):
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
-    msk_pred_particle = torch.unsqueeze((ypred["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
-    msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), axis=-1)
+    msk_pred_particle = torch.unsqueeze((ypred["cls_id"] != 0).to(dtype=torch.float32), dim=-1)
+    msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), dim=-1)
     nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
 
@@ -85,7 +86,7 @@ def mlpf_loss(y, ypred, batch):
     loss_regression_energy[batch.mask == 0] *= 0
 
     # add weight based on target pt
-    sqrt_elem_pt = torch.sqrt(batch.X[:, :, 1])
+    # sqrt_elem_pt = torch.sqrt(batch.X[:, :, 1])
     sqrt_target_pt = torch.sqrt(torch.exp(y["pt"]) * batch.X[:, :, 1])
     loss_regression_pt *= sqrt_target_pt
     loss_regression_energy *= sqrt_target_pt
@@ -104,25 +105,25 @@ def mlpf_loss(y, ypred, batch):
     loss["ispu"] = loss_pu.sum() / nelem
 
     # compute predicted pt from model output
-    pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], axis=-1) * msk_pred_particle
-    pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"].detach(), axis=-1) * msk_pred_particle
-    pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"].detach(), axis=-1) * msk_pred_particle
-    # pred_pz = pred_pt * torch.unsqueeze(torch.sinh(ypred["eta"].detach()), axis=-1) * msk_pred_particle
+    pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], dim=-1) * msk_pred_particle
+    pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"].detach(), dim=-1) * msk_pred_particle
+    pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"].detach(), dim=-1) * msk_pred_particle
+    # pred_pz = pred_pt * torch.unsqueeze(torch.sinh(ypred["eta"].detach()), dim=-1) * msk_pred_particle
     # pred_mass2 = pred_e**2 - pred_pt**2 - pred_pz**2
 
     # compute MET, sum across particle axis in event
-    pred_met = torch.sqrt(torch.sum(pred_px, axis=-2) ** 2 + torch.sum(pred_py, axis=-2) ** 2).detach()
+    pred_met = torch.sqrt(torch.sum(pred_px, dim=-2) ** 2 + torch.sum(pred_py, dim=-2) ** 2).detach()
     loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
-    was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), axis=-1), ypred["momentum"]], axis=-1) * batch.mask.unsqueeze(
-        axis=-1
+    was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), dim=-1), ypred["momentum"]], dim=-1) * batch.mask.unsqueeze(
+        dim=-1
     )
-    was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], axis=-1) * batch.mask.unsqueeze(
-        axis=-1
+    was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], dim=-1) * batch.mask.unsqueeze(
+        dim=-1
     )
 
     # standardize Wasserstein loss
-    std = was_input_true[batch.mask].std(axis=0)
+    std = was_input_true[batch.mask].std(dim=0)
     loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
     # this is the final loss to be optimized
@@ -207,7 +208,7 @@ class FocalLoss(nn.Module):
         # this is slow due to indexing
         # all_rows = torch.arange(len(x))
         # log_pt = log_p[all_rows, y]
-        log_pt = torch.gather(log_p, 1, y.unsqueeze(axis=-1)).squeeze(axis=-1)
+        log_pt = torch.gather(log_p, 1, y.unsqueeze(dim=-1)).squeeze(dim=-1)
 
         # compute focal term: (1 - pt)^gamma
         pt = log_pt.exp()

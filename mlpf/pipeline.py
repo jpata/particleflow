@@ -163,6 +163,7 @@ def main():
 
         if args.ray_train:
             import os
+
             if "ROCR_VISIBLE_DEVICES" in os.environ:
                 del os.environ["ROCR_VISIBLE_DEVICES"]
             print(os.environ)

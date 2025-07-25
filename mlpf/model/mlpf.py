@@ -122,7 +122,7 @@ class PreLnSelfAttentionLayer(nn.Module):
 
     def forward(self, x, mask, initial_embedding):
         mask_ = mask.unsqueeze(-1)
-        
+
         # --- 1. First sub-layer: Multi-Head Attention ---
         residual = x
         x_norm = self.norm0(x)  # Normalize first
@@ -161,7 +161,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         # --- 2. Second sub-layer: Feed-Forward Network ---
         residual = x
         x_norm = self.norm1(x)  # Normalize first
-        
+
         ffn_out = self.seq(x_norm)
         ffn_out = self.dropout(ffn_out)
 
