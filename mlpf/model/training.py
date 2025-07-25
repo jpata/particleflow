@@ -827,7 +827,7 @@ def run(rank, world_size, config, outdir, logfile):
         for sample in config["enabled_test_datasets"]:
             run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
 
-    # make plots only on a single machine
+    # make plots only on rank 0
     if (rank == 0) or (rank == "cpu"):
         if config["make_plots"]:
             ntest_files = -1
@@ -851,7 +851,7 @@ def override_config(config: dict, args):
         config["model"]["attention"]["attention_type"] = args.attention_type
 
     if not (args.num_convs is None):
-        for model in ["gnn_lsh", "attention", "attention"]:
+        for model in ["gnn_lsh", "attention"]:
             config["model"][model]["num_convs"] = args.num_convs
 
     config["enabled_test_datasets"] = list(config["test_dataset"].keys())
@@ -873,7 +873,7 @@ def override_config(config: dict, args):
     return config
 
 
-# Run either on CPU, single GPU or multi-GPU using pytorch
+# Run either single GPU or single-node multi-GPU using pytorch DDP
 def device_agnostic_run(config, world_size, outdir):
     if config["train"]:
         logfile = f"{outdir}/train.log"
