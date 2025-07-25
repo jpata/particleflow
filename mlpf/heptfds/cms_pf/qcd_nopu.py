@@ -22,7 +22,7 @@ _CITATION = """
 class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd_nopu dataset."""
 
-    VERSION = tfds.core.Version("2.7.1")
+    VERSION = tfds.core.Version("2.7.2")
     RELEASE_NOTES = {
         "2.0.0": "New truth def based primarily on CaloParticles",
         "2.4.0": "Add gp_to_track, gp_to_cluster, jet_idx",
@@ -31,13 +31,14 @@ class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
         "2.6.0": "Regenerate with 20250508_cmssw_15_0_5_d3c6d1",
         "2.7.0": "Remove split_caloparticle",
         "2.7.1": "Use fixed split_caloparticle",
+        "2.7.2": "Bump stats to 20M",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_qcd_nopu ~/tensorflow_datasets/
     """
 
     # create configs 1 ... NUM_SPLITS + 1 that allow to parallelize the dataset building
-    BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, cms_utils.NUM_SPLITS + 1)]
+    BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, 40 + 1)]
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
@@ -67,7 +68,7 @@ class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "QCDForPF_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path / sample_dir / "raw", self.builder_config, num_splits=cms_utils.NUM_SPLITS)
+        return cms_utils.split_sample(path / sample_dir / "raw", self.builder_config, num_splits=40)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)

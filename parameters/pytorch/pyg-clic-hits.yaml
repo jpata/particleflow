@@ -75,18 +75,6 @@ model:
     attention_type: flash
     use_pre_layernorm: True
 
-  mamba:
-    conv_type: mamba
-    embedding_dim: 512
-    width: 512
-    num_convs: 2
-    dropout: 0.0
-    activation: "elu"
-    # mamba specific paramters
-    d_state: 64
-    d_conv: 4
-    expand: 4
-
 lr_schedule_config:
   onecycle:
     pct_start: 0.3

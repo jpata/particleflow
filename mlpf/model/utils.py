@@ -176,11 +176,12 @@ def unpack_target(y, model):
 
     # note ~ momentum = ["pt", "eta", "sin_phi", "cos_phi", "energy"]
     ret["momentum"] = y[..., 2:7].to(dtype=torch.float32)
-    ret["p4"] = torch.cat([ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], axis=-1)
+    ret["p4"] = torch.cat([ret["pt"].unsqueeze(-1), ret["eta"].unsqueeze(-1), ret["phi"].unsqueeze(-1), ret["energy"].unsqueeze(-1)], dim=-1)
 
     return ret
 
 
+@torch.compile
 def unpack_predictions(preds):
     ret = {}
     ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret["ispu"] = preds
@@ -193,24 +194,22 @@ def unpack_predictions(preds):
     ret["energy"] = ret["momentum"][..., 4]
 
     # first get the cases where a particle was predicted
-    ret["cls_id"] = torch.argmax(ret["cls_binary"], axis=-1)
+    ret["cls_id"] = torch.argmax(ret["cls_binary"], dim=-1)
     # when a particle was predicted, get the particle ID
-    ret["cls_id"][ret["cls_id"] == 1] = torch.argmax(ret["cls_id_onehot"], axis=-1)[ret["cls_id"] == 1]
+    ret["cls_id"][ret["cls_id"] == 1] = torch.argmax(ret["cls_id_onehot"], dim=-1)[ret["cls_id"] == 1]
 
     # get the predicted particle ID
-    # ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], axis=-1)
+    # ret["cls_id"] = torch.argmax(ret["cls_id_onehot"], dim=-1)
 
     # particle properties
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
-    ret["p4"] = torch.cat(
-        [
-            ret["pt"].unsqueeze(axis=-1),
-            ret["eta"].unsqueeze(axis=-1),
-            ret["phi"].unsqueeze(axis=-1),
-            ret["energy"].unsqueeze(axis=-1),
-        ],
-        axis=-1,
-    )
+    p4_tensor_list = [
+        ret["pt"].unsqueeze(dim=-1),
+        ret["eta"].unsqueeze(dim=-1),
+        ret["phi"].unsqueeze(dim=-1),
+        ret["energy"].unsqueeze(dim=-1),
+    ]
+    ret["p4"] = torch.cat(p4_tensor_list, dim=-1)
 
     return ret
 

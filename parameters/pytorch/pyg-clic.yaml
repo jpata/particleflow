@@ -14,7 +14,7 @@ num_epochs: 10
 patience: 20
 lr: 0.0001
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
-conv_type: attention  # gnn_lsh, attention, mamba, flashattention
+conv_type: attention  # gnn_lsh, attention, flashattention
 ntrain:
 ntest:
 nvalid:
@@ -65,20 +65,6 @@ model:
     num_heads: 32
     attention_type: flash
     use_pre_layernorm: True
-
-  mamba:
-    conv_type: mamba
-    embedding_dim: 128
-    width: 128
-    num_convs: 2
-    dropout: 0.0
-    activation: "elu"
-    # transformer specific paramters
-    num_heads: 2
-    # mamba specific paramters
-    d_state: 16
-    d_conv: 4
-    expand: 2
 
 lr_schedule_config:
   onecycle:

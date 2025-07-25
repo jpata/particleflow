@@ -33,15 +33,6 @@ search_space = {
     # "num_node_messages": samp([2]),
     # "ffn_dist_hidden_dim": samp([64]),
     # "ffn_dist_num_layers": samp([3]),
-    # mamba specific parameters
-    # "d_state": samp([16]),
-    # "d_conv": samp([4]),
-    # "expand": samp([2]),
-    # "num_heads": samp([2, 4, 6, 8, 10, 12]),
-    # attention specifica parameters
-    # "num_heads": samp([4, 8, 16, 32, 64]),
-    # "head_dim": samp([4, 8, 16, 32, 64]),
-    # "attention_type": samp(["flash"]),  # flash, efficient, math
 }
 
 
@@ -64,12 +55,6 @@ def set_hps_from_search_space(search_space, config):
         attention_variables = ["head_dim", "num_heads"]
         if conv_type == "attention":
             for var in attention_variables:
-                if var in search_space.keys():
-                    config["model"][conv_type][var] = search_space[var]
-
-        mamba_variables = ["width", "embedding_dim", "num_heads", "d_state", "d_conv", "expand"]
-        if conv_type == "mamba":
-            for var in mamba_variables:
                 if var in search_space.keys():
                     config["model"][conv_type][var] = search_space[var]
 

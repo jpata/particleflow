@@ -34,3 +34,5 @@ models
 *.root
 
 logs
+
+env

@@ -12,7 +12,7 @@ load:
 finetune:
 num_epochs: 10
 patience: 20
-lr: 0.0001
+lr: 0.0002
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention
 ntrain:
@@ -26,6 +26,7 @@ comet_offline: False
 comet_step_freq: 10
 dtype: bfloat16
 val_freq:  # run an extra validation run every val_freq training steps
+pad_to_multiple: 256
 
 model:
   trainable: all
@@ -70,18 +71,6 @@ model:
     num_heads: 16
     attention_type: flash
     use_pre_layernorm: True
-
-  mamba:
-    conv_type: mamba
-    embedding_dim: 1024
-    width: 1024
-    num_convs: 4
-    dropout_ff: 0.0
-    activation: "elu"
-    # mamba specific paramters
-    d_state: 32
-    d_conv: 4
-    expand: 2
 
 lr_schedule_config:
   onecycle:
