@@ -16,7 +16,7 @@ source /cvmfs/cms.cern.ch/cmsset_default.sh
 cd /scratch/persistent/joosep/CMSSW_15_0_5
 eval `scram runtime -sh`
 cd $PREVDIR
-export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.5.0_p01_f8ae2f_test/
+export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.6.0pre1_p05_ccd0c7/
 export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
@@ -41,7 +41,7 @@ if [ $JOBTYPE == "mlpf" ]; then
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec
     echo "process.mlpfProducer.use_cuda = ${USE_CUDA}" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
     echo "process.puppi.applyMLPF = False" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
-    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint8_pudisc_1xa100_fp32_fused_20250527.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm12_relu_checkpoint10_8xmi250_fp32_fused_20250722.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 elif [ $JOBTYPE == "mlpfpu" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
@@ -50,7 +50,7 @@ elif [ $JOBTYPE == "mlpfpu" ]; then
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec
     echo "process.mlpfProducer.use_cuda = ${USE_CUDA}" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
     echo "process.puppi.applyMLPF = True" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
-    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint8_pudisc_1xa100_fp32_fused_20250527.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm12_relu_checkpoint10_8xmi250_fp32_fused_20250722.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 elif [ $JOBTYPE == "pf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
