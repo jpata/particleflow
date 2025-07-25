@@ -851,7 +851,7 @@ def override_config(config: dict, args):
         config["model"]["attention"]["attention_type"] = args.attention_type
 
     if not (args.num_convs is None):
-        for model in ["gnn_lsh", "attention", "attention", "mamba"]:
+        for model in ["gnn_lsh", "attention", "attention"]:
             config["model"][model]["num_convs"] = args.num_convs
 
     config["enabled_test_datasets"] = list(config["test_dataset"].keys())

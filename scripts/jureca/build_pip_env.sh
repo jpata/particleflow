@@ -34,7 +34,6 @@ pip3 install async_timeout
 pip3 install numba
 pip3 install hyperopt
 pip3 install causal-conv1d==1.0.2
-pip3 install mamba-ssm
 pip3 install comet-ml
 
 deactivate

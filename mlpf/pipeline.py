@@ -67,9 +67,9 @@ parser.add_argument(
     type=str,
     default=None,
     help="which graph layer to use",
-    choices=["attention", "gnn_lsh", "mamba"],
+    choices=["attention", "gnn_lsh"],
 )
-parser.add_argument("--num-convs", type=int, default=None, help="number of cross-particle convolution (GNN, attention, Mamba) layers")
+parser.add_argument("--num-convs", type=int, default=None, help="number of cross-particle convolution (GNN, attention) layers")
 parser.add_argument("--make-plots", action="store_true", default=None, help="make plots of the test predictions")
 parser.add_argument("--ntrain", type=int, default=None, help="training samples to use, if None use entire dataset")
 parser.add_argument("--ntest", type=int, default=None, help="training samples to use, if None use entire dataset")
