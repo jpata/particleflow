@@ -16,14 +16,15 @@ source /cvmfs/cms.cern.ch/cmsset_default.sh
 cd /scratch/persistent/joosep/CMSSW_15_0_5
 eval `scram runtime -sh`
 cd $PREVDIR
-export OUTDIR=/home/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.5.0_p01_6f8e19/
+export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.6.0pre1_p05_ccd0c7/
 export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 
 #abort on error, print all commands
 set -e
 set -x
 
-CONDITIONS=140X_dataRun3_Prompt_v2 ERA=Run3 GEOM=DB.Extended CUSTOM=
+#https://twiki.cern.ch/twiki/bin/view/CMSPublic/GTsRun3#Global_tag_for_partial_ReReco_of
+CONDITIONS=140X_dataRun3_v20 ERA=Run3 GEOM=DB.Extended CUSTOM=
 FILENAME=`sed -n "${NJOB}p" $INPUT_FILELIST`
 NTHREADS=8
 NEV=-1
@@ -41,7 +42,7 @@ if [ $JOBTYPE == "mlpf" ]; then
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec --data
     echo "process.mlpfProducer.use_cuda = ${USE_CUDA}" >> step3_RAW2DIGI_L1Reco_RECO_PAT.py
     echo "process.puppi.applyMLPF = False" >> step3_RAW2DIGI_L1Reco_RECO_PAT.py
-    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint8_pudisc_1xa100_fp32_fused_20250527.onnx'" >>  step3_RAW2DIGI_L1Reco_RECO_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm12_relu_checkpoint10_8xmi250_fp32_fused_20250722.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 elif [ $JOBTYPE == "mlpfpu" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,PAT --scenario pp \
@@ -50,7 +51,7 @@ elif [ $JOBTYPE == "mlpfpu" ]; then
 	--filein $FILENAME --fileout file:step3.root --procModifiers mlpf --no_exec --data
     echo "process.mlpfProducer.use_cuda = ${USE_CUDA}" >> step3_RAW2DIGI_L1Reco_RECO_PAT.py
     echo "process.puppi.applyMLPF = True" >> step3_RAW2DIGI_L1Reco_RECO_PAT.py
-    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm5_relu_checkpoint8_pudisc_1xa100_fp32_fused_20250527.onnx'" >>  step3_RAW2DIGI_L1Reco_RECO_PAT.py
+    echo "process.mlpfProducer.model_path = 'RecoParticleFlow/PFProducer/data/mlpf/mlpf_5M_attn2x3x256_bm12_relu_checkpoint10_8xmi250_fp32_fused_20250722.onnx'" >> step3_RAW2DIGI_L1Reco_RECO_RECOSIM_PAT.py
 elif [ $JOBTYPE == "pf" ]; then
     cmsDriver.py step3 --conditions $CONDITIONS \
         -s RAW2DIGI,L1Reco,RECO,PAT --scenario pp \
@@ -79,7 +80,7 @@ ls *.root
 mkdir -p $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}
 
 # cp step3.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_RECO_${NJOB}.root
-cp step3_inMINIAOD.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
+# cp step3_inMINIAOD.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.root
 cp step4_NANO.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step4_NANO_${NJOB}.root
 
 rm -Rf $WORKDIR
