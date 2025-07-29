@@ -11,7 +11,16 @@ ulimit -n 100000
 singularity exec -B /scratch/persistent --nv \
     --env PYTHONPATH=`pwd` \
     --env KERAS_BACKEND=torch \
-    $IMG python3 mlpf/pipeline.py --gpus 1 \
-    --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-clic.yaml \
-    --train --conv-type attention \
-    --gpu-batch-multiplier 256 --checkpoint-freq 1 --num-workers 8 --prefetch-factor 100 --comet --ntest 2000 --test-datasets clic_edm_qq_pf
+    $IMG python3 mlpf/pipeline.py
+    --data-dir /scratch/persistent/joosep/tensorflow_datasets \
+    --config parameters/pytorch/pyg-clic.yaml \
+    train \
+    --conv-type attention \
+    --gpus 1 \
+    --gpu-batch-multiplier 256 \
+    --checkpoint-freq 1 \
+    --num-workers 8 \
+    --prefetch-factor 100 \
+    --comet \
+    --ntest 2000 \
+    --test-datasets clic_edm_qq_pf

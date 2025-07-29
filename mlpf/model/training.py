@@ -827,7 +827,7 @@ def run(rank, world_size, config, outdir, logfile):
         for sample in config["enabled_test_datasets"]:
             run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
 
-    # make plots only on a single machine
+    # make plots only on rank 0
     if (rank == 0) or (rank == "cpu"):
         if config["make_plots"]:
             ntest_files = -1
@@ -847,11 +847,11 @@ def override_config(config: dict, args):
             _logger.info("overriding config item {}={} with {} from cmdline".format(arg, config[arg], arg_value))
             config[arg] = arg_value
 
-    if not (args.attention_type is None):
+    if "attention_type" in args and args.attention_type is not None:
         config["model"]["attention"]["attention_type"] = args.attention_type
 
-    if not (args.num_convs is None):
-        for model in ["gnn_lsh", "attention", "attention"]:
+    if "num_convs" in args and args.num_convs is not None:
+        for model in ["gnn_lsh", "attention"]:
             config["model"][model]["num_convs"] = args.num_convs
 
     config["enabled_test_datasets"] = list(config["test_dataset"].keys())
@@ -861,10 +861,11 @@ def override_config(config: dict, args):
     config["train"] = args.train
     config["test"] = args.test
     config["make_plots"] = args.make_plots
+    config["start_epoch"] = None
 
-    if args.start_epoch is not None:
+    if "start_epoch" in args and args.start_epoch is not None:
         args.start_epoch = int(args.start_epoch)
-    config["start_epoch"] = args.start_epoch
+        config["start_epoch"] = args.start_epoch
 
     if config["load"] is None:
         if config["start_epoch"] is None:
@@ -873,7 +874,7 @@ def override_config(config: dict, args):
     return config
 
 
-# Run either on CPU, single GPU or multi-GPU using pytorch
+# Run either single GPU or single-node multi-GPU using pytorch DDP
 def device_agnostic_run(config, world_size, outdir):
     if config["train"]:
         logfile = f"{outdir}/train.log"
