@@ -85,6 +85,7 @@ def get_parser():
     parser_test.add_argument("--attention-type", type=str, default=None, choices=["math", "efficient", "flash"])
     parser_test.add_argument("--test-datasets", nargs="+", default=[], help="Test samples to process")
     parser_test.add_argument("--make-plots", action="store_true", help="Generate plots of test predictions")
+    parser_test.add_argument("--num-convs", type=int, default=None, help="Number of GNN/Attention layers")
 
     # --- 'ray-train' command parser ---
     parser_ray = subparsers.add_parser("ray-train", help="Run distributed training with Ray Train")

@@ -847,10 +847,10 @@ def override_config(config: dict, args):
             _logger.info("overriding config item {}={} with {} from cmdline".format(arg, config[arg], arg_value))
             config[arg] = arg_value
 
-    if not (args.attention_type is None):
+    if "attention_type" in args and args.attention_type is not None:
         config["model"]["attention"]["attention_type"] = args.attention_type
 
-    if not (args.num_convs is None):
+    if "num_convs" in args and args.num_convs is not None:
         for model in ["gnn_lsh", "attention"]:
             config["model"][model]["num_convs"] = args.num_convs
 
@@ -861,10 +861,11 @@ def override_config(config: dict, args):
     config["train"] = args.train
     config["test"] = args.test
     config["make_plots"] = args.make_plots
+    config["start_epoch"] = None
 
-    if args.start_epoch is not None:
+    if "start_epoch" in args and args.start_epoch is not None:
         args.start_epoch = int(args.start_epoch)
-    config["start_epoch"] = args.start_epoch
+        config["start_epoch"] = args.start_epoch
 
     if config["load"] is None:
         if config["start_epoch"] is None:
