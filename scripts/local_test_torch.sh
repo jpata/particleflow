@@ -1,4 +1,4 @@
-# #!/bin/bash
+#!/bin/bash
 set -e
 export TFDS_DATA_DIR=`pwd`/tensorflow_datasets
 export PWD=`pwd`
@@ -33,8 +33,6 @@ mkdir -p experiments
 
 # --------------------------------------------------------------------------------------------
 # Test 1: Initial training using the 'train' sub-command
-# The --train and --test flags are replaced by the 'train' command.
-# Global arguments like --config and --prefix come before the command.
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
   --config parameters/pytorch/pyg-cms.yaml \
