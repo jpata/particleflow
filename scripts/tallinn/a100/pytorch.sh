@@ -11,7 +11,17 @@ ulimit -n 100000
 singularity exec -B /scratch/persistent -B /local --nv \
     --env PYTHONPATH=`pwd` \
     --env KERAS_BACKEND=torch \
-    $IMG python3 mlpf/pipeline.py --gpus 1 \
-    --data-dir /scratch/persistent/joosep/tensorflow_datasets --config parameters/pytorch/pyg-cms.yaml \
-    --train --conv-type attention \
-    --gpu-batch-multiplier 10 --checkpoint-freq 1 --num-workers 8 --prefetch-factor 50 --comet --ntest 1000 --test-datasets cms_pf_qcd
+    $IMG python3 mlpf/pipeline.py \
+    --data-dir /scratch/persistent/joosep/tensorflow_datasets \
+    --config parameters/pytorch/pyg-cms.yaml \
+    train \
+    --gpus 1 \
+    --gpu-batch-multiplier 10 \
+    --checkpoint-freq 1 \
+    --num-workers 8 \
+    --prefetch-factor 10 \
+    --comet \
+    --ntrain 5000 \
+    --nvalid 1000 \
+    --ntest 1000 \
+    --test-datasets cms_pf_qcd --load experiments/pyg-cms_20250729_100004_087561/checkpoints/checkpoint-09-3.818757.pth
