@@ -104,6 +104,7 @@ labels = {
     "pt_response_median": "$p_{\mathrm{T}}/p_{\mathrm{T,ptcl}}$ scale",
     "met_response": "$p_{\mathrm{T}}^{\mathrm{miss}}/p_{\mathrm{T,ptcl}}^{\mathrm{miss}}$",
     "pt": "$p_{\mathrm{T}}$ (GeV)",
+    "pt_ptcl": "$p_{\mathrm{T,ptcl}}$ (GeV)",
     "match_frac": "Match frac.",
 }
 
