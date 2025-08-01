@@ -13,7 +13,7 @@ finetune:
 num_epochs: 10
 patience: 20
 lr: 0.0002
-lr_schedule: constant  # constant, cosinedecay, onecycle
+lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention
 ntrain:
 ntest:
