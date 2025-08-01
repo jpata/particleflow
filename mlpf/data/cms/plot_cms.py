@@ -118,7 +118,7 @@ def process_files(sample_folder, rootfiles, pklfiles, outfile):
     arrs_awk["pythia"]["phi"] = ak.from_regular([np.array(p["pythia"][:, 3]) for p in pickle_data])
     arrs_awk["pythia"]["energy"] = ak.from_regular([np.array(p["pythia"][:, 4]) for p in pickle_data])
 
-    pu_mask = (arrs_awk["ytarget"]["ispu"] < 0.5) & (arrs_awk["ytarget"]["pt"] > 0.5) & (np.abs(arrs_awk["ytarget"]["eta"]) < 5)  # & msk_nohadron
+    pu_mask = (arrs_awk["ytarget"]["ispu"] < 0.5) & (arrs_awk["ytarget"]["pt"] > 0.5) & (np.abs(arrs_awk["ytarget"]["eta"]) < 5)
     if len(rootfiles) > 0:
         abs_pid = np.abs(particles_pythia["gen_pdgid"])
 
