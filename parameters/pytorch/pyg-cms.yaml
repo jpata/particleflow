@@ -60,13 +60,13 @@ model:
 
   attention:
     conv_type: attention
-    num_convs: 3
+    num_convs: 4
     dropout_ff: 0.0
     dropout_conv_id_mha: 0.0
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "relu"
+    activation: "elu"
     head_dim: 16
     num_heads: 16
     attention_type: flash

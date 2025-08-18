@@ -98,7 +98,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
-        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
+        self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim))
         self.dropout = torch.nn.Dropout(dropout_ff)
         _logger.info("layer {} using attention_type={}".format(self.name, attention_type))
         # params for torch sdp_kernel

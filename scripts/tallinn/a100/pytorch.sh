@@ -21,7 +21,5 @@ singularity exec -B /scratch/persistent -B /local --nv \
     --num-workers 8 \
     --prefetch-factor 10 \
     --comet \
-    --ntrain 5000 \
-    --nvalid 1000 \
     --ntest 1000 \
-    --test-datasets cms_pf_qcd --load experiments/pyg-cms_20250729_100004_087561/checkpoints/checkpoint-09-3.818757.pth
+    --test-datasets cms_pf_qcd

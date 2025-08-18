@@ -44,12 +44,12 @@ for ifile in $(seq 1 $END); do
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu.txt QCD_PU $ifile
 done
 
+
 END=`wc -l scripts/tallinn/qcd_pu_13p6.txt | cut -f1 -d' '`
-for ifile in $(seq 200 $END); do
+for ifile in $(seq 1 $END); do
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu_13p6.txt QCD_PU_13p6 $ifile
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu_13p6.txt QCD_PU_13p6 $ifile
 done
-
 
 END=`wc -l scripts/tallinn/qcd_nopu_13p6.txt | cut -f1 -d' '`
 for ifile in $(seq 1 $END); do
