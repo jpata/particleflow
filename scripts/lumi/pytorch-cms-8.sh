@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=mlpf-train
 #SBATCH --account=project_465001293
-#SBATCH --time=1-00:00:00
+#SBATCH --time=3-00:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=400G
+#SBATCH --mem=450G
 #SBATCH --gpus-per-task=8
-#SBATCH --partition=standard-g
+#SBATCH --partition=small-g
 #SBATCH --no-requeue
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
