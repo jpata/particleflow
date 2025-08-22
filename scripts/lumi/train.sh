@@ -10,7 +10,7 @@ python3 mlpf/pipeline.py \
     --config parameters/pytorch/pyg-cms.yaml \
     train \
     --gpus 8 \
-    --gpu-batch-multiplier 32 \
+    --gpu-batch-multiplier 16 \
     --num-workers 4 \
     --prefetch-factor 10 \
     --checkpoint-freq 1 \
