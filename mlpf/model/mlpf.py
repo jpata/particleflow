@@ -450,7 +450,7 @@ class MLPF(nn.Module):
         pz_real = pt_real * torch.sinh(preds_eta.detach())
         # pz_real = pt_real * (torch.exp(preds_eta.detach()) - torch.exp(-preds_eta.detach()))/2.0
         e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
-        e_real[~mask] = 0
+        e_real = e_real * mask.unsqueeze(-1)
         e_real[torch.isinf(e_real)] = 0
         e_real[torch.isnan(e_real)] = 0
         preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))

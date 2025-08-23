@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --partition gpu
 #SBATCH --gres gpu:mig:1
-#SBATCH --mem-per-gpu 100G
+#SBATCH --mem-per-gpu 20G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-IMG=/home/software/singularity/pytorch.simg:2024-12-03
+IMG=/home/software/singularity/pytorch.simg:2025-08-18
 cd ~/particleflow
 
-WEIGHTS=experiments/pyg-cms_20250729_112213_357186/checkpoints/checkpoint-10-3.812354.pth
-EXPDIR=experiments/pyg-cms_20250729_112213_357186
+WEIGHTS=experiments/pyg-cms_20250722_101813_274478/checkpoints/checkpoint-10-3.812332.pth
+EXPDIR=experiments/pyg-cms_20250722_101813_274478
 
 DATASET=$1
 env
