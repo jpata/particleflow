@@ -34,7 +34,6 @@ from mlpf.model.utils import (
 )
 from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard
 from mlpf.model.inference import make_plots, run_predictions
-from mlpf.model.mlpf import set_save_attention
 from mlpf.model.mlpf import MLPF
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
@@ -217,7 +216,6 @@ def eval_epoch(
     epoch: int,
     tensorboard_writer=None,
     comet_experiment=None,
-    save_attention=False,
     outdir=None,
     device_type="cuda",
     dtype=torch.float32,
@@ -232,7 +230,6 @@ def eval_epoch(
         epoch: Current epoch number
         tensorboard_writer: TensorBoard writer object
         comet_experiment: Comet.ml experiment object
-        save_attention: Whether to save attention weights
         outdir: Output directory path
         device_type: 'cuda' or 'cpu'
         dtype: Torch dtype for computations
@@ -256,12 +253,6 @@ def eval_epoch(
 
     for ival, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
-
-        # Save attention on first batch if requested
-        if save_attention and (rank == 0 or rank == "cpu") and ival == 0:
-            set_save_attention(model, outdir, True)
-        else:
-            set_save_attention(model, outdir, False)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
@@ -336,7 +327,6 @@ def train_all_epochs(
     comet_experiment=None,
     comet_step_freq=None,
     val_freq=None,
-    save_attention=False,
     checkpoint_dir: str = "",
 ):
     """Main training loop that handles all epochs and validation
@@ -360,7 +350,6 @@ def train_all_epochs(
         comet_experiment: Comet.ml experiment object
         comet_step_freq: How often to log to comet
         val_freq: How often to run validation
-        save_attention: Whether to save attention weights
         checkpoint_dir: Directory to save checkpoints
     """
 
@@ -420,7 +409,6 @@ def train_all_epochs(
             epoch=epoch,
             tensorboard_writer=tensorboard_writer_valid,
             comet_experiment=comet_experiment,
-            save_attention=save_attention,
             outdir=outdir,
             device_type=device_type,
             dtype=dtype,
@@ -811,7 +799,6 @@ def run(rank, world_size, config, outdir, logfile):
             comet_experiment=comet_experiment,
             comet_step_freq=config["comet_step_freq"],
             val_freq=config["val_freq"],
-            save_attention=config["save_attention"],
             checkpoint_dir=str(checkpoint_dir),
         )
 

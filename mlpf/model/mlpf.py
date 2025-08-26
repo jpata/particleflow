@@ -73,6 +73,58 @@ def get_activation(activation):
     return act
 
 
+class SimpleMultiheadAttention(nn.MultiheadAttention):
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        device=None,
+        dtype=None,
+        export_onnx_fused=False,
+    ) -> None:
+        factory_kwargs = {"device": device, "dtype": dtype}
+        bias = True
+        batch_first = True
+        super().__init__(embed_dim, num_heads, dropout, bias=bias, batch_first=batch_first, **factory_kwargs)
+        self.head_dim = int(embed_dim // num_heads)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
+        self.export_onnx_fused = export_onnx_fused
+
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, need_weights=False, key_padding_mask=None) -> torch.Tensor:
+        # q, k, v: 3D tensors (batch_size, seq_len, embed_dim), embed_dim = num_heads*head_dim
+        bs, seq_len, embed_dim = q.size()
+        head_dim = self.head_dim
+        num_heads = self.num_heads
+
+        # split stacked in_proj_weight, in_proj_bias to q, k, v matrices
+        wq, wk, wv = torch.split(self.in_proj_weight.data, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
+        bq, bk, bv = torch.split(self.in_proj_bias.data, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
+
+        q = torch.matmul(q, wq.T) + bq
+        k = torch.matmul(k, wk.T) + bk
+        v = torch.matmul(v, wv.T) + bv
+
+        # for pytorch internal scaled dot product attention, we need (bs*num_heads, seq_len, head_dim)
+        if not self.export_onnx_fused:
+            q = q.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2).reshape(bs * num_heads, seq_len, head_dim)
+            k = k.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2).reshape(bs * num_heads, seq_len, head_dim)
+            v = v.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2).reshape(bs * num_heads, seq_len, head_dim)
+
+        # this function will have different shape signatures in native pytorch sdpa and in ONNX com.microsoft.MultiHeadAttention
+        # in pytorch: (bs*num_heads, seq_len, head_dim)
+        # in ONNX: (bs, seq_len, num_heads*head_dim)
+        attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout)
+
+        # in case running with pytorch internal scaled dot product attention, reshape back to the original shape
+        if not self.export_onnx_fused:
+            attn_output = attn_output.reshape(bs, num_heads, seq_len, head_dim).transpose(1, 2).reshape(bs, seq_len, num_heads * head_dim)
+
+        # assert list(attn_output.size()) == [bs, seq_len, num_heads * head_dim]
+        attn_output = self.out_proj(attn_output)
+        return attn_output, None
+
+
 class PreLnSelfAttentionLayer(nn.Module):
     def __init__(
         self,
@@ -86,23 +138,30 @@ class PreLnSelfAttentionLayer(nn.Module):
         attention_type="efficient",
         learnable_queries=False,
         elems_as_queries=False,
+        use_simplified_attention=False,
+        export_onnx_fused=False,
+        save_attention=False,
     ):
         super(PreLnSelfAttentionLayer, self).__init__()
         self.name = name
 
-        # set to False to enable manual override for ONNX export
-        self.enable_ctx_manager = True
+        self.use_simplified_attention = use_simplified_attention
 
         self.attention_type = attention_type
         self.act = get_activation(activation)
-        self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
+
+        if self.use_simplified_attention:
+            self.mha = SimpleMultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, export_onnx_fused=export_onnx_fused)
+        else:
+            self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
+
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
-        _logger.info("layer {} using attention_type={}".format(self.name, attention_type))
-        # params for torch sdp_kernel
-        if self.enable_ctx_manager:
+
+        if not self.use_simplified_attention:
+            _logger.info("layer {} using attention_type={}".format(self.name, attention_type))
             self.attn_params = {
                 "math": [SDPBackend.MATH],
                 "efficient": [SDPBackend.EFFICIENT_ATTENTION],
@@ -116,60 +175,50 @@ class PreLnSelfAttentionLayer(nn.Module):
             trunc_normal_(self.queries, std=0.02)
 
         # options for saving the attention matrix
-        self.save_attention = False
+        self.save_attention = save_attention
         self.att_mat_idx = 0
-        self.outdir = ""
+        self.outdir = "."
 
     def forward(self, x, mask, initial_embedding):
-        mask_ = mask.unsqueeze(-1)
+        if mask is not None:
+            mask_ = mask.unsqueeze(-1)
 
-        # --- 1. First sub-layer: Multi-Head Attention ---
         residual = x
-        x_norm = self.norm0(x)  # Normalize first
+        x_norm = self.norm0(x)
 
         q = x_norm
+
         if self.learnable_queries:
-            q = self.queries.expand(*x.shape) * mask_
+            q = self.queries.expand(*x.shape)
         elif self.elems_as_queries:
-            q = initial_embedding * mask_
+            q = initial_embedding
+        if mask is not None:
+            q = q * mask_
 
-        key_padding_mask = None
-        if self.attention_type == "math":
-            key_padding_mask = ~mask
-
-        # Keep the existing logic for ONNX export and context manager
-        if self.enable_ctx_manager:
-            with sdpa_kernel(self.attn_params[self.attention_type]):
-                mha_out = self.mha(q, x_norm, x_norm, need_weights=False, key_padding_mask=key_padding_mask)[0]
-
-                # Optional: attention matrix saving logic
-                if self.save_attention:
-                    att_mat = self.mha(q, x_norm, x_norm, need_weights=True, key_padding_mask=key_padding_mask)[1]
-                    att_mat = att_mat.detach().cpu().numpy()
-                    np.savez(
-                        open("{}/attn_{}_{}.npz".format(self.outdir, self.name, self.att_mat_idx), "wb"),
-                        att=att_mat,
-                        in_proj_weight=self.mha.in_proj_weight.detach().cpu().numpy(),
-                    )
+        if self.use_simplified_attention:
+            mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
         else:
-            # Path for ONNX export
-            mha_out = self.mha(q, x_norm, x_norm, need_weights=False, key_padding_mask=key_padding_mask)[0]
+            with sdpa_kernel(self.attn_params[self.attention_type]):
+                mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
 
-        # First residual connection (add to original, un-normalized input)
+                if self.save_attention:
+                    att_mat = self.mha(q, x_norm, x_norm, need_weights=True)[1]
+                    att_mat = att_mat.detach().cpu().numpy()
+
         x = residual + mha_out
-
-        # --- 2. Second sub-layer: Feed-Forward Network ---
         residual = x
-        x_norm = self.norm1(x)  # Normalize first
-
+        x_norm = self.norm1(x)
         ffn_out = self.seq(x_norm)
         ffn_out = self.dropout(ffn_out)
-
-        # Second residual connection
-        x = residual + ffn_out
-
-        # Apply final mask to zero-out padded elements
-        x = x * mask_
+        if mask is not None:
+            x = x * mask_
+        if not self.use_simplified_attention and self.save_attention:
+            np.savez(
+                open("{}/attn_{}_{}.npz".format(self.outdir, self.name, self.att_mat_idx), "wb"),
+                att=att_mat,
+                x=x.detach().cpu().numpy(),
+                in_proj_weight=self.mha.in_proj_weight.detach().cpu().numpy(),
+            )
         return x
 
 
@@ -277,6 +326,9 @@ class MLPF(nn.Module):
         dropout_conv_id_mha=0.0,
         dropout_conv_id_ff=0.0,
         use_pre_layernorm=False,
+        use_simplified_attention=False,
+        export_onnx_fused=False,
+        save_attention=False,
     ):
         super(MLPF, self).__init__()
 
@@ -331,6 +383,9 @@ class MLPF(nn.Module):
                             attention_type=attention_type,
                             elems_as_queries=lastlayer,
                             # learnable_queries=lastlayer,
+                            use_simplified_attention=use_simplified_attention,
+                            export_onnx_fused=export_onnx_fused,
+                            save_attention=save_attention,
                         )
                     )
                     self.conv_reg.append(
@@ -345,6 +400,9 @@ class MLPF(nn.Module):
                             attention_type=attention_type,
                             elems_as_queries=lastlayer,
                             # learnable_queries=lastlayer,
+                            use_simplified_attention=use_simplified_attention,
+                            export_onnx_fused=export_onnx_fused,
+                            save_attention=save_attention,
                         )
                     )
             elif self.conv_type == "gnn_lsh":
@@ -447,23 +505,13 @@ class MLPF(nn.Module):
         # ensure created particle has positive mass^2 by computing energy from pt and adding a positive-only correction
         pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
         # sinh does not exist on opset13, required for CMSSW_12_3_0_pre6
-        pz_real = pt_real * torch.sinh(preds_eta.detach())
-        # pz_real = pt_real * (torch.exp(preds_eta.detach()) - torch.exp(-preds_eta.detach()))/2.0
+        # pz_real = pt_real * torch.sinh(preds_eta.detach())
+        pz_real = pt_real * (torch.exp(preds_eta.detach()) - torch.exp(-preds_eta.detach())) / 2.0
         e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
-        e_real = e_real * mask.unsqueeze(-1)
+        if mask is not None:
+            e_real = e_real * mask.unsqueeze(-1)
         e_real[torch.isinf(e_real)] = 0
         e_real[torch.isnan(e_real)] = 0
         preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
-
-
-def set_save_attention(model, outdir, save_attention):
-    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        model = model.module
-    if model.conv_type == "attention":
-        for iconv in range(model.num_convs):
-            model.conv_id[iconv].outdir = outdir
-            model.conv_reg[iconv].outdir = outdir
-            model.conv_id[iconv].save_attention = save_attention
-            model.conv_reg[iconv].save_attention = save_attention
