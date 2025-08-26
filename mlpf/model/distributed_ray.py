@@ -12,7 +12,7 @@ from mlpf.model.mlpf import MLPF
 from mlpf.model.logger import _logger, _configLogger
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.utils import create_comet_experiment
-from mlpf.model.training import train_all_epochs, get_optimizer
+from mlpf.model.training import train_all_steps, get_optimizer
 
 from mlpf.model.utils import (
     load_checkpoint,
@@ -285,34 +285,33 @@ def train_ray_trial(config, args, outdir=None):
         comet_experiment = None
 
     steps_per_epoch = len(loaders["train"])
-    start_epoch = 1
-    lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=-1)
+    lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"], steps_per_epoch, last_epoch=-1)
 
     checkpoint_dir = os.path.join(outdir, "checkpoints")
     checkpoint_dir = Path(outdir) / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+    start_step = 1
     checkpoint = ray.train.get_checkpoint()
     if checkpoint:
         with checkpoint.as_directory() as _checkpoint_dir:
             checkpoint = torch.load(Path(_checkpoint_dir) / "checkpoint.pth", map_location=torch.device(rank))
-            model, optimizer = load_checkpoint(checkpoint, model, optimizer)
-            start_epoch = checkpoint["extra_state"]["epoch"] + 1
-            lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1)
+            model, optimizer, lr_schedule = load_checkpoint(checkpoint, model, optimizer, lr_schedule)
+            start_step = checkpoint["extra_state"]["step"] + 1
 
-    train_all_epochs(
+    train_all_steps(
         rank,
         world_size,
         model,
         optimizer,
         loaders["train"],
         loaders["valid"],
-        config["num_epochs"],
+        config["num_steps"],
         config["patience"],
         outdir,
         config,
         trainable=config["model"]["trainable"],
-        start_epoch=start_epoch,
+        start_step=start_step,
         lr_schedule=lr_schedule,
         use_ray=True,
         checkpoint_freq=config["checkpoint_freq"],

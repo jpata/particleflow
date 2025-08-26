@@ -233,6 +233,32 @@ class InterleavedIterator(object):
             self._len = len_
             return len_
 
+    def state_dict(self):
+        return {"cur_index": self.cur_index}
+
+    def load_state_dict(self, state_dict):
+        self.cur_index = state_dict["cur_index"]
+
+
+class EndlessIterator(object):
+    def __init__(self, data_loader):
+        self.data_loader = data_loader
+        self.iterator = iter(data_loader)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            return next(self.iterator)
+        except StopIteration:
+            self.iterator = iter(self.data_loader)
+            return next(self.iterator)
+
+    def __len__(self):
+        return len(self.data_loader)
+
+
 
 def set_worker_sharing_strategy(worker_id: int) -> None:
     torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
@@ -240,8 +266,10 @@ def set_worker_sharing_strategy(worker_id: int) -> None:
 
 def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
     loaders = {}
+    samplers = {}
     for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
         loaders[split] = []
+        samplers[split] = []
         for type_ in config[f"{split}_dataset"][config["dataset"]]:
             dataset = []
             for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
@@ -295,6 +323,10 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
             )
 
             loaders[split].append(loader)
+            samplers[split].append(sampler)
 
         loaders[split] = InterleavedIterator(loaders[split])
-    return loaders
+        if split == "train":
+            loaders[split] = EndlessIterator(loaders[split])
+
+    return loaders, samplers

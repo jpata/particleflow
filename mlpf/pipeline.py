@@ -49,8 +49,7 @@ def get_parser():
     parser_train.add_argument("--prefetch-factor", type=int, default=None, help="Number of samples to fetch & prefetch per worker")
     parser_train.add_argument("--load", type=str, default=None, help="Load a checkpoint and continue training")
     parser_train.add_argument("--relaxed-load", action="store_true", help="Loosely load model parameters, ignoring missing keys")
-    parser_train.add_argument("--num-epochs", type=int, default=None, help="Number of training epochs")
-    parser_train.add_argument("--start-epoch", type=int, default=None, help="The initial epoch counter")
+    parser_train.add_argument("--num-steps", type=int, default=None, help="Number of training steps")
     parser_train.add_argument("--patience", type=int, default=None, help="Patience before early stopping")
     parser_train.add_argument("--lr", type=float, default=None, help="Learning rate")
     parser_train.add_argument("--lr-schedule", type=str, default=None, choices=["constant", "cosinedecay", "onecycle", "reduce_lr_on_plateau"])
@@ -103,7 +102,6 @@ def get_parser():
     parser_ray.add_argument("--num-convs", type=int, default=None, help="Number of GNN/Attention layers")
     parser_ray.add_argument("--test-datasets", nargs="+", default=[], help="Test samples to process after training")
     parser_ray.add_argument("--make-plots", action="store_true", help="Generate plots of test predictions")
-    parser_ray.add_argument("--start-epoch", type=int, default=None, help="The initial epoch counter")
 
     # --- 'ray-hpo' command parser ---
     parser_hpo = subparsers.add_parser("ray-hpo", help="Run hyperparameter optimization with Ray Tune")
