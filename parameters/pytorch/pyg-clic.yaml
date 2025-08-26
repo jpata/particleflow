@@ -2,7 +2,6 @@ train: yes
 test: yes
 make_plots: yes
 comet: yes
-save_attention: yes
 dataset: clic
 sort_data: no
 data_dir:
