@@ -4,6 +4,7 @@ JOBTYPE=$2
 INPUT_FILELIST=$3
 SAMPLE=$4
 NJOB=$5
+SITE=$6
 
 PREVDIR=`pwd`
 
@@ -11,13 +12,14 @@ PREVDIR=`pwd`
 OUTDIR=$CMSSW_BASE/out/
 WORKDIR=$CMSSW_BASE/work_${SAMPLE}_${JOBTYPE}_${NJOB}
 
-# uncomment the following when running at T2_EE_Estonia
-source /cvmfs/cms.cern.ch/cmsset_default.sh
-cd /scratch/persistent/joosep/CMSSW_15_0_5
-eval `scram runtime -sh`
-cd $PREVDIR
-export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.6.0pre1_mlpfpu_499270/
-export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
+if [ $SITE == "T2_EE_Estonia" ]; then
+    source /cvmfs/cms.cern.ch/cmsset_default.sh
+    cd /scratch/persistent/joosep/CMSSW_15_0_5
+    eval `scram runtime -sh`
+    cd $PREVDIR
+    export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.6.0pre1_puppi_2372e2/
+    export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
+fi
 
 #abort on error, print all commands
 set -e
