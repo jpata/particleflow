@@ -31,7 +31,7 @@ from mlpf.model.utils import (
     save_HPs,
     get_lr_schedule,
     count_parameters,
-    load_lr_schedule
+    load_lr_schedule,
 )
 from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard, log_dataloader_to_tensorboard
 from mlpf.model.inference import make_plots, run_predictions
@@ -118,6 +118,7 @@ def get_optimizer(model, config):
     else:
         raise ValueError(f"Unsupported optimizer type: {config['optimizer']}")
 
+
 def train_step(
     rank: Union[int, str],
     world_size: int,
@@ -133,7 +134,7 @@ def train_step(
     device_type="cuda",
     dtype=torch.float32,
     scaler=None,
-    loader_state_dict={}
+    loader_state_dict={},
 ):
     """Run one training step
 
@@ -196,6 +197,7 @@ def train_step(
         dist.barrier()
 
     return step_loss
+
 
 def evaluate(
     rank: Union[int, str],
@@ -294,6 +296,7 @@ def evaluate(
         dist.barrier()
 
     return eval_loss
+
 
 def train_all_steps(
     rank,
@@ -402,7 +405,7 @@ def train_all_steps(
             device_type=device_type,
             dtype=dtype,
             scaler=scaler,
-            loader_state_dict=train_loader.state_dict()
+            loader_state_dict=train_loader.state_dict(),
         )
         train_time = time.time() - step_start_time
 
@@ -556,7 +559,7 @@ def train_all_steps(
                         )
                 else:
                     ray.train.report(metrics)
-        
+
         # Periodic step checkpointing
         if checkpoint_freq and (step % checkpoint_freq == 0):
             if (rank == 0) or (rank == "cpu"):
@@ -593,11 +596,6 @@ def train_all_steps(
     if (rank == 0) or (rank == "cpu"):
         tensorboard_writer_train.close()
         tensorboard_writer_valid.close()
-
-
-
-
-
 
 
 def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype):
@@ -745,17 +743,17 @@ def run(rank, world_size, config, outdir, logfile):
         load_lr_schedule(lr_schedule, checkpoint, start_step)
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
-        if "train_loader_state_dict" in checkpoint:
-            train_loader.load_state_dict(checkpoint["train_loader_state_dict"])
-        if "valid_loader_state_dict" in checkpoint:
-            valid_loader.load_state_dict(checkpoint["valid_loader_state_dict"])
-        if world_size > 1:
-            if "train_sampler_state_dicts" in checkpoint:
-                for i, s in enumerate(train_sampler):
-                    s.load_state_dict(checkpoint["train_sampler_state_dicts"][i])
-            if "valid_sampler_state_dicts" in checkpoint:
-                for i, s in enumerate(valid_sampler):
-                    s.load_state_dict(checkpoint["valid_sampler_state_dicts"][i])
+        # if "train_loader_state_dict" in checkpoint:
+        #     train_loader.load_state_dict(checkpoint["train_loader_state_dict"])
+        # if "valid_loader_state_dict" in checkpoint:
+        #     valid_loader.load_state_dict(checkpoint["valid_loader_state_dict"])
+        # if world_size > 1:
+        #     if "train_sampler_state_dicts" in checkpoint:
+        #         for i, s in enumerate(train_sampler):
+        #             s.load_state_dict(checkpoint["train_sampler_state_dicts"][i])
+        #     if "valid_sampler_state_dicts" in checkpoint:
+        #         for i, s in enumerate(valid_sampler):
+        #             s.load_state_dict(checkpoint["valid_sampler_state_dicts"][i])
 
     else:  # instantiate a new model in the outdir created
         model = MLPF(**model_kwargs)

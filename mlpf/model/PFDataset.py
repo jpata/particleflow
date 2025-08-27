@@ -265,7 +265,6 @@ class EndlessIterator(object):
         self.data_loader.load_state_dict(state_dict)
 
 
-
 def set_worker_sharing_strategy(worker_id: int) -> None:
     torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
 
