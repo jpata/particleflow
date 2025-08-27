@@ -34,6 +34,7 @@ class TFDSDataSource:
             ret = ret[0]
 
         # sort the elements in each event in pT descending order
+        # the transformer is permutation-covariant, but this can be helpful for other types of models
         if self.sort:
             sortidx = np.argsort(ret["X"][:, 1])[::-1]
             ret["X"] = ret["X"][sortidx]

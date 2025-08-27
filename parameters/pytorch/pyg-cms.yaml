@@ -3,7 +3,7 @@ test: yes
 make_plots: yes
 comet: yes
 dataset: cms
-sort_data: yes
+sort_data: no
 data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
