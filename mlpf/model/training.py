@@ -10,6 +10,7 @@ import sklearn
 import sklearn.metrics
 import numpy as np
 from typing import Union, List
+import sys  # <--- ADD THIS IMPORT
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
@@ -441,15 +442,11 @@ def _run_validation_cycle(
 
         # Log a summary of the validation step
         _logger.info(
-            f"Rank {rank}: step={step}/{num_steps} "
-            f"train_loss={losses_train['Total']:.4f} "
-            f"valid_loss={losses_valid['Total']:.4f} "
-            f"stale={stale_steps} "
-            f"step_train_time={train_time/60:.2f}m "
-            f"step_valid_time={valid_time/60:.2f}m "
-            f"step_total_time={total_time/60:.2f}m "
-            f"eta={eta:.1f}m",
-            color="bold",
+            f"VALIDATION | Step={step}/{num_steps} | "
+            f"Train Loss={losses_train['Total']:.4f} | "
+            f"Valid Loss={losses_valid['Total']:.4f} | "
+            f"Stale={stale_steps} | "
+            f"ETA={eta:.1f}m"
         )
         tensorboard_writer_valid.flush()
 
@@ -553,11 +550,11 @@ def train_all_steps(
     scaler = torch.amp.GradScaler()
     train_iterator = iter(train_loader)
 
-    # Use tqdm for progress bar on the main process
-    if (world_size > 1) and (rank != 0):
-        iterator = range(start_step, num_steps + 1)
-    else:
-        iterator = tqdm.tqdm(range(start_step, num_steps + 1), initial=start_step, total=num_steps, desc=f"Training on rank={rank}")
+    # Use tqdm for progress bar only on the main process in an interactive session
+    is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
+    iterator = range(start_step, num_steps + 1)
+    if is_interactive:
+        iterator = tqdm.tqdm(iterator, initial=start_step, total=num_steps, desc=f"Training on rank={rank}")
 
     for step in iterator:
         step_start_time = time.time()
@@ -588,6 +585,16 @@ def train_all_steps(
             loader_state_dict=train_loader.state_dict(),
         )
         train_time = time.time() - step_start_time
+
+        # Log a brief training status every 100 steps on the main process
+        if (step % 100 == 0) and ((rank == 0) or (rank == "cpu")):
+            # Get the current learning rate, handling the case of multiple parameter groups
+            current_lr = lr_schedule.get_last_lr()[0]
+            _logger.info(
+                f"Step {step}/{num_steps} | "
+                f"Train Loss: {losses_train['Total']:.4f} | "
+                f"LR: {current_lr:.2e}"
+            )
 
         # Log training info and save periodic checkpoint immediately after training
         _log_and_checkpoint_step(
