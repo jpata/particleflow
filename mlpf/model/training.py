@@ -532,6 +532,7 @@ def train_all_steps(
     # Per-worker setup
     np.seterr(divide="ignore", invalid="ignore")
     import matplotlib
+
     matplotlib.use("agg")
 
     # Setup TensorBoard writers on the main process
