@@ -725,8 +725,8 @@ def run(rank, world_size, config, outdir, logfile):
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
         #optimizer must be initialized to load scheduler
-        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"], start_step)
-        lr_schedule = load_lr_schedule(lr_schedule, checkpoint, start_step)
+        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
+        load_lr_schedule(lr_schedule, checkpoint, start_step)
 
         if "train_loader_state_dict" in checkpoint:
             train_loader.load_state_dict(checkpoint["train_loader_state_dict"])

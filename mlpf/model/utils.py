@@ -289,7 +289,6 @@ def load_lr_schedule(lr_schedule, checkpoint, start_step=0):
     if "lr_schedule_state_dict" in checkpoint["extra_state"].keys():
         lr_schedule.load_state_dict(checkpoint["extra_state"]["lr_schedule_state_dict"])
         lr_schedule.last_epoch = start_step
-        return lr_schedule
     else:
         raise KeyError("Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(checkpoint["extra_state"].keys()))
 
