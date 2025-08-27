@@ -10,7 +10,9 @@ import sklearn
 import sklearn.metrics
 import numpy as np
 from typing import Union, List
-import sys  # <--- ADD THIS IMPORT
+import sys
+import shutil
+import subprocess
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
@@ -448,6 +450,7 @@ def _run_validation_cycle(
             f"Stale={stale_steps} | "
             f"ETA={eta:.1f}m"
         )
+
         tensorboard_writer_valid.flush()
 
     # Run inference and plotting on test datasets for this step
@@ -595,6 +598,15 @@ def train_all_steps(
                 f"Train Loss: {losses_train['Total']:.4f} | "
                 f"LR: {current_lr:.2e}"
             )
+
+            #check smi status
+            smi_command = shutil.which('nvidia-smi') or shutil.which('rocm-smi')
+            if smi_command:
+                try:
+                    result = subprocess.run([smi_command], capture_output=True, text=True, check=True)
+                    _logger.info(result.stdout)
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                    _logger.info("SMI error: {}".format(e))
 
         # Log training info and save periodic checkpoint immediately after training
         _log_and_checkpoint_step(

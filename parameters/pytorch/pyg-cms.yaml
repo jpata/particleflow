@@ -1,6 +1,6 @@
 train: yes
 test: yes
-make_plots: yes
+make_plots: no
 comet: yes
 dataset: cms
 sort_data: no
