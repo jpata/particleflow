@@ -340,6 +340,8 @@ def train_all_steps(
         checkpoint_dir: Directory to save checkpoints
     """
 
+    _logger.info(f"Starting training from step {start_step} to {num_steps} on rank {rank} of {world_size}")
+
     # run per-worker setup here so all processes / threads get configured.
     # Ignore divide by 0 errors
     np.seterr(divide="ignore", invalid="ignore")
@@ -370,7 +372,7 @@ def train_all_steps(
     if (world_size > 1) and (rank != 0):
         iterator = range(start_step, num_steps + 1)
     else:
-        iterator = tqdm.tqdm(range(start_step, num_steps + 1), total=num_steps, desc=f"Training on rank={rank}")
+        iterator = tqdm.tqdm(range(start_step, num_steps + 1), initial=start_step, total=num_steps, desc=f"Training on rank={rank}")
 
     for step in iterator:
         step_start_time = time.time()
@@ -696,9 +698,7 @@ def run(rank, world_size, config, outdir, logfile):
         lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"], steps_per_epoch, -1)
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
-
-        if "step" in checkpoint:
-            start_step = checkpoint["step"] + 1
+        start_step = checkpoint["extra_state"]["step"] + 1
 
         missing_keys, strict = [], True
         for k in model.state_dict().keys():
@@ -722,6 +722,7 @@ def run(rank, world_size, config, outdir, logfile):
 
         if (rank == 0) or (rank == "cpu"):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
+            _logger.info(f"Restoring training from step {start_step}")
 
         model, optimizer, lr_schedule = load_checkpoint(checkpoint, model, optimizer, lr_schedule, strict)
 
