@@ -85,7 +85,7 @@ def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
     scaler.step(optimizer)
     scaler.update()
     if lr_schedule:
-        # ReduceLROnPlateau scheduler should only be updated after each full epoch
+        # ReduceLROnPlateau scheduler should only be updated after each validation step
         if not isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
             lr_schedule.step()
 
@@ -207,7 +207,7 @@ def evaluate(
     device_type="cuda",
     dtype=torch.float32,
 ):
-    """Run one evaluation epoch
+    """Run one evaluation step
 
     Args:
         rank: Device rank (GPU id or 'cpu')
@@ -222,10 +222,10 @@ def evaluate(
         dtype: Torch dtype for computations
 
     Returns:
-        dict: Dictionary of epoch losses
+        dict: Dictionary of evaluation losses
     """
     model.eval()
-    epoch_loss = {}
+    eval_loss = {}
 
     # Confusion matrix tracking
     cm_X_target = np.zeros((13, 13))
@@ -262,9 +262,9 @@ def evaluate(
 
         # Accumulate losses
         for loss_name in loss:
-            if loss_name not in epoch_loss:
-                epoch_loss[loss_name] = 0.0
-            epoch_loss[loss_name] += loss[loss_name]
+            if loss_name not in eval_loss:
+                eval_loss[loss_name] = 0.0
+            eval_loss[loss_name] += loss[loss_name]
 
     # Log confusion matrices
     if comet_experiment:
@@ -283,15 +283,15 @@ def evaluate(
     if world_size > 1:
         torch.distributed.all_reduce(num_steps)
 
-    for loss_name in epoch_loss:
+    for loss_name in eval_loss:
         if world_size > 1:
-            torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
+            torch.distributed.all_reduce(eval_loss[loss_name])
+        eval_loss[loss_name] = eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
 
     if world_size > 1:
         dist.barrier()
 
-    return epoch_loss
+    return eval_loss
 
 def train_all_steps(
     rank,
@@ -404,7 +404,7 @@ def train_all_steps(
         train_time = time.time() - step_start_time
 
         if (step % val_freq == 0) or (step == num_steps):
-            # Validation epoch
+            # Validation step
             losses_valid = evaluate(
                 rank=rank,
                 world_size=world_size,
@@ -421,7 +421,7 @@ def train_all_steps(
             total_time = time.time() - step_start_time
 
             if lr_schedule:
-                # ReduceLROnPlateau scheduler should only be updated after each full epoch
+                # ReduceLROnPlateau scheduler should only be updated after each validation step
                 # Other schedulers are updated after each step inside the optimizer_step() function
                 if isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
                     lr_schedule.step(losses_valid["Total"])
@@ -457,7 +457,7 @@ def train_all_steps(
                 else:
                     stale_steps += 1
 
-                # Periodic epoch checkpointing
+                # Periodic step checkpointing
                 if checkpoint_freq and (step % checkpoint_freq == 0):
                     checkpoint_path = f"{checkpoint_dir}/checkpoint-{step:02d}-{losses_valid['Total']:.6f}.pth"
                     save_checkpoint(checkpoint_path, model, optimizer, extra_state)
@@ -467,7 +467,7 @@ def train_all_steps(
                     tensorboard_writer_train.add_scalar(f"step/loss_{loss}", losses_train[loss], step)
                     tensorboard_writer_valid.add_scalar(f"step/loss_{loss}", losses_valid[loss], step)
 
-                # Save epoch stats to JSON
+                # Save step stats to JSON
                 history_path = Path(outdir) / "history"
                 history_path.mkdir(parents=True, exist_ok=True)
                 stats = {
@@ -485,7 +485,7 @@ def train_all_steps(
                 time_per_step = (time.time() - t0_initial) / step
                 eta = steps_remaining * time_per_step / 60
 
-                # Log epoch summary
+                # Log step summary
                 _logger.info(
                     f"Rank {rank}: step={step}/{num_steps} "
                     f"train_loss={losses_train['Total']:.4f} "
@@ -502,7 +502,7 @@ def train_all_steps(
                 tensorboard_writer_train.flush()
                 tensorboard_writer_valid.flush()
 
-            # evaluate the model at this epoch on test datasets, make plots, track metrics
+            # evaluate the model at this validation step on test datasets, make plots, track metrics
             testdir_name = f"_step_{step}"
             for sample in config["enabled_test_datasets"]:
                 run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
