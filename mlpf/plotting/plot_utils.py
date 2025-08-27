@@ -297,11 +297,13 @@ def load_eval_data(path, max_files=None):
 
     if max_files is not None:
         filelist = filelist[:max_files]
+    assert(len(filelist)>0)
 
     for fi in tqdm.tqdm(filelist, desc="Loading eval data"):
         dd = awkward.from_parquet(fi)
         yvals.append(dd)
         filenames.append(fi)
+    assert(len(yvals)>0)
 
     data = awkward.concatenate(yvals, axis=0)
     X = data["inputs"]

@@ -258,6 +258,12 @@ class EndlessIterator(object):
     def __len__(self):
         return len(self.data_loader)
 
+    def state_dict(self):
+        return self.data_loader.state_dict()
+
+    def load_state_dict(self, state_dict):
+        self.data_loader.load_state_dict(state_dict)
+
 
 
 def set_worker_sharing_strategy(worker_id: int) -> None:

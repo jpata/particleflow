@@ -258,7 +258,7 @@ def print_optimizer_stats(optimizer, stage):
                     print(f"    {key}: {value}")
 
 
-def load_checkpoint(checkpoint, model, optimizer, strict=True):
+def load_checkpoint(checkpoint, model, optimizer, lr_schedule, strict=True):
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         model.module.load_state_dict(checkpoint["model_state_dict"], strict=strict)
     else:
@@ -270,7 +270,10 @@ def load_checkpoint(checkpoint, model, optimizer, strict=True):
         logging.info("Loaded optimizer state")
         print_optimizer_stats(optimizer, "After loading optimizer state")
 
-    return model, optimizer
+    if lr_schedule:
+        lr_schedule = load_lr_schedule(lr_schedule, checkpoint)
+
+    return model, optimizer, lr_schedule
 
 
 def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):

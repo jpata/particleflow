@@ -175,10 +175,6 @@ def train_step(
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         tensorboard_writer.flush()
 
-        # Save step checkpoint
-        extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
-        save_checkpoint(f"{checkpoint_dir}/step_weights.pth", model, optimizer, extra_state)
-
     if comet_experiment is not None and (step % comet_step_freq == 0):
         comet_experiment.log_metrics(loss, prefix="train", step=step)
         comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
@@ -371,7 +367,12 @@ def train_all_steps(
 
     train_iterator = iter(train_loader)
 
-    for step in range(start_step, num_steps + 1):
+    if (world_size > 1) and (rank != 0):
+        iterator = range(start_step, num_steps + 1)
+    else:
+        iterator = tqdm.tqdm(range(start_step, num_steps + 1), total=num_steps, desc=f"Training on rank={rank}")
+
+    for step in iterator:
         step_start_time = time.time()
 
         try:
@@ -440,9 +441,10 @@ def train_all_steps(
                     "lr_schedule_state_dict": lr_schedule.state_dict(),
                     "train_loader_state_dict": train_loader.state_dict(),
                     "valid_loader_state_dict": valid_loader.state_dict(),
-                    "train_sampler_state_dict": train_sampler.state_dict(),
-                    "valid_sampler_state_dict": valid_sampler.state_dict(),
                 }
+                if world_size > 1:
+                    extra_state["train_sampler_state_dicts"] = [s.state_dict() for s in train_sampler]
+                    extra_state["valid_sampler_state_dicts"] = [s.state_dict() for s in valid_sampler]
 
                 # Save best model if validation loss improved
                 if losses_valid["Total"] < best_val_loss:
@@ -686,9 +688,12 @@ def run(rank, world_size, config, outdir, logfile):
 
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     start_step = 1
+    lr_schedule = None
     if config["load"]:
         model = MLPF(**model_kwargs).to(torch.device(rank))
         optimizer = get_optimizer(model, config)
+        steps_per_epoch = 1 # dummy value
+        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"], steps_per_epoch, -1)
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
 
@@ -724,17 +729,20 @@ def run(rank, world_size, config, outdir, logfile):
             train_loader.load_state_dict(checkpoint["train_loader_state_dict"])
         if "valid_loader_state_dict" in checkpoint:
             valid_loader.load_state_dict(checkpoint["valid_loader_state_dict"])
-        if "train_sampler_state_dict" in checkpoint:
-            train_sampler.load_state_dict(checkpoint["train_sampler_state_dict"])
-        if "valid_sampler_state_dict" in checkpoint:
-            valid_sampler.load_state_dict(checkpoint["valid_sampler_state_dict"])
+        if world_size > 1:
+            if "train_sampler_state_dicts" in checkpoint:
+                for i, s in enumerate(train_sampler):
+                    s.load_state_dict(checkpoint["train_sampler_state_dicts"][i])
+            if "valid_sampler_state_dicts" in checkpoint:
+                for i, s in enumerate(valid_sampler):
+                    s.load_state_dict(checkpoint["valid_sampler_state_dicts"][i])
 
     else:  # instantiate a new model in the outdir created
         model = MLPF(**model_kwargs)
         optimizer = get_optimizer(model, config)
 
     model.to(rank)
-    model.compile()
+    # model.compile()
     configure_model_trainable(model, config["model"]["trainable"], True)
 
     if world_size > 1:
