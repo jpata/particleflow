@@ -31,6 +31,7 @@ from mlpf.model.utils import (
     save_HPs,
     get_lr_schedule,
     count_parameters,
+    load_lr_schedule
 )
 from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard
 from mlpf.model.inference import make_plots, run_predictions
@@ -170,7 +171,7 @@ def train_step(
         step_loss[loss_name] += loss[loss_name]
 
     # Log step metrics
-    if tensorboard_writer is not None and step % 100 == 0:
+    if tensorboard_writer is not None:
         log_open_files_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         tensorboard_writer.flush()
@@ -670,7 +671,6 @@ def run(rank, world_size, config, outdir, logfile):
         os.environ["MASTER_PORT"] = "12355"
         dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
 
-    start_epoch = 1
     checkpoint_dir = Path(outdir) / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -694,8 +694,6 @@ def run(rank, world_size, config, outdir, logfile):
     if config["load"]:
         model = MLPF(**model_kwargs).to(torch.device(rank))
         optimizer = get_optimizer(model, config)
-        steps_per_epoch = 1 # dummy value
-        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"], steps_per_epoch, -1)
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
         start_step = checkpoint["extra_state"]["step"] + 1
@@ -724,7 +722,11 @@ def run(rank, world_size, config, outdir, logfile):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
             _logger.info(f"Restoring training from step {start_step}")
 
-        model, optimizer, lr_schedule = load_checkpoint(checkpoint, model, optimizer, lr_schedule, strict)
+        model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
+
+        #optimizer must be initialized to load scheduler
+        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"], start_step)
+        lr_schedule = load_lr_schedule(lr_schedule, checkpoint, start_step)
 
         if "train_loader_state_dict" in checkpoint:
             train_loader.load_state_dict(checkpoint["train_loader_state_dict"])
@@ -797,8 +799,7 @@ def run(rank, world_size, config, outdir, logfile):
             use_cuda,
             use_ray=False,
         )
-        steps_per_epoch = len(loaders["train"])
-        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"], steps_per_epoch, -1)
+        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
         train_all_steps(
             rank,

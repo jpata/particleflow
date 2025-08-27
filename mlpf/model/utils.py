@@ -258,7 +258,7 @@ def print_optimizer_stats(optimizer, stage):
                     print(f"    {key}: {value}")
 
 
-def load_checkpoint(checkpoint, model, optimizer, lr_schedule, strict=True):
+def load_checkpoint(checkpoint, model, optimizer, strict=True, start_step=0):
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         model.module.load_state_dict(checkpoint["model_state_dict"], strict=strict)
     else:
@@ -270,10 +270,7 @@ def load_checkpoint(checkpoint, model, optimizer, lr_schedule, strict=True):
         logging.info("Loaded optimizer state")
         print_optimizer_stats(optimizer, "After loading optimizer state")
 
-    if lr_schedule:
-        lr_schedule = load_lr_schedule(lr_schedule, checkpoint)
-
-    return model, optimizer, lr_schedule
+    return model, optimizer
 
 
 def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
@@ -287,31 +284,29 @@ def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
     )
 
 
-def load_lr_schedule(lr_schedule, checkpoint):
-    "Loads the lr_schedule's state dict from checkpoint"
+def load_lr_schedule(lr_schedule, checkpoint, start_step=0):
+    """Loads the lr_schedule's state dict from checkpoint and sets the last_epoch to start_step"""
     if "lr_schedule_state_dict" in checkpoint["extra_state"].keys():
         lr_schedule.load_state_dict(checkpoint["extra_state"]["lr_schedule_state_dict"])
+        lr_schedule.last_epoch = start_step
         return lr_schedule
     else:
         raise KeyError("Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(checkpoint["extra_state"].keys()))
 
 
-def get_lr_schedule(config, opt, epochs=None, steps_per_epoch=None, last_epoch=-1):
-    # we step the schedule every mini-batch so need to multiply by steps_per_epoch
-    last_batch = last_epoch * steps_per_epoch - 1 if last_epoch != -1 else -1
+def get_lr_schedule(config, opt, num_steps, last_batch=-1):
     if config["lr_schedule"] == "constant":
-        lr_schedule = ConstantLR(opt, factor=1.0, total_iters=steps_per_epoch * epochs)
+        lr_schedule = ConstantLR(opt, factor=1.0, total_iters=num_steps)
     elif config["lr_schedule"] == "onecycle":
         lr_schedule = OneCycleLR(
             opt,
             max_lr=config["lr"],
-            steps_per_epoch=steps_per_epoch,
-            epochs=epochs,
+            total_steps=num_steps,
             last_epoch=last_batch,
             pct_start=config["lr_schedule_config"]["onecycle"]["pct_start"] or 0.3,
         )
     elif config["lr_schedule"] == "cosinedecay":
-        lr_schedule = CosineAnnealingLR(opt, T_max=steps_per_epoch * epochs, last_epoch=last_batch, eta_min=config["lr"] * 0.1)
+        lr_schedule = CosineAnnealingLR(opt, T_max=num_steps, last_epoch=last_batch, eta_min=config["lr"] * 0.1)
     elif config["lr_schedule"] == "reduce_lr_on_plateau":
         lr_schedule = torch.optim.lr_scheduler.ReduceLROnPlateau(
             opt,
