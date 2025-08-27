@@ -33,7 +33,7 @@ from mlpf.model.utils import (
     count_parameters,
     load_lr_schedule
 )
-from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard
+from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard, log_dataloader_to_tensorboard
 from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.mlpf import MLPF
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
@@ -133,6 +133,7 @@ def train_step(
     device_type="cuda",
     dtype=torch.float32,
     scaler=None,
+    loader_state_dict={}
 ):
     """Run one training step
 
@@ -174,6 +175,7 @@ def train_step(
     if tensorboard_writer is not None:
         log_open_files_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
+        log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
         tensorboard_writer.flush()
 
     if comet_experiment is not None and (step % comet_step_freq == 0):
@@ -400,6 +402,7 @@ def train_all_steps(
             device_type=device_type,
             dtype=dtype,
             scaler=scaler,
+            loader_state_dict=train_loader.state_dict()
         )
         train_time = time.time() - step_start_time
 
@@ -456,11 +459,6 @@ def train_all_steps(
                     save_checkpoint(f"{checkpoint_dir}/best_weights.pth", model, optimizer, extra_state)
                 else:
                     stale_steps += 1
-
-                # Periodic step checkpointing
-                if checkpoint_freq and (step % checkpoint_freq == 0):
-                    checkpoint_path = f"{checkpoint_dir}/checkpoint-{step:02d}-{losses_valid['Total']:.6f}.pth"
-                    save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
                 # Update loss history
                 for loss in losses_train:
@@ -558,11 +556,32 @@ def train_all_steps(
                         )
                 else:
                     ray.train.report(metrics)
+        
+        # Periodic step checkpointing
+        if checkpoint_freq and (step % checkpoint_freq == 0):
+            if (rank == 0) or (rank == "cpu"):
+                extra_state = {
+                    "step": step,
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "lr_schedule_state_dict": lr_schedule.state_dict(),
+                    "train_loader_state_dict": train_loader.state_dict(),
+                    "valid_loader_state_dict": valid_loader.state_dict(),
+                }
+                if world_size > 1:
+                    extra_state["train_sampler_state_dicts"] = [s.state_dict() for s in train_sampler]
+                    extra_state["valid_sampler_state_dicts"] = [s.state_dict() for s in valid_sampler]
 
-            # Check early stopping
-            if stale_steps > patience:
-                _logger.info(f"Breaking due to stale steps: {stale_steps}")
-                break
+                checkpoint_path = f"{checkpoint_dir}/checkpoint-{step:02d}.pth"
+                save_checkpoint(checkpoint_path, model, optimizer, extra_state)
+                checkpoints = sorted(Path(checkpoint_dir).glob("checkpoint-*.pth"), key=os.path.getmtime)
+                for i in range(len(checkpoints) - 3):
+                    _logger.info("removing {}".format(checkpoints[i]))
+                    os.remove(checkpoints[i])
+
+        # Check early stopping
+        if stale_steps > patience:
+            _logger.info(f"Breaking due to stale steps: {stale_steps}")
+            break
 
         # Synchronize processes
         if world_size > 1:
@@ -694,6 +713,7 @@ def run(rank, world_size, config, outdir, logfile):
     if config["load"]:
         model = MLPF(**model_kwargs).to(torch.device(rank))
         optimizer = get_optimizer(model, config)
+        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
         start_step = checkpoint["extra_state"]["step"] + 1
@@ -722,11 +742,8 @@ def run(rank, world_size, config, outdir, logfile):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
             _logger.info(f"Restoring training from step {start_step}")
 
-        model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
-
-        #optimizer must be initialized to load scheduler
-        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
         load_lr_schedule(lr_schedule, checkpoint, start_step)
+        model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
         if "train_loader_state_dict" in checkpoint:
             train_loader.load_state_dict(checkpoint["train_loader_state_dict"])
@@ -743,6 +760,7 @@ def run(rank, world_size, config, outdir, logfile):
     else:  # instantiate a new model in the outdir created
         model = MLPF(**model_kwargs)
         optimizer = get_optimizer(model, config)
+        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
     model.to(rank)
     # model.compile()
@@ -799,7 +817,8 @@ def run(rank, world_size, config, outdir, logfile):
             use_cuda,
             use_ray=False,
         )
-        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
+        for split in loaders.keys():
+            _logger.info("loader {} len={}".format(split, len(loaders[split])))
 
         train_all_steps(
             rank,

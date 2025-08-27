@@ -9,8 +9,10 @@ gpus: 1
 gpu_batch_multiplier: 1
 load:
 finetune:
-num_epochs: 10
-patience: 20
+num_steps: 10000
+patience: 1000
+val_freq: 1000
+checkpoint_freq: 1000
 lr: 0.0002
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention
@@ -19,7 +21,6 @@ ntest:
 nvalid:
 num_workers: 0
 prefetch_factor:
-checkpoint_freq: 1
 comet_name: particleflow-pt
 comet_offline: False
 comet_step_freq: 10
