@@ -175,7 +175,7 @@ def train_step(
 
     # Log step metrics
     if tensorboard_writer is not None:
-        log_open_files_to_tensorboard(tensorboard_writer, step)
+        # log_open_files_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
         tensorboard_writer.flush()
@@ -238,10 +238,10 @@ def evaluate(
     cm_id = np.zeros((13, 13))
 
     # Only show progress bar on rank 0
-    if (world_size > 1) and (rank != 0):
-        iterator = enumerate(valid_loader)
-    else:
-        iterator = tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader), desc=f"Step {step} eval loop on rank={rank}")
+    is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
+    iterator = enumerate(valid_loader)
+    if is_interactive:
+        iterator = tqdm.tqdm(iterator, total=len(valid_loader), desc=f"Step {step} eval loop on rank={rank}")
 
     for ival, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
