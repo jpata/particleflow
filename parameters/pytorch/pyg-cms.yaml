@@ -151,23 +151,26 @@ valid_dataset:
 
 test_dataset:
   cms_pf_ttbar:
+    batch_size: 1
     version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_qcd:
+    batch_size: 1
     version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
-#  cms_pf_qcd13p6:
-#    version: 2.7.1
-#    splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ztt:
+    batch_size: 1
     version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ttbar_nopu:
+    batch_size: 16
     version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_qcd_nopu:
+    batch_size: 16
     version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ztt_nopu:
+    batch_size: 16
     version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]

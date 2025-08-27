@@ -663,7 +663,7 @@ def train_all_steps(
 
 
 def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype):
-    batch_size = config["gpu_batch_multiplier"]
+    batch_size = config["test_dataset"][sample]["batch_size"] * config["gpu_batch_multiplier"]
     version = config["test_dataset"][sample]["version"]
 
     split_configs = config["test_dataset"][sample]["splits"]
