@@ -814,7 +814,7 @@ def run(rank, world_size, config, outdir, logfile):
         lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
     model.to(rank)
-    # model.compile()
+    model.compile()
     configure_model_trainable(model, config["model"]["trainable"], True)
 
     if world_size > 1:
