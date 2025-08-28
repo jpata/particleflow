@@ -239,12 +239,18 @@ class InterleavedIterator(object):
 
     def load_state_dict(self, state_dict):
         self.cur_index = state_dict["cur_index"]
-
+        _logger.info("InterleavedIterator setting cur_index={}".format(self.cur_index))
 
 class EndlessIterator(object):
-    def __init__(self, data_loader):
+    def __init__(self, data_loader, samplers, world_size):
         self.data_loader = data_loader
-        self.iterator = iter(data_loader)
+        self.samplers = samplers
+        self.world_size = world_size
+        self.epoch = 0
+        if self.world_size > 1:
+            for sampler in self.samplers:
+                sampler.set_epoch(self.epoch)
+        self.iterator = iter(self.data_loader)
 
     def __iter__(self):
         return self
@@ -253,6 +259,10 @@ class EndlessIterator(object):
         try:
             return next(self.iterator)
         except StopIteration:
+            self.epoch += 1
+            if self.world_size > 1:
+                for sampler in self.samplers:
+                    sampler.set_epoch(self.epoch)
             self.iterator = iter(self.data_loader)
             return next(self.iterator)
 
@@ -260,10 +270,16 @@ class EndlessIterator(object):
         return len(self.data_loader)
 
     def state_dict(self):
-        return self.data_loader.state_dict()
+        return {"epoch": self.epoch, "loader_state_dict": self.data_loader.state_dict()}
 
     def load_state_dict(self, state_dict):
-        self.data_loader.load_state_dict(state_dict)
+        self.epoch = state_dict["epoch"]
+        _logger.info("EndlessIterator setting epoch={}".format(self.epoch))
+        self.data_loader.load_state_dict(state_dict["loader_state_dict"])
+        if self.world_size > 1:
+            for sampler in self.samplers:
+                sampler.set_epoch(self.epoch)
+        self.iterator = iter(self.data_loader)  # create new iterator to respect loaded state
 
 
 def set_worker_sharing_strategy(worker_id: int) -> None:
@@ -333,6 +349,6 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
 
         loaders[split] = InterleavedIterator(loaders[split])
         if split == "train":
-            loaders[split] = EndlessIterator(loaders[split])
+            loaders[split] = EndlessIterator(loaders[split], samplers[split], world_size)
 
     return loaders, samplers

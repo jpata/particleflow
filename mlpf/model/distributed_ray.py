@@ -294,9 +294,15 @@ def train_ray_trial(config, args, outdir=None):
     checkpoint = ray.train.get_checkpoint()
     if checkpoint:
         with checkpoint.as_directory() as _checkpoint_dir:
-            checkpoint = torch.load(Path(_checkpoint_dir) / "checkpoint.pth", map_location=torch.device(rank))
+            checkpoint_path = Path(_checkpoint_dir) / "checkpoint.pth"
+            _logger.info(f"Loading checkpoint from {checkpoint_path}")
+            checkpoint = torch.load(checkpoint_path, map_location=torch.device(rank))
             model, optimizer, lr_schedule = load_checkpoint(checkpoint, model, optimizer, lr_schedule)
             start_step = checkpoint["extra_state"]["step"] + 1
+            if "train_loader_state_dict" in checkpoint["extra_state"]:
+                loaders["train"].load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
+            if "valid_loader_state_dict" in checkpoint["extra_state"]:
+                loaders["valid"].load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
 
     train_all_steps(
         rank,

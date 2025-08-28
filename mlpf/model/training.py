@@ -492,6 +492,8 @@ def _run_validation_cycle(
                     "step": step,
                     "optimizer_state_dict": optimizer.state_dict(),
                     "lr_schedule_state_dict": lr_schedule.state_dict(),
+                    "train_loader_state_dict": train_loader.state_dict(),
+                    "valid_loader_state_dict": valid_loader.state_dict(),
                 }
                 save_checkpoint(Path(temp_checkpoint_dir) / "checkpoint.pth", model, optimizer, extra_state)
                 ray.train.report(metrics, checkpoint=ray.train.Checkpoint.from_directory(temp_checkpoint_dir))

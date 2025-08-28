@@ -270,10 +270,17 @@ def load_checkpoint(checkpoint, model, optimizer, strict=True, start_step=0):
         logging.info("Loaded optimizer state")
         print_optimizer_stats(optimizer, "After loading optimizer state")
 
+    if "rng_state" in checkpoint["extra_state"]:
+        torch.set_rng_state(checkpoint["extra_state"]["rng_state"])
+        logging.info("Loaded RNG state")
+
     return model, optimizer
 
 
 def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
+    if extra_state is None:
+        extra_state = {}
+    extra_state["rng_state"] = torch.get_rng_state()
     torch.save(
         {
             "model_state_dict": get_model_state_dict(model),
