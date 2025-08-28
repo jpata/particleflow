@@ -344,9 +344,6 @@ def _log_and_checkpoint_step(
                 "train_loader_state_dict": train_loader.state_dict(),
                 "valid_loader_state_dict": valid_loader.state_dict(),
             }
-            # if world_size > 1:
-            #     extra_state["train_sampler_state_dicts"] = [s.state_dict() for s in train_sampler]
-            #     extra_state["valid_sampler_state_dicts"] = [s.state_dict() for s in valid_sampler]
 
             checkpoint_path = f"{checkpoint_dir}/checkpoint-{step:02d}.pth"
             save_checkpoint(checkpoint_path, model, optimizer, extra_state)
@@ -834,9 +831,8 @@ def run(rank, world_size, config, outdir, logfile):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
     trainable_params, nontrainable_params, table = count_parameters(model)
-    print(table)
-
     if (rank == 0) or (rank == "cpu"):
+        _logger.info(str(table))
         _logger.info(model)
         _logger.info(f"Trainable parameters: {trainable_params}")
         _logger.info(f"Non-trainable parameters: {nontrainable_params}")
@@ -899,7 +895,7 @@ def run(rank, world_size, config, outdir, logfile):
             #             s.load_state_dict(checkpoint["extra_state"]["valid_sampler_state_dicts"][i])
 
         for split in loaders.keys():
-            _logger.info("loader {} len={}".format(split, len(loaders[split])))
+            _logger.info("loader {} rank={} len={}".format(split, rank, len(loaders[split])))
 
         train_all_steps(
             rank,

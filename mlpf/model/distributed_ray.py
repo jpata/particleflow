@@ -97,7 +97,7 @@ def set_searchspace_and_run_trial(search_space, config, args):
         if rank == 0:
             logging.warning("OOM error encountered, skipping this hyperparameter configuration.")
             skiplog_file_path = Path(config["raytune"]["local_dir"]) / args.hpo / "skipped_configurations.txt"
-            lines = ["{}: {}\n".format(item[0], item[1]) for item in search_space.items()]
+            lines = ["{}: {}".format(item[0], item[1]) for item in search_space.items()]
 
             with open(skiplog_file_path, "a") as f:
                 f.write("#" * 80 + "\n")
@@ -257,7 +257,7 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
-    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
+    loaders, samplers = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
 
     if args.comet:
         comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
@@ -285,7 +285,7 @@ def train_ray_trial(config, args, outdir=None):
         comet_experiment = None
 
     steps_per_epoch = len(loaders["train"])
-    lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"], steps_per_epoch, last_epoch=-1)
+    lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
     checkpoint_dir = os.path.join(outdir, "checkpoints")
     checkpoint_dir = Path(outdir) / "checkpoints"
@@ -320,4 +320,6 @@ def train_ray_trial(config, args, outdir=None):
         dtype=getattr(torch, config["dtype"]),
         val_freq=config["val_freq"],
         checkpoint_dir=checkpoint_dir,
+        train_sampler=samplers["train"],
+        valid_sampler=samplers["valid"],
     )

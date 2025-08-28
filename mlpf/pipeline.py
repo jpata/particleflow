@@ -91,7 +91,7 @@ def get_parser():
     parser_ray.add_argument("--ray-gpus", type=int, default=0, help="GPUs per worker for Ray Train")
     parser_ray.add_argument("--ray-cpus", type=int, help="CPUs per worker for Ray Train")
     parser_ray.add_argument("--ray-local", action="store_true", help="Run Ray Train cluster locally")
-    parser_ray.add_argument("--num-epochs", type=int, default=None, help="Number of training epochs")
+    parser_ray.add_argument("--num-steps", type=int, default=None, help="Number of training steps")
     parser_ray.add_argument("--load", type=str, default=None, help="Load a checkpoint and continue training")
     parser_ray.add_argument("--comet", action="store_true", help="Use comet.ml logging")
     parser_ray.add_argument("--comet-offline", action="store_true", help="Save comet logs locally")

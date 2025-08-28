@@ -40,7 +40,7 @@ python mlpf/pipeline.py \
   --prefix MLPF_test_ \
   --pipeline \
   train \
-  --num-epochs 2 \
+  --num-steps 100 \
   --nvalid 1 \
   --gpus 0 \
   --make-plots \
@@ -53,27 +53,7 @@ python mlpf/pipeline.py \
 export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
 
 # --------------------------------------------------------------------------------------------
-# Test 2: Resume training from the previous epoch in the SAME directory
-# --experiment-dir is specified to ensure it writes to the same directory.
-# --------------------------------------------------------------------------------------------
-python mlpf/pipeline.py \
-  --config parameters/pytorch/pyg-cms.yaml \
-  --data-dir ./tensorflow_datasets/ \
-  --experiment-dir ${EXP_DIR} \
-  --pipeline \
-  train \
-  --num-epochs 3 \
-  --nvalid 1 \
-  --gpus 0 \
-  --make-plots \
-  --conv-type attention \
-  --dtype float32 \
-  --attention-type math \
-  --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-02-*.pth
-
-# --------------------------------------------------------------------------------------------
-# Test 3: Fine-tuning from a checkpoint in a NEW directory
+# Test 2: Fine-tuning from a checkpoint in a NEW directory
 # --experiment-dir is omitted, so a new one is created.
 # --start-epoch 1 resets the epoch counter for the new run.
 # --------------------------------------------------------------------------------------------
@@ -83,7 +63,7 @@ python mlpf/pipeline.py \
   --prefix MLPF_test_ \
   --pipeline \
   train \
-  --num-epochs 3 \
+  --num-steps 200 \
   --nvalid 1 \
   --gpus 0 \
   --make-plots \
@@ -91,13 +71,13 @@ python mlpf/pipeline.py \
   --dtype float32 \
   --attention-type math \
   --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-02-*.pth \
+  --load ${EXP_DIR}/checkpoints/checkpoint-200.pth \
   --start-epoch 1
 
 ls -lrt experiments/*/checkpoints/*
 
 # # --------------------------------------------------------------------------------------------
-# # Test 4: Ray Train training using the 'ray-train' sub-command
+# # Test 3: Ray Train training using the 'ray-train' sub-command
 # # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
   --config parameters/pytorch/pyg-cms.yaml \
@@ -106,7 +86,7 @@ python mlpf/pipeline.py \
   --prefix MLPF_test_ \
   --pipeline \
   ray-train \
-  --num-epochs 2 \
+  --num-steps 100 \
   --ray-cpus 2 \
   --ray-local \
   --conv-type attention \
