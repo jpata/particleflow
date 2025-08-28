@@ -193,7 +193,6 @@ class InterleavedIterator(object):
     """Will combine DataLoaders of different lengths and batch sizes."""
 
     def __init__(self, data_loaders):
-        self.idx = 0
         self.data_loaders = data_loaders
         self.data_loaders_iter = [iter(dl) for dl in data_loaders]
         max_loader_size = max([len(dl) for dl in data_loaders])
@@ -206,6 +205,7 @@ class InterleavedIterator(object):
                 if i < len(loader):
                     self.loader_ds_indices.append(iloader)
 
+         # cursor to keep track which data loader index to yield from
         self.cur_index = 0
         self._len = None
 
@@ -216,12 +216,13 @@ class InterleavedIterator(object):
         try:
             iloader = self.loader_ds_indices[self.cur_index]
         except IndexError:
-            self.cur_index = 0  # reset the curser index
+            self.cur_index = 0 
             self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]  # reset the loader
             raise StopIteration
 
+        ret = next(self.data_loaders_iter[iloader])
         self.cur_index += 1
-        return next(self.data_loaders_iter[iloader])
+        return ret
 
     def __len__(self):
         if self._len:
@@ -229,8 +230,8 @@ class InterleavedIterator(object):
         else:
             # compute and cache the length
             len_ = 0
-            for iloader in range(len(self.data_loaders_iter)):
-                len_ += len(self.data_loaders_iter[iloader])
+            for loader in self.data_loaders:
+                len_ += len(loader)
             self._len = len_
             return len_
 
@@ -241,15 +242,24 @@ class InterleavedIterator(object):
         self.cur_index = state_dict["cur_index"]
         _logger.info("InterleavedIterator setting cur_index={}".format(self.cur_index))
 
+        # we need to fast-forward the underlying dataloaders to the correct state
+        # count how many times each loader was called up to cur_index
+        loader_counts = {i: 0 for i in range(len(self.data_loaders))}
+        for i in range(self.cur_index):
+            loader_idx = self.loader_ds_indices[i]
+            loader_counts[loader_idx] += 1
+
+        # fast-forward the existing iterators
+        for i, iterator in enumerate(self.data_loaders_iter):
+            for _ in range(loader_counts.get(i, 0)):
+                next(iterator)  # consume items to advance the sampler state
+
 class EndlessIterator(object):
     def __init__(self, data_loader, samplers, world_size):
         self.data_loader = data_loader
         self.samplers = samplers
         self.world_size = world_size
         self.epoch = 0
-        if self.world_size > 1:
-            for sampler in self.samplers:
-                sampler.set_epoch(self.epoch)
         self.iterator = iter(self.data_loader)
 
     def __iter__(self):
@@ -259,6 +269,7 @@ class EndlessIterator(object):
         try:
             return next(self.iterator)
         except StopIteration:
+            print("StopIteration raised")
             self.epoch += 1
             if self.world_size > 1:
                 for sampler in self.samplers:
@@ -279,7 +290,7 @@ class EndlessIterator(object):
         if self.world_size > 1:
             for sampler in self.samplers:
                 sampler.set_epoch(self.epoch)
-        self.iterator = iter(self.data_loader)  # create new iterator to respect loaded state
+        self.iterator = iter(self.data_loader)
 
 
 def set_worker_sharing_strategy(worker_id: int) -> None:
