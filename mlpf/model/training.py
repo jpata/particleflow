@@ -36,7 +36,9 @@ from mlpf.model.utils import (
     count_parameters,
     load_lr_schedule,
 )
-from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard, log_dataloader_to_tensorboard
+from mlpf.model.monitoring import log_step_to_tensorboard, log_dataloader_to_tensorboard
+
+# from mlpf.model.monitoring import log_open_files_to_tensorboard
 from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.mlpf import MLPF
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
@@ -590,14 +592,10 @@ def train_all_steps(
         if (step % 100 == 0) and ((rank == 0) or (rank == "cpu")):
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
-            _logger.info(
-                f"Step {step}/{num_steps} | "
-                f"Train Loss: {losses_train['Total']:.4f} | "
-                f"LR: {current_lr:.2e}"
-            )
+            _logger.info(f"Step {step}/{num_steps} | " f"Train Loss: {losses_train['Total']:.4f} | " f"LR: {current_lr:.2e}")
 
-            #check smi status
-            smi_command = shutil.which('nvidia-smi') or shutil.which('rocm-smi')
+            # check smi status
+            smi_command = shutil.which("nvidia-smi") or shutil.which("rocm-smi")
             if smi_command:
                 try:
                     result = subprocess.run([smi_command], capture_output=True, text=True, check=True)

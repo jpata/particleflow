@@ -284,7 +284,6 @@ def train_ray_trial(config, args, outdir=None):
     else:
         comet_experiment = None
 
-    steps_per_epoch = len(loaders["train"])
     lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
     checkpoint_dir = os.path.join(outdir, "checkpoints")
