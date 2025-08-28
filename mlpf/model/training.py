@@ -344,9 +344,9 @@ def _log_and_checkpoint_step(
                 "train_loader_state_dict": train_loader.state_dict(),
                 "valid_loader_state_dict": valid_loader.state_dict(),
             }
-            if world_size > 1:
-                extra_state["train_sampler_state_dicts"] = [s.state_dict() for s in train_sampler]
-                extra_state["valid_sampler_state_dicts"] = [s.state_dict() for s in valid_sampler]
+            # if world_size > 1:
+            #     extra_state["train_sampler_state_dicts"] = [s.state_dict() for s in train_sampler]
+            #     extra_state["valid_sampler_state_dicts"] = [s.state_dict() for s in valid_sampler]
 
             checkpoint_path = f"{checkpoint_dir}/checkpoint-{step:02d}.pth"
             save_checkpoint(checkpoint_path, model, optimizer, extra_state)
@@ -888,15 +888,15 @@ def run(rank, world_size, config, outdir, logfile):
                 train_loader.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
             if "valid_loader_state_dict" in checkpoint["extra_state"]:
                 valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
-            if world_size > 1:
-                train_sampler = samplers["train"]
-                valid_sampler = samplers["valid"]
-                if "train_sampler_state_dicts" in checkpoint["extra_state"]:
-                    for i, s in enumerate(train_sampler):
-                        s.load_state_dict(checkpoint["extra_state"]["train_sampler_state_dicts"][i])
-                if "valid_sampler_state_dicts" in checkpoint["extra_state"]:
-                    for i, s in enumerate(valid_sampler):
-                        s.load_state_dict(checkpoint["extra_state"]["valid_sampler_state_dicts"][i])
+            # if world_size > 1:
+            #     train_sampler = samplers["train"]
+            #     valid_sampler = samplers["valid"]
+            #     if "train_sampler_state_dicts" in checkpoint["extra_state"]:
+            #         for i, s in enumerate(train_sampler):
+            #             s.load_state_dict(checkpoint["extra_state"]["train_sampler_state_dicts"][i])
+            #     if "valid_sampler_state_dicts" in checkpoint["extra_state"]:
+            #         for i, s in enumerate(valid_sampler):
+            #             s.load_state_dict(checkpoint["extra_state"]["valid_sampler_state_dicts"][i])
 
         for split in loaders.keys():
             _logger.info("loader {} len={}".format(split, len(loaders[split])))
@@ -925,9 +925,6 @@ def run(rank, world_size, config, outdir, logfile):
             train_sampler=samplers["train"],
             valid_sampler=samplers["valid"],
         )
-
-        checkpoint = torch.load(f"{checkpoint_dir}/best_weights.pth", map_location=torch.device(rank))
-        model, optimizer = load_checkpoint(checkpoint, model, optimizer)
 
     if not (config["load"] is None):
         testdir_name = "_" + Path(config["load"]).stem
