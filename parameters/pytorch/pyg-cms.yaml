@@ -17,8 +17,8 @@ lr: 0.0002
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention
 ntrain:
-ntest:
-nvalid:
+ntest: 1000
+nvalid: 10000
 num_workers: 0
 prefetch_factor:
 comet_name: particleflow-pt

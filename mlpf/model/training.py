@@ -586,7 +586,7 @@ def train_all_steps(
             device_type=device_type,
             dtype=dtype,
             scaler=scaler,
-            loader_state_dict=train_loader.state_dict(),
+            loader_state_dict=train_loader.state_dict()["loader_state_dict"],
         )
         train_time = time.time() - step_start_time
 
@@ -884,15 +884,6 @@ def run(rank, world_size, config, outdir, logfile):
                 train_loader.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
             if "valid_loader_state_dict" in checkpoint["extra_state"]:
                 valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
-            # if world_size > 1:
-            #     train_sampler = samplers["train"]
-            #     valid_sampler = samplers["valid"]
-            #     if "train_sampler_state_dicts" in checkpoint["extra_state"]:
-            #         for i, s in enumerate(train_sampler):
-            #             s.load_state_dict(checkpoint["extra_state"]["train_sampler_state_dicts"][i])
-            #     if "valid_sampler_state_dicts" in checkpoint["extra_state"]:
-            #         for i, s in enumerate(valid_sampler):
-            #             s.load_state_dict(checkpoint["extra_state"]["valid_sampler_state_dicts"][i])
 
         for split in loaders.keys():
             _logger.info("loader {} rank={} len={}".format(split, rank, len(loaders[split])))
@@ -921,23 +912,6 @@ def run(rank, world_size, config, outdir, logfile):
             train_sampler=samplers["train"],
             valid_sampler=samplers["valid"],
         )
-
-    if not (config["load"] is None):
-        testdir_name = "_" + Path(config["load"]).stem
-    else:
-        testdir_name = "_best_weights"
-
-    if config["test"]:
-        for sample in config["enabled_test_datasets"]:
-            run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
-
-    # make plots only on rank 0
-    if (rank == 0) or (rank == "cpu"):
-        if config["make_plots"]:
-            ntest_files = -1
-            for sample in config["enabled_test_datasets"]:
-                _logger.info(f"Plotting distributions for {sample}")
-                make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)
 
     if world_size > 1:
         dist.destroy_process_group()

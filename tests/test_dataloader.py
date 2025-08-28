@@ -65,8 +65,8 @@ class TestDataloaderRestoration(unittest.TestCase):
             },
             "ntrain": 100,
             "nvalid": 100,
-            "num_workers": 0,  # Test with multiple workers
-            "prefetch_factor": None,
+            "num_workers": 2,  # Test with multiple workers
+            "prefetch_factor": 2,
             "sort_data": False,
             "pad_to_multiple_elements": None,
             "gpu_batch_multiplier": 1,

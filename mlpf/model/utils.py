@@ -271,7 +271,7 @@ def load_checkpoint(checkpoint, model, optimizer, strict=True, start_step=0):
         print_optimizer_stats(optimizer, "After loading optimizer state")
 
     if "rng_state" in checkpoint["extra_state"]:
-        torch.set_rng_state(checkpoint["extra_state"]["rng_state"])
+        torch.set_rng_state(checkpoint["extra_state"]["rng_state"].cpu())
         logging.info("Loaded RNG state")
 
     return model, optimizer

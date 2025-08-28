@@ -216,7 +216,7 @@ class InterleavedIterator(object):
         try:
             iloader = self.loader_ds_indices[self.cur_index]
         except IndexError:
-            self.cur_index = 0 
+            self.cur_index = 0
             self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]  # reset the loader
             raise StopIteration
 
@@ -242,17 +242,20 @@ class InterleavedIterator(object):
         self.cur_index = state_dict["cur_index"]
         _logger.info("InterleavedIterator setting cur_index={}".format(self.cur_index))
 
-        # we need to fast-forward the underlying dataloaders to the correct state
-        # count how many times each loader was called up to cur_index
-        loader_counts = {i: 0 for i in range(len(self.data_loaders))}
+        # Fast-forward the underlying dataloaders to the correct state by
+        # re-playing the consumption sequence in the exact interleaved order.
+        _logger.info("Fast-forwarding dataloaders...")
         for i in range(self.cur_index):
             loader_idx = self.loader_ds_indices[i]
-            loader_counts[loader_idx] += 1
+            try:
+                # Consume one item from the appropriate iterator
+                next(self.data_loaders_iter[loader_idx])
+            except StopIteration:
+                # This should not happen if the state is saved and loaded correctly within the same epoch
+                _logger.warning(f"Iterator for loader {loader_idx} exhausted unexpectedly during fast-forwarding.")
+                break
+        _logger.info("Fast-forwarding complete.")
 
-        # fast-forward the existing iterators
-        for i, iterator in enumerate(self.data_loaders_iter):
-            for _ in range(loader_counts.get(i, 0)):
-                next(iterator)  # consume items to advance the sampler state
 
 class EndlessIterator(object):
     def __init__(self, data_loader, samplers, world_size):
