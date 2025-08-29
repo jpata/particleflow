@@ -1,7 +1,8 @@
 import torch
 from torch.optim import SGD
-from mlpf.model.utils import get_lr_schedule, save_checkpoint, load_checkpoint, load_lr_schedule
+from mlpf.model.utils import get_lr_schedule, save_checkpoint, load_lr_schedule
 import os
+
 
 def test_lr_schedule_restoration():
     # 1. Dummy model and optimizer

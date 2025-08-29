@@ -76,7 +76,7 @@ class TestDataloaderRestoration(unittest.TestCase):
         rank = 0
 
         # --- Ground Truth Run: run uninterrupted to get the target data sequence ---
-        loaders_gt, _ = get_interleaved_dataloaders(world_size, rank, config, use_cuda=False, use_ray=False)
+        loaders_gt, _ = get_interleaved_dataloaders(world_size, rank, config, use_cuda=False, use_ray=False, shuffle_train=False)
         train_loader_gt = loaders_gt["train"]
         gt_data = []
         for i, batch in enumerate(train_loader_gt):
@@ -90,7 +90,7 @@ class TestDataloaderRestoration(unittest.TestCase):
         # This run will be stopped mid-way and a checkpoint will be saved.
         # We need to re-seed to ensure this run starts with the same shuffle as the ground truth run.
         torch.manual_seed(0)
-        loaders1, _ = get_interleaved_dataloaders(world_size, rank, config, use_cuda=False, use_ray=False)
+        loaders1, _ = get_interleaved_dataloaders(world_size, rank, config, use_cuda=False, use_ray=False, shuffle_train=False)
         train_loader1 = loaders1["train"]
 
         run1_data = []
@@ -106,15 +106,12 @@ class TestDataloaderRestoration(unittest.TestCase):
         save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
         # --- Restored Run ---
-        model2 = MLPF(input_dim=2, num_classes=2)
-        optimizer2 = optim.Adam(model2.parameters())
 
         # This run will load the checkpoint and continue where the previous run left off.
         # It does not need to be re-seeded, as the RNG state is restored from the checkpoint.
         checkpoint = torch.load(checkpoint_path)
-        load_checkpoint(checkpoint, model2, optimizer2)
-
-        loaders2, _ = get_interleaved_dataloaders(world_size, rank, config, use_cuda=False, use_ray=False)
+        load_checkpoint(checkpoint, model, optimizer)
+        loaders2, _ = get_interleaved_dataloaders(world_size, rank, config, use_cuda=False, use_ray=False, shuffle_train=False)
         train_loader2 = loaders2["train"]
         train_loader2.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
 

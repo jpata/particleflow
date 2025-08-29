@@ -26,6 +26,7 @@ plotly
 pre-commit
 protobuf
 pyarrow
+pytest
 ray[tune]
 scikit-learn
 scikit-optimize

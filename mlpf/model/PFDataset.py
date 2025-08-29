@@ -205,7 +205,7 @@ class InterleavedIterator(object):
                 if i < len(loader):
                     self.loader_ds_indices.append(iloader)
 
-         # cursor to keep track which data loader index to yield from
+        # cursor to keep track which data loader index to yield from
         self.cur_index = 0
         self._len = None
 
@@ -300,7 +300,7 @@ def set_worker_sharing_strategy(worker_id: int) -> None:
     torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
 
 
-def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
+def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray, shuffle_train=True):
     loaders = {}
     samplers = {}
     for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
@@ -333,7 +333,9 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                     dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
 
-            shuffle = split == "train"
+            shuffle = False
+            if shuffle_train:
+                shuffle = split == "train"
             if world_size > 1:
                 sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=shuffle)
             else:

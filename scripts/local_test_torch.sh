@@ -31,6 +31,13 @@ tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
 
 mkdir -p experiments
 
+python -m pytest tests/test_dataloader.py
+python -m pytest tests/test_dataloader_behavior.py
+python -m pytest tests/test_endless_interleaved_iterator.py
+python -m pytest tests/test_interleaved_iterator.py
+python -m pytest tests/test_lr_schedule.py
+
+
 # --------------------------------------------------------------------------------------------
 # Test 1: Initial training using the 'train' sub-command
 # --------------------------------------------------------------------------------------------
@@ -55,7 +62,6 @@ export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
 # --------------------------------------------------------------------------------------------
 # Test 2: Fine-tuning from a checkpoint in a NEW directory
 # --experiment-dir is omitted, so a new one is created.
-# --start-epoch 1 resets the epoch counter for the new run.
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
   --config parameters/pytorch/pyg-cms.yaml \
@@ -71,8 +77,7 @@ python mlpf/pipeline.py \
   --dtype float32 \
   --attention-type math \
   --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-200.pth \
-  --start-epoch 1
+  --load ${EXP_DIR}/checkpoints/checkpoint-200.pth
 
 ls -lrt experiments/*/checkpoints/*
 
