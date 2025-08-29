@@ -38,7 +38,7 @@ from mlpf.model.utils import (
 )
 from mlpf.model.monitoring import log_step_to_tensorboard, log_dataloader_to_tensorboard
 
-# from mlpf.model.monitoring import log_open_files_to_tensorboard
+from mlpf.model.monitoring import log_open_files_to_tensorboard
 from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.mlpf import MLPF
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
@@ -179,7 +179,7 @@ def train_step(
 
     # Log step metrics
     if tensorboard_writer is not None:
-        # log_open_files_to_tensorboard(tensorboard_writer, step)
+        log_open_files_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
         tensorboard_writer.flush()

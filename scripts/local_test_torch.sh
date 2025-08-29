@@ -5,6 +5,13 @@ export PWD=`pwd`
 export PYTHONPATH=`pwd`
 export KERAS_BACKEND=torch
 
+# Quick unit tests
+python -m pytest tests/test_dataloader.py
+python -m pytest tests/test_dataloader_behavior.py
+python -m pytest tests/test_endless_interleaved_iterator.py
+python -m pytest tests/test_interleaved_iterator.py
+python -m pytest tests/test_lr_schedule.py
+
 #create data directories
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
@@ -30,13 +37,6 @@ done
 tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
 
 mkdir -p experiments
-
-python -m pytest tests/test_dataloader.py
-python -m pytest tests/test_dataloader_behavior.py
-python -m pytest tests/test_endless_interleaved_iterator.py
-python -m pytest tests/test_interleaved_iterator.py
-python -m pytest tests/test_lr_schedule.py
-
 
 # --------------------------------------------------------------------------------------------
 # Test 1: Initial training using the 'train' sub-command
@@ -77,7 +77,7 @@ python mlpf/pipeline.py \
   --dtype float32 \
   --attention-type math \
   --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-200.pth
+  --load ${EXP_DIR}/checkpoints/checkpoint-100.pth
 
 ls -lrt experiments/*/checkpoints/*
 

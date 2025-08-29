@@ -22,9 +22,24 @@ class TFDSDataSource:
         self.ds.dataset_info.features = tmp.features
         self.sort = sort
         self.pad_to_multiple = pad_to_multiple
-        self.rep = self.ds.__repr__()
+        self._fast_forward = False
+
+        self.dummy_ret = {}
+        for key, feature in self.ds.dataset_info.features.items():
+            shape = feature.shape
+            dtype = feature.dtype.as_numpy_dtype
+
+            dummy_shape = list(shape)
+            for i, dim in enumerate(dummy_shape):
+                if dim is None:
+                    dummy_shape[i] = 1
+
+            self.dummy_ret[key] = np.zeros(tuple(dummy_shape), dtype=dtype)
 
     def __getitem__(self, item):
+        if self._fast_forward:
+            return self.dummy_ret
+
         if isinstance(item, int):
             item = [item]
         records = self.ds.data_source.__getitems__(item)
@@ -114,7 +129,7 @@ class TFDSDataSource:
         return len(self.ds)
 
     def __repr__(self):
-        return self.rep
+        return "TFDSDataSource(ds={}, pad_to_multiple={}, _fast_forward={})".format(self.ds.__repr__(), self.pad_to_multiple, self._fast_forward)
 
 
 class PFDataset:
@@ -238,23 +253,56 @@ class InterleavedIterator(object):
     def state_dict(self):
         return {"cur_index": self.cur_index}
 
+    def _set_fast_forward(self, dataset, value):
+        """Recursively find the underlying TFDSDataSource and set its _fast_forward flag."""
+        if hasattr(dataset, "_fast_forward"):
+            dataset._fast_forward = value
+
+        if hasattr(dataset, "dataset"):
+            self._set_fast_forward(dataset.dataset, value)
+        elif hasattr(dataset, "datasets"):
+            for ds in dataset.datasets:
+                self._set_fast_forward(ds, value)
+
     def load_state_dict(self, state_dict):
         self.cur_index = state_dict["cur_index"]
         _logger.info("InterleavedIterator setting cur_index={}".format(self.cur_index))
 
-        # Fast-forward the underlying dataloaders to the correct state by
-        # re-playing the consumption sequence in the exact interleaved order.
+        # create temporary dataloaders and a temporary iterator for fast-forwarding
+        # these loaders will not use multiprocessing or prefetching, and will share the sampler with the real loaders
+        tmp_loaders = []
+        for loader in self.data_loaders:
+            tmp_loader = torch.utils.data.DataLoader(
+                loader.dataset,
+                batch_size=loader.batch_size,
+                sampler=loader.sampler,
+                collate_fn=loader.collate_fn,
+                num_workers=0,
+                prefetch_factor=None,
+            )
+            tmp_loaders.append(tmp_loader)
+        tmp_iterator = InterleavedIterator(tmp_loaders)
+
+        # set fast_forward=True on the datasets of the temporary loaders
+        for loader in tmp_iterator.data_loaders:
+            tmp_iterator._set_fast_forward(loader.dataset, True)
+
+        # fast-forward the temporary iterator, which will advance the shared samplers
         _logger.info("Fast-forwarding dataloaders...")
         for i in range(self.cur_index):
-            loader_idx = self.loader_ds_indices[i]
             try:
-                # Consume one item from the appropriate iterator
-                next(self.data_loaders_iter[loader_idx])
+                next(tmp_iterator)
             except StopIteration:
-                # This should not happen if the state is saved and loaded correctly within the same epoch
-                _logger.warning(f"Iterator for loader {loader_idx} exhausted unexpectedly during fast-forwarding.")
+                _logger.warning("Iterator exhausted unexpectedly during fast-forwarding.")
                 break
         _logger.info("Fast-forwarding complete.")
+
+        for loader in tmp_iterator.data_loaders:
+            tmp_iterator._set_fast_forward(loader.dataset, False)
+
+        # create fresh iterators from the original dataloaders
+        # these will use the advanced samplers and have fresh workers and empty queues
+        self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]
 
 
 class EndlessIterator(object):

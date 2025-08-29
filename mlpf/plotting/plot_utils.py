@@ -302,7 +302,7 @@ def load_eval_data(path, max_files=None):
 
     is_interactive = sys.stdout.isatty()
     if is_interactive:
-        filelist = tqdm.tqdm(filelist, total=len(filelist), desc=f"Loading eval data")
+        filelist = tqdm.tqdm(filelist, total=len(filelist), desc="Loading eval data")
 
     for fi in filelist:
         dd = awkward.from_parquet(fi)
