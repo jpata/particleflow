@@ -47,8 +47,8 @@ def mlpf_loss(y, ypred, batch):
     ypred["ispu"] = ypred["ispu"].permute((0, 2, 1))
 
     # binary loss for particle / no-particle classification
-    # loss_binary_classification = loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
-    loss_binary_classification = 10 * torch.nn.functional.cross_entropy(ypred["cls_binary"], (y["cls_id"] != 0).long(), reduction="none")
+    # loss_binary_classification = 10.0 * loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
+    loss_binary_classification = 10.0 * torch.nn.functional.cross_entropy(ypred["cls_binary"], (y["cls_id"] != 0).long(), reduction="none")
 
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
@@ -56,6 +56,7 @@ def mlpf_loss(y, ypred, batch):
 
     # compare particle "PU-ness", only for cases where there was a true particle
     loss_pu = torch.nn.functional.cross_entropy(ypred["ispu"], y["ispu"].long(), reduction="none")
+    # loss_pu = loss_obj_id(ypred["ispu"], y["ispu"].long()).reshape(y["cls_id"].shape)
     loss_pu[y["cls_id"] == 0] *= 0
 
     # do not compute PU loss if no PU samples in this batch
