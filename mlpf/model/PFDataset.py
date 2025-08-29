@@ -22,24 +22,8 @@ class TFDSDataSource:
         self.ds.dataset_info.features = tmp.features
         self.sort = sort
         self.pad_to_multiple = pad_to_multiple
-        self._fast_forward = False
-
-        self.dummy_ret = {}
-        for key, feature in self.ds.dataset_info.features.items():
-            shape = feature.shape
-            dtype = feature.dtype.as_numpy_dtype
-
-            dummy_shape = list(shape)
-            for i, dim in enumerate(dummy_shape):
-                if dim is None:
-                    dummy_shape[i] = 1
-
-            self.dummy_ret[key] = np.zeros(tuple(dummy_shape), dtype=dtype)
 
     def __getitem__(self, item):
-        if self._fast_forward:
-            return self.dummy_ret
-
         if isinstance(item, int):
             item = [item]
         records = self.ds.data_source.__getitems__(item)
@@ -129,7 +113,7 @@ class TFDSDataSource:
         return len(self.ds)
 
     def __repr__(self):
-        return "TFDSDataSource(ds={}, pad_to_multiple={}, _fast_forward={})".format(self.ds.__repr__(), self.pad_to_multiple, self._fast_forward)
+        return "TFDSDataSource(ds={}, pad_to_multiple={})".format(self.ds.__repr__(), self.pad_to_multiple)
 
 
 class PFDataset:
@@ -204,6 +188,28 @@ class Collater:
         return PFBatch(**ret)
 
 
+class ResumableSampler(torch.utils.data.Sampler):
+    """A wrapper for a sampler that allows saving and restoring the state."""
+
+    def __init__(self, sampler):
+        self.sampler = sampler
+        self.start_index = 0
+
+    def __iter__(self):
+        indices = list(self.sampler)
+        return iter(indices[self.start_index :])
+
+    def __len__(self):
+        return len(self.sampler)
+
+    def load_state_dict(self, state_dict):
+        self.start_index = state_dict["start_index"]
+
+    def set_epoch(self, epoch):
+        if hasattr(self.sampler, "set_epoch"):
+            self.sampler.set_epoch(epoch)
+
+
 class InterleavedIterator(object):
     """Will combine DataLoaders of different lengths and batch sizes."""
 
@@ -222,6 +228,7 @@ class InterleavedIterator(object):
 
         # cursor to keep track which data loader index to yield from
         self.cur_index = 0
+        self.batches_yielded_per_loader = [0] * len(self.data_loaders)
         self._len = None
 
     def __iter__(self):
@@ -233,10 +240,12 @@ class InterleavedIterator(object):
         except IndexError:
             self.cur_index = 0
             self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]  # reset the loader
+            self.batches_yielded_per_loader = [0] * len(self.data_loaders)
             raise StopIteration
 
         ret = next(self.data_loaders_iter[iloader])
         self.cur_index += 1
+        self.batches_yielded_per_loader[iloader] += 1
         return ret
 
     def __len__(self):
@@ -251,54 +260,18 @@ class InterleavedIterator(object):
             return len_
 
     def state_dict(self):
-        return {"cur_index": self.cur_index}
-
-    def _set_fast_forward(self, dataset, value):
-        """Recursively find the underlying TFDSDataSource and set its _fast_forward flag."""
-        if hasattr(dataset, "_fast_forward"):
-            dataset._fast_forward = value
-
-        if hasattr(dataset, "dataset"):
-            self._set_fast_forward(dataset.dataset, value)
-        elif hasattr(dataset, "datasets"):
-            for ds in dataset.datasets:
-                self._set_fast_forward(ds, value)
+        return {
+            "cur_index": self.cur_index,
+            "batches_yielded_per_loader": self.batches_yielded_per_loader,
+        }
 
     def load_state_dict(self, state_dict):
         self.cur_index = state_dict["cur_index"]
-        _logger.info("InterleavedIterator setting cur_index={}".format(self.cur_index))
+        self.batches_yielded_per_loader = state_dict["batches_yielded_per_loader"]
 
-        # create temporary dataloaders and a temporary iterator for fast-forwarding
-        # these loaders will not use multiprocessing or prefetching, and will share the sampler with the real loaders
-        tmp_loaders = []
-        for loader in self.data_loaders:
-            tmp_loader = torch.utils.data.DataLoader(
-                loader.dataset,
-                batch_size=loader.batch_size,
-                sampler=loader.sampler,
-                collate_fn=loader.collate_fn,
-                num_workers=0,
-                prefetch_factor=None,
-            )
-            tmp_loaders.append(tmp_loader)
-        tmp_iterator = InterleavedIterator(tmp_loaders)
-
-        # set fast_forward=True on the datasets of the temporary loaders
-        for loader in tmp_iterator.data_loaders:
-            tmp_iterator._set_fast_forward(loader.dataset, True)
-
-        # fast-forward the temporary iterator, which will advance the shared samplers
-        _logger.info("Fast-forwarding dataloaders...")
-        for i in range(self.cur_index):
-            try:
-                next(tmp_iterator)
-            except StopIteration:
-                _logger.warning("Iterator exhausted unexpectedly during fast-forwarding.")
-                break
-        _logger.info("Fast-forwarding complete.")
-
-        for loader in tmp_iterator.data_loaders:
-            tmp_iterator._set_fast_forward(loader.dataset, False)
+        for i, loader in enumerate(self.data_loaders):
+            start_index = self.batches_yielded_per_loader[i] * loader.batch_size
+            loader.sampler.load_state_dict({"start_index": start_index})
 
         # create fresh iterators from the original dataloaders
         # these will use the advanced samplers and have fresh workers and empty queues
@@ -324,6 +297,7 @@ class EndlessIterator(object):
             self.epoch += 1
             if self.world_size > 1:
                 for sampler in self.samplers:
+                    # set_epoch is now called on the ResumableSampler wrapper
                     sampler.set_epoch(self.epoch)
             self.iterator = iter(self.data_loader)
             return next(self.iterator)
@@ -391,6 +365,8 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray, shu
                     sampler = torch.utils.data.RandomSampler(dataset)
                 else:
                     sampler = torch.utils.data.SequentialSampler(dataset)
+
+            sampler = ResumableSampler(sampler)
 
             # build dataloaders
             batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]

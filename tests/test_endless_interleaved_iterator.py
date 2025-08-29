@@ -1,8 +1,8 @@
 import unittest
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, SequentialSampler
 
-from mlpf.model.PFDataset import InterleavedIterator, EndlessIterator
+from mlpf.model.PFDataset import InterleavedIterator, EndlessIterator, ResumableSampler
 
 
 # A mock dataset that returns dictionaries, similar to the real one
@@ -15,7 +15,6 @@ class MockDictDataset(Dataset):
         return self.size
 
     def __getitem__(self, idx):
-        print(idx, self.offset)
         return {"X": torch.tensor([float(idx + self.offset)])}
 
 
@@ -23,56 +22,58 @@ class TestEndlessInterleavedIterator(unittest.TestCase):
     def test_save_restore_with_endless(self):
         """
         Tests that the combination of EndlessIterator and InterleavedIterator
-        can be saved and restored correctly. This isolated test should
-        reproduce the bug from test_dataloader.py.
+        can be saved and restored correctly.
         """
-        # 1. Setup DataLoaders
-        # Use num_workers=0 to prove the bug is not related to multiprocessing
-        loader1 = DataLoader(MockDictDataset(size=20, offset=0), batch_size=2)  # 10 batches
-        loader2 = DataLoader(MockDictDataset(size=20, offset=100), batch_size=2)  # 10 batches
-
         # --- Ground truth run ---
-        # Manually iterate the InterleavedIterator to get the expected sequence
-        gt_iter = InterleavedIterator([loader1, loader2])
+        d1_gt = MockDictDataset(size=20, offset=0)
+        d2_gt = MockDictDataset(size=20, offset=100)
+        s1_gt = ResumableSampler(SequentialSampler(d1_gt))
+        s2_gt = ResumableSampler(SequentialSampler(d2_gt))
+        l1_gt = DataLoader(d1_gt, batch_size=2, sampler=s1_gt)
+        l2_gt = DataLoader(d2_gt, batch_size=2, sampler=s2_gt)
+        gt_iter = InterleavedIterator([l1_gt, l2_gt])
         # We will run for 10 steps total, so we need the first 10 batches
         gt_data = [batch["X"].clone() for i, batch in enumerate(gt_iter) if i < 10]
-        print("gt_data", gt_data)
 
         # --- Interrupted Run (run1) ---
-        # We don't need torch.manual_seed for SequentialSampler, but good practice
         torch.manual_seed(0)
-        inter_iter1 = InterleavedIterator([loader1, loader2])
-        # samplers and world_size are not used in this simplified case
-        endless_iter1 = EndlessIterator(inter_iter1, samplers=[], world_size=1)
+        d1_1 = MockDictDataset(size=20, offset=0)
+        d2_1 = MockDictDataset(size=20, offset=100)
+        s1_1 = ResumableSampler(SequentialSampler(d1_1))
+        s2_1 = ResumableSampler(SequentialSampler(d2_1))
+        l1_1 = DataLoader(d1_1, batch_size=2, sampler=s1_1)
+        l2_1 = DataLoader(d2_1, batch_size=2, sampler=s2_1)
+        inter_iter1 = InterleavedIterator([l1_1, l2_1])
+        endless_iter1 = EndlessIterator(inter_iter1, samplers=[s1_1, s2_1], world_size=1)
 
         run1_data = []
         for i in range(5):
             batch = next(endless_iter1)
             run1_data.append(batch["X"].clone())
-        print("run1_data", run1_data)
         state = endless_iter1.state_dict()
 
         # --- Restored Run (run2) ---
         torch.manual_seed(0)  # Re-seed to ensure loaders are identical before loading state
-        inter_iter2 = InterleavedIterator([loader1, loader2])
-        endless_iter2 = EndlessIterator(inter_iter2, samplers=[], world_size=1)
+        d1_2 = MockDictDataset(size=20, offset=0)
+        d2_2 = MockDictDataset(size=20, offset=100)
+        s1_2 = ResumableSampler(SequentialSampler(d1_2))
+        s2_2 = ResumableSampler(SequentialSampler(d2_2))
+        l1_2 = DataLoader(d1_2, batch_size=2, sampler=s1_2)
+        l2_2 = DataLoader(d2_2, batch_size=2, sampler=s2_2)
+        inter_iter2 = InterleavedIterator([l1_2, l2_2])
+        endless_iter2 = EndlessIterator(inter_iter2, samplers=[s1_2, s2_2], world_size=1)
         endless_iter2.load_state_dict(state)
 
         run2_data = []
         for i in range(5):
             batch = next(endless_iter2)
             run2_data.append(batch["X"].clone())
-        print("run2_data", run2_data)
 
         # --- Verification ---
         combined_data = run1_data + run2_data
 
         self.assertEqual(len(combined_data), len(gt_data))
         for i in range(len(gt_data)):
-            if not torch.equal(combined_data[i], gt_data[i]):
-                print(f"Mismatch at index {i}:")
-                print(f"  Combined: {combined_data[i].numpy().flatten()}")
-                print(f"  Ground Truth: {gt_data[i].numpy().flatten()}")
             self.assertTrue(torch.equal(combined_data[i], gt_data[i]))
 
 

@@ -38,7 +38,7 @@ from mlpf.model.utils import (
 )
 from mlpf.model.monitoring import log_step_to_tensorboard, log_dataloader_to_tensorboard
 
-from mlpf.model.monitoring import log_open_files_to_tensorboard
+# from mlpf.model.monitoring import log_open_files_to_tensorboard
 from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.mlpf import MLPF
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
@@ -179,7 +179,7 @@ def train_step(
 
     # Log step metrics
     if tensorboard_writer is not None:
-        log_open_files_to_tensorboard(tensorboard_writer, step)
+        # log_open_files_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
         tensorboard_writer.flush()
@@ -319,6 +319,7 @@ def _log_and_checkpoint_step(
     valid_loader,
     train_sampler,
     valid_sampler,
+    num_patience,
 ):
     """Helper function to log training information and save periodic checkpoints."""
 
@@ -350,9 +351,9 @@ def _log_and_checkpoint_step(
             checkpoint_path = f"{checkpoint_dir}/checkpoint-{step:02d}.pth"
             save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
-            # Clean up old checkpoints, keeping the last 3
+            # Clean up old checkpoints, keeping the last num_patience
             checkpoints = sorted(Path(checkpoint_dir).glob("checkpoint-*.pth"), key=os.path.getmtime)
-            for i in range(len(checkpoints) - 3):
+            for i in range(len(checkpoints) - num_patience):
                 _logger.info("removing old checkpoint {}".format(checkpoints[i]))
                 os.remove(checkpoints[i])
 
@@ -622,6 +623,7 @@ def train_all_steps(
             valid_loader,
             train_sampler,
             valid_sampler,
+            config["patience"],
         )
 
         # Run validation, testing, and plotting cycle at specified frequency

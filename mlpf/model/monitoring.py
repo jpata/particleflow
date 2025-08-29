@@ -82,5 +82,5 @@ def log_step_to_tensorboard(batch, loss_accum, lr_schedule, tensorboard_writer, 
 
 
 def log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step):
-    for k, v in loader_state_dict.items():
-        tensorboard_writer.add_scalar("step/{}".format(k), v, step)
+    for k in ["cur_index"]:
+        tensorboard_writer.add_scalar("step/{}".format(k), loader_state_dict[k], step)

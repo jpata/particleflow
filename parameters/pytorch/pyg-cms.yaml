@@ -10,7 +10,7 @@ gpu_batch_multiplier: 1
 load:
 finetune:
 num_steps: 100000
-patience: 10000
+patience: 10
 val_freq: 10000
 checkpoint_freq: 1000
 lr: 0.0002

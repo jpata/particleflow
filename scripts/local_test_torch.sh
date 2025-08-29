@@ -9,6 +9,7 @@ export KERAS_BACKEND=torch
 python -m pytest tests/test_dataloader.py
 python -m pytest tests/test_dataloader_behavior.py
 python -m pytest tests/test_endless_interleaved_iterator.py
+python -m pytest tests/test_resumable_sampler.py.py
 python -m pytest tests/test_interleaved_iterator.py
 python -m pytest tests/test_lr_schedule.py
 
