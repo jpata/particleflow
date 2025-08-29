@@ -87,7 +87,6 @@ def mlpf_loss(y, ypred, batch):
     loss_regression_energy[batch.mask == 0] *= 0
 
     # add weight based on target pt
-    # sqrt_elem_pt = torch.sqrt(batch.X[:, :, 1])
     sqrt_target_pt = torch.sqrt(torch.exp(y["pt"]) * batch.X[:, :, 1])
     loss_regression_pt *= sqrt_target_pt
     loss_regression_energy *= sqrt_target_pt
@@ -100,7 +99,6 @@ def mlpf_loss(y, ypred, batch):
     loss["Regression_energy"] = loss_regression_energy.sum() / npart
 
     # average over all elements that were not padded
-    # loss["Classification_binary"] = (sqrt_elem_pt*loss_binary_classification).sum() / nelem
     loss["Classification_binary"] = loss_binary_classification.sum() / nelem
     loss["Classification"] = loss_pid_classification.sum() / nelem
     loss["ispu"] = loss_pu.sum() / nelem
@@ -109,8 +107,6 @@ def mlpf_loss(y, ypred, batch):
     pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], dim=-1) * msk_pred_particle
     pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"].detach(), dim=-1) * msk_pred_particle
     pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"].detach(), dim=-1) * msk_pred_particle
-    # pred_pz = pred_pt * torch.unsqueeze(torch.sinh(ypred["eta"].detach()), dim=-1) * msk_pred_particle
-    # pred_mass2 = pred_e**2 - pred_pt**2 - pred_pz**2
 
     # compute MET, sum across particle axis in event
     pred_met = torch.sqrt(torch.sum(pred_px, dim=-2) ** 2 + torch.sum(pred_py, dim=-2) ** 2).detach()
