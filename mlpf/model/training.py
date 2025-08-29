@@ -944,7 +944,8 @@ def override_config(config: dict, args):
     config["train"] = args.train
     config["test"] = args.test
     config["make_plots"] = args.make_plots
-    config["optimizer"] = args.optimizer
+    if args.optimizer is not None:
+        config["optimizer"] = args.optimizer
 
     return config
 
