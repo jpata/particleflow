@@ -10,6 +10,7 @@ import scipy
 import sklearn
 import sklearn.metrics
 import tqdm
+import sys
 import vector
 
 SAMPLE_LABEL_CMS = {
@@ -299,7 +300,11 @@ def load_eval_data(path, max_files=None):
         filelist = filelist[:max_files]
     assert len(filelist) > 0
 
-    for fi in tqdm.tqdm(filelist, desc="Loading eval data"):
+    is_interactive = sys.stdout.isatty()
+    if is_interactive:
+        filelist = tqdm.tqdm(filelist, total=len(filelist), desc=f"Loading eval data")
+
+    for fi in filelist:
         dd = awkward.from_parquet(fi)
         yvals.append(dd)
         filenames.append(fi)
