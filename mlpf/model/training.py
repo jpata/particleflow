@@ -113,15 +113,18 @@ def get_optimizer(model, config):
 
     wd = config["weight_decay"] if "weight_decay" in config else 0.01
     if "optimizer" not in config:
-        return torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
+        ret = torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
     if config["optimizer"] == "adamw":
-        return torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
+        ret = torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
     elif config["optimizer"] == "lamb":
-        return Lamb(model.parameters(), lr=config["lr"], weight_decay=wd)
+        ret = Lamb(model.parameters(), lr=config["lr"], weight_decay=wd)
     elif config["optimizer"] == "sgd":
-        return torch.optim.SGD(model.parameters(), lr=config["lr"], weight_decay=wd)
+        ret = torch.optim.SGD(model.parameters(), lr=config["lr"], weight_decay=wd)
     else:
         raise ValueError(f"Unsupported optimizer type: {config['optimizer']}")
+
+    _logger.info(f"Created optimizer: {ret}")
+    return ret
 
 
 def train_step(
@@ -816,7 +819,7 @@ def run(rank, world_size, config, outdir, logfile):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
             _logger.info(f"Restoring training from step {start_step}")
 
-        load_lr_schedule(lr_schedule, checkpoint, start_step)
+        load_lr_schedule(lr_schedule, checkpoint, start_step=start_step, max_steps=config["num_steps"])
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
     else:  # instantiate a new model in the outdir created
@@ -941,6 +944,7 @@ def override_config(config: dict, args):
     config["train"] = args.train
     config["test"] = args.test
     config["make_plots"] = args.make_plots
+    config["optimizer"] = args.optimizer
 
     return config
 

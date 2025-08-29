@@ -49,6 +49,7 @@ python mlpf/pipeline.py \
   --pipeline \
   train \
   --num-steps 100 \
+  --checkpoint-freq 100 \
   --nvalid 1 \
   --gpus 0 \
   --make-plots \
@@ -73,6 +74,7 @@ python mlpf/pipeline.py \
   --pipeline \
   train \
   --num-steps 200 \
+  --checkpoint-freq 100 \
   --nvalid 1 \
   --gpus 0 \
   --make-plots \
