@@ -57,6 +57,8 @@ python mlpf/pipeline.py \
   --attention-type math \
   --num-convs 1
 
+ls -lrt experiments/*/checkpoints/*
+
 # Capture the experiment directory created by the first run for the next steps
 export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
 
