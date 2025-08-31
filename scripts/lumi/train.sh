@@ -10,12 +10,12 @@ python3 mlpf/pipeline.py \
     train \
     --gpus 8 \
     --gpu-batch-multiplier 16 \
-    --num-workers 8 \
-    --prefetch-factor 10 \
-    --checkpoint-freq 1 \
+    --num-workers 4 \
+    --prefetch-factor 5 \
     --conv-type attention \
     --dtype bfloat16 \
     --optimizer lamb \
-    --lr 0.005 \
-    --ntest 1000 \
-    --test-datasets cms_pf_qcd
+    --lr 0.002 \
+    --val-freq 5000 \
+    --test-datasets cms_pf_qcd \
+    --comet
