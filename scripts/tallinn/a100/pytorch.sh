@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --partition gpu
 #SBATCH --gres gpu:a100:1
-#SBATCH --mem-per-gpu 300G
+#SBATCH --mem-per-gpu 400G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
-IMG=/home/software/singularity/pytorch.simg:2024-12-03
+IMG=/home/software/singularity/pytorch.simg:2025-08-26
 cd ~/particleflow
 
 ulimit -n 100000
@@ -16,12 +16,12 @@ singularity exec -B /scratch/persistent -B /local --nv \
     --config parameters/pytorch/pyg-cms.yaml \
     train \
     --gpus 1 \
-    --gpu-batch-multiplier 10 \
-    --checkpoint-freq 1 \
+    --gpu-batch-multiplier 16 \
     --num-workers 8 \
     --prefetch-factor 10 \
+    --conv-type attention \
+    --dtype bfloat16 \
+    --optimizer lamb \
     --comet \
-    --ntrain 5000 \
-    --nvalid 1000 \
-    --ntest 1000 \
-    --test-datasets cms_pf_qcd
+    --test-datasets cms_pf_qcd \
+    --num-steps 1000000
