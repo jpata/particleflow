@@ -64,5 +64,3 @@ class CmsPfQcd13p6(tfds.core.GeneratorBasedBuilder):
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)
-les):
-        return cms_utils.generate_examples(files)

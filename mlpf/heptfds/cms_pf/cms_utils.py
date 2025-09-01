@@ -168,7 +168,7 @@ def prepare_data_cms(fn):
         genjet = event["genjet"]
         targetjet = event["targetjet"]
         ypythia = event["pythia"]
-        
+
         # remove PS and BREM from inputs
         msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
 

@@ -69,5 +69,3 @@ class CmsPfZtt(tfds.core.GeneratorBasedBuilder, skip_registration=True):
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)
-les):
-        return cms_utils.generate_examples(files)
