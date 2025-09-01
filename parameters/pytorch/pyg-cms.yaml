@@ -99,7 +99,7 @@ raytune:
 train_dataset:
   cms:
     physical_pu:
-      batch_size: 1
+      batch_size: 2
       samples:
         cms_pf_ttbar:
           version: 2.8.0
@@ -126,7 +126,7 @@ train_dataset:
 valid_dataset:
   cms:
     physical_pu:
-      batch_size: 1
+      batch_size: 2
       samples:
         cms_pf_ttbar:
           version: 2.8.0
