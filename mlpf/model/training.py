@@ -13,6 +13,7 @@ from typing import Union, List
 import sys
 import shutil
 import subprocess
+import psutil
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
@@ -46,6 +47,15 @@ from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
 from mlpf.model.plots import validation_plots
 from mlpf.optimizers.lamb import Lamb
+
+
+def log_memory(stage, rank, tensorboard_writer=None, step=None):
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info()
+    _logger.info(f"RAM memory usage at {stage} on rank {rank}: rss={mem.rss / 1024**2:.2f} MB, vms={mem.vms / 1024**2:.2f} MB")
+    if tensorboard_writer and step:
+        tensorboard_writer.add_scalar(f"memory/rss_MB/{stage}", mem.rss / 1024**2, step)
+        tensorboard_writer.add_scalar(f"memory/vms_MB/{stage}", mem.vms / 1024**2, step)
 
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
@@ -390,6 +400,7 @@ def _run_validation_cycle(
     """Helper function to run the validation, testing, and plotting cycle."""
 
     # Run validation
+    log_memory("evaluate_start", rank, tensorboard_writer_valid, step)
     losses_valid = evaluate(
         rank=rank,
         world_size=world_size,
@@ -402,6 +413,7 @@ def _run_validation_cycle(
         device_type=device_type,
         dtype=dtype,
     )
+    log_memory("evaluate_end", rank, tensorboard_writer_valid, step)
     valid_time = time.time() - train_time - t0_initial
     total_time = time.time() - t0_initial
 
@@ -458,10 +470,13 @@ def _run_validation_cycle(
 
     # Run inference and plotting on test datasets for this step
     testdir_name = f"_step_{step}"
+    log_memory("run_test_start", rank, tensorboard_writer_valid, step)
     for sample in config["enabled_test_datasets"]:
         run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+    log_memory("run_test_end", rank, tensorboard_writer_valid, step)
 
     if (rank == 0) or (rank == "cpu"):
+        log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
         for sample in config["enabled_test_datasets"]:
             plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
             # Log key jet metrics to TensorBoard and CometML
@@ -478,6 +493,7 @@ def _run_validation_cycle(
                     f.seek(0)
                     json.dump(data, f)
                     f.truncate()
+        log_memory("make_plots_end", rank, tensorboard_writer_valid, step)
 
     # Ray-specific reporting
     if use_ray:
@@ -575,6 +591,7 @@ def train_all_steps(
             batch = next(train_iterator)
 
         # Run a single training step
+        log_memory("train_step_start", rank, tensorboard_writer_train, step)
         losses_train = train_step(
             rank=rank,
             world_size=world_size,
@@ -592,6 +609,7 @@ def train_all_steps(
             scaler=scaler,
             loader_state_dict=train_loader.state_dict()["loader_state_dict"],
         )
+        log_memory("train_step_end", rank, tensorboard_writer_train, step)
         train_time = time.time() - step_start_time
 
         # Log a brief training status every 100 steps on the main process
