@@ -723,7 +723,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
-        collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]),
+        collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets", "pythia"], ["genmet"]),
         sampler=sampler,
         num_workers=config["num_workers"],
         prefetch_factor=config["prefetch_factor"],

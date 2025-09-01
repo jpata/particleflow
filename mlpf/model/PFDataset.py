@@ -154,6 +154,7 @@ class PFBatch:
         self.ytarget = kwargs.get("ytarget")
         self.ytarget_pt_orig = kwargs.get("ytarget_pt_orig", None)
         self.ytarget_e_orig = kwargs.get("ytarget_e_orig", None)
+        self.pythia = kwargs.get("pythia", None)
         self.ycand = kwargs.get("ycand", None)
         self.genmet = kwargs.get("genmet", None)
         self.genjets = kwargs.get("genjets", None)

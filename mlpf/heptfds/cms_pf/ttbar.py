@@ -21,7 +21,7 @@ _CITATION = """
 class CmsPfTtbar(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     """DatasetBuilder for cms_pf_ttbar dataset."""
 
-    VERSION = tfds.core.Version("2.7.1")
+    VERSION = tfds.core.Version("2.8.0")
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",
@@ -45,6 +45,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder, skip_registration=True):
         "2.6.0": "Regenerate with 20250508_cmssw_15_0_5_d3c6d1",
         "2.7.0": "Remove split_caloparticle",
         "2.7.1": "Use fixed split_caloparticle",
+        "2.8.0": "Add Pythia",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar ~/tensorflow_datasets/
@@ -70,6 +71,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder, skip_registration=True):
                     "genmet": tfds.features.Scalar(dtype=tf.float32),
                     "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                     "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
+                    "pythia": tfds.features.Tensor(shape=(None, 5), dtype=tf.float32),
                 }
             ),
             homepage="https://github.com/jpata/particleflow",

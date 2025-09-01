@@ -20,9 +20,10 @@ _CITATION = """
 class CmsPfQcd13p6(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd dataset."""
 
-    VERSION = tfds.core.Version("2.6.0")
+    VERSION = tfds.core.Version("2.8.0")
     RELEASE_NOTES = {
         "2.6.0": "First version",
+        "2.8.0": "Add Pythia",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_qcd ~/tensorflow_datasets/
@@ -62,4 +63,6 @@ class CmsPfQcd13p6(tfds.core.GeneratorBasedBuilder):
         return cms_utils.split_sample(path / sample_dir / "raw", self.builder_config, num_splits=cms_utils.NUM_SPLITS)
 
     def _generate_examples(self, files):
+        return cms_utils.generate_examples(files)
+les):
         return cms_utils.generate_examples(files)

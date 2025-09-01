@@ -57,6 +57,7 @@ class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
                     "genmet": tfds.features.Scalar(dtype=tf.float32),
                     "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
                     "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
+                    "pythia": tfds.features.Tensor(shape=(None, 5), dtype=tf.float32),
                 }
             ),
             homepage="https://github.com/jpata/particleflow",

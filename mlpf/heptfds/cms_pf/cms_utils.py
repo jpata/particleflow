@@ -149,6 +149,7 @@ def prepare_data_cms(fn):
     genmets = []
     genjets = []
     targetjets = []
+    ypythias = []
 
     try:
         if fn.endswith(".pkl"):
@@ -166,7 +167,8 @@ def prepare_data_cms(fn):
         genmet = event["genmet"][0][0]
         genjet = event["genjet"]
         targetjet = event["targetjet"]
-
+        ypythia = event["pythia"]
+        
         # remove PS and BREM from inputs
         msk_ps = (Xelem["typ"] == 2) | (Xelem["typ"] == 3) | (Xelem["typ"] == 7)
 
@@ -210,8 +212,9 @@ def prepare_data_cms(fn):
         genmets.append(genmet)
         genjets.append(genjet)
         targetjets.append(targetjet)
+        ypythias.append(ypythia)
 
-    return Xs, ytargets, ycands, genmets, genjets, targetjets
+    return Xs, ytargets, ycands, genmets, genjets, targetjets, ypythias
 
 
 def split_list(lst, x):
@@ -251,7 +254,7 @@ def generate_examples(files):
 
     for fi in files:
         print(datetime.datetime.now(), "started reading file", fi)
-        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_cms(str(fi))
+        Xs, ytargets, ycands, genmets, genjets, targetjets, ypythias = prepare_data_cms(str(fi))
         if len(Xs) == 0:
             print("Error: file {} is broken".format(fi))
         for ii in range(len(Xs)):
@@ -261,6 +264,7 @@ def generate_examples(files):
             gm = genmets[ii].astype(np.float32)
             gj = genjets[ii].astype(np.float32)
             tj = targetjets[ii].astype(np.float32)
+            yp = ypythias[ii].astype(np.float32)
 
             uniqs, counts = np.unique(yg[:, 0], return_counts=True)
-            yield str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj, "targetjets": tj}
+            yield str(fi) + "_" + str(ii), {"X": x, "ytarget": yg, "ycand": yc, "genmet": gm, "genjets": gj, "targetjets": tj, "pythia": yp}
