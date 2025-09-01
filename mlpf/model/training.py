@@ -14,6 +14,7 @@ import sys
 import shutil
 import subprocess
 import psutil
+from packaging.version import Version
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
@@ -720,10 +721,16 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     else:
         sampler = torch.utils.data.RandomSampler(ds)
 
+    vals_for_test = ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"]
+
+    # pythia branch was introduced for cms in version 2.8.0
+    if sample.startswith("cms_") and Version(version) >= Version("2.8.0"):
+        vals_for_test += ["pythia"]
+
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
-        collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets", "pythia"], ["genmet"]),
+        collate_fn=Collater(vals_for_test, ["genmet"]),
         sampler=sampler,
         num_workers=config["num_workers"],
         prefetch_factor=config["prefetch_factor"],
