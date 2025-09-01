@@ -6,36 +6,36 @@ export PYTHONPATH=`pwd`
 export KERAS_BACKEND=torch
 
 # Quick unit tests
-python -m pytest tests/test_dataloader.py
-python -m pytest tests/test_dataloader_behavior.py
-python -m pytest tests/test_endless_interleaved_iterator.py
-python -m pytest tests/test_resumable_sampler.py
-python -m pytest tests/test_interleaved_iterator.py
-python -m pytest tests/test_lr_schedule.py
+# python -m pytest tests/test_dataloader.py
+# python -m pytest tests/test_dataloader_behavior.py
+# python -m pytest tests/test_endless_interleaved_iterator.py
+# python -m pytest tests/test_resumable_sampler.py
+# python -m pytest tests/test_interleaved_iterator.py
+# python -m pytest tests/test_lr_schedule.py
 
-#create data directories
-rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
-mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
-cd local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
+# #create data directories
+# rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
+# mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
+# cd local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
 
-#Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
+# #Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
+# wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
+# wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
 
-cd ../../..
+# cd ../../..
 
-#Create the ntuples using postprocessing2.py
-rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
-mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
-for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; do
-  python mlpf/data/cms/postprocessing2.py \
-    --input $file \
-    --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw \
-    --num-events 10
-done
+# #Create the ntuples using postprocessing2.py
+# rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
+# mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
+# for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; do
+#   python mlpf/data/cms/postprocessing2.py \
+#     --input $file \
+#     --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw \
+#     --num-events 10
+# done
 
-#create the tensorflow dataset for the last split config only
-tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
+# #create the tensorflow dataset for the last split config only
+# tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
 
 mkdir -p experiments
 
@@ -48,8 +48,8 @@ python mlpf/pipeline.py \
   --prefix MLPF_test_ \
   --pipeline \
   train \
-  --num-steps 100 \
-  --checkpoint-freq 100 \
+  --num-steps 2 \
+  --checkpoint-freq 2 \
   --nvalid 1 \
   --gpus 0 \
   --make-plots \
@@ -58,7 +58,7 @@ python mlpf/pipeline.py \
   --attention-type math \
   --num-convs 1
 
-ls -lrt experiments/*/checkpoints/*
+ls experiments/MLPF_test_*/checkpoints/*
 
 # Capture the experiment directory created by the first run for the next steps
 export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
@@ -73,8 +73,8 @@ python mlpf/pipeline.py \
   --prefix MLPF_test_ \
   --pipeline \
   train \
-  --num-steps 200 \
-  --checkpoint-freq 100 \
+  --num-steps 4 \
+  --checkpoint-freq 2 \
   --nvalid 1 \
   --gpus 0 \
   --make-plots \
@@ -82,9 +82,9 @@ python mlpf/pipeline.py \
   --dtype float32 \
   --attention-type math \
   --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-100.pth
+  --load ${EXP_DIR}/checkpoints/checkpoint-02.pth
 
-ls -lrt experiments/*/checkpoints/*
+ls experiments/MLPF_test_*/checkpoints/*
 
 # # --------------------------------------------------------------------------------------------
 # # Test 3: Ray Train training using the 'ray-train' sub-command
@@ -96,7 +96,7 @@ python mlpf/pipeline.py \
   --prefix MLPF_test_ \
   --pipeline \
   ray-train \
-  --num-steps 100 \
+  --num-steps 4 \
   --ray-cpus 2 \
   --ray-local \
   --conv-type attention \

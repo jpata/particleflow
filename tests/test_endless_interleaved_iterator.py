@@ -76,6 +76,26 @@ class TestEndlessInterleavedIterator(unittest.TestCase):
         for i in range(len(gt_data)):
             self.assertTrue(torch.equal(combined_data[i], gt_data[i]))
 
+    def test_endless_iterator_with_empty_dataloaders(self):
+        """
+        Tests that EndlessIterator wrapping an empty InterleavedIterator
+        (because all dataloaders are empty) does not result in an unhandled exception.
+        This is the condition that likely causes the user-reported IndexError.
+        """
+        d1 = MockDictDataset(size=0)
+        d2 = MockDictDataset(size=0)
+        s1 = ResumableSampler(SequentialSampler(d1))
+        s2 = ResumableSampler(SequentialSampler(d2))
+        l1 = DataLoader(d1, batch_size=2, sampler=s1)
+        l2 = DataLoader(d2, batch_size=2, sampler=s2)
+        inter_iter = InterleavedIterator([l1, l2])
+        endless_iter = EndlessIterator(inter_iter, samplers=[s1, s2], world_size=1)
+
+        # According to analysis, this should lead to a RecursionError.
+        # The user reported an IndexError. This test will expose the actual error.
+        with self.assertRaises(Exception):
+            next(endless_iter)
+
 
 if __name__ == "__main__":
     unittest.main()

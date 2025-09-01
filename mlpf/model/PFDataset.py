@@ -293,12 +293,11 @@ class EndlessIterator(object):
         try:
             return next(self.iterator)
         except StopIteration:
-            print("StopIteration raised")
             self.epoch += 1
             if self.world_size > 1:
                 for sampler in self.samplers:
-                    # set_epoch is now called on the ResumableSampler wrapper
                     sampler.set_epoch(self.epoch)
+            _logger.info("EndlessIterator StopIteration raised, advancing epoch to {}".format(self.epoch))
             self.iterator = iter(self.data_loader)
             return next(self.iterator)
 

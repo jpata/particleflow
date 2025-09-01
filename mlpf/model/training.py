@@ -819,7 +819,7 @@ def run(rank, world_size, config, outdir, logfile):
             _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
             _logger.info(f"Restoring training from step {start_step}")
 
-        load_lr_schedule(lr_schedule, checkpoint, start_step=start_step, max_steps=config["num_steps"])
+        load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
     else:  # instantiate a new model in the outdir created
@@ -926,9 +926,12 @@ def override_config(config: dict, args):
     """override config dictionary with values from argparse Namespace"""
     for arg in vars(args):
         arg_value = getattr(args, arg)
-        if (arg_value is not None) and (arg in config):
-            _logger.info("overriding config item {}={} with {} from cmdline".format(arg, config[arg], arg_value))
-            config[arg] = arg_value
+        if arg_value is not None:
+            if arg in config:
+                _logger.info("overriding config item {}={} with {} from cmdline".format(arg, config[arg], arg_value))
+                config[arg] = arg_value
+            else:
+                _logger.info("skipping {}".format(arg))
 
     if "attention_type" in args and args.attention_type is not None:
         config["model"]["attention"]["attention_type"] = args.attention_type
@@ -944,8 +947,6 @@ def override_config(config: dict, args):
     config["train"] = args.train
     config["test"] = args.test
     config["make_plots"] = args.make_plots
-    if args.optimizer is not None:
-        config["optimizer"] = args.optimizer
 
     return config
 

@@ -291,7 +291,7 @@ def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
     )
 
 
-def load_lr_schedule(lr_schedule, checkpoint, start_step=0, max_steps=None):
+def load_lr_schedule(lr_schedule, checkpoint, start_step=0):
     """Loads the lr_schedule's state dict from checkpoint and sets the last_epoch to start_step"""
     if "lr_schedule_state_dict" in checkpoint["extra_state"].keys():
         state_dict = checkpoint["extra_state"]["lr_schedule_state_dict"]
