@@ -79,7 +79,7 @@ def mlpf_loss(y, ypred, batch):
     # set the loss to 0 on padded elements in the batch
     loss_binary_classification[batch.mask == 0] *= 0
     loss_pid_classification[batch.mask == 0] *= 0
-    loss_pu[batch.mask == 0] *= 0
+    # loss_pu[batch.mask == 0] *= 0
     loss_regression_pt[batch.mask == 0] *= 0
     loss_regression_eta[batch.mask == 0] *= 0
     loss_regression_sin_phi[batch.mask == 0] *= 0
