@@ -65,7 +65,7 @@ model:
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "relu"
+    activation: "elu"
     head_dim: 16
     num_heads: 16
     attention_type: flash
@@ -77,10 +77,10 @@ lr_schedule_config:
     pct_start: 0.3
 
 raytune:
-  local_dir: /home/joosep/particleflow/raytune # Note: please specify an absolute path
+  local_dir: /scratch/project_465001293/joosep/particleflow/ # Note: please specify an absolute path
   sched: asha # asha, hyperband
   search_alg: bohb # bayes, bohb, hyperopt, nevergrad, scikit
-  default_metric: "step/cms_pf_qcd/jet_ratio/jet_ratio_target_to_pred_pt/iqr"
+  default_metric: "step/cms_pf_qcd/jet_ratio/jet_ratio_target_to_pred_pt/combined"
   default_mode: "min"
   # Tune schedule specific parameters
   asha:

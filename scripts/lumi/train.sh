@@ -15,7 +15,7 @@ python3 mlpf/pipeline.py \
     --conv-type attention \
     --dtype bfloat16 \
     --optimizer lamb \
-    --lr 0.004 \
+    --lr 0.002 \
     --val-freq 1000 \
     --checkpoint-freq 100 \
     --test-datasets cms_pf_qcd \

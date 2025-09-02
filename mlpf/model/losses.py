@@ -44,7 +44,7 @@ def mlpf_loss(y, ypred, batch):
     # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
     ypred["cls_binary"] = ypred["cls_binary"].permute((0, 2, 1))
     ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
-    ypred["ispu"] = ypred["ispu"].permute((0, 2, 1))
+    # ypred["ispu"] = ypred["ispu"].permute((0, 2, 1))
 
     # binary loss for particle / no-particle classification
     # loss_binary_classification = 10.0 * loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
@@ -55,13 +55,13 @@ def mlpf_loss(y, ypred, batch):
     loss_pid_classification[y["cls_id"] == 0] *= 0
 
     # compare particle "PU-ness", only for cases where there was a true particle
-    loss_pu = torch.nn.functional.cross_entropy(ypred["ispu"], y["ispu"].long(), reduction="none")
+    # loss_pu = torch.nn.functional.cross_entropy(ypred["ispu"], y["ispu"].long(), reduction="none")
     # loss_pu = loss_obj_id(ypred["ispu"], y["ispu"].long()).reshape(y["cls_id"].shape)
-    loss_pu[y["cls_id"] == 0] *= 0
+    # loss_pu[y["cls_id"] == 0] *= 0
 
     # do not compute PU loss if no PU samples in this batch
-    if y["ispu"].long().sum() == 0:
-        loss_pu *= 0
+    # if y["ispu"].long().sum() == 0:
+    #     loss_pu *= 0
 
     # compare particle momentum, only for cases where there was a true particle
     loss_regression_pt = torch.nn.functional.mse_loss(ypred["pt"], y["pt"], reduction="none")
@@ -101,7 +101,7 @@ def mlpf_loss(y, ypred, batch):
     # average over all elements that were not padded
     loss["Classification_binary"] = loss_binary_classification.sum() / nelem
     loss["Classification"] = loss_pid_classification.sum() / nelem
-    loss["ispu"] = loss_pu.sum() / nelem
+    # loss["ispu"] = loss_pu.sum() / nelem
 
     # compute predicted pt from model output
     pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], dim=-1) * msk_pred_particle
@@ -110,7 +110,7 @@ def mlpf_loss(y, ypred, batch):
 
     # compute MET, sum across particle axis in event
     pred_met = torch.sqrt(torch.sum(pred_px, dim=-2) ** 2 + torch.sum(pred_py, dim=-2) ** 2).detach()
-    loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
+    # loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
     was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), dim=-1), ypred["momentum"]], dim=-1) * batch.mask.unsqueeze(
         dim=-1
@@ -121,19 +121,18 @@ def mlpf_loss(y, ypred, batch):
 
     # standardize Wasserstein loss
     std = was_input_true[batch.mask].std(dim=0)
-    loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
+    # loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
     # this is the final loss to be optimized
     loss["Total"] = (
         loss["Classification_binary"]
         + loss["Classification"]
-        + loss["ispu"]
+        # + loss["ispu"]
         + loss["Regression_pt"]
         + loss["Regression_eta"]
         + loss["Regression_sin_phi"]
         + loss["Regression_cos_phi"]
         + loss["Regression_energy"]
-        + 0.001 * loss["Sliced_Wasserstein_Loss"]
     )
     loss_opt = loss["Total"]
     if torch.isnan(loss_opt):
