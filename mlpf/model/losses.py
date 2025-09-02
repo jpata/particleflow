@@ -33,7 +33,7 @@ def mlpf_loss(y, ypred, batch):
     loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
-    msk_pred_particle = torch.unsqueeze((ypred["cls_id"] != 0).to(dtype=torch.float32), dim=-1)
+    # msk_pred_particle = torch.unsqueeze((ypred["cls_id"] != 0).to(dtype=torch.float32), dim=-1)
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), dim=-1)
     nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
@@ -104,23 +104,23 @@ def mlpf_loss(y, ypred, batch):
     # loss["ispu"] = loss_pu.sum() / nelem
 
     # compute predicted pt from model output
-    pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], dim=-1) * msk_pred_particle
-    pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"].detach(), dim=-1) * msk_pred_particle
-    pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"].detach(), dim=-1) * msk_pred_particle
+    # pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], dim=-1) * msk_pred_particle
+    # pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"].detach(), dim=-1) * msk_pred_particle
+    # pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"].detach(), dim=-1) * msk_pred_particle
 
     # compute MET, sum across particle axis in event
-    pred_met = torch.sqrt(torch.sum(pred_px, dim=-2) ** 2 + torch.sum(pred_py, dim=-2) ** 2).detach()
+    # pred_met = torch.sqrt(torch.sum(pred_px, dim=-2) ** 2 + torch.sum(pred_py, dim=-2) ** 2).detach()
     # loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
 
-    was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), dim=-1), ypred["momentum"]], dim=-1) * batch.mask.unsqueeze(
-        dim=-1
-    )
-    was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], dim=-1) * batch.mask.unsqueeze(
-        dim=-1
-    )
+    # was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), dim=-1), ypred["momentum"]], dim=-1) * batch.mask.unsqueeze(
+    #     dim=-1
+    # )
+    # was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], dim=-1) * batch.mask.unsqueeze(
+    #     dim=-1
+    # )
 
     # standardize Wasserstein loss
-    std = was_input_true[batch.mask].std(dim=0)
+    # std = was_input_true[batch.mask].std(dim=0)
     # loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
 
     # this is the final loss to be optimized
