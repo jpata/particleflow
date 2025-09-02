@@ -30,8 +30,7 @@ mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
 for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; do
   python mlpf/data/cms/postprocessing2.py \
     --input $file \
-    --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw \
-    --num-events 10
+    --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
 done
 
 #create the tensorflow dataset for the last split config only
@@ -50,7 +49,6 @@ python mlpf/pipeline.py \
   train \
   --num-steps 2 \
   --checkpoint-freq 2 \
-  --nvalid 1 \
   --gpus 0 \
   --make-plots \
   --conv-type attention \
@@ -75,7 +73,6 @@ python mlpf/pipeline.py \
   train \
   --num-steps 4 \
   --checkpoint-freq 2 \
-  --nvalid 1 \
   --gpus 0 \
   --make-plots \
   --conv-type attention \

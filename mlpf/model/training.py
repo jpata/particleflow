@@ -257,6 +257,7 @@ def evaluate(
 
     # Only show progress bar on rank 0
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
+    assert len(valid_loader) > 0
     iterator = enumerate(valid_loader)
     if is_interactive:
         iterator = tqdm.tqdm(iterator, total=len(valid_loader), desc=f"Step {step} eval loop on rank={rank}")
@@ -266,7 +267,7 @@ def evaluate(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
-                loss_opt, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
+                _, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
 
         # Update confusion matrices
         cm_X_target += sklearn.metrics.confusion_matrix(
@@ -550,6 +551,7 @@ def train_all_steps(
 ):
     """Main training loop that handles all steps and validation"""
     _logger.info(f"Starting training from step {start_step} to {num_steps} on rank {rank} of {world_size}")
+    assert len(train_loader) > 0
 
     # Per-worker setup
     np.seterr(divide="ignore", invalid="ignore")
@@ -853,7 +855,9 @@ def run(rank, world_size, config, outdir, logfile):
         lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
     model.to(rank)
-    model.compile()
+    # on CPU, the compilation does not work with bs>1
+    if rank != "cpu":
+        model.compile()
     configure_model_trainable(model, config["model"]["trainable"], True)
 
     if world_size > 1:
