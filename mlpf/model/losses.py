@@ -133,6 +133,7 @@ def mlpf_loss(y, ypred, batch):
         + loss["Regression_sin_phi"]
         + loss["Regression_cos_phi"]
         + loss["Regression_energy"]
+        + 0.001 * loss["Sliced_Wasserstein_Loss"]
     )
     loss_opt = loss["Total"]
     if torch.isnan(loss_opt):

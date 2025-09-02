@@ -229,6 +229,7 @@ def evaluate(
     outdir=None,
     device_type="cuda",
     dtype=torch.float32,
+    make_plots=False,
 ):
     """Run one evaluation step
 
@@ -281,7 +282,7 @@ def evaluate(
         )
 
         # Save validation plots for first batch
-        if (rank == 0 or rank == "cpu") and ival == 0:
+        if (rank == 0 or rank == "cpu") and ival == 0 and make_plots:
             validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
 
         # Accumulate losses
@@ -414,6 +415,7 @@ def _run_validation_cycle(
         outdir=outdir,
         device_type=device_type,
         dtype=dtype,
+        make_plots=config["make_plots"],
     )
     log_memory("evaluate_end", rank, tensorboard_writer_valid, step)
     valid_time = time.time() - train_time - t0_initial
@@ -477,10 +479,12 @@ def _run_validation_cycle(
         run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
     log_memory("run_test_end", rank, tensorboard_writer_valid, step)
 
+    plot_metrics_sample = {}
     if (rank == 0) or (rank == "cpu"):
         log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
         for sample in config["enabled_test_datasets"]:
             plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
+            plot_metrics_sample[sample] = plot_metrics
             # Log key jet metrics to TensorBoard and CometML
             for k in ["med", "iqr", "match_frac"]:
                 metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{k}"
@@ -517,6 +521,14 @@ def _run_validation_cycle(
                     "train_loader_state_dict": train_loader.state_dict(),
                     "valid_loader_state_dict": valid_loader.state_dict(),
                 }
+                for sample in plot_metrics_sample.keys():
+                    for metric in ["iqr", "match_frac"]:
+                        metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{metric}"
+                        metrics[metric_name] = plot_metrics_sample[sample]["jet_ratio"]["jet_ratio_target_to_pred_pt"][metric]
+                    metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/combined"] = (
+                        metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/iqr"]
+                        - metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/match_frac"]
+                    )
                 save_checkpoint(Path(temp_checkpoint_dir) / "checkpoint.pth", model, optimizer, extra_state)
                 ray.train.report(metrics, checkpoint=ray.train.Checkpoint.from_directory(temp_checkpoint_dir))
         else:
@@ -970,12 +982,14 @@ def override_config(config: dict, args):
             config["model"][model]["num_convs"] = args.num_convs
 
     config["enabled_test_datasets"] = list(config["test_dataset"].keys())
-    if len(args.test_datasets) != 0:
-        config["enabled_test_datasets"] = args.test_datasets
+    if "test_datasets" in args:
+        if len(args.test_datasets) != 0:
+            config["enabled_test_datasets"] = args.test_datasets
 
     config["train"] = args.train
     config["test"] = args.test
-    config["make_plots"] = args.make_plots
+    if "make_plots" in args:
+        config["make_plots"] = args.make_plots
 
     return config
 
