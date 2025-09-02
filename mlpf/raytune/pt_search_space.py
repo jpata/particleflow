@@ -17,7 +17,7 @@ search_space = {
     # "weight_decay": samp([0.001, 0.01, 0.03, 0.1]),
     # "lr_schedule": samp(["cosinedecay"]),
     # "pct_start": samp([0.05, 0.1, 0.2]),
-    # "gpu_batch_multiplier": samp([256]),
+    "gpu_batch_multiplier": samp([1, 4, 8]),
     # "patience": samp([9999]),
     # model arch parameters
     "activation": samp(["elu", "relu", "relu6", "leakyrelu"]),

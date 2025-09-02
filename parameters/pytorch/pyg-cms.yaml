@@ -77,10 +77,10 @@ lr_schedule_config:
     pct_start: 0.3
 
 raytune:
-  local_dir: # Note: please specify an absolute path
+  local_dir: /home/joosep/particleflow/raytune # Note: please specify an absolute path
   sched: asha # asha, hyperband
-  search_alg: hyperopt # bayes, bohb, hyperopt, nevergrad, scikit
-  default_metric: "val_loss"
+  search_alg: bohb # bayes, bohb, hyperopt, nevergrad, scikit
+  default_metric: "step/cms_pf_qcd/jet_ratio/jet_ratio_target_to_pred_pt/iqr"
   default_mode: "min"
   # Tune schedule specific parameters
   asha:
@@ -102,25 +102,25 @@ train_dataset:
       batch_size: 2
       samples:
         cms_pf_ttbar:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_ztt:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
     physical_nopu:
       batch_size: 32
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd_nopu:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_ztt_nopu:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
@@ -129,49 +129,49 @@ valid_dataset:
       batch_size: 2
       samples:
         cms_pf_ttbar:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_ztt:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
     physical_nopu:
       batch_size: 32
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd_nopu:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_ztt_nopu:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
   cms_pf_ttbar:
     batch_size: 1
-    version: 2.8.0
+    version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_qcd:
     batch_size: 1
-    version: 2.8.0
+    version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ztt:
     batch_size: 1
-    version: 2.8.0
+    version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ttbar_nopu:
     batch_size: 32
-    version: 2.8.0
+    version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_qcd_nopu:
     batch_size: 32
-    version: 2.8.0
+    version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ztt_nopu:
     batch_size: 32
-    version: 2.8.0
+    version: 2.7.1
     splits: [1,2,3,4,5,6,7,8,9,10]
