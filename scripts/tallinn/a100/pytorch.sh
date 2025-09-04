@@ -24,4 +24,4 @@ singularity exec -B /scratch/persistent -B /local --nv \
     --optimizer lamb \
     --comet \
     --test-datasets cms_pf_qcd \
-    --num-steps 1000000
+    --num-steps 1000000 --load experiments/pyg-cms_20250831_101432_291783/checkpoints/checkpoint-11000.pth
