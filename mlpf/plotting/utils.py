@@ -135,9 +135,3 @@ def compute_response(data, jet_coll="Jet", genjet_coll="GenJet", deltar_cut=0.2)
         f"{genjet_coll}_pt_unfiltered": gj_pt_unfiltered[mask],
         f"{genjet_coll}_eta_unfiltered": gj_eta_unfiltered[mask],
     }
-
-def med_iqr(arr):
-    if len(arr) == 0:
-        return 0, 0
-    q = np.quantile(arr, [0.25, 0.5, 0.75])
-    return q[1], q[2] - q[0]

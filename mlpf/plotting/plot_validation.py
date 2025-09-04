@@ -9,8 +9,8 @@ import mplhep
 import boost_histogram as bh
 from scipy.optimize import curve_fit
 from scipy.interpolate import RegularGridInterpolator
-from mlpf.plotting.utils import compute_response, med_iqr
-
+from mlpf.plotting.utils import compute_response
+from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, med_iqr, sample_label
 
 def midpoints(x):
     return (x[1:] + x[:-1]) / 2
@@ -28,10 +28,29 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     os.makedirs(output_dir, exist_ok=True)
     mplhep.style.use("CMS")
 
+    def sample_name_to_process(sample_name):
+        if "QCD" in sample_name:
+            key = "cms_pf_qcd"
+        elif "TTbar" in sample_name:
+            key = "cms_pf_ttbar"
+        elif "PhotonJet" in sample_name:
+            key = "cms_pf_photonjet"
+        elif "ZTT" in sample_name:
+            key = "cms_pf_ztt"
+        else:
+            return sample_name
+        if "PU" not in sample_name:
+            key += "_nopu"
+        return key
+
+    process_name = sample_name_to_process(sample_name)
+    plot_sample_name = EVALUATION_DATASET_NAMES.get(process_name, sample_name)
+
     # plotting style variables
     legend_fontsize = 30
     sample_label_fontsize = 30
     addtext_fontsize = 25
+    jet_label_coords = 0.02, 0.82
     jet_label_coords_single = 0.02, 0.86
     sample_label_coords = 0.02, 0.96
     default_cycler = plt.rcParams['axes.prop_cycle']
@@ -151,12 +170,12 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             plt.yscale("log")
         
         mplhep.cms.label("", data=False, com=13.6, year='Run 3', ax=a0)
-        a0.text(sample_label_coords[0], sample_label_coords[1], sample_name, transform=a0.transAxes, fontsize=sample_label_fontsize)
+        a0.text(sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=a0.transAxes, fontsize=sample_label_fontsize, ha="left", va="top")
         
         jet_label_text = jet_label
         if eta_cut:
             jet_label_text += f", |$\eta$| < {eta_cut}"
-        a0.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label_text, transform=a0.transAxes, fontsize=addtext_fontsize)
+        a0.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label_text, transform=a0.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
         
         handles, labels = a0.get_legend_handles_labels()
         handles = [x0[0].stairs, x1[0].stairs, x2[0].stairs]
@@ -199,8 +218,8 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         b = np.linspace(0, 2, 101)
 
         mplhep.cms.label("", data=False, com=13.6, year='Run 3', ax=ax)
-        ax.text(sample_label_coords[0], sample_label_coords[1], sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize)
-        ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label + additional_label, transform=ax.transAxes, fontsize=addtext_fontsize)
+        ax.text(sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top")
+        ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label + additional_label, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
 
         add_cut_pf = additional_cut(data_baseline)
         add_cut_mlpf = additional_cut(data_mlpf)
@@ -293,8 +312,8 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         return np.array(med_vals_pf), np.array(iqr_vals_pf), np.array(mean_vals_pf), np.array(sigma_vals_pf), \
                np.array(med_vals_mlpf), np.array(iqr_vals_mlpf), np.array(mean_vals_mlpf), np.array(sigma_vals_mlpf)
 
-    data_pf = awkward.from_parquet(input_pf_parquet)[:1000]
-    data_mlpf = awkward.from_parquet(input_mlpf_parquet)[:1000]
+    data_pf = awkward.from_parquet(input_pf_parquet)[:100000]
+    data_mlpf = awkward.from_parquet(input_mlpf_parquet)[:100000]
 
     corrections = np.load(corrections_file)
     corr_map_pf = corrections['corr_map_pf']
@@ -392,24 +411,24 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         filename=f"{jet_type}_jet_pt_ratio_corr.pdf"
     )
 
-    med_pf_vs_pt, iqr_pf_vs_pt, _, sigma_pf_vs_pt, med_mlpf_vs_pt, iqr_mlpf_vs_pt, _, sigma_mlpf_vs_pt = get_response_in_bins(
+    med_pf_vs_pt, iqr_pf_vs_pt, mean_pf_vs_pt, sigma_pf_vs_pt, med_mlpf_vs_pt, iqr_mlpf_vs_pt, mean_mlpf_vs_pt, sigma_mlpf_vs_pt = get_response_in_bins(
         resp_pf, resp_mlpf, data_pf, data_mlpf,
         variable_bins=pt_bins_for_response, variable_name=f"{genjet_prefix}_pt",
         jet_prefix=jet_prefix, genjet_prefix=genjet_prefix, jet_label=jet_label,
     )
-    med_pf_vs_pt_raw, iqr_pf_vs_pt_raw, _, _, med_mlpf_vs_pt_raw, iqr_mlpf_vs_pt_raw, _, _ = get_response_in_bins(
+    med_pf_vs_pt_raw, iqr_pf_vs_pt_raw, mean_pf_vs_pt_raw, sigma_pf_vs_pt_raw, med_mlpf_vs_pt_raw, iqr_mlpf_vs_pt_raw, mean_mlpf_vs_pt_raw, sigma_mlpf_vs_pt_raw = get_response_in_bins(
         resp_pf, resp_mlpf, data_pf, data_mlpf,
         variable_bins=pt_bins_for_response, variable_name=f"{genjet_prefix}_pt",
         response_type="response_raw",
         jet_prefix=jet_prefix, genjet_prefix=genjet_prefix, jet_label=jet_label,
     )
 
-    med_pf_vs_eta, iqr_pf_vs_eta, _, sigma_pf_vs_eta, med_mlpf_vs_eta, iqr_mlpf_vs_eta, _, sigma_mlpf_vs_eta = get_response_in_bins(
+    med_pf_vs_eta, iqr_pf_vs_eta, mean_pf_vs_eta, sigma_pf_vs_eta, med_mlpf_vs_eta, iqr_mlpf_vs_eta, mean_mlpf_vs_eta, sigma_mlpf_vs_eta = get_response_in_bins(
         resp_pf, resp_mlpf, data_pf, data_mlpf,
         variable_bins=eta_bins_for_response, variable_name=f"{genjet_prefix}_eta",
         jet_prefix=jet_prefix, genjet_prefix=genjet_prefix, jet_label=jet_label,
     )
-    med_pf_vs_eta_raw, iqr_pf_vs_eta_raw, _, _, med_mlpf_vs_eta_raw, iqr_mlpf_vs_eta_raw, _, _ = get_response_in_bins(
+    med_pf_vs_eta_raw, iqr_pf_vs_eta_raw, mean_pf_vs_eta_raw, sigma_pf_vs_eta_raw, med_mlpf_vs_eta_raw, iqr_mlpf_vs_eta_raw, mean_mlpf_vs_eta_raw, sigma_mlpf_vs_eta_raw = get_response_in_bins(
         resp_pf, resp_mlpf, data_pf, data_mlpf,
         variable_bins=eta_bins_for_response, variable_name=f"{genjet_prefix}_eta",
         response_type="response_raw",
@@ -417,52 +436,70 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     )
 
     # Plot scale vs pt
-    plt.figure()
-    plt.plot(midpoints(pt_bins_for_response), med_pf_vs_pt, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle)
-    plt.plot(midpoints(pt_bins_for_response), med_mlpf_vs_pt, label=mlpf_label, color=mlpf_color, linestyle=mlpf_linestyle)
-    plt.plot(midpoints(pt_bins_for_response), med_pf_vs_pt_raw, label="PF-PUPPI raw", color=pf_color, linestyle=":")
-    plt.plot(midpoints(pt_bins_for_response), med_mlpf_vs_pt_raw, label=mlpf_label + " raw", color=mlpf_color, linestyle=":")
-    plt.xlabel("GenJet $p_T$ [GeV]")
-    plt.ylabel("Median response")
-    plt.legend(ncol=2)
-    plt.savefig(os.path.join(output_dir, f"{jet_type}_scale_vs_pt.pdf"))
-    plt.close()
+    fig, ax = plt.subplots()
+    ax.plot(midpoints(pt_bins_for_response), mean_pf_vs_pt, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle)
+    ax.plot(midpoints(pt_bins_for_response), mean_mlpf_vs_pt, label=mlpf_label, color=mlpf_color, linestyle=mlpf_linestyle)
+    ax.plot(midpoints(pt_bins_for_response), mean_pf_vs_pt_raw, label="PF-PUPPI raw", color=pf_color, linestyle=":")
+    ax.plot(midpoints(pt_bins_for_response), mean_mlpf_vs_pt_raw, label=mlpf_label + " raw", color=mlpf_color, linestyle=":")
+    ax.set_xlabel("GenJet $p_T$ [GeV]")
+    ax.set_ylabel("Mean response")
+    ax.legend(ncol=2)
+    ax.set_xscale("log")
+    ax.set_ylim(0.8, 1.2)
+    mplhep.cms.label(ax=ax, data=False, com=13.6, year='Run 3')
+    ax.text(sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top")
+    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    fig.savefig(os.path.join(output_dir, f"{jet_type}_scale_vs_pt.pdf"))
+    plt.close(fig)
 
     # Plot resolution vs pt
-    plt.figure()
-    plt.plot(midpoints(pt_bins_for_response), iqr_pf_vs_pt / med_pf_vs_pt, label="PF-PUPPI (IQR/median)", color=pf_color, linestyle=pf_linestyle)
-    plt.plot(midpoints(pt_bins_for_response), iqr_mlpf_vs_pt / med_mlpf_vs_pt, label=f"{mlpf_label} (IQR/median)", color=mlpf_color, linestyle=mlpf_linestyle)
-    plt.plot(midpoints(pt_bins_for_response), iqr_pf_vs_pt_raw / med_pf_vs_pt_raw, label="PF-PUPPI raw (IQR/median)", color=pf_color, linestyle=":")
-    plt.plot(midpoints(pt_bins_for_response), iqr_mlpf_vs_pt_raw / med_mlpf_vs_pt_raw, label=f"{mlpf_label} raw (IQR/median)", color=mlpf_color, linestyle=":")
-    plt.xlabel("GenJet $p_T$ [GeV]")
-    plt.ylabel("Response resolution")
-    plt.legend(ncol=2)
-    plt.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_pt.pdf"))
-    plt.close()
+    fig, ax = plt.subplots()
+    ax.plot(midpoints(pt_bins_for_response), sigma_pf_vs_pt / mean_pf_vs_pt, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle)
+    ax.plot(midpoints(pt_bins_for_response), sigma_mlpf_vs_pt / mean_mlpf_vs_pt, label=f"{mlpf_label}", color=mlpf_color, linestyle=mlpf_linestyle)
+    ax.plot(midpoints(pt_bins_for_response), sigma_pf_vs_pt_raw / mean_pf_vs_pt_raw, label="PF-PUPPI raw", color=pf_color, linestyle=":")
+    ax.plot(midpoints(pt_bins_for_response), sigma_mlpf_vs_pt_raw / mean_mlpf_vs_pt_raw, label=f"{mlpf_label} raw", color=mlpf_color, linestyle=":")
+    ax.set_xlabel("GenJet $p_T$ [GeV]")
+    ax.set_ylabel("Response resolution")
+    ax.legend(ncol=2)
+    ax.set_xscale("log")
+    ax.set_ylim(0.0, 0.5)
+    mplhep.cms.label(ax=ax, data=False, com=13.6, year='Run 3')
+    ax.text(sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top")
+    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_pt.pdf"))
+    plt.close(fig)
 
     # Plot scale vs eta
-    plt.figure()
-    plt.plot(midpoints(eta_bins_for_response), med_pf_vs_eta, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle)
-    plt.plot(midpoints(eta_bins_for_response), med_mlpf_vs_eta, label=mlpf_label, color=mlpf_color, linestyle=mlpf_linestyle)
-    plt.plot(midpoints(eta_bins_for_response), med_pf_vs_eta_raw, label="PF-PUPPI raw", color=pf_color, linestyle=":")
-    plt.plot(midpoints(eta_bins_for_response), med_mlpf_vs_eta_raw, label=mlpf_label + " raw", color=mlpf_color, linestyle=":")
-    plt.xlabel("GenJet $\eta$")
-    plt.ylabel("Median response")
-    plt.legend(ncol=2)
-    plt.savefig(os.path.join(output_dir, f"{jet_type}_scale_vs_eta.pdf"))
-    plt.close()
+    fig, ax = plt.subplots()
+    ax.plot(midpoints(eta_bins_for_response), mean_pf_vs_eta, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle)
+    ax.plot(midpoints(eta_bins_for_response), mean_mlpf_vs_eta, label=mlpf_label, color=mlpf_color, linestyle=mlpf_linestyle)
+    ax.plot(midpoints(eta_bins_for_response), mean_pf_vs_eta_raw, label="PF-PUPPI raw", color=pf_color, linestyle=":")
+    ax.plot(midpoints(eta_bins_for_response), mean_mlpf_vs_eta_raw, label=mlpf_label + " raw", color=mlpf_color, linestyle=":")
+    ax.set_xlabel("GenJet $\eta$")
+    ax.set_ylabel("Mean response")
+    ax.legend(ncol=2)
+    ax.set_ylim(0.8, 1.2)
+    mplhep.cms.label(ax=ax, data=False, com=13.6, year='Run 3')
+    ax.text(sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top")
+    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    fig.savefig(os.path.join(output_dir, f"{jet_type}_scale_vs_eta.pdf"))
+    plt.close(fig)
 
     # Plot resolution vs eta
-    plt.figure()
-    plt.plot(midpoints(eta_bins_for_response), iqr_pf_vs_eta / med_pf_vs_eta, label="PF-PUPPI (IQR/median)", color=pf_color, linestyle=pf_linestyle)
-    plt.plot(midpoints(eta_bins_for_response), iqr_mlpf_vs_eta / med_mlpf_vs_eta, label=f"{mlpf_label} (IQR/median)", color=mlpf_color, linestyle=mlpf_linestyle)
-    plt.plot(midpoints(eta_bins_for_response), iqr_pf_vs_eta_raw / med_pf_vs_eta_raw, label="PF-PUPPI raw (IQR/median)", color=pf_color, linestyle=":")
-    plt.plot(midpoints(eta_bins_for_response), iqr_mlpf_vs_eta_raw / med_mlpf_vs_eta_raw, label=f"{mlpf_label} raw (IQR/median)", color=mlpf_color, linestyle=":")
-    plt.xlabel("GenJet $\eta$")
-    plt.ylabel("Response resolution")
-    plt.legend(ncol=2)
-    plt.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_eta.pdf"))
-    plt.close()
+    fig, ax = plt.subplots()
+    ax.plot(midpoints(eta_bins_for_response), sigma_pf_vs_eta / mean_pf_vs_eta, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle)
+    ax.plot(midpoints(eta_bins_for_response), sigma_mlpf_vs_eta / mean_mlpf_vs_eta, label=f"{mlpf_label}", color=mlpf_color, linestyle=mlpf_linestyle)
+    ax.plot(midpoints(eta_bins_for_response), sigma_pf_vs_eta_raw / mean_pf_vs_eta_raw, label="PF-PUPPI raw", color=pf_color, linestyle=":")
+    ax.plot(midpoints(eta_bins_for_response), sigma_mlpf_vs_eta_raw / mean_mlpf_vs_eta_raw, label=f"{mlpf_label} raw", color=mlpf_color, linestyle=":")
+    ax.set_xlabel("GenJet $\eta$")
+    ax.set_ylabel("Response resolution")
+    ax.legend(ncol=2)
+    ax.set_ylim(0.0, 0.5)
+    mplhep.cms.label(ax=ax, data=False, com=13.6, year='Run 3')
+    ax.text(sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top")
+    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_eta.pdf"))
+    plt.close(fig)
 
     print(f"Generated plots in {output_dir}")
 
