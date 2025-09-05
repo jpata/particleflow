@@ -11,6 +11,7 @@ import boost_histogram as bh
 from pathlib import Path
 from scipy.optimize import curve_fit
 from scipy.interpolate import RegularGridInterpolator
+from matplotlib.lines import Line2D
 from mlpf.plotting.utils import compute_response
 from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, med_iqr
 
@@ -59,6 +60,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     legend_loc = (0.5, 0.45)
     legend_loc_effpur = (0.5, 0.68)
     legend_loc_scalereso = (0.40, 0.50)
+    legend_loc_jet_response = (0.05, 0.45)
     sample_label_fontsize = 30
     addtext_fontsize = 25
     jet_label_coords = 0.02, 0.86
@@ -183,7 +185,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             # ensure legend fits on eta plot
             mult = 100
             if variable_gen == "eta":
-                mult = 10000
+                mult = 1000
             a0.set_ylim(top=a0.get_ylim()[1] * mult)
 
         mplhep.cms.label("", data=False, com=13.6, year="Run 3", ax=a0)
@@ -315,7 +317,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
 
         handles, labels = ax.get_legend_handles_labels()
         handles = [x0[0].stairs, x1[0].stairs]
-        ax.legend(handles, labels, loc=legend_loc, fontsize=legend_fontsize_jet_response)
+        ax.legend(handles, labels, loc=legend_loc_jet_response, fontsize=legend_fontsize_jet_response)
 
         jet_label_corr = "Corr. jet "
         jet_label_raw = "Raw jet "
@@ -785,7 +787,12 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     fig, ax = plt.subplots()
     ax.plot(midpoints(pt_bins_for_response), sigma_pf_vs_pt / mean_pf_vs_pt, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle, lw=3)
     ax.plot(
-        midpoints(pt_bins_for_response), sigma_mlpf_vs_pt / mean_mlpf_vs_pt, label=f"{mlpf_label}", color=mlpf_color, linestyle=mlpf_linestyle, lw=3
+        midpoints(pt_bins_for_response),
+        sigma_mlpf_vs_pt / mean_mlpf_vs_pt,
+        label=f"{mlpf_label}",
+        color=mlpf_color,
+        linestyle=mlpf_linestyle,
+        lw=3,
     )
     ax.plot(
         midpoints(pt_bins_for_response), sigma_pf_vs_pt_raw / mean_pf_vs_pt_raw, label="PF-PUPPI raw", color=pf_color, linestyle=pf_linestyle, lw=0.5
@@ -868,6 +875,123 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
     fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_eta.pdf"))
     plt.close(fig)
+
+    # Plot PU-dependent jet response
+    if "PU" in sample_name:
+
+        def plot_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf):
+            stats_pu_pf = []
+            stats_pu_mlpf = []
+
+            # Define PU bins from notebook
+            pu_bins = [(55, 60), (60, 65), (65, 70), (70, 75)]
+            if not pu_bins:
+                return
+
+            for pt_range in pt_bins_for_pu:
+                pt_min, pt_max = pt_range
+                row_stats_pf = []
+                row_stats_mlpf = []
+                for pu_min, pu_max in pu_bins:
+                    filename = f"{jet_type}_jet_pt_ratio_corr_pt{pt_min}to{pt_max}_pu{pu_min}to{pu_max}.pdf"
+
+                    s_pf, s_mlpf = jet_response_plot(
+                        resp_pf,
+                        resp_mlpf,
+                        data_pf,
+                        data_mlpf,
+                        response="response",
+                        genjet_min_pt=pt_min,
+                        genjet_max_pt=pt_max,
+                        jet_label=jet_label,
+                        additional_label=f", {pt_min}<$p_{{T,gen}}$<{pt_max}, {pu_min}≤$N_{{PV}}$<{pu_max}",
+                        jet_pt=f"{jet_prefix}_pt_corr",
+                        genjet_pt=f"{genjet_prefix}_pt",
+                        genjet_eta=f"{genjet_prefix}_eta",
+                        additional_cut=lambda data: (data["Pileup_nTrueInt"] >= pu_min) & (data["Pileup_nTrueInt"] < pu_max),
+                        filename=filename,
+                    )
+                    row_stats_pf.append(s_pf)
+                    row_stats_mlpf.append(s_mlpf)
+                stats_pu_pf.append(row_stats_pf)
+                stats_pu_mlpf.append(row_stats_mlpf)
+
+            stats_pu_pf = np.array(stats_pu_pf)
+            stats_pu_mlpf = np.array(stats_pu_mlpf)
+
+            with np.errstate(divide="ignore", invalid="ignore"):
+                # resolution = sigma / median
+                resolution_pf = np.nan_to_num(stats_pu_pf[:, :, 3] / stats_pu_pf[:, :, 0])
+                resolution_mlpf = np.nan_to_num(stats_pu_mlpf[:, :, 3] / stats_pu_mlpf[:, :, 0])
+
+            markers = ["o", "v", "^", "x", "s"]
+            fig, ax = plt.subplots()
+
+            pu_bin_centers = [b[0] + (b[1] - b[0]) / 2 for b in pu_bins]
+
+            for i, pt_range in enumerate(pt_bins_for_pu):
+                label = f"{pt_range[0]}-{pt_range[1]} GeV"
+                ax.plot(
+                    pu_bin_centers,
+                    resolution_pf[i],
+                    label=label,
+                    marker=markers[i % len(markers)],
+                    color=pf_color,
+                    linestyle=pf_linestyle,
+                )
+                ax.plot(
+                    pu_bin_centers,
+                    resolution_mlpf[i],
+                    marker=markers[i % len(markers)],
+                    color=mlpf_color,
+                    linestyle=mlpf_linestyle,
+                )
+
+            handles, labels = ax.get_legend_handles_labels()
+
+            pt_handles = []
+            for i, pt_range in enumerate(pt_bins_for_pu):
+                label = f"{pt_range[0]}-{pt_range[1]}"
+                if pt_range[1] > 1000:
+                    label = f">{pt_range[0]}"
+                pt_handles.append(Line2D([0], [0], color="black", marker=markers[i % len(markers)], linestyle="None", label=label))
+
+            leg1 = ax.legend(handles=pt_handles, title=r"$p_{T,gen}$ [GeV]", loc=(0.6, 0.43))
+            ax.add_artist(leg1)
+
+            algo_handles = [
+                Line2D([0], [0], color=pf_color, lw=2, label="PF-PUPPI", ls=pf_linestyle),
+                Line2D([0], [0], color=mlpf_color, lw=2, label=mlpf_label, ls=mlpf_linestyle),
+            ]
+            ax.legend(handles=algo_handles, title="Algorithm", loc=(0.3, 0.55))
+
+            ax.set_xlabel("True $N_{PV}$")
+            ax.set_ylabel("Response resolution (σ/median)")
+            ax.set_ylim(0, 1.5)
+            mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+            ax.text(
+                sample_label_coords[0],
+                sample_label_coords[1],
+                plot_sample_name,
+                transform=ax.transAxes,
+                fontsize=sample_label_fontsize,
+                ha="left",
+                va="top",
+            )
+            ax.text(
+                jet_label_coords_single[0],
+                jet_label_coords_single[1],
+                jet_label,
+                transform=ax.transAxes,
+                fontsize=addtext_fontsize,
+                ha="left",
+                va="top",
+            )
+
+            fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_npv.pdf"))
+            plt.close(fig)
+
+        plot_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf)
 
     print(f"Generated plots in {output_dir}")
 
