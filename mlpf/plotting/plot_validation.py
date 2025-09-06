@@ -13,7 +13,7 @@ from scipy.optimize import curve_fit
 from scipy.interpolate import RegularGridInterpolator
 from matplotlib.lines import Line2D
 from mlpf.plotting.utils import compute_response
-from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, med_iqr
+from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, med_iqr, sample_name_to_process
 
 
 def midpoints(x):
@@ -35,21 +35,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
 
     os.makedirs(output_dir, exist_ok=True)
     mplhep.style.use("CMS")
-
-    def sample_name_to_process(sample_name):
-        if "QCD" in sample_name:
-            key = "cms_pf_qcd"
-        elif "TTbar" in sample_name:
-            key = "cms_pf_ttbar"
-        elif "PhotonJet" in sample_name:
-            key = "cms_pf_photonjet"
-        elif "ZTT" in sample_name:
-            key = "cms_pf_ztt"
-        else:
-            return sample_name
-        if "PU" not in sample_name:
-            key += "_nopu"
-        return key
+    matplotlib.rcParams["axes.labelsize"] = 35
 
     process_name = sample_name_to_process(sample_name)
     plot_sample_name = EVALUATION_DATASET_NAMES.get(process_name, sample_name)
@@ -60,7 +46,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     legend_loc = (0.5, 0.45)
     legend_loc_effpur = (0.5, 0.68)
     legend_loc_scalereso = (0.40, 0.50)
-    legend_loc_jet_response = (0.05, 0.45)
+    legend_loc_jet_response = (0.05, 0.55)
     sample_label_fontsize = 30
     addtext_fontsize = 25
     jet_label_coords = 0.02, 0.86
@@ -72,6 +58,18 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     pf_linestyle = "-."
     mlpf_linestyle = "-"
     mlpf_label = "MLPF-PUPPI"
+
+    jet_prefixes = {"ak4": "Jet", "ak8": "FatJet"}
+    jet_prefix = jet_prefixes[jet_type]
+    genjet_prefixes = {"ak4": "GenJet", "ak8": "GenJetAK8"}
+    genjet_prefix = genjet_prefixes[jet_type]
+
+    # fiducial cut for kinematic distributions only
+    min_jet_pt = 0
+    if jet_prefix == "Jet":
+        min_jet_pt = 10
+    elif jet_prefix == "FatJet":
+        min_jet_pt = 150
 
     def varbins(*args):
         newlist = []
@@ -89,11 +87,12 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             pt_bins_for_response = np.array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 2000])
             pt_bins_for_kinematics = varbins(np.linspace(20, 100, 21), np.linspace(100, 200, 5), np.linspace(200, 1000, 5))
             pt_bins_for_pureff = varbins(np.linspace(1, 20, 5), np.linspace(20, 100, 21), np.linspace(100, 200, 5), np.linspace(200, 1000, 5))
+            pt_bins_for_pu = [(0, 30), (30, 60), (60, 100), (100, 200), (200, 5000)]
         elif jet_type == "ak8":
             pt_bins_for_response = varbins(np.linspace(20, 1000, 5))
-            pt_bins_for_kinematics = varbins(np.linspace(20, 1000, 5))
+            pt_bins_for_kinematics = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1250, 1500, 1750, 2000]
             pt_bins_for_pureff = varbins(np.linspace(1, 20, 5), np.linspace(20, 100, 5), np.linspace(100, 1000, 5))
-        pt_bins_for_pu = [(0, 30), (30, 60), (60, 100), (100, 200), (200, 5000)]
+            pt_bins_for_pu = [(100, 500), (500, 1000), (1000, 1500), (1500, 2000), (2000, 2500)]
     elif sample_name.startswith("TTbar_"):
         if jet_type == "ak4":
             pt_bins_for_response = np.array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 250, 500])
@@ -121,7 +120,10 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         return h1
 
     def Gauss(x, a, x0, sigma):
-        return a * np.exp(-((x - x0) ** 2) / (2 * sigma**2))
+        if sigma > 0:
+            return a * np.exp(-((x - x0) ** 2) / (2 * sigma**2))
+        else:
+            return 0
 
     def compute_scale_res(response):
         h0 = to_bh(response, np.linspace(0, 2, 100))
@@ -153,8 +155,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         jet_pt_var = f"{jet_prefix}_pt_{raw_or_corr}"
         genjet_pt_var = f"{genjet_prefix}_pt"
 
-        # placeholder
-        min_jet_pt = 0
+        print(f"Jet kinematic plots with pT > {min_jet_pt}")
 
         # Gen jets
         gen_jet_mask = data_pf[genjet_pt_var] > min_jet_pt
@@ -186,7 +187,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             mult = 100
             if variable_gen == "eta":
                 mult = 1000
-            a0.set_ylim(top=a0.get_ylim()[1] * mult)
+            a0.set_ylim(bottom=100, top=a0.get_ylim()[1] * mult)
 
         mplhep.cms.label("", data=False, com=13.6, year="Run 3", ax=a0)
         a0.text(
@@ -322,7 +323,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         jet_label_corr = "Corr. jet "
         jet_label_raw = "Raw jet "
         jl = jet_label_corr if jet_pt.endswith("_corr") else jet_label_raw
-        plt.xlabel(jl + "pT response")
+        plt.xlabel(jl + "$p_{T}/p_{T,ptcl}$ response")
         plt.ylabel("Count")
 
         ax.set_ylim(0, 1.5 * ax.get_ylim()[1])
@@ -416,7 +417,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         mplhep.histplot(eff_mlpf, ax=ax, label=mlpf_label, color=mlpf_color, linestyle=mlpf_linestyle, lw=3)
 
         ax.set_xlabel(xlabel)
-        ax.set_ylabel("Jet finding efficiency")
+        ax.set_ylabel("Jet efficiency")
         ax.legend(fontsize=legend_fontsize, loc=legend_loc_effpur)
         if "p_T" in xlabel:
             ax.set_xscale("log")
@@ -465,7 +466,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         mplhep.histplot(pur_mlpf, ax=ax, label=mlpf_label, color=mlpf_color, linestyle=mlpf_linestyle, lw=3)
 
         ax.set_xlabel(xlabel)
-        ax.set_ylabel("Jet finding purity")
+        ax.set_ylabel("Jet purity")
         ax.legend(fontsize=legend_fontsize, loc=legend_loc_effpur)
         if "p_T" in xlabel:
             ax.set_xscale("log")
@@ -500,10 +501,10 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     jet_label = ""
     if jet_type == "ak4":
         deltar_cut = 0.2
-        jet_label = "AK4 jets, $p_T$ incl."
+        jet_label = f"AK4 jets, $p_T$ > {min_jet_pt} GeV"
     elif jet_type == "ak8":
         deltar_cut = 0.4
-        jet_label = "AK8 jets, $p_T$ > 150 GeV"
+        jet_label = f"AK8 jets, $p_T$ > {min_jet_pt} GeV"
 
     if fiducial_cuts == "eta_less_2p5":
         jet_label += ", $|η|$ < 2.5"
@@ -530,11 +531,6 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         (midpoints(np.array(eta_bins)), midpoints(np.array(pt_bins))), corr_map_mlpf, method="linear", bounds_error=False, fill_value=None
     )
 
-    jet_prefixes = {"ak4": "Jet", "ak8": "FatJet"}
-    jet_prefix = jet_prefixes[jet_type]
-    genjet_prefixes = {"ak4": "GenJet", "ak8": "GenJetAK8"}
-    genjet_prefix = genjet_prefixes[jet_type]
-
     corr_pf_interp = interp_pf(
         np.stack(
             [awkward.to_numpy(awkward.flatten(data_pf[jet_prefix + "_eta"])), awkward.to_numpy(awkward.flatten(data_pf[jet_prefix + "_pt_raw"]))]
@@ -560,7 +556,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         "pt",
         "pt_raw",
         pt_bins_for_kinematics,
-        f"{jet_prefix} pT [GeV]",
+        "Raw $p_T$ (GeV)",
         f"{jet_type}_pt_raw.pdf",
         raw_or_corr="raw",
         jet_label=jet_label,
@@ -573,7 +569,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         "pt",
         "pt_corr",
         pt_bins_for_kinematics,
-        f"Corrected {jet_prefix} pT [GeV]",
+        "Corrected $p_T$ (GeV)",
         f"{jet_type}_pt_corr.pdf",
         raw_or_corr="corr",
         jet_label=jet_label,
@@ -586,7 +582,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         "eta",
         "eta",
         eta_bins_for_kinematics,
-        f"{jet_prefix} $η$",
+        "$\eta$",
         f"{jet_type}_eta.pdf",
         logy=True,
         jet_label=jet_label,
@@ -605,12 +601,17 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     h_matched_mlpf_gen_pt = to_bh(awkward.flatten(resp_mlpf[f"{genjet_prefix}_pt_unfiltered"]), pt_bins_for_pureff)
     h_matched_mlpf_gen_eta = to_bh(awkward.flatten(resp_mlpf[f"{genjet_prefix}_eta_unfiltered"]), eta_bins_for_pureff)
 
+    if jet_type == "ak4":
+        jet_label = "AK4 jets"
+    elif jet_type == "ak8":
+        jet_label = "AK8 jets"
+
     plot_efficiency_vs_kin(
         h_total_gen_pt,
         h_matched_pf_gen_pt,
         h_matched_mlpf_gen_pt,
         pt_bins_for_pureff,
-        "GenJet $p_T$ [GeV]",
+        "$p_{T,ptcl}$ (GeV)",
         output_dir,
         f"{jet_type}_efficiency_vs_pt.pdf",
         jet_label,
@@ -620,7 +621,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         h_matched_pf_gen_eta,
         h_matched_mlpf_gen_eta,
         eta_bins_for_pureff,
-        "GenJet $η$",
+        "$η_{ptcl}$",
         output_dir,
         f"{jet_type}_efficiency_vs_eta.pdf",
         jet_label,
@@ -650,7 +651,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         h_matched_pf_reco_pt,
         h_matched_mlpf_reco_pt,
         pt_bins_for_pureff,
-        "RecoJet $p_T$ [GeV]",
+        "$p_T$ (GeV)",
         output_dir,
         f"{jet_type}_purity_vs_pt.pdf",
         jet_label,
@@ -661,7 +662,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         h_matched_pf_reco_eta,
         h_matched_mlpf_reco_eta,
         eta_bins_for_pureff,
-        "RecoJet $η$",
+        "$η$",
         output_dir,
         f"{jet_type}_purity_vs_eta.pdf",
         jet_label,
@@ -769,7 +770,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.plot(midpoints(pt_bins_for_response), mean_mlpf_vs_pt, label=mlpf_label, color=mlpf_color, linestyle=mlpf_linestyle, lw=3)
     ax.plot(midpoints(pt_bins_for_response), mean_pf_vs_pt_raw, label="PF-PUPPI raw", color=pf_color, linestyle=pf_linestyle, lw=0.5)
     ax.plot(midpoints(pt_bins_for_response), mean_mlpf_vs_pt_raw, label=f"{mlpf_label} raw", color=mlpf_color, linestyle=mlpf_linestyle, lw=0.5)
-    ax.set_xlabel("GenJet $p_T$ [GeV]")
+    ax.set_xlabel("GenJet $p_T$ (GeV)")
     ax.set_ylabel("Mean response")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_xscale("log")
@@ -805,7 +806,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         linestyle=mlpf_linestyle,
         lw=0.5,
     )
-    ax.set_xlabel("GenJet $p_T$ [GeV]")
+    ax.set_xlabel("$p_{T,ptcl}$ (GeV)")
     ax.set_ylabel("Response resolution")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_xscale("log")
@@ -824,7 +825,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.plot(midpoints(eta_bins_for_response), mean_mlpf_vs_eta, label=mlpf_label, color=mlpf_color, linestyle=mlpf_linestyle, lw=3)
     ax.plot(midpoints(eta_bins_for_response), mean_pf_vs_eta_raw, label="PF-PUPPI raw", color=pf_color, linestyle=pf_linestyle, lw=0.5)
     ax.plot(midpoints(eta_bins_for_response), mean_mlpf_vs_eta_raw, label=f"{mlpf_label} raw", color=mlpf_color, linestyle=mlpf_linestyle, lw=0.5)
-    ax.set_xlabel("GenJet $η$")
+    ax.set_xlabel("$η_{ptcl}$")
     ax.set_ylabel("Mean response")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_ylim(0.5, 1.5)
@@ -864,7 +865,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         linestyle=mlpf_linestyle,
         lw=0.5,
     )
-    ax.set_xlabel("GenJet $η$")
+    ax.set_xlabel("$η_{ptcl}$")
     ax.set_ylabel("Response resolution")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_ylim(0.0, 1.0)
@@ -904,7 +905,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
                         genjet_min_pt=pt_min,
                         genjet_max_pt=pt_max,
                         jet_label=jet_label,
-                        additional_label=f", {pt_min}<$p_{{T,gen}}$<{pt_max}, {pu_min}≤$N_{{PV}}$<{pu_max}",
+                        additional_label=f", {pt_min}<$p_{{T,ptcl}}$<{pt_max}, {pu_min}≤$N_{{PV}}$<{pu_max}",
                         jet_pt=f"{jet_prefix}_pt_corr",
                         genjet_pt=f"{genjet_prefix}_pt",
                         genjet_eta=f"{genjet_prefix}_eta",
@@ -956,7 +957,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
                     label = f">{pt_range[0]}"
                 pt_handles.append(Line2D([0], [0], color="black", marker=markers[i % len(markers)], linestyle="None", label=label))
 
-            leg1 = ax.legend(handles=pt_handles, title=r"$p_{T,gen}$ [GeV]", loc=(0.6, 0.43))
+            leg1 = ax.legend(handles=pt_handles, title=r"$p_{T,ptcl}$ (GeV)", loc=(0.6, 0.43))
             ax.add_artist(leg1)
 
             algo_handles = [

@@ -86,7 +86,7 @@ CLASS_LABELS = {
 
 labels = {
     "met": "$p_{\mathrm{T}}^{\mathrm{miss}}$ (GeV)",
-    "gen_met": "$p_{\mathrm{T,truth}}^\mathrm{miss}$ (GeV)",
+    "gen_met": "$p_{\mathrm{T,ptcl}}^\mathrm{miss}$ (GeV)",
     "gen_mom": "$p_{\mathrm{truth}}$ (GeV)",
     "gen_jet": "jet $p_{\mathrm{T,truth}}$ (GeV)",
     "target_jet": "jet $p_{\mathrm{T,target}}$ (GeV)",
@@ -145,6 +145,19 @@ GENJET_BINS_PT_DATASET = {
     "cld": [10, 20, 40, 60, 80, 100, 200],
     "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
 }
+
+SAMPLE_NAME_TO_PROCESS = {
+    "QCD_PU": "cms_pf_qcd",
+    "QCD_PU_13p6": "cms_pf_qcd",
+    "QCD_noPU_13p6": "cms_pf_qcd_nopu",
+    "TTbar_PU": "cms_pf_ttbar",
+    "TTbar_PU_13p6": "cms_pf_ttbar",
+    "TTbar_noPU_13p6": "cms_pf_ttbar_nopu",
+}
+
+
+def sample_name_to_process(sample_name):
+    return SAMPLE_NAME_TO_PROCESS[sample_name]
 
 
 def load_loss_history(path, min_epoch=None, max_epoch=None):

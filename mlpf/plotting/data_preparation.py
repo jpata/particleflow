@@ -68,7 +68,7 @@ def load_multiprocess(files, max_workers=None):
 @click.option("--sample", required=True, type=str, help="Sample name (e.g., QCD_PU_13p6)")
 @click.option("--output-dir", default=".", type=str, help="Output directory for parquet files")
 @click.option("--max-files", default=-1, type=int, help="Maximum number of files to process")
-@click.option("--max-workers", default=8, type=int, help="Number of worker processes")
+@click.option("--max-workers", default=2, type=int, help="Number of worker processes")
 def prepare_data(input_dir, sample, output_dir, max_files, max_workers):
     """Loads ROOT files, processes them, and saves to Parquet format."""
 
@@ -112,6 +112,7 @@ def prepare_data(input_dir, sample, output_dir, max_files, max_workers):
         if "GenVtx_z" in data.fields and "PV_z" in data.fields:
             abs_dz = np.abs(data["GenVtx_z"] - data["PV_z"])
             mask_dz = abs_dz < 0.2
+            print("Applying dz cut: {}/{}".format(np.sum(mask_dz), len(mask_dz)))
             data = data[mask_dz]
 
         awkward.to_parquet(data, output_file)
