@@ -353,18 +353,17 @@ class MLPF(nn.Module):
             width = num_heads * head_dim
 
         # embedding of the inputs
+        if self.input_encoding == "joint":
+            self.nn0_id = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
+            self.nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
+        elif self.input_encoding == "split":
+            self.nn0_id = nn.ModuleList()
+            for ielem in range(len(self.elemtypes_nonzero)):
+                self.nn0_id.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
+            self.nn0_reg = nn.ModuleList()
+            for ielem in range(len(self.elemtypes_nonzero)):
+                self.nn0_reg.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
         if self.num_convs != 0:
-            if self.input_encoding == "joint":
-                self.nn0_id = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
-                self.nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
-            elif self.input_encoding == "split":
-                self.nn0_id = nn.ModuleList()
-                for ielem in range(len(self.elemtypes_nonzero)):
-                    self.nn0_id.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
-                self.nn0_reg = nn.ModuleList()
-                for ielem in range(len(self.elemtypes_nonzero)):
-                    self.nn0_reg.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
-
             if self.conv_type == "attention":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -450,19 +449,18 @@ class MLPF(nn.Module):
         Xfeat_normed = X_features
 
         embeddings_id, embeddings_reg = [], []
+        if self.input_encoding == "joint":
+            embedding_id = self.nn0_id(Xfeat_normed)
+            embedding_reg = self.nn0_reg(Xfeat_normed)
+        elif self.input_encoding == "split":
+            embedding_id = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_id], axis=-1)
+            elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
+            embedding_id = torch.sum(embedding_id * elemtype_mask.unsqueeze(-2), axis=-1)
+
+            embedding_reg = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_reg], axis=-1)
+            elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
+            embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
         if self.num_convs != 0:
-            if self.input_encoding == "joint":
-                embedding_id = self.nn0_id(Xfeat_normed)
-                embedding_reg = self.nn0_reg(Xfeat_normed)
-            elif self.input_encoding == "split":
-                embedding_id = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_id], axis=-1)
-                elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
-                embedding_id = torch.sum(embedding_id * elemtype_mask.unsqueeze(-2), axis=-1)
-
-                embedding_reg = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_reg], axis=-1)
-                elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
-                embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
-
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
                 out_padded = conv(conv_input, mask, embedding_id)
@@ -471,6 +469,9 @@ class MLPF(nn.Module):
                 conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
                 out_padded = conv(conv_input, mask, embedding_reg)
                 embeddings_reg.append(out_padded)
+        else:
+            embeddings_id.append(embedding_id)
+            embeddings_reg.append(embedding_reg)
 
         # id input
         if self.learned_representation_mode == "concat":
