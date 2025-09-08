@@ -201,6 +201,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         genjet_eta="GenJet_eta",
         additional_cut=lambda data: data["Pileup_nTrueInt"] >= 0,
         filename="jet_response.pdf",
+        save_figure=False
     ):
         plt.figure()
         ax = plt.axes()
@@ -292,7 +293,8 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         ax.yaxis.get_offset_text().set_x(-0.01)
         ax.yaxis.get_offset_text().set_ha("right")
 
-        plt.savefig(os.path.join(output_dir, filename))
+        if save_figure:
+            plt.savefig(os.path.join(output_dir, filename))
         plt.close()
         return ((med_pf, iqr_pf, mean_pf, std_pf), (med_mlpf, iqr_mlpf, mean_mlpf, std_mlpf))
 
@@ -467,8 +469,15 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         deltar_cut = 0.4
         jet_label = f"AK8 jets, $p_T$ > {min_jet_pt} GeV"
 
+    if jet_type == "ak4":
+        jet_label_inclusive = "AK4 jets"
+    elif jet_type == "ak8":
+        jet_label_inclusive = "AK8 jets"
+
     if fiducial_cuts == "eta_less_2p5":
-        jet_label += ", $|η|$ < 2.5"
+        eta_label = ", $|η|$ < 2.5"
+        jet_label += eta_label
+        jet_label_inclusive += eta_label
         for data in [data_pf, data_mlpf]:
             msk_rj_eta = np.abs(data["Jet_eta"]) < 2.5
             for k in data.fields:
@@ -562,11 +571,6 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     h_matched_mlpf_gen_pt = to_bh(awkward.flatten(resp_mlpf[f"{genjet_prefix}_pt_unfiltered"]), pt_bins_for_pureff)
     h_matched_mlpf_gen_eta = to_bh(awkward.flatten(resp_mlpf[f"{genjet_prefix}_eta_unfiltered"]), eta_bins_for_pureff)
 
-    if jet_type == "ak4":
-        jet_label = "AK4 jets"
-    elif jet_type == "ak8":
-        jet_label = "AK8 jets"
-
     plot_efficiency_vs_kin(
         h_total_gen_pt,
         h_matched_pf_gen_pt,
@@ -575,7 +579,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         "$p_{T,ptcl}$ (GeV)",
         output_dir,
         f"{jet_type}_efficiency_vs_pt.pdf",
-        jet_label,
+        jet_label_inclusive,
     )
     plot_efficiency_vs_kin(
         h_total_gen_eta,
@@ -585,7 +589,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         "$η_{ptcl}$",
         output_dir,
         f"{jet_type}_efficiency_vs_eta.pdf",
-        jet_label,
+        jet_label_inclusive,
     )
 
     # Purity: fraction of reco jets matched to gen
@@ -615,7 +619,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         "$p_T$ (GeV)",
         output_dir,
         f"{jet_type}_purity_vs_pt.pdf",
-        jet_label,
+        jet_label_inclusive,
     )
     plot_purity_vs_kin(
         h_total_pf_eta,
@@ -626,7 +630,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         "$η$",
         output_dir,
         f"{jet_type}_purity_vs_eta.pdf",
-        jet_label,
+        jet_label_inclusive,
     )
 
     # overall jet response ratio plots
@@ -641,6 +645,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         genjet_pt=f"{genjet_prefix}_pt",
         genjet_eta=f"{genjet_prefix}_eta",
         filename=f"{jet_type}_jet_pt_ratio_raw.pdf",
+        save_figure=True,
     )
     jet_response_plot(
         resp_pf,
@@ -649,10 +654,11 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         data_mlpf,
         response="response",
         jet_pt=f"{jet_prefix}_pt_corr",
-        jet_label=jet_label,
+        jet_label=jet_label_inclusive,
         genjet_pt=f"{genjet_prefix}_pt",
         genjet_eta=f"{genjet_prefix}_eta",
         filename=f"{jet_type}_jet_pt_ratio_corr.pdf",
+        save_figure=True,
     )
 
     med_pf_vs_pt, iqr_pf_vs_pt, mean_pf_vs_pt, sigma_pf_vs_pt, med_mlpf_vs_pt, iqr_mlpf_vs_pt, mean_mlpf_vs_pt, sigma_mlpf_vs_pt = (
@@ -665,7 +671,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             variable_name=f"{genjet_prefix}_pt",
             jet_prefix=jet_prefix,
             genjet_prefix=genjet_prefix,
-            jet_label=jet_label,
+            jet_label=jet_label_inclusive,
         )
     )
     (
@@ -687,7 +693,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         response_type="response_raw",
         jet_prefix=jet_prefix,
         genjet_prefix=genjet_prefix,
-        jet_label=jet_label,
+        jet_label=jet_label_inclusive,
     )
 
     med_pf_vs_eta, iqr_pf_vs_eta, mean_pf_vs_eta, sigma_pf_vs_eta, med_mlpf_vs_eta, iqr_mlpf_vs_eta, mean_mlpf_vs_eta, sigma_mlpf_vs_eta = (
@@ -700,7 +706,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             variable_name=f"{genjet_prefix}_eta",
             jet_prefix=jet_prefix,
             genjet_prefix=genjet_prefix,
-            jet_label=jet_label,
+            jet_label=jet_label_inclusive,
         )
     )
     (
@@ -722,7 +728,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         response_type="response_raw",
         jet_prefix=jet_prefix,
         genjet_prefix=genjet_prefix,
-        jet_label=jet_label,
+        jet_label=jet_label_inclusive,
     )
 
     # Plot scale vs pt
@@ -741,7 +747,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
-    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label_inclusive, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
     fig.savefig(os.path.join(output_dir, f"{jet_type}_scale_vs_pt.pdf"))
     plt.close(fig)
 
@@ -776,7 +782,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
-    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label_inclusive, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
     fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_pt.pdf"))
     plt.close(fig)
 
@@ -795,7 +801,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
-    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label_inclusive, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
     fig.savefig(os.path.join(output_dir, f"{jet_type}_scale_vs_eta.pdf"))
     plt.close(fig)
 
@@ -834,7 +840,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
-    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label_inclusive, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
     fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_eta.pdf"))
     plt.close(fig)
 
@@ -865,7 +871,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
                         response="response",
                         genjet_min_pt=pt_min,
                         genjet_max_pt=pt_max,
-                        jet_label=jet_label,
+                        jet_label=jet_label_inclusive,
                         additional_label=f", {pt_min}<$p_{{T,ptcl}}$<{pt_max}, {pu_min}≤$N_{{PV}}$<{pu_max}",
                         jet_pt=f"{jet_prefix}_pt_corr",
                         genjet_pt=f"{genjet_prefix}_pt",
@@ -943,7 +949,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             ax.text(
                 jet_label_coords_single[0],
                 jet_label_coords_single[1],
-                jet_label,
+                jet_label_inclusive,
                 transform=ax.transAxes,
                 fontsize=addtext_fontsize,
                 ha="left",

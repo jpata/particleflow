@@ -27,6 +27,63 @@ def apply_dz(data):
     return data[mask_dz]
 
 
+def varbins(*args):
+    """Helper function to define variable width bins."""
+    newlist = []
+    for arg in args[:-1]:
+        newlist.append(arg[:-1])
+    newlist.append(args[-1])
+    return np.concatenate(newlist)
+
+
+def plot_met_comparison(data_13p6, data_14, output_dir, sample_name):
+    """Plots the MET comparison between 13.6 TeV and 14 TeV samples."""
+    plt.figure()
+    ax = plt.axes()
+
+    bins = np.linspace(0, 500, 51)
+
+    sample_label_coords = 0.02, 0.96
+    sample_label_fontsize = 30
+    legend_fontsize = 30
+
+    met_13p6 = data_13p6["PuppiMET_pt"]
+    met_14 = data_14["PuppiMET_pt"]
+
+    h_13p6 = to_bh(met_13p6, bins=bins)
+    h_14 = to_bh(met_14, bins=bins)
+
+    mplhep.histplot(h_14, histtype="step", lw=2, density=True, label="14 TeV", ls="--")
+    mplhep.histplot(h_13p6, histtype="step", lw=2, density=True, label="13.6 TeV")
+
+    plt.xlabel("PUPPI $p_{T,miss}$ (GeV)")
+    plt.ylabel("Normalized count")
+    plt.ylim(1e-3, 1e-1)
+    plt.yscale("log")
+
+    process_name = sample_name_to_process(sample_name)
+    plot_sample_name = EVALUATION_DATASET_NAMES.get(process_name, sample_name)
+
+    ax.text(
+        sample_label_coords[0],
+        sample_label_coords[1],
+        plot_sample_name,
+        transform=ax.transAxes,
+        fontsize=sample_label_fontsize,
+        ha="left",
+        va="top",
+    )
+
+    mplhep.cms.label("", data=False, rlabel="Run 3 configuration")
+
+    ax.set_ylim(bottom=1e-5)
+    plt.legend(fontsize=legend_fontsize)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path / f"{sample_name}_met_dist_14vs13p6.pdf")
+    plt.close()
+
+
 def plot_jet_response_comparison(resp_13p6, resp_14, output_dir, sample_name, jet_type, jet_label):
     """Plots the jet response comparison between 13.6 TeV and 14 TeV samples."""
     plt.figure()
@@ -121,8 +178,9 @@ def main(input_13p6_tev_parquet, input_14_tev_parquet, output_dir, jet_type, sam
     jet_label = f"AK{jet_type[2:]} jets"
 
     plot_jet_response_comparison(resp_13p6, resp_14, output_dir, sample_name, jet_type, jet_label)
+    plot_met_comparison(data_13p6, data_14, output_dir, sample_name)
 
-    print(f"Generated plot in {output_dir}")
+    print(f"Generated plots in {output_dir}")
 
 
 if __name__ == "__main__":

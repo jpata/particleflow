@@ -170,7 +170,7 @@ def met_response_plot(
     ax.yaxis.get_offset_text().set_x(-0.01)
     ax.yaxis.get_offset_text().set_ha("right")
 
-    plt.savefig(filename)
+    # plt.savefig(filename)
     plt.close()
     return ((med_pf, iqr_pf), (med_mlpf, iqr_mlpf))
 
