@@ -6,8 +6,8 @@ from mlpf.plotting.utils import compute_response
 import matplotlib.pyplot as plt
 import mplhep
 import boost_histogram as bh
-from scipy.optimize import curve_fit
-from mlpf.plotting.plot_utils import sample_label, cms_label, med_iqr, sample_name_to_process
+from mlpf.plotting.plot_utils import sample_label, cms_label, med_iqr, sample_name_to_process, midpoints
+from mlpf.plotting.utils import Gauss, to_bh, compute_scale_res
 
 # settings from notebook
 mplhep.style.use("CMS")
@@ -21,45 +21,7 @@ jet_label_corr = "Corr. jet "
 jet_label_raw = "Raw jet "
 pf_linestyle = "-."
 mlpf_linestyle = "-"
-
-
-def to_bh(data, bins, cumulative=False):
-    h1 = bh.Histogram(bh.axis.Variable(bins))
-    if len(data) > 0:
-        h1.fill(data)
-    if cumulative:
-        h1[:] = np.sum(h1.values()) - np.cumsum(h1)
-    return h1
-
-
-def Gauss(x, a, x0, sigma):
-    return a * np.exp(-((x - x0) ** 2) / (2 * sigma**2))
-
-
-def compute_scale_res(response):
-    if len(response) == 0:
-        return 0, 0, 0
-    h0 = to_bh(response, np.linspace(0, 2, 100))
-    if h0.values().sum() > 0:
-        try:
-            parameters1, covariances1 = curve_fit(
-                Gauss,
-                h0.axes[0].centers,
-                h0.values() / h0.values().sum(),
-                p0=[1.0, 1.0, 1.0],
-                maxfev=100000,
-                method="dogbox",
-                bounds=[(-np.inf, 0.5, 0.0), (np.inf, 1.5, 2.0)],
-            )
-            norm = parameters1[0] * h0.values().sum()
-            mean = parameters1[1]
-            sigma = parameters1[2]
-            return norm, mean, sigma
-        except Exception:
-            return 0, 0, 0
-    else:
-        return 0, 0, 0
-
+    
 
 def jet_response_plot(
     resp_pf,
@@ -173,7 +135,6 @@ def jet_response_plot(
         (med_mlpf, np.std(jet_response_mlpf), len(jet_response_mlpf), std_mlpf),
     )
 
-
 def save_jet_response_plots(
     eta_reco_bins, pt_gen_bins, resp_pf, resp_mlpf, data_pf, data_mlpf, outpath, jet_type="ak4", sample="QCD"
 ):
@@ -200,12 +161,38 @@ def save_jet_response_plots(
                 genjet_max_pt=pt_gen_bins[ibin_pt + 1],
                 jet_label=f"{jet_type} jets",
                 physics_process=process_name,
-                additional_label=", %.0f<$p_{{T,gen}}$<%.0f, %.2f<$\eta_{{reco}}$<%.2f"
+                additional_label=", %.0f<$p_{{T,ptcl}}$<%.0f, %.2f<$\eta_{{reco}}$<%.2f"
                 % (pt_gen_bins[ibin_pt], pt_gen_bins[ibin_pt + 1], eta_reco_bins[ibin_eta], eta_reco_bins[ibin_eta + 1]),
             )
             plt.savefig(f"{outpath}/{jet_type}_jet_pt_ratio_raw_etabin{ibin_eta}_ptbin{ibin_pt}.pdf")
             plt.close()
 
+def save_jet_correction_heatmaps(corr_map_pf, corr_map_mlpf, eta_reco_bins, pt_gen_bins, outpath, jet_type, sample_name):
+    """Saves a 2D heatmap of jet corrections."""
+    import matplotlib.colors
+
+    process_name = sample_name_to_process(sample_name)
+
+    for cmap, name in [(corr_map_pf, "pf"), (corr_map_mlpf, "mlpf")]:
+        plt.figure()
+        ax = plt.axes()
+        plt.imshow(cmap, norm=matplotlib.colors.Normalize(vmin=1.0, vmax=2.5))
+        plt.colorbar(shrink=0.5, label="1/median")
+        plt.xticks(range(len(pt_gen_bins) - 1), ["{:.0f}".format(x) for x in midpoints(np.array(pt_gen_bins))])
+        plt.yticks(range(len(eta_reco_bins) - 1), ["{:.2f}".format(x) for x in midpoints(np.array(eta_reco_bins))])
+        plt.xlabel("$p_{T,ptcl}$ (GeV)")
+        plt.ylabel("$\eta_{reco}$")
+        # cms_label(ax)
+        # sample_label(ax, process_name, x=sample_label_coords[0], y=sample_label_coords[1], fontsize=sample_label_fontsize)
+        ax.text(
+            jet_label_coords_single[0],
+            jet_label_coords_single[1],
+            f"{name.upper()} {jet_type} jets",
+            transform=ax.transAxes,
+            fontsize=addtext_fontsize,
+        )
+        plt.savefig(f"{outpath}/{jet_type}_correction_map_{name}.pdf")
+        plt.close()
 
 def fill_nan(reciprocal):
     mask = np.isnan(reciprocal) | np.isinf(reciprocal)
@@ -223,7 +210,6 @@ def fill_nan(reciprocal):
     reciprocal = reciprocal.copy()
     reciprocal[nan_coords] = imputed_values
     return reciprocal
-
 
 def calculate_correction_map(resp_data, eta_bins, pt_bins, jet_type="ak4"):
     jet_prefixes = {"ak4": "Jet", "ak8": "FatJet"}
@@ -243,9 +229,9 @@ def calculate_correction_map(resp_data, eta_bins, pt_bins, jet_type="ak4"):
                 & (resp_data[jet_prefix + "_eta"] < eta_bins[ibin_eta + 1])
             )
 
-            response_raw = awkward.flatten(resp_data["response_raw"])
-
+            response_raw = awkward.flatten(resp_data["response_raw"][mask])
             median, _ = med_iqr(response_raw)
+            print(f"Response eta_bin={ibin_eta} pt_bin={ibin_pt} resp={len(response_raw)} median={median}")
             resp_stats_med[ibin_eta, ibin_pt] = median
 
     reciprocal_med = 1.0 / resp_stats_med
@@ -297,6 +283,10 @@ def make_corrections(input_pf_parquet, input_mlpf_parquet, corrections_file, jet
 
     corr_map_pf = calculate_correction_map(resp_pf, eta_reco_bins, pt_gen_bins, jet_type=jet_type)
     corr_map_mlpf = calculate_correction_map(resp_mlpf, eta_reco_bins, pt_gen_bins, jet_type=jet_type)
+    if output_dir:
+        save_jet_correction_heatmaps(
+            corr_map_pf, corr_map_mlpf, eta_reco_bins, pt_gen_bins, output_dir, jet_type, sample_name
+        )
 
     np.savez(corrections_file, corr_map_pf=corr_map_pf, corr_map_mlpf=corr_map_mlpf, eta_bins=eta_reco_bins, pt_bins=pt_gen_bins)
 

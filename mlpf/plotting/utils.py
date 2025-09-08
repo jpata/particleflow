@@ -1,7 +1,8 @@
 import awkward
 import numpy as np
 import numba
-
+import boost_histogram as bh
+from scipy.optimize import curve_fit
 
 @numba.njit
 def deltaphi_nb(phi1, phi2):
@@ -137,3 +138,36 @@ def compute_response(data, jet_coll="Jet", genjet_coll="GenJet", deltar_cut=0.2)
         f"{genjet_coll}_pt_unfiltered": gj_pt_unfiltered[mask],
         f"{genjet_coll}_eta_unfiltered": gj_eta_unfiltered[mask],
     }
+
+def to_bh(data, bins):
+    h1 = bh.Histogram(bh.axis.Variable(bins))
+    h1.fill(data)
+    return h1
+
+def Gauss(x, a, x0, sigma):
+    if sigma > 0:
+        return a * np.exp(-((x - x0) ** 2) / (2 * sigma**2))
+    else:
+        return 0
+
+def compute_scale_res(response):
+    h0 = to_bh(response, np.linspace(0, 2, 100))
+    if h0.values().sum() > 0:
+        try:
+            parameters1, _ = curve_fit(
+                Gauss,
+                h0.axes[0].centers,
+                h0.values() / h0.values().sum(),
+                p0=[1.0, 1.0, 1.0],
+                maxfev=1000000,
+                method="dogbox",
+                bounds=[(-np.inf, 0.5, 0.0), (np.inf, 1.5, 2.0)],
+            )
+            norm = parameters1[0] * h0.values().sum()
+            mean = parameters1[1]
+            sigma = parameters1[2]
+            return norm, mean, sigma
+        except RuntimeError:
+            return 0, 0, 0
+    else:
+        return 0, 0, 0

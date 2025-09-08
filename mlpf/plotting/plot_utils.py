@@ -214,6 +214,10 @@ def format_dataset_name(dataset):
     return EVALUATION_DATASET_NAMES[dataset]
 
 
+def midpoints(x):
+    return (x[1:] + x[:-1]) / 2
+
+
 def med_iqr(arr):
     if len(arr) > 0:
         p25 = np.percentile(arr, 25)
