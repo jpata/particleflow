@@ -4,6 +4,7 @@ import numba
 import boost_histogram as bh
 from scipy.optimize import curve_fit
 
+
 @numba.njit
 def deltaphi_nb(phi1, phi2):
     diff = phi1 - phi2
@@ -139,16 +140,19 @@ def compute_response(data, jet_coll="Jet", genjet_coll="GenJet", deltar_cut=0.2)
         f"{genjet_coll}_eta_unfiltered": gj_eta_unfiltered[mask],
     }
 
+
 def to_bh(data, bins):
     h1 = bh.Histogram(bh.axis.Variable(bins))
     h1.fill(data)
     return h1
+
 
 def Gauss(x, a, x0, sigma):
     if sigma > 0:
         return a * np.exp(-((x - x0) ** 2) / (2 * sigma**2))
     else:
         return 0
+
 
 def compute_scale_res(response):
     h0 = to_bh(response, np.linspace(0, 2, 100))

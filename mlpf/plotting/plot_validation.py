@@ -7,12 +7,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import mplhep
-import boost_histogram as bh
 from pathlib import Path
 from scipy.interpolate import RegularGridInterpolator
 from matplotlib.lines import Line2D
 from mlpf.plotting.utils import compute_response, Gauss, to_bh, compute_scale_res
 from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, med_iqr, sample_name_to_process, midpoints
+
 
 @click.command()
 @click.option("--input-pf-parquet", required=True, type=str)
