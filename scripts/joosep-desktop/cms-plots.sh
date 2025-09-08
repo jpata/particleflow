@@ -32,9 +32,31 @@ NANO_PATH=/mnt/work/particleflow/CMSSW_15_0_5_mlpf_v2.6.0pre1_puppi_2372e2/cuda_
 #   python3 mlpf/plotting/data_preparation.py \
 #   --input-dir $NANO_PATH \
 #   --sample TTbar_noPU_13p6 &
+#
+# singularity exec -B /mnt/work/ $IMG \
+#   python3 mlpf/plotting/data_preparation.py \
+#   --input-dir $NANO_PATH \
+#   --sample PhotonJet_PU_13p6 &
+#
+# singularity exec -B /mnt/work/ $IMG \
+#   python3 mlpf/plotting/data_preparation.py \
+#   --input-dir $NANO_PATH \
+#   --sample PhotonJet_noPU_13p6 &
 # wait
 
-for sample in QCD_noPU_13p6 QCD_PU_13p6 TTbar_PU_13p6 TTbar_noPU_13p6; do
+
+sample=QCD_PU_13p6
+singularity exec -B /mnt/work/ $IMG \
+  python3 mlpf/plotting/corrections.py \
+  --input-pf-parquet ${sample}_pf.parquet \
+  --input-mlpf-parquet ${sample}_mlpf.parquet \
+  --corrections-file jec_ak4.npz \
+  --output-dir ./plots/${sample}/ak4 \
+  --jet-type ak4 \
+  --sample-name ${sample}
+
+# for sample in QCD_noPU_13p6 QCD_PU_13p6 TTbar_PU_13p6 TTbar_noPU_13p6; do
+# for sample in PhotonJet_noPU_13p6 PhotonJet_PU_13p6; do
 #  singularity exec -B /mnt/work/ $IMG \
 #    python3 mlpf/plotting/plot_validation.py \
 #    --input-pf-parquet ${sample}_pf.parquet \
@@ -44,7 +66,7 @@ for sample in QCD_noPU_13p6 QCD_PU_13p6 TTbar_PU_13p6 TTbar_noPU_13p6; do
 #    --jet-type ak4 \
 #    --sample-name ${sample} \
 #    --fiducial-cuts inclusive &
-#
+
 #  singularity exec -B /mnt/work/ $IMG \
 #    python3 mlpf/plotting/plot_validation.py \
 #    --input-pf-parquet ${sample}_pf.parquet \
@@ -54,7 +76,7 @@ for sample in QCD_noPU_13p6 QCD_PU_13p6 TTbar_PU_13p6 TTbar_noPU_13p6; do
 #    --jet-type ak4 \
 #    --sample-name ${sample} \
 #    --fiducial-cuts eta_less_2p5 &
-#
+
 #  singularity exec -B /mnt/work/ $IMG \
 #    python3 mlpf/plotting/plot_validation.py \
 #    --input-pf-parquet ${sample}_pf.parquet \
@@ -65,14 +87,14 @@ for sample in QCD_noPU_13p6 QCD_PU_13p6 TTbar_PU_13p6 TTbar_noPU_13p6; do
 #    --sample-name ${sample} \
 #    --fiducial-cuts inclusive &
 
-  singularity exec -B /mnt/work/ $IMG \
-    python3 mlpf/plotting/plot_met_validation.py \
-    --input-pf-parquet ${sample}_pf.parquet \
-    --input-mlpf-parquet ${sample}_mlpf.parquet \
-    --sample-name ${sample} \
-    --output-dir ./plots &
-  wait
-done
+#   singularity exec -B /mnt/work/ $IMG \
+#     python3 mlpf/plotting/plot_met_validation.py \
+#     --input-pf-parquet ${sample}_pf.parquet \
+#     --input-mlpf-parquet ${sample}_mlpf.parquet \
+#     --sample-name ${sample} \
+#     --output-dir ./plots &
+#   wait
+# done
 
 
 # for sample in QCD_PU TTbar_PU; do

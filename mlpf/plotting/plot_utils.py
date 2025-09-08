@@ -153,6 +153,8 @@ SAMPLE_NAME_TO_PROCESS = {
     "TTbar_PU": "cms_pf_ttbar",
     "TTbar_PU_13p6": "cms_pf_ttbar",
     "TTbar_noPU_13p6": "cms_pf_ttbar_nopu",
+    "PhotonJet_noPU_13p6": "cms_pf_photonjet_nopu",
+    "PhotonJet_PU_13p6": "cms_pf_photonjet",
 }
 
 
