@@ -201,7 +201,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         genjet_eta="GenJet_eta",
         additional_cut=lambda data: data["Pileup_nTrueInt"] >= 0,
         filename="jet_response.pdf",
-        save_figure=False
+        save_figure=False,
     ):
         plt.figure()
         ax = plt.axes()
@@ -747,7 +747,15 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
-    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label_inclusive, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    ax.text(
+        jet_label_coords_single[0],
+        jet_label_coords_single[1],
+        jet_label_inclusive,
+        transform=ax.transAxes,
+        fontsize=addtext_fontsize,
+        ha="left",
+        va="top",
+    )
     fig.savefig(os.path.join(output_dir, f"{jet_type}_scale_vs_pt.pdf"))
     plt.close(fig)
 
@@ -782,7 +790,15 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
-    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label_inclusive, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    ax.text(
+        jet_label_coords_single[0],
+        jet_label_coords_single[1],
+        jet_label_inclusive,
+        transform=ax.transAxes,
+        fontsize=addtext_fontsize,
+        ha="left",
+        va="top",
+    )
     fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_pt.pdf"))
     plt.close(fig)
 
@@ -801,7 +817,15 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
-    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label_inclusive, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    ax.text(
+        jet_label_coords_single[0],
+        jet_label_coords_single[1],
+        jet_label_inclusive,
+        transform=ax.transAxes,
+        fontsize=addtext_fontsize,
+        ha="left",
+        va="top",
+    )
     fig.savefig(os.path.join(output_dir, f"{jet_type}_scale_vs_eta.pdf"))
     plt.close(fig)
 
@@ -840,7 +864,15 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
-    ax.text(jet_label_coords_single[0], jet_label_coords_single[1], jet_label_inclusive, transform=ax.transAxes, fontsize=addtext_fontsize, ha="left", va="top")
+    ax.text(
+        jet_label_coords_single[0],
+        jet_label_coords_single[1],
+        jet_label_inclusive,
+        transform=ax.transAxes,
+        fontsize=addtext_fontsize,
+        ha="left",
+        va="top",
+    )
     fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_eta.pdf"))
     plt.close(fig)
 
