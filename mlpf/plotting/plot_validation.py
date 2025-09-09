@@ -269,7 +269,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             h1,
             histtype="step",
             lw=2,
-            label="{}\nmean: {:.2f} std: {:.2f}\nmed: {:.2f} IQR: {:.2f}".format(mlpf_label, mean_mlpf, std_mlpf, med_mlpf, iqr_mlpf),
+            label="{}\\nmean: {:.2f} std: {:.2f}\nmed: {:.2f} IQR: {:.2f}".format(mlpf_label, mean_mlpf, std_mlpf, med_mlpf, iqr_mlpf),
             ls=mlpf_linestyle,
             color=mlpf_color,
         )
@@ -315,7 +315,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
 
         varname_pretty = ""
         if variable_name == "GenJet_eta" or variable_name == "GenJetAK8_eta":
-            varname_pretty = "$\eta_{ptcl}$"
+            varname_pretty = "$\\eta_{ptcl}$"
         elif variable_name == "GenJet_pt" or variable_name == "GenJetAK8_pt":
             varname_pretty = "$p_{T,ptcl}$"
         else:
@@ -552,7 +552,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         "eta",
         "eta",
         eta_bins_for_kinematics,
-        "$\eta$",
+        "$\\eta$",
         f"{jet_type}_eta.pdf",
         logy=True,
         jet_label=jet_label,
@@ -586,7 +586,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         h_matched_pf_gen_eta,
         h_matched_mlpf_gen_eta,
         eta_bins_for_pureff,
-        "$η_{ptcl}$",
+        "$\\eta_{ptcl}$",
         output_dir,
         f"{jet_type}_efficiency_vs_eta.pdf",
         jet_label_inclusive,
@@ -627,7 +627,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         h_matched_pf_reco_eta,
         h_matched_mlpf_reco_eta,
         eta_bins_for_pureff,
-        "$η$",
+        "$\\eta$",
         output_dir,
         f"{jet_type}_purity_vs_eta.pdf",
         jet_label_inclusive,
@@ -760,11 +760,16 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     plt.close(fig)
 
     # Plot resolution vs pt
-    fig, ax = plt.subplots()
-    ax.plot(midpoints(pt_bins_for_response), sigma_pf_vs_pt / mean_pf_vs_pt, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle, lw=3)
+    fig, (ax, rax) = plt.subplots(2, 1, gridspec_kw={"height_ratios": [3, 1]}, sharex=True)
+    fig.subplots_adjust(hspace=0.1)
+
+    res_pf_vs_pt = sigma_pf_vs_pt / mean_pf_vs_pt
+    res_mlpf_vs_pt = sigma_mlpf_vs_pt / mean_mlpf_vs_pt
+
+    ax.plot(midpoints(pt_bins_for_response), res_pf_vs_pt, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle, lw=3)
     ax.plot(
         midpoints(pt_bins_for_response),
-        sigma_mlpf_vs_pt / mean_mlpf_vs_pt,
+        res_mlpf_vs_pt,
         label=f"{mlpf_label}",
         color=mlpf_color,
         linestyle=mlpf_linestyle,
@@ -781,10 +786,8 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     #     linestyle=mlpf_linestyle,
     #     lw=0.5,
     # )
-    ax.set_xlabel("$p_{T,ptcl}$ (GeV)")
     ax.set_ylabel("Response resolution")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
-    ax.set_xscale("log")
     ax.set_ylim(0.0, 1.0)
     mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
     ax.text(
@@ -799,6 +802,18 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         ha="left",
         va="top",
     )
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = res_mlpf_vs_pt / res_pf_vs_pt
+
+    rax.plot(midpoints(pt_bins_for_response), ratio, color=mlpf_color, linestyle=mlpf_linestyle, lw=3)
+    rax.set_xlabel("$p_{T,ptcl}$ (GeV)")
+    rax.set_ylabel("MLPF / PF")
+    rax.set_xscale("log")
+    rax.set_ylim(0.5, 1.5)
+    rax.axhline(1.0, color="black", ls="--")
+    rax.set_xlim(min(pt_bins_for_response), max(pt_bins_for_response))
+
     fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_pt.pdf"))
     plt.close(fig)
 
@@ -808,7 +823,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.plot(midpoints(eta_bins_for_response), mean_mlpf_vs_eta, label=mlpf_label, color=mlpf_color, linestyle=mlpf_linestyle, lw=3)
     ax.plot(midpoints(eta_bins_for_response), mean_pf_vs_eta_raw, label="PF-PUPPI raw", color=pf_color, linestyle=pf_linestyle, lw=0.5)
     ax.plot(midpoints(eta_bins_for_response), mean_mlpf_vs_eta_raw, label=f"{mlpf_label} raw", color=mlpf_color, linestyle=mlpf_linestyle, lw=0.5)
-    ax.set_xlabel("$η_{ptcl}$")
+    ax.set_xlabel("$\\eta_{ptcl}$")
     ax.set_ylabel("Mean response")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_ylim(0.5, 1.5)
@@ -830,11 +845,16 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     plt.close(fig)
 
     # Plot resolution vs eta
-    fig, ax = plt.subplots()
-    ax.plot(midpoints(eta_bins_for_response), sigma_pf_vs_eta / mean_pf_vs_eta, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle, lw=3)
+    fig, (ax, rax) = plt.subplots(2, 1, gridspec_kw={"height_ratios": [3, 1]}, sharex=True)
+    fig.subplots_adjust(hspace=0.05)
+
+    res_pf_vs_eta = sigma_pf_vs_eta / mean_pf_vs_eta
+    res_mlpf_vs_eta = sigma_mlpf_vs_eta / mean_mlpf_vs_eta
+
+    ax.plot(midpoints(eta_bins_for_response), res_pf_vs_eta, label="PF-PUPPI", color=pf_color, linestyle=pf_linestyle, lw=3)
     ax.plot(
         midpoints(eta_bins_for_response),
-        sigma_mlpf_vs_eta / mean_mlpf_vs_eta,
+        res_mlpf_vs_eta,
         label=f"{mlpf_label}",
         color=mlpf_color,
         linestyle=mlpf_linestyle,
@@ -856,7 +876,6 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     #     linestyle=mlpf_linestyle,
     #     lw=0.5,
     # )
-    ax.set_xlabel("$\eta_{ptcl}$")
     ax.set_ylabel("Response resolution")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_ylim(0.0, 1.0)
@@ -873,6 +892,17 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         ha="left",
         va="top",
     )
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = res_mlpf_vs_eta / res_pf_vs_eta
+
+    rax.plot(midpoints(eta_bins_for_response), ratio, color=mlpf_color, linestyle=mlpf_linestyle, lw=3)
+    rax.set_xlabel("$\\eta_{ptcl}$")
+    rax.set_ylabel("MLPF / PF")
+    rax.set_ylim(0.5, 1.5)
+    rax.axhline(1.0, color="black", ls="--")
+    rax.set_xlim(min(eta_bins_for_response), max(eta_bins_for_response))
+
     fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_eta.pdf"))
     plt.close(fig)
 
