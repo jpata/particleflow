@@ -813,6 +813,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     rax.set_ylim(0.5, 1.5)
     rax.axhline(1.0, color="black", ls="--")
     rax.set_xlim(min(pt_bins_for_response), max(pt_bins_for_response))
+    rax.tick_params(axis="x", pad=10)
 
     fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_pt.pdf"))
     plt.close(fig)
@@ -902,6 +903,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     rax.set_ylim(0.5, 1.5)
     rax.axhline(1.0, color="black", ls="--")
     rax.set_xlim(min(eta_bins_for_response), max(eta_bins_for_response))
+    rax.tick_params(axis="x", pad=10)
 
     fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_eta.pdf"))
     plt.close(fig)

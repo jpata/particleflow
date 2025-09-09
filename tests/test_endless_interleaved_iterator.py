@@ -96,7 +96,6 @@ class TestEndlessInterleavedIterator(unittest.TestCase):
         with self.assertRaises(Exception):
             next(endless_iter)
 
-
     def test_multiple_epochs(self):
         """
         Tests that EndlessIterator can iterate for more than one epoch over
