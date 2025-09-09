@@ -770,17 +770,17 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         linestyle=mlpf_linestyle,
         lw=3,
     )
-    ax.plot(
-        midpoints(pt_bins_for_response), sigma_pf_vs_pt_raw / mean_pf_vs_pt_raw, label="PF-PUPPI raw", color=pf_color, linestyle=pf_linestyle, lw=0.5
-    )
-    ax.plot(
-        midpoints(pt_bins_for_response),
-        sigma_mlpf_vs_pt_raw / mean_mlpf_vs_pt_raw,
-        label=f"{mlpf_label} raw",
-        color=mlpf_color,
-        linestyle=mlpf_linestyle,
-        lw=0.5,
-    )
+    # ax.plot(
+    #     midpoints(pt_bins_for_response), sigma_pf_vs_pt_raw / mean_pf_vs_pt_raw, label="PF-PUPPI raw", color=pf_color, linestyle=pf_linestyle, lw=0.5
+    # )
+    # ax.plot(
+    #     midpoints(pt_bins_for_response),
+    #     sigma_mlpf_vs_pt_raw / mean_mlpf_vs_pt_raw,
+    #     label=f"{mlpf_label} raw",
+    #     color=mlpf_color,
+    #     linestyle=mlpf_linestyle,
+    #     lw=0.5,
+    # )
     ax.set_xlabel("$p_{T,ptcl}$ (GeV)")
     ax.set_ylabel("Response resolution")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
@@ -840,23 +840,23 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         linestyle=mlpf_linestyle,
         lw=3,
     )
-    ax.plot(
-        midpoints(eta_bins_for_response),
-        sigma_pf_vs_eta_raw / mean_pf_vs_eta_raw,
-        label="PF-PUPPI raw",
-        color=pf_color,
-        linestyle=pf_linestyle,
-        lw=0.5,
-    )
-    ax.plot(
-        midpoints(eta_bins_for_response),
-        sigma_mlpf_vs_eta_raw / mean_mlpf_vs_eta_raw,
-        label=f"{mlpf_label} raw",
-        color=mlpf_color,
-        linestyle=mlpf_linestyle,
-        lw=0.5,
-    )
-    ax.set_xlabel("$η_{ptcl}$")
+    # ax.plot(
+    #     midpoints(eta_bins_for_response),
+    #     sigma_pf_vs_eta_raw / mean_pf_vs_eta_raw,
+    #     label="PF-PUPPI raw",
+    #     color=pf_color,
+    #     linestyle=pf_linestyle,
+    #     lw=0.5,
+    # )
+    # ax.plot(
+    #     midpoints(eta_bins_for_response),
+    #     sigma_mlpf_vs_eta_raw / mean_mlpf_vs_eta_raw,
+    #     label=f"{mlpf_label} raw",
+    #     color=mlpf_color,
+    #     linestyle=mlpf_linestyle,
+    #     lw=0.5,
+    # )
+    ax.set_xlabel("$\eta_{ptcl}$")
     ax.set_ylabel("Response resolution")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_ylim(0.0, 1.0)
