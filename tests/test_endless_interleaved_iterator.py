@@ -97,5 +97,41 @@ class TestEndlessInterleavedIterator(unittest.TestCase):
             next(endless_iter)
 
 
+    def test_multiple_epochs(self):
+        """
+        Tests that EndlessIterator can iterate for more than one epoch over
+        an InterleavedIterator, verifying that the iterators are reset correctly.
+        """
+        d1 = MockDictDataset(size=10, offset=0)
+        d2 = MockDictDataset(size=10, offset=100)
+        s1 = ResumableSampler(SequentialSampler(d1))
+        s2 = ResumableSampler(SequentialSampler(d2))
+        # batch_size=2, so 5 batches from each loader, 10 total per epoch
+        l1 = DataLoader(d1, batch_size=2, sampler=s1)
+        l2 = DataLoader(d2, batch_size=2, sampler=s2)
+        inter_iter = InterleavedIterator([l1, l2])
+        endless_iter = EndlessIterator(inter_iter, samplers=[s1, s2], world_size=1)
+
+        total_batches_per_epoch = len(l1) + len(l2)  # 5 + 5 = 10
+        num_batches_to_iterate = int(total_batches_per_epoch * 1.5)  # 15 batches
+
+        # Iterate for 1.5 epochs
+        results = []
+        for _ in range(num_batches_to_iterate):
+            batch = next(endless_iter)
+            results.append(batch["X"].clone())
+
+        self.assertEqual(len(results), num_batches_to_iterate)
+
+        # Check that the data from the second epoch matches the data from the first
+        # The first 5 batches of the second epoch should be the same as the first 5 batches of the first epoch
+        results_first_epoch_part = results[0:5]
+        results_second_epoch_part = results[total_batches_per_epoch : total_batches_per_epoch + 5]
+
+        self.assertEqual(len(results_first_epoch_part), len(results_second_epoch_part))
+        for i in range(len(results_first_epoch_part)):
+            self.assertTrue(torch.equal(results_first_epoch_part[i], results_second_epoch_part[i]))
+
+
 if __name__ == "__main__":
     unittest.main()

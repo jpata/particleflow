@@ -193,6 +193,7 @@ class ResumableSampler(torch.utils.data.Sampler):
     """A wrapper for a sampler that allows saving and restoring the state."""
 
     def __init__(self, sampler):
+        _logger.debug("Creating ResumableSampler.")
         self.sampler = sampler
         self.start_index = 0
 
@@ -205,6 +206,7 @@ class ResumableSampler(torch.utils.data.Sampler):
 
     def load_state_dict(self, state_dict):
         self.start_index = state_dict["start_index"]
+        _logger.info(f"ResumableSampler loading state: start_index={self.start_index}")
 
     def set_epoch(self, epoch):
         if hasattr(self.sampler, "set_epoch"):
@@ -215,6 +217,7 @@ class InterleavedIterator(object):
     """Will combine DataLoaders of different lengths and batch sizes."""
 
     def __init__(self, data_loaders):
+        _logger.info(f"Creating InterleavedIterator with {len(data_loaders)} data loaders.")
         self.data_loaders = data_loaders
         self.data_loaders_iter = [iter(dl) for dl in data_loaders]
         max_loader_size = max([len(dl) for dl in data_loaders])
@@ -233,17 +236,19 @@ class InterleavedIterator(object):
         self._len = None
 
     def __iter__(self):
+        # Only reset if the iterator is exhausted
+        if self.cur_index >= len(self.loader_ds_indices):
+            _logger.debug("Resetting exhausted InterleavedIterator.")
+            self.cur_index = 0
+            self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]
+            self.batches_yielded_per_loader = [0] * len(self.data_loaders)
         return self
 
     def __next__(self):
-        try:
-            iloader = self.loader_ds_indices[self.cur_index]
-        except IndexError:
-            self.cur_index = 0
-            self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]  # reset the loader
-            self.batches_yielded_per_loader = [0] * len(self.data_loaders)
+        if self.cur_index >= len(self.loader_ds_indices):
             raise StopIteration
 
+        iloader = self.loader_ds_indices[self.cur_index]
         ret = next(self.data_loaders_iter[iloader])
         self.cur_index += 1
         self.batches_yielded_per_loader[iloader] += 1
@@ -269,6 +274,7 @@ class InterleavedIterator(object):
     def load_state_dict(self, state_dict):
         self.cur_index = state_dict["cur_index"]
         self.batches_yielded_per_loader = state_dict["batches_yielded_per_loader"]
+        _logger.info(f"InterleavedIterator loading state: cur_index={self.cur_index}, batches_yielded_per_loader={self.batches_yielded_per_loader}")
 
         for i, loader in enumerate(self.data_loaders):
             start_index = self.batches_yielded_per_loader[i] * loader.batch_size
@@ -281,6 +287,7 @@ class InterleavedIterator(object):
 
 class EndlessIterator(object):
     def __init__(self, data_loader, samplers, world_size):
+        _logger.info("Creating EndlessIterator.")
         self.data_loader = data_loader
         self.samplers = samplers
         self.world_size = world_size
@@ -311,6 +318,7 @@ class EndlessIterator(object):
     def load_state_dict(self, state_dict):
         self.epoch = state_dict["epoch"]
         _logger.info("EndlessIterator setting epoch={}".format(self.epoch))
+        _logger.info("EndlessIterator loading loader state.")
         self.data_loader.load_state_dict(state_dict["loader_state_dict"])
         if self.world_size > 1:
             for sampler in self.samplers:

@@ -80,3 +80,24 @@ class TestInterleavedIterator(unittest.TestCase):
 
     def test_save_restore_multi_worker(self):
         self._run_save_restore_test(num_workers=2)
+
+    def test_reusability(self):
+        """Tests that the InterleavedIterator can be iterated over multiple times."""
+        d1 = TensorDataset(torch.arange(10))
+        d2 = TensorDataset(torch.arange(5))
+
+        s1 = ResumableSampler(SequentialSampler(d1))
+        s2 = ResumableSampler(SequentialSampler(d2))
+
+        loader1 = DataLoader(d1, batch_size=1, sampler=s1)
+        loader2 = DataLoader(d2, batch_size=1, sampler=s2)
+
+        inter_iter = InterleavedIterator([loader1, loader2])
+
+        # First iteration
+        results1 = [item[0].item() for item in inter_iter]
+        self.assertEqual(len(results1), 15)
+
+        # Second iteration should yield the same results
+        results2 = [item[0].item() for item in inter_iter]
+        self.assertEqual(results1, results2)
