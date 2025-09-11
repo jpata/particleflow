@@ -2,6 +2,7 @@ import os
 import time
 from pathlib import Path
 import sys
+import gc
 
 import awkward
 import fastjet
@@ -12,22 +13,22 @@ import tqdm
 import vector
 from jet_utils import match_two_jet_collections
 from plotting.plot_utils import (
-    get_class_names,
-    compute_met_and_ratio,
+    # get_class_names,
+    # compute_met_and_ratio,
     load_eval_data,
     plot_jets,
     plot_jet_ratio,
-    plot_jet_response_binned,
-    plot_jet_response_binned_vstarget,
-    plot_jet_response_binned_eta,
-    plot_met,
-    plot_met_ratio,
-    plot_met_response_binned,
+    # plot_jet_response_binned,
+    # plot_jet_response_binned_vstarget,
+    # plot_jet_response_binned_eta,
+    # plot_met,
+    # plot_met_ratio,
+    # plot_met_response_binned,
     plot_num_elements,
-    plot_particles,
-    plot_particle_ratio,
-    plot_particle_response,
-    plot_pu_fraction,
+    # plot_particles,
+    # plot_particle_ratio,
+    # plot_particle_response,
+    # plot_pu_fraction,
 )
 
 from .logger import _logger
@@ -179,17 +180,21 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
 
 def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
     """Uses the predictions stored as .parquet files from run_predictions to make plots."""
+    import matplotlib.pyplot as plt
+
     ret_dict = {}
     mplhep.style.use(mplhep.styles.CMS)
-    class_names = get_class_names(sample)
+    # class_names = get_class_names(sample)
     os.system(f"mkdir -p {outpath}/plots{dir_name}/{sample}")
 
     plots_path = Path(f"{outpath}/plots{dir_name}/{sample}/")
     pred_path = Path(f"{outpath}/preds{dir_name}/{sample}/")
 
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), ntest_files)
+    _logger.info(f"Loaded data for plotting from {pred_path}")
 
     plot_num_elements(X, cp_dir=plots_path)
+    _logger.info("Plotted number of elements")
 
     # plot_elements(X, yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
 
@@ -199,6 +204,7 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
         dataset=dataset,
         sample=sample,
     )
+    _logger.info("Plotted jets")
     ret_dict["jet_ratio"] = plot_jet_ratio(
         yvals,
         cp_dir=plots_path,
@@ -207,56 +213,79 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
         dataset=dataset,
         sample=sample,
     )
-    plot_jet_ratio(
-        yvals,
-        cp_dir=plots_path,
-        bins=np.linspace(0.5, 1.5, 500),
-        logy=True,
-        file_modifier="_bins_0p5_1p5",
-        dataset=dataset,
-        sample=sample,
-    )
-    plot_jet_ratio(
-        yvals,
-        cp_dir=plots_path,
-        bins=np.linspace(0, 2, 500),
-        logy=True,
-        file_modifier="_bins_0_2",
-        dataset=dataset,
-        sample=sample,
-    )
-    plot_jet_response_binned(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
-    plot_jet_response_binned_vstarget(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
-    plot_jet_response_binned_eta(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+
+    # commented out to save memory and make the validation runtime faster
+    # _logger.info("Plotted jet ratio")
+    # plot_jet_ratio(
+    #     yvals,
+    #     cp_dir=plots_path,
+    #     bins=np.linspace(0.5, 1.5, 500),
+    #     logy=True,
+    #     file_modifier="_bins_0p5_1p5",
+    #     dataset=dataset,
+    #     sample=sample,
+    # )
+    # _logger.info("Plotted jet ratio with bins 0.5-1.5")
+    # plot_jet_ratio(
+    #     yvals,
+    #     cp_dir=plots_path,
+    #     bins=np.linspace(0, 2, 500),
+    #     logy=True,
+    #     file_modifier="_bins_0_2",
+    #     dataset=dataset,
+    #     sample=sample,
+    # )
+    # _logger.info("Plotted jet ratio with bins 0-2")
+    # plot_jet_response_binned(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # _logger.info("Plotted binned jet response")
+    # plot_jet_response_binned_vstarget(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # _logger.info("Plotted binned jet response vs target")
+    # plot_jet_response_binned_eta(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # _logger.info("Plotted binned jet response vs eta")
     # plot_jet_response_binned_separate(yvals, cp_dir=plots_path, title=title)
 
-    met_data = compute_met_and_ratio(yvals)
-    plot_met(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
-    plot_met_ratio(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
-    plot_met_ratio(met_data, cp_dir=plots_path, bins=np.linspace(0, 20, 100), logy=True, dataset=dataset, sample=sample)
-    plot_met_ratio(
-        met_data,
-        cp_dir=plots_path,
-        bins=np.linspace(0, 2, 500),
-        logy=False,
-        file_modifier="_bins_0_2",
-        dataset=dataset,
-        sample=sample,
-    )
-    plot_met_ratio(
-        met_data,
-        cp_dir=plots_path,
-        bins=np.linspace(0, 5, 500),
-        logy=False,
-        file_modifier="_bins_0_5",
-        dataset=dataset,
-        sample=sample,
-    )
-    plot_met_response_binned(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # met_data = compute_met_and_ratio(yvals)
+    # _logger.info("Computed MET and ratio")
+    # plot_met(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # _logger.info("Plotted MET")
+    # plot_met_ratio(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # _logger.info("Plotted MET ratio")
+    # plot_met_ratio(met_data, cp_dir=plots_path, bins=np.linspace(0, 20, 100), logy=True, dataset=dataset, sample=sample)
+    # _logger.info("Plotted MET ratio with bins 0-20")
+    # plot_met_ratio(
+    #     met_data,
+    #     cp_dir=plots_path,
+    #     bins=np.linspace(0, 2, 500),
+    #     logy=False,
+    #     file_modifier="_bins_0_2",
+    #     dataset=dataset,
+    #     sample=sample,
+    # )
+    # _logger.info("Plotted MET ratio with bins 0-2")
+    # plot_met_ratio(
+    #     met_data,
+    #     cp_dir=plots_path,
+    #     bins=np.linspace(0, 5, 500),
+    #     logy=False,
+    #     file_modifier="_bins_0_5",
+    #     dataset=dataset,
+    #     sample=sample,
+    # )
+    # _logger.info("Plotted MET ratio with bins 0-5")
+    # plot_met_response_binned(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # _logger.info("Plotted binned MET response")
 
-    plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
-    plot_particle_ratio(yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
-    plot_particle_response(X, yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
-    plot_pu_fraction(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # _logger.info("Plotted particles")
+    # plot_particle_ratio(yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # _logger.info("Plotted particle ratio")
+    # plot_particle_response(X, yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # _logger.info("Plotted particle response")
+    # plot_pu_fraction(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # _logger.info("Plotted PU fraction")
+
+    del X, yvals
+    plt.close("all")
+    gc.collect()
 
     return ret_dict

@@ -3,11 +3,13 @@ import os.path as osp
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import gc
 import tqdm
 import yaml
 import json
-import sklearn
-import sklearn.metrics
+
+# import sklearn
+# import sklearn.metrics
 import numpy as np
 from typing import Union, List
 import sys
@@ -46,7 +48,8 @@ from mlpf.model.mlpf import MLPF
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
-from mlpf.model.plots import validation_plots
+
+# from mlpf.model.plots import validation_plots
 from mlpf.optimizers.lamb import Lamb
 
 
@@ -252,9 +255,9 @@ def evaluate(
     eval_loss = {}
 
     # Confusion matrix tracking
-    cm_X_target = np.zeros((13, 13))
-    cm_X_pred = np.zeros((13, 13))
-    cm_id = np.zeros((13, 13))
+    # cm_X_target = np.zeros((13, 13))
+    # cm_X_pred = np.zeros((13, 13))
+    # cm_id = np.zeros((13, 13))
 
     # Only show progress bar on rank 0
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
@@ -271,19 +274,19 @@ def evaluate(
                 _, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
 
         # Update confusion matrices
-        cm_X_target += sklearn.metrics.confusion_matrix(
-            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ytarget["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-        )
-        cm_X_pred += sklearn.metrics.confusion_matrix(
-            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-        )
-        cm_id += sklearn.metrics.confusion_matrix(
-            ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-        )
+        # cm_X_target += sklearn.metrics.confusion_matrix(
+        #     batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ytarget["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+        # )
+        # cm_X_pred += sklearn.metrics.confusion_matrix(
+        #     batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+        # )
+        # cm_id += sklearn.metrics.confusion_matrix(
+        #     ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
+        # )
 
         # Save validation plots for first batch
-        if (rank == 0 or rank == "cpu") and ival == 0 and make_plots:
-            validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
+        # if (rank == 0 or rank == "cpu") and ival == 0 and make_plots:
+        #     validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
 
         # Accumulate losses
         for loss_name in loss:
@@ -292,16 +295,16 @@ def evaluate(
             eval_loss[loss_name] += loss[loss_name]
 
     # Log confusion matrices
-    if comet_experiment:
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_X_target, title="Element to target", row_label="X", column_label="target", step=step, file_name="cm_X_target.json"
-        )
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", step=step, file_name="cm_X_pred.json"
-        )
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_id, title="Target to pred", row_label="target", column_label="pred", step=step, file_name="cm_id.json"
-        )
+    # if comet_experiment:
+    #     comet_experiment.log_confusion_matrix(
+    #         matrix=cm_X_target, title="Element to target", row_label="X", column_label="target", step=step, file_name="cm_X_target.json"
+    #     )
+    #     comet_experiment.log_confusion_matrix(
+    #         matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", step=step, file_name="cm_X_pred.json"
+    #     )
+    #     comet_experiment.log_confusion_matrix(
+    #         matrix=cm_id, title="Target to pred", row_label="target", column_label="pred", step=step, file_name="cm_id.json"
+    #     )
 
     # Average losses across steps
     num_steps = torch.tensor(float(len(valid_loader)), device=rank, dtype=torch.float32)
@@ -533,6 +536,10 @@ def _run_validation_cycle(
                 ray.train.report(metrics, checkpoint=ray.train.Checkpoint.from_directory(temp_checkpoint_dir))
         else:
             ray.train.report(metrics)
+
+    gc.collect()
+    if device_type == "cuda":
+        torch.cuda.empty_cache()
 
     return best_val_loss, stale_steps
 
