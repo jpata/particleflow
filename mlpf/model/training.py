@@ -1,3 +1,36 @@
+"""
+This script defines the training, validation, and testing workflow for the MLPF model.
+
+The main entry point is `device_agnostic_run`, which handles CPU, single-GPU, and multi-GPU (DDP) training configurations.
+
+The overall training flow is as follows:
+1. `device_agnostic_run`: Sets up the environment and launches the `run` function for each process/GPU.
+2. `run`: Initializes the process group, model, optimizer, data loaders, and learning rate scheduler. It then calls `train_all_steps` to begin the main training loop.
+3. `train_all_steps`: The core training loop that iterates over training steps.
+    - For each step, it calls `train_step` to perform a forward and backward pass.
+    - Manages checkpointing, learning rate scheduling, and early stopping.
+    - Periodically, it calls `_run_validation_cycle` to evaluate the model.
+4. `_run_validation_cycle`:
+    - Calls `evaluate` to compute validation loss.
+    - Calls `run_test` to generate predictions on the test datasets.
+    - Calls `make_plots` (from inference.py) to create performance plots.
+
+Key Functions:
+- `device_agnostic_run`: Entry point that manages device configuration (CPU/GPU/multi-GPU).
+- `run`: Main function for a single process, responsible for setup and starting the training loop.
+- `train_all_steps`: Orchestrates the entire training process over all steps.
+- `train_step`: Executes a single training step (forward pass, loss calculation, backward pass, optimizer step).
+- `evaluate`: Computes model performance and loss on the validation dataset.
+- `model_step`: Performs a single forward pass through the model and computes the loss.
+- `optimizer_step`: Executes the backward pass and updates model weights.
+- `_log_and_checkpoint_step`: Handles logging and periodic checkpoint saving.
+- `_run_validation_cycle`: Coordinates the validation, testing, and plotting process at regular intervals.
+- `run_test`: Runs inference on a specified test dataset.
+- `get_optimizer`: Utility to create an optimizer based on the configuration.
+- `configure_model_trainable`: Utility to set specific model layers as trainable.
+- `override_config`: Merges command-line arguments into the configuration dictionary.
+"""
+
 import os
 import os.path as osp
 import time
@@ -56,7 +89,7 @@ from mlpf.optimizers.lamb import Lamb
 def log_memory(stage, rank, tensorboard_writer=None, step=None):
     process = psutil.Process(os.getpid())
     mem = process.memory_info()
-    _logger.info(f"RAM memory usage at {stage} on rank {rank}: rss={mem.rss / 1024**2:.2f} MB, vms={mem.vms / 1024**2:.2f} MB")
+    _logger.debug(f"RAM memory usage at {stage} on rank {rank}: rss={mem.rss / 1024**2:.2f} MB, vms={mem.vms / 1024**2:.2f} MB")
     if tensorboard_writer and step:
         tensorboard_writer.add_scalar(f"memory/rss_MB/{stage}", mem.rss / 1024**2, step)
         tensorboard_writer.add_scalar(f"memory/vms_MB/{stage}", mem.vms / 1024**2, step)
@@ -254,11 +287,6 @@ def evaluate(
     model.eval()
     eval_loss = {}
 
-    # Confusion matrix tracking
-    # cm_X_target = np.zeros((13, 13))
-    # cm_X_pred = np.zeros((13, 13))
-    # cm_id = np.zeros((13, 13))
-
     # Only show progress bar on rank 0
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
     assert len(valid_loader) > 0
@@ -273,17 +301,6 @@ def evaluate(
             with torch.no_grad():
                 _, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
 
-        # Update confusion matrices
-        # cm_X_target += sklearn.metrics.confusion_matrix(
-        #     batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ytarget["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-        # )
-        # cm_X_pred += sklearn.metrics.confusion_matrix(
-        #     batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-        # )
-        # cm_id += sklearn.metrics.confusion_matrix(
-        #     ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-        # )
-
         # Save validation plots for first batch
         # if (rank == 0 or rank == "cpu") and ival == 0 and make_plots:
         #     validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
@@ -293,18 +310,6 @@ def evaluate(
             if loss_name not in eval_loss:
                 eval_loss[loss_name] = 0.0
             eval_loss[loss_name] += loss[loss_name]
-
-    # Log confusion matrices
-    # if comet_experiment:
-    #     comet_experiment.log_confusion_matrix(
-    #         matrix=cm_X_target, title="Element to target", row_label="X", column_label="target", step=step, file_name="cm_X_target.json"
-    #     )
-    #     comet_experiment.log_confusion_matrix(
-    #         matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", step=step, file_name="cm_X_pred.json"
-    #     )
-    #     comet_experiment.log_confusion_matrix(
-    #         matrix=cm_id, title="Target to pred", row_label="target", column_label="pred", step=step, file_name="cm_id.json"
-    #     )
 
     # Average losses across steps
     num_steps = torch.tensor(float(len(valid_loader)), device=rank, dtype=torch.float32)
@@ -400,7 +405,7 @@ def _run_validation_cycle(
     valid_sampler,
     train_sampler,
 ):
-    """Helper function to run the validation, testing, and plotting cycle."""
+    """Run the validation, testing, and plotting cycle."""
 
     # Run validation
     log_memory("evaluate_start", rank, tensorboard_writer_valid, step)
@@ -501,7 +506,7 @@ def _run_validation_cycle(
                     f.truncate()
         log_memory("make_plots_end", rank, tensorboard_writer_valid, step)
 
-    # Ray-specific reporting
+    # Ray-specific reporting and checkpointing
     if use_ray:
         import ray
 
@@ -571,9 +576,6 @@ def train_all_steps(
 
     # Per-worker setup
     np.seterr(divide="ignore", invalid="ignore")
-    import matplotlib
-
-    matplotlib.use("agg")
 
     # Setup TensorBoard writers on the main process
     if (rank == 0) or (rank == "cpu"):
@@ -599,15 +601,13 @@ def train_all_steps(
     if is_interactive:
         iterator = tqdm.tqdm(iterator, initial=start_step, total=num_steps, desc=f"Training on rank={rank}")
 
+    # loop over the dataset
     for step in iterator:
         step_start_time = time.time()
 
         # Get next training batch
-        try:
-            batch = next(train_iterator)
-        except StopIteration:
-            train_iterator = iter(train_loader)
-            batch = next(train_iterator)
+        batch = next(train_iterator)
+        _logger.debug(f"rank={rank} batch={batch.shape}")
 
         # Run a single training step
         log_memory("train_step_start", rank, tensorboard_writer_train, step)
@@ -666,7 +666,7 @@ def train_all_steps(
             config["patience"],
         )
 
-        # Run validation, testing, and plotting cycle at specified frequency
+        # Run validation, testing, and plotting cycle at specified frequency, or at the last step
         if (step % val_freq == 0) or (step == num_steps):
             best_val_loss, stale_steps = _run_validation_cycle(
                 rank,

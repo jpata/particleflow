@@ -333,7 +333,8 @@ def set_worker_sharing_strategy(worker_id: int) -> None:
 def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray, shuffle_train=True):
     loaders = {}
     samplers = {}
-    for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
+    # build train, valid dataset and dataloaders
+    for split in ["train", "valid"]:
         loaders[split] = []
         samplers[split] = []
         for type_ in config[f"{split}_dataset"][config["dataset"]]:
