@@ -75,7 +75,6 @@ def log_step_to_tensorboard(batch, loss_accum, lr_schedule, tensorboard_writer, 
     # get the number of elements, excluding padded elements
     num_elems = batch.X[batch.mask].shape[0]
 
-    tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
     tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
     tensorboard_writer.add_scalar("step/num_batch", batch.X.shape[0], step)
     tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)

@@ -344,9 +344,6 @@ def _log_and_checkpoint_step(
 
     # Log training losses to TensorBoard and CometML on the main process
     if (rank == 0) or (rank == "cpu"):
-        # Log learning rate
-        tensorboard_writer_train.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
-
         # Log training losses
         for loss, value in losses_train.items():
             tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
