@@ -40,15 +40,9 @@ import gc
 import tqdm
 import yaml
 import json
-
-# import sklearn
-# import sklearn.metrics
 import numpy as np
-from typing import Union, List
+from typing import Union
 import sys
-import shutil
-import subprocess
-import psutil
 from packaging.version import Version
 
 # comet needs to be imported before torch
@@ -59,7 +53,8 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
 
-from mlpf.model.logger import _logger, _configLogger
+from mlpf.optimizers import get_optimizer
+from mlpf.logger import _logger, _configLogger, log_smi, log_memory
 from mlpf.model.utils import (
     unpack_predictions,
     unpack_target,
@@ -74,49 +69,11 @@ from mlpf.model.utils import (
     load_lr_schedule,
 )
 from mlpf.model.monitoring import log_step_to_tensorboard, log_dataloader_to_tensorboard
-
-# from mlpf.model.monitoring import log_open_files_to_tensorboard
 from mlpf.model.inference import make_plots, run_predictions
-from mlpf.model.mlpf import MLPF
+from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
-
-# from mlpf.model.plots import validation_plots
-from mlpf.optimizers.lamb import Lamb
-
-
-def log_memory(stage, rank, tensorboard_writer=None, step=None):
-    process = psutil.Process(os.getpid())
-    mem = process.memory_info()
-    _logger.debug(f"RAM memory usage at {stage} on rank {rank}: rss={mem.rss / 1024**2:.2f} MB, vms={mem.vms / 1024**2:.2f} MB")
-    if tensorboard_writer and step:
-        tensorboard_writer.add_scalar(f"memory/rss_MB/{stage}", mem.rss / 1024**2, step)
-        tensorboard_writer.add_scalar(f"memory/vms_MB/{stage}", mem.vms / 1024**2, step)
-
-
-def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
-    """Set only the given layers as trainable in the model"""
-
-    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        raise Exception("configure trainability before distributing the model")
-    if is_training:
-        model.train()
-        if trainable != "all":
-            model.eval()
-
-            # first set all parameters as non-trainable
-            for param in model.parameters():
-                param.requires_grad = False
-
-            # now explicitly enable specific layers
-            for layer in trainable:
-                layer = getattr(model, layer)
-                layer.train()
-                for param in layer.parameters():
-                    param.requires_grad = True
-    else:
-        model.eval()
 
 
 def model_step(batch, model, loss_fn):
@@ -140,38 +97,6 @@ def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
         # ReduceLROnPlateau scheduler should only be updated after each validation step
         if not isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
             lr_schedule.step()
-
-
-def get_optimizer(model, config):
-    """
-    Returns the optimizer for the given model based on the configuration provided.
-    Parameters:
-    model (torch.nn.Module): The model for which the optimizer is to be created.
-    config (dict): Configuration dictionary containing optimizer settings.
-                   Must include the key "lr" for learning rate.
-                   Optionally includes the key "optimizer" to specify the type of optimizer.
-                   Supported values for "optimizer" are "adamw", "lamb", and "sgd".
-                   If "optimizer" is not provided, "adamw" is used by default.
-    Returns:
-    torch.optim.Optimizer: The optimizer specified in the configuration.
-    Raises:
-    ValueError: If the specified optimizer type is not supported.
-    """
-
-    wd = config["weight_decay"] if "weight_decay" in config else 0.01
-    if "optimizer" not in config:
-        ret = torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
-    if config["optimizer"] == "adamw":
-        ret = torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
-    elif config["optimizer"] == "lamb":
-        ret = Lamb(model.parameters(), lr=config["lr"], weight_decay=wd)
-    elif config["optimizer"] == "sgd":
-        ret = torch.optim.SGD(model.parameters(), lr=config["lr"], weight_decay=wd)
-    else:
-        raise ValueError(f"Unsupported optimizer type: {config['optimizer']}")
-
-    _logger.info(f"Created optimizer: {ret}")
-    return ret
 
 
 def train_step(
@@ -607,7 +532,7 @@ def train_all_steps(
 
         # Get next training batch
         batch = next(train_iterator)
-        _logger.debug(f"rank={rank} batch={batch.shape}")
+        _logger.debug(f"rank={rank} batch={batch.X.shape}")
 
         # Run a single training step
         log_memory("train_step_start", rank, tensorboard_writer_train, step)
@@ -638,13 +563,7 @@ def train_all_steps(
             _logger.info(f"Step {step}/{num_steps} | " f"Train Loss: {losses_train['Total']:.4f} | " f"LR: {current_lr:.2e}")
 
             # check smi status
-            smi_command = shutil.which("nvidia-smi") or shutil.which("rocm-smi")
-            if smi_command:
-                try:
-                    result = subprocess.run([smi_command], capture_output=True, text=True, check=True)
-                    _logger.info(result.stdout)
-                except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                    _logger.info("SMI error: {}".format(e))
+            log_smi()
 
         # Log training info and save periodic checkpoint immediately after training
         _log_and_checkpoint_step(
@@ -795,9 +714,9 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
         dist.barrier()  # block until all workers finished executing run_predictions()
 
 
-def run(rank, world_size, config, outdir, logfile):
-    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
-        _configLogger("mlpf", filename=logfile)
+def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: str):
+    # per-rank log
+    _configLogger(f"mlpf-{rank}", filename=f"{logfile}.{rank}")
 
     use_cuda = rank != "cpu"
 
@@ -807,10 +726,11 @@ def run(rank, world_size, config, outdir, logfile):
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
-        dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
+        dist.init_process_group("nccl", rank=int(rank), world_size=world_size)  # (nccl should be faster than gloo)
 
     checkpoint_dir = Path(outdir) / "checkpoints"
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    if (rank == 0) | (rank == "cpu"):
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     model_kwargs = {
         "input_dim": len(X_FEATURES[config["dataset"]]),
@@ -826,10 +746,11 @@ def run(rank, world_size, config, outdir, logfile):
         **config["model"][config["conv_type"]],
     }
 
-    # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     start_step = 1
     lr_schedule = None
     checkpoint = None
+
+    # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     if config["load"]:
         model = MLPF(**model_kwargs).to(torch.device(rank))
         optimizer = get_optimizer(model, config)
@@ -858,9 +779,8 @@ def run(rank, world_size, config, outdir, logfile):
                 _logger.warning("Use option --relaxed-load if you insist to ignore the missing parameters")
                 raise KeyError
 
-        if (rank == 0) or (rank == "cpu"):
-            _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
-            _logger.info(f"Restoring training from step {start_step}")
+        _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
+        _logger.info(f"Restoring training from step {start_step}")
 
         load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
@@ -871,7 +791,9 @@ def run(rank, world_size, config, outdir, logfile):
         lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
     model.to(rank)
-    # on CPU, the compilation does not work with bs>1
+    # CPU: the compilation does not work with bs>1
+    # Nvidia: compilation should generally be used, but can be disabled
+    # ROCM: compilation seems to be needed for ROCm to work properly
     if rank != "cpu":
         model.compile()
     configure_model_trainable(model, config["model"]["trainable"], True)
@@ -881,13 +803,12 @@ def run(rank, world_size, config, outdir, logfile):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
     trainable_params, nontrainable_params, table = count_parameters(model)
-    if (rank == 0) or (rank == "cpu"):
-        _logger.info(str(table))
-        _logger.info(model)
-        _logger.info(f"Trainable parameters: {trainable_params}")
-        _logger.info(f"Non-trainable parameters: {nontrainable_params}")
-        _logger.info(f"Total parameters: {trainable_params + nontrainable_params}")
-        _logger.info(table.to_string(index=False))
+    _logger.info(str(table))
+    _logger.info(model)
+    _logger.info(f"Trainable parameters: {trainable_params}")
+    _logger.info(f"Non-trainable parameters: {nontrainable_params}")
+    _logger.info(f"Total parameters: {trainable_params + nontrainable_params}")
+    _logger.info(table.to_string(index=False))
 
     if config["train"]:
         if (rank == 0) or (rank == "cpu"):

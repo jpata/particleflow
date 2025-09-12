@@ -6,7 +6,7 @@ import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
 
-from mlpf.model.logger import _logger
+from mlpf.logger import _logger
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
@@ -20,17 +20,23 @@ class TFDSDataSource:
         self.ds.dataset_info = SimpleNamespace()
         self.ds.dataset_info.name = tmp.name
         self.ds.dataset_info.features = tmp.features
+        self.ds.dataset_info.config_name = tmp.config_name
         self.sort = sort
         self.pad_to_multiple = pad_to_multiple
 
     def __getitem__(self, item):
         if isinstance(item, int):
             item = [item]
+        assert len(item) == 1
+        # getitems requires a list
         records = self.ds.data_source.__getitems__(item)
-        ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
 
-        if len(item) == 1:
-            ret = ret[0]
+        ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
+        assert len(ret) == 1
+        ret = ret[0]
+
+        Xshape = ret["X"].shape
+        _logger.debug(f"Getting item={item}, ds={self.ds.dataset_info.name}:{self.ds.dataset_info.config_name}, X={Xshape}")
 
         # sort the elements in each event in pT descending order
         # the transformer is permutation-covariant, but this can be helpful for other types of models
@@ -150,7 +156,7 @@ class PFBatch:
         self.attrs = list(kwargs.keys())
 
         # write out the possible attributes here explicitly
-        self.X = kwargs.get("X")
+        self.X = kwargs["X"]
         self.ytarget = kwargs.get("ytarget")
         self.ytarget_pt_orig = kwargs.get("ytarget_pt_orig", None)
         self.ytarget_e_orig = kwargs.get("ytarget_e_orig", None)
@@ -302,9 +308,8 @@ class EndlessIterator(object):
             return next(self.iterator)
         except StopIteration:
             self.epoch += 1
-            if self.world_size > 1:
-                for sampler in self.samplers:
-                    sampler.set_epoch(self.epoch)
+            for sampler in self.samplers:
+                sampler.set_epoch(self.epoch)
             _logger.info("EndlessIterator StopIteration raised, advancing epoch to {}".format(self.epoch))
             self.iterator = iter(self.data_loader)
             return next(self.iterator)
@@ -320,9 +325,8 @@ class EndlessIterator(object):
         _logger.info("EndlessIterator setting epoch={}".format(self.epoch))
         _logger.info("EndlessIterator loading loader state.")
         self.data_loader.load_state_dict(state_dict["loader_state_dict"])
-        if self.world_size > 1:
-            for sampler in self.samplers:
-                sampler.set_epoch(self.epoch)
+        for sampler in self.samplers:
+            sampler.set_epoch(self.epoch)
         self.iterator = iter(self.data_loader)
 
 
@@ -342,7 +346,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray, shu
             for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
                 version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
                 split_configs = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["splits"]
-                print("split_configs", split_configs)
+                _logger.info(f"sample={sample} split={split} split_configs={split_configs}")
 
                 nevents = None
                 if not (config[f"n{split}"] is None):

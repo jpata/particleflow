@@ -1,7 +1,7 @@
 import psutil
 import resource
 from collections import defaultdict
-from mlpf.model.logger import _logger
+from mlpf.logger import _logger
 
 
 def monitor_open_files():

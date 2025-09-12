@@ -1,14 +1,13 @@
 import math
 import numpy as np
+from typing import Union, List
 
 import torch
 import torch.nn as nn
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-from mlpf.model.logger import _logger
+from mlpf.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
-
-ATT_MAT_IDX = 0
 
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
@@ -517,3 +516,27 @@ class MLPF(nn.Module):
         preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
+
+
+def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
+    """Set only the given layers as trainable in the model"""
+
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        raise Exception("configure trainability before distributing the model")
+    if is_training:
+        model.train()
+        if trainable != "all":
+            model.eval()
+
+            # first set all parameters as non-trainable
+            for param in model.parameters():
+                param.requires_grad = False
+
+            # now explicitly enable specific layers
+            for layer in trainable:
+                layer = getattr(model, layer)
+                layer.train()
+                for param in layer.parameters():
+                    param.requires_grad = True
+    else:
+        model.eval()

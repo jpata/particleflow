@@ -6,7 +6,7 @@ import numpy as np
 import glob
 import os
 
-from mlpf.model.logger import _logger
+from mlpf.logger import _logger
 
 
 def log_confusion_matrices(cm_X_target, cm_X_pred, cm_id, comet_experiment, epoch):

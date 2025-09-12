@@ -31,8 +31,8 @@ from plotting.plot_utils import (
     # plot_pu_fraction,
 )
 
-from .logger import _logger
-from .utils import unpack_predictions, unpack_target
+from mlpf.logger import _logger
+from mlpf.model.utils import unpack_predictions, unpack_target
 
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):

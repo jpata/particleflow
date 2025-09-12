@@ -4,7 +4,7 @@ import torch
 from torch.nn import functional as F
 from torch import Tensor, nn
 
-from mlpf.model.logger import _logger
+from mlpf.logger import _logger
 
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):

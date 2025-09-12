@@ -9,7 +9,7 @@ import yaml
 import csv
 
 from mlpf.model.mlpf import MLPF
-from mlpf.model.logger import _logger, _configLogger
+from mlpf.logger import _logger, _configLogger
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.utils import create_comet_experiment
 from mlpf.model.training import train_all_steps, get_optimizer
