@@ -246,6 +246,9 @@ class InterleavedIterator(object):
         if self.cur_index >= len(self.loader_ds_indices):
             _logger.debug("Resetting exhausted InterleavedIterator.")
             self.cur_index = 0
+            for loader in self.data_loaders:
+                if hasattr(loader.sampler, "load_state_dict"):
+                    loader.sampler.load_state_dict({"start_index": 0})
             self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]
             self.batches_yielded_per_loader = [0] * len(self.data_loaders)
         return self
