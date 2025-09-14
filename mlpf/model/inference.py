@@ -11,8 +11,8 @@ import numpy as np
 import torch
 import tqdm
 import vector
-from jet_utils import match_two_jet_collections
-from plotting.plot_utils import (
+from mlpf.jet_utils import match_two_jet_collections
+from mlpf.plotting.plot_utils import (
     # get_class_names,
     # compute_met_and_ratio,
     load_eval_data,

@@ -23,7 +23,7 @@ import yaml
 from mlpf.model.training import device_agnostic_run, override_config
 from mlpf.model.distributed_ray import run_hpo, run_ray_training
 from mlpf.model.PFDataset import SHARING_STRATEGY
-from utils import create_experiment_dir
+from mlpf.utils import create_experiment_dir
 
 
 def get_parser():
