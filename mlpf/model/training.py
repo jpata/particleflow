@@ -77,6 +77,7 @@ from mlpf.utils import create_comet_experiment
 
 
 def model_step(batch, model, loss_fn):
+    _logger.debug(f"model_step")
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
@@ -90,6 +91,7 @@ def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
         param.grad = None
 
     # Backward pass and optimization
+    _logger.debug(f"optimizer_step")
     scaler.scale(loss_opt).backward()
     scaler.step(optimizer)
     scaler.update()
@@ -136,6 +138,9 @@ def train_step(
     Returns:
         dict: Dictionary of step losses
     """
+    if world_size > 1:
+        dist.barrier()
+
     model.train()
     step_loss = {}
 
@@ -169,12 +174,14 @@ def train_step(
         torch.distributed.all_reduce(num_steps)
 
     for loss_name in step_loss:
+        _logger.debug(f"train_step {loss_name}={step_loss[loss_name]}")
         if world_size > 1:
             torch.distributed.all_reduce(step_loss[loss_name])
         step_loss[loss_name] = step_loss[loss_name].cpu().item() / num_steps.cpu().item()
 
     if world_size > 1:
         dist.barrier()
+    _logger.debug(f"train_step reduced {step_loss}")
 
     return step_loss
 
@@ -209,6 +216,10 @@ def evaluate(
     Returns:
         dict: Dictionary of evaluation losses
     """
+    
+    if world_size > 1:
+        dist.barrier()
+
     model.eval()
     eval_loss = {}
 
@@ -332,6 +343,7 @@ def _run_validation_cycle(
 ):
     """Run the validation, testing, and plotting cycle."""
 
+    _logger.info(f"Running validation on rank{rank}")
     # Run validation
     log_memory("evaluate_start", rank, tensorboard_writer_valid, step)
     losses_valid = evaluate(
@@ -557,13 +569,18 @@ def train_all_steps(
         train_time = time.time() - step_start_time
 
         # Log a brief training status every 100 steps on the main process
-        if (step % 100 == 0) and ((rank == 0) or (rank == "cpu")):
+        # if (step % 100 == 0) and ((rank == 0) or (rank == "cpu")):
+        if (step % 1 == 0):
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
-            _logger.info(f"Step {step}/{num_steps} | " f"Train Loss: {losses_train['Total']:.4f} | " f"LR: {current_lr:.2e}")
+            _logger.info(f"Step {step}/{num_steps} rank{rank} | " f"Train Loss: {losses_train['Total']:.4f} | " f"LR: {current_lr:.2e}")
 
             # check smi status
-            log_smi()
+            log_smi(rank)
+        
+        # Synchronize all processes at the end of the step
+        if world_size > 1:
+            dist.barrier()
 
         # Log training info and save periodic checkpoint immediately after training
         _log_and_checkpoint_step(
@@ -613,15 +630,12 @@ def train_all_steps(
                 valid_sampler,
                 train_sampler,
             )
-
+        
         # Check for early stopping
         if stale_steps > patience:
             _logger.info(f"Stopping early due to stale steps: {stale_steps} > {patience}")
             break
 
-        # Synchronize all processes at the end of the step
-        if world_size > 1:
-            dist.barrier()
 
     # End of training loop
     _logger.info(f"Training completed. Total time on device {rank}: {(time.time() - t0_initial)/60:.3f}min")
@@ -716,7 +730,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
 
 def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: str):
     # per-rank log
-    _configLogger(f"mlpf-{rank}", filename=f"{logfile}.{rank}")
+    _configLogger(f"mlpf", rank, filename=f"{logfile}.{rank}")
 
     use_cuda = rank != "cpu"
 
@@ -925,7 +939,7 @@ def device_agnostic_run(config, world_size, outdir):
         logfile = f"{outdir}/train.log"
     else:
         logfile = f"{outdir}/test.log"
-    _configLogger("mlpf", filename=logfile)
+    _configLogger("mlpf", 0, filename=logfile)
 
     if config["gpus"]:
         assert (

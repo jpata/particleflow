@@ -12,14 +12,15 @@ def _logging(rank, _logger, msg):
         _logger.info(msg)
 
 
-def _configLogger(name, filename=None, loglevel=logging.INFO):
+def _configLogger(name, rank, filename=None, loglevel=logging.INFO):
     # define a Handler which writes INFO messages or higher to the sys.stdout
     logger = logging.getLogger(name)
     logger.setLevel(loglevel)
     if filename:
         logfile = logging.FileHandler(filename)
         logfile.setLevel(loglevel)
-        logfile.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
+        fmt = logging.Formatter(f"rank{rank} " + "[%(asctime)s] %(levelname)s : %(message)s")
+        logfile.setFormatter(fmt)
         logger.addHandler(logfile)
 
 
@@ -90,11 +91,12 @@ def log_memory(stage, rank, tensorboard_writer=None, step=None):
         tensorboard_writer.add_scalar(f"memory/vms_MB/{stage}", mem.vms / 1024**2, step)
 
 
-def log_smi():
-    smi_command = shutil.which("nvidia-smi") or shutil.which("rocm-smi")
-    if smi_command:
-        try:
-            result = subprocess.run([smi_command], capture_output=True, text=True, check=True)
-            _logger.info(result.stdout)
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            _logger.info("SMI error: {}".format(e))
+def log_smi(rank):
+    if (rank == 0) or (rank == "cpu"):
+        smi_command = shutil.which("nvidia-smi") or shutil.which("rocm-smi")
+        if smi_command:
+            try:
+                result = subprocess.run([smi_command], capture_output=True, text=True, check=True)
+                _logger.info(result.stdout)
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                _logger.info("SMI error: {}".format(e))

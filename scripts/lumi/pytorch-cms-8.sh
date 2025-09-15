@@ -23,9 +23,9 @@ export MIOPEN_USER_DB_PATH=/tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
 export MIOPEN_CUSTOM_CACHE_DIR=${MIOPEN_USER_DB_PATH}
 export ROCM_PATH=/opt/rocm
 export KERAS_BACKEND=torch
-export NCCL_SOCKET_IFNAME=hsn0,hsn1,hsn2,hsn3
-export NCCL_NET_GDR_LEVEL=PHB
-export NCCL_DEBUG=INFO
+export NCCL_SOCKET_IFNAME=hsn
+export NCCL_NET_GDR_LEVEL=3
+export NCCL_DEBUG=DEBUG
 export PYTHONPATH=`pwd`
 env
 

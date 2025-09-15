@@ -7,6 +7,7 @@ rocm-smi --showdriverversion
 python3 mlpf/pipeline.py \
     --data-dir $TFDS_DATA_DIR \
     --config parameters/pytorch/pyg-cms.yaml \
+    --experiment-dir experiments/pyg-cms_20250912_201225_216787 \
     train \
     --gpus 8 \
     --gpu-batch-multiplier 8 \
@@ -20,4 +21,4 @@ python3 mlpf/pipeline.py \
     --val-freq 5000 \
     --checkpoint-freq 100 \
     --test-datasets cms_pf_qcd \
-    --comet
+    --load experiments/pyg-cms_20250912_201225_216787/checkpoints/checkpoint-35000.pth

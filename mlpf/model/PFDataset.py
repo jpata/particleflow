@@ -226,11 +226,13 @@ class InterleavedIterator(object):
         _logger.info(f"Creating InterleavedIterator with {len(data_loaders)} data loaders.")
         self.data_loaders = data_loaders
         self.data_loaders_iter = [iter(dl) for dl in data_loaders]
-        max_loader_size = max([len(dl) for dl in data_loaders])
+        dl_lens = [len(dl) for dl in data_loaders]
+        _logger.debug(f"InterleavedIterator len(data_loaders)={dl_lens}")
+        max_loader_size = max(dl_lens)
 
         self.loader_ds_indices = []
 
-        # iterate loaders interleaved
+        # iterate loaders interleaved up to the maximum size
         for i in range(max_loader_size):
             for iloader, loader in enumerate(data_loaders):
                 if i < len(loader):
@@ -241,21 +243,33 @@ class InterleavedIterator(object):
         self.batches_yielded_per_loader = [0] * len(self.data_loaders)
         self._len = None
 
+        _logger.debug(f"InterleavedIterator at {self.cur_index}/{len(self.loader_ds_indices)}")
+
     def __iter__(self):
         # Only reset if the iterator is exhausted
+        _logger.debug(f"Resetting InterleavedIterator: {self.cur_index}/{len(self.loader_ds_indices)}")
         if self.cur_index >= len(self.loader_ds_indices):
-            _logger.debug("Resetting exhausted InterleavedIterator.")
+            _logger.debug("InterleavedIterator was exhausted, creating new iterators for data loaders")
             self.cur_index = 0
+            for loader in self.data_loaders:
+                if hasattr(loader.sampler, "load_state_dict"):
+                    loader.sampler.load_state_dict({"start_index": 0})
             self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]
             self.batches_yielded_per_loader = [0] * len(self.data_loaders)
         return self
 
     def __next__(self):
+        _logger.debug(f"InterleavedIterator.__next__ {self.cur_index}/{len(self.loader_ds_indices)}")
         if self.cur_index >= len(self.loader_ds_indices):
+            _logger.debug(f"InterleavedIterator.__next__ raising StopIteration")
             raise StopIteration
 
         iloader = self.loader_ds_indices[self.cur_index]
-        ret = next(self.data_loaders_iter[iloader])
+        try:
+            ret = next(self.data_loaders_iter[iloader])
+        except StopIteration as e:
+            _logger.error(f"Unexpected StopIteration from data loader: iloader={iloader}, batches_yielded_per_loader={self.batches_yielded_per_loader} len(loader)={len(self.data_loaders_iter[iloader])}")
+            raise e
         self.cur_index += 1
         self.batches_yielded_per_loader[iloader] += 1
         return ret
@@ -284,6 +298,7 @@ class InterleavedIterator(object):
 
         for i, loader in enumerate(self.data_loaders):
             start_index = self.batches_yielded_per_loader[i] * loader.batch_size
+            _logger.info(f"InterleavedIterator advancing sampler {i} to {start_index}")
             loader.sampler.load_state_dict({"start_index": start_index})
 
         # create fresh iterators from the original dataloaders
@@ -308,9 +323,9 @@ class EndlessIterator(object):
             return next(self.iterator)
         except StopIteration:
             self.epoch += 1
+            _logger.info("EndlessIterator caught StopIteration, advancing epoch to {}".format(self.epoch))
             for sampler in self.samplers:
                 sampler.set_epoch(self.epoch)
-            _logger.info("EndlessIterator StopIteration raised, advancing epoch to {}".format(self.epoch))
             self.iterator = iter(self.data_loader)
             return next(self.iterator)
 
@@ -394,7 +409,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray, shu
                 # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
                 worker_init_fn=set_worker_sharing_strategy,
-                # persistent_workers=True,
+                persistent_workers=True,
             )
 
             loaders[split].append(loader)
