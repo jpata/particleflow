@@ -174,9 +174,7 @@ class TestDataloaderRestoration(unittest.TestCase):
 
         # --- Ground Truth Run: get the full data sequence for 1.5 epochs ---
         torch.manual_seed(0)
-        loaders_gt, _ = get_interleaved_dataloaders(
-            world_size, rank, config, use_cuda=False, use_ray=False, shuffle_train=False
-        )
+        loaders_gt, _ = get_interleaved_dataloaders(world_size, rank, config, use_cuda=False, use_ray=False, shuffle_train=False)
         train_loader_gt = loaders_gt["train"]
         gt_iterator = iter(train_loader_gt)
         gt_data = []
