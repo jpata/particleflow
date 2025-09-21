@@ -100,13 +100,13 @@ train_dataset:
       batch_size: 2
       samples:
         cms_pf_qcd:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1]
     physical_nopu:
       batch_size: 32
       samples:
         cms_pf_qcd_nopu:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1]
 
 valid_dataset:
@@ -115,17 +115,17 @@ valid_dataset:
       batch_size: 2
       samples:
         cms_pf_qcd:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1]
     physical_nopu:
       batch_size: 32
       samples:
         cms_pf_qcd_nopu:
-          version: 2.8.0
+          version: 2.7.1
           splits: [1]
 
 test_dataset:
   cms_pf_qcd_nopu:
     batch_size: 32
-    version: 2.8.0
+    version: 2.7.1
     splits: [1]

@@ -245,17 +245,21 @@ class InterleavedIterator(object):
 
         _logger.debug(f"InterleavedIterator at {self.cur_index}/{len(self.loader_ds_indices)}")
 
+    def reset(self):
+        _logger.debug("Resetting InterleavedIterator state")
+        self.cur_index = 0
+        for loader in self.data_loaders:
+            if hasattr(loader.sampler, "load_state_dict"):
+                loader.sampler.load_state_dict({"start_index": 0})
+        self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]
+        self.batches_yielded_per_loader = [0] * len(self.data_loaders)
+
     def __iter__(self):
         # Only reset if the iterator is exhausted
         _logger.debug(f"Resetting InterleavedIterator: {self.cur_index}/{len(self.loader_ds_indices)}")
         if self.cur_index >= len(self.loader_ds_indices):
-            _logger.debug("InterleavedIterator was exhausted, creating new iterators for data loaders")
-            self.cur_index = 0
-            for loader in self.data_loaders:
-                if hasattr(loader.sampler, "load_state_dict"):
-                    loader.sampler.load_state_dict({"start_index": 0})
-            self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]
-            self.batches_yielded_per_loader = [0] * len(self.data_loaders)
+            _logger.debug(f"Resetting exhausted InterleavedIterator, {self.cur_index}>={len(self.loader_ds_indices)}.")
+            self.reset()
         return self
 
     def __next__(self):
@@ -338,7 +342,7 @@ class EndlessIterator(object):
     def load_state_dict(self, state_dict):
         self.epoch = state_dict["epoch"]
         _logger.info("EndlessIterator setting epoch={}".format(self.epoch))
-        _logger.info("EndlessIterator loading loader state.")
+        _logger.info("EndlessIterator loading state.")
         self.data_loader.load_state_dict(state_dict["loader_state_dict"])
         for sampler in self.samplers:
             sampler.set_epoch(self.epoch)

@@ -344,6 +344,8 @@ def _run_validation_cycle(
     """Run the validation, testing, and plotting cycle."""
 
     _logger.info(f"Running validation on rank{rank}")
+    valid_loader.reset()
+
     # Run validation
     log_memory("evaluate_start", rank, tensorboard_writer_valid, step)
     losses_valid = evaluate(
@@ -569,7 +571,6 @@ def train_all_steps(
         train_time = time.time() - step_start_time
 
         # Log a brief training status every 100 steps on the main process
-        # if (step % 100 == 0) and ((rank == 0) or (rank == "cpu")):
         if (step % 1 == 0):
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
