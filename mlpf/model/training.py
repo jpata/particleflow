@@ -77,7 +77,7 @@ from mlpf.utils import create_comet_experiment
 
 
 def model_step(batch, model, loss_fn):
-    _logger.debug(f"model_step")
+    _logger.debug(f"model_step X={batch.X.shape}")
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
@@ -91,7 +91,7 @@ def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
         param.grad = None
 
     # Backward pass and optimization
-    _logger.debug(f"optimizer_step")
+    _logger.debug(f"optimizer_step scale={scaler.get_scale():.2E}")
     scaler.scale(loss_opt).backward()
     scaler.step(optimizer)
     scaler.update()
@@ -216,7 +216,7 @@ def evaluate(
     Returns:
         dict: Dictionary of evaluation losses
     """
-    
+
     if world_size > 1:
         dist.barrier()
 
@@ -571,14 +571,14 @@ def train_all_steps(
         train_time = time.time() - step_start_time
 
         # Log a brief training status every 100 steps on the main process
-        if (step % 1 == 0):
+        if step % 100 == 0:
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
             _logger.info(f"Step {step}/{num_steps} rank{rank} | " f"Train Loss: {losses_train['Total']:.4f} | " f"LR: {current_lr:.2e}")
 
             # check smi status
             log_smi(rank)
-        
+
         # Synchronize all processes at the end of the step
         if world_size > 1:
             dist.barrier()
@@ -631,12 +631,11 @@ def train_all_steps(
                 valid_sampler,
                 train_sampler,
             )
-        
+
         # Check for early stopping
         if stale_steps > patience:
             _logger.info(f"Stopping early due to stale steps: {stale_steps} > {patience}")
             break
-
 
     # End of training loop
     _logger.info(f"Training completed. Total time on device {rank}: {(time.time() - t0_initial)/60:.3f}min")
@@ -731,7 +730,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
 
 def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: str):
     # per-rank log
-    _configLogger(f"mlpf", rank, filename=f"{logfile}.{rank}")
+    _configLogger("mlpf", rank, filename=f"{logfile}.{rank}")
 
     use_cuda = rank != "cpu"
 
