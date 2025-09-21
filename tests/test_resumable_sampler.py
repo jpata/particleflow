@@ -1,6 +1,6 @@
 import unittest
 import torch
-from torch.utils.data import TensorDataset, SequentialSampler, DistributedSampler
+from torch.utils.data import TensorDataset, SequentialSampler, DistributedSampler, Sampler
 
 from mlpf.model.PFDataset import ResumableSampler
 
@@ -19,7 +19,7 @@ class TestResumableSampler(unittest.TestCase):
 
         # Advance the sampler
         resumable_sampler.load_state_dict({"start_index": 5})
-        self.assertEqual(len(resumable_sampler), 10)  # Full length should be reported
+        self.assertEqual(len(resumable_sampler), 10)  # Should report full length
         self.assertEqual(list(resumable_sampler), list(range(5, 10)))
 
     def test_distributed_sampler_compatibility(self):
@@ -47,3 +47,55 @@ class TestResumableSampler(unittest.TestCase):
 
         resumable_sampler.set_epoch(5)
         self.assertEqual(resumable_sampler.sampler.epoch, 5)
+
+    def test_shuffling_with_set_epoch(self):
+        """
+        Tests that set_epoch is correctly used to shuffle data across epochs,
+        even when the sampler is reset.
+        """
+
+        class MockShufflingSampler(Sampler):
+            def __init__(self, data_source):
+                self.data_source = data_source
+                self.epoch = 0
+
+            def __iter__(self):
+                g = torch.Generator()
+                g.manual_seed(self.epoch)
+                indices = torch.randperm(len(self.data_source), generator=g).tolist()
+                return iter(indices)
+
+            def __len__(self):
+                return len(self.data_source)
+
+            def set_epoch(self, epoch):
+                self.epoch = epoch
+
+        dataset = TensorDataset(torch.arange(100))
+        base_sampler = MockShufflingSampler(dataset)
+        resumable_sampler = ResumableSampler(base_sampler)
+
+        # Epoch 1
+        resumable_sampler.set_epoch(0)
+        epoch1_indices = list(resumable_sampler)
+
+        # Simulate advancing and then starting a new epoch
+        resumable_sampler.load_state_dict({"start_index": 50})  # mid-epoch
+        resumable_sampler.set_epoch(1)  # new epoch
+        resumable_sampler.load_state_dict({"start_index": 0})  # iterator reset
+
+        # Epoch 2
+        epoch2_indices = list(resumable_sampler)
+
+        # Check that the order is different
+        self.assertNotEqual(epoch1_indices, epoch2_indices)
+
+        # Check that both epochs contain all samples
+        self.assertEqual(sorted(epoch1_indices), list(range(100)))
+        self.assertEqual(sorted(epoch2_indices), list(range(100)))
+
+        # Check that epoch 1 is reproducible by resetting the epoch
+        resumable_sampler.set_epoch(0)
+        resumable_sampler.load_state_dict({"start_index": 0})
+        epoch1_redux_indices = list(resumable_sampler)
+        self.assertEqual(epoch1_indices, epoch1_redux_indices)
