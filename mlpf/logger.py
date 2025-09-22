@@ -12,7 +12,7 @@ def _logging(rank, _logger, msg):
         _logger.info(msg)
 
 
-def _configLogger(name, rank, filename=None, loglevel=logging.DEBUG):
+def _configLogger(name, rank, filename=None, loglevel=logging.INFO):
     # define a Handler which writes INFO messages or higher to the sys.stdout
     logger = logging.getLogger(name)
     logger.setLevel(loglevel)
