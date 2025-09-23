@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --partition gpu
 #SBATCH --gres gpu:a100:1
-#SBATCH --mem-per-gpu 200G
+#SBATCH --mem-per-gpu 400G
 #SBATCH -o logs/slurm-%x-%j-%N.out
 
 IMG=/home/software/singularity/pytorch.simg:2025-09-01
@@ -24,4 +24,4 @@ singularity exec -B /scratch/persistent -B /local --nv \
     --optimizer adamw \
     --comet \
     --test-datasets cms_pf_qcd \
-    --num-steps 1000000
+    --num-steps 100000

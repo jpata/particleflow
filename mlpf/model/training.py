@@ -571,7 +571,7 @@ def train_all_steps(
         train_time = time.time() - step_start_time
 
         # Log a brief training status every 100 steps on the main process
-        if (step % 100 == 0):
+        if step % 100 == 0:
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
             _logger.info(f"Step {step}/{num_steps} rank{rank} | " f"Train Loss: {losses_train['Total']:.4f} | " f"LR: {current_lr:.2e}")

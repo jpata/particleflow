@@ -5,7 +5,7 @@
 
 export KERAS_BACKEND=tensorflow
 export PYTHONPATH="mlpf"
-export IMG=/home/software/singularity/pytorch.simg:2024-08-18
+export IMG=/home/software/singularity/pytorch.simg:2025-09-01
 export CMD="singularity exec -B /local -B /scratch/persistent -B /scratch/local $IMG tfds build"
 export PYTHONUNBUFFERED=1
 
