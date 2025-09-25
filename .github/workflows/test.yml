@@ -21,17 +21,17 @@ jobs:
       - name: Cache pip packages
         uses: actions/cache@v4
         with:
-          # This is the directory where pip stores its cache
           path: ~/.cache/pip
-          # This key is generated based on the contents of requirements.txt.
-          # If the file changes, the key changes, and a new cache is created.
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          # A fallback key if an exact match is not found
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Install wget
+        run: |
+          apt-get update && apt-get install -y wget
 
       - name: Run tests
         run: ./scripts/local_test_torch.sh
