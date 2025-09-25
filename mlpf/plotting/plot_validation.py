@@ -13,6 +13,7 @@ from matplotlib.lines import Line2D
 from mlpf.plotting.utils import compute_response, Gauss, to_bh, compute_scale_res
 from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, med_iqr, sample_name_to_process, midpoints
 
+
 def apply_jet_eta(eta_min, eta_max, data):
     eta_label = f", {eta_min} < $|η|$ < {eta_max}"
     msk_rj_eta = (np.abs(data["Jet_eta"]) >= eta_min) & (np.abs(data["Jet_eta"]) < eta_max)
@@ -25,13 +26,15 @@ def apply_jet_eta(eta_min, eta_max, data):
             data[k] = data[k][msk_gj_eta]
     return eta_label
 
+
 jet_fiducial_cuts = {
     "inclusive": {"eta": [0, 5.0]},
     "eta_0_2p5": {"eta": [0, 2.5]},
     "eta_2p5_3": {"eta": [2.5, 3]},
     "eta_3_5": {"eta": [3, 5]},
 }
-    
+
+
 @click.command()
 @click.option("--input-pf-parquet", required=True, type=str)
 @click.option("--input-mlpf-parquet", required=True, type=str)

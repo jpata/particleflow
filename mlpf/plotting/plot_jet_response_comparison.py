@@ -157,8 +157,8 @@ def main(input_13p6_tev_parquet, input_14_tev_parquet, output_dir, jet_type, sam
     data_14 = awkward.from_parquet(input_14_tev_parquet)
 
     jet_label = f"AK{jet_type[2:]} jets"
-    
-    #Fiducial cuts
+
+    # Fiducial cuts
     max_jet_abs_eta = 2.5
     fiducial_cuts = "eta_less_2p5"
 

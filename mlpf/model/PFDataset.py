@@ -429,7 +429,7 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray, shu
                 # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
                 worker_init_fn=set_worker_sharing_strategy,
-                persistent_workers=config["num_workers"]>0,
+                persistent_workers=config["num_workers"] > 0,
             )
 
             loaders[split].append(loader)
