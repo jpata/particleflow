@@ -11,20 +11,27 @@ on:
 jobs:
   test-in-container:
     runs-on: ubuntu-latest
-    # This runs the job in a Docker container using the official PyTorch image.
     container:
       image: pytorch/pytorch:latest
 
     steps:
-      # Step 1: Check out the repository code into the container's workspace.
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Install project-specific dependencies from requirements.txt.
-      # The PyTorch image already has Python and pip, so we just use them.
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          # This is the directory where pip stores its cache
+          path: ~/.cache/pip
+          # This key is generated based on the contents of requirements.txt.
+          # If the file changes, the key changes, and a new cache is created.
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          # A fallback key if an exact match is not found
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Step 3: Run the test script.
       - name: Run tests
         run: ./scripts/local_test_torch.sh

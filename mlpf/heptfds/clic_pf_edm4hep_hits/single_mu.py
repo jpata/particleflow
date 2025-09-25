@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import tensorflow as tf
+import numpy as np
 from utils_edm import (
     X_FEATURES_CH,
     X_FEATURES_TRK,
@@ -56,10 +56,10 @@ class ClicEdmSingleMuonHitsPf(tfds.core.GeneratorBasedBuilder):
                             None,
                             max(len(X_FEATURES_TRK), len(X_FEATURES_CH)),
                         ),
-                        dtype=tf.float32,
+                        dtype=np.float32,
                     ),
-                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
+                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
                 }
             ),
             supervised_keys=None,

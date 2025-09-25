@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import tensorflow as tf
+import numpy as np
 import tensorflow_datasets as tfds
 from utils_edm import (
     NUM_SPLITS,
@@ -56,13 +56,13 @@ class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
                             None,
                             max(len(X_FEATURES_TRK), len(X_FEATURES_CL)),
                         ),
-                        dtype=tf.float32,
+                        dtype=np.float32,
                     ),
-                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "genmet": tfds.features.Scalar(dtype=tf.float32),
-                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
-                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
+                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "genmet": tfds.features.Scalar(dtype=np.float32),
+                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
+                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
                 }
             ),
             supervised_keys=None,
