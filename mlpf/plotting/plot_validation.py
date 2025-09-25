@@ -13,7 +13,25 @@ from matplotlib.lines import Line2D
 from mlpf.plotting.utils import compute_response, Gauss, to_bh, compute_scale_res
 from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, med_iqr, sample_name_to_process, midpoints
 
+def apply_jet_eta(eta_min, eta_max, data):
+    eta_label = f", {eta_min} < $|η|$ < {eta_max}"
+    msk_rj_eta = (np.abs(data["Jet_eta"]) >= eta_min) & (np.abs(data["Jet_eta"]) < eta_max)
+    for k in data.fields:
+        if k.startswith("Jet_"):
+            data[k] = data[k][msk_rj_eta]
+    msk_gj_eta = (np.abs(data["GenJet_eta"]) >= eta_min) & (np.abs(data["GenJet_eta"]) < eta_max)
+    for k in data.fields:
+        if k.startswith("GenJet_"):
+            data[k] = data[k][msk_gj_eta]
+    return eta_label
 
+jet_fiducial_cuts = {
+    "inclusive": {"eta": [0, 5.0]},
+    "eta_0_2p5": {"eta": [0, 2.5]},
+    "eta_2p5_3": {"eta": [2.5, 3]},
+    "eta_3_5": {"eta": [3, 5]},
+}
+    
 @click.command()
 @click.option("--input-pf-parquet", required=True, type=str)
 @click.option("--input-mlpf-parquet", required=True, type=str)
@@ -21,7 +39,7 @@ from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, med_iqr, sample_n
 @click.option("--output-dir", required=True, type=str)
 @click.option("--jet-type", default="ak4", type=click.Choice(["ak4", "ak8"]))
 @click.option("--sample-name", required=True, type=str, help="Sample name (e.g., QCD_PU_13p6)")
-@click.option("--fiducial-cuts", default="inclusive", type=click.Choice(["inclusive", "eta_less_2p5"]))
+@click.option("--fiducial-cuts", default="inclusive", type=click.Choice(jet_fiducial_cuts.keys()))
 def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_dir, jet_type, sample_name, fiducial_cuts):
     """Applies corrections and generates validation plots."""
 
@@ -474,19 +492,11 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     elif jet_type == "ak8":
         jet_label_inclusive = "AK8 jets"
 
-    if fiducial_cuts == "eta_less_2p5":
-        eta_label = ", $|η|$ < 2.5"
-        jet_label += eta_label
-        jet_label_inclusive += eta_label
-        for data in [data_pf, data_mlpf]:
-            msk_rj_eta = np.abs(data["Jet_eta"]) < 2.5
-            for k in data.fields:
-                if k.startswith("Jet_"):
-                    data[k] = data[k][msk_rj_eta]
-            msk_gj_eta = np.abs(data["GenJet_eta"]) < 2.5
-            for k in data.fields:
-                if k.startswith("GenJet_"):
-                    data[k] = data[k][msk_gj_eta]
+    chosen_cuts = jet_fiducial_cuts[fiducial_cuts]
+    for data in [data_pf, data_mlpf]:
+        eta_label = apply_jet_eta(chosen_cuts["eta"][0], chosen_cuts["eta"][1], data)
+    jet_label += eta_label
+    jet_label_inclusive += eta_label
 
     corrections = np.load(corrections_file)
     corr_map_pf = corrections["corr_map_pf"]

@@ -156,6 +156,25 @@ def main(input_13p6_tev_parquet, input_14_tev_parquet, output_dir, jet_type, sam
     data_13p6 = awkward.from_parquet(input_13p6_tev_parquet)
     data_14 = awkward.from_parquet(input_14_tev_parquet)
 
+    jet_label = f"AK{jet_type[2:]} jets"
+    
+    #Fiducial cuts
+    max_jet_abs_eta = 2.5
+    fiducial_cuts = "eta_less_2p5"
+
+    if fiducial_cuts == "eta_less_2p5":
+        eta_label = f", $|η|$ < {max_jet_abs_eta}"
+        jet_label += eta_label
+        for data in [data_13p6, data_14]:
+            msk_rj_eta = np.abs(data["Jet_eta"]) < max_jet_abs_eta
+            for k in data.fields:
+                if k.startswith("Jet_"):
+                    data[k] = data[k][msk_rj_eta]
+            msk_gj_eta = np.abs(data["GenJet_eta"]) < max_jet_abs_eta
+            for k in data.fields:
+                if k.startswith("GenJet_"):
+                    data[k] = data[k][msk_gj_eta]
+
     data_13p6 = apply_dz(data_13p6)
     data_14 = apply_dz(data_14)
 
@@ -174,8 +193,6 @@ def main(input_13p6_tev_parquet, input_14_tev_parquet, output_dir, jet_type, sam
     deltar_cut = 0.2 if jet_type == "ak4" else 0.4
     resp_13p6 = compute_response(data_13p6, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
     resp_14 = compute_response(data_14, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
-
-    jet_label = f"AK{jet_type[2:]} jets"
 
     plot_jet_response_comparison(resp_13p6, resp_14, output_dir, sample_name, jet_type, jet_label)
     plot_met_comparison(data_13p6, data_14, output_dir, sample_name)
