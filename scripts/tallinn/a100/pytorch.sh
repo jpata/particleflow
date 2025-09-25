@@ -24,4 +24,4 @@ singularity exec -B /scratch/persistent -B /local --nv \
     --optimizer adamw \
     --comet \
     --test-datasets cms_pf_qcd \
-    --num-steps 100000
+    --num-steps 1000000
