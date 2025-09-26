@@ -12,6 +12,12 @@ from pathlib import Path
 from mlpf.plotting.utils import compute_response
 from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, sample_name_to_process
 
+default_cycler = plt.rcParams["axes.prop_cycle"]
+pf_color = list(default_cycler)[0]["color"]
+mlpf_color = list(default_cycler)[1]["color"]
+pf_linestyle = "-."
+mlpf_linestyle = "-"
+legend_loc_jet_response = (0.45, 0.65)
 
 def to_bh(data, bins):
     """Converts numpy array to boost_histogram object."""
@@ -47,20 +53,14 @@ def plot_met_comparison(data_13p6_pf, data_13p6_mlpf, data_14_pf, data_14_mlpf, 
     sample_label_fontsize = 30
     legend_fontsize = 30
 
-    met_13p6_pf = data_13p6_pf["PuppiMET_pt"]
-    met_13p6_mlpf = data_13p6_mlpf["PuppiMET_pt"]
-    met_14_pf = data_14_pf["PuppiMET_pt"]
-    met_14_mlpf = data_14_mlpf["PuppiMET_pt"]
-
-    h_13p6_pf = to_bh(met_13p6_pf, bins=bins)
-    h_13p6_mlpf = to_bh(met_13p6_mlpf, bins=bins)
-    h_14_pf = to_bh(met_14_pf, bins=bins)
-    h_14_mlpf = to_bh(met_14_mlpf, bins=bins)
-
-    mplhep.histplot(h_14_pf, histtype="step", lw=2, density=True, label="14 TeV, PF", ls="--", color="blue")
-    mplhep.histplot(h_13p6_pf, histtype="step", lw=2, density=True, label="13.6 TeV, PF", color="blue")
-    mplhep.histplot(h_14_mlpf, histtype="step", lw=2, density=True, label="14 TeV, MLPF", ls="--", color="red")
-    mplhep.histplot(h_13p6_mlpf, histtype="step", lw=2, density=True, label="13.6 TeV, MLPF", color="red")
+    h_13p6_pf = to_bh(data_13p6_pf["PuppiMET_pt"], bins=bins)
+    h_13p6_mlpf = to_bh(data_13p6_mlpf["PuppiMET_pt"], bins=bins)
+    h_14_pf = to_bh(data_14_pf["PuppiMET_pt"], bins=bins)
+    h_14_mlpf = to_bh(data_14_mlpf["PuppiMET_pt"], bins=bins)
+    mplhep.histplot(h_14_pf, histtype="step", lw=1, density=True, label="14 TeV, PF", ls="--", color=pf_color)
+    mplhep.histplot(h_13p6_pf, histtype="step", lw=1, density=True, label="13.6 TeV, PF", color=pf_color)
+    mplhep.histplot(h_14_mlpf, histtype="step", lw=2, density=True, label="14 TeV, MLPF", ls="--", color=mlpf_color)
+    mplhep.histplot(h_13p6_mlpf, histtype="step", lw=2, density=True, label="13.6 TeV, MLPF", color=mlpf_color)
 
     plt.xlabel("$p_{T,miss}$ (GeV)")
     plt.ylabel("Normalized count")
@@ -83,7 +83,7 @@ def plot_met_comparison(data_13p6_pf, data_13p6_mlpf, data_14_pf, data_14_mlpf, 
     mplhep.cms.label("", data=False, rlabel="Run 3 configuration")
 
     ax.set_ylim(bottom=1e-5)
-    plt.legend(fontsize=legend_fontsize)
+    plt.legend(fontsize=legend_fontsize, loc=legend_loc_jet_response)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path / f"{sample_name}_met_dist_14vs13p6.pdf")
@@ -112,10 +112,10 @@ def plot_jet_response_comparison(resp_13p6_pf, resp_13p6_mlpf, resp_14_pf, resp_
     h_14_pf = to_bh(response_14_pf, bins=b)
     h_14_mlpf = to_bh(response_14_mlpf, bins=b)
 
-    mplhep.histplot(h_14_pf, histtype="step", lw=2, density=True, label="14 TeV, PF", ls="--", color="blue")
-    mplhep.histplot(h_13p6_pf, histtype="step", lw=2, density=True, label="13.6 TeV, PF", color="blue")
-    mplhep.histplot(h_14_mlpf, histtype="step", lw=2, density=True, label="14 TeV, MLPF", ls="--", color="red")
-    mplhep.histplot(h_13p6_mlpf, histtype="step", lw=2, density=True, label="13.6 TeV, MLPF", color="red")
+    mplhep.histplot(h_14_pf, histtype="step", lw=1, density=True, label="14 TeV, PF", ls="--", color=pf_color)
+    mplhep.histplot(h_13p6_pf, histtype="step", lw=1, density=True, label="13.6 TeV, PF", color=pf_color)
+    mplhep.histplot(h_14_mlpf, histtype="step", lw=2, density=True, label="14 TeV, MLPF", ls="--", color=mlpf_color)
+    mplhep.histplot(h_13p6_mlpf, histtype="step", lw=2, density=True, label="13.6 TeV, MLPF", color=mlpf_color)
 
     plt.xlabel("Raw jet $p_T / p_{T,ptcl}$ response")
     plt.ylabel("Normalized count")
@@ -144,7 +144,7 @@ def plot_jet_response_comparison(resp_13p6_pf, resp_13p6_mlpf, resp_14_pf, resp_
         va="top",
     )
     ax.set_ylim(0, ax.get_ylim()[1] * 1.5)
-    plt.legend(fontsize=legend_fontsize)
+    plt.legend(fontsize=legend_fontsize, loc=legend_loc_jet_response)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path / f"{sample_name}_{jet_type}_jet_pt_ratio_14vs13p6.pdf")
@@ -181,7 +181,7 @@ def main(
     fiducial_cuts = "eta_less_2p5"
 
     if fiducial_cuts == "eta_less_2p5":
-        eta_label = f", $|η|$ < {max_jet_abs_eta}"
+        eta_label = f", 0 < $|η|$ < {max_jet_abs_eta}"
         jet_label += eta_label
         for data in [data_13p6_pf, data_13p6_mlpf, data_14_pf, data_14_mlpf]:
             msk_rj_eta = np.abs(data["Jet_eta"]) < max_jet_abs_eta

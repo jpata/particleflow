@@ -290,7 +290,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             h1,
             histtype="step",
             lw=2,
-            label="{}\\nmean: {:.2f} std: {:.2f}\nmed: {:.2f} IQR: {:.2f}".format(mlpf_label, mean_mlpf, std_mlpf, med_mlpf, iqr_mlpf),
+            label="{}\nmean: {:.2f} std: {:.2f}\nmed: {:.2f} IQR: {:.2f}".format(mlpf_label, mean_mlpf, std_mlpf, med_mlpf, iqr_mlpf),
             ls=mlpf_linestyle,
             color=mlpf_color,
         )

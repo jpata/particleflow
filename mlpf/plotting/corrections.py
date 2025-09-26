@@ -218,7 +218,7 @@ def fill_nan(reciprocal):
     return reciprocal
 
 
-def calculate_correction_map(resp_data, eta_bins, pt_bins, jet_type="ak4"):
+def calculate_correction_map(resp_data, eta_bins, pt_bins, jet_type="ak4", response_type="response_raw"):
     jet_prefixes = {"ak4": "Jet", "ak8": "FatJet"}
     jet_prefix = jet_prefixes[jet_type]
     genjet_prefixes = {"ak4": "GenJet", "ak8": "GenJetAK8"}
@@ -236,7 +236,7 @@ def calculate_correction_map(resp_data, eta_bins, pt_bins, jet_type="ak4"):
                 & (resp_data[jet_prefix + "_eta"] < eta_bins[ibin_eta + 1])
             )
 
-            response_raw = awkward.flatten(resp_data["response_raw"][mask])
+            response_raw = awkward.flatten(resp_data[response_type][mask])
             median, _ = med_iqr(response_raw)
             print(f"Response eta_bin={ibin_eta} pt_bin={ibin_pt} resp={len(response_raw)} median={median}")
             resp_stats_med[ibin_eta, ibin_pt] = median
@@ -266,13 +266,13 @@ def make_corrections(input_pf_parquet, input_mlpf_parquet, corrections_file, jet
         jet_coll = "Jet"
         genjet_coll = "GenJet"
         deltar_cut = 0.2
-        eta_reco_bins = [-5.191, -2.964, -1.392, 0, 1.392, 2.964, 5.191]
+        eta_reco_bins = [-6, -5.191, -4.0, -2.964, -1.392, 0, 1.392, 2.964, 4.0, 5.191, 6]
         pt_gen_bins = [10, 20, 30, 40, 50, 80, 120, 200, 500, 3000]
     else:  # ak8
         jet_coll = "FatJet"
         genjet_coll = "GenJetAK8"
         deltar_cut = 0.4
-        eta_reco_bins = [-5.191, -2.964, -1.392, 0, 1.392, 2.964, 5.191]
+        eta_reco_bins = [-6, -5.191, -4.0, -2.964, -1.392, 0, 1.392, 2.964, 4.0, 5.191, 6]
         pt_gen_bins = [200, 300, 400, 500, 3000]
 
     print("computing PF response")
@@ -332,6 +332,11 @@ def make_corrections(input_pf_parquet, input_mlpf_parquet, corrections_file, jet
         resp_pf_corr = compute_response(data_pf, jet_coll=jet_coll, genjet_coll=genjet_coll, deltar_cut=deltar_cut)
         print("computing corrected MLPF response")
         resp_mlpf_corr = compute_response(data_mlpf, jet_coll=jet_coll, genjet_coll=genjet_coll, deltar_cut=deltar_cut)
+
+        # get the per-bin medians after corrections
+        corr_map_pf2 = calculate_correction_map(resp_pf_corr, eta_reco_bins, pt_gen_bins, jet_type=jet_type, response_type="response")
+        corr_map_mlpf2 = calculate_correction_map(resp_mlpf_corr, eta_reco_bins, pt_gen_bins, jet_type=jet_type, response_type="response")
+        save_jet_correction_heatmaps(corr_map_pf2, corr_map_mlpf2, eta_reco_bins, pt_gen_bins, output_dir, jet_type + "corr", sample_name)
 
         save_jet_response_plots(
             eta_reco_bins,
