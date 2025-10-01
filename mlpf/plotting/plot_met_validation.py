@@ -25,7 +25,19 @@ def to_bh(data, bins):
 
 
 def plot_met_distribution(
-    data_pf, data_mlpf, bins, xlabel, filename, logy, sample_name, mlpf_label, legend_loc, legend_fontsize, sample_label_coords, sample_label_fontsize, ratio_ylim
+    data_pf,
+    data_mlpf,
+    bins,
+    xlabel,
+    filename,
+    logy,
+    sample_name,
+    mlpf_label,
+    legend_loc,
+    legend_fontsize,
+    sample_label_coords,
+    sample_label_fontsize,
+    ratio_ylim,
 ):
     f, (a0, a1) = plt.subplots(2, 1, gridspec_kw={"height_ratios": [3, 1]}, sharex=True)
 
@@ -411,7 +423,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
         legend_fontsize=legend_fontsize,
         sample_label_coords=sample_label_coords,
         sample_label_fontsize=sample_label_fontsize,
-        ratio_ylim=ratio_ylim
+        ratio_ylim=ratio_ylim,
     )
 
     # Define MET response, avoiding division by zero

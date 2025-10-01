@@ -15,11 +15,11 @@ from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, med_iqr, sample_n
 
 
 def apply_jet_eta(eta_min, eta_max, data):
-    if eta_min==0:
+    if eta_min == 0:
         eta_label = f", $|η|$ < {eta_max}"
     else:
         eta_label = f", {eta_min} < $|η|$ < {eta_max}"
-    
+
     msk_rj_eta = (np.abs(data["Jet_eta"]) >= eta_min) & (np.abs(data["Jet_eta"]) < eta_max)
     for k in data.fields:
         if k.startswith("Jet_"):

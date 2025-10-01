@@ -22,6 +22,7 @@ legend_loc_jet_response = (0.05, 0.65)
 pf_label = "PF-PUPPI"
 mlpf_label = "MLPF-PUPPI"
 
+
 def to_bh(data, bins):
     """Converts numpy array to boost_histogram object."""
     h1 = bh.Histogram(bh.axis.Variable(bins))
@@ -159,9 +160,7 @@ def plot_jet_response_comparison(resp_pf, resp_mlpf, output_dir, sample_name, je
 @click.option("--jet-type", default="ak4", type=click.Choice(["ak4", "ak8"]), help="Jet type to plot.")
 @click.option("--sample-name", required=True, type=str, help="Sample name for plot labels (e.g., QCD_PU).")
 @click.option("--tev", required=True, type=str, help="Center of mass energy")
-def main(
-    input_pf_parquet, input_mlpf_parquet, output_dir, jet_type, sample_name, tev
-):
+def main(input_pf_parquet, input_mlpf_parquet, output_dir, jet_type, sample_name, tev):
     """
     Generates a comparison plot of the jet response distribution
     """
