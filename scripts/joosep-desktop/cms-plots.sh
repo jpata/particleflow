@@ -68,8 +68,8 @@ singularity exec -B /mnt/work/ $IMG \
 wait
 
 # # # #Do jet-level plots
-for sample in QCD_noPU_13p6 QCD_PU_13p6 TTbar_PU_13p6 TTbar_noPU_13p6 PhotonJet_noPU_13p6 PhotonJet_PU_13p6; do
-# for sample in QCD_noPU_13p6 QCD_PU_13p6; do
+# for sample in QCD_noPU_13p6 QCD_PU_13p6 TTbar_PU_13p6 TTbar_noPU_13p6 PhotonJet_noPU_13p6 PhotonJet_PU_13p6; do
+for sample in TTbar_PU_13p6 QCD_PU_13p6; do
   singularity exec -B /mnt/work/ $IMG \
     python3 mlpf/plotting/plot_validation.py \
     --input-pf-parquet ${sample}_pf.parquet \
@@ -130,9 +130,34 @@ for sample in QCD_noPU_13p6 QCD_PU_13p6 TTbar_PU_13p6 TTbar_noPU_13p6 PhotonJet_
 done
 
 #Do the 14 TeV to 13.6 TeV comparison
+for sample in QCD_PU_13p6 TTbar_PU_13p6; do
+  singularity exec -B /mnt/work $IMG \
+    python mlpf/plotting/plot_jet_response_comparison_v1.py \
+      --input-pf-parquet ${sample}_pf.parquet \
+      --input-mlpf-parquet ${sample}_mlpf.parquet \
+      --output-dir ./plots \
+      --sample-name $sample \
+      --jet-type ak4 \
+      --tev 13.6 &
+done
+wait
+
 for sample in QCD_PU TTbar_PU; do
   singularity exec -B /mnt/work $IMG \
-    python mlpf/plotting/plot_jet_response_comparison.py \
+    python mlpf/plotting/plot_jet_response_comparison_v1.py \
+      --input-pf-parquet ${sample}_pf.parquet \
+      --input-mlpf-parquet ${sample}_mlpf.parquet \
+      --output-dir ./plots \
+      --sample-name $sample \
+      --jet-type ak4 \
+      --tev 14 &
+done
+wait
+
+# #Do the 14 TeV to 13.6 TeV comparison
+for sample in QCD_PU TTbar_PU; do
+  singularity exec -B /mnt/work $IMG \
+    python mlpf/plotting/plot_jet_response_comparison_v2.py \
       --input-13p6-tev-pf-parquet ${sample}_13p6_pf.parquet \
       --input-13p6-tev-mlpf-parquet ${sample}_13p6_mlpf.parquet \
       --input-14-tev-pf-parquet ${sample}_pf.parquet \
@@ -142,7 +167,7 @@ for sample in QCD_PU TTbar_PU; do
       --jet-type ak4 &
 
   singularity exec -B /mnt/work $IMG \
-    python mlpf/plotting/plot_jet_response_comparison.py \
+    python mlpf/plotting/plot_jet_response_comparison_v2.py \
       --input-13p6-tev-pf-parquet ${sample}_13p6_pf.parquet \
       --input-13p6-tev-mlpf-parquet ${sample}_13p6_mlpf.parquet \
       --input-14-tev-pf-parquet ${sample}_pf.parquet \

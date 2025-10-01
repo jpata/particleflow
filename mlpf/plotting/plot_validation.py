@@ -15,7 +15,11 @@ from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, med_iqr, sample_n
 
 
 def apply_jet_eta(eta_min, eta_max, data):
-    eta_label = f", {eta_min} < $|η|$ < {eta_max}"
+    if eta_min==0:
+        eta_label = f", $|η|$ < {eta_max}"
+    else:
+        eta_label = f", {eta_min} < $|η|$ < {eta_max}"
+    
     msk_rj_eta = (np.abs(data["Jet_eta"]) >= eta_min) & (np.abs(data["Jet_eta"]) < eta_max)
     for k in data.fields:
         if k.startswith("Jet_"):
@@ -820,7 +824,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         ratio = res_mlpf_vs_pt / res_pf_vs_pt
 
     rax.plot(midpoints(pt_bins_for_response), ratio, color=mlpf_color, linestyle=mlpf_linestyle, lw=3)
-    rax.set_xlabel("$p_{T,ptcl}$ (GeV)")
+    rax.set_xlabel("Jet $p_{T,ptcl}$ (GeV)")
     rax.set_ylabel("MLPF / PF")
     rax.set_xscale("log")
     rax.set_ylim(0.5, 1.5)

@@ -25,7 +25,7 @@ def to_bh(data, bins):
 
 
 def plot_met_distribution(
-    data_pf, data_mlpf, bins, xlabel, filename, logy, sample_name, mlpf_label, legend_loc, legend_fontsize, sample_label_coords, sample_label_fontsize
+    data_pf, data_mlpf, bins, xlabel, filename, logy, sample_name, mlpf_label, legend_loc, legend_fontsize, sample_label_coords, sample_label_fontsize, ratio_ylim
 ):
     f, (a0, a1) = plt.subplots(2, 1, gridspec_kw={"height_ratios": [3, 1]}, sharex=True)
 
@@ -64,11 +64,11 @@ def plot_met_distribution(
     plt.ylabel("Count")
 
     plt.sca(a1)
-    mplhep.histplot(h0 / h0, histtype="step", lw=2, ls="--")
-    mplhep.histplot(h1 / h0, histtype="step", lw=2, ls="-.")
-    mplhep.histplot(h2 / h0, histtype="step", lw=2, ls="-")
-    plt.ylim(0.0, 10.0)
-    plt.ylabel("Reco / Gen")
+    plt.plot([], [])
+    mplhep.histplot(h1 / h1, histtype="step", lw=2, ls="-.")
+    mplhep.histplot(h2 / h1, histtype="step", lw=2, ls="-")
+    plt.ylim(0.0, ratio_ylim)
+    plt.ylabel("MLPF / PF")
     plt.xlabel(xlabel)
 
     if "pT" in xlabel or "MET" in xlabel:
@@ -367,15 +367,19 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
     if sample_name.startswith("QCD_"):
         met_bins = varbins(np.linspace(0, 150, 21), np.linspace(150, 500, 5))
         met_bins_for_response = np.array([5, 20, 40, 60, 80, 100, 150, 200, 300, 500])
+        ratio_ylim = 2
     elif sample_name.startswith("TTbar_"):
         met_bins = varbins(np.linspace(0, 150, 21), np.linspace(150, 250, 5))
         met_bins_for_response = np.array([5, 20, 40, 60, 80, 100, 150, 250])
+        ratio_ylim = 2
     elif sample_name.startswith("PhotonJet_"):
         met_bins = varbins(np.linspace(0, 200, 41))
         met_bins_for_response = np.array([5, 20, 40, 60, 80, 100, 150, 200])
+        ratio_ylim = 2
     else:
         met_bins = np.linspace(0, 500, 51)
         met_bins_for_response = np.linspace(1, 500, 26)
+        ratio_ylim = 2
 
     data_pf = awkward.from_parquet(input_pf_parquet)
     data_mlpf = awkward.from_parquet(input_mlpf_parquet)
@@ -407,6 +411,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
         legend_fontsize=legend_fontsize,
         sample_label_coords=sample_label_coords,
         sample_label_fontsize=sample_label_fontsize,
+        ratio_ylim=ratio_ylim
     )
 
     # Define MET response, avoiding division by zero
