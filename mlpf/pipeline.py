@@ -121,7 +121,8 @@ def get_parser():
     parser_hpo.add_argument("--comet", action="store_true", help="Use comet.ml logging")
 
     # option for habana training
-    parser.add_argument("--habana", action="store_true", default=None, help="use Habana Gaudi device for training")
+    parser_train.add_argument("--habana", action="store_true", default=None, help="use Habana Gaudi device")
+    parser_test.add_argument("--habana", action="store_true", default=None, help="use Habana Gaudi device")
     return parser
 
 
@@ -181,10 +182,10 @@ def main():
                         "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]},
                     }
                 }
-                # load only the last config split
-                config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]["splits"] = ["10"]
+                # load only the first config split
+                config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]["splits"] = ["1"]
             config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
-            config["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
+            config["test_dataset"]["cms_pf_ttbar"]["splits"] = ["1"]
 
     # override loaded config with values from command line args
     config = override_config(config, args)
