@@ -25,6 +25,12 @@ from mlpf.model.distributed_ray import run_hpo, run_ray_training
 from mlpf.model.PFDataset import SHARING_STRATEGY
 from utils import create_experiment_dir
 
+# import habana if available
+try:
+    import habana_frameworks.torch.core as htcore
+except ImportError:
+    pass
+
 
 def get_parser():
     """Create and return the ArgumentParser object."""
@@ -114,6 +120,9 @@ def get_parser():
     parser_hpo.add_argument("--raytune-num-samples", type=int, help="Number of samples to draw from the search space")
     parser_hpo.add_argument("--comet", action="store_true", help="Use comet.ml logging")
 
+    # option for habana training
+    parser_train.add_argument("--habana", action="store_true", default=None, help="use Habana Gaudi device")
+    parser_test.add_argument("--habana", action="store_true", default=None, help="use Habana Gaudi device")
     return parser
 
 
@@ -173,10 +182,10 @@ def main():
                         "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]},
                     }
                 }
-                # load only the last config split
-                config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]["splits"] = ["10"]
+                # load only the first config split
+                config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]["splits"] = ["1"]
             config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
-            config["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
+            config["test_dataset"]["cms_pf_ttbar"]["splits"] = ["1"]
 
     # override loaded config with values from command line args
     config = override_config(config, args)
@@ -201,7 +210,7 @@ def main():
             run_ray_training(config, args, experiment_dir)
         elif args.command in ["train", "test"]:
             world_size = args.gpus if args.gpus > 0 else 1
-            device_agnostic_run(config, world_size, experiment_dir)
+            device_agnostic_run(config, world_size, experiment_dir, args.habana)
 
 
 if __name__ == "__main__":
