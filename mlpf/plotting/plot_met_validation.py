@@ -32,12 +32,18 @@ def plot_met_distribution(
     filename,
     logy,
     sample_name,
+    gen_color,
+    pf_color,
+    mlpf_color,
+    pf_label,
     mlpf_label,
     legend_loc,
     legend_fontsize,
     sample_label_coords,
     sample_label_fontsize,
     ratio_ylim,
+    pf_linestyle,
+    mlpf_linestyle
 ):
     f, (a0, a1) = plt.subplots(2, 1, gridspec_kw={"height_ratios": [3, 1]}, sharex=True)
 
@@ -51,9 +57,9 @@ def plot_met_distribution(
     h2 = to_bh(data_mlpf["PuppiMET_pt"], bins)
 
     plt.sca(a0)
-    x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen.", binwnorm=1.0, ls="--")
-    x1 = mplhep.histplot(h1, histtype="step", lw=2, label="PF-PUPPI", binwnorm=1.0, ls="-.")
-    x2 = mplhep.histplot(h2, histtype="step", lw=2, label=mlpf_label, binwnorm=1.0, ls="-")
+    x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen.", ls="--", color=gen_color)
+    x1 = mplhep.histplot(h1, histtype="step", lw=2, label="PF-PUPPI", ls=pf_linestyle, color=pf_color)
+    x2 = mplhep.histplot(h2, histtype="step", lw=2, label=mlpf_label, ls=mlpf_linestyle, color=mlpf_color)
 
     if logy:
         plt.yscale("log")
@@ -77,15 +83,16 @@ def plot_met_distribution(
 
     plt.sca(a1)
     plt.plot([], [])
-    mplhep.histplot(h1 / h1, histtype="step", lw=2, ls="-.")
-    mplhep.histplot(h2 / h1, histtype="step", lw=2, ls="-")
+
+    ratio = h1/h1
+    sigma_ratio = ratio * np.sqrt(1/h1.counts() + 1.0/h1.counts())
+    mplhep.histplot(ratio, histtype="step", lw=2, ls=pf_linestyle, color=pf_color)
+    mplhep.histplot(ratio, yerr=sigma_ratio.counts(), edgecolor=pf_color, ls=pf_linestyle, lw=2, histtype="band", facecolor=pf_color)
+    mplhep.histplot(h2 / h1, histtype="step", lw=2, ls=mlpf_linestyle, color=mlpf_color)
     plt.ylim(0.0, ratio_ylim)
     plt.ylabel("MLPF / PF")
     plt.xlabel(xlabel)
-
-    if "pT" in xlabel or "MET" in xlabel:
-        plt.xscale("log")
-
+    #plt.xscale("log")
     plt.xlim(min(bins), max(bins))
     plt.savefig(filename)
     plt.close()
@@ -355,7 +362,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
 
     # plotting style variables
     legend_fontsize = 30
-    legend_loc = (0.5, 0.45)
+    legend_loc = (0.5, 0.55)
     legend_loc_scalereso = (0.50, 0.65)
     legend_loc_met_response = (0.3, 0.45)
     sample_label_fontsize = 30
@@ -363,10 +370,12 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
     jet_label_coords_single = 0.02, 0.88
     sample_label_coords = 0.02, 0.96
     default_cycler = plt.rcParams["axes.prop_cycle"]
-    pf_color = list(default_cycler)[1]["color"]
-    mlpf_color = list(default_cycler)[2]["color"]
+    gen_color = "#648df4"
+    pf_color = "#f3a041"
+    mlpf_color = "#d23b3d"
     pf_linestyle = "-."
     mlpf_linestyle = "-"
+    pf_label = "PF-PUPPI"
     mlpf_label = "MLPF-PUPPI"
 
     def varbins(*args):
@@ -377,11 +386,11 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
         return np.concatenate(newlist)
 
     if sample_name.startswith("QCD_"):
-        met_bins = varbins(np.linspace(0, 150, 21), np.linspace(150, 500, 5))
+        met_bins = varbins(np.linspace(0, 500, 21))
         met_bins_for_response = np.array([5, 20, 40, 60, 80, 100, 150, 200, 300, 500])
         ratio_ylim = 2
     elif sample_name.startswith("TTbar_"):
-        met_bins = varbins(np.linspace(0, 150, 21), np.linspace(150, 250, 5))
+        met_bins = varbins(np.linspace(0, 500, 21))
         met_bins_for_response = np.array([5, 20, 40, 60, 80, 100, 150, 250])
         ratio_ylim = 2
     elif sample_name.startswith("PhotonJet_"):
@@ -390,6 +399,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
         ratio_ylim = 2
     else:
         met_bins = np.linspace(0, 500, 51)
+        #met_bins = np.logspace(-1, 3, 21)
         met_bins_for_response = np.linspace(1, 500, 26)
         ratio_ylim = 2
 
@@ -418,12 +428,18 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
         os.path.join(output_dir, "met_pt.pdf"),
         logy=True,
         sample_name=plot_sample_name,
+        gen_color=gen_color,
+        pf_color=pf_color,
+        mlpf_color=mlpf_color,
+        pf_label=pf_label,
         mlpf_label=mlpf_label,
         legend_loc=legend_loc,
         legend_fontsize=legend_fontsize,
         sample_label_coords=sample_label_coords,
         sample_label_fontsize=sample_label_fontsize,
         ratio_ylim=ratio_ylim,
+        pf_linestyle=pf_linestyle,
+        mlpf_linestyle=mlpf_linestyle
     )
 
     # Define MET response, avoiding division by zero

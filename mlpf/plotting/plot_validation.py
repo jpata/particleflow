@@ -72,10 +72,13 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     jet_label_coords_single = 0.02, 0.88
     sample_label_coords = 0.02, 0.96
     default_cycler = plt.rcParams["axes.prop_cycle"]
-    pf_color = list(default_cycler)[1]["color"]
-    mlpf_color = list(default_cycler)[2]["color"]
+    gen_color = "#648df4"
+    pf_color = "#f3a041"
+    mlpf_color = "#d23b3d"
+    gen_linestyle = "--"
     pf_linestyle = "-."
     mlpf_linestyle = "-"
+    pf_label = "PF-PUPPI"
     mlpf_label = "MLPF-PUPPI"
 
     jet_prefixes = {"ak4": "Jet", "ak8": "FatJet"}
@@ -104,32 +107,38 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     if sample_name.startswith("QCD_"):
         if jet_type == "ak4":
             pt_bins_for_response = np.array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 2000])
-            pt_bins_for_kinematics = varbins(np.linspace(20, 100, 21), np.linspace(100, 200, 5), np.linspace(200, 1000, 5))
+            #pt_bins_for_kinematics = varbins(np.linspace(20, 100, 21), np.linspace(100, 200, 5), np.linspace(200, 1000, 5), np.linspace(1000, 2000, 2))
+            pt_bins_for_kinematics = np.logspace(1, 3.61, 41)
             pt_bins_for_pureff = varbins(np.linspace(1, 20, 5), np.linspace(20, 100, 21), np.linspace(100, 200, 5), np.linspace(200, 1000, 5))
             pt_bins_for_pu = [(0, 30), (30, 60), (60, 100), (100, 200), (200, 5000)]
         elif jet_type == "ak8":
             pt_bins_for_response = varbins(np.linspace(20, 1000, 5))
-            pt_bins_for_kinematics = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1250, 1500, 1750, 2000]
+            #pt_bins_for_kinematics = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1250, 1500, 1750, 2000]
+            pt_bins_for_kinematics = np.logspace(2, 3.61, 41)
             pt_bins_for_pureff = varbins(np.linspace(1, 20, 5), np.linspace(20, 100, 5), np.linspace(100, 1000, 5))
             pt_bins_for_pu = [(100, 500), (500, 1000), (1000, 1500), (1500, 2000), (2000, 2500)]
     elif sample_name.startswith("TTbar_"):
         if jet_type == "ak4":
             pt_bins_for_response = np.array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 250, 500])
-            pt_bins_for_kinematics = varbins(np.linspace(20, 100, 21), np.linspace(100, 250, 5))
+            #pt_bins_for_kinematics = varbins(np.linspace(10, 100, 21), np.linspace(100, 250, 5), np.linspace(250, 500, 2))
+            pt_bins_for_kinematics = np.logspace(1, 3.31, 41)
             pt_bins_for_pureff = varbins(np.linspace(1, 20, 5), np.linspace(20, 100, 21), np.linspace(100, 250, 5))
         elif jet_type == "ak8":
             pt_bins_for_response = varbins(np.linspace(10, 400, 5))
-            pt_bins_for_kinematics = varbins(np.linspace(10, 400, 5))
+            # pt_bins_for_kinematics = varbins(np.linspace(10, 400, 5))
+            pt_bins_for_kinematics = np.logspace(1, 2.70, 41)
             pt_bins_for_pureff = varbins(np.linspace(1, 400, 5))
         pt_bins_for_pu = [(0, 30), (30, 60), (60, 100), (100, 200), (200, 5000)]
     elif sample_name.startswith("PhotonJet_"):
         if jet_type == "ak4":
             pt_bins_for_response = np.array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 125, 150, 175, 200, 250, 300])
-            pt_bins_for_kinematics = varbins(np.linspace(20, 60, 21), np.linspace(60, 120, 2))
+            # pt_bins_for_kinematics = varbins(np.linspace(20, 60, 21), np.linspace(60, 120, 2))
+            pt_bins_for_kinematics = np.logspace(1, 2.31, 41)
             pt_bins_for_pureff = varbins(np.linspace(5, 20, 5), np.linspace(20, 60, 21), np.linspace(60, 120, 2))
         elif jet_type == "ak8":
             pt_bins_for_response = varbins(np.linspace(1, 1000, 5))
-            pt_bins_for_kinematics = varbins(np.linspace(1, 1000, 5))
+            # pt_bins_for_kinematics = varbins(np.linspace(1, 1000, 5))
+            pt_bins_for_kinematics = np.logspace(1, 3, 41)
             pt_bins_for_pureff = varbins(np.linspace(1, 1000, 5))
         pt_bins_for_pu = [(0, 30), (30, 60), (60, 100)]
 
@@ -163,17 +172,14 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         h2 = to_bh(awkward.flatten(data_mlpf[f"{jet_prefix}_{variable_reco}"][mlpf_jet_mask]), bins)
 
         plt.sca(a0)
-        x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen.", binwnorm=1.0, ls="--")
-        x1 = mplhep.histplot(h1, histtype="step", lw=2, label="PF-PUPPI", binwnorm=1.0, ls=pf_linestyle)
-        x2 = mplhep.histplot(h2, histtype="step", lw=2, label=mlpf_label, binwnorm=1.0, ls=mlpf_linestyle)
+        x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen.", ls=gen_linestyle)
+        x1 = mplhep.histplot(h1, histtype="step", lw=2, label=pf_label, ls=pf_linestyle)
+        x2 = mplhep.histplot(h2, histtype="step", lw=2, label=mlpf_label, ls=mlpf_linestyle)
 
         if logy:
             plt.yscale("log")
-            # ensure legend fits on eta plot
-            mult = 100
-            if variable_gen == "eta":
-                mult = 1000
-            a0.set_ylim(bottom=100, top=a0.get_ylim()[1] * mult)
+            mult = 10000
+            a0.set_ylim(bottom=1, top=a0.get_ylim()[1] * mult)
 
         mplhep.cms.label("", data=False, com=13.6, year="Run 3", ax=a0)
         a0.text(
@@ -195,10 +201,14 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         plt.ylabel("Count")
 
         plt.sca(a1)
-        mplhep.histplot(h0 / h0, histtype="step", lw=2, ls="--")
-        mplhep.histplot(h1 / h0, histtype="step", lw=2, ls=pf_linestyle)
-        mplhep.histplot(h2 / h0, histtype="step", lw=2, ls=mlpf_linestyle)
-        plt.ylim(0.8, 1.2)
+        ratio = h0/h0
+        sigma_ratio = ratio * np.sqrt(1/h0.counts() + 1.0/h0.counts())
+
+        mplhep.histplot(ratio, histtype="step", lw=2, ls=gen_linestyle, color=gen_color)
+        mplhep.histplot(ratio, yerr=sigma_ratio.counts(), edgecolor=gen_color, ls=gen_linestyle, lw=2, histtype="band", facecolor=gen_color)
+        mplhep.histplot(h1 / h0, histtype="step", lw=2, ls=pf_linestyle, color=pf_color)
+        mplhep.histplot(h2 / h0, histtype="step", lw=2, ls=mlpf_linestyle, color=mlpf_color)
+        plt.ylim(0, 2)
         plt.ylabel("Reco / Gen")
         plt.xlabel(xlabel)
 

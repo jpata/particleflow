@@ -13,8 +13,9 @@ from mlpf.plotting.utils import compute_response
 from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES, sample_name_to_process
 
 default_cycler = plt.rcParams["axes.prop_cycle"]
-pf_color = list(default_cycler)[0]["color"]
-mlpf_color = list(default_cycler)[1]["color"]
+gen_color = "#648df4"
+pf_color = "#f3a041"
+mlpf_color = "#d23b3d"
 pf_linestyle = "-."
 mlpf_linestyle = "-"
 legend_loc_met = (0.4, 0.55)
