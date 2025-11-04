@@ -3,15 +3,16 @@ from __future__ import print_function
 
 import os
 
-outdir = "/local/joosep/mlpf/cms/20250618_cmssw_15_0_5_f8ae2f/"
+outdir = "/local/joosep/mlpf/cms/20251001_cmssw_15_0_5_e42b72/"
 
 samples = [
-    ("QCDForPF_13p6TeV_TuneCUETP8M1_cfi", 700000, 710050, "genjob_pu55to75_val.sh", outdir + "/pu55to75_val"),
-    ("QCDForPF_13p6TeV_TuneCUETP8M1_cfi", 700000, 702050, "genjob_nopu_val.sh", outdir + "/nopu_val"),
-    ("TTbar_13p6TeV_TuneCUETP8M1_cfi", 800000, 802050, "genjob_pu55to75_val.sh", outdir + "/pu55to75_val"),
-    ("TTbar_13p6TeV_TuneCUETP8M1_cfi", 800000, 802050, "genjob_nopu_val.sh", outdir + "/nopu_val"),
-    ("PhotonJet_Pt_10_13p6TeV_TuneCUETP8M1_cfi", 900000, 902050, "genjob_pu55to75_val.sh", outdir + "/pu55to75_val"),
-    ("PhotonJet_Pt_10_13p6TeV_TuneCUETP8M1_cfi", 900000, 902050, "genjob_nopu_val.sh", outdir + "/nopu_val"),
+    ("QCDForPF_13p6TeV_TuneCUETP8M1_cfi", 700050, 701050, "genjob_pu55to75_val_v2.sh", outdir + "/pu55to75_val"),
+    # ("QCDForPF_13p6TeV_TuneCUETP8M1_cfi", 700000, 710050, "genjob_pu55to75_val.sh", outdir + "/pu55to75_val"),
+    # ("QCDForPF_13p6TeV_TuneCUETP8M1_cfi", 700000, 702050, "genjob_nopu_val.sh", outdir + "/nopu_val"),
+    # ("TTbar_13p6TeV_TuneCUETP8M1_cfi", 800000, 802050, "genjob_pu55to75_val.sh", outdir + "/pu55to75_val"),
+    # ("TTbar_13p6TeV_TuneCUETP8M1_cfi", 800000, 802050, "genjob_nopu_val.sh", outdir + "/nopu_val"),
+    # ("PhotonJet_Pt_10_13p6TeV_TuneCUETP8M1_cfi", 900000, 902050, "genjob_pu55to75_val.sh", outdir + "/pu55to75_val"),
+    # ("PhotonJet_Pt_10_13p6TeV_TuneCUETP8M1_cfi", 900000, 902050, "genjob_nopu_val.sh", outdir + "/nopu_val"),
 ]
 
 if __name__ == "__main__":
