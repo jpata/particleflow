@@ -6,7 +6,7 @@ import os
 outdir = "/local/joosep/mlpf/cms/20251125_cmssw_15_0_5_117d32/"
 
 samples = [
-    ("QCDForPF_13p6TeV_TuneCUETP8M1_cfi", 700000, 700010, "genjob_pu55to75_val_v3.sh", outdir + "/pu55to75_val"),
+    ("QCDForPF_13p6TeV_TuneCUETP8M1_cfi", 700000, 701050, "genjob_pu55to75_val_v3.sh", outdir + "/pu55to75_val"),
     # ("QCDForPF_13p6TeV_TuneCUETP8M1_cfi", 700000, 710050, "genjob_pu55to75_val.sh", outdir + "/pu55to75_val"),
     # ("QCDForPF_13p6TeV_TuneCUETP8M1_cfi", 700000, 702050, "genjob_nopu_val.sh", outdir + "/nopu_val"),
     # ("TTbar_13p6TeV_TuneCUETP8M1_cfi", 800000, 802050, "genjob_pu55to75_val.sh", outdir + "/pu55to75_val"),

@@ -57,8 +57,8 @@ done
 #     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_nopu_13p6.txt QCD_noPU_13p6 $ifile $SITE
 # done
 
-END=`wc -l scripts/tallinn/qcd_pu_13p6_v2.txt | cut -f1 -d' '`
+END=`wc -l scripts/tallinn/qcd_pu_13p6_v3.txt | cut -f1 -d' '`
 for ifile in $(seq 1 10); do
-    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu_13p6_v2.txt QCD_PU_13p6_v2 $ifile $SITE
-    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu_13p6_v2.txt QCD_PU_13p6_v2 $ifile $SITE
+    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu_13p6_v3.txt QCD_PU_13p6_v3 $ifile $SITE
+    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu_13p6_v3.txt QCD_PU_13p6_v3 $ifile $SITE
 done
