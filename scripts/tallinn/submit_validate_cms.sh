@@ -38,20 +38,19 @@ SITE=T2_EE_Estonia
 #     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/ttbar_nopu_13p6.txt TTbar_noPU_13p6 $ifile $SITE
 #     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/ttbar_nopu_13p6.txt TTbar_noPU_13p6 $ifile $SITE
 # done
-#
-# END=`wc -l scripts/tallinn/qcd_pu.txt | cut -f1 -d' '`
-# for ifile in $(seq 1 $END); do
-#     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu.txt QCD_PU $ifile $SITE
-#     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu.txt QCD_PU $ifile $SITE
-# done
-#
-# END=`wc -l scripts/tallinn/qcd_pu_13p6.txt | cut -f1 -d' '`
-# for ifile in $(seq 1 $END); do
-#     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu_13p6.txt QCD_PU_13p6 $ifile $SITE
-#     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu_13p6.txt QCD_PU_13p6 $ifile $SITE
-# done
-#
-#
+
+END=`wc -l scripts/tallinn/qcd_pu.txt | cut -f1 -d' '`
+for ifile in $(seq 1 10); do
+    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu.txt QCD_PU $ifile $SITE
+    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu.txt QCD_PU $ifile $SITE
+done
+
+END=`wc -l scripts/tallinn/qcd_pu_13p6.txt | cut -f1 -d' '`
+for ifile in $(seq 1 10); do
+    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu_13p6.txt QCD_PU_13p6 $ifile $SITE
+    sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu_13p6.txt QCD_PU_13p6 $ifile $SITE
+done
+
 # END=`wc -l scripts/tallinn/qcd_nopu_13p6.txt | cut -f1 -d' '`
 # for ifile in $(seq 1 $END); do
 #     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_nopu_13p6.txt QCD_noPU_13p6 $ifile $SITE
@@ -59,7 +58,7 @@ SITE=T2_EE_Estonia
 # done
 
 END=`wc -l scripts/tallinn/qcd_pu_13p6_v2.txt | cut -f1 -d' '`
-for ifile in $(seq 1 $END); do
+for ifile in $(seq 1 10); do
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu_13p6_v2.txt QCD_PU_13p6_v2 $ifile $SITE
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu_13p6_v2.txt QCD_PU_13p6_v2 $ifile $SITE
 done
