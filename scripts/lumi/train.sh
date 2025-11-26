@@ -9,13 +9,13 @@ python3 mlpf/pipeline.py \
     --config parameters/pytorch/pyg-cms.yaml \
     train \
     --gpus 8 \
-    --gpu-batch-multiplier 16 \
-    --num-workers 8 \
-    --prefetch-factor 10 \
-    --checkpoint-freq 1 \
+    --gpu-batch-multiplier 4 \
+    --num-workers 1 \
+    --prefetch-factor 1 \
     --conv-type attention \
     --dtype bfloat16 \
-    --optimizer lamb \
-    --lr 0.005 \
-    --ntest 1000 \
-    --test-datasets cms_pf_qcd
+    --optimizer adamw \
+    --lr 0.001 \
+    --num-steps 500000 \
+    --val-freq 10000 \
+    --checkpoint-freq 100

@@ -10,6 +10,7 @@ import scipy
 import sklearn
 import sklearn.metrics
 import tqdm
+import sys
 import vector
 
 SAMPLE_LABEL_CMS = {
@@ -85,7 +86,7 @@ CLASS_LABELS = {
 
 labels = {
     "met": "$p_{\mathrm{T}}^{\mathrm{miss}}$ (GeV)",
-    "gen_met": "$p_{\mathrm{T,truth}}^\mathrm{miss}$ (GeV)",
+    "gen_met": "$p_{\mathrm{T,ptcl}}^\mathrm{miss}$ (GeV)",
     "gen_mom": "$p_{\mathrm{truth}}$ (GeV)",
     "gen_jet": "jet $p_{\mathrm{T,truth}}$ (GeV)",
     "target_jet": "jet $p_{\mathrm{T,target}}$ (GeV)",
@@ -145,6 +146,24 @@ GENJET_BINS_PT_DATASET = {
     "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
 }
 
+SAMPLE_NAME_TO_PROCESS = {
+    "QCD_PU": "cms_pf_qcd",
+    "QCD_PU_13p6": "cms_pf_qcd",
+    "QCD_PU_13p6_v2": "cms_pf_qcd",
+    "QCD_PU_13p6_v3": "cms_pf_qcd",
+    "QCD_noPU_13p6": "cms_pf_qcd_nopu",
+    "TTbar_PU": "cms_pf_ttbar",
+    "TTbar_PU_13p6": "cms_pf_ttbar",
+    "TTbar_noPU_13p6": "cms_pf_ttbar_nopu",
+    "PhotonJet_PU": "cms_pf_photonjet",
+    "PhotonJet_noPU_13p6": "cms_pf_photonjet_nopu",
+    "PhotonJet_PU_13p6": "cms_pf_photonjet",
+}
+
+
+def sample_name_to_process(sample_name):
+    return SAMPLE_NAME_TO_PROCESS[sample_name]
+
 
 def load_loss_history(path, min_epoch=None, max_epoch=None):
     ret = {}
@@ -196,6 +215,10 @@ def loss_plot(train, test, fname, margin=0.05, smoothing=False, epoch=None, cp_d
 
 def format_dataset_name(dataset):
     return EVALUATION_DATASET_NAMES[dataset]
+
+
+def midpoints(x):
+    return (x[1:] + x[:-1]) / 2
 
 
 def med_iqr(arr):
@@ -297,11 +320,17 @@ def load_eval_data(path, max_files=None):
 
     if max_files is not None:
         filelist = filelist[:max_files]
+    assert len(filelist) > 0
 
-    for fi in tqdm.tqdm(filelist, desc="Loading eval data"):
+    is_interactive = sys.stdout.isatty()
+    if is_interactive:
+        filelist = tqdm.tqdm(filelist, total=len(filelist), desc="Loading eval data")
+
+    for fi in filelist:
         dd = awkward.from_parquet(fi)
         yvals.append(dd)
         filenames.append(fi)
+    assert len(yvals) > 0
 
     data = awkward.concatenate(yvals, axis=0)
     X = data["inputs"]

@@ -1,7 +1,7 @@
 """CMS PF QCD 13p6 dataset."""
 
 import cms_utils
-import tensorflow as tf
+import numpy as np
 import tensorflow_datasets as tfds
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -20,9 +20,10 @@ _CITATION = """
 class CmsPfQcd13p6(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd dataset."""
 
-    VERSION = tfds.core.Version("2.6.0")
+    VERSION = tfds.core.Version("2.8.0")
     RELEASE_NOTES = {
         "2.6.0": "First version",
+        "2.8.0": "Add Pythia",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_qcd ~/tensorflow_datasets/
@@ -42,12 +43,12 @@ class CmsPfQcd13p6(tfds.core.GeneratorBasedBuilder):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
-                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "genmet": tfds.features.Scalar(dtype=tf.float32),
-                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
-                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
+                    "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=np.float32),
+                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "genmet": tfds.features.Scalar(dtype=np.float32),
+                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
+                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
                 }
             ),
             homepage="https://github.com/jpata/particleflow",

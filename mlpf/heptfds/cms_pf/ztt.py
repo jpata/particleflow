@@ -1,7 +1,7 @@
 """CMS PF TTbar dataset."""
 
 import cms_utils
-import tensorflow as tf
+import numpy as np
 import tensorflow_datasets as tfds
 
 X_FEATURES = cms_utils.X_FEATURES
@@ -21,13 +21,14 @@ _CITATION = """
 class CmsPfZtt(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     """DatasetBuilder for cms_pf_ztt dataset."""
 
-    VERSION = tfds.core.Version("2.7.1")
+    VERSION = tfds.core.Version("2.8.0")
     RELEASE_NOTES = {
         "2.5.0": "Remove neutrinos from genjets, split to 10",
         "2.5.1": "Associate ele with GSF first",
         "2.6.0": "Regenerate with 20250508_cmssw_15_0_5_d3c6d1",
         "2.7.0": "Remove split_caloparticle",
         "2.7.1": "Use fixed split_caloparticle",
+        "2.8.0": "Add Pythia",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ztt ~/tensorflow_datasets/
@@ -47,12 +48,13 @@ class CmsPfZtt(tfds.core.GeneratorBasedBuilder, skip_registration=True):
             description=_DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
-                    "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=tf.float32),
-                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "genmet": tfds.features.Scalar(dtype=tf.float32),
-                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
-                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
+                    "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=np.float32),
+                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "genmet": tfds.features.Scalar(dtype=np.float32),
+                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
+                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
+                    "pythia": tfds.features.Tensor(shape=(None, 5), dtype=np.float32),
                 }
             ),
             homepage="https://github.com/jpata/particleflow",

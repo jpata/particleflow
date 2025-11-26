@@ -1,15 +1,49 @@
+"""
+This script defines the training, validation, and testing workflow for the MLPF model.
+
+The main entry point is `device_agnostic_run`, which handles CPU, single-GPU, and multi-GPU (DDP) training configurations.
+
+The overall training flow is as follows:
+1. `device_agnostic_run`: Sets up the environment and launches the `run` function for each process/GPU.
+2. `run`: Initializes the process group, model, optimizer, data loaders, and learning rate scheduler. It then calls `train_all_steps` to begin the main training loop.
+3. `train_all_steps`: The core training loop that iterates over training steps.
+    - For each step, it calls `train_step` to perform a forward and backward pass.
+    - Manages checkpointing, learning rate scheduling, and early stopping.
+    - Periodically, it calls `_run_validation_cycle` to evaluate the model.
+4. `_run_validation_cycle`:
+    - Calls `evaluate` to compute validation loss.
+    - Calls `run_test` to generate predictions on the test datasets.
+    - Calls `make_plots` (from inference.py) to create performance plots.
+
+Key Functions:
+- `device_agnostic_run`: Entry point that manages device configuration (CPU/GPU/multi-GPU).
+- `run`: Main function for a single process, responsible for setup and starting the training loop.
+- `train_all_steps`: Orchestrates the entire training process over all steps.
+- `train_step`: Executes a single training step (forward pass, loss calculation, backward pass, optimizer step).
+- `evaluate`: Computes model performance and loss on the validation dataset.
+- `model_step`: Performs a single forward pass through the model and computes the loss.
+- `optimizer_step`: Executes the backward pass and updates model weights.
+- `_log_and_checkpoint_step`: Handles logging and periodic checkpoint saving.
+- `_run_validation_cycle`: Coordinates the validation, testing, and plotting process at regular intervals.
+- `run_test`: Runs inference on a specified test dataset.
+- `get_optimizer`: Utility to create an optimizer based on the configuration.
+- `configure_model_trainable`: Utility to set specific model layers as trainable.
+- `override_config`: Merges command-line arguments into the configuration dictionary.
+"""
+
 import os
 import os.path as osp
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import gc
 import tqdm
 import yaml
 import json
-import sklearn
-import sklearn.metrics
 import numpy as np
-from typing import Union, List
+from typing import Union
+import sys
+from packaging.version import Version
 
 # comet needs to be imported before torch
 from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
@@ -19,7 +53,8 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
 
-from mlpf.model.logger import _logger, _configLogger
+from mlpf.optimizers import get_optimizer
+from mlpf.logger import _logger, _configLogger, log_smi, log_memory
 from mlpf.model.utils import (
     unpack_predictions,
     unpack_target,
@@ -31,42 +66,18 @@ from mlpf.model.utils import (
     save_HPs,
     get_lr_schedule,
     count_parameters,
+    load_lr_schedule,
 )
-from mlpf.model.monitoring import log_open_files_to_tensorboard, log_step_to_tensorboard
+from mlpf.model.monitoring import log_step_to_tensorboard, log_dataloader_to_tensorboard
 from mlpf.model.inference import make_plots, run_predictions
-from mlpf.model.mlpf import MLPF
+from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
-from mlpf.model.plots import validation_plots
-from mlpf.optimizers.lamb import Lamb
-
-
-def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
-    """Set only the given layers as trainable in the model"""
-
-    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        raise Exception("configure trainability before distributing the model")
-    if is_training:
-        model.train()
-        if trainable != "all":
-            model.eval()
-
-            # first set all parameters as non-trainable
-            for param in model.parameters():
-                param.requires_grad = False
-
-            # now explicitly enable specific layers
-            for layer in trainable:
-                layer = getattr(model, layer)
-                layer.train()
-                for param in layer.parameters():
-                    param.requires_grad = True
-    else:
-        model.eval()
 
 
 def model_step(batch, model, loss_fn):
+    _logger.debug(f"model_step X={batch.X.shape}")
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
@@ -80,52 +91,24 @@ def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
         param.grad = None
 
     # Backward pass and optimization
+    _logger.debug(f"optimizer_step scale={scaler.get_scale():.2E}")
     scaler.scale(loss_opt).backward()
     scaler.step(optimizer)
     scaler.update()
     if lr_schedule:
-        # ReduceLROnPlateau scheduler should only be updated after each full epoch
+        # ReduceLROnPlateau scheduler should only be updated after each validation step
         if not isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
             lr_schedule.step()
 
 
-def get_optimizer(model, config):
-    """
-    Returns the optimizer for the given model based on the configuration provided.
-    Parameters:
-    model (torch.nn.Module): The model for which the optimizer is to be created.
-    config (dict): Configuration dictionary containing optimizer settings.
-                   Must include the key "lr" for learning rate.
-                   Optionally includes the key "optimizer" to specify the type of optimizer.
-                   Supported values for "optimizer" are "adamw", "lamb", and "sgd".
-                   If "optimizer" is not provided, "adamw" is used by default.
-    Returns:
-    torch.optim.Optimizer: The optimizer specified in the configuration.
-    Raises:
-    ValueError: If the specified optimizer type is not supported.
-    """
-
-    wd = config["weight_decay"] if "weight_decay" in config else 0.01
-    if "optimizer" not in config:
-        return torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
-    if config["optimizer"] == "adamw":
-        return torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=wd)
-    elif config["optimizer"] == "lamb":
-        return Lamb(model.parameters(), lr=config["lr"], weight_decay=wd)
-    elif config["optimizer"] == "sgd":
-        return torch.optim.SGD(model.parameters(), lr=config["lr"], weight_decay=wd)
-    else:
-        raise ValueError(f"Unsupported optimizer type: {config['optimizer']}")
-
-
-def train_epoch(
+def train_step(
     rank: Union[int, str],
     world_size: int,
     model: MLPF,
     optimizer,
-    train_loader,
+    batch,
     lr_schedule,
-    epoch: int,
+    step: int,
     tensorboard_writer=None,
     comet_experiment=None,
     comet_step_freq=None,
@@ -133,17 +116,18 @@ def train_epoch(
     device_type="cuda",
     dtype=torch.float32,
     scaler=None,
+    loader_state_dict={},
 ):
-    """Run one training epoch
+    """Run one training step
 
     Args:
         rank: Device rank (GPU id or 'cpu')
         world_size: Number of devices being used
         model: The neural network model
         optimizer: The optimizer
-        train_loader: Training data loader
+        batch: Training batch
         lr_schedule: Learning rate scheduler
-        epoch: Current epoch number
+        step: Current step number
         tensorboard_writer: TensorBoard writer object
         comet_experiment: Comet.ml experiment object
         comet_step_freq: How often to log to comet
@@ -152,82 +136,77 @@ def train_epoch(
         dtype: Torch dtype for computations
 
     Returns:
-        dict: Dictionary of epoch losses
+        dict: Dictionary of step losses
     """
-    model.train()
-    epoch_loss = {}
-
-    # Only show progress bar on rank 0
-    if (world_size > 1) and (rank != 0):
-        iterator = enumerate(train_loader)
-    else:
-        iterator = tqdm.tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch} train loop on rank={rank}")
-
-    for itrain, batch in iterator:
-        batch = batch.to(rank, non_blocking=True)
-
-        with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-            loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss)
-
-        optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
-
-        # Accumulate losses
-        for loss_name in loss:
-            if loss_name not in epoch_loss:
-                epoch_loss[loss_name] = 0.0
-            epoch_loss[loss_name] += loss[loss_name]
-
-        # Log step metrics
-        step = (epoch - 1) * len(train_loader) + itrain
-        if tensorboard_writer is not None and step % 100 == 0:
-            log_open_files_to_tensorboard(tensorboard_writer, step)
-            log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
-            tensorboard_writer.flush()
-
-            # Save step checkpoint
-            extra_state = {"step": step, "lr_schedule_state_dict": lr_schedule.state_dict()}
-            save_checkpoint(f"{checkpoint_dir}/step_weights.pth", model, optimizer, extra_state)
-
-        if comet_experiment is not None and (itrain % comet_step_freq == 0):
-            comet_experiment.log_metrics(loss, prefix="train", step=step)
-            comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
-
-    # Average losses across steps
-    num_steps = torch.tensor(float(len(train_loader)), device=rank, dtype=torch.float32)
-    if world_size > 1:
-        torch.distributed.all_reduce(num_steps)
-
-    for loss_name in epoch_loss:
-        if world_size > 1:
-            torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
-
     if world_size > 1:
         dist.barrier()
 
-    return epoch_loss
+    model.train()
+    step_loss = {}
+
+    batch = batch.to(rank, non_blocking=True)
+
+    with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
+        loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss)
+
+    optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
+
+    # Accumulate losses
+    for loss_name in loss:
+        if loss_name not in step_loss:
+            step_loss[loss_name] = 0.0
+        step_loss[loss_name] += loss[loss_name]
+
+    # Log step metrics
+    if tensorboard_writer is not None:
+        # log_open_files_to_tensorboard(tensorboard_writer, step)
+        log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
+        log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
+        tensorboard_writer.flush()
+
+    if comet_experiment is not None and (step % comet_step_freq == 0):
+        comet_experiment.log_metrics(loss, prefix="train", step=step)
+        comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
+
+    # Average losses across steps
+    num_steps = torch.tensor(1.0, device=rank, dtype=torch.float32)
+    if world_size > 1:
+        torch.distributed.all_reduce(num_steps)
+
+    for loss_name in step_loss:
+        _logger.debug(f"train_step {loss_name}={step_loss[loss_name]}")
+        if world_size > 1:
+            torch.distributed.all_reduce(step_loss[loss_name])
+        step_loss[loss_name] = step_loss[loss_name].cpu().item() / num_steps.cpu().item()
+
+    if world_size > 1:
+        dist.barrier()
+    _logger.debug(f"train_step reduced {step_loss}")
+
+    return step_loss
 
 
-def eval_epoch(
+def evaluate(
     rank: Union[int, str],
     world_size: int,
     model: MLPF,
     valid_loader,
-    epoch: int,
+    step: int,
     tensorboard_writer=None,
     comet_experiment=None,
     outdir=None,
     device_type="cuda",
     dtype=torch.float32,
+    make_plots=False,
 ):
-    """Run one evaluation epoch
+    """Run one evaluation step
 
     Args:
         rank: Device rank (GPU id or 'cpu')
         world_size: Number of devices being used
         model: The neural network model
         valid_loader: Validation data loader
-        epoch: Current epoch number
+        step: Current step number
         tensorboard_writer: TensorBoard writer object
         comet_experiment: Comet.ml experiment object
         outdir: Output directory path
@@ -235,92 +214,291 @@ def eval_epoch(
         dtype: Torch dtype for computations
 
     Returns:
-        dict: Dictionary of epoch losses
+        dict: Dictionary of evaluation losses
     """
-    model.eval()
-    epoch_loss = {}
 
-    # Confusion matrix tracking
-    cm_X_target = np.zeros((13, 13))
-    cm_X_pred = np.zeros((13, 13))
-    cm_id = np.zeros((13, 13))
+    if world_size > 1:
+        dist.barrier()
+
+    model.eval()
+    eval_loss = {}
 
     # Only show progress bar on rank 0
-    if (world_size > 1) and (rank != 0):
-        iterator = enumerate(valid_loader)
-    else:
-        iterator = tqdm.tqdm(enumerate(valid_loader), total=len(valid_loader), desc=f"Epoch {epoch} eval loop on rank={rank}")
+    is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
+    assert len(valid_loader) > 0
+    iterator = enumerate(valid_loader)
+    if is_interactive:
+        iterator = tqdm.tqdm(iterator, total=len(valid_loader), desc=f"Step {step} eval loop on rank={rank}")
 
     for ival, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
-                loss_opt, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
-
-        # Update confusion matrices
-        cm_X_target += sklearn.metrics.confusion_matrix(
-            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ytarget["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-        )
-        cm_X_pred += sklearn.metrics.confusion_matrix(
-            batch.X[:, :, 0][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-        )
-        cm_id += sklearn.metrics.confusion_matrix(
-            ytarget["cls_id"][batch.mask].detach().cpu().numpy(), ypred["cls_id"][batch.mask].detach().cpu().numpy(), labels=range(13)
-        )
+                _, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
 
         # Save validation plots for first batch
-        if (rank == 0 or rank == "cpu") and ival == 0:
-            validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir)
+        # if (rank == 0 or rank == "cpu") and ival == 0 and make_plots:
+        #     validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
 
         # Accumulate losses
         for loss_name in loss:
-            if loss_name not in epoch_loss:
-                epoch_loss[loss_name] = 0.0
-            epoch_loss[loss_name] += loss[loss_name]
-
-    # Log confusion matrices
-    if comet_experiment:
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_X_target, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_target.json"
-        )
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", epoch=epoch, file_name="cm_X_pred.json"
-        )
-        comet_experiment.log_confusion_matrix(
-            matrix=cm_id, title="Target to pred", row_label="target", column_label="pred", epoch=epoch, file_name="cm_id.json"
-        )
+            if loss_name not in eval_loss:
+                eval_loss[loss_name] = 0.0
+            eval_loss[loss_name] += loss[loss_name]
 
     # Average losses across steps
     num_steps = torch.tensor(float(len(valid_loader)), device=rank, dtype=torch.float32)
     if world_size > 1:
         torch.distributed.all_reduce(num_steps)
 
-    for loss_name in epoch_loss:
+    for loss_name in eval_loss:
         if world_size > 1:
-            torch.distributed.all_reduce(epoch_loss[loss_name])
-        epoch_loss[loss_name] = epoch_loss[loss_name].cpu().item() / num_steps.cpu().item()
+            torch.distributed.all_reduce(eval_loss[loss_name])
+        eval_loss[loss_name] = eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
 
     if world_size > 1:
         dist.barrier()
 
-    return epoch_loss
+    return eval_loss
 
 
-def train_all_epochs(
+def _log_and_checkpoint_step(
+    rank,
+    world_size,
+    step,
+    model,
+    optimizer,
+    lr_schedule,
+    losses_train,
+    tensorboard_writer_train,
+    comet_experiment,
+    checkpoint_freq,
+    checkpoint_dir,
+    train_loader,
+    valid_loader,
+    train_sampler,
+    valid_sampler,
+    num_patience,
+):
+    """Helper function to log training information and save periodic checkpoints."""
+
+    # Log training losses to TensorBoard and CometML on the main process
+    if (rank == 0) or (rank == "cpu"):
+        # Log training losses
+        for loss, value in losses_train.items():
+            tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
+
+        tensorboard_writer_train.flush()
+
+    if comet_experiment:
+        comet_experiment.log_metrics(losses_train, prefix="step_train_loss", step=step)
+
+    # Save a periodic checkpoint
+    if checkpoint_freq and (step % checkpoint_freq == 0):
+        if (rank == 0) or (rank == "cpu"):
+            extra_state = {
+                "step": step,
+                "optimizer_state_dict": optimizer.state_dict(),
+                "lr_schedule_state_dict": lr_schedule.state_dict(),
+                "train_loader_state_dict": train_loader.state_dict(),
+                "valid_loader_state_dict": valid_loader.state_dict(),
+            }
+
+            checkpoint_path = f"{checkpoint_dir}/checkpoint-{step:02d}.pth"
+            save_checkpoint(checkpoint_path, model, optimizer, extra_state)
+
+            # Clean up old checkpoints, keeping the last num_patience
+            checkpoints = sorted(Path(checkpoint_dir).glob("checkpoint-*.pth"), key=os.path.getmtime)
+            for i in range(len(checkpoints) - num_patience):
+                _logger.info("removing old checkpoint {}".format(checkpoints[i]))
+                os.remove(checkpoints[i])
+
+
+def _run_validation_cycle(
+    rank,
+    world_size,
+    model,
+    optimizer,
+    lr_schedule,
+    valid_loader,
+    step,
+    num_steps,
+    losses_train,
+    best_val_loss,
+    stale_steps,
+    outdir,
+    config,
+    device_type,
+    dtype,
+    tensorboard_writer_valid,
+    comet_experiment,
+    checkpoint_dir,
+    train_time,
+    t0_initial,
+    use_ray,
+    train_loader,
+    valid_sampler,
+    train_sampler,
+):
+    """Run the validation, testing, and plotting cycle."""
+
+    _logger.info(f"Running validation on rank{rank}")
+    valid_loader.reset()
+
+    # Run validation
+    log_memory("evaluate_start", rank, tensorboard_writer_valid, step)
+    losses_valid = evaluate(
+        rank=rank,
+        world_size=world_size,
+        model=model,
+        valid_loader=valid_loader,
+        step=step,
+        tensorboard_writer=tensorboard_writer_valid,
+        comet_experiment=comet_experiment,
+        outdir=outdir,
+        device_type=device_type,
+        dtype=dtype,
+        make_plots=config["make_plots"],
+    )
+    log_memory("evaluate_end", rank, tensorboard_writer_valid, step)
+    valid_time = time.time() - train_time - t0_initial
+    total_time = time.time() - t0_initial
+
+    # Update learning rate scheduler that depends on validation loss
+    if lr_schedule and isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
+        lr_schedule.step(losses_valid["Total"])
+
+    # Log validation metrics to CometML
+    if comet_experiment:
+        comet_experiment.log_metrics(losses_valid, prefix="step_valid_loss", step=step)
+        comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
+
+    # All subsequent actions are only done on the main process
+    if (rank == 0) or (rank == "cpu"):
+        # Save the best model checkpoint if validation loss improves
+        if losses_valid["Total"] < best_val_loss:
+            best_val_loss = losses_valid["Total"]
+            stale_steps = 0
+        else:
+            stale_steps += 1
+
+        # Log validation losses to TensorBoard
+        for loss, value in losses_valid.items():
+            tensorboard_writer_valid.add_scalar(f"step/loss_{loss}", value, step)
+
+        # Save step statistics to a JSON file
+        history_path = Path(outdir) / "history"
+        history_path.mkdir(parents=True, exist_ok=True)
+        stats = {
+            "train": losses_train,
+            "valid": losses_valid,
+            "step_train_time": train_time,
+            "step_valid_time": valid_time,
+            "step_total_time": total_time,
+        }
+        with open(f"{history_path}/step_{step}.json", "w") as f:
+            json.dump(stats, f)
+
+        # Calculate and log ETA
+        steps_remaining = num_steps - step
+        time_per_step = (time.time() - t0_initial) / step
+        eta = steps_remaining * time_per_step / 60
+
+        # Log a summary of the validation step
+        _logger.info(
+            f"VALIDATION | Step={step}/{num_steps} | "
+            f"Train Loss={losses_train['Total']:.4f} | "
+            f"Valid Loss={losses_valid['Total']:.4f} | "
+            f"Stale={stale_steps} | "
+            f"ETA={eta:.1f}m"
+        )
+
+        tensorboard_writer_valid.flush()
+
+    # Run inference and plotting on test datasets for this step
+    testdir_name = f"_step_{step}"
+    log_memory("run_test_start", rank, tensorboard_writer_valid, step)
+    for sample in config["enabled_test_datasets"]:
+        run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+    log_memory("run_test_end", rank, tensorboard_writer_valid, step)
+
+    plot_metrics_sample = {}
+    if (rank == 0) or (rank == "cpu"):
+        log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
+        for sample in config["enabled_test_datasets"]:
+            plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
+            plot_metrics_sample[sample] = plot_metrics
+            # Log key jet metrics to TensorBoard and CometML
+            for k in ["med", "iqr", "match_frac"]:
+                metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{k}"
+                metric_value = plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k]
+                tensorboard_writer_valid.add_scalar(metric_name, metric_value, step)
+                if comet_experiment:
+                    comet_experiment.log_metric(metric_name, metric_value, step=step)
+                # Add jet metrics to the JSON log file
+                with open(f"{history_path}/step_{step}.json", "r+") as f:
+                    data = json.load(f)
+                    data.update({metric_name: metric_value})
+                    f.seek(0)
+                    json.dump(data, f)
+                    f.truncate()
+        log_memory("make_plots_end", rank, tensorboard_writer_valid, step)
+
+    # Ray-specific reporting and checkpointing
+    if use_ray:
+        import ray
+
+        metrics = {
+            "loss": losses_train["Total"],
+            "val_loss": losses_valid["Total"],
+            "step": step,
+            **{f"train_{k}": v for k, v in losses_train.items()},
+            **{f"valid_{k}": v for k, v in losses_valid.items()},
+        }
+        if (rank == 0) or (rank == "cpu"):
+            with TemporaryDirectory() as temp_checkpoint_dir:
+                extra_state = {
+                    "step": step,
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "lr_schedule_state_dict": lr_schedule.state_dict(),
+                    "train_loader_state_dict": train_loader.state_dict(),
+                    "valid_loader_state_dict": valid_loader.state_dict(),
+                }
+                for sample in plot_metrics_sample.keys():
+                    for metric in ["iqr", "match_frac"]:
+                        metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{metric}"
+                        metrics[metric_name] = plot_metrics_sample[sample]["jet_ratio"]["jet_ratio_target_to_pred_pt"][metric]
+                    metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/combined"] = (
+                        metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/iqr"]
+                        - metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/match_frac"]
+                    )
+                save_checkpoint(Path(temp_checkpoint_dir) / "checkpoint.pth", model, optimizer, extra_state)
+                ray.train.report(metrics, checkpoint=ray.train.Checkpoint.from_directory(temp_checkpoint_dir))
+        else:
+            ray.train.report(metrics)
+
+    gc.collect()
+    if device_type == "cuda":
+        torch.cuda.empty_cache()
+
+    return best_val_loss, stale_steps
+
+
+def train_all_steps(
     rank,
     world_size,
     model,
     optimizer,
     train_loader,
     valid_loader,
-    num_epochs,
+    num_steps,
     patience,
     outdir,
     config,
     trainable="all",
     dtype=torch.float32,
-    start_epoch=1,
+    start_step=1,
     lr_schedule=None,
     use_ray=False,
     checkpoint_freq=None,
@@ -328,40 +506,17 @@ def train_all_epochs(
     comet_step_freq=None,
     val_freq=None,
     checkpoint_dir: str = "",
+    train_sampler=None,
+    valid_sampler=None,
 ):
-    """Main training loop that handles all epochs and validation
+    """Main training loop that handles all steps and validation"""
+    _logger.info(f"Starting training from step {start_step} to {num_steps} on rank {rank} of {world_size}")
+    assert len(train_loader) > 0
 
-    Args:
-        rank: Device rank (GPU id or 'cpu')
-        world_size: Number of devices being used
-        model: The neural network model
-        optimizer: The optimizer
-        train_loader: Training data loader
-        valid_loader: Validation data loader
-        num_epochs: Total number of epochs to train
-        patience: Early stopping patience
-        outdir: Output directory for logs and checkpoints
-        trainable: Which model parts to train ("all" or list of layer names)
-        dtype: Torch dtype for computations
-        start_epoch: Epoch to start/resume from
-        lr_schedule: Learning rate scheduler
-        use_ray: Whether using Ray for distributed training
-        checkpoint_freq: How often to save checkpoints
-        comet_experiment: Comet.ml experiment object
-        comet_step_freq: How often to log to comet
-        val_freq: How often to run validation
-        checkpoint_dir: Directory to save checkpoints
-    """
-
-    # run per-worker setup here so all processes / threads get configured.
-    # Ignore divide by 0 errors
+    # Per-worker setup
     np.seterr(divide="ignore", invalid="ignore")
-    # disable GUI
-    import matplotlib
 
-    matplotlib.use("agg")
-
-    # Setup tensorboard writers
+    # Setup TensorBoard writers on the main process
     if (rank == 0) or (rank == "cpu"):
         tensorboard_writer_train = SummaryWriter(f"{outdir}/runs/train")
         tensorboard_writer_valid = SummaryWriter(f"{outdir}/runs/valid")
@@ -373,23 +528,36 @@ def train_all_epochs(
     t0_initial = time.time()
 
     # Early stopping setup
-    stale_epochs = torch.tensor(0, device=rank)
+    stale_steps = 0
     best_val_loss = float("inf")
 
     scaler = torch.amp.GradScaler()
+    train_iterator = iter(train_loader)
 
-    for epoch in range(start_epoch, num_epochs + 1):
-        epoch_start_time = time.time()
+    # Use tqdm for progress bar only on the main process in an interactive session
+    is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
+    iterator = range(start_step, num_steps + 1)
+    if is_interactive:
+        iterator = tqdm.tqdm(iterator, initial=start_step, total=num_steps, desc=f"Training on rank={rank}")
 
-        # Training epoch
-        losses_train = train_epoch(
+    # loop over the dataset
+    for step in iterator:
+        step_start_time = time.time()
+
+        # Get next training batch
+        batch = next(train_iterator)
+        _logger.debug(f"rank={rank} batch={batch.X.shape}")
+
+        # Run a single training step
+        log_memory("train_step_start", rank, tensorboard_writer_train, step)
+        losses_train = train_step(
             rank=rank,
             world_size=world_size,
             model=model,
             optimizer=optimizer,
-            train_loader=train_loader,
+            batch=batch,
             lr_schedule=lr_schedule,
-            epoch=epoch,
+            step=step,
             tensorboard_writer=tensorboard_writer_train,
             comet_experiment=comet_experiment,
             comet_step_freq=comet_step_freq,
@@ -397,175 +565,89 @@ def train_all_epochs(
             device_type=device_type,
             dtype=dtype,
             scaler=scaler,
+            loader_state_dict=train_loader.state_dict()["loader_state_dict"],
         )
-        train_time = time.time() - epoch_start_time
+        log_memory("train_step_end", rank, tensorboard_writer_train, step)
+        train_time = time.time() - step_start_time
 
-        # Validation epoch
-        losses_valid = eval_epoch(
-            rank=rank,
-            world_size=world_size,
-            model=model,
-            valid_loader=valid_loader,
-            epoch=epoch,
-            tensorboard_writer=tensorboard_writer_valid,
-            comet_experiment=comet_experiment,
-            outdir=outdir,
-            device_type=device_type,
-            dtype=dtype,
-        )
-        valid_time = time.time() - train_time - epoch_start_time
-        total_time = time.time() - epoch_start_time
+        # Log a brief training status every 100 steps on the main process
+        if step % 100 == 0:
+            # Get the current learning rate, handling the case of multiple parameter groups
+            current_lr = lr_schedule.get_last_lr()[0]
+            _logger.info(f"Step {step}/{num_steps} rank{rank} | " f"Train Loss: {losses_train['Total']:.4f} | " f"LR: {current_lr:.2e}")
 
-        if lr_schedule:
-            # ReduceLROnPlateau scheduler should only be updated after each full epoch
-            # Other schedulers are updated after each step inside the optimizer_step() function
-            if isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                lr_schedule.step(losses_valid["Total"])
+            # check smi status
+            log_smi(rank)
 
-        # Log metrics
-        if comet_experiment:
-            comet_experiment.log_metrics(losses_train, prefix="epoch_train_loss", epoch=epoch)
-            comet_experiment.log_metrics(losses_valid, prefix="epoch_valid_loss", epoch=epoch)
-            comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), epoch=epoch)
-            comet_experiment.log_epoch_end(epoch)
-
-        # Handle checkpointing and logging on rank 0
-        if (rank == 0) or (rank == "cpu"):
-            # Log learning rate
-            tensorboard_writer_train.add_scalar("epoch/learning_rate", lr_schedule.get_last_lr()[0], epoch)
-
-            # Prepare checkpoint state
-            extra_state = {"epoch": epoch, "lr_schedule_state_dict": lr_schedule.state_dict()}
-
-            # Save best model if validation loss improved
-            if losses_valid["Total"] < best_val_loss:
-                best_val_loss = losses_valid["Total"]
-                stale_epochs = 0
-                save_checkpoint(f"{checkpoint_dir}/best_weights.pth", model, optimizer, extra_state)
-            else:
-                stale_epochs += 1
-
-            # Periodic epoch checkpointing
-            if checkpoint_freq and (epoch % checkpoint_freq == 0):
-                checkpoint_path = f"{checkpoint_dir}/checkpoint-{epoch:02d}-{losses_valid['Total']:.6f}.pth"
-                save_checkpoint(checkpoint_path, model, optimizer, extra_state)
-
-            # Update loss history
-            for loss in losses_train:
-                tensorboard_writer_train.add_scalar(f"epoch/loss_{loss}", losses_train[loss], epoch)
-                tensorboard_writer_valid.add_scalar(f"epoch/loss_{loss}", losses_valid[loss], epoch)
-
-            # Save epoch stats to JSON
-            history_path = Path(outdir) / "history"
-            history_path.mkdir(parents=True, exist_ok=True)
-            stats = {
-                "train": losses_train,
-                "valid": losses_valid,
-                "epoch_train_time": train_time,
-                "epoch_valid_time": valid_time,
-                "epoch_total_time": total_time,
-            }
-            with open(f"{history_path}/epoch_{epoch}.json", "w") as f:
-                json.dump(stats, f)
-
-            # Calculate and log ETA
-            epochs_remaining = num_epochs - epoch
-            time_per_epoch = (time.time() - t0_initial) / epoch
-            eta = epochs_remaining * time_per_epoch / 60
-
-            # Log epoch summary
-            _logger.info(
-                f"Rank {rank}: epoch={epoch}/{num_epochs} "
-                f"train_loss={losses_train['Total']:.4f} "
-                f"valid_loss={losses_valid['Total']:.4f} "
-                f"stale={stale_epochs} "
-                f"epoch_train_time={train_time/60:.2f}m "
-                f"epoch_valid_time={valid_time/60:.2f}m "
-                f"epoch_total_time={total_time/60:.2f}m "
-                f"eta={eta:.1f}m",
-                color="bold",
-            )
-
-            # Flush tensorboard
-            tensorboard_writer_train.flush()
-            tensorboard_writer_valid.flush()
-
-        # evaluate the model at this epoch on test datasets, make plots, track metrics
-        testdir_name = f"_epoch_{epoch}"
-        for sample in config["enabled_test_datasets"]:
-            run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
-        if (rank == 0) or (rank == "cpu"):  # plot only on rank 0
-            for sample in config["enabled_test_datasets"]:
-                plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
-
-                # track the following jet metrics in tensorboard
-                for k in ["med", "iqr", "match_frac"]:
-                    tensorboard_writer_valid.add_scalar(
-                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
-                        plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
-                        epoch,
-                    )
-                    if comet_experiment:
-                        comet_experiment.log_metric(
-                            "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k),
-                            plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k],
-                            epoch=epoch,
-                        )
-                    # Add jet metrics entry to the JSON logging file
-                    additional_stats = {
-                        "epoch/{}/jet_ratio/jet_ratio_target_to_pred_pt/{}".format(sample, k): plot_metrics["jet_ratio"][
-                            "jet_ratio_target_to_pred_pt"
-                        ][k]
-                    }
-                    with open(f"{history_path}/epoch_{epoch}.json", "r+") as f:
-                        data = json.load(f)
-                        data.update(additional_stats)
-                        f.seek(0)
-                        json.dump(data, f)
-                        f.truncate()
-
-        # Ray training specific logging
-        if use_ray:
-            import ray
-
-            metrics = {
-                "loss": losses_train["Total"],
-                "val_loss": losses_valid["Total"],
-                "epoch": epoch,
-                **{f"train_{k}": v for k, v in losses_train.items()},
-                **{f"valid_{k}": v for k, v in losses_valid.items()},
-            }
-
-            if (rank == 0) or (rank == "cpu"):
-                with TemporaryDirectory() as temp_checkpoint_dir:
-                    temp_checkpoint_dir = Path(temp_checkpoint_dir)
-                    save_checkpoint(temp_checkpoint_dir / "checkpoint.pth", model, optimizer, extra_state)
-                    ray.train.report(
-                        metrics,
-                        checkpoint=ray.train.Checkpoint.from_directory(temp_checkpoint_dir) if rank == 0 else None,
-                    )
-            else:
-                ray.train.report(metrics)
-
-        # Check early stopping
-        if stale_epochs > patience:
-            _logger.info(f"Breaking due to stale epochs: {stale_epochs}")
-            break
-
-        # Synchronize processes
+        # Synchronize all processes at the end of the step
         if world_size > 1:
             dist.barrier()
-    # End loop over epochs, training completed
+
+        # Log training info and save periodic checkpoint immediately after training
+        _log_and_checkpoint_step(
+            rank,
+            world_size,
+            step,
+            model,
+            optimizer,
+            lr_schedule,
+            losses_train,
+            tensorboard_writer_train,
+            comet_experiment,
+            checkpoint_freq,
+            checkpoint_dir,
+            train_loader,
+            valid_loader,
+            train_sampler,
+            valid_sampler,
+            config["patience"],
+        )
+
+        # Run validation, testing, and plotting cycle at specified frequency, or at the last step
+        if (step % val_freq == 0) or (step == num_steps):
+            best_val_loss, stale_steps = _run_validation_cycle(
+                rank,
+                world_size,
+                model,
+                optimizer,
+                lr_schedule,
+                valid_loader,
+                step,
+                num_steps,
+                losses_train,
+                best_val_loss,
+                stale_steps,
+                outdir,
+                config,
+                device_type,
+                dtype,
+                tensorboard_writer_valid,
+                comet_experiment,
+                checkpoint_dir,
+                train_time,
+                t0_initial,
+                use_ray,
+                train_loader,
+                valid_sampler,
+                train_sampler,
+            )
+
+        # Check for early stopping
+        if stale_steps > patience:
+            _logger.info(f"Stopping early due to stale steps: {stale_steps} > {patience}")
+            break
+
+    # End of training loop
     _logger.info(f"Training completed. Total time on device {rank}: {(time.time() - t0_initial)/60:.3f}min")
 
-    # Clean up
+    # Clean up TensorBoard writers
     if (rank == 0) or (rank == "cpu"):
         tensorboard_writer_train.close()
         tensorboard_writer_valid.close()
 
 
 def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype):
-    batch_size = config["gpu_batch_multiplier"]
+    batch_size = config["test_dataset"][sample]["batch_size"] * config["gpu_batch_multiplier"]
     version = config["test_dataset"][sample]["version"]
 
     split_configs = config["test_dataset"][sample]["splits"]
@@ -590,10 +672,16 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     else:
         sampler = torch.utils.data.RandomSampler(ds)
 
+    vals_for_test = ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"]
+
+    # pythia branch was introduced for cms in version 2.8.0
+    if sample.startswith("cms_") and Version(version) >= Version("2.8.0"):
+        vals_for_test += ["pythia"]
+
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
-        collate_fn=Collater(["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"], ["genmet"]),
+        collate_fn=Collater(vals_for_test, ["genmet"]),
         sampler=sampler,
         num_workers=config["num_workers"],
         prefetch_factor=config["prefetch_factor"],
@@ -640,9 +728,9 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
         dist.barrier()  # block until all workers finished executing run_predictions()
 
 
-def run(rank, world_size, config, outdir, logfile):
-    if (rank == 0) or (rank == "cpu"):  # keep writing the logs
-        _configLogger("mlpf", filename=logfile)
+def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: str):
+    # per-rank log
+    _configLogger("mlpf", rank, filename=f"{logfile}.{rank}")
 
     use_cuda = rank != "cpu"
 
@@ -652,11 +740,11 @@ def run(rank, world_size, config, outdir, logfile):
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
-        dist.init_process_group("nccl", rank=rank, world_size=world_size)  # (nccl should be faster than gloo)
+        dist.init_process_group("nccl", rank=int(rank), world_size=world_size)  # (nccl should be faster than gloo)
 
-    start_epoch = 1
     checkpoint_dir = Path(outdir) / "checkpoints"
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    if (rank == 0) | (rank == "cpu"):
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     model_kwargs = {
         "input_dim": len(X_FEATURES[config["dataset"]]),
@@ -672,17 +760,18 @@ def run(rank, world_size, config, outdir, logfile):
         **config["model"][config["conv_type"]],
     }
 
+    start_step = 1
+    lr_schedule = None
+    checkpoint = None
+
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     if config["load"]:
         model = MLPF(**model_kwargs).to(torch.device(rank))
         optimizer = get_optimizer(model, config)
+        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
         checkpoint = torch.load(config["load"], map_location=torch.device(rank))
-
-        if config["start_epoch"] is None:
-            start_epoch = int(os.path.basename(config["load"]).split("-")[1]) + 1
-        else:
-            start_epoch = config["start_epoch"]
+        start_step = checkpoint["extra_state"]["step"] + 1
 
         missing_keys, strict = [], True
         for k in model.state_dict().keys():
@@ -704,24 +793,23 @@ def run(rank, world_size, config, outdir, logfile):
                 _logger.warning("Use option --relaxed-load if you insist to ignore the missing parameters")
                 raise KeyError
 
-        if (rank == 0) or (rank == "cpu"):
-            _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
+        _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
+        _logger.info(f"Restoring training from step {start_step}")
 
+        load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
-
-        # if we are rewinding the epoch counter to 1, then we also want to set the learning rate to the initial value
-        if start_epoch == 1:
-            for g in optimizer.param_groups:
-                if g["lr"] != config["lr"]:
-                    _logger.info("optimizer param group lr changed {} -> {}".format(g["lr"], config["lr"]))
-                    g["lr"] = config["lr"]
 
     else:  # instantiate a new model in the outdir created
         model = MLPF(**model_kwargs)
         optimizer = get_optimizer(model, config)
+        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
     model.to(rank)
-    model.compile()
+    # CPU: the compilation does not work with bs>1
+    # Nvidia: compilation should generally be used, but can be disabled
+    # ROCM: compilation seems to be needed for ROCm to work properly
+    if rank != "cpu":
+        model.compile()
     configure_model_trainable(model, config["model"]["trainable"], True)
 
     if world_size > 1:
@@ -729,14 +817,12 @@ def run(rank, world_size, config, outdir, logfile):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
     trainable_params, nontrainable_params, table = count_parameters(model)
-    print(table)
-
-    if (rank == 0) or (rank == "cpu"):
-        _logger.info(model)
-        _logger.info(f"Trainable parameters: {trainable_params}")
-        _logger.info(f"Non-trainable parameters: {nontrainable_params}")
-        _logger.info(f"Total parameters: {trainable_params + nontrainable_params}")
-        _logger.info(table.to_string(index=False))
+    _logger.info(str(table))
+    _logger.info(model)
+    _logger.info(f"Trainable parameters: {trainable_params}")
+    _logger.info(f"Non-trainable parameters: {nontrainable_params}")
+    _logger.info(f"Total parameters: {trainable_params + nontrainable_params}")
+    _logger.info(table.to_string(index=False))
 
     if config["train"]:
         if (rank == 0) or (rank == "cpu"):
@@ -768,31 +854,39 @@ def run(rank, world_size, config, outdir, logfile):
         else:
             comet_experiment = None
 
-        loaders = get_interleaved_dataloaders(
+        loaders, samplers = get_interleaved_dataloaders(
             world_size,
             rank,
             config,
             use_cuda,
             use_ray=False,
         )
-        steps_per_epoch = len(loaders["train"])
-        last_epoch = -1 if start_epoch == 1 else start_epoch - 1
-        lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch)
 
-        train_all_epochs(
+        if config["load"] and checkpoint:
+            train_loader = loaders["train"]
+            valid_loader = loaders["valid"]
+            if "train_loader_state_dict" in checkpoint["extra_state"]:
+                train_loader.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
+            if "valid_loader_state_dict" in checkpoint["extra_state"]:
+                valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
+
+        for split in loaders.keys():
+            _logger.info("loader {} rank={} len={}".format(split, rank, len(loaders[split])))
+
+        train_all_steps(
             rank,
             world_size,
             model,
             optimizer,
             loaders["train"],
             loaders["valid"],
-            config["num_epochs"],
+            config["num_steps"],
             config["patience"],
             outdir,
             config,
             trainable=config["model"]["trainable"],
             dtype=dtype,
-            start_epoch=start_epoch,
+            start_step=start_step,
             lr_schedule=lr_schedule,
             use_ray=False,
             checkpoint_freq=config["checkpoint_freq"],
@@ -800,27 +894,9 @@ def run(rank, world_size, config, outdir, logfile):
             comet_step_freq=config["comet_step_freq"],
             val_freq=config["val_freq"],
             checkpoint_dir=str(checkpoint_dir),
+            train_sampler=samplers["train"],
+            valid_sampler=samplers["valid"],
         )
-
-        checkpoint = torch.load(f"{checkpoint_dir}/best_weights.pth", map_location=torch.device(rank))
-        model, optimizer = load_checkpoint(checkpoint, model, optimizer)
-
-    if not (config["load"] is None):
-        testdir_name = "_" + Path(config["load"]).stem
-    else:
-        testdir_name = "_best_weights"
-
-    if config["test"]:
-        for sample in config["enabled_test_datasets"]:
-            run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
-
-    # make plots only on rank 0
-    if (rank == 0) or (rank == "cpu"):
-        if config["make_plots"]:
-            ntest_files = -1
-            for sample in config["enabled_test_datasets"]:
-                _logger.info(f"Plotting distributions for {sample}")
-                make_plots(outdir, sample, config["dataset"], testdir_name, ntest_files)
 
     if world_size > 1:
         dist.destroy_process_group()
@@ -830,9 +906,12 @@ def override_config(config: dict, args):
     """override config dictionary with values from argparse Namespace"""
     for arg in vars(args):
         arg_value = getattr(args, arg)
-        if (arg_value is not None) and (arg in config):
-            _logger.info("overriding config item {}={} with {} from cmdline".format(arg, config[arg], arg_value))
-            config[arg] = arg_value
+        if arg_value is not None:
+            if arg in config:
+                _logger.info("overriding config item {}={} with {} from cmdline".format(arg, config[arg], arg_value))
+                config[arg] = arg_value
+            else:
+                _logger.info("skipping {}".format(arg))
 
     if "attention_type" in args and args.attention_type is not None:
         config["model"]["attention"]["attention_type"] = args.attention_type
@@ -842,21 +921,14 @@ def override_config(config: dict, args):
             config["model"][model]["num_convs"] = args.num_convs
 
     config["enabled_test_datasets"] = list(config["test_dataset"].keys())
-    if len(args.test_datasets) != 0:
-        config["enabled_test_datasets"] = args.test_datasets
+    if "test_datasets" in args:
+        if len(args.test_datasets) != 0:
+            config["enabled_test_datasets"] = args.test_datasets
 
     config["train"] = args.train
     config["test"] = args.test
-    config["make_plots"] = args.make_plots
-    config["start_epoch"] = None
-
-    if "start_epoch" in args and args.start_epoch is not None:
-        args.start_epoch = int(args.start_epoch)
-        config["start_epoch"] = args.start_epoch
-
-    if config["load"] is None:
-        if config["start_epoch"] is None:
-            config["start_epoch"] = 1
+    if "make_plots" in args:
+        config["make_plots"] = args.make_plots
 
     return config
 
@@ -867,7 +939,7 @@ def device_agnostic_run(config, world_size, outdir):
         logfile = f"{outdir}/train.log"
     else:
         logfile = f"{outdir}/test.log"
-    _configLogger("mlpf", filename=logfile)
+    _configLogger("mlpf", 0, filename=logfile)
 
     if config["gpus"]:
         assert (

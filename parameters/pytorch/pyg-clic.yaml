@@ -65,6 +65,7 @@ model:
     attention_type: flash
     use_pre_layernorm: True
 
+optimizer: adamw
 lr_schedule_config:
   onecycle:
     pct_start: 0.3

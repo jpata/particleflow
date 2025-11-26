@@ -1,30 +1,30 @@
 train: yes
 test: yes
-make_plots: yes
+make_plots: no
 comet: yes
 dataset: cms
-sort_data: yes
+sort_data: no
 data_dir:
 gpus: 1
 gpu_batch_multiplier: 1
 load:
 finetune:
-num_epochs: 10
-patience: 20
-lr: 0.0002
+num_steps: 100000
+patience: 10
+val_freq: 20000
+checkpoint_freq: 1000
+lr: 0.0004
 lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
 conv_type: attention
 ntrain:
-ntest:
-nvalid:
+ntest: 5000
+nvalid: 10000
 num_workers: 0
 prefetch_factor:
-checkpoint_freq: 1
 comet_name: particleflow-pt
 comet_offline: False
 comet_step_freq: 10
 dtype: bfloat16
-val_freq:  # run an extra validation run every val_freq training steps
 pad_to_multiple: 256
 
 model:
@@ -65,12 +65,13 @@ model:
     dropout_conv_id_ff: 0.0
     dropout_conv_reg_mha: 0.0
     dropout_conv_reg_ff: 0.0
-    activation: "relu"
+    activation: "elu"
     head_dim: 16
     num_heads: 16
     attention_type: flash
     use_pre_layernorm: True
 
+optimizer: adamw
 lr_schedule_config:
   onecycle:
     pct_start: 0.3
@@ -78,8 +79,8 @@ lr_schedule_config:
 raytune:
   local_dir: # Note: please specify an absolute path
   sched: asha # asha, hyperband
-  search_alg: hyperopt # bayes, bohb, hyperopt, nevergrad, scikit
-  default_metric: "val_loss"
+  search_alg: bohb # bayes, bohb, hyperopt, nevergrad, scikit
+  default_metric: "step/cms_pf_qcd/jet_ratio/jet_ratio_target_to_pred_pt/combined"
   default_mode: "min"
   # Tune schedule specific parameters
   asha:
@@ -98,76 +99,79 @@ raytune:
 train_dataset:
   cms:
     physical_pu:
-      batch_size: 1
+      batch_size: 2
       samples:
         cms_pf_ttbar:
-          version: 2.7.1
+          version: 2.8.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd:
-          version: 2.7.1
+          version: 2.8.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_ztt:
-          version: 2.7.1
+          version: 2.8.0
           splits: [1,2,3,4,5,6,7,8,9,10]
     physical_nopu:
-      batch_size: 16
+      batch_size: 32
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.7.1
+          version: 2.8.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd_nopu:
-          version: 2.7.1
-          splits: [1,2,3,4,5,6,7,8,9,10]
+          version: 2.8.0
+          splits: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
         cms_pf_ztt_nopu:
-          version: 2.7.1
+          version: 2.8.0
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 valid_dataset:
   cms:
     physical_pu:
-      batch_size: 1
+      batch_size: 2
       samples:
         cms_pf_ttbar:
-          version: 2.7.1
+          version: 2.8.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd:
-          version: 2.7.1
+          version: 2.8.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_ztt:
-          version: 2.7.1
+          version: 2.8.0
           splits: [1,2,3,4,5,6,7,8,9,10]
     physical_nopu:
-      batch_size: 16
+      batch_size: 32
       samples:
         cms_pf_ttbar_nopu:
-          version: 2.7.1
+          version: 2.8.0
           splits: [1,2,3,4,5,6,7,8,9,10]
         cms_pf_qcd_nopu:
-          version: 2.7.1
-          splits: [1,2,3,4,5,6,7,8,9,10]
+          version: 2.8.0
+          splits: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
         cms_pf_ztt_nopu:
-          version: 2.7.1
+          version: 2.8.0
           splits: [1,2,3,4,5,6,7,8,9,10]
 
 test_dataset:
   cms_pf_ttbar:
-    version: 2.7.1
+    batch_size: 1
+    version: 2.8.0
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_qcd:
-    version: 2.7.1
+    batch_size: 1
+    version: 2.8.0
     splits: [1,2,3,4,5,6,7,8,9,10]
-#  cms_pf_qcd13p6:
-#    version: 2.7.1
-#    splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ztt:
-    version: 2.7.1
+    batch_size: 1
+    version: 2.8.0
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_ttbar_nopu:
-    version: 2.7.1
+    batch_size: 32
+    version: 2.8.0
     splits: [1,2,3,4,5,6,7,8,9,10]
   cms_pf_qcd_nopu:
-    version: 2.7.1
-    splits: [1,2,3,4,5,6,7,8,9,10]
+    batch_size: 32
+    version: 2.8.0
+    splits: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40]
   cms_pf_ztt_nopu:
-    version: 2.7.1
+    batch_size: 32
+    version: 2.8.0
     splits: [1,2,3,4,5,6,7,8,9,10]

@@ -26,6 +26,7 @@ plotly
 pre-commit
 protobuf
 pyarrow
+pytest
 ray[tune]
 scikit-learn
 scikit-optimize
@@ -34,7 +35,6 @@ seaborn
 setGPU
 tensorflow
 tensorflow-datasets
-tf2onnx
 torch
 torch_runstats
 torchaudio

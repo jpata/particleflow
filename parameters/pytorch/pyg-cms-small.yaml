@@ -1,0 +1,131 @@
+train: yes
+test: yes
+make_plots: no
+comet: yes
+dataset: cms
+sort_data: no
+data_dir:
+gpus: 1
+gpu_batch_multiplier: 1
+load:
+finetune:
+num_steps: 100000
+patience: 10
+val_freq: 20000
+checkpoint_freq: 1000
+lr: 0.0004
+lr_schedule: cosinedecay  # constant, cosinedecay, onecycle
+conv_type: attention
+ntrain:
+ntest: 1000
+nvalid: 10000
+num_workers: 0
+prefetch_factor:
+comet_name: particleflow-pt
+comet_offline: False
+comet_step_freq: 10
+dtype: bfloat16
+pad_to_multiple: 256
+
+model:
+  trainable: all
+
+  learned_representation_mode: last #last, concat
+  input_encoding: split #split, joint
+  pt_mode: direct-elemtype-split
+  eta_mode: linear
+  sin_phi_mode: linear
+  cos_phi_mode: linear
+  energy_mode: direct-elemtype-split
+
+
+  gnn_lsh:
+    conv_type: gnn_lsh
+    embedding_dim: 512
+    width: 512
+    num_convs: 8
+    dropout_ff: 0.0
+    activation: "elu"
+    # gnn-lsh specific parameters
+    bin_size: 320
+    max_num_bins: 200
+    distance_dim: 128
+    layernorm: True
+    num_node_messages: 2
+    ffn_dist_hidden_dim: 128
+    ffn_dist_num_layers: 2
+
+  attention:
+    conv_type: attention
+    num_convs: 3
+    dropout_ff: 0.0
+    dropout_conv_id_mha: 0.0
+    dropout_conv_id_ff: 0.0
+    dropout_conv_reg_mha: 0.0
+    dropout_conv_reg_ff: 0.0
+    activation: "elu"
+    head_dim: 16
+    num_heads: 16
+    attention_type: flash
+    use_pre_layernorm: True
+
+optimizer: adamw
+lr_schedule_config:
+  onecycle:
+    pct_start: 0.3
+
+raytune:
+  local_dir: # Note: please specify an absolute path
+  sched: asha # asha, hyperband
+  search_alg: bohb # bayes, bohb, hyperopt, nevergrad, scikit
+  default_metric: "step/cms_pf_qcd/jet_ratio/jet_ratio_target_to_pred_pt/combined"
+  default_mode: "min"
+  # Tune schedule specific parameters
+  asha:
+    max_t: 200
+    reduction_factor: 4
+    brackets: 1
+    grace_period: 10
+  hyperband:
+    max_t: 200
+    reduction_factor: 4
+  hyperopt:
+    n_random_steps: 10
+  nevergrad:
+    n_random_steps: 10
+
+train_dataset:
+  cms:
+    physical_pu:
+      batch_size: 2
+      samples:
+        cms_pf_qcd:
+          version: 2.7.1
+          splits: [1]
+    physical_nopu:
+      batch_size: 32
+      samples:
+        cms_pf_qcd_nopu:
+          version: 2.7.1
+          splits: [1]
+
+valid_dataset:
+  cms:
+    physical_pu:
+      batch_size: 2
+      samples:
+        cms_pf_qcd:
+          version: 2.7.1
+          splits: [1]
+    physical_nopu:
+      batch_size: 32
+      samples:
+        cms_pf_qcd_nopu:
+          version: 2.7.1
+          splits: [1]
+
+test_dataset:
+  cms_pf_qcd_nopu:
+    batch_size: 32
+    version: 2.7.1
+    splits: [1]

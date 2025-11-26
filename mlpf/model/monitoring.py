@@ -1,7 +1,7 @@
 import psutil
 import resource
 from collections import defaultdict
-from mlpf.model.logger import _logger
+from mlpf.logger import _logger
 
 
 def monitor_open_files():
@@ -75,7 +75,11 @@ def log_step_to_tensorboard(batch, loss_accum, lr_schedule, tensorboard_writer, 
     # get the number of elements, excluding padded elements
     num_elems = batch.X[batch.mask].shape[0]
 
-    tensorboard_writer.add_scalar("step/loss", loss_accum / num_elems, step)
     tensorboard_writer.add_scalar("step/num_elems", num_elems, step)
     tensorboard_writer.add_scalar("step/num_batch", batch.X.shape[0], step)
     tensorboard_writer.add_scalar("step/learning_rate", lr_schedule.get_last_lr()[0], step)
+
+
+def log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step):
+    for k in ["cur_index"]:
+        tensorboard_writer.add_scalar("step/{}".format(k), loader_state_dict[k], step)

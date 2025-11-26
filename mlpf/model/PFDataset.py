@@ -6,7 +6,7 @@ import tensorflow_datasets as tfds
 import torch
 import torch.utils.data
 
-from mlpf.model.logger import _logger
+from mlpf.logger import _logger
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
@@ -20,20 +20,26 @@ class TFDSDataSource:
         self.ds.dataset_info = SimpleNamespace()
         self.ds.dataset_info.name = tmp.name
         self.ds.dataset_info.features = tmp.features
+        self.ds.dataset_info.config_name = tmp.config_name
         self.sort = sort
         self.pad_to_multiple = pad_to_multiple
-        self.rep = self.ds.__repr__()
 
     def __getitem__(self, item):
         if isinstance(item, int):
             item = [item]
+        assert len(item) == 1
+        # getitems requires a list
         records = self.ds.data_source.__getitems__(item)
-        ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
 
-        if len(item) == 1:
-            ret = ret[0]
+        ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
+        assert len(ret) == 1
+        ret = ret[0]
+
+        Xshape = ret["X"].shape
+        _logger.debug(f"Getting item={item}, ds={self.ds.dataset_info.name}:{self.ds.dataset_info.config_name}, X={Xshape}")
 
         # sort the elements in each event in pT descending order
+        # the transformer is permutation-covariant, but this can be helpful for other types of models
         if self.sort:
             sortidx = np.argsort(ret["X"][:, 1])[::-1]
             ret["X"] = ret["X"][sortidx]
@@ -113,7 +119,7 @@ class TFDSDataSource:
         return len(self.ds)
 
     def __repr__(self):
-        return self.rep
+        return "TFDSDataSource(ds={}, pad_to_multiple={})".format(self.ds.__repr__(), self.pad_to_multiple)
 
 
 class PFDataset:
@@ -150,10 +156,11 @@ class PFBatch:
         self.attrs = list(kwargs.keys())
 
         # write out the possible attributes here explicitly
-        self.X = kwargs.get("X")
+        self.X = kwargs["X"]
         self.ytarget = kwargs.get("ytarget")
         self.ytarget_pt_orig = kwargs.get("ytarget_pt_orig", None)
         self.ytarget_e_orig = kwargs.get("ytarget_e_orig", None)
+        self.pythia = kwargs.get("pythia", None)
         self.ycand = kwargs.get("ycand", None)
         self.genmet = kwargs.get("genmet", None)
         self.genjets = kwargs.get("genjets", None)
@@ -188,39 +195,100 @@ class Collater:
         return PFBatch(**ret)
 
 
+class ResumableSampler(torch.utils.data.Sampler):
+    """A wrapper for a sampler that allows saving and restoring the state."""
+
+    def __init__(self, sampler):
+        _logger.debug("Creating ResumableSampler.")
+        self.sampler = sampler
+        self.start_index = 0
+        self.name = ""
+
+    def __iter__(self):
+        indices = list(self.sampler)
+        return iter(indices[self.start_index :])
+
+    def __len__(self):
+        return len(self.sampler)
+
+    def load_state_dict(self, state_dict):
+        self.start_index = state_dict["start_index"]
+        _logger.info(f"ResumableSampler {self.name} loading state: start_index={self.start_index}")
+
+    def reset(self):
+        _logger.info(f"ResumableSampler {self.name} resetting")
+        self.load_state_dict({"start_index": 0})
+
+    def set_epoch(self, epoch):
+        if hasattr(self.sampler, "set_epoch"):
+            self.sampler.set_epoch(epoch)
+
+
 class InterleavedIterator(object):
     """Will combine DataLoaders of different lengths and batch sizes."""
 
     def __init__(self, data_loaders):
-        self.idx = 0
+        _logger.info(f"Creating InterleavedIterator with {len(data_loaders)} data loaders.")
         self.data_loaders = data_loaders
         self.data_loaders_iter = [iter(dl) for dl in data_loaders]
-        max_loader_size = max([len(dl) for dl in data_loaders])
+        dl_lens = [len(dl) for dl in data_loaders]
+        _logger.debug(f"InterleavedIterator len(data_loaders)={dl_lens}")
+        max_loader_size = max(dl_lens)
 
         self.loader_ds_indices = []
 
-        # iterate loaders interleaved
+        # iterate loaders interleaved up to the maximum size
         for i in range(max_loader_size):
             for iloader, loader in enumerate(data_loaders):
                 if i < len(loader):
                     self.loader_ds_indices.append(iloader)
 
+        # cursor to keep track which data loader index to yield from
         self.cur_index = 0
+        self.batches_yielded_per_loader = [0] * len(self.data_loaders)
         self._len = None
+        self.name = ""
+
+        _logger.debug(f"InterleavedIterator at {self.cur_index}/{len(self.loader_ds_indices)}")
+
+    def reset(self):
+        _logger.debug(f"Resetting InterleavedIterator {self.name} state")
+        self.cur_index = 0
+        for loader in self.data_loaders:
+            if hasattr(loader.sampler, "reset"):
+                loader.sampler.reset()
+        self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]
+        self.batches_yielded_per_loader = [0] * len(self.data_loaders)
 
     def __iter__(self):
+        # Only reset if the iterator is exhausted
+        _logger.debug(f"Resetting InterleavedIterator {self.name}: {self.cur_index}/{len(self.loader_ds_indices)}")
+        if self.cur_index >= len(self.loader_ds_indices):
+            _logger.debug(f"Resetting exhausted InterleavedIterator {self.name}, {self.cur_index}>={len(self.loader_ds_indices)}.")
+            self.reset()
         return self
 
     def __next__(self):
-        try:
-            iloader = self.loader_ds_indices[self.cur_index]
-        except IndexError:
-            self.cur_index = 0  # reset the curser index
-            self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]  # reset the loader
+        _logger.debug(f"InterleavedIterator {self.name}.__next__ {self.cur_index}/{len(self.loader_ds_indices)}")
+        if self.cur_index >= len(self.loader_ds_indices):
+            _logger.debug(f"InterleavedIterator {self.name}.__next__ raising StopIteration")
             raise StopIteration
 
+        iloader = self.loader_ds_indices[self.cur_index]
+        try:
+            ret = next(self.data_loaders_iter[iloader])
+        # This should not happen, and is here for debugging
+        except StopIteration as e:
+            _logger.error(
+                f"Unexpected StopIteration from data loader {self.name}:"
+                + f" iloader={iloader}, "
+                + f"batches_yielded_per_loader={self.batches_yielded_per_loader} "
+                + f"len(loader)={len(self.data_loaders_iter[iloader])}"
+            )
+            raise e
         self.cur_index += 1
-        return next(self.data_loaders_iter[iloader])
+        self.batches_yielded_per_loader[iloader] += 1
+        return ret
 
     def __len__(self):
         if self._len:
@@ -228,26 +296,91 @@ class InterleavedIterator(object):
         else:
             # compute and cache the length
             len_ = 0
-            for iloader in range(len(self.data_loaders_iter)):
-                len_ += len(self.data_loaders_iter[iloader])
+            for loader in self.data_loaders:
+                len_ += len(loader)
             self._len = len_
             return len_
+
+    def state_dict(self):
+        return {
+            "cur_index": self.cur_index,
+            "batches_yielded_per_loader": self.batches_yielded_per_loader,
+        }
+
+    def load_state_dict(self, state_dict):
+        self.cur_index = state_dict["cur_index"]
+        self.batches_yielded_per_loader = state_dict["batches_yielded_per_loader"]
+        _logger.info(
+            f"InterleavedIterator {self.name} loading state: cur_index={self.cur_index}, batches_yielded_per_loader={self.batches_yielded_per_loader}"
+        )
+
+        for i, loader in enumerate(self.data_loaders):
+            start_index = self.batches_yielded_per_loader[i] * loader.batch_size
+            _logger.info(f"InterleavedIterator {self.name} advancing sampler {i} to {start_index}")
+            loader.sampler.load_state_dict({"start_index": start_index})
+
+        # create fresh iterators from the original dataloaders
+        # these will use the advanced samplers and have fresh workers and empty queues
+        self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]
+
+
+class EndlessIterator(object):
+    def __init__(self, data_loader, samplers, world_size):
+        _logger.info("Creating EndlessIterator.")
+        self.data_loader = data_loader
+        self.samplers = samplers
+        self.world_size = world_size
+        self.epoch = 0
+        self.iterator = iter(self.data_loader)
+        self.name = ""
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            return next(self.iterator)
+        except StopIteration:
+            self.epoch += 1
+            _logger.info(f"EndlessIterator {self.name} caught StopIteration, advancing epoch to {self.epoch}")
+            for sampler in self.samplers:
+                sampler.set_epoch(self.epoch)
+            self.iterator = iter(self.data_loader)
+            return next(self.iterator)
+
+    def __len__(self):
+        return len(self.data_loader)
+
+    def state_dict(self):
+        return {"epoch": self.epoch, "loader_state_dict": self.data_loader.state_dict()}
+
+    def load_state_dict(self, state_dict):
+        self.epoch = state_dict["epoch"]
+        _logger.info(f"EndlessIterator {self.name} setting epoch={self.epoch}")
+        _logger.info(f"EndlessIterator {self.name} loading state.")
+        self.data_loader.load_state_dict(state_dict["loader_state_dict"])
+        for sampler in self.samplers:
+            sampler.set_epoch(self.epoch)
+        self.iterator = iter(self.data_loader)
 
 
 def set_worker_sharing_strategy(worker_id: int) -> None:
     torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
 
 
-def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
+def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray, shuffle_train=True):
     loaders = {}
-    for split in ["train", "valid"]:  # build train, valid dataset and dataloaders
+    samplers = {}
+    # build train, valid dataset and dataloaders
+    for split in ["train", "valid"]:
         loaders[split] = []
+        samplers[split] = []
         for type_ in config[f"{split}_dataset"][config["dataset"]]:
             dataset = []
             for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
                 version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
                 split_configs = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["splits"]
-                print("split_configs", split_configs)
+                _logger.info(f"sample={sample} split={split} split_configs={split_configs}")
 
                 nevents = None
                 if not (config[f"n{split}"] is None):
@@ -269,7 +402,9 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                     dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
 
-            shuffle = split == "train"
+            shuffle = False
+            if shuffle_train:
+                shuffle = split == "train"
             if world_size > 1:
                 sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=shuffle)
             else:
@@ -277,6 +412,9 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                     sampler = torch.utils.data.RandomSampler(dataset)
                 else:
                     sampler = torch.utils.data.SequentialSampler(dataset)
+
+            sampler = ResumableSampler(sampler)
+            sampler.name = f"{type_}:{split}"
 
             # build dataloaders
             batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
@@ -291,10 +429,15 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray):
                 # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
                 worker_init_fn=set_worker_sharing_strategy,
-                # persistent_workers=True,
+                persistent_workers=config["num_workers"] > 0,
             )
 
             loaders[split].append(loader)
+            samplers[split].append(sampler)
 
         loaders[split] = InterleavedIterator(loaders[split])
-    return loaders
+        if split == "train":
+            loaders[split] = EndlessIterator(loaders[split], samplers[split], world_size)
+        loaders[split].name = f"{type_}:{split}"
+
+    return loaders, samplers

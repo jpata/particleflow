@@ -1,14 +1,13 @@
 import math
 import numpy as np
+from typing import Union, List
 
 import torch
 import torch.nn as nn
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
-from mlpf.model.logger import _logger
+from mlpf.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
-
-ATT_MAT_IDX = 0
 
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
@@ -353,18 +352,17 @@ class MLPF(nn.Module):
             width = num_heads * head_dim
 
         # embedding of the inputs
+        if self.input_encoding == "joint":
+            self.nn0_id = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
+            self.nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
+        elif self.input_encoding == "split":
+            self.nn0_id = nn.ModuleList()
+            for ielem in range(len(self.elemtypes_nonzero)):
+                self.nn0_id.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
+            self.nn0_reg = nn.ModuleList()
+            for ielem in range(len(self.elemtypes_nonzero)):
+                self.nn0_reg.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
         if self.num_convs != 0:
-            if self.input_encoding == "joint":
-                self.nn0_id = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
-                self.nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
-            elif self.input_encoding == "split":
-                self.nn0_id = nn.ModuleList()
-                for ielem in range(len(self.elemtypes_nonzero)):
-                    self.nn0_id.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
-                self.nn0_reg = nn.ModuleList()
-                for ielem in range(len(self.elemtypes_nonzero)):
-                    self.nn0_reg.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
-
             if self.conv_type == "attention":
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -431,7 +429,7 @@ class MLPF(nn.Module):
         # DNN that acts on the node level to predict the PID
         self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, dropout_ff)
         self.nn_pid = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
-        self.nn_pu = ffn(decoding_dim, 2, width, self.act, dropout_ff)
+        # self.nn_pu = ffn(decoding_dim, 2, width, self.act, dropout_ff)
 
         # elementwise DNN for node momentum regression
         embed_dim = decoding_dim
@@ -450,19 +448,18 @@ class MLPF(nn.Module):
         Xfeat_normed = X_features
 
         embeddings_id, embeddings_reg = [], []
+        if self.input_encoding == "joint":
+            embedding_id = self.nn0_id(Xfeat_normed)
+            embedding_reg = self.nn0_reg(Xfeat_normed)
+        elif self.input_encoding == "split":
+            embedding_id = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_id], axis=-1)
+            elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
+            embedding_id = torch.sum(embedding_id * elemtype_mask.unsqueeze(-2), axis=-1)
+
+            embedding_reg = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_reg], axis=-1)
+            elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
+            embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
         if self.num_convs != 0:
-            if self.input_encoding == "joint":
-                embedding_id = self.nn0_id(Xfeat_normed)
-                embedding_reg = self.nn0_reg(Xfeat_normed)
-            elif self.input_encoding == "split":
-                embedding_id = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_id], axis=-1)
-                elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
-                embedding_id = torch.sum(embedding_id * elemtype_mask.unsqueeze(-2), axis=-1)
-
-                embedding_reg = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_reg], axis=-1)
-                elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
-                embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
-
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
                 out_padded = conv(conv_input, mask, embedding_id)
@@ -471,6 +468,9 @@ class MLPF(nn.Module):
                 conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
                 out_padded = conv(conv_input, mask, embedding_reg)
                 embeddings_reg.append(out_padded)
+        else:
+            embeddings_id.append(embedding_id)
+            embeddings_reg.append(embedding_reg)
 
         # id input
         if self.learned_representation_mode == "concat":
@@ -483,7 +483,8 @@ class MLPF(nn.Module):
 
         preds_binary_particle = self.nn_binary_particle(final_embedding_id)
         preds_pid = self.nn_pid(final_embedding_id)
-        preds_pu = self.nn_pu(final_embedding_id)
+        # preds_pu = self.nn_pu(final_embedding_id)
+        preds_pu = torch.zeros_like(preds_binary_particle)
 
         # pred_charge = self.nn_charge(final_embedding_id)
 
@@ -515,3 +516,27 @@ class MLPF(nn.Module):
         preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
+
+
+def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
+    """Set only the given layers as trainable in the model"""
+
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        raise Exception("configure trainability before distributing the model")
+    if is_training:
+        model.train()
+        if trainable != "all":
+            model.eval()
+
+            # first set all parameters as non-trainable
+            for param in model.parameters():
+                param.requires_grad = False
+
+            # now explicitly enable specific layers
+            for layer in trainable:
+                layer = getattr(model, layer)
+                layer.train()
+                for param in layer.parameters():
+                    param.requires_grad = True
+    else:
+        model.eval()
