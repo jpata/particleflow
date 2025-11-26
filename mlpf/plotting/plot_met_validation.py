@@ -43,7 +43,8 @@ def plot_met_distribution(
     sample_label_fontsize,
     ratio_ylim,
     pf_linestyle,
-    mlpf_linestyle
+    mlpf_linestyle,
+    tev,
 ):
     f, (a0, a1) = plt.subplots(2, 1, gridspec_kw={"height_ratios": [3, 1]}, sharex=True)
 
@@ -65,7 +66,7 @@ def plot_met_distribution(
         plt.yscale("log")
         a0.set_ylim(bottom=1, top=a0.get_ylim()[1] * 1000)
 
-    mplhep.cms.label("", data=False, com=13.6, year="Run 3", ax=a0)
+    mplhep.cms.label("", data=False, com=tev, year="Run 3", ax=a0)
     a0.text(
         sample_label_coords[0],
         sample_label_coords[1],
@@ -120,12 +121,13 @@ def met_response_plot(
     mlpf_color,
     pf_linestyle,
     mlpf_linestyle,
+    tev,
 ):
     plt.figure()
     ax = plt.axes()
     b = np.linspace(0, 5, 101)
 
-    mplhep.cms.label("", data=False, com=13.6, year="Run 3", ax=ax)
+    mplhep.cms.label("", data=False, com=tev, year="Run 3", ax=ax)
     ax.text(
         sample_label_coords[0],
         sample_label_coords[1],
@@ -203,6 +205,7 @@ def get_met_response_in_bins(
     output_dir,
     sample_name,
     mlpf_label,
+    tev,
     **kwargs,
 ):
     med_vals_pf, iqr_vals_pf = [], []
@@ -223,6 +226,7 @@ def get_met_response_in_bins(
             filename=os.path.join(output_dir, f"met_response_bin_genmet_pt_{ibin}.pdf"),
             sample_name=sample_name,
             mlpf_label=mlpf_label,
+            tev=tev,
             **kwargs,
         )
         med_vals_pf.append(stats_pf[0])
@@ -238,7 +242,7 @@ def get_met_response_in_bins(
     )
 
 
-def plot_met_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, output_dir, sample_name, mlpf_label, **kwargs):
+def plot_met_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, output_dir, sample_name, mlpf_label, tev, **kwargs):
     stats_pu_pf = []
     stats_pu_mlpf = []
 
@@ -264,6 +268,7 @@ def plot_met_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, output_dir, 
                 filename=filename,
                 sample_name=sample_name,
                 mlpf_label=mlpf_label,
+                tev=tev,
                 **kwargs,
             )
             row_stats_pf.append(s_pf)
@@ -320,7 +325,7 @@ def plot_met_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, output_dir, 
     ax.set_xlabel("True $N_{PV}$")
     ax.set_ylabel("MET response resolution (IQR/med.)")
     ax.set_ylim(0, 1.5)
-    mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
     ax.text(
         kwargs["sample_label_coords"][0],
         kwargs["sample_label_coords"][1],
@@ -349,7 +354,8 @@ def plot_met_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, output_dir, 
 @click.option("--input-mlpf-parquet", required=True, type=str)
 @click.option("--output-dir", required=True, type=str)
 @click.option("--sample-name", required=True, type=str, help="Sample name (e.g., QCD_PU_13p6)")
-def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
+@click.option("--tev", default=13.6, type=float, help="Center of mass energy in TeV (for plot labels)")
+def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, tev):
     """Generates MET validation plots."""
 
     output_dir = str(Path(output_dir, sample_name, "met"))
@@ -439,7 +445,8 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
         sample_label_fontsize=sample_label_fontsize,
         ratio_ylim=ratio_ylim,
         pf_linestyle=pf_linestyle,
-        mlpf_linestyle=mlpf_linestyle
+        mlpf_linestyle=mlpf_linestyle,
+        tev=tev,
     )
 
     # Define MET response, avoiding division by zero
@@ -472,6 +479,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
         filename=os.path.join(output_dir, "met_response.pdf"),
         sample_name=plot_sample_name,
         mlpf_label=mlpf_label,
+        tev=tev,
         **plot_style_kwargs_response,
     )
 
@@ -490,6 +498,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
         output_dir=output_dir,
         sample_name=plot_sample_name,
         mlpf_label=mlpf_label,
+        tev=tev,
         **plot_style_kwargs,
     )
 
@@ -503,7 +512,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
     ax.set_xscale("log")
     ax.set_ylim(0.0, 4.0)
     plt.axhline(1.0, color="black", ls="--")
-    mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
@@ -525,7 +534,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_xscale("log")
     ax.set_ylim(0.0, 2.0)
-    mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
@@ -537,7 +546,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name):
 
     # Plot PU-dependent MET response
     if "PU" in sample_name:
-        plot_met_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, output_dir, plot_sample_name, mlpf_label, **plot_style_kwargs)
+        plot_met_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, output_dir, plot_sample_name, mlpf_label, tev, **plot_style_kwargs)
 
     print(f"Generated plots in {output_dir}")
 

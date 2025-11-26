@@ -47,7 +47,8 @@ jet_fiducial_cuts = {
 @click.option("--jet-type", default="ak4", type=click.Choice(["ak4", "ak8"]))
 @click.option("--sample-name", required=True, type=str, help="Sample name (e.g., QCD_PU_13p6)")
 @click.option("--fiducial-cuts", default="inclusive", type=click.Choice(jet_fiducial_cuts.keys()))
-def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_dir, jet_type, sample_name, fiducial_cuts):
+@click.option("--tev", default=13.6, type=float, help="Center of mass energy in TeV for plotting.")
+def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_dir, jet_type, sample_name, fiducial_cuts, tev):
     """Applies corrections and generates validation plots."""
 
     output_dir = str(Path(output_dir, sample_name, jet_type, fiducial_cuts))
@@ -143,7 +144,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         pt_bins_for_pu = [(0, 30), (30, 60), (60, 100)]
 
     def plot_kinematic_distribution(
-        data_pf, data_mlpf, jet_prefix, genjet_prefix, variable_gen, variable_reco, bins, xlabel, filename, logy=True, raw_or_corr="raw", jet_label=""
+        data_pf, data_mlpf, jet_prefix, genjet_prefix, variable_gen, variable_reco, bins, xlabel, filename, tev, logy=True, raw_or_corr="raw", jet_label=""
     ):
         f, (a0, a1) = plt.subplots(2, 1, gridspec_kw={"height_ratios": [3, 1]}, sharex=True)
 
@@ -181,7 +182,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             mult = 10000
             a0.set_ylim(bottom=1, top=a0.get_ylim()[1] * mult)
 
-        mplhep.cms.label("", data=False, com=13.6, year="Run 3", ax=a0)
+        mplhep.cms.label("", data=False, com=tev, year="Run 3", ax=a0)
         a0.text(
             sample_label_coords[0],
             sample_label_coords[1],
@@ -224,6 +225,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         resp_mlpf,
         data_baseline,
         data_mlpf,
+        tev,
         response="response",
         genjet_min_pt=0,
         genjet_max_pt=5000,
@@ -242,7 +244,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         ax = plt.axes()
         b = np.linspace(0, 2, 101)
 
-        mplhep.cms.label("", data=False, com=13.6, year="Run 3", ax=ax)
+        mplhep.cms.label("", data=False, com=tev, year="Run 3", ax=ax)
         ax.text(
             sample_label_coords[0],
             sample_label_coords[1],
@@ -340,6 +342,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         data_mlpf,
         variable_bins,
         variable_name,
+        tev,
         response_type="response",
         jet_prefix="Jet",
         genjet_prefix="GenJet",
@@ -364,6 +367,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
                 resp_mlpf,
                 data_pf,
                 data_mlpf,
+                tev,
                 response=response_type,
                 genjet_min_pt=min_bin_val if "pt" in variable_name else 0,
                 genjet_max_pt=max_bin_val if "pt" in variable_name else 5000,
@@ -405,6 +409,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         output_dir,
         filename,
         jet_label,
+        tev,
     ):
         fig, ax = plt.subplots()
 
@@ -422,7 +427,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         ax.set_ylim(0.0, 1.5)
         ax.set_xlim(np.min(h_total_gen.axes[0]), np.max(h_total_gen.axes[0]))
         plt.axhline(1.0, color="black", ls="--")
-        mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+        mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
         ax.text(
             sample_label_coords[0],
             sample_label_coords[1],
@@ -454,6 +459,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         output_dir,
         filename,
         jet_label,
+        tev,
     ):
         fig, ax = plt.subplots()
 
@@ -471,7 +477,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         ax.set_ylim(0.0, 1.5)
         ax.set_xlim(np.min(h_total_pf.axes[0]), np.max(h_total_pf.axes[0]))
         plt.axhline(1.0, color="black", ls="--")
-        mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+        mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
         ax.text(
             sample_label_coords[0],
             sample_label_coords[1],
@@ -557,6 +563,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         f"{jet_type}_pt_raw.pdf",
         raw_or_corr="raw",
         jet_label=jet_label,
+        tev=tev,
     )
     plot_kinematic_distribution(
         data_pf,
@@ -570,6 +577,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         f"{jet_type}_pt_corr.pdf",
         raw_or_corr="corr",
         jet_label=jet_label,
+        tev=tev,
     )
     plot_kinematic_distribution(
         data_pf,
@@ -583,6 +591,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         f"{jet_type}_eta.pdf",
         logy=True,
         jet_label=jet_label,
+        tev=tev,
     )
     resp_pf = compute_response(data_pf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
     resp_mlpf = compute_response(data_mlpf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
@@ -607,6 +616,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         output_dir,
         f"{jet_type}_efficiency_vs_pt.pdf",
         jet_label_inclusive,
+        tev=tev,
     )
     plot_efficiency_vs_kin(
         h_total_gen_eta,
@@ -617,6 +627,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         output_dir,
         f"{jet_type}_efficiency_vs_eta.pdf",
         jet_label_inclusive,
+        tev=tev,
     )
 
     # Purity: fraction of reco jets matched to gen
@@ -647,6 +658,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         output_dir,
         f"{jet_type}_purity_vs_pt.pdf",
         jet_label_inclusive,
+        tev=tev,
     )
     plot_purity_vs_kin(
         h_total_pf_eta,
@@ -658,6 +670,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         output_dir,
         f"{jet_type}_purity_vs_eta.pdf",
         jet_label_inclusive,
+        tev=tev,
     )
 
     # overall jet response ratio plots
@@ -666,6 +679,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         resp_mlpf,
         data_pf,
         data_mlpf,
+        tev,
         response="response_raw",
         jet_pt=f"{jet_prefix}_pt_raw",
         jet_label=jet_label,
@@ -679,6 +693,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         resp_mlpf,
         data_pf,
         data_mlpf,
+        tev,
         response="response",
         jet_pt=f"{jet_prefix}_pt_corr",
         jet_label=jet_label_inclusive,
@@ -696,6 +711,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             data_mlpf,
             variable_bins=pt_bins_for_response,
             variable_name=f"{genjet_prefix}_pt",
+            tev=tev,
             jet_prefix=jet_prefix,
             genjet_prefix=genjet_prefix,
             jet_label=jet_label_inclusive,
@@ -717,6 +733,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         data_mlpf,
         variable_bins=pt_bins_for_response,
         variable_name=f"{genjet_prefix}_pt",
+        tev=tev,
         response_type="response_raw",
         jet_prefix=jet_prefix,
         genjet_prefix=genjet_prefix,
@@ -731,6 +748,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             data_mlpf,
             variable_bins=eta_bins_for_response,
             variable_name=f"{genjet_prefix}_eta",
+            tev=tev,
             jet_prefix=jet_prefix,
             genjet_prefix=genjet_prefix,
             jet_label=jet_label_inclusive,
@@ -752,6 +770,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         data_mlpf,
         variable_bins=eta_bins_for_response,
         variable_name=f"{genjet_prefix}_eta",
+        tev=tev,
         response_type="response_raw",
         jet_prefix=jet_prefix,
         genjet_prefix=genjet_prefix,
@@ -770,7 +789,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.set_xscale("log")
     ax.set_ylim(0.5, 1.5)
     plt.axhline(1.0, color="black", ls="--")
-    mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
@@ -816,7 +835,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.set_ylabel("Response resolution")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_ylim(0.0, 1.0)
-    mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
@@ -856,7 +875,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_ylim(0.5, 1.5)
     plt.axhline(1.0, color="black", ls="--")
-    mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
@@ -907,7 +926,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     ax.set_ylabel("Response resolution")
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_ylim(0.0, 1.0)
-    mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
@@ -938,7 +957,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     # Plot PU-dependent jet response
     if "PU" in sample_name:
 
-        def plot_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf):
+        def plot_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, tev):
             stats_pu_pf = []
             stats_pu_mlpf = []
 
@@ -959,6 +978,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
                         resp_mlpf,
                         data_pf,
                         data_mlpf,
+                        tev,
                         response="response",
                         genjet_min_pt=pt_min,
                         genjet_max_pt=pt_max,
@@ -1027,7 +1047,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             ax.set_xlabel("True $N_{PV}$")
             ax.set_ylabel("Response resolution (σ/median)")
             ax.set_ylim(0, 1.5)
-            mplhep.cms.label(ax=ax, data=False, com=13.6, year="Run 3")
+            mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
             ax.text(
                 sample_label_coords[0],
                 sample_label_coords[1],
@@ -1050,7 +1070,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
             fig.savefig(os.path.join(output_dir, f"{jet_type}_resolution_vs_npv.pdf"))
             plt.close(fig)
 
-        plot_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf)
+        plot_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, tev)
 
     print(f"Generated plots in {output_dir}")
 

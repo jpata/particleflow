@@ -45,7 +45,7 @@ def varbins(*args):
     return np.concatenate(newlist)
 
 
-def plot_met_comparison(data_13p6_pf, data_13p6_mlpf, data_14_pf, data_14_mlpf, output_dir, sample_name):
+def plot_met_comparison(data_sample1_pf, data_sample1_mlpf, data_sample2_pf, data_sample2_mlpf, output_dir, sample_name, sample1_label, sample2_label):
     """Plots the MET comparison between 13.6 TeV and 14 TeV samples, for PF and MLPF."""
     plt.figure()
     ax = plt.axes()
@@ -56,10 +56,10 @@ def plot_met_comparison(data_13p6_pf, data_13p6_mlpf, data_14_pf, data_14_mlpf, 
     sample_label_fontsize = 30
     legend_fontsize = 30
 
-    h_13p6_pf = to_bh(data_13p6_pf["PuppiMET_pt"], bins=bins)
-    h_13p6_mlpf = to_bh(data_13p6_mlpf["PuppiMET_pt"], bins=bins)
-    h_14_pf = to_bh(data_14_pf["PuppiMET_pt"], bins=bins)
-    h_14_mlpf = to_bh(data_14_mlpf["PuppiMET_pt"], bins=bins)
+    h_13p6_pf = to_bh(data_sample1_pf["PuppiMET_pt"], bins=bins)
+    h_13p6_mlpf = to_bh(data_sample1_mlpf["PuppiMET_pt"], bins=bins)
+    h_14_pf = to_bh(data_sample2_pf["PuppiMET_pt"], bins=bins)
+    h_14_mlpf = to_bh(data_sample2_mlpf["PuppiMET_pt"], bins=bins)
     mplhep.histplot(h_14_pf, histtype="step", lw=1, density=True, ls="--", color=pf_color)
     mplhep.histplot(h_13p6_pf, histtype="step", lw=1, density=True, color=pf_color)
     mplhep.histplot(h_14_mlpf, histtype="step", lw=2, density=True, ls="--", color=mlpf_color)
@@ -87,10 +87,10 @@ def plot_met_comparison(data_13p6_pf, data_13p6_mlpf, data_14_pf, data_14_mlpf, 
 
     ax.set_ylim(bottom=1e-5)
     legend_elements = [
-        matplotlib.lines.Line2D([0], [0], color=pf_color, ls="--", lw=1, label="14 TeV, PF"),
-        matplotlib.lines.Line2D([0], [0], color=pf_color, ls="-", lw=1, label="13.6 TeV, PF"),
-        matplotlib.lines.Line2D([0], [0], color=mlpf_color, ls="--", lw=2, label="14 TeV, MLPF"),
-        matplotlib.lines.Line2D([0], [0], color=mlpf_color, ls="-", lw=2, label="13.6 TeV, MLPF"),
+        matplotlib.lines.Line2D([0], [0], color=pf_color, ls="--", lw=1, label=f"{sample2_label}, PF"),
+        matplotlib.lines.Line2D([0], [0], color=pf_color, ls="-", lw=1, label=f"{sample1_label}, PF"),
+        matplotlib.lines.Line2D([0], [0], color=mlpf_color, ls="--", lw=2, label=f"{sample2_label}, MLPF"),
+        matplotlib.lines.Line2D([0], [0], color=mlpf_color, ls="-", lw=2, label=f"{sample1_label}, MLPF"),
     ]
     ax.legend(handles=legend_elements, fontsize=legend_fontsize, loc=legend_loc_met)
     output_path = Path(output_dir)
@@ -99,7 +99,7 @@ def plot_met_comparison(data_13p6_pf, data_13p6_mlpf, data_14_pf, data_14_mlpf, 
     plt.close()
 
 
-def plot_jet_response_comparison(resp_13p6_pf, resp_13p6_mlpf, resp_14_pf, resp_14_mlpf, output_dir, sample_name, jet_type, jet_label):
+def plot_jet_response_comparison(resp_sample1_pf, resp_sample1_mlpf, resp_sample2_pf, resp_sample2_mlpf, output_dir, sample_name, jet_type, jet_label, sample1_label, sample2_label):
     """Plots the jet response comparison between 13.6 TeV and 14 TeV samples, for PF and MLPF."""
     plt.figure()
     ax = plt.axes()
@@ -111,10 +111,10 @@ def plot_jet_response_comparison(resp_13p6_pf, resp_13p6_mlpf, resp_14_pf, resp_
     addtext_fontsize = 25
     legend_fontsize = 24
 
-    response_13p6_pf = awkward.flatten(resp_13p6_pf["response_raw"])
-    response_13p6_mlpf = awkward.flatten(resp_13p6_mlpf["response_raw"])
-    response_14_pf = awkward.flatten(resp_14_pf["response_raw"])
-    response_14_mlpf = awkward.flatten(resp_14_mlpf["response_raw"])
+    response_13p6_pf = awkward.flatten(resp_sample1_pf["response_raw"])
+    response_13p6_mlpf = awkward.flatten(resp_sample1_mlpf["response_raw"])
+    response_14_pf = awkward.flatten(resp_sample2_pf["response_raw"])
+    response_14_mlpf = awkward.flatten(resp_sample2_mlpf["response_raw"])
 
     h_13p6_pf = to_bh(response_13p6_pf, bins=b)
     h_13p6_mlpf = to_bh(response_13p6_mlpf, bins=b)
@@ -154,10 +154,10 @@ def plot_jet_response_comparison(resp_13p6_pf, resp_13p6_mlpf, resp_14_pf, resp_
     )
     ax.set_ylim(0, ax.get_ylim()[1] * 1.5)
     legend_elements = [
-        matplotlib.lines.Line2D([0], [0], color=pf_color, ls="--", lw=1, label="14 TeV, PF"),
-        matplotlib.lines.Line2D([0], [0], color=pf_color, ls="-", lw=1, label="13.6 TeV, PF"),
-        matplotlib.lines.Line2D([0], [0], color=mlpf_color, ls="--", lw=2, label="14 TeV, MLPF"),
-        matplotlib.lines.Line2D([0], [0], color=mlpf_color, ls="-", lw=2, label="13.6 TeV, MLPF"),
+        matplotlib.lines.Line2D([0], [0], color=pf_color, ls="--", lw=1, label=f"{sample2_label}, PF"),
+        matplotlib.lines.Line2D([0], [0], color=pf_color, ls="-", lw=1, label=f"{sample1_label}, PF"),
+        matplotlib.lines.Line2D([0], [0], color=mlpf_color, ls="--", lw=2, label=f"{sample2_label}, MLPF"),
+        matplotlib.lines.Line2D([0], [0], color=mlpf_color, ls="-", lw=2, label=f"{sample1_label}, MLPF"),
     ]
     ax.legend(handles=legend_elements, fontsize=legend_fontsize, loc=legend_loc_jet_response)
     output_path = Path(output_dir)
@@ -167,15 +167,25 @@ def plot_jet_response_comparison(resp_13p6_pf, resp_13p6_mlpf, resp_14_pf, resp_
 
 
 @click.command()
-@click.option("--input-13p6-tev-pf-parquet", required=True, type=str, help="Input parquet file for 13.6 TeV PF sample.")
-@click.option("--input-13p6-tev-mlpf-parquet", required=True, type=str, help="Input parquet file for 13.6 TeV MLPF sample.")
-@click.option("--input-14-tev-pf-parquet", required=True, type=str, help="Input parquet file for 14 TeV PF sample.")
-@click.option("--input-14-tev-mlpf-parquet", required=True, type=str, help="Input parquet file for 14 TeV MLPF sample.")
+@click.option("--input-sample1-pf-parquet", required=True, type=str, help="Input parquet file for sample1 PF sample.")
+@click.option("--input-sample1-mlpf-parquet", required=True, type=str, help="Input parquet file for sample1 MLPF sample.")
+@click.option("--input-sample2-pf-parquet", required=True, type=str, help="Input parquet file for sample2 PF sample.")
+@click.option("--input-sample2-mlpf-parquet", required=True, type=str, help="Input parquet file for sample2 MLPF sample.")
 @click.option("--output-dir", required=True, type=str, help="Output directory for plots.")
 @click.option("--jet-type", default="ak4", type=click.Choice(["ak4", "ak8"]), help="Jet type to plot.")
 @click.option("--sample-name", required=True, type=str, help="Sample name for plot labels (e.g., QCD_PU).")
+@click.option("--sample1-label", default="13.6 TeV", type=str, help="Label for the first sample (e.g., 13.6 TeV).")
+@click.option("--sample2-label", default="14 TeV", type=str, help="Label for the second sample (e.g., 14 TeV).")
 def main(
-    input_13p6_tev_pf_parquet, input_13p6_tev_mlpf_parquet, input_14_tev_pf_parquet, input_14_tev_mlpf_parquet, output_dir, jet_type, sample_name
+    input_sample1_pf_parquet,
+    input_sample1_mlpf_parquet,
+    input_sample2_pf_parquet,
+    input_sample2_mlpf_parquet,
+    output_dir,
+    jet_type,
+    sample_name,
+    sample1_label,
+    sample2_label,
 ):
     """
     Generates a comparison plot of the jet response distribution
@@ -184,10 +194,10 @@ def main(
     mplhep.style.use("CMS")
     matplotlib.rcParams["axes.labelsize"] = 35
 
-    data_13p6_pf = awkward.from_parquet(input_13p6_tev_pf_parquet)
-    data_13p6_mlpf = awkward.from_parquet(input_13p6_tev_mlpf_parquet)
-    data_14_pf = awkward.from_parquet(input_14_tev_pf_parquet)
-    data_14_mlpf = awkward.from_parquet(input_14_tev_mlpf_parquet)
+    data_sample1_pf = awkward.from_parquet(input_sample1_pf_parquet)
+    data_sample1_mlpf = awkward.from_parquet(input_sample1_mlpf_parquet)
+    data_sample2_pf = awkward.from_parquet(input_sample2_pf_parquet)
+    data_sample2_mlpf = awkward.from_parquet(input_sample2_mlpf_parquet)
 
     jet_label = f"AK{jet_type[2:]} jets"
 
@@ -198,7 +208,7 @@ def main(
     if fiducial_cuts == "eta_less_2p5":
         eta_label = f", 0 < $|η|$ < {max_jet_abs_eta}"
         jet_label += eta_label
-        for data in [data_13p6_pf, data_13p6_mlpf, data_14_pf, data_14_mlpf]:
+        for data in [data_sample1_pf, data_sample1_mlpf, data_sample2_pf, data_sample2_mlpf]:
             msk_rj_eta = np.abs(data["Jet_eta"]) < max_jet_abs_eta
             for k in data.fields:
                 if k.startswith("Jet_"):
@@ -208,35 +218,37 @@ def main(
                 if k.startswith("GenJet_"):
                     data[k] = data[k][msk_gj_eta]
 
-    data_13p6_pf = apply_dz(data_13p6_pf)
-    data_13p6_mlpf = apply_dz(data_13p6_mlpf)
-    data_14_pf = apply_dz(data_14_pf)
-    data_14_mlpf = apply_dz(data_14_mlpf)
+    data_sample1_pf = apply_dz(data_sample1_pf)
+    data_sample1_mlpf = apply_dz(data_sample1_mlpf)
+    data_sample2_pf = apply_dz(data_sample2_pf)
+    data_sample2_mlpf = apply_dz(data_sample2_mlpf)
 
     jet_prefixes = {"ak4": "Jet", "ak8": "FatJet"}
     jet_prefix = jet_prefixes[jet_type]
     genjet_prefixes = {"ak4": "GenJet", "ak8": "GenJetAK8"}
     genjet_prefix = genjet_prefixes[jet_type]
 
-    data_13p6_pf[f"{jet_prefix}_pt_raw"] = data_13p6_pf[f"{jet_prefix}_pt"] * (1.0 - data_13p6_pf[f"{jet_prefix}_rawFactor"])
-    data_13p6_mlpf[f"{jet_prefix}_pt_raw"] = data_13p6_mlpf[f"{jet_prefix}_pt"] * (1.0 - data_13p6_mlpf[f"{jet_prefix}_rawFactor"])
-    data_14_pf[f"{jet_prefix}_pt_raw"] = data_14_pf[f"{jet_prefix}_pt"] * (1.0 - data_14_pf[f"{jet_prefix}_rawFactor"])
-    data_14_mlpf[f"{jet_prefix}_pt_raw"] = data_14_mlpf[f"{jet_prefix}_pt"] * (1.0 - data_14_mlpf[f"{jet_prefix}_rawFactor"])
+    data_sample1_pf[f"{jet_prefix}_pt_raw"] = data_sample1_pf[f"{jet_prefix}_pt"] * (1.0 - data_sample1_pf[f"{jet_prefix}_rawFactor"])
+    data_sample1_mlpf[f"{jet_prefix}_pt_raw"] = data_sample1_mlpf[f"{jet_prefix}_pt"] * (1.0 - data_sample1_mlpf[f"{jet_prefix}_rawFactor"])
+    data_sample2_pf[f"{jet_prefix}_pt_raw"] = data_sample2_pf[f"{jet_prefix}_pt"] * (1.0 - data_sample2_pf[f"{jet_prefix}_rawFactor"])
+    data_sample2_mlpf[f"{jet_prefix}_pt_raw"] = data_sample2_mlpf[f"{jet_prefix}_pt"] * (1.0 - data_sample2_mlpf[f"{jet_prefix}_rawFactor"])
 
     # Placeholder for corrected pt
-    data_13p6_pf[f"{jet_prefix}_pt_corr"] = data_13p6_pf[f"{jet_prefix}_pt_raw"]
-    data_13p6_mlpf[f"{jet_prefix}_pt_corr"] = data_13p6_mlpf[f"{jet_prefix}_pt_raw"]
-    data_14_pf[f"{jet_prefix}_pt_corr"] = data_14_pf[f"{jet_prefix}_pt_raw"]
-    data_14_mlpf[f"{jet_prefix}_pt_corr"] = data_14_mlpf[f"{jet_prefix}_pt_raw"]
+    data_sample1_pf[f"{jet_prefix}_pt_corr"] = data_sample1_pf[f"{jet_prefix}_pt_raw"]
+    data_sample1_mlpf[f"{jet_prefix}_pt_corr"] = data_sample1_mlpf[f"{jet_prefix}_pt_raw"]
+    data_sample2_pf[f"{jet_prefix}_pt_corr"] = data_sample2_pf[f"{jet_prefix}_pt_raw"]
+    data_sample2_mlpf[f"{jet_prefix}_pt_corr"] = data_sample2_mlpf[f"{jet_prefix}_pt_raw"]
 
     deltar_cut = 0.2 if jet_type == "ak4" else 0.4
-    resp_13p6_pf = compute_response(data_13p6_pf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
-    resp_13p6_mlpf = compute_response(data_13p6_mlpf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
-    resp_14_pf = compute_response(data_14_pf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
-    resp_14_mlpf = compute_response(data_14_mlpf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
+    resp_sample1_pf = compute_response(data_sample1_pf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
+    resp_sample1_mlpf = compute_response(data_sample1_mlpf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
+    resp_sample2_pf = compute_response(data_sample2_pf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
+    resp_sample2_mlpf = compute_response(data_sample2_mlpf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
 
-    plot_jet_response_comparison(resp_13p6_pf, resp_13p6_mlpf, resp_14_pf, resp_14_mlpf, output_dir, sample_name, jet_type, jet_label)
-    plot_met_comparison(data_13p6_pf, data_13p6_mlpf, data_14_pf, data_14_mlpf, output_dir, sample_name)
+    plot_jet_response_comparison(
+        resp_sample1_pf, resp_sample1_mlpf, resp_sample2_pf, resp_sample2_mlpf, output_dir, sample_name, jet_type, jet_label, sample1_label, sample2_label
+    )
+    plot_met_comparison(data_sample1_pf, data_sample1_mlpf, data_sample2_pf, data_sample2_mlpf, output_dir, sample_name, sample1_label, sample2_label)
 
     print(f"Generated plots in {output_dir}")
 

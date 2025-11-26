@@ -149,6 +149,8 @@ GENJET_BINS_PT_DATASET = {
 SAMPLE_NAME_TO_PROCESS = {
     "QCD_PU": "cms_pf_qcd",
     "QCD_PU_13p6": "cms_pf_qcd",
+    "QCD_PU_13p6_v2": "cms_pf_qcd",
+    "QCD_PU_13p6_v3": "cms_pf_qcd",
     "QCD_noPU_13p6": "cms_pf_qcd_nopu",
     "TTbar_PU": "cms_pf_ttbar",
     "TTbar_PU_13p6": "cms_pf_ttbar",
