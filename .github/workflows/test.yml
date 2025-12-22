@@ -31,7 +31,7 @@ jobs:
 
       - name: Install wget
         run: |
-          apt-get update && apt-get install -y wget
+          apt-get update && apt-get install -y wget gcc g++ build-essential
 
       - name: Run tests
         run: ./scripts/local_test_torch.sh
