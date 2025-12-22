@@ -85,15 +85,15 @@ def plot_met_distribution(
     plt.sca(a1)
     plt.plot([], [])
 
-    ratio = h1/h1
-    sigma_ratio = ratio * np.sqrt(1/h1.counts() + 1.0/h1.counts())
+    ratio = h1 / h1
+    sigma_ratio = ratio * np.sqrt(1 / h1.counts() + 1.0 / h1.counts())
     mplhep.histplot(ratio, histtype="step", lw=2, ls=pf_linestyle, color=pf_color)
     mplhep.histplot(ratio, yerr=sigma_ratio.counts(), edgecolor=pf_color, ls=pf_linestyle, lw=2, histtype="band", facecolor=pf_color)
     mplhep.histplot(h2 / h1, histtype="step", lw=2, ls=mlpf_linestyle, color=mlpf_color)
     plt.ylim(0.0, ratio_ylim)
     plt.ylabel("MLPF / PF")
     plt.xlabel(xlabel)
-    #plt.xscale("log")
+    # plt.xscale("log")
     plt.xlim(min(bins), max(bins))
     plt.savefig(filename)
     plt.close()
@@ -375,7 +375,6 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
     addtext_fontsize = 25
     jet_label_coords_single = 0.02, 0.88
     sample_label_coords = 0.02, 0.96
-    default_cycler = plt.rcParams["axes.prop_cycle"]
     gen_color = "#648df4"
     pf_color = "#f3a041"
     mlpf_color = "#d23b3d"
@@ -405,7 +404,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
         ratio_ylim = 2
     else:
         met_bins = np.linspace(0, 500, 51)
-        #met_bins = np.logspace(-1, 3, 21)
+        # met_bins = np.logspace(-1, 3, 21)
         met_bins_for_response = np.linspace(1, 500, 26)
         ratio_ylim = 2
 

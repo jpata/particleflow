@@ -45,7 +45,9 @@ def varbins(*args):
     return np.concatenate(newlist)
 
 
-def plot_met_comparison(data_sample1_pf, data_sample1_mlpf, data_sample2_pf, data_sample2_mlpf, output_dir, sample_name, sample1_label, sample2_label):
+def plot_met_comparison(
+    data_sample1_pf, data_sample1_mlpf, data_sample2_pf, data_sample2_mlpf, output_dir, sample_name, sample1_label, sample2_label
+):
     """Plots the MET comparison between 13.6 TeV and 14 TeV samples, for PF and MLPF."""
     plt.figure()
     ax = plt.axes()
@@ -99,7 +101,9 @@ def plot_met_comparison(data_sample1_pf, data_sample1_mlpf, data_sample2_pf, dat
     plt.close()
 
 
-def plot_jet_response_comparison(resp_sample1_pf, resp_sample1_mlpf, resp_sample2_pf, resp_sample2_mlpf, output_dir, sample_name, jet_type, jet_label, sample1_label, sample2_label):
+def plot_jet_response_comparison(
+    resp_sample1_pf, resp_sample1_mlpf, resp_sample2_pf, resp_sample2_mlpf, output_dir, sample_name, jet_type, jet_label, sample1_label, sample2_label
+):
     """Plots the jet response comparison between 13.6 TeV and 14 TeV samples, for PF and MLPF."""
     plt.figure()
     ax = plt.axes()
@@ -246,7 +250,16 @@ def main(
     resp_sample2_mlpf = compute_response(data_sample2_mlpf, jet_coll=jet_prefix, genjet_coll=genjet_prefix, deltar_cut=deltar_cut)
 
     plot_jet_response_comparison(
-        resp_sample1_pf, resp_sample1_mlpf, resp_sample2_pf, resp_sample2_mlpf, output_dir, sample_name, jet_type, jet_label, sample1_label, sample2_label
+        resp_sample1_pf,
+        resp_sample1_mlpf,
+        resp_sample2_pf,
+        resp_sample2_mlpf,
+        output_dir,
+        sample_name,
+        jet_type,
+        jet_label,
+        sample1_label,
+        sample2_label,
     )
     plot_met_comparison(data_sample1_pf, data_sample1_mlpf, data_sample2_pf, data_sample2_mlpf, output_dir, sample_name, sample1_label, sample2_label)
 

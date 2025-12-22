@@ -72,7 +72,6 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     jet_label_coords = 0.02, 0.86
     jet_label_coords_single = 0.02, 0.88
     sample_label_coords = 0.02, 0.96
-    default_cycler = plt.rcParams["axes.prop_cycle"]
     gen_color = "#648df4"
     pf_color = "#f3a041"
     mlpf_color = "#d23b3d"
@@ -108,20 +107,20 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     if sample_name.startswith("QCD_"):
         if jet_type == "ak4":
             pt_bins_for_response = np.array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 250, 300, 350, 400, 450, 500, 600, 700, 800, 900, 1000, 2000])
-            #pt_bins_for_kinematics = varbins(np.linspace(20, 100, 21), np.linspace(100, 200, 5), np.linspace(200, 1000, 5), np.linspace(1000, 2000, 2))
+            # pt_bins_for_kinematics = varbins(np.linspace(20, 100, 21), np.linspace(100, 200, 5), np.linspace(200, 1000, 5), np.linspace(1000, 2000, 2))
             pt_bins_for_kinematics = np.logspace(1, 3.61, 41)
             pt_bins_for_pureff = varbins(np.linspace(1, 20, 5), np.linspace(20, 100, 21), np.linspace(100, 200, 5), np.linspace(200, 1000, 5))
             pt_bins_for_pu = [(0, 30), (30, 60), (60, 100), (100, 200), (200, 5000)]
         elif jet_type == "ak8":
             pt_bins_for_response = varbins(np.linspace(20, 1000, 5))
-            #pt_bins_for_kinematics = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1250, 1500, 1750, 2000]
+            # pt_bins_for_kinematics = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1250, 1500, 1750, 2000]
             pt_bins_for_kinematics = np.logspace(2, 3.61, 41)
             pt_bins_for_pureff = varbins(np.linspace(1, 20, 5), np.linspace(20, 100, 5), np.linspace(100, 1000, 5))
             pt_bins_for_pu = [(100, 500), (500, 1000), (1000, 1500), (1500, 2000), (2000, 2500)]
     elif sample_name.startswith("TTbar_"):
         if jet_type == "ak4":
             pt_bins_for_response = np.array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 250, 500])
-            #pt_bins_for_kinematics = varbins(np.linspace(10, 100, 21), np.linspace(100, 250, 5), np.linspace(250, 500, 2))
+            # pt_bins_for_kinematics = varbins(np.linspace(10, 100, 21), np.linspace(100, 250, 5), np.linspace(250, 500, 2))
             pt_bins_for_kinematics = np.logspace(1, 3.31, 41)
             pt_bins_for_pureff = varbins(np.linspace(1, 20, 5), np.linspace(20, 100, 21), np.linspace(100, 250, 5))
         elif jet_type == "ak8":
@@ -144,7 +143,19 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         pt_bins_for_pu = [(0, 30), (30, 60), (60, 100)]
 
     def plot_kinematic_distribution(
-        data_pf, data_mlpf, jet_prefix, genjet_prefix, variable_gen, variable_reco, bins, xlabel, filename, tev, logy=True, raw_or_corr="raw", jet_label=""
+        data_pf,
+        data_mlpf,
+        jet_prefix,
+        genjet_prefix,
+        variable_gen,
+        variable_reco,
+        bins,
+        xlabel,
+        filename,
+        tev,
+        logy=True,
+        raw_or_corr="raw",
+        jet_label="",
     ):
         f, (a0, a1) = plt.subplots(2, 1, gridspec_kw={"height_ratios": [3, 1]}, sharex=True)
 
@@ -202,8 +213,8 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         plt.ylabel("Count")
 
         plt.sca(a1)
-        ratio = h0/h0
-        sigma_ratio = ratio * np.sqrt(1/h0.counts() + 1.0/h0.counts())
+        ratio = h0 / h0
+        sigma_ratio = ratio * np.sqrt(1 / h0.counts() + 1.0 / h0.counts())
 
         mplhep.histplot(ratio, histtype="step", lw=2, ls=gen_linestyle, color=gen_color)
         mplhep.histplot(ratio, yerr=sigma_ratio.counts(), edgecolor=gen_color, ls=gen_linestyle, lw=2, histtype="band", facecolor=gen_color)
