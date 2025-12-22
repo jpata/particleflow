@@ -12,7 +12,7 @@ jobs:
   test-in-container:
     runs-on: ubuntu-latest
     container:
-      image: pytorch/pytorch:2.9.1-cuda12.9-cudnn9-runtime
+      image: pytorch/pytorch:2.9.1-cuda13.0-cudnn9-runtime
 
     steps:
       - name: Checkout repository
