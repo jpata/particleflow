@@ -83,20 +83,20 @@ python mlpf/pipeline.py \
 
 ls experiments/MLPF_test_*/checkpoints/*
 
-# # --------------------------------------------------------------------------------------------
-# # Test 3: Ray Train training using the 'ray-train' sub-command
-# # --------------------------------------------------------------------------------------------
-python mlpf/pipeline.py \
-  --config parameters/pytorch/pyg-cms.yaml \
-  --data-dir ${PWD}/tensorflow_datasets/ \
-  --experiments-dir ${PWD}/experiments \
-  --prefix MLPF_test_ \
-  --pipeline \
-  ray-train \
-  --num-steps 4 \
-  --ray-cpus 2 \
-  --ray-local \
-  --conv-type attention \
-  --dtype float32 \
-  --attention-type math \
-  --num-convs 1
+## --------------------------------------------------------------------------------------------
+## Test 3: Ray Train training using the 'ray-train' sub-command
+## --------------------------------------------------------------------------------------------
+#python mlpf/pipeline.py \
+#  --config parameters/pytorch/pyg-cms.yaml \
+#  --data-dir ${PWD}/tensorflow_datasets/ \
+#  --experiments-dir ${PWD}/experiments \
+#  --prefix MLPF_test_ \
+#  --pipeline \
+#  ray-train \
+#  --num-steps 4 \
+#  --ray-cpus 2 \
+#  --ray-local \
+#  --conv-type attention \
+#  --dtype float32 \
+#  --attention-type math \
+#  --num-convs 1
