@@ -40,13 +40,13 @@ SITE=T2_EE_Estonia
 # done
 
 END=`wc -l scripts/tallinn/qcd_pu.txt | cut -f1 -d' '`
-for ifile in $(seq 1 10); do
+for ifile in $(seq 10 $END); do
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu.txt QCD_PU $ifile $SITE
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu.txt QCD_PU $ifile $SITE
 done
 
 END=`wc -l scripts/tallinn/qcd_pu_13p6.txt | cut -f1 -d' '`
-for ifile in $(seq 1 10); do
+for ifile in $(seq 1 1000); do
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu_13p6.txt QCD_PU_13p6 $ifile $SITE
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu_13p6.txt QCD_PU_13p6 $ifile $SITE
 done
@@ -58,7 +58,7 @@ done
 # done
 
 END=`wc -l scripts/tallinn/qcd_pu_13p6_v3.txt | cut -f1 -d' '`
-for ifile in $(seq 1 10); do
+for ifile in $(seq 1 1000); do
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False mlpf scripts/tallinn/qcd_pu_13p6_v3.txt QCD_PU_13p6_v3 $ifile $SITE
     sbatch $SUBSCRIPT scripts/cmssw/validation_job.sh False pf scripts/tallinn/qcd_pu_13p6_v3.txt QCD_PU_13p6_v3 $ifile $SITE
 done
