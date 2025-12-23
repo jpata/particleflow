@@ -17,7 +17,7 @@ if [ $SITE == "T2_EE_Estonia" ]; then
     cd /scratch/persistent/joosep/CMSSW_15_0_5
     eval `scram runtime -sh`
     cd $PREVDIR
-    export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.6.0pre1_puppi_2372e2/
+    export OUTDIR=/local/$USER/mlpf/results/cms/${CMSSW_VERSION}_mlpf_v2.6.0pre1_puppi_117d32/
     export WORKDIR=/scratch/local/$USER/${SLURM_JOB_ID}
 fi
 
@@ -88,7 +88,7 @@ mkdir -p $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}
 #cp step4_NANO_btv.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step4_NANO_btv_${NJOB}.root
 cp step4_NANO_jme.root $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step4_NANO_jme_${NJOB}.root
 
-#python3 ~/particleflow/mlpf/plotting/cms_fwlite.py step3_inMINIAODSIM.root step3_inMINIAODSIM.pkl
-#cp step3_inMINIAODSIM.pkl $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.pkl
+python3 ~/particleflow/mlpf/plotting/cms_fwlite.py step3_inMINIAODSIM.root step3_inMINIAODSIM.pkl
+cp step3_inMINIAODSIM.pkl $OUTDIR/cuda_${USE_CUDA}/${SAMPLE}_${JOBTYPE}/step3_MINI_${NJOB}.pkl
 
 rm -Rf $WORKDIR

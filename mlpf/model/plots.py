@@ -6,18 +6,23 @@ import numpy as np
 import glob
 import os
 
+from mlpf.logger import _logger
+
 
 def log_confusion_matrices(cm_X_target, cm_X_pred, cm_id, comet_experiment, epoch):
     if comet_experiment:
         comet_experiment.log_confusion_matrix(
             matrix=cm_X_target, title="Element to target", row_label="X", column_label="target", epoch=epoch, file_name="cm_X_target.json"
         )
+        _logger.info("logged confusion matrix: Element to target")
         comet_experiment.log_confusion_matrix(
             matrix=cm_X_pred, title="Element to pred", row_label="X", column_label="pred", epoch=epoch, file_name="cm_X_pred.json"
         )
+        _logger.info("logged confusion matrix: Element to pred")
         comet_experiment.log_confusion_matrix(
             matrix=cm_id, title="Target to pred", row_label="target", column_label="pred", epoch=epoch, file_name="cm_id.json"
         )
+        _logger.info("logged confusion matrix: Target to pred")
 
 
 def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir):
@@ -34,6 +39,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
     ).numpy()
     df = pandas.DataFrame(arr)
     df.to_parquet(f"{outdir}/batch0_epoch{epoch}.parquet")
+    _logger.info(f"saved batch0_epoch{epoch}.parquet")
 
     if tensorboard_writer:
         sig_prob = torch.softmax(ypred_binary, axis=-1)[:, 1].to(torch.float32)
@@ -48,6 +54,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             plt.xlabel("log [E/E_elem]")
             plt.yscale("log")
             tensorboard_writer.add_figure("energy_elemtype{}".format(int(xcls)), fig, global_step=epoch)
+            _logger.info(f"plotted energy_elemtype{int(xcls)}")
 
             fig = plt.figure()
             msk = X[:, 0] == xcls
@@ -59,6 +66,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             plt.xlabel("log [pt/pt_elem]")
             plt.yscale("log")
             tensorboard_writer.add_figure("pt_elemtype{}".format(int(xcls)), fig, global_step=epoch)
+            _logger.info(f"plotted pt_elemtype{int(xcls)}")
 
             fig = plt.figure(figsize=(5, 5))
             msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
@@ -70,6 +78,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             plt.xlabel("log [E_target/E_elem]")
             plt.ylabel("log [E_pred/E_elem]")
             tensorboard_writer.add_figure("energy_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
+            _logger.info(f"plotted energy_elemtype{int(xcls)}_corr")
 
             fig = plt.figure(figsize=(5, 5))
             msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
@@ -81,6 +90,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             plt.xlabel("log [pt_target/pt_elem]")
             plt.ylabel("log [pt_pred/pt_elem]")
             tensorboard_writer.add_figure("pt_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
+            _logger.info(f"plotted pt_elemtype{int(xcls)}_corr")
 
             fig = plt.figure(figsize=(5, 5))
             msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
@@ -92,6 +102,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             plt.xlabel("eta_target")
             plt.ylabel("eta_pred")
             tensorboard_writer.add_figure("eta_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
+            _logger.info(f"plotted eta_elemtype{int(xcls)}_corr")
 
             fig = plt.figure(figsize=(5, 5))
             msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
@@ -103,6 +114,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             plt.xlabel("sin_phi_target")
             plt.ylabel("sin_phi_pred")
             tensorboard_writer.add_figure("sphi_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
+            _logger.info(f"plotted sphi_elemtype{int(xcls)}_corr")
 
             fig = plt.figure(figsize=(5, 5))
             msk = (X[:, 0] == xcls) & (ytarget_flat[:, 0] != 0) & (ypred_binary_cls != 0)
@@ -114,6 +126,7 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             plt.xlabel("cos_phi_target")
             plt.ylabel("cos_phi_pred")
             tensorboard_writer.add_figure("cphi_elemtype{}_corr".format(int(xcls)), fig, global_step=epoch)
+            _logger.info(f"plotted cphi_elemtype{int(xcls)}_corr")
 
             fig = plt.figure()
             msk = X[:, 0] == xcls
@@ -122,32 +135,48 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             plt.hist(sig_prob[msk & (ytarget_flat[:, 0] != 0)], bins=b, histtype="step")
             plt.xlabel("particle proba")
             tensorboard_writer.add_figure("sig_proba_elemtype{}".format(int(xcls)), fig, global_step=epoch)
+            _logger.info(f"plotted sig_proba_elemtype{int(xcls)}")
 
         try:
             tensorboard_writer.add_histogram("pt_target", torch.clamp(batch.ytarget[batch.mask][:, 2], -10, 10), global_step=epoch)
+            _logger.info("plotted pt_target histogram")
             tensorboard_writer.add_histogram("pt_pred", torch.clamp(ypred_raw[2][batch.mask][:, 0], -10, 10), global_step=epoch)
+            _logger.info("plotted pt_pred histogram")
             ratio = (ypred_raw[2][batch.mask][:, 0] / batch.ytarget[batch.mask][:, 2])[batch.ytarget[batch.mask][:, 0] != 0]
             tensorboard_writer.add_histogram("pt_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
+            _logger.info("plotted pt_ratio histogram")
 
             tensorboard_writer.add_histogram("eta_target", torch.clamp(batch.ytarget[batch.mask][:, 3], -10, 10), global_step=epoch)
+            _logger.info("plotted eta_target histogram")
             tensorboard_writer.add_histogram("eta_pred", torch.clamp(ypred_raw[2][batch.mask][:, 1], -10, 10), global_step=epoch)
+            _logger.info("plotted eta_pred histogram")
             ratio = (ypred_raw[2][batch.mask][:, 1] / batch.ytarget[batch.mask][:, 3])[batch.ytarget[batch.mask][:, 0] != 0]
             tensorboard_writer.add_histogram("eta_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
+            _logger.info("plotted eta_ratio histogram")
 
             tensorboard_writer.add_histogram("sphi_target", torch.clamp(batch.ytarget[batch.mask][:, 4], -10, 10), global_step=epoch)
+            _logger.info("plotted sphi_target histogram")
             tensorboard_writer.add_histogram("sphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 2], -10, 10), global_step=epoch)
+            _logger.info("plotted sphi_pred histogram")
             ratio = (ypred_raw[2][batch.mask][:, 2] / batch.ytarget[batch.mask][:, 4])[batch.ytarget[batch.mask][:, 0] != 0]
             tensorboard_writer.add_histogram("sphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
+            _logger.info("plotted sphi_ratio histogram")
 
             tensorboard_writer.add_histogram("cphi_target", torch.clamp(batch.ytarget[batch.mask][:, 5], -10, 10), global_step=epoch)
+            _logger.info("plotted cphi_target histogram")
             tensorboard_writer.add_histogram("cphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 3], -10, 10), global_step=epoch)
+            _logger.info("plotted cphi_pred histogram")
             ratio = (ypred_raw[2][batch.mask][:, 3] / batch.ytarget[batch.mask][:, 5])[batch.ytarget[batch.mask][:, 0] != 0]
             tensorboard_writer.add_histogram("cphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
+            _logger.info("plotted cphi_ratio histogram")
 
             tensorboard_writer.add_histogram("energy_target", torch.clamp(batch.ytarget[batch.mask][:, 6], -10, 10), global_step=epoch)
+            _logger.info("plotted energy_target histogram")
             tensorboard_writer.add_histogram("energy_pred", torch.clamp(ypred_raw[2][batch.mask][:, 4], -10, 10), global_step=epoch)
+            _logger.info("plotted energy_pred histogram")
             ratio = (ypred_raw[2][batch.mask][:, 4] / batch.ytarget[batch.mask][:, 6])[batch.ytarget[batch.mask][:, 0] != 0]
             tensorboard_writer.add_histogram("energy_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
+            _logger.info("plotted energy_ratio histogram")
         except ValueError as e:
             print(e)
 
@@ -169,5 +198,6 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
                     plt.title("event {}, m={:.2E}".format(ibatch, np.mean(attn_matrix[ibatch][attn_matrix[ibatch] > 0])))
                 plt.suptitle(attn_name)
                 tensorboard_writer.add_figure(attn_name, fig, global_step=epoch)
+                _logger.info(f"plotted attention matrix {attn_name}")
         except ValueError as e:
             print(e)

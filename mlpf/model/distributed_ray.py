@@ -9,10 +9,10 @@ import yaml
 import csv
 
 from mlpf.model.mlpf import MLPF
-from mlpf.model.logger import _logger, _configLogger
+from mlpf.logger import _logger, _configLogger
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.utils import create_comet_experiment
-from mlpf.model.training import train_all_epochs, get_optimizer
+from mlpf.model.training import train_all_steps, get_optimizer
 
 from mlpf.model.utils import (
     load_checkpoint,
@@ -97,7 +97,7 @@ def set_searchspace_and_run_trial(search_space, config, args):
         if rank == 0:
             logging.warning("OOM error encountered, skipping this hyperparameter configuration.")
             skiplog_file_path = Path(config["raytune"]["local_dir"]) / args.hpo / "skipped_configurations.txt"
-            lines = ["{}: {}\n".format(item[0], item[1]) for item in search_space.items()]
+            lines = ["{}: {}".format(item[0], item[1]) for item in search_space.items()]
 
             with open(skiplog_file_path, "a") as f:
                 f.write("#" * 80 + "\n")
@@ -257,7 +257,7 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
-    loaders = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
+    loaders, samplers = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
 
     if args.comet:
         comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
@@ -284,35 +284,39 @@ def train_ray_trial(config, args, outdir=None):
     else:
         comet_experiment = None
 
-    steps_per_epoch = len(loaders["train"])
-    start_epoch = 1
-    lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=-1)
+    lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
     checkpoint_dir = os.path.join(outdir, "checkpoints")
     checkpoint_dir = Path(outdir) / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+    start_step = 1
     checkpoint = ray.train.get_checkpoint()
     if checkpoint:
         with checkpoint.as_directory() as _checkpoint_dir:
-            checkpoint = torch.load(Path(_checkpoint_dir) / "checkpoint.pth", map_location=torch.device(rank))
-            model, optimizer = load_checkpoint(checkpoint, model, optimizer)
-            start_epoch = checkpoint["extra_state"]["epoch"] + 1
-            lr_schedule = get_lr_schedule(config, optimizer, config["num_epochs"], steps_per_epoch, last_epoch=start_epoch - 1)
+            checkpoint_path = Path(_checkpoint_dir) / "checkpoint.pth"
+            _logger.info(f"Loading checkpoint from {checkpoint_path}")
+            checkpoint = torch.load(checkpoint_path, map_location=torch.device(rank))
+            model, optimizer, lr_schedule = load_checkpoint(checkpoint, model, optimizer, lr_schedule)
+            start_step = checkpoint["extra_state"]["step"] + 1
+            if "train_loader_state_dict" in checkpoint["extra_state"]:
+                loaders["train"].load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
+            if "valid_loader_state_dict" in checkpoint["extra_state"]:
+                loaders["valid"].load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
 
-    train_all_epochs(
+    train_all_steps(
         rank,
         world_size,
         model,
         optimizer,
         loaders["train"],
         loaders["valid"],
-        config["num_epochs"],
+        config["num_steps"],
         config["patience"],
         outdir,
         config,
         trainable=config["model"]["trainable"],
-        start_epoch=start_epoch,
+        start_step=start_step,
         lr_schedule=lr_schedule,
         use_ray=True,
         checkpoint_freq=config["checkpoint_freq"],
@@ -321,4 +325,6 @@ def train_ray_trial(config, args, outdir=None):
         dtype=getattr(torch, config["dtype"]),
         val_freq=config["val_freq"],
         checkpoint_dir=checkpoint_dir,
+        train_sampler=samplers["train"],
+        valid_sampler=samplers["valid"],
     )

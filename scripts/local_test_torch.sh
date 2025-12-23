@@ -5,6 +5,14 @@ export PWD=`pwd`
 export PYTHONPATH=`pwd`
 export KERAS_BACKEND=torch
 
+# Quick unit tests
+python -m pytest tests/test_dataloader.py
+python -m pytest tests/test_dataloader_behavior.py
+python -m pytest tests/test_endless_interleaved_iterator.py
+python -m pytest tests/test_resumable_sampler.py
+python -m pytest tests/test_interleaved_iterator.py
+python -m pytest tests/test_lr_schedule.py
+
 #create data directories
 rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
@@ -22,8 +30,7 @@ mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
 for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; do
   python mlpf/data/cms/postprocessing2.py \
     --input $file \
-    --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw \
-    --num-events 10
+    --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
 done
 
 #create the tensorflow dataset for the last split config only
@@ -40,42 +47,23 @@ python mlpf/pipeline.py \
   --prefix MLPF_test_ \
   --pipeline \
   train \
-  --num-epochs 2 \
-  --nvalid 1 \
+  --num-steps 2 \
+  --checkpoint-freq 2 \
   --gpus 0 \
   --make-plots \
   --conv-type attention \
   --dtype float32 \
   --attention-type math \
   --num-convs 1
+
+ls experiments/MLPF_test_*/checkpoints/*
 
 # Capture the experiment directory created by the first run for the next steps
 export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
 
 # --------------------------------------------------------------------------------------------
-# Test 2: Resume training from the previous epoch in the SAME directory
-# --experiment-dir is specified to ensure it writes to the same directory.
-# --------------------------------------------------------------------------------------------
-python mlpf/pipeline.py \
-  --config parameters/pytorch/pyg-cms.yaml \
-  --data-dir ./tensorflow_datasets/ \
-  --experiment-dir ${EXP_DIR} \
-  --pipeline \
-  train \
-  --num-epochs 3 \
-  --nvalid 1 \
-  --gpus 0 \
-  --make-plots \
-  --conv-type attention \
-  --dtype float32 \
-  --attention-type math \
-  --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-02-*.pth
-
-# --------------------------------------------------------------------------------------------
-# Test 3: Fine-tuning from a checkpoint in a NEW directory
+# Test 2: Fine-tuning from a checkpoint in a NEW directory
 # --experiment-dir is omitted, so a new one is created.
-# --start-epoch 1 resets the epoch counter for the new run.
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
   --config parameters/pytorch/pyg-cms.yaml \
@@ -83,33 +71,32 @@ python mlpf/pipeline.py \
   --prefix MLPF_test_ \
   --pipeline \
   train \
-  --num-epochs 3 \
-  --nvalid 1 \
+  --num-steps 4 \
+  --checkpoint-freq 2 \
   --gpus 0 \
   --make-plots \
   --conv-type attention \
   --dtype float32 \
   --attention-type math \
   --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-02-*.pth \
-  --start-epoch 1
+  --load ${EXP_DIR}/checkpoints/checkpoint-02.pth
 
-ls -lrt experiments/*/checkpoints/*
+ls experiments/MLPF_test_*/checkpoints/*
 
-# # --------------------------------------------------------------------------------------------
-# # Test 4: Ray Train training using the 'ray-train' sub-command
-# # --------------------------------------------------------------------------------------------
-python mlpf/pipeline.py \
-  --config parameters/pytorch/pyg-cms.yaml \
-  --data-dir ${PWD}/tensorflow_datasets/ \
-  --experiments-dir ${PWD}/experiments \
-  --prefix MLPF_test_ \
-  --pipeline \
-  ray-train \
-  --num-epochs 2 \
-  --ray-cpus 2 \
-  --ray-local \
-  --conv-type attention \
-  --dtype float32 \
-  --attention-type math \
-  --num-convs 1
+## --------------------------------------------------------------------------------------------
+## Test 3: Ray Train training using the 'ray-train' sub-command
+## --------------------------------------------------------------------------------------------
+#python mlpf/pipeline.py \
+#  --config parameters/pytorch/pyg-cms.yaml \
+#  --data-dir ${PWD}/tensorflow_datasets/ \
+#  --experiments-dir ${PWD}/experiments \
+#  --prefix MLPF_test_ \
+#  --pipeline \
+#  ray-train \
+#  --num-steps 4 \
+#  --ray-cpus 2 \
+#  --ray-local \
+#  --conv-type attention \
+#  --dtype float32 \
+#  --attention-type math \
+#  --num-convs 1

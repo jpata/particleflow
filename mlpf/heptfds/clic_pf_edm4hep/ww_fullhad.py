@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import tensorflow as tf
+import numpy as np
 from utils_edm import X_FEATURES_CL, X_FEATURES_TRK, Y_FEATURES, generate_examples, split_sample, NUM_SPLITS
 
 import tensorflow_datasets as tfds
@@ -56,13 +56,13 @@ class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
                             None,
                             max(len(X_FEATURES_TRK), len(X_FEATURES_CL)),
                         ),
-                        dtype=tf.float32,
+                        dtype=np.float32,
                     ),
-                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=tf.float32),
-                    "genmet": tfds.features.Scalar(dtype=tf.float32),
-                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
-                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=tf.float32),
+                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "genmet": tfds.features.Scalar(dtype=np.float32),
+                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
+                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
                 }
             ),
             homepage="https://github.com/jpata/particleflow",

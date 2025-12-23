@@ -23,7 +23,7 @@ import yaml
 from mlpf.model.training import device_agnostic_run, override_config
 from mlpf.model.distributed_ray import run_hpo, run_ray_training
 from mlpf.model.PFDataset import SHARING_STRATEGY
-from utils import create_experiment_dir
+from mlpf.utils import create_experiment_dir
 
 
 def get_parser():
@@ -49,8 +49,7 @@ def get_parser():
     parser_train.add_argument("--prefetch-factor", type=int, default=None, help="Number of samples to fetch & prefetch per worker")
     parser_train.add_argument("--load", type=str, default=None, help="Load a checkpoint and continue training")
     parser_train.add_argument("--relaxed-load", action="store_true", help="Loosely load model parameters, ignoring missing keys")
-    parser_train.add_argument("--num-epochs", type=int, default=None, help="Number of training epochs")
-    parser_train.add_argument("--start-epoch", type=int, default=None, help="The initial epoch counter")
+    parser_train.add_argument("--num-steps", type=int, default=None, help="Number of training steps")
     parser_train.add_argument("--patience", type=int, default=None, help="Patience before early stopping")
     parser_train.add_argument("--lr", type=float, default=None, help="Learning rate")
     parser_train.add_argument("--lr-schedule", type=str, default=None, choices=["constant", "cosinedecay", "onecycle", "reduce_lr_on_plateau"])
@@ -92,7 +91,7 @@ def get_parser():
     parser_ray.add_argument("--ray-gpus", type=int, default=0, help="GPUs per worker for Ray Train")
     parser_ray.add_argument("--ray-cpus", type=int, help="CPUs per worker for Ray Train")
     parser_ray.add_argument("--ray-local", action="store_true", help="Run Ray Train cluster locally")
-    parser_ray.add_argument("--num-epochs", type=int, default=None, help="Number of training epochs")
+    parser_ray.add_argument("--num-steps", type=int, default=None, help="Number of training steps")
     parser_ray.add_argument("--load", type=str, default=None, help="Load a checkpoint and continue training")
     parser_ray.add_argument("--comet", action="store_true", help="Use comet.ml logging")
     parser_ray.add_argument("--comet-offline", action="store_true", help="Save comet logs locally")
@@ -103,7 +102,6 @@ def get_parser():
     parser_ray.add_argument("--num-convs", type=int, default=None, help="Number of GNN/Attention layers")
     parser_ray.add_argument("--test-datasets", nargs="+", default=[], help="Test samples to process after training")
     parser_ray.add_argument("--make-plots", action="store_true", help="Generate plots of test predictions")
-    parser_ray.add_argument("--start-epoch", type=int, default=None, help="The initial epoch counter")
 
     # --- 'ray-hpo' command parser ---
     parser_hpo = subparsers.add_parser("ray-hpo", help="Run hyperparameter optimization with Ray Tune")

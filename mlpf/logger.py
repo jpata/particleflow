@@ -1,4 +1,8 @@
 import logging
+import psutil
+import shutil
+import subprocess
+import os
 from functools import lru_cache
 
 
@@ -8,14 +12,15 @@ def _logging(rank, _logger, msg):
         _logger.info(msg)
 
 
-def _configLogger(name, filename=None, loglevel=logging.INFO):
+def _configLogger(name, rank=0, filename=None, loglevel=logging.INFO):
     # define a Handler which writes INFO messages or higher to the sys.stdout
     logger = logging.getLogger(name)
     logger.setLevel(loglevel)
     if filename:
         logfile = logging.FileHandler(filename)
         logfile.setLevel(loglevel)
-        logfile.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
+        fmt = logging.Formatter(f"rank{rank} " + "[%(asctime)s] %(levelname)s : %(message)s")
+        logfile.setFormatter(fmt)
         logger.addHandler(logfile)
 
 
@@ -75,3 +80,23 @@ _logger = ColoredLogger("mlpf")
 def warn_once(msg, logger=_logger):
     # Keep track of 10 different messages and then warn again
     logger.warning(msg)
+
+
+def log_memory(stage, rank, tensorboard_writer=None, step=None):
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info()
+    _logger.debug(f"RAM memory usage at {stage} on rank {rank}: rss={mem.rss / 1024**2:.2f} MB, vms={mem.vms / 1024**2:.2f} MB")
+    if tensorboard_writer and step:
+        tensorboard_writer.add_scalar(f"memory/rss_MB/{stage}", mem.rss / 1024**2, step)
+        tensorboard_writer.add_scalar(f"memory/vms_MB/{stage}", mem.vms / 1024**2, step)
+
+
+def log_smi(rank):
+    if (rank == 0) or (rank == "cpu"):
+        smi_command = shutil.which("nvidia-smi") or shutil.which("rocm-smi")
+        if smi_command:
+            try:
+                result = subprocess.run([smi_command], capture_output=True, text=True, check=True)
+                _logger.info(result.stdout)
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                _logger.info("SMI error: {}".format(e))
