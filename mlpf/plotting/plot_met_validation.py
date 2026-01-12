@@ -58,7 +58,7 @@ def plot_met_distribution(
     h2 = to_bh(data_mlpf["RawPuppiMET_pt"], bins)
 
     plt.sca(a0)
-    x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen.", ls="--", color=gen_color)
+    x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen", ls="--", color=gen_color)
     x1 = mplhep.histplot(h1, histtype="step", lw=2, label="PF-PUPPI", ls=pf_linestyle, color=pf_color)
     x2 = mplhep.histplot(h2, histtype="step", lw=2, label=mlpf_label, ls=mlpf_linestyle, color=mlpf_color)
 
@@ -368,7 +368,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
 
     # plotting style variables
     legend_fontsize = 30
-    legend_loc = (0.5, 0.55)
+    legend_loc = (0.5, 0.5)
     legend_loc_scalereso = (0.50, 0.65)
     legend_loc_met_response = (0.3, 0.45)
     sample_label_fontsize = 35
