@@ -45,6 +45,8 @@ def load_nano(fn):
         "PuppiMET_phi",
         "RawPFMET_pt",
         "RawPFMET_phi",
+        "RawPuppiMET_pt",
+        "RawPuppiMET_phi",
         "Pileup_nPU",
         "Pileup_nTrueInt",
         "GenVtx_z",

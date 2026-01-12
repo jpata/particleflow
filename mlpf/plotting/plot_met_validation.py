@@ -24,6 +24,13 @@ def to_bh(data, bins):
     return h1
 
 
+# def sample_label(ax, sample, additional_text="", x=0.05, y=0.95, fontsize=35, color="black"):
+#     text = EVALUATION_DATASET_NAMES[sample]
+#     plt.text(x, y, text + additional_text, ha="left", va="top", transform=ax.transAxes, fontsize=fontsize, color=color)
+
+# def cms_label(ax):
+#     mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=ax)
+
 def plot_met_distribution(
     data_pf,
     data_mlpf,
@@ -52,10 +59,10 @@ def plot_met_distribution(
     h0 = to_bh(data_pf["GenMET_pt"], bins)
 
     # PF MET (Puppi)
-    h1 = to_bh(data_pf["PuppiMET_pt"], bins)
+    h1 = to_bh(data_pf["RawPuppiMET_pt"], bins)
 
     # MLPF MET
-    h2 = to_bh(data_mlpf["PuppiMET_pt"], bins)
+    h2 = to_bh(data_mlpf["RawPuppiMET_pt"], bins)
 
     plt.sca(a0)
     x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen.", ls="--", color=gen_color)
@@ -66,7 +73,7 @@ def plot_met_distribution(
         plt.yscale("log")
         a0.set_ylim(bottom=1, top=a0.get_ylim()[1] * 1000)
 
-    mplhep.cms.label("", data=False, com=tev, year="Run 3", ax=a0)
+    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=a0)
     a0.text(
         sample_label_coords[0],
         sample_label_coords[1],
@@ -127,7 +134,7 @@ def met_response_plot(
     ax = plt.axes()
     b = np.linspace(0, 5, 101)
 
-    mplhep.cms.label("", data=False, com=tev, year="Run 3", ax=ax)
+    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=ax)
     ax.text(
         sample_label_coords[0],
         sample_label_coords[1],
@@ -325,7 +332,7 @@ def plot_met_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, output_dir, 
     ax.set_xlabel("True $N_{PV}$")
     ax.set_ylabel("MET response resolution (IQR/med.)")
     ax.set_ylim(0, 1.5)
-    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
+    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=ax)
     ax.text(
         kwargs["sample_label_coords"][0],
         kwargs["sample_label_coords"][1],
@@ -371,13 +378,13 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
     legend_loc = (0.5, 0.55)
     legend_loc_scalereso = (0.50, 0.65)
     legend_loc_met_response = (0.3, 0.45)
-    sample_label_fontsize = 30
+    sample_label_fontsize = 35
     addtext_fontsize = 25
     jet_label_coords_single = 0.02, 0.88
-    sample_label_coords = 0.02, 0.96
-    gen_color = "#648df4"
-    pf_color = "#f3a041"
-    mlpf_color = "#d23b3d"
+    sample_label_coords = 0.05, 0.95
+    gen_color = "#9C9CA1"
+    pf_color = "#5790FC"
+    mlpf_color = "#E42536"
     pf_linestyle = "-."
     mlpf_linestyle = "-"
     pf_label = "PF-PUPPI"
@@ -454,12 +461,12 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
 
     msk = genmet_pt_pf != 0
     resp_pf = {
-        "response": np.divide(data_pf["PuppiMET_pt"][msk], genmet_pt_pf[msk]),
+        "response": np.divide(data_pf["RawPuppiMET_pt"][msk], genmet_pt_pf[msk]),
         "GenMET_pt": genmet_pt_pf,
     }
     msk = genmet_pt_mlpf != 0
     resp_mlpf = {
-        "response": np.divide(data_mlpf["PuppiMET_pt"][msk], genmet_pt_mlpf[msk]),
+        "response": np.divide(data_mlpf["RawPuppiMET_pt"][msk], genmet_pt_mlpf[msk]),
         "GenMET_pt": genmet_pt_mlpf,
     }
 
@@ -511,7 +518,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
     ax.set_xscale("log")
     ax.set_ylim(0.0, 4.0)
     plt.axhline(1.0, color="black", ls="--")
-    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
+    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=ax)
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
@@ -533,7 +540,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_xscale("log")
     ax.set_ylim(0.0, 2.0)
-    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
+    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=ax)
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
