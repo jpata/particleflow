@@ -52,10 +52,10 @@ def plot_met_distribution(
     h0 = to_bh(data_pf["GenMET_pt"], bins)
 
     # PF MET (Puppi)
-    h1 = to_bh(data_pf["RawPuppiMET_pt"], bins)
+    h1 = to_bh(data_pf["PuppiMET_pt"], bins)
 
     # MLPF MET
-    h2 = to_bh(data_mlpf["RawPuppiMET_pt"], bins)
+    h2 = to_bh(data_mlpf["PuppiMET_pt"], bins)
 
     plt.sca(a0)
     x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen", ls="--", color=gen_color)
@@ -373,7 +373,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
     legend_loc_met_response = (0.3, 0.45)
     sample_label_fontsize = 35
     addtext_fontsize = 25
-    jet_label_coords_single = 0.02, 0.88
+    jet_label_coords_single = 0.05, 0.88
     sample_label_coords = 0.05, 0.95
     gen_color = "#9C9CA1"
     pf_color = "#5790FC"
@@ -454,12 +454,12 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
 
     msk = genmet_pt_pf != 0
     resp_pf = {
-        "response": np.divide(data_pf["RawPuppiMET_pt"][msk], genmet_pt_pf[msk]),
+        "response": np.divide(data_pf["PuppiMET_pt"][msk], genmet_pt_pf[msk]),
         "GenMET_pt": genmet_pt_pf,
     }
     msk = genmet_pt_mlpf != 0
     resp_mlpf = {
-        "response": np.divide(data_mlpf["RawPuppiMET_pt"][msk], genmet_pt_mlpf[msk]),
+        "response": np.divide(data_mlpf["PuppiMET_pt"][msk], genmet_pt_mlpf[msk]),
         "GenMET_pt": genmet_pt_mlpf,
     }
 

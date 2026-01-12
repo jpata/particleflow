@@ -67,14 +67,14 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
     legend_loc_effpur = (0.5, 0.68)
     legend_loc_scalereso = (0.40, 0.50)
     legend_loc_jet_response = (0.05, 0.55)
-    sample_label_fontsize = 30
+    sample_label_fontsize = 35
     addtext_fontsize = 25
-    jet_label_coords = 0.02, 0.86
-    jet_label_coords_single = 0.02, 0.88
-    sample_label_coords = 0.02, 0.96
-    gen_color = "#648df4"
-    pf_color = "#f3a041"
-    mlpf_color = "#d23b3d"
+    jet_label_coords = 0.05, 0.85
+    jet_label_coords_single = 0.05, 0.87
+    sample_label_coords = 0.05, 0.95
+    gen_color = "#9C9CA1"
+    pf_color = "#5790FC"
+    mlpf_color = "#E42536"
     gen_linestyle = "--"
     pf_linestyle = "-."
     mlpf_linestyle = "-"
@@ -184,9 +184,9 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         h2 = to_bh(awkward.flatten(data_mlpf[f"{jet_prefix}_{variable_reco}"][mlpf_jet_mask]), bins)
 
         plt.sca(a0)
-        x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen.", ls=gen_linestyle)
-        x1 = mplhep.histplot(h1, histtype="step", lw=2, label=pf_label, ls=pf_linestyle)
-        x2 = mplhep.histplot(h2, histtype="step", lw=2, label=mlpf_label, ls=mlpf_linestyle)
+        x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen", ls=gen_linestyle, color=gen_color)
+        x1 = mplhep.histplot(h1, histtype="step", lw=2, label=pf_label, ls=pf_linestyle, color=pf_color)
+        x2 = mplhep.histplot(h2, histtype="step", lw=2, label=mlpf_label, ls=mlpf_linestyle, color=mlpf_color)
 
         if logy:
             plt.yscale("log")
