@@ -24,13 +24,6 @@ def to_bh(data, bins):
     return h1
 
 
-# def sample_label(ax, sample, additional_text="", x=0.05, y=0.95, fontsize=35, color="black"):
-#     text = EVALUATION_DATASET_NAMES[sample]
-#     plt.text(x, y, text + additional_text, ha="left", va="top", transform=ax.transAxes, fontsize=fontsize, color=color)
-
-# def cms_label(ax):
-#     mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=ax)
-
 def plot_met_distribution(
     data_pf,
     data_mlpf,
