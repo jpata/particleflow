@@ -66,7 +66,7 @@ def plot_met_distribution(
         plt.yscale("log")
         a0.set_ylim(bottom=1, top=a0.get_ylim()[1] * 1000)
 
-    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=a0)
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (13.6 TeV)", ax=a0)
     a0.text(
         sample_label_coords[0],
         sample_label_coords[1],
@@ -127,7 +127,7 @@ def met_response_plot(
     ax = plt.axes()
     b = np.linspace(0, 5, 101)
 
-    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=ax)
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (13.6 TeV)", ax=ax)
     ax.text(
         sample_label_coords[0],
         sample_label_coords[1],
@@ -325,7 +325,7 @@ def plot_met_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, output_dir, 
     ax.set_xlabel("True $N_{PV}$")
     ax.set_ylabel("MET response resolution (IQR/med.)")
     ax.set_ylim(0, 1.5)
-    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=ax)
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (13.6 TeV)", ax=ax)
     ax.text(
         kwargs["sample_label_coords"][0],
         kwargs["sample_label_coords"][1],
@@ -511,7 +511,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
     ax.set_xscale("log")
     ax.set_ylim(0.0, 4.0)
     plt.axhline(1.0, color="black", ls="--")
-    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=ax)
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (13.6 TeV)", ax=ax)
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
@@ -533,7 +533,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_xscale("log")
     ax.set_ylim(0.0, 2.0)
-    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (13.6 TeV)', ax=ax)
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (13.6 TeV)", ax=ax)
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )

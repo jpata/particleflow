@@ -85,12 +85,18 @@ def loss_plot(epochs, train, test, margin=0.05, smoothing=False, ylabel="", titl
     plt.legend(loc=3, frameon=False, fontsize=35)
     plt.xlabel("Epoch")
     plt.ylabel(ylabel)
-    mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (14 TeV)')
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (14 TeV)")
     return fig, ax
 
 
 @click.command()
-@click.option("--input-dirs", "-i", multiple=True, help="Input directories containing history/epoch_*.json files.", default=["/mnt/work/huggingface/particleflow/cms/v2.6.0pre1/pyg-cms_20250722_101813_274478"])
+@click.option(
+    "--input-dirs",
+    "-i",
+    multiple=True,
+    help="Input directories containing history/epoch_*.json files.",
+    default=["/mnt/work/huggingface/particleflow/cms/v2.6.0pre1/pyg-cms_20250722_101813_274478"],
+)
 @click.option("--labels", "-l", multiple=True, help="Labels for each input directory. Must be the same number as input-dirs.", default=["v2.6.0pre1"])
 @click.option("--output-dir", "-o", type=str, help="Output directory for plots.", default="plots")
 def main(input_dirs, labels, output_dir):
@@ -241,7 +247,7 @@ def main(input_dirs, labels, output_dir):
         plt.ylabel("Total Valid. Loss [a.u.]")
         plt.xlabel("Epoch")
         plt.legend(loc="best")
-        mplhep.cms.label(llabel='Simulation', rlabel='Run 3 (14 TeV)')
+        mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (14 TeV)")
         plt.savefig(output_path / "loss_comparison.pdf")
         plt.close()
 
