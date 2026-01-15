@@ -65,8 +65,8 @@ def loss_plot(epochs, train, test, margin=0.05, smoothing=False, ylabel="", titl
     l0 = "Training"
     l1 = "Validation"
 
-    p0 = plt.plot(epochs, train, alpha=alpha, label=l0, marker="o", ls="--")
-    p1 = plt.plot(epochs, test, alpha=alpha, label=l1, marker="x")
+    p0 = plt.plot(epochs, train, alpha=alpha, label=l0, marker="o", ls="--", lw=3, ms=10)
+    p1 = plt.plot(epochs, test, alpha=alpha, label=l1, marker="x", lw=3, ms=10)
 
     if smoothing:
         train_smooth = np.convolve(train[~np.isnan(train)], np.ones(5) / 5, mode="valid")
@@ -82,17 +82,23 @@ def loss_plot(epochs, train, test, margin=0.05, smoothing=False, ylabel="", titl
     if last_valid_loss is not np.nan:
         plt.ylim(last_valid_loss * (1.0 - margin), last_valid_loss * (1.0 + margin))
 
-    plt.legend(loc=3, frameon=False, fontsize=30)
-    plt.xlabel("epoch")
+    plt.legend(loc=3, frameon=False, fontsize=35)
+    plt.xlabel("Epoch")
     plt.ylabel(ylabel)
-    mplhep.cms.label("", data=False, rlabel="Run 3 configuration")
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (14 TeV)")
     return fig, ax
 
 
 @click.command()
-@click.option("--input-dirs", "-i", multiple=True, required=True, help="Input directories containing history/epoch_*.json files.")
-@click.option("--labels", "-l", multiple=True, help="Labels for each input directory. Must be the same number as input-dirs.")
-@click.option("--output-dir", "-o", required=True, type=str, help="Output directory for plots.")
+@click.option(
+    "--input-dirs",
+    "-i",
+    multiple=True,
+    help="Input directories containing history/epoch_*.json files.",
+    default=["/mnt/work/huggingface/particleflow/cms/v2.6.0pre1/pyg-cms_20250722_101813_274478"],
+)
+@click.option("--labels", "-l", multiple=True, help="Labels for each input directory. Must be the same number as input-dirs.", default=["v2.6.0pre1"])
+@click.option("--output-dir", "-o", type=str, help="Output directory for plots.", default="plots")
 def main(input_dirs, labels, output_dir):
     """
     Generates loss curve plots from training history files.
@@ -123,7 +129,7 @@ def main(input_dirs, labels, output_dir):
 
         # Total loss
         fig, ax = loss_plot(
-            history.index + 1, history["train_Total"].values, history["valid_Total"].values, margin=0.1, ylabel="Total loss", title=label
+            history.index + 1, history["train_Total"].values, history["valid_Total"].values, margin=0.15, ylabel="Total Loss [a.u.]", title=label
         )
         plt.xticks(range(1, len(history) + 1))
         plt.savefig(output_path / f"{label}_loss.pdf")
@@ -136,7 +142,7 @@ def main(input_dirs, labels, output_dir):
                 history["train_Classification"].values * 100,
                 history["valid_Classification"].values * 100,
                 margin=0.05,
-                ylabel="Particle ID loss x100",
+                ylabel="Particle ID Loss x100 [a.u.]",
                 title=label,
             )
             plt.xticks(range(1, len(history) + 1))
@@ -149,8 +155,8 @@ def main(input_dirs, labels, output_dir):
                 history.index + 1,
                 history["train_Classification_binary"].values,
                 history["valid_Classification_binary"].values,
-                margin=0.1,
-                ylabel="Binary classification loss",
+                margin=0.15,
+                ylabel="Binary Classification Loss [a.u.]",
                 title=label,
             )
             plt.xticks(range(1, len(history) + 1))
@@ -162,7 +168,7 @@ def main(input_dirs, labels, output_dir):
         if all([f"train_{loss}" in history.columns for loss in reg_losses]):
             reg_loss = sum([history[f"train_{loss}"].values for loss in reg_losses])
             val_reg_loss = sum([history[f"valid_{loss}"].values for loss in reg_losses])
-            fig, ax = loss_plot(history.index + 1, reg_loss, val_reg_loss, margin=0.2, ylabel="Regression loss", title=label)
+            fig, ax = loss_plot(history.index + 1, reg_loss, val_reg_loss, margin=0.2, ylabel="Regression Loss [a.u.]", title=label)
             plt.xticks(range(1, len(history) + 1))
             plt.savefig(output_path / f"{label}_reg_loss.pdf")
             plt.close(fig)
@@ -174,7 +180,7 @@ def main(input_dirs, labels, output_dir):
                 history["train_ispu"].values,
                 history["valid_ispu"].values,
                 margin=0.5,
-                ylabel="PU classification loss",
+                ylabel="PU Classification Loss [a.u.]",
                 title=label,
             )
             plt.xticks(range(1, len(history) + 1))
@@ -186,10 +192,10 @@ def main(input_dirs, labels, output_dir):
         # fig.suptitle(label, fontsize=35)
 
         loss_info = [
-            {"name": "Total", "label": "Total Loss"},
-            {"name": "Classification", "label": "PID Classification Loss"},
-            {"name": "Classification_binary", "label": "Binary Classification Loss"},
-            {"name": "Regression", "label": "Regression Loss"},
+            {"name": "Total", "label": "Total Loss [a.u.]"},
+            {"name": "Classification", "label": "PID Classification Loss [a.u.]"},
+            {"name": "Classification_binary", "label": "Binary Classification Loss [a.u.]"},
+            {"name": "Regression", "label": "Regression Loss [a.u.]"},
         ]
 
         for i, (ax, info) in enumerate(zip(axs, loss_info)):
@@ -238,10 +244,10 @@ def main(input_dirs, labels, output_dir):
                 continue
             label = labels[i] if labels else Path(input_dirs[i]).name
             plt.plot(history.index + 1, history["valid_Total"], marker="o", label=label)
-        plt.ylabel("Total valid. loss")
-        plt.xlabel("epoch")
+        plt.ylabel("Total Valid. Loss [a.u.]")
+        plt.xlabel("Epoch")
         plt.legend(loc="best")
-        mplhep.cms.label("", data=False, rlabel="Run 3 configuration")
+        mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (14 TeV)")
         plt.savefig(output_path / "loss_comparison.pdf")
         plt.close()
 

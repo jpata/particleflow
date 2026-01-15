@@ -58,7 +58,7 @@ def plot_met_distribution(
     h2 = to_bh(data_mlpf["PuppiMET_pt"], bins)
 
     plt.sca(a0)
-    x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen.", ls="--", color=gen_color)
+    x0 = mplhep.histplot(h0, histtype="step", lw=2, label="Gen", ls="--", color=gen_color)
     x1 = mplhep.histplot(h1, histtype="step", lw=2, label="PF-PUPPI", ls=pf_linestyle, color=pf_color)
     x2 = mplhep.histplot(h2, histtype="step", lw=2, label=mlpf_label, ls=mlpf_linestyle, color=mlpf_color)
 
@@ -66,7 +66,7 @@ def plot_met_distribution(
         plt.yscale("log")
         a0.set_ylim(bottom=1, top=a0.get_ylim()[1] * 1000)
 
-    mplhep.cms.label("", data=False, com=tev, year="Run 3", ax=a0)
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (13.6 TeV)", ax=a0)
     a0.text(
         sample_label_coords[0],
         sample_label_coords[1],
@@ -127,7 +127,7 @@ def met_response_plot(
     ax = plt.axes()
     b = np.linspace(0, 5, 101)
 
-    mplhep.cms.label("", data=False, com=tev, year="Run 3", ax=ax)
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (13.6 TeV)", ax=ax)
     ax.text(
         sample_label_coords[0],
         sample_label_coords[1],
@@ -325,7 +325,7 @@ def plot_met_response_vs_pu(resp_pf, resp_mlpf, data_pf, data_mlpf, output_dir, 
     ax.set_xlabel("True $N_{PV}$")
     ax.set_ylabel("MET response resolution (IQR/med.)")
     ax.set_ylim(0, 1.5)
-    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (13.6 TeV)", ax=ax)
     ax.text(
         kwargs["sample_label_coords"][0],
         kwargs["sample_label_coords"][1],
@@ -368,16 +368,16 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
 
     # plotting style variables
     legend_fontsize = 30
-    legend_loc = (0.5, 0.55)
+    legend_loc = (0.5, 0.5)
     legend_loc_scalereso = (0.50, 0.65)
     legend_loc_met_response = (0.3, 0.45)
-    sample_label_fontsize = 30
+    sample_label_fontsize = 35
     addtext_fontsize = 25
-    jet_label_coords_single = 0.02, 0.88
-    sample_label_coords = 0.02, 0.96
-    gen_color = "#648df4"
-    pf_color = "#f3a041"
-    mlpf_color = "#d23b3d"
+    jet_label_coords_single = 0.05, 0.88
+    sample_label_coords = 0.05, 0.95
+    gen_color = "#9C9CA1"
+    pf_color = "#5790FC"
+    mlpf_color = "#E42536"
     pf_linestyle = "-."
     mlpf_linestyle = "-"
     pf_label = "PF-PUPPI"
@@ -511,7 +511,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
     ax.set_xscale("log")
     ax.set_ylim(0.0, 4.0)
     plt.axhline(1.0, color="black", ls="--")
-    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (13.6 TeV)", ax=ax)
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
@@ -533,7 +533,7 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, output_dir, sample_name, te
     ax.legend(fontsize=legend_fontsize, loc=legend_loc_scalereso)
     ax.set_xscale("log")
     ax.set_ylim(0.0, 2.0)
-    mplhep.cms.label(ax=ax, data=False, com=tev, year="Run 3")
+    mplhep.cms.label(llabel="Simulation", rlabel="Run 3 (13.6 TeV)", ax=ax)
     ax.text(
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
