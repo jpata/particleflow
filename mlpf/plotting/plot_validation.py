@@ -851,8 +851,8 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
     ax.text(
-        jet_label_coords_single[0],
-        jet_label_coords_single[1],
+        jet_label_coords[0],
+        jet_label_coords[1],
         jet_label_inclusive,
         transform=ax.transAxes,
         fontsize=addtext_fontsize,
@@ -891,8 +891,8 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
     ax.text(
-        jet_label_coords_single[0],
-        jet_label_coords_single[1],
+        jet_label_coords[0],
+        jet_label_coords[1],
         jet_label_inclusive,
         transform=ax.transAxes,
         fontsize=addtext_fontsize,
@@ -942,8 +942,8 @@ def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_di
         sample_label_coords[0], sample_label_coords[1], plot_sample_name, transform=ax.transAxes, fontsize=sample_label_fontsize, ha="left", va="top"
     )
     ax.text(
-        jet_label_coords_single[0],
-        jet_label_coords_single[1],
+        jet_label_coords[0],
+        jet_label_coords[1],
         jet_label_inclusive,
         transform=ax.transAxes,
         fontsize=addtext_fontsize,

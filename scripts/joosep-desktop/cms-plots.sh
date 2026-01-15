@@ -2,7 +2,7 @@
 
 export PYTHONPATH=`pwd`
 export QT_QPA_PLATFORM=offscreen
-IMG=~/HEP-KBFI/singularity/pytorch.simg\:2025-09-01
+IMG=~/HEP-KBFI/singularity/pytorch.simg\:2025-11-28
 NANO_PATH=/mnt/work/particleflow/CMSSW_15_0_5_mlpf_v2.6.0pre1_puppi_2372e2/cuda_False/
 
 # singularity exec -B /mnt/work/ $IMG  \
