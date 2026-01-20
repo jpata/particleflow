@@ -1,0 +1,22 @@
+Bootstrap: docker
+
+From: cern/alma8-base
+
+%post
+       yum --disablerepo=epel install -y dnf vim which
+       yum --disablerepo=epel install -y python3 python3-devel python3-pip
+       yum --disablerepo=epel install -y doxygen
+       yum --disablerepo=epel install -y motif motif-devel
+       yum --disablerepo=epel install -y wget
+       yum --disablerepo=epel install -y gcc gcc-c++ make patch bash tar gzip unzip bzip2 xz file gnupg2 git
+       
+       yum --disablerepo=epel install -y mesa-libGL mesa-libEGL mesa-libGLU
+       yum --disablerepo=epel install -y libglvnd-opengl glx-utils libXpm libXext libXft
+       yum --disablerepo=epel install -y mesa-dri-drivers
+
+%environment
+    export LIBGL_ALWAYS_SOFTWARE=1
+    export LD_LIBRARY_PATH=/usr/lib64:$LD_LIBRARY_PATH
+
+%runscript
+    /bin/bash
