@@ -39,7 +39,8 @@ class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
     """
 
     # create configs 1 ... NUM_SPLITS + 1 that allow to parallelize the dataset building
-    BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, 40 + 1)]
+    NUM_SPLITS = 40
+    BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, NUM_SPLITS + 1)]
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
