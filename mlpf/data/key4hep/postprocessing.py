@@ -125,8 +125,7 @@ def weighted_avg_and_std(values, weights):
 
 def track_pt(omega):
     a = 3 * 10**-4
-    b = 4  # B-field in tesla, from clicRec_e4h_input
-
+    b = 4  # B-field in tesla
     return a * np.abs(b / omega)
 
 
@@ -233,7 +232,7 @@ def hits_to_features(hit_data, iev, coll, feats):
     return awkward.Record(feat_arr)
 
 
-def get_calohit_matrix_and_genadj(dataset, hit_data, calohit_links, iev, collectionIDs):
+def get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs):
     feats = ["type", "cellID", "energy", "energyError", "time", "position.x", "position.y", "position.z"]
 
     hit_idx_global = 0
@@ -253,18 +252,10 @@ def get_calohit_matrix_and_genadj(dataset, hit_data, calohit_links, iev, collect
 
     # add all edges from genparticle to calohit
     calohit_to_gen_weight = calohit_links["CalohitMCTruthLink.weight"][iev]
-    if dataset == "clic":
-        calohit_to_gen_calo_colid = calohit_links["CalohitMCTruthLink#0.collectionID"][iev]
-        calohit_to_gen_gen_colid = calohit_links["CalohitMCTruthLink#1.collectionID"][iev]
-        calohit_to_gen_calo_idx = calohit_links["CalohitMCTruthLink#0.index"][iev]
-        calohit_to_gen_gen_idx = calohit_links["CalohitMCTruthLink#1.index"][iev]
-    elif dataset == "fcc":
-        calohit_to_gen_calo_colid = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"][iev]
-        calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID"][iev]
-        calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]
-        calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index"][iev]
-    else:
-        raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+    calohit_to_gen_calo_colid = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"][iev]
+    calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID"][iev]
+    calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]
+    calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index"][iev]
 
     genparticle_to_hit_matrix_coo0 = []
     genparticle_to_hit_matrix_coo1 = []
@@ -291,20 +282,12 @@ def get_calohit_matrix_and_genadj(dataset, hit_data, calohit_links, iev, collect
     )
 
 
-def hit_cluster_adj(dataset, prop_data, hit_idx_local_to_global, iev):
+def hit_cluster_adj(prop_data, hit_idx_local_to_global, iev):
 
-    if dataset == "clic":
-        coll_arr = prop_data["PandoraClusters#1"]["PandoraClusters#1.collectionID"][iev]
-        idx_arr = prop_data["PandoraClusters#1"]["PandoraClusters#1.index"][iev]
-        hits_begin = prop_data["PandoraClusters"]["PandoraClusters.hits_begin"][iev]
-        hits_end = prop_data["PandoraClusters"]["PandoraClusters.hits_end"][iev]
-    elif dataset == "fcc":
-        coll_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.collectionID"][iev]
-        idx_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.index"][iev]
-        hits_begin = prop_data["PandoraClusters"]["PandoraClusters.hits_begin"][iev]
-        hits_end = prop_data["PandoraClusters"]["PandoraClusters.hits_end"][iev]
-    else:
-        raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+    coll_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.collectionID"][iev]
+    idx_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.index"][iev]
+    hits_begin = prop_data["PandoraClusters"]["PandoraClusters.hits_begin"][iev]
+    hits_end = prop_data["PandoraClusters"]["PandoraClusters.hits_end"][iev]
 
     # index in the array of all hits
     hit_to_cluster_matrix_coo0 = []
@@ -331,14 +314,9 @@ def hit_cluster_adj(dataset, prop_data, hit_idx_local_to_global, iev):
     return hit_to_cluster_matrix_coo0, hit_to_cluster_matrix_coo1, hit_to_cluster_matrix_w
 
 
-def gen_to_features(dataset, prop_data, iev):
+def gen_to_features(prop_data, iev):
 
-    if dataset == "clic":
-        gen_arr = prop_data[iev]
-    elif dataset == "fcc":
-        gen_arr = prop_data[mc_coll][iev]
-    else:
-        raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+    gen_arr = prop_data[mc_coll][iev]
 
     gen_arr = {k.replace(mc_coll + ".", ""): gen_arr[k] for k in gen_arr.fields}
 
@@ -374,27 +352,15 @@ def gen_to_features(dataset, prop_data, iev):
         "daughters_end": gen_arr["daughters_end"],
     }
 
-    if dataset == "clic":
-        ret["index"] = prop_data["MCParticles#1.index"][iev]
-    elif dataset == "fcc":
-        ret["index"] = prop_data["_MCParticles_daughters/_MCParticles_daughters.index"][iev]
-    else:
-        raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+    ret["index"] = prop_data["_MCParticles_daughters/_MCParticles_daughters.index"][iev]
 
     return ret
 
 
-def genparticle_track_adj(dataset, sitrack_links, iev):
+def genparticle_track_adj(sitrack_links, iev):
 
-    if dataset == "clic":
-        trk_to_gen_trkidx = sitrack_links["SiTracksMCTruthLink#0.index"][iev]
-        trk_to_gen_genidx = sitrack_links["SiTracksMCTruthLink#1.index"][iev]
-    elif dataset == "fcc":
-        trk_to_gen_trkidx = sitrack_links["_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index"][iev]
-        trk_to_gen_genidx = sitrack_links["_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index"][iev]
-    else:
-        raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
-
+    trk_to_gen_trkidx = sitrack_links["_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index"][iev]
+    trk_to_gen_genidx = sitrack_links["_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index"][iev]
     trk_to_gen_w = sitrack_links["SiTracksMCTruthLink.weight"][iev]
 
     genparticle_to_track_matrix_coo0 = awkward.to_numpy(trk_to_gen_genidx)
@@ -476,47 +442,38 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     return awkward.Record(ret)
 
 
-def track_to_features(dataset, prop_data, iev):
-    if dataset == "clic":
-        track_arr = prop_data[track_coll][iev]
-        feats_from_track = ["type", "chi2", "ndf", "dEdx", "dEdxError", "radiusOfInnermostHit"]
-        ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
+def track_to_features(prop_data, iev):
+    track_arr = prop_data[track_coll][iev]
+    # the following are needed since they are no longer defined under SiTracks_Refitted
+    track_arr_dQdx = prop_data["SiTracks_Refitted_dQdx"][iev]
+    track_arr_trackStates = prop_data["_SiTracks_Refitted_trackStates"][iev]
 
-    elif dataset == "fcc":
-        track_arr = prop_data[track_coll][iev]
-        # the following are needed since they are no longer defined under SiTracks_Refitted
-        track_arr_dQdx = prop_data["SiTracks_Refitted_dQdx"][iev]
-        track_arr_trackStates = prop_data["_SiTracks_Refitted_trackStates"][iev]
+    feats_from_track = ["type", "chi2", "ndf"]
+    ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
 
-        feats_from_track = ["type", "chi2", "ndf"]
-        ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
+    ret["dEdx"] = track_arr_dQdx["SiTracks_Refitted_dQdx.dQdx.value"]
+    ret["dEdxError"] = track_arr_dQdx["SiTracks_Refitted_dQdx.dQdx.error"]
 
-        ret["dEdx"] = track_arr_dQdx["SiTracks_Refitted_dQdx.dQdx.value"]
-        ret["dEdxError"] = track_arr_dQdx["SiTracks_Refitted_dQdx.dQdx.error"]
+    # build the radiusOfInnermostHit variable
+    num_tracks = len(ret["dEdx"])
+    innermost_radius = []
+    for itrack in range(num_tracks):
 
-        # build the radiusOfInnermostHit variable
-        num_tracks = len(ret["dEdx"])
-        innermost_radius = []
-        for itrack in range(num_tracks):
+        # select the track states corresponding to itrack
+        # pick the state AtFirstHit
+        # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
+        ibegin = track_arr[track_coll + "." + "trackStates_begin"][itrack]
+        iend = track_arr[track_coll + "." + "trackStates_end"][itrack]
 
-            # select the track states corresponding to itrack
-            # pick the state AtFirstHit
-            # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
-            ibegin = track_arr[track_coll + "." + "trackStates_begin"][itrack]
-            iend = track_arr[track_coll + "." + "trackStates_end"][itrack]
+        refX = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "referencePoint.x"][ibegin:iend]
+        refY = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "referencePoint.y"][ibegin:iend]
+        location = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "location"][ibegin:iend]
 
-            refX = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "referencePoint.x"][ibegin:iend]
-            refY = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "referencePoint.y"][ibegin:iend]
-            location = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "location"][ibegin:iend]
+        istate = np.argmax(location == 2)  # 2 refers to AtFirstHit
 
-            istate = np.argmax(location == 2)  # 2 refers to AtFirstHit
+        innermost_radius.append(math.sqrt(refX[istate] ** 2 + refY[istate] ** 2))
 
-            innermost_radius.append(math.sqrt(refX[istate] ** 2 + refY[istate] ** 2))
-
-        ret["radiusOfInnermostHit"] = np.array(innermost_radius)
-
-    else:
-        raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+    ret["radiusOfInnermostHit"] = np.array(innermost_radius)
 
     n_tr = len(ret["type"])
 
@@ -524,14 +481,7 @@ def track_to_features(dataset, prop_data, iev):
     trackstate_idx = prop_data[track_coll][track_coll + ".trackStates_begin"][iev]
     # get the properties of the track at the first track state (at the origin)
     for k in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
-
-        if dataset == "clic":
-            ret[k] = awkward.to_numpy(prop_data["SiTracks_1"]["SiTracks_1." + k][iev][trackstate_idx])
-        elif dataset == "fcc":
-            ret[k] = awkward.to_numpy(prop_data["_SiTracks_Refitted_trackStates"]["_SiTracks_Refitted_trackStates." + k][iev][trackstate_idx])
-
-        else:
-            raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+        ret[k] = awkward.to_numpy(prop_data["_SiTracks_Refitted_trackStates"]["_SiTracks_Refitted_trackStates." + k][iev][trackstate_idx])
 
     ret["pt"] = awkward.to_numpy(track_pt(ret["omega"]))
     ret["px"] = awkward.to_numpy(np.cos(ret["phi"])) * ret["pt"]
@@ -615,18 +565,18 @@ def add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_tr
     return genparticle_to_hit, genparticle_to_trk
 
 
-def get_genparticles_and_adjacencies(dataset, prop_data, hit_data, calohit_links, sitrack_links, iev, collectionIDs):
-    gen_features = gen_to_features(dataset, prop_data, iev)
-    hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(dataset, hit_data, calohit_links, iev, collectionIDs)
-    hit_to_cluster = hit_cluster_adj(dataset, prop_data, hit_idx_local_to_global, iev)
+def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack_links, iev, collectionIDs):
+    gen_features = gen_to_features(prop_data, iev)
+    hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs)
+    hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
-    track_features = track_to_features(dataset, prop_data, iev)
-    genparticle_to_trk = genparticle_track_adj(dataset, sitrack_links, iev)
+    track_features = track_to_features(prop_data, iev)
+    genparticle_to_trk = genparticle_track_adj(sitrack_links, iev)
 
     # collect hits of st=1 daughters to the st=1 particles
     mask_status1 = gen_features["generatorStatus"] == 1
 
-    if gen_features["index"] is not None:  # if there are even daughters
+    if gen_features["index"] is not None:  # if there are daughters
         genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
 
     n_gp = awkward.count(gen_features["PDG"])
@@ -867,16 +817,10 @@ def get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track, idx_rp_to_cluster):
     return track_to_rp, cluster_to_rp
 
 
-def get_reco_properties(dataset, prop_data, iev):
+def get_reco_properties(prop_data, iev):
 
-    if dataset == "clic":
-        reco_arr = prop_data["MergedRecoParticles"][iev]
-        reco_arr = {k.replace("MergedRecoParticles.", ""): reco_arr[k] for k in reco_arr.fields}
-    elif dataset == "fcc":
-        reco_arr = prop_data["PandoraPFOs"][iev]
-        reco_arr = {k.replace("PandoraPFOs.", ""): reco_arr[k] for k in reco_arr.fields}
-    else:
-        raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+    reco_arr = prop_data["PandoraPFOs"][iev]
+    reco_arr = {k.replace("PandoraPFOs.", ""): reco_arr[k] for k in reco_arr.fields}
 
     reco_p4 = vector.awk(
         awkward.zip({"mass": reco_arr["mass"], "x": reco_arr["momentum.x"], "y": reco_arr["momentum.y"], "z": reco_arr["momentum.z"]})
@@ -886,12 +830,7 @@ def get_reco_properties(dataset, prop_data, iev):
     reco_arr["phi"] = reco_p4.phi
     reco_arr["energy"] = reco_p4.energy
 
-    if dataset == "clic":
-        msk = reco_arr["type"] != 0
-    elif dataset == "fcc":
-        msk = reco_arr["PDG"] != 0
-    else:
-        raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+    msk = reco_arr["PDG"] != 0
 
     reco_arr = awkward.Record({k: reco_arr[k][msk] for k in reco_arr.keys()})
     return reco_arr
@@ -959,7 +898,7 @@ def compute_jets(particles_p4, min_pt=jet_ptcut, with_indices=False):
     return ret
 
 
-def process_one_file(fn, ofn, dataset):
+def process_one_file(fn, ofn):
 
     # output exists, do not recreate
     if os.path.isfile(ofn):
@@ -970,132 +909,72 @@ def process_one_file(fn, ofn, dataset):
     fi = uproot.open(fn)
     arrs = fi["events"]
 
-    if dataset == "clic":
-        collectionIDs = {
-            k: v
-            for k, v in zip(
-                fi.get("metadata").arrays("CollectionIDs")["CollectionIDs"]["m_names"][0],
-                fi.get("metadata").arrays("CollectionIDs")["CollectionIDs"]["m_collectionIDs"][0],
-            )
-        }
-        prop_data = arrs.arrays(
-            [
-                "MCParticles.PDG",
-                "MCParticles.momentum.x",
-                "MCParticles.momentum.y",
-                "MCParticles.momentum.z",
-                "MCParticles.mass",
-                "MCParticles.charge",
-                "MCParticles.generatorStatus",
-                "MCParticles.simulatorStatus",
-                "MCParticles.daughters_begin",
-                "MCParticles.daughters_end",
-                "MCParticles#1.index",
-                track_coll,
-                "SiTracks_1",
-                "PandoraClusters",
-                "PandoraClusters#1",
-                "PandoraClusters#0",
-                "MergedRecoParticles",
-            ]
+    collectionIDs = {
+        k: v
+        for k, v in zip(
+            fi.get("podio_metadata").arrays("events___CollectionTypeInfo/events___CollectionTypeInfo.name")[
+                "events___CollectionTypeInfo/events___CollectionTypeInfo.name"
+            ][0],
+            fi.get("podio_metadata").arrays("events___CollectionTypeInfo/events___CollectionTypeInfo.collectionID")[
+                "events___CollectionTypeInfo/events___CollectionTypeInfo.collectionID"
+            ][0],
         )
-        calohit_links = arrs.arrays(
-            [
-                "CalohitMCTruthLink.weight",
-                "CalohitMCTruthLink#0.index",
-                "CalohitMCTruthLink#0.collectionID",
-                "CalohitMCTruthLink#1.index",
-                "CalohitMCTruthLink#1.collectionID",
-            ]
-        )
-        sitrack_links = arrs.arrays(
-            [
-                "SiTracksMCTruthLink.weight",
-                "SiTracksMCTruthLink#0.index",
-                "SiTracksMCTruthLink#0.collectionID",
-                "SiTracksMCTruthLink#1.index",
-                "SiTracksMCTruthLink#1.collectionID",
-            ]
-        )
-        # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
-        # to the index in the track/cluster collection
-        idx_rp_to_cluster = arrs["MergedRecoParticles#0/MergedRecoParticles#0.index"].array()
-        idx_rp_to_track = arrs["MergedRecoParticles#1/MergedRecoParticles#1.index"].array()
+    }
+    prop_data = arrs.arrays(
+        [
+            mc_coll,
+            "MCParticles.PDG",
+            "MCParticles.momentum.x",
+            "MCParticles.momentum.y",
+            "MCParticles.momentum.z",
+            "MCParticles.mass",
+            "MCParticles.charge",
+            "MCParticles.generatorStatus",
+            "MCParticles.simulatorStatus",
+            "MCParticles.daughters_begin",
+            "MCParticles.daughters_end",
+            "_MCParticles_daughters/_MCParticles_daughters.index",
+            track_coll,
+            "_SiTracks_Refitted_trackStates",
+            "PandoraClusters",
+            "_PandoraClusters_hits/_PandoraClusters_hits.index",
+            "_PandoraClusters_hits/_PandoraClusters_hits.collectionID",
+            "PandoraPFOs",
+            "SiTracks_Refitted_dQdx",
+        ]
+    )
+    calohit_links = arrs.arrays(
+        [
+            "CalohitMCTruthLink.weight",
+            "_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID",
+            "_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index",
+            "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID",
+            "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index",
+        ]
+    )
+    sitrack_links = arrs.arrays(
+        [
+            "SiTracksMCTruthLink.weight",
+            "_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.collectionID",
+            "_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index",
+            "_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.collectionID",
+            "_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index",
+        ]
+    )
 
-        hit_data = {
-            "ECALBarrel": arrs["ECALBarrel"].array(),
-            "ECALEndcap": arrs["ECALEndcap"].array(),
-            "ECALOther": arrs["ECALOther"].array(),
-            "HCALBarrel": arrs["HCALBarrel"].array(),
-            "HCALEndcap": arrs["HCALEndcap"].array(),
-            "HCALOther": arrs["HCALOther"].array(),
-            "MUON": arrs["MUON"].array(),
-        }
-    elif dataset == "fcc":
-        collectionIDs = {
-            k: v
-            for k, v in zip(
-                fi.get("podio_metadata").arrays("events___idTable/m_names")["events___idTable/m_names"][0],
-                fi.get("podio_metadata").arrays("events___idTable/m_collectionIDs")["events___idTable/m_collectionIDs"][0],
-            )
-        }
-        prop_data = arrs.arrays(
-            [
-                mc_coll,
-                "MCParticles.PDG",
-                "MCParticles.momentum.x",
-                "MCParticles.momentum.y",
-                "MCParticles.momentum.z",
-                "MCParticles.mass",
-                "MCParticles.charge",
-                "MCParticles.generatorStatus",
-                "MCParticles.simulatorStatus",
-                "MCParticles.daughters_begin",
-                "MCParticles.daughters_end",
-                "_MCParticles_daughters/_MCParticles_daughters.index",  # similar to "MCParticles#1.index" in clic
-                track_coll,
-                "_SiTracks_Refitted_trackStates",
-                "PandoraClusters",
-                "_PandoraClusters_hits/_PandoraClusters_hits.index",
-                "_PandoraClusters_hits/_PandoraClusters_hits.collectionID",
-                "PandoraPFOs",
-                "SiTracks_Refitted_dQdx",
-            ]
-        )
-        calohit_links = arrs.arrays(
-            [
-                "CalohitMCTruthLink.weight",
-                "_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID",
-                "_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index",
-                "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID",
-                "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index",
-            ]
-        )
-        sitrack_links = arrs.arrays(
-            [
-                "SiTracksMCTruthLink.weight",
-                "_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.collectionID",
-                "_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index",
-                "_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.collectionID",
-                "_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index",
-            ]
-        )
+    # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
+    # to the index in the track/cluster collection
+    idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
+    idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
-        # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
-        # to the index in the track/cluster collection
-        idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
-        idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
-
-        hit_data = {
-            "ECALBarrel": arrs["ECALBarrel"].array(),
-            "ECALEndcap": arrs["ECALEndcap"].array(),
-            "HCALBarrel": arrs["HCALBarrel"].array(),
-            "HCALEndcap": arrs["HCALEndcap"].array(),
-            "HCALOther": arrs["HCALOther"].array(),
-            "MUON": arrs["MUON"].array(),
-        }
-    else:
-        raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+    hit_data = {
+        "ECALBarrel": arrs["ECALBarrel"].array(),
+        "ECALEndcap": arrs["ECALEndcap"].array(),
+        "HCALBarrel": arrs["HCALBarrel"].array(),
+        "HCALEndcap": arrs["HCALEndcap"].array(),
+        "HCALOther": arrs["HCALOther"].array(),
+        "MUON": arrs["MUON"].array(),
+    }
 
     # Compute truth MET and jets from status=1 pythia particles
     mc_pdg = np.abs(prop_data["MCParticles.PDG"])
@@ -1117,14 +996,9 @@ def process_one_file(fn, ofn, dataset):
     for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
 
         # get the reco particles
-        reco_arr = get_reco_properties(dataset, prop_data, iev)
+        reco_arr = get_reco_properties(prop_data, iev)
 
-        if dataset == "clic":
-            reco_type = np.abs(reco_arr["type"])
-        elif dataset == "fcc":
-            reco_type = np.abs(reco_arr["PDG"])
-        else:
-            raise Exception("--dataset provided is not supported. Only 'fcc' or 'clic' are supported atm.")
+        reco_type = np.abs(reco_arr["PDG"])
 
         n_rps = len(reco_type)
         reco_features = awkward.Record(
@@ -1147,7 +1021,6 @@ def process_one_file(fn, ofn, dataset):
 
         # get the genparticles and the links between genparticles and tracks/clusters
         gpdata = get_genparticles_and_adjacencies(
-            dataset,
             prop_data,
             hit_data,
             calohit_links,
@@ -1280,7 +1153,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
-    parser.add_argument("--dataset", type=str, help="Which detector dataset?", required=True, choices=["clic", "fcc"])
 
     args = parser.parse_args()
     return args
@@ -1294,11 +1166,11 @@ def process(args):
         flist = glob.glob(args.input + "/*.root")
         for infile in flist:
             outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-            process_one_file(infile, outfile, args.dataset)
+            process_one_file(infile, outfile)
     else:
         infile = args.input
         outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-        process_one_file(infile, outfile, args.dataset)
+        process_one_file(infile, outfile)
 
 
 if __name__ == "__main__":
