@@ -1,0 +1,3 @@
+[submodule "mlpf/data/key4hep/gen"]
+	path = mlpf/data/key4hep/gen
+	url = https://github.com/HEP-KBFI/key4hep-sim.git
