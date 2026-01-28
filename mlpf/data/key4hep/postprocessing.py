@@ -309,7 +309,10 @@ def get_hit_matrix_and_genadj(
 
     hit_idx_local_to_global = {v: k for k, v in hit_idx_global_to_local.items()}
     hit_feature_matrix = awkward.Record(
-        {k: awkward.concatenate([hit_feature_matrix[i][k] for i in range(len(hit_feature_matrix))]) for k in hit_feature_matrix[0].fields}
+        {
+            k: awkward.concatenate([hit_feature_matrix[i][k] for i in range(len(hit_feature_matrix))])
+            for k in hit_feature_matrix[0].fields
+        }
     )
 
     if "CalohitMCTruthLink.weight" in calohit_links.fields:
@@ -318,6 +321,8 @@ def get_hit_matrix_and_genadj(
         calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID"][iev]
         calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]
         calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index"][iev]
+    else:
+        raise Exception("--dataset provided is not supported. Only 'fcc', 'clic', or 'muoncollider' are supported atm.")
 
         for calo_colid, calo_idx, gen_colid, gen_idx, w in zip(
             calohit_to_gen_calo_colid,
@@ -393,7 +398,9 @@ def gen_to_features(prop_data: awkward.Record, iev: int) -> GenFeatures:
     gen_arr = {k.replace(mc_coll + ".", ""): gen_arr[k] for k in gen_arr.fields}
 
     MCParticles_p4 = vector.awk(
-        awkward.zip({"mass": gen_arr["mass"], "x": gen_arr["momentum.x"], "y": gen_arr["momentum.y"], "z": gen_arr["momentum.z"]})
+        awkward.zip(
+            {"mass": gen_arr["mass"], "x": gen_arr["momentum.x"], "y": gen_arr["momentum.y"], "z": gen_arr["momentum.z"]}
+        )
     )
     gen_arr["pt"] = MCParticles_p4.pt
     gen_arr["eta"] = MCParticles_p4.eta
@@ -422,7 +429,7 @@ def gen_to_features(prop_data: awkward.Record, iev: int) -> GenFeatures:
         "jet_idx": np.zeros(len(gen_arr["PDG"]), dtype=np.int64),
         "daughters_begin": gen_arr["daughters_begin"],
         "daughters_end": gen_arr["daughters_end"],
-        "index": prop_data["_MCParticles_daughters/_MCParticles_daughters.index"][iev],
+        "index": prop_data[f"_{mc_coll}_daughters/_{mc_coll}_daughters.index"][iev],
     }
 
     return ret
@@ -714,7 +721,11 @@ def get_genparticles_and_adjacencies(
         print(f"  st1_particle: pdg={gen_features['PDG'][idx]} pt={gen_features['pt'][idx]:.4f} energy={gen_features['energy'][idx]:.4f}")
 
     if len(genparticle_to_trk[0]) > 0:
-        gp_to_track = coo_matrix((genparticle_to_trk[2], (genparticle_to_trk[0], genparticle_to_trk[1])), shape=(n_gp, n_track)).max(axis=1).todense()
+        gp_to_track = (
+            coo_matrix((genparticle_to_trk[2], (genparticle_to_trk[0], genparticle_to_trk[1])), shape=(n_gp, n_track))
+            .max(axis=1)
+            .todense()
+        )
     else:
         gp_to_track = np.zeros((n_gp, 1))
 
@@ -1050,7 +1061,9 @@ def get_reco_properties(prop_data: Any, iev: int) -> awkward.Record:
     reco_arr = {k.replace("PandoraPFOs.", ""): reco_arr[k] for k in reco_arr.fields}
 
     reco_p4 = vector.awk(
-        awkward.zip({"mass": reco_arr["mass"], "x": reco_arr["momentum.x"], "y": reco_arr["momentum.y"], "z": reco_arr["momentum.z"]})
+        awkward.zip(
+            {"mass": reco_arr["mass"], "x": reco_arr["momentum.x"], "y": reco_arr["momentum.y"], "z": reco_arr["momentum.z"]}
+        )
     )
     reco_arr["pt"] = reco_p4.pt
     reco_arr["eta"] = reco_p4.eta
@@ -1249,26 +1262,35 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             "VXDTrackerHits",
             "VXDEndcapTrackerHits",
         ]
+    elif detector == "maia":
+        b_field = 5.0
+        hit_collections = [
+            "ECALBarrel",
+            "ECALEndcap",
+            "HCALBarrel",
+            "HCALEndcap",
+            "HCALOther",
+            "MUON",
+            "ITrackerHits",
+            "ITrackerEndcapHits",
+            "OTrackerHits",
+            "OTrackerEndcapHits",
+            "VXDTrackerHits",
+            "VXDEndcapTrackerHits",
+        ]
     else:
-        raise ValueError(f"Unknown detector type: {detector}")
-
-    hit_data = {}
-    for k in hit_collections:
-        if k in arrs:
-            hit_data[k] = arrs[k].array()
-        else:
-            raise KeyError(f"Hit collection {k} not found in the input file! Available collections: {arrs.keys()}")
+        raise Exception("--dataset provided is not supported. Only 'clic', 'cld', or 'maia' are supported atm.")
 
     # Compute truth MET and jets from status=1 pythia particles
-    mc_pdg = np.abs(prop_data["MCParticles.PDG"])
-    mc_st1_mask = (prop_data["MCParticles.generatorStatus"] == 1) & (mc_pdg != 12) & (mc_pdg != 14) & (mc_pdg != 16)
+    mc_pdg = np.abs(prop_data[f"{_mc_coll}.PDG"])
+    mc_st1_mask = (prop_data[f"{_mc_coll}.generatorStatus"] == 1) & (mc_pdg != 12) & (mc_pdg != 14) & (mc_pdg != 16)
     mc_st1_p4 = vector.awk(
         awkward.zip(
             {
-                "px": prop_data["MCParticles.momentum.x"][mc_st1_mask],
-                "py": prop_data["MCParticles.momentum.y"][mc_st1_mask],
-                "pz": prop_data["MCParticles.momentum.z"][mc_st1_mask],
-                "mass": prop_data["MCParticles.mass"][mc_st1_mask],
+                "px": prop_data[f"{_mc_coll}.momentum.x"][mc_st1_mask],
+                "py": prop_data[f"{_mc_coll}.momentum.y"][mc_st1_mask],
+                "pz": prop_data[f"{_mc_coll}.momentum.z"][mc_st1_mask],
+                "mass": prop_data[f"{_mc_coll}.mass"][mc_st1_mask],
             }
         )
     )
@@ -1434,9 +1456,13 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         gps_hit[mask_hit_inclusive_only, PN_IDX] = gps_canonical[hit_to_gp_inclusive[mask_hit_inclusive_only], PN_IDX]
 
         rps_track = get_particle_feature_matrix(track_to_rp_all, reco_features, particle_feature_order)
-        rps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])])
+        rps_track[:, 0] = np.array(
+            [map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])]
+        )
         rps_cluster = get_particle_feature_matrix(cluster_to_rp_all, reco_features, particle_feature_order)
-        rps_cluster[:, 0] = np.array([map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(rps_cluster[:, 0], rps_cluster[:, 1])])
+        rps_cluster[:, 0] = np.array(
+            [map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(rps_cluster[:, 0], rps_cluster[:, 1])]
+        )
         rps_cluster[:, 1] = 0
 
         # all initial gen/reco particle energy must be reconstructable
@@ -1502,7 +1528,9 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         sorted_jet_idx = awkward.argsort(target_jets.pt, axis=-1, ascending=False).to_list()
         target_jets_indices = target_jets_indices.to_list()
         for jet_idx in sorted_jet_idx:
-            jet_constituents = [index_mapping[idx] for idx in target_jets_indices[jet_idx]]  # map back to constituent index *before* masking
+            jet_constituents = [
+                index_mapping[idx] for idx in target_jets_indices[jet_idx]
+            ]  # map back to constituent index *before* masking
             ytarget_constituents[jet_constituents] = jet_idx
         ytarget_track_constituents = ytarget_constituents[: len(ytarget_track)]
         ytarget_cluster_constituents = ytarget_constituents[len(ytarget_track) :]
@@ -1542,7 +1570,7 @@ def parse_args() -> Any:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
-    parser.add_argument("--detector", type=str, default="clic", help="detector type (clic, cld)")
+    parser.add_argument("--detector", type=str, default="clic", help="detector type (clic, cld, maia)")
     parser.add_argument("--first-event", type=int, default=0, help="first event to process")
     parser.add_argument("--num-events", type=int, default=-1, help="number of events to process")
 
