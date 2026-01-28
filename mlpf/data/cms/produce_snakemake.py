@@ -74,9 +74,6 @@ def main():
     for bm in bind_mounts:
         bind_args += f" -B {bm}"
 
-    gen_apptainer_cmd = f"apptainer exec {bind_args} {gen_container_img}"
-    main_apptainer_cmd = f"apptainer exec {bind_args} {main_container_img}"
-
     # Get postprocessing script from spec
     postproc_script = prod_config["postprocessing"]["script"]
     postproc_extra_args = prod_config["postprocessing"].get("args", {})
@@ -149,15 +146,14 @@ def main():
                 elif prod_type == "key4hep":
                     gen_base_dir = os.path.join(workspace_dir, "gen")
                     root_file = os.path.join(sample_gen_root_dir, f"reco_{process_name}_{seed}.root")
-                wrapper = gen_apptainer_cmd
+                
                 exports = f"export OUTDIR={gen_base_dir}/ && export CONFIG_DIR={config_dir} && export WORKDIR={scratch_root}/{process_name}_{seed} && export NEV={events_per_job}"
-                gen_cmd = f"{wrapper} bash {gen_script} {process_name} {seed}"
+                gen_cmd = f"bash {gen_script} {process_name} {seed}"
 
                 cmd = f"""
 if [ ! -f {root_file} ]; then
     echo "Generating {root_file}"
     {exports}
-    which apptainer
     {gen_cmd}
 else
     echo "Skipping {root_file}, already exists"
@@ -190,9 +186,6 @@ fi
                         args_str += f" --{k} {v}"
 
                 postproc_cmd = f"python3 {postproc_script} {args_str}"
-
-                if main_container_img:
-                    postproc_cmd = f"{main_apptainer_cmd} {postproc_cmd}"
 
                 if prod_type == "cms":
                     cmd = f"""
@@ -243,6 +236,8 @@ fi
 rule gen_{chunk_id}:
     output:
         \"{gen_sentinel}\"
+    container:
+        \"{gen_container_img}\"
     shell:
         \"{gen_script_path} && touch {{output}}\"
 
@@ -251,9 +246,12 @@ rule post_{chunk_id}:
         \"{gen_sentinel}\"
     output:
         \"{post_sentinel}\"
+    container:
+        \"{main_container_img}\"
     shell:
         \"{post_script_path} && touch {{output}}\"
 """
+        all_sample_post_sentinels[sample_key] = sample_post_sentinels
         all_sample_post_sentinels[sample_key] = sample_post_sentinels
 
     # -------------------------------------------------------------------------
@@ -289,8 +287,6 @@ rule post_{chunk_id}:
             tfds_sentinel = f"{jobs_dir}/tfds/tfds_{tfds_id}.done"
 
             tfds_build_cmd = f"tfds build {builder_path} --config {config_id} --data_dir {tfds_root_dir} --manual_dir {manual_dir} --overwrite"
-            if main_container_img:
-                tfds_build_cmd = f"{main_apptainer_cmd} {tfds_build_cmd}"
 
             cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
@@ -311,6 +307,8 @@ rule tfds_{tfds_id}:
         {input_sentinels_str}
     output:
         \"{tfds_sentinel}\"
+    container:
+        \"{main_container_img}\"
     shell:
         \"{tfds_script_path} && touch {{output}}\"
 """
@@ -332,6 +330,7 @@ rule tfds_{tfds_id}:
 
     print(f"Generated Snakemake workflow in {snakefile_path}")
     print(f"Generated {len(tfds_sentinels)} TFDS jobs.")
+    print(f"Run with: snakemake --snakefile {snakefile_path} --cores 1 --use-apptainer --apptainer-args \"{bind_args}\"")
 
 
 if __name__ == "__main__":
