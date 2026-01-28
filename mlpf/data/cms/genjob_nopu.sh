@@ -2,15 +2,15 @@
 set -e
 set -x
 
-OUTDIR=/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/
-CMSSWDIR=/scratch/persistent/joosep/CMSSW_15_0_5/
-MLPF_PATH=/home/joosep/particleflow/
+OUTDIR=${OUTDIR:-/local/joosep/mlpf/cms/20250508_cmssw_15_0_5_d3c6d1/nopu/}
+CMSSWDIR=${CMSSWDIR:-/scratch/persistent/joosep/CMSSW_15_0_5/}
+CONFIG_DIR=${CONFIG_DIR:-/home/joosep/particleflow/}
 
 #seed must be greater than 0
 SAMPLE=$1
 SEED=$2
 
-WORKDIR=/scratch/local/joosep/$SLURM_JOBID/$SAMPLE/$SEED
+WORKDIR=${WORKDIR:-/scratch/local/joosep/$SLURM_JOBID/$SAMPLE/$SEED}
 #WORKDIR=`pwd`/$SAMPLE/$SEED
 mkdir -p $WORKDIR
 mkdir -p $OUTDIR
@@ -18,7 +18,7 @@ mkdir -p $OUTDIR
 PILEUP=NoPileUp
 PILEUP_INPUT=
 
-N=100
+N=${NEV:-100}
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh

@@ -11,18 +11,23 @@ project:
   paths:
     storage_root: "/mnt/work/mlpf"
     scratch_root: "/mnt/work/scratch/mlpf"
-    tfds_dir: "/mnt/work/mlpf/tensorflow_datasets"
 
 # -----------------------------------------------------------------------------
 # Dataset Productions
 # Defines how raw data is generated (or found), processed, and registered in TFDS.
+# Each production follows a unified directory structure:
+#   $workspace_dir/gen  - Raw ROOT/EDM files from simulation
+#   $workspace_dir/post - Postprocessed intermediate files (parquet/pkl)
+#   $workspace_dir/tfds - Final TensorFlow Datasets
 # -----------------------------------------------------------------------------
 productions:
-  # CMS Production Campaign (example based on prepare_args.py)
+  # CMS Production Campaign
   cms_2025_main:
     type: "cms"
     comment: "Main production with CMSSW_15_0_5"
     workspace_dir: "${project.paths.storage_root}/cms/20250508_cmssw_15_0_5_d3c6d1"
+    config_dir: "/home/joosep/particleflow/"
+    gen_container: "/cvmfs/singularity.opensciencegrid.org/cmssw/cms:rhel8-x86_64"
     
     # Common execution environment for this campaign
     environment:
@@ -110,30 +115,51 @@ productions:
         version: "2.8.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-  # Key4Hep (CLIC) Production (example based on existing data)
-  clic_2024_edm4hep:
+  # CLD Production
+  cld_2025_edm4hep:
     type: "key4hep"
-    workspace_dir: "${project.paths.storage_root}/clic_edm4hep"
-    
+    comment: "CLD production with Key4Hep"
+    workspace_dir: "/mnt/work/particleflow/cld/v1.2.2_key4hep_2025-05-29_CLD_3edac3"
+    config_dir: "/home/joosep/key4hep-sim/cld/CLDConfig"
+    gen_container: "/home/software/singularity/alma9.simg"
+
     samples:
-      qq:
-        input_pattern: "qq/*.root"
       ttbar:
-        input_pattern: "ttbar/*.root"
-        
+        process_name: "p8_ee_ttbar_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [300000, 300010]
+        events_per_job: 100
+      ww:
+        process_name: "p8_ee_WW_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [400000, 400010]
+        events_per_job: 100
+      zz_tautau:
+        process_name: "p8_ee_ZZ_tautau_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [100000, 100010]
+        events_per_job: 100
+      zh_tautau:
+        process_name: "p8_ee_ZH_Htautau_ecm240"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [200000, 200010]
+        events_per_job: 100
+      zz:
+        process_name: "p8_ee_ZZ_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [100000, 100010]
+        events_per_job: 100
+
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
-      args:
-        dataset: "clic"
-      output_format: "parquet"
+      args: {} 
 
     tfds_mapping:
-      qq:
-        builder_path: "mlpf/heptfds/clic_pf_edm4hep/qq"
-        version: "2.5.0"
       ttbar:
-        builder_path: "mlpf/heptfds/clic_pf_edm4hep/ttbar"
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
         version: "2.5.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
 
 # -----------------------------------------------------------------------------
 # Model Configurations
