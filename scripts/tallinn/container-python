@@ -1,0 +1,12 @@
+#!/bin/bash
+CORES=${SLURM_CPUS_PER_TASK:-1}
+export OMP_NUM_THREADS=$CORES
+export OPENBLAS_NUM_THREADS=$CORES
+export MKL_NUM_THREADS=$CORES
+export VECLIB_MAXIMUM_THREADS=$CORES
+export NUMEXPR_NUM_THREADS=$CORES
+
+FIX_DIR="/home/joosep/particleflow/scripts/tallinn/snakemake_fix"
+export PYTHONPATH="$FIX_DIR:$PYTHONPATH"
+
+apptainer exec -B /home -B /local -B /scratch -B /cvmfs -B /etc/munge/ -B /etc/slurm/ -B /var/run/munge/ /home/joosep/singularity/alma9-kbfi.simg python3.13 "$@"
