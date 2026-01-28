@@ -29,6 +29,7 @@ class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
         "2.0.0": "Initial release",
         "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",
         "2.5.0": "Use 10 splits, skip 2.4.0 to unify with CMS datasets",
+        "2.6.0pre1": "New generation with v1.2.2_key4hep_2025-05-29_CLD_3edac3",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
@@ -77,7 +78,7 @@ class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_tt_ecm365"), self.builder_config, num_splits=NUM_SPLITS)
+        return split_sample(Path(path / "p8_ee_ttbar_ecm365"), self.builder_config, num_splits=NUM_SPLITS)
 
     def _generate_examples(self, files):
         return generate_examples(files)

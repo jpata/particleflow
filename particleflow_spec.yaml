@@ -5,7 +5,7 @@
 project:
   name: "particleflow"
   description: "Machine Learning for Particle Flow Reconstruction"
-  container: "/home/joosep/HEP-KBFI/singularity/pytorch.simg:2026-01-20"
+  container: "/home/software/singularity/pytorch.simg:2026-01-20"
   bind_mounts:
     - "/local"
     - "/cvmfs"
@@ -129,8 +129,8 @@ productions:
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [300000, 300010]
-        events_per_job: 10
+        seed_range: [300000, 301010]
+        events_per_job: 100
       ww:
         process_name: "p8_ee_WW_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
@@ -159,7 +159,7 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
-        version: "2.5.0"
+        version: "2.6.0pre1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 

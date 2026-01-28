@@ -90,6 +90,8 @@ def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     split_index = int(builder_config.name) - 1
     files_train_split = split_list(files_train, num_splits)
     files_test_split = split_list(files_test, num_splits)
+    assert len(files_train_split[split_index]) > 0
+    assert len(files_test_split[split_index]) > 0
 
     return {
         "train": generate_examples(files_train_split[split_index]),
@@ -208,6 +210,7 @@ def prepare_data_clic(fn):
 def generate_examples(files):
     for fi in files:
         Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_clic(fi)
+        print(fi, [len(x) for x in Xs])
         for iev in range(len(Xs)):
             gm = genmets[iev][0]
             gj = genjets[iev]

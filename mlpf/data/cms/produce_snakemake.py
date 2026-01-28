@@ -5,7 +5,7 @@ import re
 import argparse
 
 # Configuration
-CHUNK_SIZE = 100
+CHUNK_SIZE = 1
 LOCAL_JOBS_DIR = "snakemake_jobs"
 SPEC_FILE = "particleflow_spec.yaml"
 
@@ -37,10 +37,6 @@ def ensure_dir(d):
 def write_bash_script(path, content):
     with open(path, "w") as f:
         f.write("#!/bin/bash\n")
-        f.write("#SBATCH -p main\n")
-        f.write("#SBATCH --mem-per-cpu=6G\n")
-        f.write("#SBATCH --cpus-per-task=1\n")
-        f.write("#SBATCH -o logs/slurm-%x-%j-%N.out\n")
         f.write("set -e\n")
         f.write(content)
     os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
@@ -146,7 +142,7 @@ def main():
                 elif prod_type == "key4hep":
                     gen_base_dir = os.path.join(workspace_dir, "gen")
                     root_file = os.path.join(sample_gen_root_dir, f"reco_{process_name}_{seed}.root")
-                
+
                 exports = f"export OUTDIR={gen_base_dir}/ && export CONFIG_DIR={config_dir} && export WORKDIR={scratch_root}/{process_name}_{seed} && export NEV={events_per_job}"
                 gen_cmd = f"bash {gen_script} {process_name} {seed}"
 
@@ -330,7 +326,7 @@ rule tfds_{tfds_id}:
 
     print(f"Generated Snakemake workflow in {snakefile_path}")
     print(f"Generated {len(tfds_sentinels)} TFDS jobs.")
-    print(f"Run with: snakemake --snakefile {snakefile_path} --cores 1 --use-apptainer --apptainer-args \"{bind_args}\"")
+    print(f'Run with: snakemake --snakefile {snakefile_path} --cores 1 --use-apptainer --apptainer-args "{bind_args}"')
 
 
 if __name__ == "__main__":
