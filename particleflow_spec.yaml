@@ -1,5 +1,5 @@
 # ParticleFlow Project Unified Configuration Specification
-# This file serves as the single source of truth for dataset generation, 
+# This file serves as the single source of truth for dataset generation,
 # processing pipeline, and model definitions.
 
 project:
@@ -7,10 +7,12 @@ project:
   description: "Machine Learning for Particle Flow Reconstruction"
   container: "/home/joosep/HEP-KBFI/singularity/pytorch.simg:2026-01-20"
   bind_mounts:
-    - "/mnt/work"
+    - "/local"
+    - "/cvmfs"
+    - "/scratch/local"
   paths:
-    storage_root: "/mnt/work/mlpf"
-    scratch_root: "/mnt/work/scratch/mlpf"
+    storage_root: "/local/joosep/mlpf/"
+    scratch_root: "/scratch/local/joosep/"
 
 # -----------------------------------------------------------------------------
 # Dataset Productions
@@ -28,7 +30,7 @@ productions:
     workspace_dir: "${project.paths.storage_root}/cms/20250508_cmssw_15_0_5_d3c6d1"
     config_dir: "/home/joosep/particleflow/"
     gen_container: "/cvmfs/singularity.opensciencegrid.org/cmssw/cms:rhel8-x86_64"
-    
+
     # Common execution environment for this campaign
     environment:
       cmssw_release: "CMSSW_15_0_5"
@@ -50,7 +52,7 @@ productions:
         seed_range: [200000, 210010]
         events_per_job: 100
         output_subdir: "pu55to75"
-      
+
       qcd_pu:
         process_name: "QCDForPF_14TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu55to75.sh"
@@ -119,8 +121,8 @@ productions:
   cld_2025_edm4hep:
     type: "key4hep"
     comment: "CLD production with Key4Hep"
-    workspace_dir: "/mnt/work/particleflow/cld/v1.2.2_key4hep_2025-05-29_CLD_3edac3"
-    config_dir: "/home/joosep/key4hep-sim/cld/CLDConfig"
+    workspace_dir: "${project.paths.storage_root}/cld/v1.2.2_key4hep_2025-05-29_CLD_3edac3"
+    config_dir: "/home/joosep/particleflow/mlpf/data/key4hep/gen/cld/CLDConfig"
     gen_container: "/home/software/singularity/alma9.simg"
 
     samples:
@@ -128,31 +130,31 @@ productions:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
         seed_range: [300000, 300010]
-        events_per_job: 100
+        events_per_job: 10
       ww:
         process_name: "p8_ee_WW_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
         seed_range: [400000, 400010]
-        events_per_job: 100
+        events_per_job: 10
       zz_tautau:
         process_name: "p8_ee_ZZ_tautau_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
         seed_range: [100000, 100010]
-        events_per_job: 100
+        events_per_job: 10
       zh_tautau:
         process_name: "p8_ee_ZH_Htautau_ecm240"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
         seed_range: [200000, 200010]
-        events_per_job: 100
+        events_per_job: 10
       zz:
         process_name: "p8_ee_ZZ_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
         seed_range: [100000, 100010]
-        events_per_job: 100
+        events_per_job: 10
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
-      args: {} 
+      args: {}
 
     tfds_mapping:
       ttbar:
@@ -177,7 +179,7 @@ models:
   pyg-cms-v1:
     <<: *model_defaults
     dataset: cms
-    
+
     # Dataset Selection
     train_datasets:
       - name: "cms_pf_ttbar"
@@ -186,7 +188,7 @@ models:
       - name: "cms_pf_qcd"
         version: "2.8.0"
         splits: ["train"]
-        
+
     validation_datasets:
       - name: "cms_pf_ttbar"
         version: "2.8.0"
@@ -197,18 +199,18 @@ models:
       num_epochs: 10
       batch_size: 2
       lr: 0.0004
-      
+
     # Architecture Definition
     architecture:
       type: "gnn_lsh_attention"
       input_encoding: "split"
-      
+
       gnn_lsh:
         embedding_dim: 512
         width: 512
         num_convs: 8
         bin_size: 320
-        
+
       attention:
         num_convs: 3
         head_dim: 16
@@ -218,11 +220,11 @@ models:
   pyg-clic-v1:
     <<: *model_defaults
     dataset: clic
-    
+
     train_datasets:
       - name: "clic_edm_qq_pf"
         version: "2.5.0"
-    
+
     architecture:
       type: "attention"
       attention:
