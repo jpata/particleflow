@@ -36,6 +36,11 @@ productions:
       cmssw_release: "CMSSW_15_0_5"
       scram_arch: "el8_amd64_gcc12"
 
+    memory:
+      gen: 4000
+      post: 4000
+      tfds: 8000
+
     # Step 1: Generation
     # Defines the MC samples to be generated or processed
     samples:
@@ -124,6 +129,11 @@ productions:
     workspace_dir: "${project.paths.storage_root}/cld/v1.2.2_key4hep_2025-05-29_CLD_3edac3"
     config_dir: "/home/joosep/particleflow/mlpf/data/key4hep/gen/cld/CLDConfig"
     gen_container: "/home/software/singularity/alma9.simg"
+
+    memory:
+      gen: 4000
+      post: 4000
+      tfds: 8000
 
     samples:
       ttbar:
