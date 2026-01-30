@@ -181,6 +181,14 @@ productions:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
         version: "2.6.0pre1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ww:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/ww"
+        version: "2.6.0pre1"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      zz:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/zz"
+        version: "2.6.0pre1"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 
 # -----------------------------------------------------------------------------
