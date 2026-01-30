@@ -129,6 +129,20 @@ def build_config_from_spec(spec, model_name, production_name):
 
     # Initialize config with model parameters
     config = {}
+    config["load"] = None
+    config["num_steps"] = 100000
+    config["comet"] = False
+    config["comet_step_freq"] = 1000
+    config["ntrain"] = None
+    config["ntest"] = None
+    config["nvalid"] = None
+    config["sort_data"] = False
+    config["gpu_batch_multiplier"] = 1
+    config["num_workers"] = 1
+    config["prefetch_factor"] = 1
+    config["patience"] = 1000
+    config["checkpoint_freq"] = 1000
+    config["val_freq"] = 1000
 
     # Copy hyperparameters and other top-level settings
     for k, v in model_config.items():
@@ -148,6 +162,14 @@ def build_config_from_spec(spec, model_name, production_name):
         config["model"]["gnn_lsh"]["conv_type"] = "gnn_lsh"
     if "attention" in config["model"]:
         config["model"]["attention"]["conv_type"] = "attention"
+    config["model"]["trainable"] = "all"
+    config["model"]["learned_representation_mode"] = "last"
+    config["model"]["input_encoding"] = "split"
+    config["model"]["pt_mode"] = "direct-elemtype-split"
+    config["model"]["eta_mode"] = "linear"
+    config["model"]["sin_phi_mode"] = "linear"
+    config["model"]["cos_phi_mode"] = "linear"
+    config["model"]["energy_mode"] = "direct-elemtype-split"
 
     # Dataset and Production
     config["dataset"] = model_config.get("dataset", prod_config.get("type"))
@@ -159,11 +181,17 @@ def build_config_from_spec(spec, model_name, production_name):
         ds_config = {}
 
         if config["dataset"] == "cms":
-            # Assume physical_pu for now as it is the standard for MLPF CMS
-            ds_config["cms"] = {"physical_pu": {"batch_size": config.get("batch_size", 1), "samples": {}}}
-            target_dict = ds_config["cms"]["physical_pu"]["samples"]
+            phys_key = "physical_pu"
         else:
-            target_dict = ds_config
+            phys_key = "physical"
+
+        ds_config[config["dataset"]] = {
+            phys_key: {
+                "batch_size": config.get("batch_size", 1),
+                "samples": {},
+            }
+        }
+        target_dict = ds_config[config["dataset"]][phys_key]["samples"]
 
         for ds_item in dataset_list:
             name = ds_item["name"]
@@ -175,11 +203,9 @@ def build_config_from_spec(spec, model_name, production_name):
             if "splits" in ds_item:
                 entry["splits"] = ds_item["splits"]
 
-            # Copy batch size if specific, else use global
+            # Copy batch size if specific
             if "batch_size" in ds_item:
                 entry["batch_size"] = ds_item["batch_size"]
-            elif config["dataset"] != "cms":
-                entry["batch_size"] = config.get("batch_size", 1)
 
             target_dict[name] = entry
 
@@ -208,7 +234,7 @@ def build_config_from_spec(spec, model_name, production_name):
     # Default fields expected by pipeline/training
     if "comet_name" not in config:
         config["comet_name"] = "particleflow"
-
+    print(config)
     return config
 
 

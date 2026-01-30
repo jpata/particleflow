@@ -300,7 +300,6 @@ rule post_{chunk_id}:
 
                 cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
-export TFDS_DATA_DIR={tfds_root_dir}
 
 echo "Building TFDS for {builder_path} config {config_id}"
 echo "Manual dir: {manual_dir}"

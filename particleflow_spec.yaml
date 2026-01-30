@@ -11,7 +11,7 @@ project:
     - "/cvmfs"
     - "/scratch/local"
   paths:
-    storage_root: "/local/joosep/mlpf/"
+    storage_root: "./local/joosep/mlpf/"
     scratch_root: "/scratch/local/joosep/"
 
 # -----------------------------------------------------------------------------
@@ -246,13 +246,13 @@ models:
     # Dataset Selection
     train_datasets:
       - name: "cld_edm_ttbar_pf"
-        version: "2.6.0pre1"
-        splits: ["train"]
+        version: "2.5.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
       - name: "cld_edm_ttbar_pf"
-        version: "2.6.0pre1"
-        splits: ["test"]
+        version: "2.5.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     # Hyperparameters
     hyperparameters:
@@ -267,18 +267,3 @@ models:
         num_convs: 3
         head_dim: 32
         num_heads: 32
-
-  # Example: CLIC Model
-  pyg-clic-v1:
-    <<: *model_defaults
-    dataset: clic
-
-    train_datasets:
-      - name: "clic_edm_qq_pf"
-        version: "2.5.0"
-
-    architecture:
-      type: "attention"
-      attention:
-        num_convs: 3
-        head_dim: 32
