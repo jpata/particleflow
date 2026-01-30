@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import numpy as np
@@ -26,7 +27,7 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmGamma(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("2.5.0")
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.5.0"))
     RELEASE_NOTES = {
         "2.5.0": "Use 10 splits, skip 2.4.0 to unify with CMS datasets",
     }

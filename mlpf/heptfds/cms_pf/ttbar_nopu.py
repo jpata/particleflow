@@ -1,4 +1,5 @@
 """CMS PF TTbar dataset."""
+import os
 
 import cms_utils
 import numpy as np
@@ -22,7 +23,7 @@ _CITATION = """
 class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_ttbar_nopu dataset."""
 
-    VERSION = tfds.core.Version("2.8.0")
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.8.0"))
     RELEASE_NOTES = {
         "1.7.1": "First version",
         "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",

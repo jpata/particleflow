@@ -1,4 +1,5 @@
 """CMS PF QCD 13p6 dataset."""
+import os
 
 import cms_utils
 import numpy as np
@@ -20,7 +21,7 @@ _CITATION = """
 class CmsPfQcd13p6(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd dataset."""
 
-    VERSION = tfds.core.Version("2.8.0")
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.8.0"))
     RELEASE_NOTES = {
         "2.6.0": "First version",
         "2.8.0": "Add Pythia",

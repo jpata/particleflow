@@ -1,4 +1,5 @@
 """CMS PF TTbar dataset."""
+import os
 
 import cms_utils
 import numpy as np
@@ -22,7 +23,7 @@ _CITATION = """
 class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd_nopu dataset."""
 
-    VERSION = tfds.core.Version("2.8.0")
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.8.0"))
     RELEASE_NOTES = {
         "2.0.0": "New truth def based primarily on CaloParticles",
         "2.4.0": "Add gp_to_track, gp_to_cluster, jet_idx",

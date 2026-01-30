@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +16,7 @@ from ttbar import _DESCRIPTION, _CITATION
 
 
 class ClicEdmTtbarHitsPf10k(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.7.0")
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.7.0"))
     RELEASE_NOTES = {
         "1.5.0": "Regenerate with ARRAY_RECORD",
         "1.7.0": "Update track features",

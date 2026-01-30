@@ -296,10 +296,12 @@ rule post_{chunk_id}:
                 tfds_script_path = f"{jobs_dir}/tfds/tfds_{tfds_id}.sh"
                 tfds_sentinel = f"{jobs_dir}/tfds/tfds_{tfds_id}.done"
 
+                version = mapping.get("version")
                 tfds_build_cmd = f"tfds build {builder_path} --config {config_id} --data_dir {tfds_root_dir} --manual_dir {manual_dir} --overwrite"
 
                 cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
+{f'export TFDS_VERSION={version}' if version else ''}
 
 echo "Building TFDS for {builder_path} config {config_id}"
 echo "Manual dir: {manual_dir}"

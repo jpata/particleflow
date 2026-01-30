@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +28,7 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmTtbarPu10Pf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.5.0")
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.5.0"))
     RELEASE_NOTES = {
         "1.3.0": "Update stats to ~1M events",
         "1.4.0": "Fix ycand matching",

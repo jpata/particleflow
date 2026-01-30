@@ -1,4 +1,5 @@
 """CMS PF SingleEle dataset."""
+import os
 
 import cms_utils
 import numpy as np
@@ -20,7 +21,7 @@ _CITATION = """
 class CmsPfSingleEle(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     """DatasetBuilder for cms_pf_ttbar dataset."""
 
-    VERSION = tfds.core.Version("2.5.0")
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.5.0"))
     RELEASE_NOTES = {
         "2.5.0": "First version",
     }

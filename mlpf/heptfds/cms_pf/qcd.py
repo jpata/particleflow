@@ -1,4 +1,5 @@
 """CMS PF QCD dataset."""
+import os
 
 import cms_utils
 import numpy as np
@@ -21,7 +22,7 @@ _CITATION = """
 class CmsPfQcd(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd dataset."""
 
-    VERSION = tfds.core.Version("2.8.0")
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.8.0"))
     RELEASE_NOTES = {
         "1.3.0": "12_2_0_pre2 generation with updated caloparticle/trackingparticle",
         "1.3.1": "Remove PS again",

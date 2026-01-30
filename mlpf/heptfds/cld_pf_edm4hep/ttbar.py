@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import os
 import numpy as np
 import tensorflow_datasets as tfds
 from utils_edm import (
@@ -24,7 +25,7 @@ FIXME
 
 
 class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("2.5.0")
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.5.0"))
     RELEASE_NOTES = {
         "2.0.0": "Initial release",
         "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",
