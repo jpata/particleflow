@@ -23,7 +23,7 @@ import yaml
 from mlpf.model.training import device_agnostic_run, override_config
 from mlpf.model.distributed_ray import run_hpo, run_ray_training
 from mlpf.model.PFDataset import SHARING_STRATEGY
-from mlpf.utils import create_experiment_dir
+from mlpf.utils import create_experiment_dir, load_spec, resolve_path
 
 
 def get_parser():
@@ -31,7 +31,10 @@ def get_parser():
     parser = argparse.ArgumentParser()
 
     # --- Define top-level, global arguments ---
-    parser.add_argument("--config", type=str, required=True, help="Path to the yaml config file")
+    parser.add_argument("--spec-file", type=str, required=True, help="Path to the yaml spec file (particleflow_spec.yaml)")
+    parser.add_argument("--model-name", type=str, required=True, help="Model name from spec file to train")
+    parser.add_argument("--production-name", type=str, required=True, help="Production name from spec file")
+
     parser.add_argument("--experiment-dir", type=str, help="The directory where to save the weights and configs. If None, create a new one.")
     parser.add_argument("--prefix", type=str, help="Prefix prepended to the experiment dir name")
     parser.add_argument("--data-dir", type=str, help="Path to the `tensorflow_datasets/` directory")
@@ -115,6 +118,100 @@ def get_parser():
     return parser
 
 
+def build_config_from_spec(spec, model_name, production_name):
+    if model_name not in spec["models"]:
+        raise ValueError(f"Model {model_name} not found in spec")
+    if production_name not in spec["productions"]:
+        raise ValueError(f"Production {production_name} not found in spec")
+
+    model_config = spec["models"][model_name]
+    prod_config = spec["productions"][production_name]
+
+    # Initialize config with model parameters
+    config = {}
+
+    # Copy hyperparameters and other top-level settings
+    for k, v in model_config.items():
+        if k not in ["architecture", "train_datasets", "validation_datasets", "test_datasets"]:
+            config[k] = v
+
+    # Handle hyperparameters specifically if they are nested
+    if "hyperparameters" in model_config:
+        for k, v in model_config["hyperparameters"].items():
+            config[k] = v
+
+    # Model Architecture
+    config["model"] = model_config["architecture"]
+    config["conv_type"] = config["model"]["type"]
+
+    if "gnn_lsh" in config["model"]:
+        config["model"]["gnn_lsh"]["conv_type"] = "gnn_lsh"
+    if "attention" in config["model"]:
+        config["model"]["attention"]["conv_type"] = "attention"
+
+    # Dataset and Production
+    config["dataset"] = model_config.get("dataset", prod_config.get("type"))
+
+    workspace_dir = resolve_path(prod_config["workspace_dir"], spec)
+    config["data_dir"] = os.path.join(workspace_dir, "tfds")
+
+    def build_dataset_config(dataset_list):
+        ds_config = {}
+
+        if config["dataset"] == "cms":
+            # Assume physical_pu for now as it is the standard for MLPF CMS
+            ds_config["cms"] = {"physical_pu": {"batch_size": config.get("batch_size", 1), "samples": {}}}
+            target_dict = ds_config["cms"]["physical_pu"]["samples"]
+        else:
+            target_dict = ds_config
+
+        for ds_item in dataset_list:
+            name = ds_item["name"]
+
+            entry = {}
+            if "version" in ds_item:
+                entry["version"] = ds_item["version"]
+
+            if "splits" in ds_item:
+                entry["splits"] = ds_item["splits"]
+
+            # Copy batch size if specific, else use global
+            if "batch_size" in ds_item:
+                entry["batch_size"] = ds_item["batch_size"]
+            elif config["dataset"] != "cms":
+                entry["batch_size"] = config.get("batch_size", 1)
+
+            target_dict[name] = entry
+
+        return ds_config
+
+    if "train_datasets" in model_config:
+        config["train_dataset"] = build_dataset_config(model_config["train_datasets"])
+
+    if "validation_datasets" in model_config:
+        config["valid_dataset"] = build_dataset_config(model_config["validation_datasets"])
+
+    if "test_datasets" in model_config:
+        config["test_dataset"] = {}
+        for ds_item in model_config.get("test_datasets", []):
+            name = ds_item["name"]
+            entry = {}
+            entry["version"] = ds_item.get("version", "2.8.0")
+            entry["splits"] = ds_item.get("splits", ["test"])
+            entry["batch_size"] = ds_item.get("batch_size", 1)
+            config["test_dataset"][name] = entry
+
+    # Ensure some defaults for testing/validation if not present
+    if "test_dataset" not in config:
+        config["test_dataset"] = {}
+
+    # Default fields expected by pipeline/training
+    if "comet_name" not in config:
+        config["comet_name"] = "particleflow"
+
+    return config
+
+
 def main():
     # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
     import torch
@@ -126,8 +223,9 @@ def main():
 
     logging.basicConfig(level=logging.INFO)
 
-    with open(args.config, "r") as stream:  # load config (includes: which physics samples, model params)
-        config = yaml.safe_load(stream)
+    # Load Spec and Build Config
+    spec = load_spec(args.spec_file)
+    config = build_config_from_spec(spec, args.model_name, args.production_name)
 
     # --- Manually set action flags based on the command, for override_config ---
     if args.command == "train":
@@ -155,26 +253,29 @@ def main():
 
     # override some options for the pipeline test
     if args.pipeline:
+        if "gnn_lsh" not in config["model"]:
+            config["model"]["gnn_lsh"] = {}
         config["model"]["gnn_lsh"]["num_convs"] = 1
         config["model"]["gnn_lsh"]["width"] = 32
         config["model"]["gnn_lsh"]["embedding_dim"] = 32
 
+        if "attention" not in config["model"]:
+            config["model"]["attention"] = {}
         config["model"]["attention"]["num_convs"] = 1
         config["model"]["attention"]["num_heads"] = 2
         config["model"]["attention"]["head_dim"] = 2
 
         if config["dataset"] == "cms":
             for ds in ["train_dataset", "valid_dataset"]:
-                config[ds]["cms"] = {
-                    "physical_pu": {
-                        "batch_size": config[ds]["cms"]["physical_pu"]["batch_size"],
-                        "samples": {"cms_pf_ttbar": config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]},
+                if ds in config:
+                    config[ds]["cms"] = {
+                        "physical_pu": {
+                            "batch_size": config[ds]["cms"]["physical_pu"]["batch_size"],
+                            "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "2.8.0"}},
+                        }
                     }
-                }
-                # load only the last config split
-                config[ds]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]["splits"] = ["10"]
-            config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
-            config["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
+        # config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]} # This line in original code might fail if key missing
+        # config["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
 
     # override loaded config with values from command line args
     config = override_config(config, args)
@@ -185,15 +286,21 @@ def main():
     else:
         experiment_dir = args.experiment_dir
         if experiment_dir is None:
+            # Use model_name and production_name for prefix if available
+            prefix = (args.prefix or "") + f"{args.model_name}_{args.production_name}_"
             experiment_dir = create_experiment_dir(
-                prefix=(args.prefix or "") + Path(args.config).stem + "_",
+                prefix=prefix,
                 experiments_dir=args.experiments_dir if args.experiments_dir else "experiments",
             )
 
-        # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
+        # Save config for later reference.
         config_filename = f"{args.command}-config.yaml"
         with open((Path(experiment_dir) / config_filename), "w") as file:
             yaml.dump(config, file)
+
+        # Also save the spec file for reproducibility
+        with open((Path(experiment_dir) / "particleflow_spec.yaml"), "w") as file:
+            yaml.dump(spec, file)
 
         if args.command == "ray-train":
             run_ray_training(config, args, experiment_dir)

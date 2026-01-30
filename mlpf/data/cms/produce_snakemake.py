@@ -1,33 +1,12 @@
 import os
 import stat
-import yaml
-import re
 import argparse
+from mlpf.utils import load_spec, resolve_path
 
 # Configuration
 CHUNK_SIZE = 1
 LOCAL_JOBS_DIR = "snakemake_jobs"
 SPEC_FILE = "particleflow_spec.yaml"
-
-
-def load_spec(spec_file):
-    with open(spec_file, "r") as f:
-        spec = yaml.safe_load(f)
-    return spec
-
-
-def resolve_path(path, spec):
-    # Simple recursive substitution for ${...}
-    def replace(match):
-        key_path = match.group(1).split(".")
-        val = spec
-        for k in key_path:
-            val = val.get(k)
-            if val is None:
-                return match.group(0)  # fail gracefully
-        return str(val)
-
-    return re.sub(r"\$\{(.+?)\}", replace, path)
 
 
 def ensure_dir(d):
@@ -45,13 +24,15 @@ def write_bash_script(path, content):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
-    parser.add_argument("--steps", type=str, default="gen,post,tfds", help="Comma-separated steps to run: gen,post,tfds")
+    parser.add_argument("--model", type=str, help="Model name from spec file to train")
+    parser.add_argument("--steps", type=str, default="gen,post,tfds,train", help="Comma-separated steps to run: gen,post,tfds,train")
     args = parser.parse_args()
 
     req_steps = args.steps.split(",")
     enable_gen = "gen" in req_steps
     enable_post = "post" in req_steps
     enable_tfds = "tfds" in req_steps
+    enable_train = "train" in req_steps
 
     spec = load_spec(SPEC_FILE)
 
@@ -66,6 +47,7 @@ def main():
     mem_gen = memory_config.get("gen", 2000)
     mem_post = memory_config.get("post", 2000)
     mem_tfds = memory_config.get("tfds", 4000)
+    mem_train = memory_config.get("train", 8000)
 
     # Resolve workspace dir and TFDS dir
     workspace_dir = resolve_path(prod_config["workspace_dir"], spec)
@@ -104,7 +86,7 @@ def main():
 
     # Track completion files for all chunks of all samples
     all_sample_post_sentinels = {}
-    
+
     # Track targets for rule all
     final_targets = []
 
@@ -162,7 +144,12 @@ def main():
                         gen_base_dir = os.path.join(workspace_dir, "gen")
                         root_file = os.path.join(sample_gen_root_dir, f"reco_{process_name}_{seed}.root")
 
-                    exports = f"export OUTDIR={gen_base_dir}/ && export CONFIG_DIR={config_dir} && export WORKDIR={scratch_root}/{process_name}_{seed} && export NEV={events_per_job}"
+                    exports = (
+                        f"export OUTDIR={gen_base_dir}/"
+                        + f" && export CONFIG_DIR={config_dir}"
+                        + f" && export WORKDIR={scratch_root}/{process_name}_{seed}"
+                        + f" && export NEV={events_per_job}"
+                    )
                     gen_cmd = f"bash {gen_script} {process_name} {seed}"
 
                     cmd = f"""
@@ -181,13 +168,13 @@ fi
                 rules_content += f"""
 rule gen_{chunk_id}:
     output:
-        \"{gen_sentinel}\"
+        "{gen_sentinel}"
     resources:
         mem_mb={mem_gen}
     container:
-        \"{gen_container_img}\"
+        "{gen_container_img}"
     shell:
-        \"{gen_script_path} && touch {{output}}\"
+        "{gen_script_path} && touch {{output}}"
 """
                 if "gen" in req_steps:
                     final_targets.append(gen_sentinel)
@@ -263,15 +250,15 @@ fi
                 rules_content += f"""
 rule post_{chunk_id}:
     input:
-        \"{gen_sentinel}\"
+        "{gen_sentinel}"
     output:
-        \"{post_sentinel}\"
+        "{post_sentinel}"
     resources:
         mem_mb={mem_post}
     container:
-        \"{main_container_img}\"
+        "{main_container_img}"
     shell:
-        \"{post_script_path} && touch {{output}}\"
+        "{post_script_path} && touch {{output}}"
 """
 
         all_sample_post_sentinels[sample_key] = sample_post_sentinels
@@ -280,7 +267,7 @@ rule post_{chunk_id}:
     # PART 2: TFDS Conversion (Per Config ID / Split)
     # -------------------------------------------------------------------------
     tfds_sentinels = []
-    
+
     if enable_tfds:
         for sample_key, mapping in tfds_mappings.items():
             if sample_key not in samples:
@@ -329,17 +316,79 @@ rule tfds_{tfds_id}:
     input:
         {input_sentinels_str}
     output:
-        \"{tfds_sentinel}\"
+        "{tfds_sentinel}"
     resources:
         mem_mb={mem_tfds}
     container:
-        \"{main_container_img}\"
+        "{main_container_img}"
     shell:
-        \"{tfds_script_path} && touch {{output}}\"
+        "{tfds_script_path} && touch {{output}}"
 """
                 tfds_sentinels.append(tfds_sentinel)
                 if "tfds" in req_steps:
                     final_targets.append(tfds_sentinel)
+
+    # -------------------------------------------------------------------------
+    # PART 3: Model Training
+    # -------------------------------------------------------------------------
+    if enable_train:
+        if not args.model:
+            raise ValueError("A model must be specified with --model for the 'train' step.")
+        if args.model not in spec["models"]:
+            raise ValueError(f"Model {args.model} not found in {SPEC_FILE}")
+
+        ensure_dir(f"{jobs_dir}/train")
+
+        model_spec = spec["models"][args.model]
+        gpu_count = model_spec.get("gpus", 0)
+        gpu_type = model_spec.get("gpu_type", "")
+        mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", 0)
+
+        exp_name = f"{args.model}_{args.production}"
+
+        train_script_path = f"{jobs_dir}/train/train_{exp_name}.sh"
+        train_sentinel = f"{jobs_dir}/train/train_{exp_name}.done"
+
+        train_cmd = f"python3 mlpf/pipeline.py --spec-file {SPEC_FILE} --model-name {args.model} --production-name {args.production} train"
+
+        cmd = f"""
+export PYTHONPATH=$(pwd):$PYTHONPATH
+export TFDS_DATA_DIR={tfds_root_dir}
+
+{train_cmd}
+"""
+        write_bash_script(train_script_path, cmd)
+
+        input_sentinels_str = " ,\n        ".join([f'"{s}"' for s in tfds_sentinels])
+
+        # snakemake rule names cannot contain hyphens
+        rule_model_name = args.model.replace("-", "_")
+
+        # Constructing the resources string
+        resources_str = f"mem_mb={mem_train}"
+        if gpu_count > 0:
+            if gpu_type:
+                resources_str += f', gres="gpu:{gpu_type}:{gpu_count}"'
+            else:
+                resources_str += f", gpu={gpu_count}"
+        if mem_per_gpu_mb > 0 and gpu_count > 0:
+            resources_str += f', "mem-per-gpu"={mem_per_gpu_mb}'
+
+        rules_content += f"""
+rule train_{rule_model_name}:
+    input:
+        {input_sentinels_str}
+    output:
+        "{train_sentinel}"
+    resources:
+        {resources_str}
+    container:
+        "{main_container_img}"
+    shell:
+        "{train_script_path} && touch {{output}}"
+"""
+        if "train" in req_steps:
+            final_targets.append(train_sentinel)
 
     # -------------------------------------------------------------------------
     # Finalize Snakefile

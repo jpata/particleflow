@@ -181,6 +181,8 @@ models:
   defaults: &model_defaults
     backend: pytorch
     gpus: 1
+    gpu_type: a100 # Add GPU type for resource allocation
+    mem_per_gpu_mb: 400000 # Add memory per GPU in MB (400GB)
     optimizer: adamw
     lr_schedule: cosinedecay
     dtype: bfloat16
@@ -225,6 +227,36 @@ models:
         num_convs: 3
         head_dim: 16
         num_heads: 16
+
+  # Example: CLD Model
+  pyg-cld-v1:
+    <<: *model_defaults
+    dataset: cld
+
+    # Dataset Selection
+    train_datasets:
+      - name: "cld_edm_ttbar_pf"
+        version: "2.6.0pre1"
+        splits: ["train"]
+
+    validation_datasets:
+      - name: "cld_edm_ttbar_pf"
+        version: "2.6.0pre1"
+        splits: ["test"]
+
+    # Hyperparameters
+    hyperparameters:
+      num_epochs: 10
+      batch_size: 1
+      lr: 0.0001
+
+    # Architecture Definition
+    architecture:
+      type: "attention"
+      attention:
+        num_convs: 3
+        head_dim: 32
+        num_heads: 32
 
   # Example: CLIC Model
   pyg-clic-v1:
