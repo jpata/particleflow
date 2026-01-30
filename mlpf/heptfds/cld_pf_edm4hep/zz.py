@@ -25,7 +25,7 @@ FIXME
 
 
 class CldEdmZzPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.5.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "UNDEFINED"))
     RELEASE_NOTES = {
         "2.0.0": "Initial release",
         "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",

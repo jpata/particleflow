@@ -22,7 +22,7 @@ _CITATION = """
 class CmsPfTtbar(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     """DatasetBuilder for cms_pf_ttbar dataset."""
 
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.8.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "UNDEFINED"))
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",

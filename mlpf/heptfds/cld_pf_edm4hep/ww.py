@@ -25,11 +25,8 @@ FIXME
 
 
 class CldEdmWwPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.5.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "UNDEFINED"))
     RELEASE_NOTES = {
-        "2.0.0": "Initial release",
-        "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",
-        "2.5.0": "Use 10 splits, skip 2.4.0 to unify with CMS datasets",
         "2.6.0pre1": "New generation with v1.2.2_key4hep_2025-05-29_CLD_3edac3",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
