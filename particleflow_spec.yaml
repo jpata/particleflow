@@ -192,6 +192,7 @@ models:
     backend: pytorch
     gpus: 1
     gpu_type: a100 # Add GPU type for resource allocation
+    gpu_batch_multiplier: 128
     mem_per_gpu_mb: 400000 # Add memory per GPU in MB (400GB)
     optimizer: adamw
     lr_schedule: cosinedecay

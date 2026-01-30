@@ -46,7 +46,7 @@ def get_parser():
 
     # --- 'train' command parser ---
     parser_train = subparsers.add_parser("train", help="Run standard training on a single node (CPU, single-GPU, or DDP)")
-    parser_train.add_argument("--gpus", type=int, default=0, help="Number of GPUs to use. Set to 0 for CPU.")
+    parser_train.add_argument("--gpus", type=int, default=None, help="Number of GPUs to use. Set to 0 for CPU.")
     parser_train.add_argument("--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor")
     parser_train.add_argument("--num-workers", type=int, default=None, help="Number of processes to load data")
     parser_train.add_argument("--prefetch-factor", type=int, default=None, help="Number of samples to fetch & prefetch per worker")
@@ -76,7 +76,7 @@ def get_parser():
     # --- 'test' command parser ---
     parser_test = subparsers.add_parser("test", help="Run evaluation on a trained model")
     parser_test.add_argument("--load", type=str, required=True, help="Path to a saved model checkpoint to test")
-    parser_test.add_argument("--gpus", type=int, default=0, help="Number of GPUs to use. Set to 0 for CPU.")
+    parser_test.add_argument("--gpus", type=int, default=None, help="Number of GPUs to use. Set to 0 for CPU.")
     parser_test.add_argument("--gpu-batch-multiplier", type=int, default=None, help="Increase batch size per GPU by this constant factor")
     parser_test.add_argument("--num-workers", type=int, default=None, help="Number of processes to load data")
     parser_test.add_argument("--prefetch-factor", type=int, default=None, help="Number of samples to fetch & prefetch per worker")
@@ -137,7 +137,6 @@ def build_config_from_spec(spec, model_name, production_name):
     config["ntest"] = None
     config["nvalid"] = None
     config["sort_data"] = False
-    config["gpu_batch_multiplier"] = 1
     config["num_workers"] = 1
     config["prefetch_factor"] = 1
     config["patience"] = 1000
@@ -147,6 +146,7 @@ def build_config_from_spec(spec, model_name, production_name):
     # Copy hyperparameters and other top-level settings
     for k, v in model_config.items():
         if k not in ["architecture", "train_datasets", "validation_datasets", "test_datasets"]:
+            print(k, v)
             config[k] = v
 
     # Handle hyperparameters specifically if they are nested
@@ -331,7 +331,10 @@ def main():
         if args.command == "ray-train":
             run_ray_training(config, args, experiment_dir)
         elif args.command in ["train", "test"]:
-            world_size = args.gpus if args.gpus > 0 else 1
+            if args.gpus is not None:
+                config["gpus"] = args.gpus
+            gpus = config.get("gpus", 0)
+            world_size = gpus if gpus > 0 else 1
             device_agnostic_run(config, world_size, experiment_dir)
 
 
