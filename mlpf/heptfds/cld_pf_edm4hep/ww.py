@@ -27,7 +27,7 @@ FIXME
 class CldEdmWwPf(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "UNDEFINED"))
     RELEASE_NOTES = {
-        "2.6.0pre1": "New generation with v1.2.2_key4hep_2025-05-29_CLD_3edac3",
+        "2.6.0": "New generation with v1.2.2_key4hep_2025-05-29_CLD_3edac3",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.

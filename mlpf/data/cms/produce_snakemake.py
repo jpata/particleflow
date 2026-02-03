@@ -25,14 +25,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
     parser.add_argument("--model", type=str, help="Model name from spec file to train")
+    parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
     parser.add_argument("--steps", type=str, default="gen,post,tfds,train", help="Comma-separated steps to run: gen,post,tfds,train")
     args = parser.parse_args()
 
     req_steps = args.steps.split(",")
-    enable_gen = "gen" in req_steps
-    enable_post = "post" in req_steps
-    enable_tfds = "tfds" in req_steps
-    enable_train = "train" in req_steps
 
     spec = load_spec(SPEC_FILE)
 
@@ -42,6 +39,9 @@ def main():
 
     prod_config = spec["productions"][args.production]
     prod_type = prod_config.get("type", "cms")
+
+    cpu_partition = prod_config.get("slurm_partition", "main")
+    cpu_runtime = prod_config.get("slurm_runtime", "120m")
 
     memory_config = prod_config.get("memory", {})
     mem_gen = memory_config.get("gen", 2000)
@@ -131,28 +131,29 @@ def main():
             post_sentinel = f"{jobs_dir}/post/post_{chunk_id}.done"
 
             # 1. Generation
-            if enable_gen:
-                gen_script_path = f"{jobs_dir}/gen/gen_{chunk_id}.sh"
-                gen_cmd_lines = []
+            gen_script_path = f"{jobs_dir}/gen/gen_{chunk_id}.sh"
+            gen_cmd_lines = []
 
-                for seed in range(chunk_start, chunk_end):
-                    # Prepare common variables
-                    if prod_type == "cms":
-                        gen_base_dir = os.path.join(workspace_dir, "gen", output_subdir)
-                        root_file = os.path.join(sample_gen_root_dir, f"pfntuple_{seed}.root")
-                    elif prod_type == "key4hep":
-                        gen_base_dir = os.path.join(workspace_dir, "gen")
-                        root_file = os.path.join(sample_gen_root_dir, f"reco_{process_name}_{seed}.root")
+            for seed in range(chunk_start, chunk_end):
+                # Prepare common variables
+                if prod_type == "cms":
+                    gen_base_dir = os.path.join(workspace_dir, "gen", output_subdir)
+                    root_file = os.path.join(sample_gen_root_dir, f"pfntuple_{seed}.root")
+                elif prod_type == "key4hep":
+                    gen_base_dir = os.path.join(workspace_dir, "gen")
+                    root_file = os.path.join(sample_gen_root_dir, f"reco_{process_name}_{seed}.root")
 
-                    exports = (
-                        f"export OUTDIR={gen_base_dir}/"
-                        + f" && export CONFIG_DIR={config_dir}"
-                        + f" && export WORKDIR={scratch_root}/{process_name}_{seed}"
-                        + f" && export NEV={events_per_job}"
-                    )
-                    gen_cmd = f"bash {gen_script} {process_name} {seed}"
+                exports = (
+                    f"export OUTDIR={gen_base_dir}/"
+                    + f" && export CONFIG_DIR={config_dir}"
+                    + f" && export WORKDIR={scratch_root}/{process_name}_{seed}"
+                    + f" && export NEV={events_per_job}"
+                )
+                gen_cmd = f"bash {gen_script} {process_name} {seed}"
+                if args.ignore_failures:
+                    gen_cmd += " || echo 'WARNING: Generation failed'"
 
-                    cmd = f"""
+                cmd = f"""
 if [ ! -f {root_file} ]; then
     echo "Generating {root_file}"
     {exports}
@@ -161,51 +162,58 @@ else
     echo "Skipping {root_file}, already exists"
 fi
 """
-                    gen_cmd_lines.append(cmd)
+                gen_cmd_lines.append(cmd)
 
-                write_bash_script(gen_script_path, "\n".join(gen_cmd_lines))
+            write_bash_script(gen_script_path, "\n".join(gen_cmd_lines))
+
+            if "gen" in req_steps:
+                final_targets.append(gen_sentinel)
 
                 rules_content += f"""
 rule gen_{chunk_id}:
     output:
         "{gen_sentinel}"
     resources:
-        mem_mb={mem_gen}
+        mem_mb_per_cpu={mem_gen},
+        slurm_partition="{cpu_partition}",
+        runtime="{cpu_runtime}"
     container:
         "{gen_container_img}"
     shell:
         "{gen_script_path} && touch {{output}}"
 """
-                if "gen" in req_steps:
-                    final_targets.append(gen_sentinel)
 
             # 2. Postprocessing
-            if enable_post:
-                post_script_path = f"{jobs_dir}/post/post_{chunk_id}.sh"
-                post_cmd_lines = []
+            post_script_path = f"{jobs_dir}/post/post_{chunk_id}.sh"
+            post_cmd_lines = []
 
-                for seed in range(chunk_start, chunk_end):
-                    if prod_type == "cms":
-                        root_file = os.path.join(sample_gen_root_dir, f"pfntuple_{seed}.root")
-                        post_file_final = os.path.join(sample_post_dir, f"pfntuple_{seed}.pkl.bz2")
-                        post_file_inter = os.path.join(sample_post_dir, f"pfntuple_{seed}.pkl")
-                    elif prod_type == "key4hep":
-                        root_file = os.path.join(sample_gen_root_dir, f"reco_{process_name}_{seed}.root")
-                        post_file_final = os.path.join(sample_post_dir, f"reco_{process_name}_{seed}.parquet")
-                        post_file_inter = post_file_final
+            for seed in range(chunk_start, chunk_end):
+                if prod_type == "cms":
+                    root_file = os.path.join(sample_gen_root_dir, f"pfntuple_{seed}.root")
+                    post_file_final = os.path.join(sample_post_dir, f"pfntuple_{seed}.pkl.bz2")
+                    post_file_inter = os.path.join(sample_post_dir, f"pfntuple_{seed}.pkl")
+                elif prod_type == "key4hep":
+                    root_file = os.path.join(sample_gen_root_dir, f"reco_{process_name}_{seed}.root")
+                    post_file_final = os.path.join(sample_post_dir, f"reco_{process_name}_{seed}.parquet")
+                    post_file_inter = post_file_final
 
-                    args_str = f"--input {root_file} --outpath {sample_post_dir}"
-                    for k, v in postproc_extra_args.items():
-                        if isinstance(v, bool):
-                            if v:
-                                args_str += f" --{k}"
-                        else:
-                            args_str += f" --{k} {v}"
+                args_str = f"--input {root_file} --outpath {sample_post_dir}"
+                for k, v in postproc_extra_args.items():
+                    if isinstance(v, bool):
+                        if v:
+                            args_str += f" --{k}"
+                    else:
+                        args_str += f" --{k} {v}"
 
-                    postproc_cmd = f"python3 {postproc_script} {args_str}"
+                postproc_cmd = f"python3 {postproc_script} {args_str}"
 
-                    if prod_type == "cms":
-                        cmd = f"""
+                exit_cmd = "exit 1"
+                if args.ignore_failures:
+                    postproc_cmd += " || echo 'WARNING: Postprocessing failed'"
+                    exit_cmd = "echo 'Ignoring failure'; true"
+
+                if prod_type == "cms":
+                    cmd = f"""
 if [ ! -f {post_file_final} ]; then
     if [ -f {root_file} ]; then
         echo "Postprocessing {root_file}"
@@ -214,47 +222,51 @@ if [ ! -f {post_file_final} ]; then
             bzip2 -z {post_file_inter}
         else
             echo "Error: Postprocessing failed to produce {post_file_inter}"
-            exit 1
+            {exit_cmd}
         fi
     else
         echo "Error: Input file {root_file} missing for postprocessing"
-        exit 1
+        {exit_cmd}
     fi
 else
     echo "Skipping {post_file_final}, already exists"
 fi
 """
-                    else:  # key4hep / parquet
-                        cmd = f"""
+                else:  # key4hep / parquet
+                    cmd = f"""
 if [ ! -f {post_file_final} ]; then
     if [ -f {root_file} ]; then
         echo "Postprocessing {root_file}"
         {postproc_cmd}
     else
         echo "Error: Input file {root_file} missing for postprocessing"
-        exit 1
+        {exit_cmd}
     fi
 else
     echo "Skipping {post_file_final}, already exists"
 fi
 """
 
-                    post_cmd_lines.append(cmd)
+                post_cmd_lines.append(cmd)
 
-                write_bash_script(post_script_path, "\n".join(post_cmd_lines))
+            write_bash_script(post_script_path, "\n".join(post_cmd_lines))
 
-                sample_post_sentinels.append(post_sentinel)
-                if "post" in req_steps:
-                    final_targets.append(post_sentinel)
+            sample_post_sentinels.append(post_sentinel)
+            if "post" in req_steps:
+                final_targets.append(post_sentinel)
+
+                post_rule_input = ""
+                if "gen" in req_steps:
+                    post_rule_input = f'\n    input:\n        "{gen_sentinel}"'
 
                 rules_content += f"""
-rule post_{chunk_id}:
-    input:
-        "{gen_sentinel}"
+rule post_{chunk_id}:{post_rule_input}
     output:
         "{post_sentinel}"
     resources:
-        mem_mb={mem_post}
+        mem_mb_per_cpu={mem_post},
+        slurm_partition="{cpu_partition}",
+        runtime="{cpu_runtime}"
     container:
         "{main_container_img}"
     shell:
@@ -268,73 +280,86 @@ rule post_{chunk_id}:
     # -------------------------------------------------------------------------
     tfds_sentinels = []
 
-    if enable_tfds:
-        for sample_key, mapping in tfds_mappings.items():
-            if sample_key not in samples:
-                print(f"Warning: TFDS mapping found for {sample_key} but no sample definition.")
-                continue
+    for sample_key, mapping in tfds_mappings.items():
+        if sample_key not in samples:
+            print(f"Warning: TFDS mapping found for {sample_key} but no sample definition.")
+            continue
 
-            sample_data = samples[sample_key]
-            builder_path = mapping["builder_path"]
-            config_ids = mapping.get("config_ids", [1])
+        sample_data = samples[sample_key]
+        builder_path = mapping["builder_path"]
+        config_ids = mapping.get("config_ids", [1])
 
-            process_name = sample_data["process_name"]
-            output_subdir = sample_data.get("output_subdir", process_name)
+        process_name = sample_data["process_name"]
+        output_subdir = sample_data.get("output_subdir", process_name)
 
-            # Determine manual_dir for TFDS
-            if prod_type == "cms":
-                # For CMS, data is in workspace/post/subdir/process
-                # TFDS builder expects workspace/post/subdir (containing process folder)
-                manual_dir = os.path.join(workspace_dir, "post", output_subdir)
-            else:
-                # For Key4Hep, data is in workspace/post/process
-                # TFDS builder expects workspace/post (containing process folder)
-                manual_dir = os.path.join(workspace_dir, "post")
+        # Determine manual_dir for TFDS
+        if prod_type == "cms":
+            # For CMS, data is in workspace/post/subdir/process
+            # TFDS builder expects workspace/post/subdir (containing process folder)
+            manual_dir = os.path.join(workspace_dir, "post", output_subdir)
+        else:
+            # For Key4Hep, data is in workspace/post/process
+            # TFDS builder expects workspace/post (containing process folder)
+            manual_dir = os.path.join(workspace_dir, "post")
 
-            for config_id in config_ids:
-                tfds_id = f"{sample_key}_tfds_{config_id}"
-                tfds_script_path = f"{jobs_dir}/tfds/tfds_{tfds_id}.sh"
-                tfds_sentinel = f"{jobs_dir}/tfds/tfds_{tfds_id}.done"
+        for config_id in config_ids:
+            tfds_id = f"{sample_key}_tfds_{config_id}"
+            tfds_script_path = f"{jobs_dir}/tfds/tfds_{tfds_id}.sh"
+            tfds_sentinel = f"{jobs_dir}/tfds/tfds_{tfds_id}.done"
 
-                version = mapping.get("version")
-                tfds_build_cmd = f"tfds build {builder_path} --config {config_id} --data_dir {tfds_root_dir} --manual_dir {manual_dir} --overwrite"
+            # Use a scratch directory for TFDS generation to avoid IO bottleneck on shared storage
+            job_scratch_dir = os.path.join(scratch_root, "tfds_tmp", tfds_id)
 
-                cmd = f"""
+            version = mapping.get("version")
+            tfds_build_cmd = f"tfds build {builder_path} --config {config_id} --data_dir {job_scratch_dir} --manual_dir {manual_dir} --overwrite"
+
+            cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
+export KERAS_BACKEND=torch
+hostname
 {f'export TFDS_VERSION={version}' if version else ''}
+env
 
 echo "Building TFDS for {builder_path} config {config_id}"
 echo "Manual dir: {manual_dir}"
+echo "Scratch dir: {job_scratch_dir}"
 
+mkdir -p {job_scratch_dir}
 {tfds_build_cmd}
+
+echo "Copying from {job_scratch_dir} to {tfds_root_dir}"
+cp -r {job_scratch_dir}/* {tfds_root_dir}/
+rm -rf {job_scratch_dir}
 """
-                write_bash_script(tfds_script_path, cmd)
+            write_bash_script(tfds_script_path, cmd)
+
+            tfds_sentinels.append(tfds_sentinel)
+            if "tfds" in req_steps:
+                final_targets.append(tfds_sentinel)
 
                 input_sentinels_str = ",\n        ".join([f'"{s}"' for s in all_sample_post_sentinels.get(sample_key, [])])
+                tfds_rule_input = ""
+                if "post" in req_steps:
+                    tfds_rule_input = f"\n    input:\n        {input_sentinels_str}"
 
                 rules_content += f"""
-rule tfds_{tfds_id}:
-    input:
-        {input_sentinels_str}
+rule tfds_{tfds_id}:{tfds_rule_input}
     output:
         "{tfds_sentinel}"
     resources:
-        mem_mb={mem_tfds}
+        mem_mb_per_cpu={mem_tfds},
+        slurm_partition="{cpu_partition}",
+        runtime="{cpu_runtime}"
     container:
         "{main_container_img}"
     shell:
         "{tfds_script_path} && touch {{output}}"
 """
-                tfds_sentinels.append(tfds_sentinel)
-                if "tfds" in req_steps:
-                    final_targets.append(tfds_sentinel)
 
     # -------------------------------------------------------------------------
     # PART 3: Model Training
     # -------------------------------------------------------------------------
-    if enable_train:
-        if not args.model:
-            raise ValueError("A model must be specified with --model for the 'train' step.")
+    if args.model:
         if args.model not in spec["models"]:
             raise ValueError(f"Model {args.model} not found in {SPEC_FILE}")
 
@@ -343,7 +368,9 @@ rule tfds_{tfds_id}:
         model_spec = spec["models"][args.model]
         gpu_count = model_spec.get("gpus", 0)
         gpu_type = model_spec.get("gpu_type", "")
-        mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", 0)
+        mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", 8000)
+        gpu_partition = model_spec.get("slurm_partition", "gpu")
+        gpu_runtime = model_spec.get("slurm_runtime", "120m")
 
         exp_name = f"{args.model}_{args.production}"
 
@@ -355,30 +382,35 @@ rule tfds_{tfds_id}:
         cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export TFDS_DATA_DIR={tfds_root_dir}
-
+env
+nvidia-smi
 {train_cmd}
 """
         write_bash_script(train_script_path, cmd)
 
         input_sentinels_str = " ,\n        ".join([f'"{s}"' for s in tfds_sentinels])
+        train_rule_input = ""
+        if "tfds" in req_steps:
+            train_rule_input = f"\n    input:\n        {input_sentinels_str}"
 
         # snakemake rule names cannot contain hyphens
         rule_model_name = args.model.replace("-", "_")
 
         # Constructing the resources string
-        resources_str = f"mem_mb={mem_train}"
+        resources_str = f'mem_mb_per_cpu={mem_train}, slurm_partition="{gpu_partition}", runtime="{gpu_runtime}"'
         if gpu_count > 0:
             if gpu_type:
-                resources_str += f', gres="gpu:{gpu_type}:{gpu_count}"'
+                resources_str += f',gres="gpu:{gpu_type}:{gpu_count}"'
             else:
                 resources_str += f", gpu={gpu_count}"
         if mem_per_gpu_mb > 0 and gpu_count > 0:
-            resources_str += f', "mem-per-gpu"={mem_per_gpu_mb}'
+            resources_str += f",mem_per_gpu={mem_per_gpu_mb}"
 
-        rules_content += f"""
-rule train_{rule_model_name}:
-    input:
-        {input_sentinels_str}
+        if "train" in req_steps:
+            final_targets.append(train_sentinel)
+
+            rules_content += f"""
+rule train_{rule_model_name}:{train_rule_input}
     output:
         "{train_sentinel}"
     resources:
@@ -388,8 +420,9 @@ rule train_{rule_model_name}:
     shell:
         "{train_script_path} && touch {{output}}"
 """
-        if "train" in req_steps:
-            final_targets.append(train_sentinel)
+
+    elif "train" in req_steps:
+        raise ValueError("A model must be specified with --model for the 'train' step.")
 
     # -------------------------------------------------------------------------
     # Finalize Snakefile
@@ -407,7 +440,7 @@ rule train_{rule_model_name}:
 
     print(f"Generated Snakemake workflow in {snakefile_path}")
     print(f"Generated {len(final_targets)} target jobs.")
-    print(f'Run with: snakemake --snakefile {snakefile_path} --cores 1 --use-apptainer --apptainer-args "{bind_args}"')
+    print(f'Run with: snakemake --snakefile {snakefile_path} --cores 1 --use-apptainer --apptainer-args "{bind_args} --nv"')
 
 
 if __name__ == "__main__":

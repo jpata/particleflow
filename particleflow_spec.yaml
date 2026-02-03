@@ -5,13 +5,13 @@
 project:
   name: "particleflow"
   description: "Machine Learning for Particle Flow Reconstruction"
-  container: "/home/software/singularity/pytorch.simg:2026-01-20"
+  container: "/home/software/singularity/pytorch.simg:2026-02-03"
   bind_mounts:
     - "/local"
     - "/cvmfs"
     - "/scratch/local"
   paths:
-    storage_root: "./local/joosep/mlpf/"
+    storage_root: "/local/joosep/mlpf/"
     scratch_root: "/scratch/local/joosep/"
 
 # -----------------------------------------------------------------------------
@@ -40,6 +40,9 @@ productions:
       gen: 4000
       post: 4000
       tfds: 8000
+
+    slurm_partition: "main"
+    slurm_runtime: "120m"
 
     # Step 1: Generation
     # Defines the MC samples to be generated or processed
@@ -135,17 +138,10 @@ productions:
       post: 4000
       tfds: 8000
 
+    slurm_partition: "main"
+    slurm_runtime: "120m"
+
     samples:
-      ttbar:
-        process_name: "p8_ee_ttbar_ecm365"
-        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [300000, 301010]
-        events_per_job: 100
-      ww:
-        process_name: "p8_ee_WW_ecm365"
-        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [400000, 401010]
-        events_per_job: 100
       zz:
         process_name: "p8_ee_ZZ_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
@@ -171,6 +167,21 @@ productions:
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
         seed_range: [200000, 201010]
         events_per_job: 100
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [300000, 301010]
+        events_per_job: 100
+      ww:
+        process_name: "p8_ee_WW_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [400000, 401010]
+        events_per_job: 100
+      qq:
+        process_name: "p8_ee_qq_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [500000, 501010]
+        events_per_job: 100
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
@@ -179,15 +190,19 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
-        version: "2.6.0pre1"
+        version: "2.6.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ww"
-        version: "2.6.0pre1"
+        version: "2.6.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       zz:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/zz"
-        version: "2.6.0pre1"
+        version: "2.6.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qq:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/qq"
+        version: "2.6.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 
@@ -201,7 +216,9 @@ models:
     gpus: 1
     gpu_type: a100 # Add GPU type for resource allocation
     gpu_batch_multiplier: 128
-    mem_per_gpu_mb: 400000 # Add memory per GPU in MB (400GB)
+    mem_per_gpu_mb: 100000
+    slurm_partition: "gpu"
+    slurm_runtime: "600m"
     optimizer: adamw
     lr_schedule: cosinedecay
     dtype: bfloat16
@@ -255,12 +272,12 @@ models:
     # Dataset Selection
     train_datasets:
       - name: "cld_edm_ttbar_pf"
-        version: "2.5.0"
+        version: "2.6.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
       - name: "cld_edm_ttbar_pf"
-        version: "2.5.0"
+        version: "2.6.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     # Hyperparameters
