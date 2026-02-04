@@ -14,30 +14,29 @@ We build on existing simulation software by the experimental collaborations.
 Below is the development timeline of MLPF by our team, ranging from initial proofs of concept to full detector simulations and fine-tuning studies.
 
 **2021: First full-event GNN demonsration of MLPF**
-* **Paper:** [MLPF: Particle-flow reconstruction with graph neural networks](https://doi.org/10.1140/epjc/s10052-021-09158-w) (Eur. Phys. J. C)
+* **Paper:** [MLPF: efficient machine-learned particle-flow reconstruction using graph neural networks](https://doi.org/10.1140/epjc/s10052-021-09158-w) (Eur. Phys. J. C)
 * **Focus:** Initial idea with a scalable GNN.
 * **Code:** [v1.1](https://zenodo.org/records/4559587)
 * **Dataset:** [Zenodo Record](https://doi.org/10.5281/zenodo.4559324)
 
-**2021: First Demonstration in CMS Run 3**
+**2021: First demonstration in CMS Run 3**
 * **Paper:** [Machine Learning for Particle Flow Reconstruction at CMS](http://dx.doi.org/10.1088/1742-6596/2438/1/012100) (J. Phys. Conf. Ser.)
 * **Note:** [CERN-CMS-DP-2021-030](https://cds.cern.ch/record/2792320)
 
-**2022: Improved Performance in CMS Run 3**
+**2022: Improved performance in CMS Run 3**
 * **Note:** [CERN-CMS-DP-2022-061](http://cds.cern.ch/record/2842375)
 
-**2024: Improved Performance with CLIC Full Simulation**
+**2024: Improved performance with CLIC full simulation**
 * **Paper:** [MLPF: efficient machine-learned particle-flow reconstruction using graph neural networks](https://doi.org/10.1038/s42005-024-01599-5) (Communications Physics)
 * **Focus:** Improved event-level performance in full simulation.
 * **Code:** [v1.6.2](https://zenodo.org/records/10928968)
 * **Results:** [Zenodo Record](https://doi.org/10.5281/zenodo.10567397)
 
-**2025: Fine-tuning Across Detectors**
+**2025: Fine-tuning across detectors**
 * **Paper (Fine-tuning):** [Fine-tuning from CLIC to CLD](https://doi.org/10.1103/PhysRevD.111.092015) (Phys. Rev. D)
 * *Code:* [v2.3.0](https://github.com/jpata/particleflow/releases/tag/v2.3.0)
 
-**2025/2026: CMS Run 3 Full Paper**
-
+**2025/2026: CMS Run 3 full results**
 * **Note (EPS-HEP 2025):** [CERN-CMS-DP-2025-033](https://cds.cern.ch/record/2937578)
 * **Paper:** [CMS Run 3 paper](https://arxiv.org/abs/2601.17554) (arXiv, submitted to EPJC)
 * *Code:* [v2.4.0](https://github.com/jpata/particleflow/releases/tag/v2.4.0)
@@ -45,8 +44,6 @@ Below is the development timeline of MLPF by our team, ranging from initial proo
 ---
 
 ### **Datasets**
-
-#### **Open Datasets**
 
 #### **Software & Dataset Compatibility**
 
