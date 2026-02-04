@@ -981,12 +981,12 @@ def parse_args():
     parser.add_argument("--input", type=str, help="Input file from PFAnalysis", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
     parser.add_argument(
-        "--save-full-graph",
+        "--save_full_graph",
         action="store_true",
         help="save the full event graph",
     )
     parser.add_argument(
-        "--num-events",
+        "--num_events",
         type=int,
         help="number of events to process",
         default=-1,

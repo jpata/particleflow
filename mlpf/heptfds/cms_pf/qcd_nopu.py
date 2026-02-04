@@ -1,4 +1,5 @@
 """CMS PF TTbar dataset."""
+
 import os
 
 import cms_utils
@@ -23,7 +24,7 @@ _CITATION = """
 class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_qcd_nopu dataset."""
 
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.8.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.0.0"))
     RELEASE_NOTES = {
         "2.0.0": "New truth def based primarily on CaloParticles",
         "2.4.0": "Add gp_to_track, gp_to_cluster, jet_idx",
@@ -34,6 +35,7 @@ class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
         "2.7.1": "Use fixed split_caloparticle",
         "2.7.2": "Bump stats to 20M",
         "2.8.0": "Add Pythia",
+        "3.0.0": "updated beamspot, 13.6 TeV",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_qcd_nopu ~/tensorflow_datasets/
@@ -72,7 +74,7 @@ class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
         sample_dir = "QCDForPF_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path / sample_dir / "raw", self.builder_config, num_splits=40)
+        return cms_utils.split_sample(path / sample_dir, self.builder_config, num_splits=40)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)
