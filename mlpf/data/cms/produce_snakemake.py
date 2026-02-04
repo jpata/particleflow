@@ -101,6 +101,8 @@ def main():
         gen_script = sample_data["gen_script"]
         output_subdir = sample_data.get("output_subdir", process_name)
         events_per_job = sample_data.get("events_per_job", 100)
+        pu_type = sample_data.get("pu_type", "nopu")
+        copy_step2 = sample_data.get("copy_step2", False)
 
         # Unified Directory Structure
         if prod_type == "cms":
@@ -149,7 +151,10 @@ def main():
                     + f" && export WORKDIR={scratch_root}/{process_name}_{seed}"
                     + f" && export NEV={events_per_job}"
                 )
-                gen_cmd = f"bash {gen_script} {process_name} {seed}"
+                gen_cmd = f"bash {gen_script} {process_name} {seed} {pu_type}"
+                if copy_step2:
+                    gen_cmd += " true"
+
                 if args.ignore_failures:
                     gen_cmd += " || echo 'WARNING: Generation failed'"
 
@@ -252,7 +257,7 @@ fi
             write_bash_script(post_script_path, "\n".join(post_cmd_lines))
 
             sample_post_sentinels.append(post_sentinel)
-            if "post" in req_steps:
+            if "post" in req_steps and (sample_key in tfds_mappings):
                 final_targets.append(post_sentinel)
 
                 post_rule_input = ""

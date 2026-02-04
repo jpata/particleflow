@@ -49,45 +49,60 @@ productions:
     samples:
       ttbar_pu:
         process_name: "TTbar_14TeV_TuneCUETP8M1_cfi"
-        gen_script: "mlpf/data/cms/genjob_pu55to75.sh"
-        seed_range: [100000, 110010]
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [100000, 100110]
         events_per_job: 100
         output_subdir: "pu55to75"
+        pu_type: "pu55to75"
 
       ztt_pu:
         process_name: "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
-        gen_script: "mlpf/data/cms/genjob_pu55to75.sh"
-        seed_range: [200000, 210010]
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [200000, 200110]
         events_per_job: 100
         output_subdir: "pu55to75"
+        pu_type: "pu55to75"
 
       qcd_pu:
         process_name: "QCDForPF_14TeV_TuneCUETP8M1_cfi"
-        gen_script: "mlpf/data/cms/genjob_pu55to75.sh"
-        seed_range: [300000, 310010]
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [300000, 300110]
         events_per_job: 100
         output_subdir: "pu55to75"
+        pu_type: "pu55to75"
+
+      qcd_val:
+        process_name: "QCDForPF_14TeV_TuneCUETP8M1_cfi"
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [400000, 400110]
+        events_per_job: 100
+        output_subdir: "pu55to75"
+        pu_type: "pu55to75"
+        copy_step2: true
 
       ttbar_nopu:
         process_name: "TTbar_14TeV_TuneCUETP8M1_cfi"
-        gen_script: "mlpf/data/cms/genjob_nopu.sh"
-        seed_range: [820000, 850010]
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [800000, 800110]
         events_per_job: 100
         output_subdir: "nopu"
+        pu_type: "nopu"
 
       qcd_nopu:
         process_name: "QCDForPF_14TeV_TuneCUETP8M1_cfi"
-        gen_script: "mlpf/data/cms/genjob_nopu.sh"
-        seed_range: [1000000, 1200010]
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [1000000, 1000110]
         events_per_job: 100
         output_subdir: "nopu"
+        pu_type: "nopu"
 
       ztt_nopu:
         process_name: "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
-        gen_script: "mlpf/data/cms/genjob_nopu.sh"
-        seed_range: [1120000, 1150010]
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [1100000, 1100110]
         events_per_job: 100
         output_subdir: "nopu"
+        pu_type: "nopu"
 
     # Step 2: Postprocessing
     # Converts ROOT/EDM output to intermediate format (pkl/parquet) for ML
@@ -214,11 +229,11 @@ models:
   defaults: &model_defaults
     backend: pytorch
     gpus: 1
-    gpu_type: a100 # Add GPU type for resource allocation
-    gpu_batch_multiplier: 128
+    gpu_type: a100
+    gpu_batch_multiplier: 256
     mem_per_gpu_mb: 100000
     slurm_partition: "gpu"
-    slurm_runtime: "600m"
+    slurm_runtime: "48h"
     optimizer: adamw
     lr_schedule: cosinedecay
     dtype: bfloat16
@@ -244,34 +259,44 @@ models:
 
     # Hyperparameters
     hyperparameters:
-      num_epochs: 10
-      batch_size: 2
+      batch_size: 1
       lr: 0.0004
 
     # Architecture Definition
     architecture:
-      type: "gnn_lsh_attention"
+      type: "attention"
       input_encoding: "split"
-
-      gnn_lsh:
-        embedding_dim: 512
-        width: 512
-        num_convs: 8
-        bin_size: 320
-
       attention:
         num_convs: 3
-        head_dim: 16
-        num_heads: 16
+        head_dim: 32
+        num_heads: 32
 
   # Example: CLD Model
   pyg-cld-v1:
     <<: *model_defaults
     dataset: cld
 
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0005
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 3
+        head_dim: 32
+        num_heads: 32
+
     # Dataset Selection
     train_datasets:
       - name: "cld_edm_ttbar_pf"
+        version: "2.6.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_ww_pf"
+        version: "2.6.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_qq_pf"
         version: "2.6.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
@@ -279,17 +304,9 @@ models:
       - name: "cld_edm_ttbar_pf"
         version: "2.6.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-    # Hyperparameters
-    hyperparameters:
-      num_epochs: 10
-      batch_size: 1
-      lr: 0.0001
-
-    # Architecture Definition
-    architecture:
-      type: "attention"
-      attention:
-        num_convs: 3
-        head_dim: 32
-        num_heads: 32
+      - name: "cld_edm_ww_pf"
+        version: "2.6.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_qq_pf"
+        version: "2.6.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
