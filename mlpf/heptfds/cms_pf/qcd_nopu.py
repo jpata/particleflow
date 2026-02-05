@@ -42,7 +42,7 @@ class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
     """
 
     # create configs 1 ... NUM_SPLITS + 1 that allow to parallelize the dataset building
-    NUM_SPLITS = 40
+    NUM_SPLITS = 10
     BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, NUM_SPLITS + 1)]
 
     def __init__(self, *args, **kwargs):

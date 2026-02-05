@@ -5,7 +5,7 @@
 project:
   name: "particleflow"
   description: "Machine Learning for Particle Flow Reconstruction"
-  container: "/home/software/singularity/pytorch.simg:2026-01-20"
+  container: "/home/software/singularity/pytorch.simg:2026-02-04"
   bind_mounts:
     - "/local"
     - "/cvmfs"
@@ -49,7 +49,7 @@ productions:
     # Defines the MC samples to be generated or processed
     samples:
       ttbar_pu:
-        process_name: "TTbar_14TeV_TuneCUETP8M1_cfi"
+        process_name: "TTbar_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
         seed_range: [100000, 100110]
         events_per_job: 50
@@ -57,7 +57,7 @@ productions:
         pu_type: "pu55to75"
 
       ztt_pu:
-        process_name: "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
+        process_name: "ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
         seed_range: [200000, 200110]
         events_per_job: 100
@@ -65,7 +65,7 @@ productions:
         pu_type: "pu55to75"
 
       qcd_pu:
-        process_name: "QCDForPF_14TeV_TuneCUETP8M1_cfi"
+        process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
         seed_range: [300000, 300110]
         events_per_job: 100
@@ -73,7 +73,7 @@ productions:
         pu_type: "pu55to75"
 
       qcd_val:
-        process_name: "QCDForPF_14TeV_TuneCUETP8M1_cfi"
+        process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
         seed_range: [400000, 400110]
         events_per_job: 100
@@ -82,7 +82,7 @@ productions:
         copy_step2: true
 
       ttbar_nopu:
-        process_name: "TTbar_14TeV_TuneCUETP8M1_cfi"
+        process_name: "TTbar_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
         seed_range: [800000, 800110]
         events_per_job: 100
@@ -90,7 +90,7 @@ productions:
         pu_type: "nopu"
 
       qcd_nopu:
-        process_name: "QCDForPF_14TeV_TuneCUETP8M1_cfi"
+        process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
         seed_range: [1000000, 1000110]
         events_per_job: 100
@@ -98,7 +98,7 @@ productions:
         pu_type: "nopu"
 
       ztt_nopu:
-        process_name: "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi"
+        process_name: "ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
         seed_range: [1100000, 1100110]
         events_per_job: 100
@@ -135,7 +135,7 @@ productions:
       qcd_nopu:
         builder_path: "mlpf/heptfds/cms_pf/qcd_nopu"
         version: "3.0.0"
-        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40]
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ztt_nopu:
         builder_path: "mlpf/heptfds/cms_pf/ztt_nopu"
         version: "3.0.0"
