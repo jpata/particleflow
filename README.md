@@ -1,89 +1,75 @@
-[![CI](https://github.com/jpata/particleflow/workflows/CI/badge.svg)](https://github.com/jpata/particleflow/actions)
+### **Summary**
 
-# Overview
-MLPF focuses on developing full event reconstruction based on computationally scalable and flexible end-to-end ML models.
+**ML-based particle flow (MLPF)** focuses on developing full event reconstruction for particle detectors using computationally scalable and flexible machine learning models. The project aims to improve particle flow reconstruction across various detector environments, including CMS, CLD and CLIC.
+We build on existing simulation software by the experimental collaborations.
 
 <p float="left">
   <img src="images/schematic.png" alt="High-level overview" width="600"/>
 </p>
 
-### Dataset compatibility table
-The following table specifies which version of the jpata/particleflow software should be used with which version of the tensorflow datasets.
+---
 
-| Code  | CMS dataset | CLIC dataset | CLD dataset |
-| ----- | ----------- | ------------ | ----------- |
-| [1.9.0](https://github.com/jpata/particleflow/releases/v1.9.0) | 2.4.0    | 2.2.0    | NA |
-| [2.0.0](https://github.com/jpata/particleflow/releases/v2.0.0) | 2.4.0    | 2.3.0    | NA |
-| [2.1.0](https://github.com/jpata/particleflow/releases/v2.1.0) | 2.5.0    | 2.5.0    | NA |
-| [2.2.0](https://github.com/jpata/particleflow/releases/v2.2.0) | 2.5.0    | 2.5.0    | 2.5.0 |
-| [2.3.0](https://github.com/jpata/particleflow/releases/v2.3.0) | 2.5.0    | 2.5.0    | 2.5.0 |
-| [2.4.0](https://github.com/jpata/particleflow/releases/v2.4.0) | 2.6.0    | 2.5.0    | 2.5.0 |
+### **Publications**
 
-## MLPF on open datasets
+Below is the development timeline of MLPF by our team, ranging from initial proofs of concept to full detector simulations and fine-tuning studies.
 
-<p float="left">
-  <img src="images/commphys_featured_image.png" alt="PF reconstruction" width="600"/>
-</p>
+**2021: First full-event GNN demonsration of MLPF**
+* **Paper:** [MLPF: efficient machine-learned particle-flow reconstruction using graph neural networks](https://doi.org/10.1140/epjc/s10052-021-09158-w) (Eur. Phys. J. C)
+* **Focus:** Initial idea with a scalable GNN.
+* **Code:** [v1.1](https://zenodo.org/records/4559587)
+* **Dataset:** [Zenodo Record](https://doi.org/10.5281/zenodo.4559324)
 
-  - paper: https://doi.org/10.1038/s42005-024-01599-5
-  - code: https://doi.org/10.5281/zenodo.10893930
-  - dataset: https://doi.org/10.5281/zenodo.8409592
-  - results: https://doi.org/10.5281/zenodo.10567397
-  - weights: https://huggingface.co/jpata/particleflow/tree/main/clic/clusters/v1.6
+**2021: First demonstration in CMS Run 3**
+* **Paper:** [Machine Learning for Particle Flow Reconstruction at CMS](http://dx.doi.org/10.1088/1742-6596/2438/1/012100) (J. Phys. Conf. Ser.)
+* **Note:** [CERN-CMS-DP-2021-030](https://cds.cern.ch/record/2792320)
 
-### Open datasets:
-The following datasets are available to reproduce the studies. They include full Geant4 simulation and reconstruction based on the CLIC detector. We have no affiliation with the CLIC collaboration, therefore these datasets are to be used only for computational studies and come with no warranty.
+**2022: Improved performance in CMS Run 3**
+* **Note:** [CERN-CMS-DP-2022-061](http://cds.cern.ch/record/2842375)
 
-- MLPF-CLIC, raw data: https://zenodo.org/records/8260741 or https://www.coe-raise.eu/od-pfr
-- MLPF-CLIC, processed for ML, tracks and clusters: https://zenodo.org/records/8409592
-- MLPF-CLIC, processed for ML, tracks and hits: https://zenodo.org/records/8414225
+**2024: Improved performance with CLIC full simulation**
+* **Paper:** [MLPF: efficient machine-learned particle-flow reconstruction using graph neural networks](https://doi.org/10.1038/s42005-024-01599-5) (Communications Physics)
+* **Focus:** Improved event-level performance in full simulation.
+* **Code:** [v1.6.2](https://zenodo.org/records/10928968)
+* **Results:** [Zenodo Record](https://doi.org/10.5281/zenodo.10567397)
 
-## MLPF development in CMS
+**2025: Fine-tuning across detectors**
+* **Paper (Fine-tuning):** [Fine-tuning from CLIC to CLD](https://doi.org/10.1103/PhysRevD.111.092015) (Phys. Rev. D)
+* *Code:* [v2.3.0](https://github.com/jpata/particleflow/releases/tag/v2.3.0)
 
-<p float="left">
-  <img src="images/cms/ev_pf.png" alt="PF reconstruction" width="300"/>
-  <img src="images/cms/ev_mlpf.png" alt="MLPF reconstruction" width="300"/>
-</p>
+**2025/2026: CMS Run 3 full results**
+* **Note (EPS-HEP 2025):** [CERN-CMS-DP-2025-033](https://cds.cern.ch/record/2937578)
+* **Paper:** [CMS Run 3 paper](https://arxiv.org/abs/2601.17554) (arXiv, submitted to EPJC)
+* *Code:* [v2.4.0](https://github.com/jpata/particleflow/releases/tag/v2.4.0)
 
-<p float="left">
-  <img src="images/cms/ak4jet_puppi_pt_ttbar.png" alt="PUPPI jets in ttbar" width="300"/>
-</p>
+---
 
-  - EPS-HEP 2025:
-    - CERN-CMS-DP-2025-033, https://cds.cern.ch/record/2937578, https://twiki.cern.ch/twiki/bin/view/CMS/DraftDPSNoteMLPFEPS2025
-  - ACAT 2022:
-    - CERN-CMS-DP-2022-061, http://cds.cern.ch/record/2842375
-  - ACAT 2021:
-    - J. Phys. Conf. Ser. 2438 012100, http://dx.doi.org/10.1088/1742-6596/2438/1/012100
-    - CERN-CMS-DP-2021-030, https://cds.cern.ch/record/2792320
-    - https://twiki.cern.ch/twiki/bin/view/Main/DraftDPSNoteMLPFACAT2021
+### **Datasets**
 
-## Initial development with Delphes
+#### **Software & Dataset Compatibility**
 
-<p float="left">
-  <img src="images/delphes/num_particles.png" alt="Number of reconstructed particles" width="250"/>
-  <img src="images/delphes/inference_time.png" alt="Scaling of the inference time" width="300"/>
-</p>
+Please ensure you use the correct version of the `jpata/particleflow` software with the corresponding dataset version.
 
-  - paper: https://doi.org/10.1140/epjc/s10052-021-09158-w
-  - code: https://doi.org/10.5281/zenodo.4559587
-  - dataset: https://doi.org/10.5281/zenodo.4559324
+| Code Version | CMS Dataset | CLIC Dataset | CLD Dataset |
+| --- | --- | --- | --- |
+| [1.9.0](https://github.com/jpata/particleflow/releases/v1.9.0) | 2.4.0 | 2.2.0 | NA |
+| [2.0.0](https://github.com/jpata/particleflow/releases/v2.0.0) | 2.4.0 | 2.3.0 | NA |
+| [2.1.0](https://github.com/jpata/particleflow/releases/v2.1.0) | 2.5.0 | 2.5.0 | NA |
+| [2.2.0](https://github.com/jpata/particleflow/releases/v2.2.0) | 2.5.0 | 2.5.0 | 2.5.0 |
+| [2.3.0](https://github.com/jpata/particleflow/releases/v2.3.0) | 2.5.0 | 2.5.0 | 2.5.0 |
+| [2.4.0](https://github.com/jpata/particleflow/releases/v2.4.0) | 2.6.0 | 2.5.0 | 2.5.0 |
 
-# Citations and reuse
+---
 
-You are welcome to reuse the code in your work in accordance with the [license](https://github.com/jpata/particleflow/blob/main/LICENSE).
+### **Instructions: Citations and Reuse**
 
-For academic work, please consider citing the following papers:
-- initial idea with scalable GNN, code [v1.1](https://zenodo.org/records/4559587): https://doi.org/10.1140/epjc/s10052-021-09158-w
-- improved event-level performance in full simulation, code [v1.6.2](https://zenodo.org/records/10928968): https://doi.org/10.1038/s42005-024-01599-5
-- studies in CMS: https://cds.cern.ch/record/2792320, http://dx.doi.org/10.1088/1742-6596/2438/1/012100, http://cds.cern.ch/record/2842375
-- fine-tuning from CLIC to CLD, code [v2.3.0](https://github.com/jpata/particleflow/releases/tag/v2.3.0): https://doi.org/10.1103/PhysRevD.111.092015
-- CMS full simulation in 2025, code [v2.4.0](https://github.com/jpata/particleflow/releases/tag/v2.4.0): [https://doi.org/10.1103/PhysRevD.111.092015](https://cds.cern.ch/record/2937578)
+You are welcome to reuse the code in accordance with the [LICENSE](https://github.com/jpata/particleflow/blob/main/LICENSE).
 
-If you use the code in a significant way for research purposes, please consider citing the [tagged version](https://zenodo.org/search?q=parent.id%3A4452541&f=allversions%3Atrue&l=list&p=1&s=10&sort=version) that you used, for example:
-- Joosep Pata, Eric Wulff, Farouk Mokhtar, Javier Duarte, Aadi Tepper, Ka Wa Ho, & Lars Sørlie. (2025). jpata/particleflow: v2.2.0 (v2.2.0). Zenodo. https://doi.org/10.5281/zenodo.14650991
+**How to Cite**
 
-If you use the datasets prepared by the MLPF team for academic work, please cite the [appropriate dataset](https://zenodo.org/search?q=mlpf&f=allversions%3Atrue&f=resource_type%3Adataset&l=list&p=1&s=10&sort=version) via the zenodo link, as well as the corresponding paper.
+1. **Academic Work:** Please cite the specific papers listed in the **Publications** section above relevant to the method you are using (e.g., initial GNN idea, fine-tuning, or specific detector studies).
+2. **Code Usage:** If you use the code significantly for research, please cite the specific [tagged version from Zenodo](https://zenodo.org/search?q=parent.id%3A4452541&f=allversions%3Atrue&l=list&p=1&s=10&sort=version).
+3. **Dataset Usage:** Cite the [appropriate dataset](https://zenodo.org/search?q=mlpf&f=allversions%3Atrue&f=resource_type%3Adataset&l=list&p=1&s=10&sort=version) via the Zenodo link and the corresponding paper.
 
-At the moment, we are unable to release work-in-progress datasets before the corresponding academic publication is out.
-If you have a collaboration idea that does not fit into the above categories, please [get in touch](https://github.com/jpata/particleflow/discussions/categories/general)!
+**Contact**
+
+For collaboration ideas that do not fit into the categories above, please [get in touch via GitHub Discussions](https://github.com/jpata/particleflow/discussions/categories/general).
