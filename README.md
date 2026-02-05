@@ -1,7 +1,7 @@
 ### **Summary**
 
-**ML-based particle flow (MLPF)** focuses on developing full event reconstruction for particle detectors using computationally scalable and flexible machine learning models. The project aims to improve particle flow reconstruction across various detector environments, including CMS, CLD and CLIC.
-We build on existing simulation software by the experimental collaborations.
+**ML-based particle flow (MLPF)** focuses on developing full event reconstruction for particle detectors using computationally scalable and flexible machine learning models. The project aims to improve particle flow reconstruction across various detector environments, including CMS, as well as future detectors via Key4HEP.
+We build on existing, open-souce simulation software by the experimental collaborations.
 
 <p float="left">
   <img src="images/schematic.png" alt="High-level overview" width="600"/>
@@ -13,7 +13,7 @@ We build on existing simulation software by the experimental collaborations.
 
 Below is the development timeline of MLPF by our team, ranging from initial proofs of concept to full detector simulations and fine-tuning studies.
 
-**2021: First full-event GNN demonsration of MLPF**
+**2021: First full-event GNN demonstration of MLPF**
 * **Paper:** [MLPF: efficient machine-learned particle-flow reconstruction using graph neural networks](https://doi.org/10.1140/epjc/s10052-021-09158-w) (Eur. Phys. J. C)
 * **Focus:** Initial idea with a scalable GNN.
 * **Code:** [v1.1](https://zenodo.org/records/4559587)
@@ -34,12 +34,12 @@ Below is the development timeline of MLPF by our team, ranging from initial proo
 
 **2025: Fine-tuning across detectors**
 * **Paper (Fine-tuning):** [Fine-tuning from CLIC to CLD](https://doi.org/10.1103/PhysRevD.111.092015) (Phys. Rev. D)
-* *Code:* [v2.3.0](https://github.com/jpata/particleflow/releases/tag/v2.3.0)
+* **Code:** [v2.3.0](https://github.com/jpata/particleflow/releases/tag/v2.3.0)
 
 **2025/2026: CMS Run 3 full results**
 * **Note (EPS-HEP 2025):** [CERN-CMS-DP-2025-033](https://cds.cern.ch/record/2937578)
 * **Paper:** [CMS Run 3 paper](https://arxiv.org/abs/2601.17554) (arXiv, submitted to EPJC)
-* *Code:* [v2.4.0](https://github.com/jpata/particleflow/releases/tag/v2.4.0)
+* **Code:** [v2.4.0](https://github.com/jpata/particleflow/releases/tag/v2.4.0)
 
 ---
 
