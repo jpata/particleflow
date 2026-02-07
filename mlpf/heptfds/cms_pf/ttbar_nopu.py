@@ -75,7 +75,7 @@ class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "TTbar_14TeV_TuneCUETP8M1_cfi"
+        sample_dir = "TTbar_13p6TeV_TuneCUETP8M1_cfi"
         return cms_utils.split_sample(path / sample_dir, self.builder_config, num_splits=cms_utils.NUM_SPLITS)
 
     def _generate_examples(self, files):

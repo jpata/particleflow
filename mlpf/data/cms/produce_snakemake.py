@@ -330,11 +330,20 @@ echo "Manual dir: {manual_dir}"
 echo "Scratch dir: {job_scratch_dir}"
 
 mkdir -p {job_scratch_dir}
+
+# Ensure cleanup on exit, even if the job fails
+cleanup() {{
+    if [ ! -z "{job_scratch_dir}" ] && [ "{job_scratch_dir}" != "{scratch_root}" ]; then
+        echo "Cleaning up scratch directory {job_scratch_dir}"
+        rm -Rf {job_scratch_dir}
+    fi
+}}
+trap cleanup EXIT
+
 {tfds_build_cmd}
 
 echo "Copying from {job_scratch_dir} to {tfds_root_dir}"
 cp -r {job_scratch_dir}/* {tfds_root_dir}/
-rm -rf {job_scratch_dir}
 """
             write_bash_script(tfds_script_path, cmd)
 

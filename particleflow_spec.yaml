@@ -43,7 +43,7 @@ productions:
       tfds: 8000
 
     slurm_partition: "main"
-    slurm_runtime: "10h"
+    slurm_runtime: "24h"
 
     # Step 1: Generation
     # Defines the MC samples to be generated or processed
@@ -51,7 +51,7 @@ productions:
       ttbar_pu:
         process_name: "TTbar_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [100000, 100110]
+        seed_range: [100000, 100210]
         events_per_job: 50
         output_subdir: "pu55to75"
         pu_type: "pu55to75"
@@ -59,7 +59,7 @@ productions:
       ztt_pu:
         process_name: "ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [200000, 200110]
+        seed_range: [200000, 200210]
         events_per_job: 100
         output_subdir: "pu55to75"
         pu_type: "pu55to75"
@@ -67,7 +67,7 @@ productions:
       qcd_pu:
         process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [300000, 300110]
+        seed_range: [300000, 300210]
         events_per_job: 100
         output_subdir: "pu55to75"
         pu_type: "pu55to75"
@@ -75,16 +75,16 @@ productions:
       qcd_val:
         process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [400000, 400110]
+        seed_range: [400000, 400210]
         events_per_job: 100
-        output_subdir: "pu55to75"
+        output_subdir: "pu55to75_val"
         pu_type: "pu55to75"
         copy_step2: true
 
       ttbar_nopu:
         process_name: "TTbar_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [800000, 800110]
+        seed_range: [800000, 800210]
         events_per_job: 100
         output_subdir: "nopu"
         pu_type: "nopu"
@@ -92,7 +92,7 @@ productions:
       qcd_nopu:
         process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [1000000, 1000110]
+        seed_range: [1000000, 1000210]
         events_per_job: 100
         output_subdir: "nopu"
         pu_type: "nopu"
@@ -100,7 +100,7 @@ productions:
       ztt_nopu:
         process_name: "ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [1100000, 1100110]
+        seed_range: [1100000, 1100210]
         events_per_job: 100
         output_subdir: "nopu"
         pu_type: "nopu"
@@ -118,7 +118,7 @@ productions:
     tfds_mapping:
       ttbar_pu:
         builder_path: "mlpf/heptfds/cms_pf/ttbar"
-        version: "3.00"
+        version: "3.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qcd_pu:
         builder_path: "mlpf/heptfds/cms_pf/qcd"
@@ -198,6 +198,16 @@ productions:
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
         seed_range: [500000, 501010]
         events_per_job: 100
+      z_qq:
+        process_name: "p8_ee_Z_qq_ecm91"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [600000, 601010]
+        events_per_job: 100
+      z_tautau:
+        process_name: "p8_ee_Z_tautau_ecm91"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [700000, 701010]
+        events_per_job: 100
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
@@ -231,7 +241,6 @@ models:
     backend: pytorch
     gpus: 1
     gpu_type: a100
-    gpu_batch_multiplier: 256
     mem_per_gpu_mb: 100000
     slurm_partition: "gpu"
     slurm_runtime: "48h"
@@ -243,20 +252,24 @@ models:
   pyg-cms-v1:
     <<: *model_defaults
     dataset: cms
+    gpu_batch_multiplier: 8
 
     # Dataset Selection
     train_datasets:
       - name: "cms_pf_ttbar"
         version: "3.0.0"
-        splits: ["train"]
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cms_pf_qcd"
         version: "3.0.0"
-        splits: ["train"]
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
       - name: "cms_pf_ttbar"
         version: "3.0.0"
-        splits: ["test"]
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cms_pf_qcd"
+        version: "3.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     # Hyperparameters
     hyperparameters:
@@ -276,6 +289,7 @@ models:
   pyg-cld-v1:
     <<: *model_defaults
     dataset: cld
+    gpu_batch_multiplier: 256
 
     hyperparameters:
       batch_size: 1

@@ -32,9 +32,30 @@ fi
 OUTDIR=${OUTDIR:-${OUTDIR_DEFAULT_BASE}/${OUTDIR_SUFFIX}/}
 N=${NEV:-$NEV_DEFAULT}
 
-WORKDIR=${WORKDIR:-/scratch/local/joosep/$SLURM_JOBID/$SAMPLE/$SEED}
+if [ -z "$WORKDIR" ]; then
+    if [ ! -z "$SLURM_JOBID" ]; then
+        WORKDIR=/scratch/local/joosep/$SLURM_JOBID/$SAMPLE/$SEED
+        CLEANUP_DIR=/scratch/local/joosep/$SLURM_JOBID
+    else
+        WORKDIR=/scratch/local/joosep/job_${SAMPLE}_${SEED}
+        CLEANUP_DIR=$WORKDIR
+    fi
+else
+    CLEANUP_DIR=$WORKDIR
+fi
+
 mkdir -p $WORKDIR
 mkdir -p $OUTDIR/$SAMPLE/root/
+
+# Ensure cleanup on exit, even if the job fails
+cleanup() {
+    # Safety check: never delete the root scratch directory
+    if [ ! -z "$CLEANUP_DIR" ] && [ "$CLEANUP_DIR" != "/scratch/local/joosep" ] && [ "$CLEANUP_DIR" != "/scratch/local/joosep/" ]; then
+        echo "Cleaning up scratch directory $CLEANUP_DIR"
+        rm -Rf $CLEANUP_DIR
+    fi
+}
+trap cleanup EXIT
 
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
@@ -98,5 +119,3 @@ cmsRun step3_phase1_new.py > /dev/null
 #cp step3_phase1_new.root $OUTDIR/$SAMPLE/root/step3_${SEED}.root
 mv pfntuple.root pfntuple_${SEED}.root
 cp pfntuple_${SEED}.root $OUTDIR/$SAMPLE/root/
-
-rm -Rf /scratch/local/joosep/$SLURM_JOBID

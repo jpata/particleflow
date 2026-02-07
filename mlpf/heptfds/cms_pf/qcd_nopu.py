@@ -73,8 +73,8 @@ class CmsPfQcdNopu(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Returns SplitGenerators."""
         path = dl_manager.manual_dir
-        sample_dir = "QCDForPF_14TeV_TuneCUETP8M1_cfi"
-        return cms_utils.split_sample(path / sample_dir, self.builder_config, num_splits=40)
+        sample_dir = "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
+        return cms_utils.split_sample(path / sample_dir, self.builder_config, num_splits=self.NUM_SPLITS)
 
     def _generate_examples(self, files):
         return cms_utils.generate_examples(files)
