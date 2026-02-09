@@ -177,37 +177,33 @@ def build_config_from_spec(spec, model_name, production_name):
     workspace_dir = resolve_path(prod_config["workspace_dir"], spec)
     config["data_dir"] = os.path.join(workspace_dir, "tfds")
 
-    def build_dataset_config(dataset_list):
+    def build_dataset_config(dataset_input):
         ds_config = {}
+        ds_config[config["dataset"]] = {}
+        dataset_groups = dataset_input
 
-        if config["dataset"] == "cms":
-            phys_key = "physical_pu"
-        else:
-            phys_key = "physical"
-
-        ds_config[config["dataset"]] = {
-            phys_key: {
-                "batch_size": config.get("batch_size", 1),
+        for phys_key, phys_val in dataset_groups.items():
+            ds_config[config["dataset"]][phys_key] = {
+                "batch_size": phys_val.get("batch_size", config.get("batch_size", 1)),
                 "samples": {},
             }
-        }
-        target_dict = ds_config[config["dataset"]][phys_key]["samples"]
+            target_dict = ds_config[config["dataset"]][phys_key]["samples"]
 
-        for ds_item in dataset_list:
-            name = ds_item["name"]
+            for ds_item in phys_val["samples"]:
+                name = ds_item["name"]
 
-            entry = {}
-            if "version" in ds_item:
-                entry["version"] = ds_item["version"]
+                entry = {}
+                if "version" in ds_item:
+                    entry["version"] = ds_item["version"]
 
-            if "splits" in ds_item:
-                entry["splits"] = ds_item["splits"]
+                if "splits" in ds_item:
+                    entry["splits"] = ds_item["splits"]
 
-            # Copy batch size if specific
-            if "batch_size" in ds_item:
-                entry["batch_size"] = ds_item["batch_size"]
+                # Copy batch size if specific
+                if "batch_size" in ds_item:
+                    entry["batch_size"] = ds_item["batch_size"]
 
-            target_dict[name] = entry
+                target_dict[name] = entry
 
         return ds_config
 
@@ -222,7 +218,7 @@ def build_config_from_spec(spec, model_name, production_name):
         for ds_item in model_config.get("test_datasets", []):
             name = ds_item["name"]
             entry = {}
-            entry["version"] = ds_item.get("version", "2.8.0")
+            entry["version"] = ds_item.get("version")
             entry["splits"] = ds_item.get("splits", ["test"])
             entry["batch_size"] = ds_item.get("batch_size", 1)
             config["test_dataset"][name] = entry
