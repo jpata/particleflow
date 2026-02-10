@@ -920,6 +920,7 @@ def process_one_file(fn, ofn):
             ][0],
         )
     }
+
     prop_data = arrs.arrays(
         [
             mc_coll,
@@ -968,6 +969,7 @@ def process_one_file(fn, ofn):
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
     hit_data = {
+        "ECALOther": arrs["ECALOther"].array(),
         "ECALBarrel": arrs["ECALBarrel"].array(),
         "ECALEndcap": arrs["ECALEndcap"].array(),
         "HCALBarrel": arrs["HCALBarrel"].array(),

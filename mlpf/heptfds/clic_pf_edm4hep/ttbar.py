@@ -21,7 +21,7 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.5.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.0.0"))
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "update stats, move to 380 GeV",
@@ -34,6 +34,7 @@ class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
         "2.2.0": "New target definition, fix truth jets, add targetjets and jet idx",
         "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",
         "2.5.0": "Use 10 splits, skip 2.4.0 to unify with CMS datasets",
+        "3.0.0": "New generation with v1.2.4_key4hep_2025-05-29_CLIC_819e4e",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
@@ -81,7 +82,7 @@ class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_tt_ecm380/"), self.builder_config, num_splits=NUM_SPLITS)
+        return split_sample(Path(path / "p8_ee_ttbar_ecm380/"), self.builder_config, num_splits=NUM_SPLITS)
 
     def _generate_examples(self, files):
         return generate_examples(files)

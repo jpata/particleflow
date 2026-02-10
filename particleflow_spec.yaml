@@ -231,6 +231,56 @@ productions:
         version: "2.6.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
+  # CLIC Production
+  clic_2025_edm4hep:
+    type: "key4hep"
+    comment: "CLIC production with Key4Hep"
+    workspace_dir: "${project.paths.storage_root}/clic/v1.2.4_key4hep_2025-05-29_CLIC_819e4e"
+    config_dir: "/home/joosep/particleflow/mlpf/data/key4hep/gen/clic"
+    gen_container: "/home/software/singularity/alma9.simg"
+
+    memory:
+      gen: 4000
+      post: 4000
+      tfds: 8000
+
+    slurm_partition: "main"
+    slurm_runtime: "120m"
+
+    samples:
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm380"
+        gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
+        seed_range: [300000, 301010]
+        events_per_job: 100
+      ww_fullhad:
+        process_name: "p8_ee_WW_fullhad_ecm380"
+        gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
+        seed_range: [400000, 401010]
+        events_per_job: 100
+      qq:
+        process_name: "p8_ee_qq_ecm380"
+        gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
+        seed_range: [500000, 501010]
+        events_per_job: 100
+
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
+      args: {}
+
+    tfds_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep/ttbar"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ww_fullhad:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep/ww_fullhad"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qq:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep/qq"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 # -----------------------------------------------------------------------------
 # Model Configurations
@@ -366,4 +416,51 @@ models:
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
             version: "2.6.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  # CLIC Model
+  pyg-clic-v1:
+    <<: *model_defaults
+    dataset: clic
+    gpu_batch_multiplier: 256
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0005
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 3
+        head_dim: 32
+        num_heads: 32
+
+    # Dataset Selection
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_pf"
+            version: "3.0.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
