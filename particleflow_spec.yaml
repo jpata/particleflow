@@ -245,7 +245,7 @@ productions:
       tfds: 8000
 
     slurm_partition: "main"
-    slurm_runtime: "120m"
+    slurm_runtime: "240m"
 
     samples:
       ttbar:
