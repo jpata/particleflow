@@ -32,6 +32,7 @@ for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; d
     --input $file \
     --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 done
+find local_test_data
 
 #create the tensorflow dataset for the last split config only
 tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
