@@ -69,6 +69,27 @@ The following datasets are available to reproduce the studies. They include full
   - code: https://doi.org/10.5281/zenodo.4559587
   - dataset: https://doi.org/10.5281/zenodo.4559324
 
+## Running the workflow with Snakemake
+The full event reconstruction and model training workflow can be managed using [Snakemake](https://snakemake.readthedocs.io/). Snakemake must be available on both the interactive and worker nodes.
+
+### 1. Generate the Snakefile
+Use the provided script to generate a `Snakefile` for a specific production campaign and model.
+```bash
+python3 mlpf/produce_snakemake.py --production clic_2025_edm4hep --steps gen,post,tfds
+```
+
+### 2. Execute the workflow
+Run Snakemake using the generated `Snakefile`. The following example uses SLURM and Apptainer:
+```bash
+snakemake -s snakemake_jobs/clic_2025_edm4hep/Snakefile --executor slurm --jobs 100 --use-apptainer
+```
+
+To include model training:
+```bash
+python3 mlpf/produce_snakemake.py --production clic_2025_edm4hep --steps train --model pyg-clic-v1
+snakemake -s snakemake_jobs/clic_2025_edm4hep/Snakefile --executor slurm --jobs 1 --use-apptainer --apptainer-args "--nv"
+```
+
 # Citations and reuse
 
 You are welcome to reuse the code in your work in accordance with the [license](https://github.com/jpata/particleflow/blob/main/LICENSE).
