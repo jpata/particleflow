@@ -25,12 +25,12 @@ wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/2024
 cd ../../..
 
 #Create the ntuples using postprocessing2.py
-rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
-mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
+rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
+mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; do
   python mlpf/data/cms/postprocessing2.py \
     --input $file \
-    --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
+    --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
 done
 
 #create the tensorflow dataset for the last split config only
