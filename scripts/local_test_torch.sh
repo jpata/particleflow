@@ -41,7 +41,7 @@ mkdir -p experiments
 # Test 1: Initial training using the 'train' sub-command
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
-  --spec_file particleflow_spec.yaml \
+  --spec-file particleflow_spec.yaml \
   --model-name pyg-cms-v1 \
   --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ \
@@ -66,7 +66,7 @@ export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
 # --experiment-dir is omitted, so a new one is created.
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
-  --spec_file particleflow_spec.yaml \
+  --spec-file particleflow_spec.yaml \
   --model-name pyg-cms-v1 \
   --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ \
