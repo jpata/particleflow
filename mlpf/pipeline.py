@@ -293,7 +293,7 @@ def main():
                     config[ds]["cms"] = {
                         "physical_pu": {
                             "batch_size": config[ds]["cms"]["physical_pu"]["batch_size"],
-                            "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "2.8.0"}},
+                            "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "3.0.0"}},
                         }
                     }
         # config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]} # This line in original code might fail if key missing
