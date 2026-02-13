@@ -188,7 +188,7 @@ productions:
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
         seed_range: [300000, 301010]
         events_per_job: 100
-      ww:
+      ww_fullhad:
         process_name: "p8_ee_WW_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
         seed_range: [400000, 401010]
@@ -218,7 +218,7 @@ productions:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
         version: "2.6.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      ww:
+      ww_fullhad:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ww"
         version: "2.6.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -408,7 +408,7 @@ models:
           - name: "cld_edm_ttbar_pf"
             version: "2.6.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "cld_edm_ww_pf"
+          - name: "cld_edm_ww_fullhad_pf"
             version: "2.6.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
@@ -422,7 +422,7 @@ models:
           - name: "cld_edm_ttbar_pf"
             version: "2.6.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "cld_edm_ww_pf"
+          - name: "cld_edm_ww_fullhad_pf"
             version: "2.6.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
@@ -433,7 +433,7 @@ models:
       - name: "cld_edm_ttbar_pf"
         version: "2.6.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-      - name: "cld_edm_ww_pf"
+      - name: "cld_edm_ww_fullhad_pf"
         version: "2.6.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_qq_pf"
