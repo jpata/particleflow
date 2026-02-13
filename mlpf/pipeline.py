@@ -132,15 +132,15 @@ def build_config_from_spec(spec, model_name, production_name):
     config["load"] = None
     config["num_steps"] = 100000
     config["comet"] = False
-    config["comet_step_freq"] = 1000
+    config["comet_step_freq"] = 10000
     config["ntrain"] = None
-    config["ntest"] = None
+    config["ntest"] = 1000
     config["nvalid"] = None
     config["sort_data"] = False
     config["num_workers"] = 1
     config["prefetch_factor"] = 1
-    config["patience"] = 1000
-    config["checkpoint_freq"] = 1000
+    config["patience"] = 10000
+    config["checkpoint_freq"] = 10000
     config["val_freq"] = 1000
 
     # Copy hyperparameters and other top-level settings
@@ -243,7 +243,7 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 
     # Load Spec and Build Config
     spec = load_spec(args.spec_file)

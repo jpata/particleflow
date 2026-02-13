@@ -697,7 +697,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     torch.cuda.empty_cache()
 
     # FIXME: import this from a central place
-    if config["dataset"] == "clic":
+    if config["dataset"] == "clic" or config["dataset"] == "cld":
         import fastjet
 
         jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
@@ -708,7 +708,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
         jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
         jet_ptcut = 3
     else:
-        raise Exception("not implemented")
+        raise Exception("jet configuration for dataset {} not implemented".format(config["dataset"]))
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
