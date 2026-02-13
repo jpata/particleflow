@@ -19,14 +19,12 @@ mkdir -p local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
 cd local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
 
 #Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
+wget --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
+wget --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
 
 cd ../../..
 
 #Create the ntuples using postprocessing2.py
-rm -Rf local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
-mkdir -p local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
 for file in `\ls -1 local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root/*.root`; do
   python mlpf/data/cms/postprocessing2.py \
     --input $file \
