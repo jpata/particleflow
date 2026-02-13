@@ -19,8 +19,8 @@ mkdir -p local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
 cd local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
 
 #Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
-wget --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
-wget --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
 
 cd ../../..
 
@@ -41,7 +41,8 @@ mkdir -p experiments
 # Test 1: Initial training using the 'train' sub-command
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
-  --config parameters/pytorch/pyg-cms.yaml \
+  --spec_file particleflow_spec.yaml \
+  --model pyg-cms-v1 \
   --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ \
   --pipeline \
@@ -65,7 +66,8 @@ export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
 # --experiment-dir is omitted, so a new one is created.
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
-  --config parameters/pytorch/pyg-cms.yaml \
+  --spec_file particleflow_spec.yaml \
+  --model pyg-cms-v1 \
   --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ \
   --pipeline \
