@@ -42,11 +42,10 @@ mkdir -p experiments
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
   --spec_file particleflow_spec.yaml \
-  --model pyg-cms-v1 \
+  --model-name pyg-cms-v1 \
   --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ \
   --pipeline \
-  train \
   --num-steps 2 \
   --checkpoint-freq 2 \
   --gpus 0 \
@@ -54,7 +53,8 @@ python mlpf/pipeline.py \
   --conv-type attention \
   --dtype float32 \
   --attention-type math \
-  --num-convs 1
+  --num-convs 1 \
+  train
 
 ls experiments/MLPF_test_*/checkpoints/*
 
@@ -67,11 +67,10 @@ export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
   --spec_file particleflow_spec.yaml \
-  --model pyg-cms-v1 \
+  --model-name pyg-cms-v1 \
   --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ \
   --pipeline \
-  train \
   --num-steps 4 \
   --checkpoint-freq 2 \
   --gpus 0 \
@@ -80,7 +79,8 @@ python mlpf/pipeline.py \
   --dtype float32 \
   --attention-type math \
   --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-02.pth
+  --load ${EXP_DIR}/checkpoints/checkpoint-02.pth \
+  train
 
 ls experiments/MLPF_test_*/checkpoints/*
 
