@@ -14,9 +14,9 @@ python -m pytest tests/test_interleaved_iterator.py
 python -m pytest tests/test_lr_schedule.py
 
 #create data directories
-rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi
-mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
-cd local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root
+rm -Rf local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
+mkdir -p local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
+cd local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
 
 #Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
 wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
@@ -25,13 +25,12 @@ wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/2024
 cd ../../..
 
 #Create the ntuples using postprocessing2.py
-rm -Rf local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
-mkdir -p local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
-for file in `\ls -1 local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/root/*.root`; do
+for file in `\ls -1 local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root/*.root`; do
   python mlpf/data/cms/postprocessing2.py \
     --input $file \
-    --outpath local_test_data/TTbar_14TeV_TuneCUETP8M1_cfi/raw
+    --outpath local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
 done
+find local_test_data
 
 #create the tensorflow dataset for the last split config only
 tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
@@ -42,7 +41,9 @@ mkdir -p experiments
 # Test 1: Initial training using the 'train' sub-command
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
-  --config parameters/pytorch/pyg-cms.yaml \
+  --spec-file particleflow_spec.yaml \
+  --model-name pyg-cms-v1 \
+  --production cms_2025_main \
   --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ \
   --pipeline \
@@ -66,7 +67,9 @@ export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
 # --experiment-dir is omitted, so a new one is created.
 # --------------------------------------------------------------------------------------------
 python mlpf/pipeline.py \
-  --config parameters/pytorch/pyg-cms.yaml \
+  --spec-file particleflow_spec.yaml \
+  --model-name pyg-cms-v1 \
+  --production cms_2025_main \
   --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ \
   --pipeline \

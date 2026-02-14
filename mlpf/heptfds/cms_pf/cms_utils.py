@@ -243,6 +243,8 @@ def split_sample(path, builder_config, num_splits=NUM_SPLITS, train_frac=0.9):
     split_index = int(builder_config.name) - 1
     files_train_split = split_list(files_train, num_splits)
     files_test_split = split_list(files_test, num_splits)
+    assert len(files_train_split[split_index]) > 0
+    assert len(files_test_split[split_index]) > 0
     return {
         "train": generate_examples(files_train_split[split_index]),
         "test": generate_examples(files_test_split[split_index]),

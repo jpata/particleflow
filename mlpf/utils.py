@@ -1,8 +1,30 @@
 import datetime
 import logging
 import platform
+import re
+import yaml
 from pathlib import Path
 from comet_ml import OfflineExperiment, Experiment  # isort:skip
+
+
+def load_spec(spec_file):
+    with open(spec_file, "r") as f:
+        spec = yaml.safe_load(f)
+    return spec
+
+
+def resolve_path(path, spec):
+    # Simple recursive substitution for ${...}
+    def replace(match):
+        key_path = match.group(1).split(".")
+        val = spec
+        for k in key_path:
+            val = val.get(k)
+            if val is None:
+                return match.group(0)  # fail gracefully
+        return str(val)
+
+    return re.sub(r"\$\{(.+?)\}", replace, path)
 
 
 def create_experiment_dir(prefix=None, suffix=None, experiments_dir="experiments"):

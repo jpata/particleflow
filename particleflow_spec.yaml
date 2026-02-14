@@ -1,0 +1,499 @@
+# ParticleFlow Project Unified Configuration Specification
+# This file serves as the single source of truth for dataset generation,
+# processing pipeline, and model definitions.
+
+project:
+  name: "particleflow"
+  description: "Machine Learning for Particle Flow Reconstruction"
+  container: "/home/software/singularity/pytorch.simg:2026-02-04"
+  bind_mounts:
+    - "/local"
+    - "/cvmfs"
+    - "/scratch/local"
+    - "/scratch/persistent"
+  paths:
+    storage_root: "/local/joosep/mlpf/"
+    scratch_root: "/scratch/local/joosep/"
+
+# -----------------------------------------------------------------------------
+# Dataset Productions
+# Defines how raw data is generated (or found), processed, and registered in TFDS.
+# Each production follows a unified directory structure:
+#   $workspace_dir/gen  - Raw ROOT/EDM files from simulation
+#   $workspace_dir/post - Postprocessed intermediate files (parquet/pkl)
+#   $workspace_dir/tfds - Final TensorFlow Datasets
+# -----------------------------------------------------------------------------
+productions:
+  # CMS Production Campaign
+  cms_2025_main:
+    type: "cms"
+    comment: "Main production with CMSSW_15_0_5"
+    workspace_dir: "${project.paths.storage_root}/cms/20260204_cmssw_15_0_5_117d32"
+    config_dir: "/home/joosep/particleflow/"
+    gen_container: "/cvmfs/singularity.opensciencegrid.org/cmssw/cms:rhel8-x86_64"
+
+    # Common execution environment for this campaign
+    environment:
+      cmssw_release: "CMSSW_15_0_5"
+      scram_arch: "el8_amd64_gcc12"
+
+    memory:
+      gen: 6000
+      post: 4000
+      tfds: 8000
+
+    slurm_partition: "main"
+    slurm_runtime: "24h"
+
+    # Step 1: Generation
+    # Defines the MC samples to be generated or processed
+    samples:
+      ttbar_pu:
+        process_name: "TTbar_13p6TeV_TuneCUETP8M1_cfi"
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [100000, 100210]
+        events_per_job: 50
+        output_subdir: "pu55to75"
+        pu_type: "pu55to75"
+
+      ztt_pu:
+        process_name: "ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi"
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [200000, 200210]
+        events_per_job: 100
+        output_subdir: "pu55to75"
+        pu_type: "pu55to75"
+
+      qcd_pu:
+        process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [300000, 300210]
+        events_per_job: 100
+        output_subdir: "pu55to75"
+        pu_type: "pu55to75"
+
+      qcd_val:
+        process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [400000, 400210]
+        events_per_job: 100
+        output_subdir: "pu55to75_val"
+        pu_type: "pu55to75"
+        copy_step2: true
+
+      ttbar_nopu:
+        process_name: "TTbar_13p6TeV_TuneCUETP8M1_cfi"
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [800000, 800210]
+        events_per_job: 100
+        output_subdir: "nopu"
+        pu_type: "nopu"
+
+      qcd_nopu:
+        process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [1000000, 1000210]
+        events_per_job: 100
+        output_subdir: "nopu"
+        pu_type: "nopu"
+
+      ztt_nopu:
+        process_name: "ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi"
+        gen_script: "mlpf/data/cms/genjob_pu.sh"
+        seed_range: [1100000, 1100210]
+        events_per_job: 100
+        output_subdir: "nopu"
+        pu_type: "nopu"
+
+    # Step 2: Postprocessing
+    # Converts ROOT/EDM output to intermediate format (pkl/parquet) for ML
+    postprocessing:
+      script: "mlpf/data/cms/postprocessing2.py"
+      args:
+        save_full_graph: false
+        num_events: -1 # process all
+
+    # Step 3: TFDS Conversion
+    # Mapping samples to TensorFlow Dataset Builders
+    tfds_mapping:
+      ttbar_pu:
+        builder_path: "mlpf/heptfds/cms_pf/ttbar"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qcd_pu:
+        builder_path: "mlpf/heptfds/cms_pf/qcd"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ztt_pu:
+        builder_path: "mlpf/heptfds/cms_pf/ztt"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ttbar_nopu:
+        builder_path: "mlpf/heptfds/cms_pf/ttbar_nopu"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qcd_nopu:
+        builder_path: "mlpf/heptfds/cms_pf/qcd_nopu"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ztt_nopu:
+        builder_path: "mlpf/heptfds/cms_pf/ztt_nopu"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+  # CLD Production
+  cld_2025_edm4hep:
+    type: "key4hep"
+    comment: "CLD production with Key4Hep"
+    workspace_dir: "${project.paths.storage_root}/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9"
+    config_dir: "/home/joosep/particleflow/mlpf/data/key4hep/gen/cld/CLDConfig"
+    gen_container: "/home/software/singularity/alma9.simg"
+
+    memory:
+      gen: 4000
+      post: 4000
+      tfds: 8000
+
+    slurm_partition: "main"
+    slurm_runtime: "120m"
+
+    samples:
+      zz:
+        process_name: "p8_ee_ZZ_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [100000, 101010]
+        events_per_job: 100
+      zz_tautau_365:
+        process_name: "p8_ee_ZZ_tautau_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [100000, 101010]
+        events_per_job: 100
+      zz_tautau_240:
+        process_name: "p8_ee_ZZ_tautau_ecm240"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [100000, 101010]
+        events_per_job: 100
+      zh_tautau_365:
+        process_name: "p8_ee_ZH_Htautau_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [200000, 201010]
+        events_per_job: 100
+      zh_tautau_240:
+        process_name: "p8_ee_ZH_Htautau_ecm240"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [200000, 201010]
+        events_per_job: 100
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [300000, 301010]
+        events_per_job: 100
+      ww_fullhad:
+        process_name: "p8_ee_WW_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [400000, 401010]
+        events_per_job: 100
+      qq:
+        process_name: "p8_ee_qq_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [500000, 501010]
+        events_per_job: 100
+      z_qq:
+        process_name: "p8_ee_Z_qq_ecm91"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [600000, 601010]
+        events_per_job: 100
+      z_tautau:
+        process_name: "p8_ee_Z_tautau_ecm91"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [700000, 701010]
+        events_per_job: 100
+
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
+      args: {}
+
+    tfds_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
+        version: "2.6.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ww_fullhad:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/ww"
+        version: "2.6.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      zz:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/zz"
+        version: "2.6.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qq:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/qq"
+        version: "2.6.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+  # CLIC Production
+  clic_2025_edm4hep:
+    type: "key4hep"
+    comment: "CLIC production with Key4Hep"
+    workspace_dir: "${project.paths.storage_root}/clic/v1.2.4_key4hep_2025-05-29_CLIC_819e4e"
+    config_dir: "/home/joosep/particleflow/mlpf/data/key4hep/gen/clic"
+    gen_container: "/home/software/singularity/alma9.simg"
+
+    memory:
+      gen: 4000
+      post: 4000
+      tfds: 8000
+
+    slurm_partition: "main"
+    slurm_runtime: "240m"
+
+    samples:
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm380"
+        gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
+        seed_range: [300000, 301010]
+        events_per_job: 100
+      ww_fullhad:
+        process_name: "p8_ee_WW_fullhad_ecm380"
+        gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
+        seed_range: [400000, 401010]
+        events_per_job: 100
+      qq:
+        process_name: "p8_ee_qq_ecm380"
+        gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
+        seed_range: [500000, 501010]
+        events_per_job: 100
+
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
+      args: {}
+
+    tfds_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep/ttbar"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ww_fullhad:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep/ww_fullhad"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qq:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep/qq"
+        version: "3.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+# -----------------------------------------------------------------------------
+# Model Configurations
+# Defines training recipes. Can inherit from defaults or other models.
+# -----------------------------------------------------------------------------
+models:
+  defaults: &model_defaults
+    backend: pytorch
+    gpus: 1
+    gpu_type: l40
+    mem_per_gpu_mb: 100000
+    slurm_partition: "gpu"
+    slurm_runtime: "48h"
+    optimizer: adamw
+    lr_schedule: cosinedecay
+    dtype: bfloat16
+
+  # Example: CMS Model (GNN + Attention)
+  pyg-cms-v1:
+    <<: *model_defaults
+    dataset: cms
+    gpu_batch_multiplier: 4
+
+    # Dataset Selection
+    train_datasets:
+      physical_pu:
+        batch_size: 1
+        samples:
+          - name: "cms_pf_ttbar"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cms_pf_qcd"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cms_pf_ztt"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      physical_nopu:
+        batch_size: 16
+        samples:
+          - name: "cms_pf_ttbar_nopu"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cms_pf_qcd_nopu"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cms_pf_ztt_nopu"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      physical_pu:
+        batch_size: 1
+        samples:
+          - name: "cms_pf_ttbar"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cms_pf_qcd"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cms_pf_ztt"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      physical_nopu:
+        batch_size: 16
+        samples:
+          - name: "cms_pf_ttbar_nopu"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cms_pf_qcd_nopu"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cms_pf_ztt_nopu"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "cms_pf_ttbar"
+        version: "3.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cms_pf_qcd"
+        version: "3.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cms_pf_ztt"
+        version: "3.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    # Hyperparameters
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0004
+
+    # Architecture Definition
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 3
+        head_dim: 32
+        num_heads: 32
+
+  # Example: CLD Model
+  pyg-cld-v1:
+    <<: *model_defaults
+    dataset: cld
+    gpu_batch_multiplier: 128
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0005
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 3
+        head_dim: 32
+        num_heads: 32
+
+    # Dataset Selection
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "cld_edm_ttbar_pf"
+            version: "2.6.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_pf"
+            version: "2.6.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_pf"
+            version: "2.6.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "cld_edm_ttbar_pf"
+            version: "2.6.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_pf"
+            version: "2.6.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_pf"
+            version: "2.6.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "cld_edm_ttbar_pf"
+        version: "2.6.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_ww_fullhad_pf"
+        version: "2.6.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_qq_pf"
+        version: "2.6.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  # CLIC Model
+  pyg-clic-v1:
+    <<: *model_defaults
+    dataset: clic
+    gpu_batch_multiplier: 128
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0005
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 3
+        head_dim: 32
+        num_heads: 32
+
+    # Dataset Selection
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_pf"
+            version: "3.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "clic_edm_ttbar_pf"
+        version: "3.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_ww_fullhad_pf"
+        version: "3.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_qq_pf"
+        version: "3.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]

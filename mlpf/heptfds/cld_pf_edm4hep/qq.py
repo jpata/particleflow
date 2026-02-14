@@ -1,48 +1,47 @@
 from pathlib import Path
 
+import os
 import numpy as np
+import tensorflow_datasets as tfds
 from utils_edm import (
-    X_FEATURES_CH,
+    NUM_SPLITS,
+    X_FEATURES_CL,
     X_FEATURES_TRK,
     Y_FEATURES,
     generate_examples,
     split_sample,
 )
 
-import tensorflow_datasets as tfds
-
 _DESCRIPTION = """
-CLIC EDM4HEP dataset with single neutron with raw hits.
-  - X: reconstructed tracks and calorimeter hits, variable number N per event
+CLD EDM4HEP dataset with ee -> qq at 365 GeV.
+  - X: reconstructed tracks and clusters, variable number N per event
   - ygen: stable generator particles, zero-padded to N per event
   - ycand: baseline particle flow particles, zero-padded to N per event
 """
 
 _CITATION = """
-Pata, Joosep, Wulff, Eric, Duarte, Javier, Mokhtar, Farouk, Zhang, Mengke, Girone, Maria, & Southwick, David. (2023).
-Simulated datasets for detector and particle flow reconstruction: CLIC detector (1.1) [Data set].
-Zenodo. https://doi.org/10.5281/zenodo.8260741
+FIXME
 """
 
 
-class ClicEdmSingleNeutronHitsPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.7.0")
+class CldEdmQqPf(tfds.core.GeneratorBasedBuilder):
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "UNDEFINED"))
     RELEASE_NOTES = {
-        "1.1.0": "Remove track referencepoint feature",
-        "1.2.0": "Keep all interacting genparticles",
-        "1.5.0": "Regenerate with ARRAY_RECORD",
-        "1.7.0": "Update track features",
+        "2.6.0": "New generation with v1.2.2_key4hep_2025-05-29_CLD_3edac3",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
 
     The processed tensorflow_dataset can also be downloaded from:
-    FIXME
+    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/cld_edm4hep/ ./
     """
+
+    # create configs 1 ... NUM_SPLITS + 1 that allow to parallelize the dataset building
+    BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, NUM_SPLITS + 1)]
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(ClicEdmSingleNeutronHitsPf, self).__init__(*args, **kwargs)
+        super(CldEdmQqPf, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
@@ -54,12 +53,15 @@ class ClicEdmSingleNeutronHitsPf(tfds.core.GeneratorBasedBuilder):
                     "X": tfds.features.Tensor(
                         shape=(
                             None,
-                            max(len(X_FEATURES_TRK), len(X_FEATURES_CH)),
+                            max(len(X_FEATURES_TRK), len(X_FEATURES_CL)),
                         ),
                         dtype=np.float32,
                     ),
-                    "ygen": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "ytarget": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
                     "ycand": tfds.features.Tensor(shape=(None, len(Y_FEATURES)), dtype=np.float32),
+                    "genmet": tfds.features.Scalar(dtype=np.float32),
+                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
+                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
                 }
             ),
             supervised_keys=None,
@@ -67,14 +69,14 @@ class ClicEdmSingleNeutronHitsPf(tfds.core.GeneratorBasedBuilder):
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(
                 x_features_track=X_FEATURES_TRK,
-                x_features_calohit=X_FEATURES_CH,
+                x_features_cluster=X_FEATURES_CL,
                 y_features=Y_FEATURES,
             ),
         )
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "neutron/"))
+        return split_sample(Path(path / "p8_ee_qq_ecm365"), self.builder_config, num_splits=NUM_SPLITS)
 
     def _generate_examples(self, files):
         return generate_examples(files)

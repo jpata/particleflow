@@ -178,7 +178,7 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
     _logger.info(f"Time taken to make predictions on device {rank} is: {time_total_min:.2f} min")
 
 
-def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
+def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None):
     """Uses the predictions stored as .parquet files from run_predictions to make plots."""
     import matplotlib.pyplot as plt
 
@@ -190,7 +190,7 @@ def make_plots(outpath, sample, dataset, dir_name="", ntest_files=-1):
     plots_path = Path(f"{outpath}/plots{dir_name}/{sample}/")
     pred_path = Path(f"{outpath}/preds{dir_name}/{sample}/")
 
-    yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), ntest_files)
+    yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), num_test_events)
     _logger.info(f"Loaded data for plotting from {pred_path}")
 
     plot_num_elements(X, cp_dir=plots_path)

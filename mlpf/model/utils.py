@@ -14,33 +14,39 @@ import logging
 ELEM_TYPES = {
     "cms": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
     "clic": [0, 1, 2],
+    "cld": [0, 1, 2],
 }
 
 # Some element types are defined, but do not exist in the dataset at all
 ELEM_TYPES_NONZERO = {
     "cms": [1, 4, 5, 6, 8, 9, 10, 11],
     "clic": [1, 2],
+    "cld": [1, 2],
 }
 
 CLASS_LABELS = {
     "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],  # we never actually predict 15/taus (not there in targets)
     "clic": [0, 211, 130, 22, 11, 13],
+    "cld": [0, 211, 130, 22, 11, 13],
     "clic_hits": [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
     "cms": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
     "clic": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    "cld": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     "clic_hits": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
     "cms": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
     "clic": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    "cld": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     "clic_hits": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
     "cms": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
     "clic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    "ccldlic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     "clic_hits": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
@@ -103,6 +109,25 @@ X_FEATURES = {
         "sigma_z",
     ],
     "clic": [
+        "type",
+        "pt | et",
+        "eta",
+        "sin_phi",
+        "cos_phi",
+        "p | energy",
+        "chi2 | position.x",
+        "ndf | position.y",
+        "dEdx | position.z",
+        "dEdxError | iTheta",
+        "radiusOfInnermostHit | energy_ecal",
+        "tanLambda | energy_hcal",
+        "D0 | energy_other",
+        "omega | num_hits",
+        "Z0 | sigma_x",
+        "time | sigma_y",
+        "Null | sigma_z",
+    ],
+    "cld": [
         "type",
         "pt | et",
         "eta",

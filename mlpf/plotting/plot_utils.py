@@ -124,6 +124,8 @@ def get_class_names(sample_name):
 # overline results in misalignment
 EVALUATION_DATASET_NAMES = {
     "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "cld_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
+    "cld_edm_ww_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$, PU10",
     "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
@@ -311,25 +313,40 @@ def particle_label(ax, pid):
     )
 
 
-def load_eval_data(path, max_files=None):
+def load_eval_data(path, max_events=None):
     yvals = []
     filenames = []
     print("path", path)
 
-    filelist = list(glob.glob(path))
-
-    if max_files is not None:
-        filelist = filelist[:max_files]
+    filelist = sorted(list(glob.glob(path)))
     assert len(filelist) > 0
 
     is_interactive = sys.stdout.isatty()
+    iterator = filelist
     if is_interactive:
-        filelist = tqdm.tqdm(filelist, total=len(filelist), desc="Loading eval data")
+        iterator = tqdm.tqdm(filelist, desc="Loading eval data")
 
-    for fi in filelist:
+    total_events = 0
+    for fi in iterator:
         dd = awkward.from_parquet(fi)
+        num_in_file = len(dd)
+        print(fi, num_in_file, total_events, max_events)
+
+        if max_events is not None and max_events > 0:
+            if total_events + num_in_file > max_events:
+                to_take = max_events - total_events
+                yvals.append(dd[:to_take])
+                filenames.append(fi)
+                total_events += to_take
+                break
+
         yvals.append(dd)
         filenames.append(fi)
+        total_events += num_in_file
+
+        if max_events is not None and max_events > 0 and total_events >= max_events:
+            break
+
     assert len(yvals) > 0
 
     data = awkward.concatenate(yvals, axis=0)
