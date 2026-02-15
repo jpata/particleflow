@@ -24,10 +24,10 @@ FIXME
 """
 
 
-class CldEdmWwPf(tfds.core.GeneratorBasedBuilder):
+class CldEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "UNDEFINED"))
     RELEASE_NOTES = {
-        "2.6.0": "New generation with v1.2.2_key4hep_2025-05-29_CLD_3edac3",
+        "3.0.0": "New generation with v1.2.2_key4hep_2025-05-29_CLD_3edac3",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
@@ -41,7 +41,7 @@ class CldEdmWwPf(tfds.core.GeneratorBasedBuilder):
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(CldEdmWwPf, self).__init__(*args, **kwargs)
+        super(CldEdmWwFullhadPf, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
@@ -76,7 +76,7 @@ class CldEdmWwPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_WW_ecm365"), self.builder_config, num_splits=NUM_SPLITS)
+        return split_sample(Path(path / "p8_ee_WW_fullhad_ecm365"), self.builder_config, num_splits=NUM_SPLITS)
 
     def _generate_examples(self, files):
         return generate_examples(files)
