@@ -969,13 +969,7 @@ def process_one_file(fn, ofn):
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
     hit_data = {
-        "ECALOther": arrs["ECALOther"].array(),
-        "ECALBarrel": arrs["ECALBarrel"].array(),
-        "ECALEndcap": arrs["ECALEndcap"].array(),
-        "HCALBarrel": arrs["HCALBarrel"].array(),
-        "HCALEndcap": arrs["HCALEndcap"].array(),
-        "HCALOther": arrs["HCALOther"].array(),
-        "MUON": arrs["MUON"].array(),
+        k: arrs[k].array() for k in ["ECALOther", "ECALBarrel", "ECALEndcap", "HCALBarrel", "HCALEndcap", "HCALOther", "MUON"] if k in arrs.keys()
     }
 
     # Compute truth MET and jets from status=1 pythia particles
