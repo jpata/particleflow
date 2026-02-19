@@ -35,12 +35,27 @@ productions:
     # Common execution environment for this campaign
     environment:
       cmssw_release: "CMSSW_15_0_5"
+      cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5/"
       scram_arch: "el8_amd64_gcc12"
 
     memory:
       gen: 6000
       post: 4000
       tfds: 8000
+      val: 12000 #fairly high mem limit due to CPU execution of the attention model
+
+    validation:
+      job_types: ["pf", "mlpf"]
+      use_cuda: False
+
+    validation_data:
+      job_types: ["pf", "mlpf"]
+      use_cuda: False
+      samples:
+        jetmet0:
+          input_filelist: "scripts/tallinn/jetmet0.txt"
+          seed_range: [1, 11]
+          output_subdir: "Run2024C"
 
     slurm_partition: "main"
     slurm_runtime: "24h"
@@ -79,7 +94,7 @@ productions:
         events_per_job: 100
         output_subdir: "pu55to75_val"
         pu_type: "pu55to75"
-        copy_step2: true
+        copy_step2: True
 
       ttbar_nopu:
         process_name: "TTbar_13p6TeV_TuneCUETP8M1_cfi"

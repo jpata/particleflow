@@ -40,6 +40,8 @@ def main():
     prod_config = spec["productions"][args.production]
     prod_type = prod_config.get("type", "cms")
 
+    cmssw_dir = prod_config.get("environment", {}).get("cmssw_dir", "")
+
     cpu_partition = prod_config.get("slurm_partition", "main")
     cpu_runtime = prod_config.get("slurm_runtime", "120m")
 
@@ -80,7 +82,13 @@ def main():
     ensure_dir(f"{jobs_dir}/gen")
     ensure_dir(f"{jobs_dir}/post")
     ensure_dir(f"{jobs_dir}/tfds")
+    ensure_dir(f"{jobs_dir}/val")
     ensure_dir(tfds_root_dir)
+
+    val_config = prod_config.get("validation", {})
+    val_job_types = val_config.get("job_types", [])
+    val_use_cuda = val_config.get("use_cuda", False)
+    mem_val = memory_config.get("val", 8000)
 
     snakefile_content = "rule all:\n    input:\n"
 
@@ -148,12 +156,13 @@ def main():
                 exports = (
                     f"export OUTDIR={gen_base_dir}/"
                     + f" && export CONFIG_DIR={config_dir}"
+                    + (f" && export CMSSWDIR={cmssw_dir}" if cmssw_dir else "")
                     + f" && export WORKDIR={scratch_root}/{process_name}_{seed}"
                     + f" && export NEV={events_per_job}"
                 )
                 gen_cmd = f"bash {gen_script} {process_name} {seed} {pu_type}"
                 if copy_step2:
-                    gen_cmd += " true"
+                    gen_cmd += " True"
 
                 if args.ignore_failures:
                     gen_cmd += " || echo 'WARNING: Generation failed'"
@@ -186,6 +195,42 @@ rule gen_{chunk_id}:
         "{gen_container_img}"
     shell:
         "{gen_script_path} && touch {{output}}"
+"""
+
+            # 1.5 Validation
+            if copy_step2 and "val" in req_steps and prod_type == "cms":
+                for job_type in val_job_types:
+                    val_id = f"{sample_key}_{job_type}_{chunk_start}"
+                    val_sentinel = f"{jobs_dir}/val/val_{val_id}.done"
+                    val_script_path = f"{jobs_dir}/val/val_{val_id}.sh"
+
+                    val_cmd_lines = []
+                    for seed in range(chunk_start, chunk_end):
+                        val_cmd = (
+                            f"WORKSPACE_DIR={workspace_dir} OUTPUT_SUBDIR={output_subdir} {f'CMSSWDIR={cmssw_dir} ' if cmssw_dir else ''}"
+                            + f"bash mlpf/data/cms/valjob.sh {process_name} {seed} {job_type} {val_use_cuda}"
+                        )
+                        val_cmd_lines.append(val_cmd)
+
+                    write_bash_script(val_script_path, "\n".join(val_cmd_lines))
+                    final_targets.append(val_sentinel)
+
+                    val_rule_input = ""
+                    if "gen" in req_steps:
+                        val_rule_input = f'\n    input:\n        "{gen_sentinel}"'
+
+                    rules_content += f"""
+rule val_{val_id}:{val_rule_input}
+    output:
+        "{val_sentinel}"
+    resources:
+        mem_mb_per_cpu={mem_val},
+        slurm_partition="{cpu_partition}",
+        runtime="{cpu_runtime}"
+    container:
+        "{gen_container_img}"
+    shell:
+        "{val_script_path} && touch {{output}}"
 """
 
             # 2. Postprocessing
@@ -279,6 +324,51 @@ rule post_{chunk_id}:{post_rule_input}
 """
 
         all_sample_post_sentinels[sample_key] = sample_post_sentinels
+
+    # 1.6 Data Validation
+    if "val_data" in req_steps and prod_type == "cms":
+        val_data_config = prod_config.get("validation_data", {})
+        val_data_job_types = val_data_config.get("job_types", [])
+        val_data_use_cuda = val_data_config.get("use_cuda", False)
+        val_data_samples = val_data_config.get("samples", {})
+
+        for val_sample_key, val_sample_data in val_data_samples.items():
+            input_filelist = val_sample_data["input_filelist"]
+            seed_start, seed_end = val_sample_data["seed_range"]
+            output_subdir = val_sample_data.get("output_subdir", val_sample_key)
+
+            for job_type in val_data_job_types:
+                for chunk_start in range(seed_start, seed_end, CHUNK_SIZE):
+                    chunk_end = min(chunk_start + CHUNK_SIZE, seed_end)
+                    val_id = f"{val_sample_key}_{job_type}_{chunk_start}"
+                    val_sentinel = f"{jobs_dir}/val/val_data_{val_id}.done"
+                    val_script_path = f"{jobs_dir}/val/val_data_{val_id}.sh"
+
+                    val_cmd_lines = []
+                    for seed in range(chunk_start, chunk_end):
+                        val_cmd = (
+                            f"WORKSPACE_DIR={workspace_dir} OUTPUT_SUBDIR={output_subdir} {f'CMSSWDIR={cmssw_dir} ' if cmssw_dir else ''} "
+                            + f"INPUT_FILELIST={config_dir}/{input_filelist} "
+                            + f"bash mlpf/data/cms/valjob_data.sh {val_sample_key} {seed} {job_type} {val_data_use_cuda}"
+                        )
+                        val_cmd_lines.append(val_cmd)
+
+                    write_bash_script(val_script_path, "\n".join(val_cmd_lines))
+                    final_targets.append(val_sentinel)
+
+                    rules_content += f"""
+rule val_data_{val_id}:
+    output:
+        "{val_sentinel}"
+    resources:
+        mem_mb_per_cpu={mem_val},
+        slurm_partition="{cpu_partition}",
+        runtime="{cpu_runtime}"
+    container:
+        "{gen_container_img}"
+    shell:
+        "{val_script_path} && touch {{output}}"
+"""
 
     # -------------------------------------------------------------------------
     # PART 2: TFDS Conversion (Per Config ID / Split)
