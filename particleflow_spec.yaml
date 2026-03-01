@@ -5,7 +5,7 @@
 project:
   name: "particleflow"
   description: "Machine Learning for Particle Flow Reconstruction"
-  container: "/home/software/singularity/pytorch.simg:2026-02-04"
+  container: "/home/software/singularity/pytorch.simg:2026-02-26"
   bind_mounts:
     - "/local"
     - "/cvmfs"
@@ -42,15 +42,17 @@ productions:
       gen: 6000
       post: 4000
       tfds: 8000
-      val: 12000 #fairly high mem limit due to CPU execution of the attention model
+      val: 8000 #fairly high mem limit due to CPU execution of the attention model and 8 threads
 
     validation:
       job_types: ["pf", "mlpf"]
       use_cuda: False
+      threads: 8
 
     validation_data:
       job_types: ["pf", "mlpf"]
       use_cuda: False
+      threads: 8
       samples:
         jetmet0:
           input_filelist: "scripts/tallinn/jetmet0.txt"
@@ -58,7 +60,7 @@ productions:
           output_subdir: "Run2024C"
 
     slurm_partition: "main"
-    slurm_runtime: "24h"
+    slurm_runtime: "48h"
 
     # Step 1: Generation
     # Defines the MC samples to be generated or processed

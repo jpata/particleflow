@@ -8,6 +8,7 @@ SAMPLE=$1
 SEED=$2
 JOB_TYPE=$3
 USE_CUDA=${4:-false}
+NTHREADS=${NTHREADS:-8}
 
 # Environment variables (usually set by Snakemake or spec)
 CMSSWDIR=${CMSSWDIR:-/scratch/persistent/joosep/CMSSW_15_0_5/}
@@ -56,7 +57,7 @@ if [ "$JOB_TYPE" == "mlpf" ]; then
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
         --datatier RECOSIM,MINIAODSIM -n -1 --era $ERA \
         --eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
-        --filein file:$STEP2_FILE --fileout file:step3.root \
+        --nThreads $NTHREADS --filein file:$STEP2_FILE --fileout file:step3.root \
         --procModifiers mlpf --no_exec --python_filename=step3.py
     echo "process.mlpfProducer.use_cuda = ${USE_CUDA}" >> step3.py
 else
@@ -64,7 +65,7 @@ else
         -s RAW2DIGI,L1Reco,RECO,RECOSIM,PAT \
         --datatier RECOSIM,MINIAODSIM -n -1 --era $ERA \
         --eventcontent RECOSIM,MINIAODSIM --geometry=$GEOM \
-        --filein file:$STEP2_FILE --fileout file:step3.root \
+        --nThreads $NTHREADS --filein file:$STEP2_FILE --fileout file:step3.root \
         --no_exec --python_filename=step3.py
 fi
 

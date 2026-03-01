@@ -88,6 +88,7 @@ def main():
     val_config = prod_config.get("validation", {})
     val_job_types = val_config.get("job_types", [])
     val_use_cuda = val_config.get("use_cuda", False)
+    val_threads = val_config.get("threads", 1)
     mem_val = memory_config.get("val", 8000)
 
     snakefile_content = "rule all:\n    input:\n"
@@ -208,7 +209,7 @@ rule gen_{chunk_id}:
                     for seed in range(chunk_start, chunk_end):
                         val_cmd = (
                             f"WORKSPACE_DIR={workspace_dir} OUTPUT_SUBDIR={output_subdir} {f'CMSSWDIR={cmssw_dir} ' if cmssw_dir else ''}"
-                            + f"bash mlpf/data/cms/valjob.sh {process_name} {seed} {job_type} {val_use_cuda}"
+                            + f"NTHREADS={val_threads} bash mlpf/data/cms/valjob.sh {process_name} {seed} {job_type} {val_use_cuda}"
                         )
                         val_cmd_lines.append(val_cmd)
 
@@ -223,6 +224,7 @@ rule gen_{chunk_id}:
 rule val_{val_id}:{val_rule_input}
     output:
         "{val_sentinel}"
+    threads: {val_threads}
     resources:
         mem_mb_per_cpu={mem_val},
         slurm_partition="{cpu_partition}",
@@ -330,6 +332,7 @@ rule post_{chunk_id}:{post_rule_input}
         val_data_config = prod_config.get("validation_data", {})
         val_data_job_types = val_data_config.get("job_types", [])
         val_data_use_cuda = val_data_config.get("use_cuda", False)
+        val_data_threads = val_data_config.get("threads", 1)
         val_data_samples = val_data_config.get("samples", {})
 
         for val_sample_key, val_sample_data in val_data_samples.items():
@@ -349,7 +352,7 @@ rule post_{chunk_id}:{post_rule_input}
                         val_cmd = (
                             f"WORKSPACE_DIR={workspace_dir} OUTPUT_SUBDIR={output_subdir} {f'CMSSWDIR={cmssw_dir} ' if cmssw_dir else ''} "
                             + f"INPUT_FILELIST={config_dir}/{input_filelist} "
-                            + f"bash mlpf/data/cms/valjob_data.sh {val_sample_key} {seed} {job_type} {val_data_use_cuda}"
+                            + f"NTHREADS={val_data_threads} bash mlpf/data/cms/valjob_data.sh {val_sample_key} {seed} {job_type} {val_data_use_cuda}"
                         )
                         val_cmd_lines.append(val_cmd)
 
@@ -360,6 +363,7 @@ rule post_{chunk_id}:{post_rule_input}
 rule val_data_{val_id}:
     output:
         "{val_sentinel}"
+    threads: {val_data_threads}
     resources:
         mem_mb_per_cpu={mem_val},
         slurm_partition="{cpu_partition}",

@@ -11,7 +11,7 @@ MODEL=pyg-cms-v1
 #MODEL=pyg-clic-v1
 
 singularity exec -B /local --env PYTHONPATH=`pwd` \
-    /home/software/singularity/pytorch.simg\:2026-02-04 \
+    /home/software/singularity/pytorch.simg\:2026-02-26 \
     python3 mlpf/produce_snakemake.py \
     --production $WORKFLOW \
     --steps gen,post,tfds
@@ -23,7 +23,7 @@ singularity exec -B /local --env PYTHONPATH=`pwd` \
     --apptainer-args " -B /local -B /cvmfs -B /scratch/local"
 
 singularity exec -B /local --env PYTHONPATH=`pwd` \
-    /home/software/singularity/pytorch.simg\:2026-02-04 \
+    /home/software/singularity/pytorch.simg\:2026-02-26 \
     python3 mlpf/produce_snakemake.py \
     --production $WORKFLOW \
     --steps train \
@@ -36,7 +36,7 @@ singularity exec -B /local --env PYTHONPATH=`pwd` \
     --apptainer-args " -B /local -B /cvmfs -B /scratch/local --nv"
 
 singularity exec -B /local --env PYTHONPATH=`pwd` \
-    /home/software/singularity/pytorch.simg\:2026-02-04 \
+    /home/software/singularity/pytorch.simg\:2026-02-26 \
     python3 mlpf/produce_snakemake.py \
     --production $WORKFLOW \
     --steps val_data
