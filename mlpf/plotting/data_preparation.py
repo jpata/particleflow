@@ -8,15 +8,14 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 
 
-def load_nano(fn):
+def load_nano(fn, is_data=False):
     """Loads events from a nanoaod file."""
     tt = uproot.open(fn).get("Events")
     ret = {}
-    for k in [
+    keys_to_load = [
         "Jet_pt",
         "Jet_eta",
         "Jet_phi",
-        "Jet_genJetIdx",
         "Jet_rawFactor",
         "Jet_chMultiplicity",
         "Jet_neMultiplicity",
@@ -28,17 +27,7 @@ def load_nano(fn):
         "FatJet_pt",
         "FatJet_eta",
         "FatJet_phi",
-        "FatJet_genJetAK8Idx",
         "FatJet_rawFactor",
-        "GenJet_pt",
-        "GenJet_eta",
-        "GenJet_phi",
-        "GenJet_partonFlavour",
-        "GenJetAK8_pt",
-        "GenJetAK8_eta",
-        "GenJetAK8_phi",
-        "GenMET_pt",
-        "GenMET_phi",
         "PFMET_pt",
         "PFMET_phi",
         "PuppiMET_pt",
@@ -49,35 +38,56 @@ def load_nano(fn):
         "RawPuppiMET_phi",
         "Pileup_nPU",
         "Pileup_nTrueInt",
-        "GenVtx_z",
         "PV_z",
-    ]:
-        ret[k] = tt.arrays(k)[k]
+    ]
+    if not is_data:
+        keys_to_load += [
+            "Jet_genJetIdx",
+            "FatJet_genJetAK8Idx",
+            "GenJet_pt",
+            "GenJet_eta",
+            "GenJet_phi",
+            "GenJet_partonFlavour",
+            "GenJetAK8_pt",
+            "GenJetAK8_eta",
+            "GenJetAK8_phi",
+            "GenMET_pt",
+            "GenMET_phi",
+            "GenVtx_z",
+        ]
+
+    for k in keys_to_load:
+        if k in tt:
+            ret[k] = tt.arrays(k)[k]
+        else:
+            print(f"Warning: branch {k} not found in {fn}")
     return [
         ret,
     ]
 
 
-def load_multiprocess(files, max_workers=None):
+def load_multiprocess(files, is_data=False, max_workers=None):
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        results = list(tqdm.tqdm(executor.map(load_nano, files), total=len(files)))
+        results = list(tqdm.tqdm(executor.map(load_nano, files, [is_data] * len(files)), total=len(files)))
     successful_results = [r for r in results if r is not None]
     return awkward.concatenate(successful_results)
 
 
 @click.command()
-@click.option("--input-dir", required=True, type=str, help="Input directory with ROOT files")
+@click.option("--input-pf", required=True, type=str, help="Input directory for PF")
+@click.option("--input-mlpf", required=True, type=str, help="Input directory for MLPF")
 @click.option("--sample", required=True, type=str, help="Sample name (e.g., QCD_PU_13p6)")
 @click.option("--output-dir", default=".", type=str, help="Output directory for parquet files")
 @click.option("--max-files", default=-1, type=int, help="Maximum number of files to process")
 @click.option("--max-workers", default=2, type=int, help="Number of worker processes")
-def prepare_data(input_dir, sample, output_dir, max_files, max_workers):
+@click.option("--is-data", is_flag=True, help="Whether the sample is data (no gen info)")
+def prepare_data(input_pf, input_mlpf, sample, output_dir, max_files, max_workers, is_data):
     """Loads ROOT files, processes them, and saves to Parquet format."""
 
     os.makedirs(output_dir, exist_ok=True)
 
-    pf_files = glob.glob(f"{input_dir}/{sample}_pf/step4_NANO_jme_*.root")
-    mlpf_files = glob.glob(f"{input_dir}/{sample}_mlpf/step4_NANO_jme_*.root")
+    pf_files = glob.glob(f"{input_pf}/*.root")
+    mlpf_files = glob.glob(f"{input_mlpf}/*.root")
 
     pf_files_d = {os.path.basename(fn): fn for fn in pf_files}
     mlpf_files_d = {os.path.basename(fn): fn for fn in mlpf_files}
@@ -98,7 +108,7 @@ def prepare_data(input_dir, sample, output_dir, max_files, max_workers):
 
         print(f"Processing {len(files_to_process)} files for {sample}_{mlpf_or_pf}")
 
-        data = load_multiprocess(files_to_process, max_workers=max_workers)
+        data = load_multiprocess(files_to_process, is_data=is_data, max_workers=max_workers)
 
         if data is None:
             print(f"No data loaded for {sample}_{mlpf_or_pf}")

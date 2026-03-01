@@ -14,17 +14,24 @@ def load_spec(spec_file):
 
 
 def resolve_path(path, spec):
-    # Simple recursive substitution for ${...}
+    # Recursive substitution for ${...}
     def replace(match):
         key_path = match.group(1).split(".")
         val = spec
         for k in key_path:
-            val = val.get(k)
+            if isinstance(val, dict):
+                val = val.get(k)
+            else:
+                val = None
             if val is None:
                 return match.group(0)  # fail gracefully
         return str(val)
 
-    return re.sub(r"\$\{(.+?)\}", replace, path)
+    prev_path = None
+    while path != prev_path:
+        prev_path = path
+        path = re.sub(r"\$\{(.+?)\}", replace, path)
+    return path
 
 
 def create_experiment_dir(prefix=None, suffix=None, experiments_dir="experiments"):
