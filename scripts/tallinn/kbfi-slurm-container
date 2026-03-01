@@ -1,0 +1,39 @@
+#!/bin/bash
+# This script is a wrapper for running Python/Snakemake inside an Apptainer container on the KBFI Slurm cluster.
+#
+# --- Snakemake Slurm Hack Documentation ---
+# When using the Snakemake Slurm executor, Snakemake submits jobs to the cluster that must
+# execute within the same containerized environment. Snakemake relies on `sys.executable`
+# to know how to invoke the 'snakemake' command on remote nodes.
+#
+# To ensure portability and consistency:
+# 1. We include 'snakemake_fix' in the PYTHONPATH.
+# 2. Python automatically imports 'snakemake_fix/sitecustomize.py' on startup.
+# 3. 'sitecustomize.py' dynamically overrides `sys.executable` to point to THIS wrapper script.
+#
+# This "hack" ensures that any job Snakemake submits via Slurm will automatically re-enter
+# the Apptainer container by calling this script, rather than attempting to run on the
+# bare host system.
+#
+# For more information on Snakemake executors and cluster integration, see:
+# https://snakemake.readthedocs.io/en/stable/executing/cli.html#executors
+# ------------------------------------------
+
+CORES=${SLURM_CPUS_PER_TASK:-1}
+export OMP_NUM_THREADS=$CORES
+export OPENBLAS_NUM_THREADS=$CORES
+export MKL_NUM_THREADS=$CORES
+export VECLIB_MAXIMUM_THREADS=$CORES
+export NUMEXPR_NUM_THREADS=$CORES
+
+KBFI_SLURM_APPTAINER=/scratch/persistent/joosep/singularity/kbfi-slurm-snakemake-20260301-34aca7a.sif
+
+# Get the directory where this script is located
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+FIX_DIR="$SCRIPT_DIR/snakemake_fix"
+export PYTHONPATH="$FIX_DIR:$PYTHONPATH"
+
+#Ensure slurm database paths are visible in the container
+
+apptainer exec -B /home -B /local -B /scratch -B /cvmfs -B /etc/munge/ -B /etc/slurm/ -B /var/run/munge/ --nv ${HOME}/singularity/alma9-kbfi.simg python3.13 "$@"

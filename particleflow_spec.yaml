@@ -5,15 +5,15 @@
 project:
   name: "particleflow"
   description: "Machine Learning for Particle Flow Reconstruction"
-  container: "/home/software/singularity/pytorch.simg:2026-02-26"
+  container: "/scratch/persistent/joosep/singularity/pytorch-20260301-34aca7a.sif"
   bind_mounts:
     - "/local"
     - "/cvmfs"
     - "/scratch/local"
     - "/scratch/persistent"
   paths:
-    storage_root: "/local/joosep/mlpf/"
-    scratch_root: "/scratch/local/joosep/"
+    storage_root: "/local/joosep/mlpf"
+    scratch_root: "/scratch/local/joosep"
 
 # -----------------------------------------------------------------------------
 # Dataset Productions
@@ -29,13 +29,13 @@ productions:
     type: "cms"
     comment: "Main production with CMSSW_15_0_5"
     workspace_dir: "${project.paths.storage_root}/cms/20260204_cmssw_15_0_5_117d32"
-    config_dir: "/home/joosep/particleflow/"
+    config_dir: "/home/joosep/particleflow"
     gen_container: "/cvmfs/singularity.opensciencegrid.org/cmssw/cms:rhel8-x86_64"
 
     # Common execution environment for this campaign
     environment:
       cmssw_release: "CMSSW_15_0_5"
-      cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5/"
+      cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5"
       scram_arch: "el8_amd64_gcc12"
 
     memory:
