@@ -29,8 +29,8 @@ data_samples:
 
 # Data validation settings
 data_validation:
-  golden_json: "corrections/Cert_Collisions2024_378981_386951_Golden.json"
-  lumi_csv: "corrections/output.csv"
+  golden_json: "data/cms/run3/corrections/Cert_Collisions2024_378981_386951_Golden.json"
+  lumi_csv: "data/cms/run3/corrections/output.csv"
 
 # Sample used to derive JECs
 correction_sample: "QCD_PU_13p6"
