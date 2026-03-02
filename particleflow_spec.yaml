@@ -55,8 +55,8 @@ productions:
       threads: 8
       samples:
         jetmet0:
-          input_filelist: "scripts/tallinn/jetmet0.txt"
-          seed_range: [1, 11]
+          input_filelist: "data/cms/run3/tallinn/jetmet0.txt" #use data/cms/run3/cmssw/jetmet0.txt if not in Tallinn
+          seed_range: [1, 100]
           output_subdir: "Run2024C"
 
     slurm_partition: "main"

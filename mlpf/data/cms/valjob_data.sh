@@ -15,7 +15,7 @@ CMSSWDIR=${CMSSWDIR:-/scratch/persistent/joosep/CMSSW_15_0_5/}
 CONFIG_DIR=${CONFIG_DIR:-/home/joosep/particleflow/}
 WORKSPACE_DIR=${WORKSPACE_DIR}
 OUTPUT_SUBDIR=${OUTPUT_SUBDIR:-data_val}
-INPUT_FILELIST=${INPUT_FILELIST:-${CONFIG_DIR}/scripts/cmssw/jetmet0.txt}
+INPUT_FILELIST=${INPUT_FILELIST:-${CONFIG_DIR}/data/cms/run3/cmssw/jetmet0.txt}
 
 # Derived paths
 FILENAME=$(sed -n "${SEED}p" $INPUT_FILELIST)
