@@ -34,6 +34,7 @@ scipy
 seaborn
 setGPU
 snakemake
+tensorflow
 tensorflow-datasets
 torch
 torch_runstats
