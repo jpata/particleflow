@@ -69,7 +69,7 @@ The full data generation, model training and validation workflow can be managed 
 
 ### 1. Configure for your site
 
-Change `particleflow_spec.yaml` to suit your site, edit the paths as needed:
+Change `particleflow_spec.yaml` to suit your site, edit the config as needed, for example:
 ```diff
 -  <<: *tallinn
 +  <<: *lxplus
@@ -85,7 +85,9 @@ Use the provided script to generate a `Snakefile` for a specific production camp
 You can also produce the snakefile for specific steps only, e.g. `--steps train` to start from existing ML datasets.
 
 ### 3. Execute the workflow
-Run Snakemake using the generated `Snakefile`. The following example runs locally using a single core, which can be used for debugging:
+Run Snakemake using the generated `Snakefile`. The following example runs locally using a single core, which can be used for debugging.
+Note that a super old GPU like P100, V100 or T4 won't work for training! You need at least Ampere generation or newer.
+The reference for training is an 80GB A100 GPU.
 ```bash
 ./scripts/wrapper_lxplus.sh snakemake -s snakemake_jobs/cld_2025_edm4hep/Snakefile --cores 1 --printshellcmds
 ```
