@@ -66,8 +66,6 @@ apptainer exec -B /local --env PYTHONPATH=`pwd` \
     $IMG \
     python3 mlpf/produce_validation_snakemake.py \
     --config validation_cms.yaml
-
-# Run the validation plotting workflow using the tallinn slurm profile
 ./scripts/tallinn/kbfi-slurm-container -m snakemake --executor slurm \
     --profile tallinn \
     -s snakemake_jobs/validation_$WORKFLOW/Snakefile \

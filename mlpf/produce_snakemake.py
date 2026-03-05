@@ -21,6 +21,31 @@ def write_bash_script(path, content):
     os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
 
 
+def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0):
+    res = {}
+    if executor == "slurm":
+        res["mem_mb_per_cpu"] = mem
+        res["slurm_partition"] = f'"{partition}"'
+        res["runtime"] = f'"{runtime}"'
+        if gpus > 0:
+            if gpu_type:
+                res["gres"] = f'"gpu:{gpu_type}:{gpus}"'
+            else:
+                res["gpu"] = gpus
+            if mem_per_gpu > 0:
+                res["mem_per_gpu"] = mem_per_gpu
+    elif executor == "condor":
+        res["mem_mb"] = mem
+        res["job_flavour"] = f'"{partition}"'
+        res["runtime"] = f'"{runtime}"'
+        if gpus > 0:
+            res["request_gpus"] = gpus
+    else:
+        res["mem_mb"] = mem
+
+    return ", ".join([f"{k}={v}" for k, v in res.items()])
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
@@ -40,10 +65,12 @@ def main():
     prod_config = spec["productions"][args.production]
     prod_type = prod_config.get("type", "cms")
 
-    cmssw_dir = prod_config.get("environment", {}).get("cmssw_dir", "")
+    executor = spec["project"].get("executor", "slurm")
 
-    cpu_partition = prod_config.get("slurm_partition", "main")
-    cpu_runtime = prod_config.get("slurm_runtime", "120m")
+    cmssw_dir = resolve_path(prod_config.get("environment", {}).get("cmssw_dir", ""), spec)
+
+    cpu_partition = resolve_path(prod_config.get("slurm_partition", "main"), spec)
+    cpu_runtime = resolve_path(prod_config.get("slurm_runtime", "120m"), spec)
 
     memory_config = prod_config.get("memory", {})
     mem_gen = memory_config.get("gen", 2000)
@@ -189,9 +216,7 @@ rule gen_{chunk_id}:
     output:
         "{gen_sentinel}"
     resources:
-        mem_mb_per_cpu={mem_gen},
-        slurm_partition="{cpu_partition}",
-        runtime="{cpu_runtime}"
+        {get_resource_str(executor, mem_gen, cpu_partition, cpu_runtime)}
     container:
         "{gen_container_img}"
     shell:
@@ -226,9 +251,7 @@ rule val_{val_id}:{val_rule_input}
         "{val_sentinel}"
     threads: {val_threads}
     resources:
-        mem_mb_per_cpu={mem_val},
-        slurm_partition="{cpu_partition}",
-        runtime="{cpu_runtime}"
+        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_threads)}
     container:
         "{gen_container_img}"
     shell:
@@ -316,9 +339,7 @@ rule post_{chunk_id}:{post_rule_input}
     output:
         "{post_sentinel}"
     resources:
-        mem_mb_per_cpu={mem_post},
-        slurm_partition="{cpu_partition}",
-        runtime="{cpu_runtime}"
+        {get_resource_str(executor, mem_post, cpu_partition, cpu_runtime)}
     container:
         "{main_container_img}"
     shell:
@@ -336,7 +357,7 @@ rule post_{chunk_id}:{post_rule_input}
         val_data_samples = val_data_config.get("samples", {})
 
         for val_sample_key, val_sample_data in val_data_samples.items():
-            input_filelist = val_sample_data["input_filelist"]
+            input_filelist = resolve_path(val_sample_data["input_filelist"], spec)
             seed_start, seed_end = val_sample_data["seed_range"]
             output_subdir = val_sample_data.get("output_subdir", val_sample_key)
 
@@ -365,9 +386,7 @@ rule val_data_{val_id}:
         "{val_sentinel}"
     threads: {val_data_threads}
     resources:
-        mem_mb_per_cpu={mem_val},
-        slurm_partition="{cpu_partition}",
-        runtime="{cpu_runtime}"
+        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_data_threads)}
     container:
         "{gen_container_img}"
     shell:
@@ -455,9 +474,7 @@ rule tfds_{tfds_id}:{tfds_rule_input}
     output:
         "{tfds_sentinel}"
     resources:
-        mem_mb_per_cpu={mem_tfds},
-        slurm_partition="{cpu_partition}",
-        runtime="{cpu_runtime}"
+        {get_resource_str(executor, mem_tfds, cpu_partition, cpu_runtime)}
     container:
         "{main_container_img}"
     shell:
@@ -477,8 +494,8 @@ rule tfds_{tfds_id}:{tfds_rule_input}
         gpu_count = model_spec.get("gpus", 0)
         gpu_type = model_spec.get("gpu_type", "")
         mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", 8000)
-        gpu_partition = model_spec.get("slurm_partition", "gpu")
-        gpu_runtime = model_spec.get("slurm_runtime", "120m")
+        gpu_partition = resolve_path(model_spec.get("slurm_partition", "gpu"), spec)
+        gpu_runtime = resolve_path(model_spec.get("slurm_runtime", "120m"), spec)
 
         exp_name = f"{args.model}_{args.production}"
 
@@ -504,16 +521,6 @@ nvidia-smi
         # snakemake rule names cannot contain hyphens
         rule_model_name = args.model.replace("-", "_")
 
-        # Constructing the resources string
-        resources_str = f'mem_mb_per_cpu={mem_train}, slurm_partition="{gpu_partition}", runtime="{gpu_runtime}"'
-        if gpu_count > 0:
-            if gpu_type:
-                resources_str += f',gres="gpu:{gpu_type}:{gpu_count}"'
-            else:
-                resources_str += f", gpu={gpu_count}"
-        if mem_per_gpu_mb > 0 and gpu_count > 0:
-            resources_str += f",mem_per_gpu={mem_per_gpu_mb}"
-
         if "train" in req_steps:
             final_targets.append(train_sentinel)
 
@@ -522,7 +529,7 @@ rule train_{rule_model_name}:{train_rule_input}
     output:
         "{train_sentinel}"
     resources:
-        {resources_str}
+        {get_resource_str(executor, mem_train, gpu_partition, gpu_runtime, gpus=gpu_count, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu_mb)}
     container:
         "{main_container_img}"
     shell:

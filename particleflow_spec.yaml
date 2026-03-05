@@ -5,15 +5,45 @@
 project:
   name: "particleflow"
   description: "Machine Learning for Particle Flow Reconstruction"
-  container: "/scratch/persistent/joosep/singularity/pytorch-20260301-34aca7a.sif"
-  bind_mounts:
-    - "/local"
-    - "/cvmfs"
-    - "/scratch/local"
-    - "/scratch/persistent"
-  paths:
-    storage_root: "/local/joosep/mlpf"
-    scratch_root: "/scratch/local/joosep"
+
+  # Site-specific configurations (Anchors)
+  # To switch sites, update the merge key (<<: *anchor) below.
+  sites:
+    tallinn: &tallinn
+      site_name: "tallinn"
+      executor: "slurm"
+      container: "/scratch/persistent/joosep/singularity/pytorch-20260301-34aca7a.sif"
+      bind_mounts:
+        - "/local"
+        - "/cvmfs"
+        - "/scratch/local"
+        - "/scratch/persistent"
+      paths:
+        storage_root: "/local/joosep/mlpf"
+        scratch_root: "/scratch/local/joosep"
+      cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5"
+      gpu_partition: "gpu"
+      cpu_partition: "main"
+
+    lxplus: &lxplus
+      site_name: "cmssw"
+      executor: "condor"
+      container: "/eos/user/j/jpata/www/pytorch.simg:2024-12-03"
+      bind_mounts:
+        - "/afs"
+        - "/cvmfs"
+        - "/eos"
+        - "/etc/pki/ca-trust"
+        - "/etc/tnsnames.ora"
+      paths:
+        storage_root: "/eos/user/j/jpata/mlpf"
+        scratch_root: "/tmp"
+      cmssw_dir: "/cvmfs/cms.cern.ch"
+      gpu_partition: "longlunch"
+      cpu_partition: "workday"
+
+  # Selected site defaults (Merged into 'project')
+  <<: *tallinn
 
 # -----------------------------------------------------------------------------
 # Dataset Productions
@@ -35,7 +65,7 @@ productions:
     # Common execution environment for this campaign
     environment:
       cmssw_release: "CMSSW_15_0_5"
-      cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5"
+      cmssw_dir: "${project.cmssw_dir}"
       scram_arch: "el8_amd64_gcc12"
 
     memory:
@@ -55,11 +85,11 @@ productions:
       threads: 8
       samples:
         jetmet0:
-          input_filelist: "data/cms/run3/tallinn/jetmet0.txt" #use data/cms/run3/cmssw/jetmet0.txt if not in Tallinn
+          input_filelist: "data/cms/run3/${project.site_name}/jetmet0.txt"
           seed_range: [1, 100]
           output_subdir: "Run2024C"
 
-    slurm_partition: "main"
+    slurm_partition: "${project.cpu_partition}"
     slurm_runtime: "48h"
 
     # Step 1: Generation
@@ -309,7 +339,7 @@ models:
     gpus: 1
     gpu_type: l40
     mem_per_gpu_mb: 100000
-    slurm_partition: "gpu"
+    slurm_partition: "${project.gpu_partition}"
     slurm_runtime: "48h"
     optimizer: adamw
     lr_schedule: cosinedecay

@@ -22,6 +22,31 @@ def write_bash_script(path, content):
     os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
 
 
+def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0):
+    res = {}
+    if executor == "slurm":
+        res["mem_mb_per_cpu"] = mem
+        res["slurm_partition"] = f'"{partition}"'
+        res["runtime"] = f'"{runtime}"'
+        if gpus > 0:
+            if gpu_type:
+                res["gres"] = f'"gpu:{gpu_type}:{gpus}"'
+            else:
+                res["gpu"] = gpus
+            if mem_per_gpu > 0:
+                res["mem_per_gpu"] = mem_per_gpu
+    elif executor == "condor":
+        res["mem_mb"] = mem
+        res["job_flavour"] = f'"{partition}"'
+        res["runtime"] = f'"{runtime}"'
+        if gpus > 0:
+            res["request_gpus"] = gpus
+    else:
+        res["mem_mb"] = mem
+
+    return ", ".join([f"{k}={v}" for k, v in res.items()])
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default=VALIDATION_SPEC_FILE, help="Validation spec file (yaml)")
@@ -36,6 +61,7 @@ def main():
     if production not in spec["productions"]:
         raise ValueError(f"Production {production} not found in {SPEC_FILE}")
 
+    executor = spec["project"].get("executor", "slurm")
     main_container_img = spec["project"].get("container")
 
     # Use container from vspec if provided, else use project container
@@ -60,8 +86,8 @@ def main():
     # Resource requirements
     res = vspec.get("resources", {})
     mem_mb = res.get("mem_mb", 8000)
-    runtime = res.get("runtime", "2h")
-    partition = res.get("slurm_partition", "main")
+    runtime = resolve_path(res.get("runtime", "2h"), spec)
+    partition = resolve_path(res.get("slurm_partition", "main"), spec)
 
     jobs_dir = f"{LOCAL_JOBS_DIR}/validation_{production}"
     ensure_dir(jobs_dir)
@@ -111,9 +137,7 @@ rule {prep_id}:
         "{output_dir}/{sample}_pf.parquet",
         "{output_dir}/{sample}_mlpf.parquet"
     resources:
-        mem_mb_per_cpu={mem_mb},
-        slurm_partition="{partition}",
-        runtime="{runtime}"
+        {get_resource_str(executor, mem_mb, partition, runtime)}
     container:
         "{container_img}"
     shell:
@@ -146,9 +170,7 @@ rule {corr_id}:
         "{corr_sentinel}",
         "{jec_file}"
     resources:
-        mem_mb_per_cpu={mem_mb},
-        slurm_partition="{partition}",
-        runtime="{runtime}"
+        {get_resource_str(executor, mem_mb, partition, runtime)}
     container:
         "{container_img}"
     shell:
@@ -187,9 +209,7 @@ rule {data_plot_id}:
     output:
         "{data_plot_sentinel}"
     resources:
-        mem_mb_per_cpu={mem_mb},
-        slurm_partition="{partition}",
-        runtime="{runtime}"
+        {get_resource_str(executor, mem_mb, partition, runtime)}
     container:
         "{container_img}"
     shell:
@@ -218,9 +238,7 @@ rule {met_id}:
     output:
         "{met_sentinel}"
     resources:
-        mem_mb_per_cpu={mem_mb},
-        slurm_partition="{partition}",
-        runtime="{runtime}"
+        {get_resource_str(executor, mem_mb, partition, runtime)}
     container:
         "{container_img}"
     shell:
@@ -256,9 +274,7 @@ rule {plot_id}:
     output:
         "{plot_sentinel}"
     resources:
-        mem_mb_per_cpu={mem_mb},
-        slurm_partition="{partition}",
-        runtime="{runtime}"
+        {get_resource_str(executor, mem_mb, partition, runtime)}
     container:
         "{container_img}"
     shell:

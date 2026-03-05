@@ -54,4 +54,4 @@ tev: 13.6
 resources:
   mem_mb: 8000
   runtime: "2h"
-  slurm_partition: "main"
+  slurm_partition: "${project.cpu_partition}"
