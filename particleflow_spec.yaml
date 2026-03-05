@@ -12,7 +12,7 @@ project:
     tallinn: &tallinn
       site_name: "tallinn"
       executor: "slurm"
-      container: "/scratch/persistent/joosep/singularity/pytorch-20260301-34aca7a.sif"
+      container: "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
       bind_mounts:
         - "/local"
         - "/cvmfs"
@@ -28,7 +28,7 @@ project:
     lxplus: &lxplus
       site_name: "lxplus"
       executor: "condor"
-      container: "/eos/user/j/jpata/www/pytorch-20260301-34aca7a.sif"
+      container: "/eos/user/j/jpata/www/pytorch-20260305-08d6950.sif"
       bind_mounts:
         - "/afs"
         - "/cvmfs"
@@ -39,8 +39,8 @@ project:
         storage_root: "/eos/user/j/jpata/mlpf"
         scratch_root: "/tmp"
       cmssw_dir: "/cvmfs/cms.cern.ch"
-      gpu_partition: "longlunch"
-      cpu_partition: "workday"
+      gpu_partition: "tomorrow"
+      cpu_partition: "tomorrow"
 
   # Selected site defaults (Merged into 'project'), choose 'tallinn' or 'lxplus'
   <<: *tallinn
@@ -332,6 +332,7 @@ productions:
 # -----------------------------------------------------------------------------
 # Model Configurations
 # Defines training recipes. Can inherit from defaults or other models.
+# The multipliers are tuned for an 80GB A100 for training.
 # -----------------------------------------------------------------------------
 models:
   defaults: &model_defaults
