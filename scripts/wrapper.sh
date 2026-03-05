@@ -1,2 +1,2 @@
 #!/bin/bash
-apptainer exec --env PYTHONPATH=`pwd` `./scripts/get_pytorch_image.sh` "$@"
+apptainer exec --nv --env PYTHONPATH=`pwd` `./scripts/get_pytorch_image.sh` "$@"

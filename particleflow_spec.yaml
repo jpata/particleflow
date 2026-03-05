@@ -26,9 +26,9 @@ project:
       cpu_partition: "main"
 
     lxplus: &lxplus
-      site_name: "cmssw"
+      site_name: "lxplus"
       executor: "condor"
-      container: "/eos/user/j/jpata/www/pytorch.simg:2024-12-03"
+      container: "/eos/user/j/jpata/www/pytorch-20260301-34aca7a.sif"
       bind_mounts:
         - "/afs"
         - "/cvmfs"
@@ -42,7 +42,7 @@ project:
       gpu_partition: "longlunch"
       cpu_partition: "workday"
 
-  # Selected site defaults (Merged into 'project')
+  # Selected site defaults (Merged into 'project'), choose 'tallinn' or 'lxplus'
   <<: *tallinn
 
 # -----------------------------------------------------------------------------

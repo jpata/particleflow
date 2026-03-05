@@ -65,24 +65,36 @@ Please ensure you use the correct version of the `jpata/particleflow` software w
 ---
 
 ## Running the workflow with Snakemake
-The full event reconstruction and model training workflow can be managed using [Snakemake](https://snakemake.readthedocs.io/). Snakemake must be available on both the interactive and worker nodes.
+The full data generation, model training and validation workflow can be managed using [Snakemake](https://snakemake.readthedocs.io/). Snakemake must be available on both the interactive and worker nodes. The examples below demonstrate how to test it on lxplus.
 
-### 1. Generate the Snakefile
-Use the provided script to generate a `Snakefile` for a specific production campaign and model.
-```bash
-python3 mlpf/produce_snakemake.py --production clic_2025_edm4hep --steps gen,post,tfds
+### 1. Configure for your site
+
+Change `particleflow_spec.yaml` to suit your site, edit the paths as needed:
+```diff
+-  <<: *tallinn
++  <<: *lxplus
 ```
 
-### 2. Execute the workflow
-Run Snakemake using the generated `Snakefile`. The following example uses SLURM and Apptainer:
+### 2. Generate the Snakefile
+Use the provided script to generate a `Snakefile` for a specific production campaign and model. The following commands create the workflows to run everything from scratch, which requires weeks of time with a few thousand job slots, access to CERN cvmfs and multiple terabytes of storage.
 ```bash
-snakemake -s snakemake_jobs/clic_2025_edm4hep/Snakefile --executor slurm --jobs 100 --use-apptainer
+./scripts/wrapper_lxplus.sh python3 mlpf/produce_snakemake.py --production clic_2025_edm4hep --steps gen,post,tfds,train --model pyg-clic-v1
+./scripts/wrapper_lxplus.sh python3 mlpf/produce_snakemake.py --production cld_2025_edm4hep --steps gen,post,tfds,train --model pyg-cld-v1
+./scripts/wrapper_lxplus.sh python3 mlpf/produce_snakemake.py --production cms_2025_main --steps gen,post,tfds,train --model pyg-cms-v1
+```
+You can also produce the snakefile for specific steps only, e.g. `--steps train` to start from existing ML datasets.
+
+### 3. Execute the workflow
+Run Snakemake using the generated `Snakefile`. The following example runs locally using a single core, which can be used for debugging:
+```bash
+./scripts/wrapper_lxplus.sh snakemake -s snakemake_jobs/cld_2025_edm4hep/Snakefile --cores 1 --printshellcmds
 ```
 
-To include model training:
+### 4. Run a large-scale production on batch
+Batch systems are different site-by-site. Check some examples below on how to run the full workflow using a batch system:
 ```bash
-python3 mlpf/produce_snakemake.py --production clic_2025_edm4hep --steps train --model pyg-clic-v1
-snakemake -s snakemake_jobs/clic_2025_edm4hep/Snakefile --executor slurm --jobs 1 --use-apptainer --apptainer-args "--nv"
+./scripts/tallinn/produce_key4hep_snakemake.sh
+#TODO: set up and test an example workflow how to run on lxplus condor
 ```
 
 # Citations and reuse
