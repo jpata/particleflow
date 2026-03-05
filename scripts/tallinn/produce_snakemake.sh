@@ -13,31 +13,47 @@ MODEL=pyg-cms-v1
 # Extract the container image from the spec file
 IMG=$(./scripts/get_pytorch_image.sh)
 
-#singularity exec -B /local --env PYTHONPATH=`pwd` \
-#    $IMG \
-#    python3 mlpf/produce_snakemake.py \
-#    --production $WORKFLOW \
-#    --steps gen,post,tfds
-#./scripts/tallinn/kbfi-slurm-container -m snakemake --executor slurm \
-#    --profile tallinn \
-#    -s snakemake_jobs/$WORKFLOW/Snakefile \
-#    --jobs unlimited \
-#    --use-apptainer \
-#    --apptainer-args " -B /local -B /cvmfs -B /scratch/local"
-#
-#singularity exec -B /local --env PYTHONPATH=`pwd` \
-#    $IMG \
-#    python3 mlpf/produce_snakemake.py \
-#    --production $WORKFLOW \
-#    --steps train \
-#    --model $MODEL
-#./scripts/tallinn/kbfi-slurm-container -m snakemake --executor slurm \
-#    --profile tallinn \
-#    -s snakemake_jobs/$WORKFLOW/Snakefile \
-#    --jobs unlimited \
-#    --use-apptainer \
-#    --apptainer-args " -B /local -B /cvmfs -B /scratch/local --nv"
+#Generate the training datasets
+singularity exec -B /local --env PYTHONPATH=`pwd` \
+    $IMG \
+    python3 mlpf/produce_snakemake.py \
+    --production $WORKFLOW \
+    --steps gen,post,tfds
+./scripts/tallinn/kbfi-slurm-container -m snakemake --executor slurm \
+    --profile tallinn \
+    -s snakemake_jobs/$WORKFLOW/Snakefile \
+    --jobs unlimited \
+    --use-apptainer \
+    --apptainer-args " -B /local -B /cvmfs -B /scratch/local"
 
+#Train the model on GPU
+singularity exec -B /local --env PYTHONPATH=`pwd` \
+    $IMG \
+    python3 mlpf/produce_snakemake.py \
+    --production $WORKFLOW \
+    --steps train \
+    --model $MODEL
+./scripts/tallinn/kbfi-slurm-container -m snakemake --executor slurm \
+    --profile tallinn \
+    -s snakemake_jobs/$WORKFLOW/Snakefile \
+    --jobs unlimited \
+    --use-apptainer \
+    --apptainer-args " -B /local -B /cvmfs -B /scratch/local --nv"
+
+#Run MC validation jobs (MLPF inference on generated validation datasets)
+singularity exec -B /local --env PYTHONPATH=`pwd` \
+    $IMG \
+    python3 mlpf/produce_snakemake.py \
+    --production $WORKFLOW \
+    --steps val
+./scripts/tallinn/kbfi-slurm-container -m snakemake --executor slurm \
+    --profile tallinn \
+    -s snakemake_jobs/$WORKFLOW/Snakefile \
+    --jobs unlimited \
+    --use-apptainer \
+    --apptainer-args " -B /local -B /cvmfs -B /scratch/local"
+
+#Run data validation jobs (MLPF inference on existing data files)
 singularity exec -B /local --env PYTHONPATH=`pwd` \
     $IMG \
     python3 mlpf/produce_snakemake.py \
