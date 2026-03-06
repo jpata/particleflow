@@ -547,9 +547,9 @@ def train_all_steps(
         step_start_time = time.time()
 
         # Get next training batch
-        _logger.info(f"Getting batch for step {step}")
+        _logger.debug(f"Getting batch for step {step}")
         batch = next(train_iterator)
-        _logger.info(f"Got batch for step {step} rank={rank} batch={batch.X.shape}")
+        _logger.debug(f"Got batch for step {step} rank={rank} batch={batch.X.shape}")
 
         # Run a single training step
         log_memory("train_step_start", rank, tensorboard_writer_train, step)

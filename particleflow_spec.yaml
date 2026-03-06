@@ -362,6 +362,19 @@ models:
     optimizer: adamw
     lr_schedule: cosinedecay
     dtype: bfloat16
+    load: null
+    num_steps: 100000
+    comet: false
+    comet_step_freq: 10000
+    ntrain: null #use full train dataset for training
+    nvalid: null #use full valid dataset for validation
+    ntest: 100 #do test on a small subset
+    sort_data: false
+    num_workers: 1
+    prefetch_factor: 1
+    patience: 10000
+    checkpoint_freq: 10000
+    val_freq: 10000
 
   # Example: CMS Model (GNN + Attention)
   pyg-cms-v1:

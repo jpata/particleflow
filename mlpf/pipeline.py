@@ -133,26 +133,15 @@ def build_config_from_spec(spec, model_name, production_name):
     # Merge with model defaults if present
     if "defaults" in spec["models"]:
         for k, v in spec["models"]["defaults"].items():
+            if isinstance(v, str):
+                v = resolve_path(v, spec)
             config[k] = v
-
-    config["load"] = None
-    config["num_steps"] = 100000
-    config["comet"] = False
-    config["comet_step_freq"] = 10000
-    config["ntrain"] = None
-    config["ntest"] = 1000
-    config["nvalid"] = None
-    config["sort_data"] = False
-    config["num_workers"] = 1
-    config["prefetch_factor"] = 1
-    config["patience"] = 10000
-    config["checkpoint_freq"] = 10000
-    config["val_freq"] = 1000
 
     # Copy hyperparameters and other top-level settings
     for k, v in model_config.items():
         if k not in ["architecture", "train_datasets", "validation_datasets", "test_datasets"]:
-            print(k, v)
+            if isinstance(v, str):
+                v = resolve_path(v, spec)
             config[k] = v
 
     # Handle hyperparameters specifically if they are nested
