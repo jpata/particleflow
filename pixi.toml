@@ -82,12 +82,12 @@ snakemake --workflow-profile .profiles/lxbatch \
 """
 
 # Generate the Snakefile for Tallinn (includes gen, post, tfds, and train)
-tallinn-generate = "PYTHONPATH=. python3 mlpf/produce_snakemake.py --production cms_2025_main --steps gen,post,tfds,train"
+tallinn-generate = "PYTHONPATH=. python3 mlpf/produce_snakemake.py --production cld_2025_edm4hep --steps tfds"
 
 # Run the generated workflow on Tallinn Slurm
 tallinn-run = """
 snakemake --workflow-profile .profiles/tallinn \
-          --snakefile snakemake_jobs/cms_2025_main/Snakefile \
+          --snakefile snakemake_jobs/cld_2025_edm4hep/Snakefile \
           --use-apptainer \
           --apptainer-args \"-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv\" \
           --cores 1

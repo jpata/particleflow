@@ -25,7 +25,7 @@ FIXME
 
 
 class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "UNDEFINED"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.0.0"))
     RELEASE_NOTES = {
         "2.0.0": "Initial release",
         "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",
@@ -68,7 +68,7 @@ class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
                 }
             ),
             supervised_keys=None,
-            homepage="",
+            homepage="https://github.com/jpata/particleflow",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(
                 x_features_track=X_FEATURES_TRK,

@@ -25,8 +25,9 @@ FIXME
 
 
 class CldEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "UNDEFINED"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.0.0"))
     RELEASE_NOTES = {
+        "2.5.0": "Use 10 splits, skip 2.4.0 to unify with CMS datasets",
         "3.0.0": "New generation with v1.2.2_key4hep_2025-05-29_CLD_3edac3",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
@@ -65,7 +66,7 @@ class CldEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
                 }
             ),
             supervised_keys=None,
-            homepage="",
+            homepage="https://github.com/jpata/particleflow",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(
                 x_features_track=X_FEATURES_TRK,
