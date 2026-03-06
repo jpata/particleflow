@@ -507,7 +507,9 @@ rule tfds_{tfds_id}:{tfds_rule_input}
         train_script_path = f"{jobs_dir}/train/train_{exp_name}.sh"
         train_sentinel = f"{jobs_dir}/train/train_{exp_name}.done"
 
-        train_cmd = f"python3 mlpf/pipeline.py --spec-file {SPEC_FILE} --model-name {args.model} --production-name {args.production} train --gpus {gpu_count}"
+        train_cmd = (
+            f"python3 mlpf/pipeline.py --spec-file {SPEC_FILE} --model-name {args.model} --production-name {args.production} train --gpus {gpu_count}"
+        )
 
         cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
