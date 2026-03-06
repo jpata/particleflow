@@ -12,6 +12,7 @@ project:
     tallinn: &tallinn
       site_name: "tallinn"
       executor: "slurm"
+      slurm_account: "hepusers"
       container: "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
       bind_mounts:
         - "/local"

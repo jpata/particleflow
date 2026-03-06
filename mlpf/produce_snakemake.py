@@ -21,19 +21,22 @@ def write_bash_script(path, content):
     os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
 
 
-def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0):
+def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0, slurm_account=None):
     res = {}
     if executor == "slurm":
-        res["mem_mb_per_cpu"] = mem
+        if gpus > 0 and mem_per_gpu > 0:
+            res["mem_per_gpu"] = mem_per_gpu
+        else:
+            res["mem_mb_per_cpu"] = mem
         res["slurm_partition"] = f'"{partition}"'
         res["runtime"] = f'"{runtime}"'
+        if slurm_account:
+            res["slurm_account"] = f'"{slurm_account}"'
         if gpus > 0:
             if gpu_type:
                 res["gres"] = f'"gpu:{gpu_type}:{gpus}"'
             else:
                 res["gpu"] = gpus
-            if mem_per_gpu > 0:
-                res["mem_per_gpu"] = mem_per_gpu
     elif executor == "condor":
         res["mem_mb"] = mem
         res["job_flavour"] = f'"{partition}"'
@@ -66,6 +69,7 @@ def main():
     prod_type = prod_config.get("type", "cms")
 
     executor = spec["project"].get("executor", "slurm")
+    slurm_account = spec["project"].get("slurm_account")
 
     cmssw_dir = resolve_path(prod_config.get("environment", {}).get("cmssw_dir", ""), spec)
 
@@ -216,7 +220,7 @@ rule gen_{chunk_id}:
     output:
         "{gen_sentinel}"
     resources:
-        {get_resource_str(executor, mem_gen, cpu_partition, cpu_runtime)}
+        {get_resource_str(executor, mem_gen, cpu_partition, cpu_runtime, slurm_account=slurm_account)}
     container:
         "{gen_container_img}"
     shell:
@@ -251,7 +255,7 @@ rule val_{val_id}:{val_rule_input}
         "{val_sentinel}"
     threads: {val_threads}
     resources:
-        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_threads)}
+        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_threads, slurm_account=slurm_account)}
     container:
         "{gen_container_img}"
     shell:
@@ -339,7 +343,7 @@ rule post_{chunk_id}:{post_rule_input}
     output:
         "{post_sentinel}"
     resources:
-        {get_resource_str(executor, mem_post, cpu_partition, cpu_runtime)}
+        {get_resource_str(executor, mem_post, cpu_partition, cpu_runtime, slurm_account=slurm_account)}
     container:
         "{main_container_img}"
     shell:
@@ -386,7 +390,7 @@ rule val_data_{val_id}:
         "{val_sentinel}"
     threads: {val_data_threads}
     resources:
-        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_data_threads)}
+        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_data_threads, slurm_account=slurm_account)}
     container:
         "{gen_container_img}"
     shell:
@@ -474,7 +478,7 @@ rule tfds_{tfds_id}:{tfds_rule_input}
     output:
         "{tfds_sentinel}"
     resources:
-        {get_resource_str(executor, mem_tfds, cpu_partition, cpu_runtime)}
+        {get_resource_str(executor, mem_tfds, cpu_partition, cpu_runtime, slurm_account=slurm_account)}
     container:
         "{main_container_img}"
     shell:
@@ -529,7 +533,7 @@ rule train_{rule_model_name}:{train_rule_input}
     output:
         "{train_sentinel}"
     resources:
-        {get_resource_str(executor, mem_train, gpu_partition, gpu_runtime, gpus=gpu_count, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu_mb)}
+        {get_resource_str(executor, mem_train, gpu_partition, gpu_runtime, gpus=gpu_count, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu_mb, slurm_account=slurm_account)}
     container:
         "{main_container_img}"
     shell:
