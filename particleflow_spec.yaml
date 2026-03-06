@@ -57,7 +57,7 @@ project:
       gpu_partition: "local"
       cpu_partition: "local"
 
-  # Selected site defaults (Merged into 'project'), choose 'tallinn' or 'lxplus'
+  # Selected site defaults (Merged into 'project'), choose 'tallinn', 'lxplus' or 'local'
   <<: *tallinn
 
 # -----------------------------------------------------------------------------
@@ -351,7 +351,7 @@ productions:
 # The multipliers are tuned for an 80GB A100 for training.
 # -----------------------------------------------------------------------------
 models:
-  defaults: &model_defaults
+  defaults: &defaults
     backend: pytorch
     gpus: 1
     threads: 16
@@ -378,7 +378,7 @@ models:
 
   # Example: CMS Model (GNN + Attention)
   pyg-cms-v1:
-    <<: *tallinn
+    <<: *defaults
     dataset: cms
     gpu_batch_multiplier: 4
 
@@ -462,7 +462,7 @@ models:
 
   # Example: CLD Model
   pyg-cld-v1:
-    <<: *tallinn
+    <<: *defaults
     dataset: cld
     gpu_batch_multiplier: 128
 
@@ -520,7 +520,7 @@ models:
 
   # CLIC Model
   pyg-clic-v1:
-    <<: *tallinn
+    <<: *defaults
     dataset: clic
     gpu_batch_multiplier: 128
 
