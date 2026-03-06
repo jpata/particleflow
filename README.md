@@ -87,28 +87,22 @@ Configure the environment for your specific cluster. This sets up the necessary 
     ```
 
 ### **3. Generate the Workflow**
-Generate the `Snakefile` for a specific production campaign.
+Generate the `Snakefile` for a production campaign corresponding to your site.
 ```bash
-pixi run -e tallinn generate
-pixi run -e lxplus generate
-```
-You can override the production or steps using environment variables:
-```bash
-PROD=cms_run3 STEPS=train pixi run -e lxplus generate
+PROD=cms_run3 STEPS=gen,post,tfds,train pixi run -e lxplus generate
 ```
 
 ### **4. Execute the Workflow**
 Launch the workflow on the cluster's batch system. It is recommended to run this inside a `tmux` or `screen` session.
 ```bash
-pixi run -e tallinn run
-pixi run -e lxplus run
+PROD=cms_run3 STEPS=gen,post,tfds,train pixi run -e lxplus run
 ```
 *Note: The `run` task automatically updates `particleflow_spec.yaml` to use the correct site-specific anchors.*
 
 ### **5. Validation & Plots**
 To run the validation plotting workflow:
 ```bash
-pixi run -e tallinn validation
+PROD=cms_run3 pixi run -e lxplus validation
 ```
 
 ---
