@@ -78,13 +78,13 @@ curl -fsSL https://pixi.sh/install.sh | bash
 Configure the environment for your specific cluster. This sets up the necessary Snakemake profiles and site defaults.
 
 *   **Tallinn (Slurm):**
-    ```bash
-    pixi run -e tallinn init
-    ```
-*   **LXPLUS (HTCondor):**
-    ```bash
-    pixi run -e lxplus init
-    ```
+```bash
+pixi run -e tallinn init
+```
+*   **lxplus (HTCondor):**
+```bash
+pixi run -e lxplus init
+```
 
 ### **3. Generate the Workflow**
 Generate the `Snakefile` for a production campaign corresponding to your site.

@@ -7,7 +7,7 @@ project:
   description: "Machine Learning for Particle Flow Reconstruction"
 
   # Site-specific configurations (Anchors)
-  # To switch sites, update the merge key (<<: *local
+  # To switch sites, update the merge key (<<: *tallinn
   sites:
     tallinn: &tallinn
       site_name: "tallinn"
@@ -58,7 +58,7 @@ project:
       cpu_partition: "local"
 
   # Selected site defaults (Merged into 'project'), choose 'tallinn' or 'lxplus'
-  <<: *local
+  <<: *tallinn
 
 # -----------------------------------------------------------------------------
 # Dataset Productions
@@ -353,7 +353,7 @@ models:
   defaults: &model_defaults
     backend: pytorch
     gpus: 1
-    gpu_type: l40
+    gpu_type: a100
     mem_per_gpu_mb: 100000
     slurm_partition: "${project.gpu_partition}"
     slurm_runtime: "48h"
@@ -363,7 +363,7 @@ models:
 
   # Example: CMS Model (GNN + Attention)
   pyg-cms-v1:
-    <<: *local
+    <<: *tallinn
     dataset: cms
     gpu_batch_multiplier: 4
 
@@ -442,12 +442,12 @@ models:
       input_encoding: "split"
       attention:
         num_convs: 3
-        head_dim: 32
-        num_heads: 32
+        head_dim: 16
+        num_heads: 16
 
   # Example: CLD Model
   pyg-cld-v1:
-    <<: *local
+    <<: *tallinn
     dataset: cld
     gpu_batch_multiplier: 128
 
@@ -460,8 +460,8 @@ models:
       input_encoding: "split"
       attention:
         num_convs: 3
-        head_dim: 32
-        num_heads: 32
+        head_dim: 16
+        num_heads: 16
 
     # Dataset Selection
     train_datasets:
@@ -505,7 +505,7 @@ models:
 
   # CLIC Model
   pyg-clic-v1:
-    <<: *local
+    <<: *tallinn
     dataset: clic
     gpu_batch_multiplier: 128
 
@@ -518,8 +518,8 @@ models:
       input_encoding: "split"
       attention:
         num_convs: 3
-        head_dim: 32
-        num_heads: 32
+        head_dim: 16
+        num_heads: 16
 
     # Dataset Selection
     train_datasets:

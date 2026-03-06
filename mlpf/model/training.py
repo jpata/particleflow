@@ -532,7 +532,9 @@ def train_all_steps(
     best_val_loss = float("inf")
 
     scaler = torch.amp.GradScaler()
+    _logger.info("Creating train_iterator")
     train_iterator = iter(train_loader)
+    _logger.info("Created train_iterator")
 
     # Use tqdm for progress bar only on the main process in an interactive session
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
@@ -545,8 +547,9 @@ def train_all_steps(
         step_start_time = time.time()
 
         # Get next training batch
+        _logger.info(f"Getting batch for step {step}")
         batch = next(train_iterator)
-        _logger.debug(f"rank={rank} batch={batch.X.shape}")
+        _logger.info(f"Got batch for step {step} rank={rank} batch={batch.X.shape}")
 
         # Run a single training step
         log_memory("train_step_start", rank, tensorboard_writer_train, step)
@@ -800,11 +803,16 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
     else:  # instantiate a new model in the outdir created
+        _logger.info("Instantiating model")
+        _logger.info(f"model_kwargs: {model_kwargs}")
         model = MLPF(**model_kwargs)
+        _logger.info("Instantiated model")
         optimizer = get_optimizer(model, config)
         lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
-    model.to(rank)
+    _logger.info("Moving model to device rank={}".format(rank))
+    model.to(device=rank)
+    _logger.info("Moved model to device rank={}".format(rank))
     # CPU: the compilation does not work with bs>1
     # Nvidia: compilation should generally be used, but can be disabled
     # ROCM: compilation seems to be needed for ROCm to work properly
@@ -814,7 +822,9 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+        _logger.info("Configured model for SyncBatchNorm rank={}".format(rank))
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
+        _logger.info("Configured model for DistributedDataParallel rank={}".format(rank))
 
     trainable_params, nontrainable_params, table = count_parameters(model)
     _logger.info(str(table))
@@ -854,6 +864,7 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
         else:
             comet_experiment = None
 
+        _logger.info("Getting dataloaders")
         loaders, samplers = get_interleaved_dataloaders(
             world_size,
             rank,
@@ -861,6 +872,7 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
             use_cuda,
             use_ray=False,
         )
+        _logger.info("Got dataloaders")
 
         if config["load"] and checkpoint:
             train_loader = loaders["train"]
@@ -952,6 +964,7 @@ def device_agnostic_run(config, world_size, outdir):
             for rank in range(world_size):
                 _logger.info(torch.cuda.get_device_name(rank), color="purple")
 
+            _logger.info("Spawning DDP processes")
             mp.spawn(
                 run,
                 args=(world_size, config, outdir, logfile),
@@ -961,6 +974,7 @@ def device_agnostic_run(config, world_size, outdir):
         elif world_size == 1:
             rank = 0
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
+            _logger.info(f"Calling run(rank={rank}, world_size={world_size}, ...)")
             run(rank, world_size, config, outdir, logfile)
 
     else:
