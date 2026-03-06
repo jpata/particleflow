@@ -91,13 +91,13 @@ Generate the `Snakefile` for a production campaign corresponding to your site.
 ```bash
 PROD=cms_run3 STEPS=gen,post,tfds,train pixi run -e lxplus generate
 ```
+You can inspect `snakemake_jobs/cms_run3/Snakefile` and the related scripts to understand the workflow.
 
 ### **4. Execute the Workflow**
-Launch the workflow on the cluster's batch system. It is recommended to run this inside a `tmux` or `screen` session.
+Launch the workflow on the batch system. It is recommended to run this inside a `tmux` or `screen` session.
 ```bash
 PROD=cms_run3 STEPS=gen,post,tfds,train pixi run -e lxplus run
 ```
-*Note: The `run` task automatically updates `particleflow_spec.yaml` to use the correct site-specific anchors.*
 
 ### **5. Validation & Plots**
 To run the validation plotting workflow:
