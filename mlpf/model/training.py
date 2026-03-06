@@ -811,7 +811,8 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
         lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
 
     _logger.info("Moving model to device rank={}".format(rank))
-    model.to(device=rank)
+    if rank != "cpu":
+        model.to(device="cuda:{}".format(rank))
     _logger.info("Moved model to device rank={}".format(rank))
     # CPU: the compilation does not work with bs>1
     # Nvidia: compilation should generally be used, but can be disabled

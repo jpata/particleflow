@@ -30,18 +30,22 @@ env = { SITE = "local", PROFILE = ".profiles/local", APPTAINER_ARGS = "-B /tmp -
 setup = "sed -i 's/<<: \\*.*$/<<: \\*tallinn/' particleflow_spec.yaml"
 init = """
 mkdir -p .profiles/tallinn \
+&& echo '#!/bin/bash
+# properties = {properties}
+{exec_job}' > .profiles/tallinn/jobscript.sh \
 && echo 'executor: "slurm"
+jobscript: "jobscript.sh"
 jobs: unlimited
-restart-times: 3
+restart-times: 0
 max-jobs-per-second: 10
 max-status-checks-per-second: 10
-local-cores: 1
-latency-wait: 60
-verbose: false
+verbose: true
+use-conda: false
 default-resources:
   - slurm_account="hepusers"' > .profiles/tallinn/config.v8+.yaml
 """
 
+#FIXME: convert to use https://github.com/htcondor/snakemake-executor-plugin-htcondor
 [feature.lxplus.tasks]
 setup = "sed -i 's/<<: \\*.*$/<<: \\*lxplus/' particleflow_spec.yaml"
 init = """
@@ -58,11 +62,11 @@ location_cern=true \
 executor: "cluster-generic"
 cluster-generic-status-cmd: "grid-status.py"
 cluster-generic-submit-cmd: "grid-submit.py"
-max-jobs-per-second: 100
-max-status-checks-per-second: 100
-restart-times: 5
-local-cores: 10
-jobs: 5000
+max-jobs-per-second: 10
+max-status-checks-per-second: 10
+restart-times: 0
+local-cores: 1
+jobs: 100
 verbose: false' > .profiles/lxbatch/config.v8+.yaml
 """
 

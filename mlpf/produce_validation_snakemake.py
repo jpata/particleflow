@@ -25,10 +25,9 @@ def write_bash_script(path, content):
 def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0, slurm_account=None):
     res = {}
     if executor == "slurm":
+        res["mem_mb"] = mem
         if gpus > 0 and mem_per_gpu > 0:
             res["mem_per_gpu"] = mem_per_gpu
-        else:
-            res["mem_mb_per_cpu"] = mem
         res["slurm_partition"] = f'"{partition}"'
         res["runtime"] = f'"{runtime}"'
         if slurm_account:
@@ -38,7 +37,9 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
                 res["gres"] = f'"gpu:{gpu_type}:{gpus}"'
             else:
                 res["gpu"] = gpus
+        res["cpus_per_task"] = threads
     elif executor == "condor":
+
         res["mem_mb"] = mem
         res["job_flavour"] = f'"{partition}"'
         res["runtime"] = f'"{runtime}"'

@@ -88,6 +88,7 @@ productions:
       post: 4000
       tfds: 8000
       val: 8000 #fairly high mem limit due to CPU execution of the attention model and 8 threads
+      train: 16000
 
     validation:
       job_types: ["pf", "mlpf"]
@@ -353,8 +354,9 @@ models:
   defaults: &model_defaults
     backend: pytorch
     gpus: 1
+    threads: 16
     gpu_type: a100
-    mem_per_gpu_mb: 100000
+    mem_per_gpu_mb: 80000
     slurm_partition: "${project.gpu_partition}"
     slurm_runtime: "48h"
     optimizer: adamw

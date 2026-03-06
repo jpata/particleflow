@@ -24,10 +24,9 @@ def write_bash_script(path, content):
 def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0, slurm_account=None):
     res = {}
     if executor == "slurm":
+        res["mem_mb"] = mem
         if gpus > 0 and mem_per_gpu > 0:
             res["mem_per_gpu"] = mem_per_gpu
-        else:
-            res["mem_mb_per_cpu"] = mem
         res["slurm_partition"] = f'"{partition}"'
         res["runtime"] = f'"{runtime}"'
         if slurm_account:
@@ -37,6 +36,7 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
                 res["gres"] = f'"gpu:{gpu_type}:{gpus}"'
             else:
                 res["gpu"] = gpus
+        res["cpus_per_task"] = threads
     elif executor == "condor":
         res["mem_mb"] = mem
         res["job_flavour"] = f'"{partition}"'
@@ -497,6 +497,7 @@ rule tfds_{tfds_id}:{tfds_rule_input}
         model_spec = spec["models"][args.model]
         model_defaults = spec["models"].get("defaults", {})
         gpu_count = model_spec.get("gpus", model_defaults.get("gpus", 0))
+        gpu_threads = model_spec.get("threads", model_defaults.get("threads", 16))
         gpu_type = model_spec.get("gpu_type", model_defaults.get("gpu_type", ""))
         mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", model_defaults.get("mem_per_gpu_mb", 8000))
         gpu_partition = resolve_path(model_spec.get("slurm_partition", model_defaults.get("slurm_partition", "gpu")), spec)
@@ -514,8 +515,11 @@ rule tfds_{tfds_id}:{tfds_rule_input}
         cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export TFDS_DATA_DIR={tfds_root_dir}
+export KERAS_BACKEND=torch
+export TORCH_COMPILE_DISABLE=1
 env
 nvidia-smi
+#TORCH_LOGS="+all" {train_cmd}
 {train_cmd}
 """
         write_bash_script(train_script_path, cmd)
@@ -535,8 +539,9 @@ nvidia-smi
 rule train_{rule_model_name}:{train_rule_input}
     output:
         "{train_sentinel}"
+    threads: {gpu_threads}
     resources:
-        {get_resource_str(executor, mem_train, gpu_partition, gpu_runtime, gpus=gpu_count, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu_mb, slurm_account=slurm_account)}
+        {get_resource_str(executor, mem_train, gpu_partition, gpu_runtime, threads=gpu_threads, gpus=gpu_count, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu_mb, slurm_account=slurm_account)}
     container:
         "{main_container_img}"
     shell:
