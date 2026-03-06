@@ -1,7 +1,7 @@
 [workspace]
 name = "particleflow"
-version = "0.1.0"
-description = "Machine Learning for Particle Flow Reconstruction on LXPLUS"
+version = "2.5.0"
+description = "Machine Learning for Particle Flow Reconstruction"
 channels = ["conda-forge", "bioconda"]
 platforms = ["linux-64"]
 
@@ -17,14 +17,29 @@ pyyaml = "*"
 [pypi-dependencies]
 comet-ml = "*"
 
-[tasks]
-# Site selection: Update particleflow_spec.yaml to use site defaults
-use-tallinn = "sed -i 's/<<: \\*lxplus/<<: \\*tallinn/' particleflow_spec.yaml"
-use-lxplus = "sed -i 's/<<: \\*tallinn/<<: \\*lxplus/' particleflow_spec.yaml"
+[feature.tallinn.activation]
+env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv", PROD = "cld_2025_edm4hep", STEPS = "tfds" }
 
-# Initialize the HTCondor profile for LXPLUS (lxbatch)
-# This uses the official Snakemake HTCondor profile template
-lxplus-init = """
+[feature.lxplus.activation]
+env = { SITE = "lxplus", PROFILE = ".profiles/lxbatch", APPTAINER_ARGS = "-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora --nv", PROD = "cms_2025_main", STEPS = "train" }
+
+[feature.tallinn.tasks]
+setup = "sed -i 's/<<: \\*lxplus/<<: \\*tallinn/' particleflow_spec.yaml"
+init = """
+mkdir -p .profiles/tallinn \
+&& echo 'executor: "slurm"
+jobs: unlimited
+restart-times: 3
+max-jobs-per-second: 10
+max-status-checks-per-second: 10
+local-cores: 1
+latency-wait: 60
+verbose: false' > .profiles/tallinn/config.v8+.yaml
+"""
+
+[feature.lxplus.tasks]
+setup = "sed -i 's/<<: \\*tallinn/<<: \\*lxplus/' particleflow_spec.yaml"
+init = """
 mkdir -p .profiles \
 && rm -rf .profiles/lxbatch \
 && cookiecutter \
@@ -46,62 +61,20 @@ jobs: 5000
 verbose: false' > .profiles/lxbatch/config.v8+.yaml
 """
 
-# Initialize the Slurm profile for Tallinn
-tallinn-init = """
-mkdir -p .profiles/tallinn \
-&& echo 'executor: "slurm"
-jobs: unlimited
-restart-times: 3
-max-jobs-per-second: 10
-max-status-checks-per-second: 10
-local-cores: 1
-latency-wait: 60
-verbose: false' > .profiles/tallinn/config.v8+.yaml
-"""
+[tasks]
+# Unified generation step
+generate = { cmd = "PYTHONPATH=. python3 mlpf/produce_snakemake.py --production $PROD --steps $STEPS", depends-on = ["setup"] }
 
-# Generate the Snakefile for a specific production on LXPLUS (defaults to cms_2025_main)
-lxplus-generate = "PYTHONPATH=. python3 mlpf/produce_snakemake.py --production cms_2025_main --steps train"
+# Unified run step
+run = { cmd = "snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/$PROD/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1", depends-on = ["setup"] }
 
-# Run the generated workflow on LXPLUS HTCondor
-lxplus-run = """
-snakemake --workflow-profile .profiles/lxbatch \
-          --snakefile snakemake_jobs/cms_2025_main/Snakefile \
-          --use-apptainer \
-          --apptainer-args \"-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora --nv\" \
-          --cores 1
-"""
+# Unified validation step
+validation = { cmd = "PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config ${VAL_CONFIG:-validation_cms.yaml} && snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/validation_$PROD/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1", depends-on = ["setup"] }
 
-# Generate and run validation plots on LXPLUS
-lxplus-validation = """
-PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config validation_cms.yaml && \
-snakemake --workflow-profile .profiles/lxbatch \
-          --snakefile snakemake_jobs/validation_cms_2025_main/Snakefile \
-          --use-apptainer \
-          --apptainer-args \"-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora --nv\" \
-          --cores 1
-"""
+# Local dry-run
+dry-run = "snakemake --snakefile snakemake_jobs/$PROD/Snakefile --dry-run"
 
-# Generate the Snakefile for Tallinn (includes gen, post, tfds, and train)
-tallinn-generate = "PYTHONPATH=. python3 mlpf/produce_snakemake.py --production cld_2025_edm4hep --steps tfds"
-
-# Run the generated workflow on Tallinn Slurm
-tallinn-run = """
-snakemake --workflow-profile .profiles/tallinn \
-          --snakefile snakemake_jobs/cld_2025_edm4hep/Snakefile \
-          --use-apptainer \
-          --apptainer-args \"-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv\" \
-          --cores 1
-"""
-
-# Generate and run validation plots on Tallinn
-tallinn-validation = """
-PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config validation_cms.yaml && \
-snakemake --workflow-profile .profiles/tallinn \
-          --snakefile snakemake_jobs/validation_cms_2025_main/Snakefile \
-          --use-apptainer \
-          --apptainer-args \"-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv\" \
-          --cores 1
-"""
-
-# Local dry-run for validation
-dry-run = "snakemake --snakefile snakemake_jobs/cms_2025_main/Snakefile --dry-run"
+[environments]
+tallinn = ["tallinn"]
+lxplus = ["lxplus"]
+default = ["tallinn"]
