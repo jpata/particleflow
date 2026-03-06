@@ -7,7 +7,7 @@ project:
   description: "Machine Learning for Particle Flow Reconstruction"
 
   # Site-specific configurations (Anchors)
-  # To switch sites, update the merge key (<<: *anchor) below.
+  # To switch sites, update the merge key (<<: *local
   sites:
     tallinn: &tallinn
       site_name: "tallinn"
@@ -43,8 +43,22 @@ project:
       gpu_partition: "tomorrow"
       cpu_partition: "tomorrow"
 
+    local: &local
+      site_name: "local"
+      executor: "local"
+      container: "https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif"
+      bind_mounts:
+        - "/tmp"
+        - "/mnt/work"
+      paths:
+        storage_root: "/mnt/work/mlpf/"
+        scratch_root: "/tmp/particleflow"
+      cmssw_dir: "/home/joosep/particleflow/CMSSW_15_0_5"
+      gpu_partition: "local"
+      cpu_partition: "local"
+
   # Selected site defaults (Merged into 'project'), choose 'tallinn' or 'lxplus'
-  <<: *tallinn
+  <<: *local
 
 # -----------------------------------------------------------------------------
 # Dataset Productions
@@ -349,7 +363,7 @@ models:
 
   # Example: CMS Model (GNN + Attention)
   pyg-cms-v1:
-    <<: *model_defaults
+    <<: *local
     dataset: cms
     gpu_batch_multiplier: 4
 
@@ -433,7 +447,7 @@ models:
 
   # Example: CLD Model
   pyg-cld-v1:
-    <<: *model_defaults
+    <<: *local
     dataset: cld
     gpu_batch_multiplier: 128
 
@@ -491,7 +505,7 @@ models:
 
   # CLIC Model
   pyg-clic-v1:
-    <<: *model_defaults
+    <<: *local
     dataset: clic
     gpu_batch_multiplier: 128
 

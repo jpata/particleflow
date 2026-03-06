@@ -495,18 +495,19 @@ rule tfds_{tfds_id}:{tfds_rule_input}
         ensure_dir(f"{jobs_dir}/train")
 
         model_spec = spec["models"][args.model]
-        gpu_count = model_spec.get("gpus", 0)
-        gpu_type = model_spec.get("gpu_type", "")
-        mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", 8000)
-        gpu_partition = resolve_path(model_spec.get("slurm_partition", "gpu"), spec)
-        gpu_runtime = resolve_path(model_spec.get("slurm_runtime", "120m"), spec)
+        model_defaults = spec["models"].get("defaults", {})
+        gpu_count = model_spec.get("gpus", model_defaults.get("gpus", 0))
+        gpu_type = model_spec.get("gpu_type", model_defaults.get("gpu_type", ""))
+        mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", model_defaults.get("mem_per_gpu_mb", 8000))
+        gpu_partition = resolve_path(model_spec.get("slurm_partition", model_defaults.get("slurm_partition", "gpu")), spec)
+        gpu_runtime = resolve_path(model_spec.get("slurm_runtime", model_defaults.get("slurm_runtime", "120m")), spec)
 
         exp_name = f"{args.model}_{args.production}"
 
         train_script_path = f"{jobs_dir}/train/train_{exp_name}.sh"
         train_sentinel = f"{jobs_dir}/train/train_{exp_name}.done"
 
-        train_cmd = f"python3 mlpf/pipeline.py --spec-file {SPEC_FILE} --model-name {args.model} --production-name {args.production} train"
+        train_cmd = f"python3 mlpf/pipeline.py --spec-file {SPEC_FILE} --model-name {args.model} --production-name {args.production} train --gpus {gpu_count}"
 
         cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH

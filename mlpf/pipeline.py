@@ -129,6 +129,12 @@ def build_config_from_spec(spec, model_name, production_name):
 
     # Initialize config with model parameters
     config = {}
+
+    # Merge with model defaults if present
+    if "defaults" in spec["models"]:
+        for k, v in spec["models"]["defaults"].items():
+            config[k] = v
+
     config["load"] = None
     config["num_steps"] = 100000
     config["comet"] = False
@@ -329,7 +335,9 @@ def main():
         elif args.command in ["train", "test"]:
             if args.gpus is not None:
                 config["gpus"] = args.gpus
-            gpus = config.get("gpus", 0)
+            if "gpus" not in config:
+                config["gpus"] = 0
+            gpus = config["gpus"]
             world_size = gpus if gpus > 0 else 1
             device_agnostic_run(config, world_size, experiment_dir)
 

@@ -23,8 +23,11 @@ env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /l
 [feature.lxplus.activation]
 env = { SITE = "lxplus", PROFILE = ".profiles/lxbatch", APPTAINER_ARGS = "-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora --nv" }
 
+[feature.local.activation]
+env = { SITE = "local", PROFILE = ".profiles/local", APPTAINER_ARGS = "-B /tmp -B /mnt --nv" }
+
 [feature.tallinn.tasks]
-setup = "sed -i 's/<<: \\*lxplus/<<: \\*tallinn/' particleflow_spec.yaml"
+setup = "sed -i 's/<<: \\*.*$/<<: \\*tallinn/' particleflow_spec.yaml"
 init = """
 mkdir -p .profiles/tallinn \
 && echo 'executor: "slurm"
@@ -40,7 +43,7 @@ default-resources:
 """
 
 [feature.lxplus.tasks]
-setup = "sed -i 's/<<: \\*tallinn/<<: \\*lxplus/' particleflow_spec.yaml"
+setup = "sed -i 's/<<: \\*.*$/<<: \\*lxplus/' particleflow_spec.yaml"
 init = """
 mkdir -p .profiles \
 && rm -rf .profiles/lxbatch \
@@ -63,12 +66,23 @@ jobs: 5000
 verbose: false' > .profiles/lxbatch/config.v8+.yaml
 """
 
+[feature.local.tasks]
+setup = "sed -i 's/<<: \\*.*$/<<: \\*local/' particleflow_spec.yaml"
+init = """
+mkdir -p .profiles/local \
+&& echo 'executor: "local"
+jobs: 1
+restart-times: 0
+local-cores: 1
+verbose: false' > .profiles/local/config.v8+.yaml
+"""
+
 [tasks]
 # Unified generation step
-generate = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --steps ${STEPS:-gen,post,tfds,train}'", depends-on = ["setup"] }
+generate = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --model ${MODEL:-pyg-cms-v1} --steps ${STEPS:-gen,post,tfds,train}'", depends-on = ["setup"] }
 
 # Unified run step
-run = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1'", depends-on = ["setup"] }
+run = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["generate"] }
 
 # Unified validation step
 validation = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config ${VAL_CONFIG:-validation_cms.yaml} && snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/validation_${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1'", depends-on = ["setup"] }
@@ -79,4 +93,5 @@ dry-run = "bash -c 'snakemake --snakefile snakemake_jobs/${PROD:-cms_run3}/Snake
 [environments]
 tallinn = ["tallinn"]
 lxplus = ["lxplus"]
+local = ["local"]
 default = ["tallinn"]
