@@ -43,7 +43,7 @@ project:
       cpu_partition: "tomorrow"
 
   # Selected site defaults (Merged into 'project'), choose 'tallinn' or 'lxplus'
-  <<: *tallinn
+  <<: *lxplus
 
 # -----------------------------------------------------------------------------
 # Dataset Productions

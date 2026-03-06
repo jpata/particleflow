@@ -1,0 +1,107 @@
+[workspace]
+name = "particleflow"
+version = "0.1.0"
+description = "Machine Learning for Particle Flow Reconstruction on LXPLUS"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.10"
+snakemake = ">=8.0"
+python-htcondor = ">=24.0.0,<25.0.0"
+snakemake-executor-plugin-cluster-generic = "*"
+snakemake-executor-plugin-slurm = "*"
+cookiecutter = "*"
+pyyaml = "*"
+
+[pypi-dependencies]
+comet-ml = "*"
+
+[tasks]
+# Site selection: Update particleflow_spec.yaml to use site defaults
+use-tallinn = "sed -i 's/<<: \\*lxplus/<<: \\*tallinn/' particleflow_spec.yaml"
+use-lxplus = "sed -i 's/<<: \\*tallinn/<<: \\*lxplus/' particleflow_spec.yaml"
+
+# Initialize the HTCondor profile for LXPLUS (lxbatch)
+# This uses the official Snakemake HTCondor profile template
+lxplus-init = """
+mkdir -p .profiles \
+&& rm -rf .profiles/lxbatch \
+&& cookiecutter \
+--no-input \
+--output-dir .profiles/ \
+gh:Snakemake-Profiles/htcondor \
+profile_name=lxbatch \
+htcondor_log_dir=$PWD/.condor_jobs \
+location_cern=true \
+&& echo 'jobscript: "grid-jobscript.sh"
+executor: "cluster-generic"
+cluster-generic-status-cmd: "grid-status.py"
+cluster-generic-submit-cmd: "grid-submit.py"
+max-jobs-per-second: 100
+max-status-checks-per-second: 100
+restart-times: 5
+local-cores: 10
+jobs: 5000
+verbose: false' > .profiles/lxbatch/config.v8+.yaml
+"""
+
+# Initialize the Slurm profile for Tallinn
+tallinn-init = """
+mkdir -p .profiles/tallinn \
+&& echo 'executor: "slurm"
+jobs: unlimited
+restart-times: 3
+max-jobs-per-second: 10
+max-status-checks-per-second: 10
+local-cores: 1
+latency-wait: 60
+verbose: false' > .profiles/tallinn/config.v8+.yaml
+"""
+
+# Generate the Snakefile for a specific production on LXPLUS (defaults to cms_2025_main)
+lxplus-generate = "PYTHONPATH=. python3 mlpf/produce_snakemake.py --production cms_2025_main --steps train"
+
+# Run the generated workflow on LXPLUS HTCondor
+lxplus-run = """
+snakemake --workflow-profile .profiles/lxbatch \
+          --snakefile snakemake_jobs/cms_2025_main/Snakefile \
+          --use-apptainer \
+          --apptainer-args \"-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora --nv\" \
+          --cores 1
+"""
+
+# Generate and run validation plots on LXPLUS
+lxplus-validation = """
+PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config validation_cms.yaml && \
+snakemake --workflow-profile .profiles/lxbatch \
+          --snakefile snakemake_jobs/validation_cms_2025_main/Snakefile \
+          --use-apptainer \
+          --apptainer-args \"-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora --nv\" \
+          --cores 1
+"""
+
+# Generate the Snakefile for Tallinn (includes gen, post, tfds, and train)
+tallinn-generate = "PYTHONPATH=. python3 mlpf/produce_snakemake.py --production cms_2025_main --steps gen,post,tfds,train"
+
+# Run the generated workflow on Tallinn Slurm
+tallinn-run = """
+snakemake --workflow-profile .profiles/tallinn \
+          --snakefile snakemake_jobs/cms_2025_main/Snakefile \
+          --use-apptainer \
+          --apptainer-args \"-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv\" \
+          --cores 1
+"""
+
+# Generate and run validation plots on Tallinn
+tallinn-validation = """
+PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config validation_cms.yaml && \
+snakemake --workflow-profile .profiles/tallinn \
+          --snakefile snakemake_jobs/validation_cms_2025_main/Snakefile \
+          --use-apptainer \
+          --apptainer-args \"-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv\" \
+          --cores 1
+"""
+
+# Local dry-run for validation
+dry-run = "snakemake --snakefile snakemake_jobs/cms_2025_main/Snakefile --dry-run"
