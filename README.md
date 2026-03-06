@@ -1,7 +1,7 @@
 ### **Summary**
 
 **ML-based particle flow (MLPF)** focuses on developing full event reconstruction for particle detectors using computationally scalable and flexible machine learning models. The project aims to improve particle flow reconstruction across various detector environments, including CMS, as well as future detectors via Key4HEP.
-We build on existing, open-souce simulation software by the experimental collaborations.
+We build on existing, open-source simulation software by the experimental collaborations.
 
 <p float="left">
   <img src="images/schematic.png" alt="High-level overview" width="600"/>
@@ -64,42 +64,56 @@ Please ensure you use the correct version of the `jpata/particleflow` software w
 
 ---
 
-## Running the workflow with Snakemake
-The full data generation, model training and validation workflow can be managed using [Snakemake](https://snakemake.readthedocs.io/). Snakemake must be available on both the interactive and worker nodes. The examples below demonstrate how to test it on lxplus.
+## **Getting Started with Pixi & Snakemake**
 
-### 1. Configure for your site
+The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment management and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration.
 
-Change `particleflow_spec.yaml` to suit your site, edit the config as needed, for example:
-```diff
--  <<: *tallinn
-+  <<: *lxplus
-```
-
-### 2. Generate the Snakefile
-Use the provided script to generate a `Snakefile` for a specific production campaign and model. The following commands create the workflows to run everything from scratch, which requires weeks of time with a few thousand job slots, access to CERN cvmfs and multiple terabytes of storage.
+### **1. Install Pixi**
 ```bash
-./scripts/wrapper_lxplus.sh python3 mlpf/produce_snakemake.py --production clic_2025_edm4hep --steps gen,post,tfds,train --model pyg-clic-v1
-./scripts/wrapper_lxplus.sh python3 mlpf/produce_snakemake.py --production cld_2025_edm4hep --steps gen,post,tfds,train --model pyg-cld-v1
-./scripts/wrapper_lxplus.sh python3 mlpf/produce_snakemake.py --production cms_2025_main --steps gen,post,tfds,train --model pyg-cms-v1
+curl -fsSL https://pixi.sh/install.sh | bash
+# Restart your shell or source your .bashrc
 ```
-You can also produce the snakefile for specific steps only, e.g. `--steps train` to start from existing ML datasets.
 
-### 3. Execute the workflow
-Run Snakemake using the generated `Snakefile`. The following example runs locally using a single core, which can be used for debugging.
-Note that a super old GPU like P100, V100 or T4 won't work for training! You need at least Ampere generation or newer.
-The reference for training is an 80GB A100 GPU.
+### **2. Initialize Your Site**
+Configure the environment for your specific cluster. This sets up the necessary Snakemake profiles and site defaults.
+
+*   **Tallinn (Slurm):**
+    ```bash
+    pixi run -e tallinn init
+    ```
+*   **LXPLUS (HTCondor):**
+    ```bash
+    pixi run -e lxplus init
+    ```
+
+### **3. Generate the Workflow**
+Generate the `Snakefile` for a specific production campaign.
 ```bash
-./scripts/wrapper_lxplus.sh snakemake -s snakemake_jobs/cld_2025_edm4hep/Snakefile --cores 1 --printshellcmds
+pixi run -e tallinn generate
+pixi run -e lxplus generate
 ```
-
-### 4. Run a large-scale production on batch
-Batch systems are different site-by-site. Check some examples below on how to run the full workflow using a batch system:
+You can override the production or steps using environment variables:
 ```bash
-./scripts/tallinn/produce_key4hep_snakemake.sh
-#TODO: set up and test an example workflow how to run on lxplus condor
+PROD=cms_run3 STEPS=train pixi run -e lxplus generate
 ```
 
-# Citations and reuse
+### **4. Execute the Workflow**
+Launch the workflow on the cluster's batch system. It is recommended to run this inside a `tmux` or `screen` session.
+```bash
+pixi run -e tallinn run
+pixi run -e lxplus run
+```
+*Note: The `run` task automatically updates `particleflow_spec.yaml` to use the correct site-specific anchors.*
+
+### **5. Validation & Plots**
+To run the validation plotting workflow:
+```bash
+pixi run -e tallinn validation
+```
+
+---
+
+# **Citations and Reuse**
 
 You are welcome to reuse the code in accordance with the [LICENSE](https://github.com/jpata/particleflow/blob/main/LICENSE).
 

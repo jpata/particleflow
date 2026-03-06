@@ -18,10 +18,10 @@ pyyaml = "*"
 comet-ml = "*"
 
 [feature.tallinn.activation]
-env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv", PROD = "cld_2025_edm4hep", STEPS = "tfds" }
+env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv", PROD = "cms_run3", STEPS = "tfds" }
 
 [feature.lxplus.activation]
-env = { SITE = "lxplus", PROFILE = ".profiles/lxbatch", APPTAINER_ARGS = "-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora --nv", PROD = "cms_2025_main", STEPS = "train" }
+env = { SITE = "lxplus", PROFILE = ".profiles/lxbatch", APPTAINER_ARGS = "-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora --nv", PROD = "cms_run3", STEPS = "train" }
 
 [feature.tallinn.tasks]
 setup = "sed -i 's/<<: \\*lxplus/<<: \\*tallinn/' particleflow_spec.yaml"
