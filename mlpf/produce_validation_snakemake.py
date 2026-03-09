@@ -129,7 +129,7 @@ def main():
         prep_sentinel = f"{jobs_dir}/prep/{prep_id}.done"
 
         cmd = (
-            "python3 mlpf/plotting/data_preparation.py "
+            "PYTHONPATH=. python3 mlpf/plotting/data_preparation.py "
             + f"--input-pf {paths['pf_dir']} --input-mlpf {paths['mlpf_dir']} "
             + f"--sample {sample} --output-dir {output_dir}"
         )
@@ -158,7 +158,7 @@ rule {prep_id}:
         jec_file = f"{output_dir}/jec_{jet_type}_{corr_sample}.npz"
 
         cmd = (
-            "python3 mlpf/plotting/corrections.py "
+            "PYTHONPATH=. python3 mlpf/plotting/corrections.py "
             + f"--input-pf-parquet {output_dir}/{corr_sample}_pf.parquet "
             + f"--input-mlpf-parquet {output_dir}/{corr_sample}_mlpf.parquet "
             + f"--corrections-file {jec_file} "
@@ -198,7 +198,7 @@ rule {corr_id}:
             jec_file = f"{output_dir}/jec_ak4_{corr_sample}.npz"
 
             cmd = (
-                "python3 mlpf/plotting/cmssw_validation_data.py "
+                "PYTHONPATH=. python3 mlpf/plotting/cmssw_validation_data.py "
                 + f"--input-pf '{paths['pf_dir']}/step4_NANO_*.root' "
                 + f"--input-mlpf '{paths['mlpf_dir']}/step4_NANO_*.root' "
                 + f"--golden-json {golden_json} --jec-file {jec_file} "
@@ -227,7 +227,7 @@ rule {data_plot_id}:
             met_sentinel = f"{jobs_dir}/plots/{met_id}.done"
 
             cmd = (
-                "python3 mlpf/plotting/plot_met_validation.py "
+                "PYTHONPATH=. python3 mlpf/plotting/plot_met_validation.py "
                 + f"--input-pf-parquet {output_dir}/{sample}_pf.parquet "
                 + f"--input-mlpf-parquet {output_dir}/{sample}_mlpf.parquet "
                 + f"--output-dir {output_dir} --sample-name {sample} --tev {vspec['tev']}"
@@ -260,7 +260,7 @@ rule {met_id}:
                         plot_sentinel = f"{jobs_dir}/plots/{plot_id}.done"
 
                         cmd = (
-                            "python3 mlpf/plotting/plot_validation.py "
+                            "PYTHONPATH=. python3 mlpf/plotting/plot_validation.py "
                             + f"--input-pf-parquet {output_dir}/{sample}_pf.parquet "
                             + f"--input-mlpf-parquet {output_dir}/{sample}_mlpf.parquet "
                             + f"--corrections-file {jec_file} "

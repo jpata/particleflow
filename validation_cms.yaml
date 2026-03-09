@@ -1,8 +1,8 @@
 # CMS Validation Plotting Configuration
-production: "cms_2025_main"
+production: "cms_run3"
 
 # Single source of truth for workspace
-workspace_dir: "${productions.cms_2025_main.workspace_dir}"
+workspace_dir: "${productions.cms_run3.workspace_dir}"
 
 # Container image for validation (from main spec)
 container: "${project.container}"

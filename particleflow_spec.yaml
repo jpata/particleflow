@@ -61,7 +61,7 @@ project:
       cpu_partition: "local"
 
   # Selected site defaults (Merged into 'project'), choose 'tallinn' or 'lxplus'
-  <<: *lxplus
+  <<: *tallinn
 
 # -----------------------------------------------------------------------------
 # Dataset Productions
