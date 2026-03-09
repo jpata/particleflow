@@ -34,7 +34,7 @@ project:
       bind_mounts:
         - "/afs"
         - "/cvmfs"
-        - "/eos"
+        - "/eos/user/j/jpata"
         - "/etc/pki/ca-trust"
         - "/etc/tnsnames.ora"
       paths:
@@ -213,7 +213,7 @@ productions:
     comment: "CLD production with Key4Hep"
     workspace_dir: "${project.paths.storage_root}/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
-    gen_container: "/home/software/singularity/alma9.simg"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
 
     memory:
       gen: 4000
@@ -303,7 +303,7 @@ productions:
     comment: "CLIC production with Key4Hep"
     workspace_dir: "${project.paths.storage_root}/clic/v1.2.4_key4hep_2025-05-29_CLIC_819e4e"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/clic"
-    gen_container: "/home/software/singularity/alma9.simg"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
 
     memory:
       gen: 4000

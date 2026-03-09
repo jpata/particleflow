@@ -13,10 +13,12 @@ def ensure_dir(d):
     os.makedirs(d, exist_ok=True)
 
 
-def write_bash_script(path, content):
+def write_bash_script(path, content, project_root=None):
     with open(path, "w") as f:
         f.write("#!/bin/bash\n")
         f.write("set -e\n")
+        if project_root:
+            f.write(f"cd {project_root}\n")
         f.write(content)
     os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
 
@@ -77,6 +79,7 @@ def main():
     req_steps = args.steps.split(",")
 
     spec = load_spec(SPEC_FILE)
+    project_root = resolve_path("${project.paths.project_root}", spec)
 
     # Target specific production
     if args.production not in spec["productions"]:
@@ -227,7 +230,7 @@ fi
 """
                 gen_cmd_lines.append(cmd)
 
-            write_bash_script(gen_script_path, "\n".join(gen_cmd_lines))
+            write_bash_script(gen_script_path, "\n".join(gen_cmd_lines), project_root=project_root)
 
             if "gen" in req_steps:
                 final_targets.append(gen_sentinel)
@@ -259,7 +262,7 @@ rule gen_{chunk_id}:
                         )
                         val_cmd_lines.append(val_cmd)
 
-                    write_bash_script(val_script_path, "\n".join(val_cmd_lines))
+                    write_bash_script(val_script_path, "\n".join(val_cmd_lines), project_root=project_root)
                     final_targets.append(val_sentinel)
 
                     val_rule_input = ""
@@ -345,7 +348,7 @@ fi
 
                 post_cmd_lines.append(cmd)
 
-            write_bash_script(post_script_path, "\n".join(post_cmd_lines))
+            write_bash_script(post_script_path, "\n".join(post_cmd_lines), project_root=project_root)
 
             sample_post_sentinels.append(post_sentinel)
             if "post" in req_steps and (sample_key in tfds_mappings):
@@ -398,7 +401,7 @@ rule post_{chunk_id}:{post_rule_input}
                         )
                         val_cmd_lines.append(val_cmd)
 
-                    write_bash_script(val_script_path, "\n".join(val_cmd_lines))
+                    write_bash_script(val_script_path, "\n".join(val_cmd_lines), project_root=project_root)
                     final_targets.append(val_sentinel)
 
                     rules_content += f"""
@@ -479,7 +482,7 @@ trap cleanup EXIT
 echo "Copying from {job_scratch_dir} to {tfds_root_dir}"
 cp -r {job_scratch_dir}/* {tfds_root_dir}/
 """
-            write_bash_script(tfds_script_path, cmd)
+            write_bash_script(tfds_script_path, cmd, project_root=project_root)
 
             tfds_sentinels.append(tfds_sentinel)
             if "tfds" in req_steps:
@@ -539,7 +542,7 @@ nvidia-smi
 #TORCH_LOGS="+all" {train_cmd}
 {train_cmd}
 """
-        write_bash_script(train_script_path, cmd)
+        write_bash_script(train_script_path, cmd, project_root=project_root)
 
         input_sentinels_str = " ,\n        ".join([f'"{s}"' for s in tfds_sentinels])
         train_rule_input = ""
