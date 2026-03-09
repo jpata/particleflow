@@ -37,6 +37,7 @@ project:
         - "/eos/user/j/jpata"
         - "/etc/pki/ca-trust"
         - "/etc/tnsnames.ora"
+        - "/run"
       paths:
         storage_root: "/eos/user/j/jpata/mlpf"
         scratch_root: "/tmp"

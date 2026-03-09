@@ -21,7 +21,7 @@ snakemake-executor-plugin-htcondor = { git = "https://github.com/htcondor/snakem
 env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv" }
 
 [feature.lxplus.activation]
-env = { SITE = "lxplus", PROFILE = ".profiles/lxbatch", APPTAINER_ARGS = "-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora --nv" }
+env = { SITE = "lxplus", PROFILE = ".profiles/lxbatch", APPTAINER_ARGS = "-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora -B /run --nv" }
 
 [feature.local.activation]
 env = { SITE = "local", PROFILE = ".profiles/local", APPTAINER_ARGS = "-B /tmp -B /mnt --nv" }
