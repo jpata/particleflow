@@ -11,11 +11,11 @@ snakemake = ">=8.0"
 python-htcondor = ">=24.0.0,<25.0.0"
 snakemake-executor-plugin-cluster-generic = "*"
 snakemake-executor-plugin-slurm = "*"
-cookiecutter = "*"
 pyyaml = "*"
 
 [pypi-dependencies]
 comet-ml = "*"
+snakemake-executor-plugin-htcondor = { git = "https://github.com/htcondor/snakemake-executor-plugin-htcondor" }
 
 [feature.tallinn.activation]
 env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv" }
@@ -45,29 +45,22 @@ default-resources:
   - slurm_account="hepusers"' > .profiles/tallinn/config.v8+.yaml
 """
 
-#FIXME: convert to use https://github.com/htcondor/snakemake-executor-plugin-htcondor
 [feature.lxplus.tasks]
 setup = "sed -i '0,/^  <<: \\*.*$/s//  <<: \\*lxplus/' particleflow_spec.yaml"
 init = """
-mkdir -p .profiles \
-&& rm -rf .profiles/lxbatch \
-&& cookiecutter \
---no-input \
---output-dir .profiles/ \
-gh:Snakemake-Profiles/htcondor \
-profile_name=lxbatch \
-htcondor_log_dir=$PWD/.condor_jobs \
-location_cern=true \
-&& echo 'jobscript: "grid-jobscript.sh"
-executor: "cluster-generic"
-cluster-generic-status-cmd: "grid-status.py"
-cluster-generic-submit-cmd: "grid-submit.py"
+mkdir -p .profiles/lxbatch \
+&& mkdir -p .condor_jobs \
+&& echo 'executor: "htcondor"
+htcondor-jobdir: ".condor_jobs"
+jobs: 100
 max-jobs-per-second: 10
 max-status-checks-per-second: 10
 restart-times: 0
 local-cores: 1
-jobs: 100
-verbose: false' > .profiles/lxbatch/config.v8+.yaml
+verbose: false
+default-resources:
+  - getenv=True
+  - job_wrapper="scripts/lxplus/test_wrapper.sh"' > .profiles/lxbatch/config.v8+.yaml
 """
 
 [feature.local.tasks]

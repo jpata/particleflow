@@ -21,14 +21,30 @@ def write_bash_script(path, content):
     os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
 
 
+def parse_runtime(runtime_str):
+    if isinstance(runtime_str, int):
+        return runtime_str
+    if runtime_str.endswith("h"):
+        return int(runtime_str[:-1]) * 60
+    if runtime_str.endswith("m"):
+        return int(runtime_str[:-1])
+    if runtime_str.endswith("d"):
+        return int(runtime_str[:-1]) * 60 * 24
+    try:
+        return int(runtime_str)
+    except ValueError:
+        return runtime_str
+
+
 def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0, slurm_account=None):
     res = {}
+    runtime_m = parse_runtime(runtime)
     if executor == "slurm":
         res["mem_mb"] = mem
         if gpus > 0 and mem_per_gpu > 0:
             res["mem_per_gpu"] = mem_per_gpu
         res["slurm_partition"] = f'"{partition}"'
-        res["runtime"] = f'"{runtime}"'
+        res["runtime"] = runtime_m
         if slurm_account:
             res["slurm_account"] = f'"{slurm_account}"'
         if gpus > 0:
@@ -40,7 +56,8 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
     elif executor == "condor":
         res["mem_mb"] = mem
         res["job_flavour"] = f'"{partition}"'
-        res["runtime"] = f'"{runtime}"'
+        res["runtime"] = runtime_m
+        res["getenv"] = True
         if gpus > 0:
             res["request_gpus"] = gpus
     else:
@@ -100,7 +117,7 @@ def main():
     postproc_script = prod_config["postprocessing"]["script"]
     postproc_extra_args = prod_config["postprocessing"].get("args", {})
 
-    config_dir = prod_config.get("config_dir", "")
+    config_dir = resolve_path(prod_config.get("config_dir", ""), spec)
 
     scratch_root = resolve_path(spec["project"]["paths"]["scratch_root"], spec)
 

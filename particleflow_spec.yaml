@@ -7,7 +7,7 @@ project:
   description: "Machine Learning for Particle Flow Reconstruction"
 
   # Site-specific configurations (Anchors)
-  # To switch sites, update the merge key (<<: *tallinn
+  # To switch sites, update the merge key (<<: *lxplus
   sites:
     tallinn: &tallinn
       site_name: "tallinn"
@@ -22,6 +22,7 @@ project:
       paths:
         storage_root: "/local/joosep/mlpf"
         scratch_root: "/scratch/local/joosep"
+        project_root: "/home/joosep/particleflow"
       cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5"
       gpu_partition: "gpu"
       cpu_partition: "main"
@@ -39,6 +40,7 @@ project:
       paths:
         storage_root: "/eos/user/j/jpata/mlpf"
         scratch_root: "/tmp"
+        project_root: "/afs/cern.ch/work/j/jpata/particleflow"
       cmssw_dir: "/cvmfs/cms.cern.ch"
       gpu_partition: "tomorrow"
       cpu_partition: "tomorrow"
@@ -53,12 +55,13 @@ project:
       paths:
         storage_root: "/mnt/work/mlpf/"
         scratch_root: "/tmp/particleflow"
+        project_root: "/home/joosep/particleflow"
       cmssw_dir: "/home/joosep/particleflow/CMSSW_15_0_5"
       gpu_partition: "local"
       cpu_partition: "local"
 
-  # Selected site defaults (Merged into 'project'), choose 'tallinn', 'lxplus' or 'local'
-  <<: *tallinn
+  # Selected site defaults (Merged into 'project'), choose 'tallinn' or 'lxplus'
+  <<: *lxplus
 
 # -----------------------------------------------------------------------------
 # Dataset Productions
@@ -74,7 +77,7 @@ productions:
     type: "cms"
     comment: "Main production with CMSSW_15_0_5"
     workspace_dir: "${project.paths.storage_root}/cms/20260204_cmssw_15_0_5_117d32"
-    config_dir: "/home/joosep/particleflow"
+    config_dir: "${project.paths.project_root}"
     gen_container: "/cvmfs/singularity.opensciencegrid.org/cmssw/cms:rhel8-x86_64"
 
     # Common execution environment for this campaign
@@ -209,7 +212,7 @@ productions:
     type: "key4hep"
     comment: "CLD production with Key4Hep"
     workspace_dir: "${project.paths.storage_root}/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9"
-    config_dir: "/home/joosep/particleflow/mlpf/data/key4hep/gen/cld/CLDConfig"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
     gen_container: "/home/software/singularity/alma9.simg"
 
     memory:
@@ -299,7 +302,7 @@ productions:
     type: "key4hep"
     comment: "CLIC production with Key4Hep"
     workspace_dir: "${project.paths.storage_root}/clic/v1.2.4_key4hep_2025-05-29_CLIC_819e4e"
-    config_dir: "/home/joosep/particleflow/mlpf/data/key4hep/gen/clic"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/clic"
     gen_container: "/home/software/singularity/alma9.simg"
 
     memory:
