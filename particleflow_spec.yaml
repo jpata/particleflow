@@ -76,6 +76,7 @@ productions:
   # CMS Production Campaign
   cms_run3:
     type: "cms"
+    model: "pyg-cms-v1"
     comment: "Main production with CMSSW_15_0_5"
     workspace_dir: "${project.paths.storage_root}/cms/20260204_cmssw_15_0_5_117d32"
     config_dir: "${project.paths.project_root}"
@@ -211,6 +212,7 @@ productions:
   # CLD Production
   cld:
     type: "key4hep"
+    model: "pyg-cld-v1"
     comment: "CLD production with Key4Hep"
     workspace_dir: "${project.paths.storage_root}/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
@@ -301,6 +303,7 @@ productions:
   # CLIC Production
   clic:
     type: "key4hep"
+    model: "pyg-clic-v1"
     comment: "CLIC production with Key4Hep"
     workspace_dir: "${project.paths.storage_root}/clic/v1.2.4_key4hep_2025-05-29_CLIC_819e4e"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/clic"
@@ -380,7 +383,6 @@ models:
     checkpoint_freq: 10000
     val_freq: 10000
 
-  # Example: CMS Model (GNN + Attention)
   pyg-cms-v1:
     <<: *defaults
     dataset: cms
@@ -468,7 +470,7 @@ models:
   pyg-cld-v1:
     <<: *defaults
     dataset: cld
-    gpu_batch_multiplier: 128
+    gpu_batch_multiplier: 1024
 
     hyperparameters:
       batch_size: 1
@@ -526,7 +528,7 @@ models:
   pyg-clic-v1:
     <<: *defaults
     dataset: clic
-    gpu_batch_multiplier: 128
+    gpu_batch_multiplier: 1024
 
     hyperparameters:
       batch_size: 1

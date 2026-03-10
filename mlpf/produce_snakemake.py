@@ -71,7 +71,7 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
-    parser.add_argument("--model", type=str, default="pyg-cms-v1", help="Model name from spec file to train")
+    parser.add_argument("--model", type=str, default=None, help="Model name from spec file to train")
     parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
     parser.add_argument("--steps", type=str, default="gen,post,tfds,train", help="Comma-separated steps to run: gen,post,tfds,train")
     args = parser.parse_args()
@@ -87,6 +87,9 @@ def main():
 
     prod_config = spec["productions"][args.production]
     prod_type = prod_config.get("type", "cms")
+
+    if not args.model:
+        args.model = prod_config.get("model", "pyg-cms-v1")
 
     executor = spec["project"].get("executor", "slurm")
     slurm_account = spec["project"].get("slurm_account")

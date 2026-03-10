@@ -76,7 +76,7 @@ verbose: false' > .profiles/local/config.v8+.yaml
 
 [tasks]
 # Unified generation step
-generate = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --model ${MODEL:-pyg-cms-v1} --steps ${STEPS:-gen,post,tfds,train}'", depends-on = ["setup"] }
+generate = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --model \"${MODEL:-}\" --steps ${STEPS:-gen,post,tfds,train}'", depends-on = ["setup"] }
 
 # Unified run step
 run = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["generate"] }
