@@ -33,6 +33,8 @@ scikit-optimize
 scipy
 seaborn
 setGPU
+snakemake
+tensorboard
 tensorflow
 tensorflow-datasets
 torch

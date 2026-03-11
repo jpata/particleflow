@@ -13,18 +13,65 @@ def ensure_dir(d):
     os.makedirs(d, exist_ok=True)
 
 
-def write_bash_script(path, content):
+def write_bash_script(path, content, project_root=None):
     with open(path, "w") as f:
         f.write("#!/bin/bash\n")
         f.write("set -e\n")
+        if project_root:
+            f.write(f"cd {project_root}\n")
         f.write(content)
     os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
+
+
+def parse_runtime(runtime_str):
+    if isinstance(runtime_str, int):
+        return runtime_str
+    if runtime_str.endswith("h"):
+        return int(runtime_str[:-1]) * 60
+    if runtime_str.endswith("m"):
+        return int(runtime_str[:-1])
+    if runtime_str.endswith("d"):
+        return int(runtime_str[:-1]) * 60 * 24
+    try:
+        return int(runtime_str)
+    except ValueError:
+        return runtime_str
+
+
+def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0, slurm_account=None):
+    res = {}
+    runtime_m = parse_runtime(runtime)
+    if executor == "slurm":
+        res["mem_mb"] = mem
+        if gpus > 0 and mem_per_gpu > 0:
+            res["mem_per_gpu"] = mem_per_gpu
+        res["slurm_partition"] = f'"{partition}"'
+        res["runtime"] = runtime_m
+        if slurm_account:
+            res["slurm_account"] = f'"{slurm_account}"'
+        if gpus > 0:
+            if gpu_type:
+                res["gres"] = f'"gpu:{gpu_type}:{gpus}"'
+            else:
+                res["gpu"] = gpus
+        res["cpus_per_task"] = threads
+    elif executor == "condor":
+        res["mem_mb"] = mem
+        res["job_flavour"] = f'"{partition}"'
+        res["runtime"] = runtime_m
+        res["getenv"] = True
+        if gpus > 0:
+            res["request_gpus"] = gpus
+    else:
+        res["mem_mb"] = mem
+
+    return ", ".join([f"{k}={v}" for k, v in res.items()])
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
-    parser.add_argument("--model", type=str, help="Model name from spec file to train")
+    parser.add_argument("--model", type=str, default=None, help="Model name from spec file to train")
     parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
     parser.add_argument("--steps", type=str, default="gen,post,tfds,train", help="Comma-separated steps to run: gen,post,tfds,train")
     args = parser.parse_args()
@@ -32,6 +79,7 @@ def main():
     req_steps = args.steps.split(",")
 
     spec = load_spec(SPEC_FILE)
+    project_root = resolve_path("${project.paths.project_root}", spec)
 
     # Target specific production
     if args.production not in spec["productions"]:
@@ -40,8 +88,16 @@ def main():
     prod_config = spec["productions"][args.production]
     prod_type = prod_config.get("type", "cms")
 
-    cpu_partition = prod_config.get("slurm_partition", "main")
-    cpu_runtime = prod_config.get("slurm_runtime", "120m")
+    if not args.model:
+        args.model = prod_config.get("model", "pyg-cms-v1")
+
+    executor = spec["project"].get("executor", "slurm")
+    slurm_account = spec["project"].get("slurm_account")
+
+    cmssw_dir = resolve_path(prod_config.get("environment", {}).get("cmssw_dir", ""), spec)
+
+    cpu_partition = resolve_path(prod_config.get("slurm_partition", "main"), spec)
+    cpu_runtime = resolve_path(prod_config.get("slurm_runtime", "120m"), spec)
 
     memory_config = prod_config.get("memory", {})
     mem_gen = memory_config.get("gen", 2000)
@@ -67,7 +123,7 @@ def main():
     postproc_script = prod_config["postprocessing"]["script"]
     postproc_extra_args = prod_config["postprocessing"].get("args", {})
 
-    config_dir = prod_config.get("config_dir", "")
+    config_dir = resolve_path(prod_config.get("config_dir", ""), spec)
 
     scratch_root = resolve_path(spec["project"]["paths"]["scratch_root"], spec)
 
@@ -80,7 +136,14 @@ def main():
     ensure_dir(f"{jobs_dir}/gen")
     ensure_dir(f"{jobs_dir}/post")
     ensure_dir(f"{jobs_dir}/tfds")
+    ensure_dir(f"{jobs_dir}/val")
     ensure_dir(tfds_root_dir)
+
+    val_config = prod_config.get("validation", {})
+    val_job_types = val_config.get("job_types", [])
+    val_use_cuda = val_config.get("use_cuda", False)
+    val_threads = val_config.get("threads", 1)
+    mem_val = memory_config.get("val", 8000)
 
     snakefile_content = "rule all:\n    input:\n"
 
@@ -148,12 +211,13 @@ def main():
                 exports = (
                     f"export OUTDIR={gen_base_dir}/"
                     + f" && export CONFIG_DIR={config_dir}"
+                    + (f" && export CMSSWDIR={cmssw_dir}" if cmssw_dir else "")
                     + f" && export WORKDIR={scratch_root}/{process_name}_{seed}"
                     + f" && export NEV={events_per_job}"
                 )
                 gen_cmd = f"bash {gen_script} {process_name} {seed} {pu_type}"
                 if copy_step2:
-                    gen_cmd += " true"
+                    gen_cmd += " True"
 
                 if args.ignore_failures:
                     gen_cmd += " || echo 'WARNING: Generation failed'"
@@ -169,7 +233,7 @@ fi
 """
                 gen_cmd_lines.append(cmd)
 
-            write_bash_script(gen_script_path, "\n".join(gen_cmd_lines))
+            write_bash_script(gen_script_path, "\n".join(gen_cmd_lines), project_root=project_root)
 
             if "gen" in req_steps:
                 final_targets.append(gen_sentinel)
@@ -179,13 +243,46 @@ rule gen_{chunk_id}:
     output:
         "{gen_sentinel}"
     resources:
-        mem_mb_per_cpu={mem_gen},
-        slurm_partition="{cpu_partition}",
-        runtime="{cpu_runtime}"
+        {get_resource_str(executor, mem_gen, cpu_partition, cpu_runtime, slurm_account=slurm_account)}
     container:
         "{gen_container_img}"
     shell:
         "{gen_script_path} && touch {{output}}"
+"""
+
+            # 1.5 Validation
+            if copy_step2 and "val" in req_steps and prod_type == "cms":
+                for job_type in val_job_types:
+                    val_id = f"{sample_key}_{job_type}_{chunk_start}"
+                    val_sentinel = f"{jobs_dir}/val/val_{val_id}.done"
+                    val_script_path = f"{jobs_dir}/val/val_{val_id}.sh"
+
+                    val_cmd_lines = []
+                    for seed in range(chunk_start, chunk_end):
+                        val_cmd = (
+                            f"WORKSPACE_DIR={workspace_dir} OUTPUT_SUBDIR={output_subdir} {f'CMSSWDIR={cmssw_dir} ' if cmssw_dir else ''}"
+                            + f"NTHREADS={val_threads} bash mlpf/data/cms/valjob.sh {process_name} {seed} {job_type} {val_use_cuda}"
+                        )
+                        val_cmd_lines.append(val_cmd)
+
+                    write_bash_script(val_script_path, "\n".join(val_cmd_lines), project_root=project_root)
+                    final_targets.append(val_sentinel)
+
+                    val_rule_input = ""
+                    if "gen" in req_steps:
+                        val_rule_input = f'\n    input:\n        "{gen_sentinel}"'
+
+                    rules_content += f"""
+rule val_{val_id}:{val_rule_input}
+    output:
+        "{val_sentinel}"
+    threads: {val_threads}
+    resources:
+        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_threads, slurm_account=slurm_account)}
+    container:
+        "{gen_container_img}"
+    shell:
+        "{val_script_path} && touch {{output}}"
 """
 
             # 2. Postprocessing
@@ -254,7 +351,7 @@ fi
 
                 post_cmd_lines.append(cmd)
 
-            write_bash_script(post_script_path, "\n".join(post_cmd_lines))
+            write_bash_script(post_script_path, "\n".join(post_cmd_lines), project_root=project_root)
 
             sample_post_sentinels.append(post_sentinel)
             if "post" in req_steps and (sample_key in tfds_mappings):
@@ -269,9 +366,7 @@ rule post_{chunk_id}:{post_rule_input}
     output:
         "{post_sentinel}"
     resources:
-        mem_mb_per_cpu={mem_post},
-        slurm_partition="{cpu_partition}",
-        runtime="{cpu_runtime}"
+        {get_resource_str(executor, mem_post, cpu_partition, cpu_runtime, slurm_account=slurm_account)}
     container:
         "{main_container_img}"
     shell:
@@ -279,6 +374,51 @@ rule post_{chunk_id}:{post_rule_input}
 """
 
         all_sample_post_sentinels[sample_key] = sample_post_sentinels
+
+    # 1.6 Data Validation
+    if "val_data" in req_steps and prod_type == "cms":
+        val_data_config = prod_config.get("validation_data", {})
+        val_data_job_types = val_data_config.get("job_types", [])
+        val_data_use_cuda = val_data_config.get("use_cuda", False)
+        val_data_threads = val_data_config.get("threads", 1)
+        val_data_samples = val_data_config.get("samples", {})
+
+        for val_sample_key, val_sample_data in val_data_samples.items():
+            input_filelist = resolve_path(val_sample_data["input_filelist"], spec)
+            seed_start, seed_end = val_sample_data["seed_range"]
+            output_subdir = val_sample_data.get("output_subdir", val_sample_key)
+
+            for job_type in val_data_job_types:
+                for chunk_start in range(seed_start, seed_end, CHUNK_SIZE):
+                    chunk_end = min(chunk_start + CHUNK_SIZE, seed_end)
+                    val_id = f"{val_sample_key}_{job_type}_{chunk_start}"
+                    val_sentinel = f"{jobs_dir}/val/val_data_{val_id}.done"
+                    val_script_path = f"{jobs_dir}/val/val_data_{val_id}.sh"
+
+                    val_cmd_lines = []
+                    for seed in range(chunk_start, chunk_end):
+                        val_cmd = (
+                            f"WORKSPACE_DIR={workspace_dir} OUTPUT_SUBDIR={output_subdir} {f'CMSSWDIR={cmssw_dir} ' if cmssw_dir else ''} "
+                            + f"INPUT_FILELIST={config_dir}/{input_filelist} "
+                            + f"NTHREADS={val_data_threads} bash mlpf/data/cms/valjob_data.sh {val_sample_key} {seed} {job_type} {val_data_use_cuda}"
+                        )
+                        val_cmd_lines.append(val_cmd)
+
+                    write_bash_script(val_script_path, "\n".join(val_cmd_lines), project_root=project_root)
+                    final_targets.append(val_sentinel)
+
+                    rules_content += f"""
+rule val_data_{val_id}:
+    output:
+        "{val_sentinel}"
+    threads: {val_data_threads}
+    resources:
+        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_data_threads, slurm_account=slurm_account)}
+    container:
+        "{gen_container_img}"
+    shell:
+        "{val_script_path} && touch {{output}}"
+"""
 
     # -------------------------------------------------------------------------
     # PART 2: TFDS Conversion (Per Config ID / Split)
@@ -345,7 +485,7 @@ trap cleanup EXIT
 echo "Copying from {job_scratch_dir} to {tfds_root_dir}"
 cp -r {job_scratch_dir}/* {tfds_root_dir}/
 """
-            write_bash_script(tfds_script_path, cmd)
+            write_bash_script(tfds_script_path, cmd, project_root=project_root)
 
             tfds_sentinels.append(tfds_sentinel)
             if "tfds" in req_steps:
@@ -361,9 +501,7 @@ rule tfds_{tfds_id}:{tfds_rule_input}
     output:
         "{tfds_sentinel}"
     resources:
-        mem_mb_per_cpu={mem_tfds},
-        slurm_partition="{cpu_partition}",
-        runtime="{cpu_runtime}"
+        {get_resource_str(executor, mem_tfds, cpu_partition, cpu_runtime, slurm_account=slurm_account)}
     container:
         "{main_container_img}"
     shell:
@@ -380,27 +518,34 @@ rule tfds_{tfds_id}:{tfds_rule_input}
         ensure_dir(f"{jobs_dir}/train")
 
         model_spec = spec["models"][args.model]
-        gpu_count = model_spec.get("gpus", 0)
-        gpu_type = model_spec.get("gpu_type", "")
-        mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", 8000)
-        gpu_partition = model_spec.get("slurm_partition", "gpu")
-        gpu_runtime = model_spec.get("slurm_runtime", "120m")
+        model_defaults = spec["models"].get("defaults", {})
+        gpu_count = model_spec.get("gpus", model_defaults.get("gpus", 0))
+        gpu_threads = model_spec.get("threads", model_defaults.get("threads", 16))
+        gpu_type = model_spec.get("gpu_type", model_defaults.get("gpu_type", ""))
+        mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", model_defaults.get("mem_per_gpu_mb", 8000))
+        gpu_partition = resolve_path(model_spec.get("slurm_partition", model_defaults.get("slurm_partition", "gpu")), spec)
+        gpu_runtime = resolve_path(model_spec.get("slurm_runtime", model_defaults.get("slurm_runtime", "120m")), spec)
 
         exp_name = f"{args.model}_{args.production}"
 
         train_script_path = f"{jobs_dir}/train/train_{exp_name}.sh"
         train_sentinel = f"{jobs_dir}/train/train_{exp_name}.done"
 
-        train_cmd = f"python3 mlpf/pipeline.py --spec-file {SPEC_FILE} --model-name {args.model} --production-name {args.production} train"
+        train_cmd = (
+            f"python3 mlpf/pipeline.py --spec-file {SPEC_FILE} --model-name {args.model} --production-name {args.production} train --gpus {gpu_count}"
+        )
 
         cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export TFDS_DATA_DIR={tfds_root_dir}
+export KERAS_BACKEND=torch
+export TORCH_COMPILE_DISABLE=1
 env
 nvidia-smi
+#TORCH_LOGS="+all" {train_cmd}
 {train_cmd}
 """
-        write_bash_script(train_script_path, cmd)
+        write_bash_script(train_script_path, cmd, project_root=project_root)
 
         input_sentinels_str = " ,\n        ".join([f'"{s}"' for s in tfds_sentinels])
         train_rule_input = ""
@@ -410,16 +555,6 @@ nvidia-smi
         # snakemake rule names cannot contain hyphens
         rule_model_name = args.model.replace("-", "_")
 
-        # Constructing the resources string
-        resources_str = f'mem_mb_per_cpu={mem_train}, slurm_partition="{gpu_partition}", runtime="{gpu_runtime}"'
-        if gpu_count > 0:
-            if gpu_type:
-                resources_str += f',gres="gpu:{gpu_type}:{gpu_count}"'
-            else:
-                resources_str += f", gpu={gpu_count}"
-        if mem_per_gpu_mb > 0 and gpu_count > 0:
-            resources_str += f",mem_per_gpu={mem_per_gpu_mb}"
-
         if "train" in req_steps:
             final_targets.append(train_sentinel)
 
@@ -427,8 +562,9 @@ nvidia-smi
 rule train_{rule_model_name}:{train_rule_input}
     output:
         "{train_sentinel}"
+    threads: {gpu_threads}
     resources:
-        {resources_str}
+        {get_resource_str(executor, mem_train, gpu_partition, gpu_runtime, threads=gpu_threads, gpus=gpu_count, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu_mb, slurm_account=slurm_account)}
     container:
         "{main_container_img}"
     shell:

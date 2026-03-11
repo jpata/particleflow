@@ -1,0 +1,57 @@
+# CMS Validation Plotting Configuration
+production: "cms_run3"
+
+# Single source of truth for workspace
+workspace_dir: "${productions.cms_run3.workspace_dir}"
+
+# Container image for validation (from main spec)
+container: "${project.container}"
+
+# Input directories (resolved relative to workspace_dir if needed)
+val_dir: "${workspace_dir}/val"
+val_data_dir: "${workspace_dir}/val_data"
+
+# Output directory for parquets and plots
+output_dir: "${workspace_dir}/plots_validation"
+
+# MC Samples to validate (from particleflow_spec.yaml)
+# We map the sample key to its metadata for path construction
+mc_samples:
+  QCD_PU_13p6:
+    output_subdir: "pu55to75_val"
+    process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
+
+# Data Samples to validate
+data_samples:
+  jetmet0:
+    output_subdir: "Run2024C"
+    process_name: "jetmet0"
+
+# Data validation settings
+data_validation:
+  golden_json: "data/cms/run3/corrections/Cert_Collisions2024_378981_386951_Golden.json"
+  lumi_csv: "data/cms/run3/corrections/output.csv"
+
+# Sample used to derive JECs
+correction_sample: "QCD_PU_13p6"
+
+# Jet types to consider
+jet_types:
+  - ak4
+  - ak8
+
+# Fiducial cuts for plot_validation.py
+fiducial_cuts:
+  - inclusive
+  - eta_0_2p5
+  - eta_2p5_3
+  - eta_3_5
+
+# Center of mass energy
+tev: 13.6
+
+# Resource requirements
+resources:
+  mem_mb: 8000
+  runtime: "2h"
+  slurm_partition: "${project.cpu_partition}"

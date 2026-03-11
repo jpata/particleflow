@@ -7,7 +7,7 @@ unset PYTHONPATH
 SAMPLE=$1
 SEED=$2
 PU_TYPE=${3:-nopu}
-COPY_STEP2=${4:-false}
+COPY_STEP2=${4:-False}
 
 CMSSWDIR=${CMSSWDIR:-/scratch/persistent/joosep/CMSSW_15_0_5/}
 CONFIG_DIR=${CONFIG_DIR:-/home/joosep/particleflow/}
@@ -111,7 +111,7 @@ ls -lrt
 
 echo "process.RandomNumberGeneratorService.generator.initialSeed = $SEED" >> step2_phase1_new.py
 cmsRun step2_phase1_new.py > /dev/null
-if [ "$COPY_STEP2" == "true" ]; then
+if [ "$COPY_STEP2" == "True" ]; then
   cp step2_phase1_new.root $OUTDIR/$SAMPLE/root/step2_${SEED}.root
 fi
 

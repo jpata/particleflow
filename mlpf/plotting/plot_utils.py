@@ -125,7 +125,7 @@ def get_class_names(sample_name):
 EVALUATION_DATASET_NAMES = {
     "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "cld_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
-    "cld_edm_ww_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
+    "cld_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$, PU10",
     "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",

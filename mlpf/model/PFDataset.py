@@ -137,10 +137,11 @@ class PFDataset:
 
         try:
             builder = tfds.builder(name, data_dir=data_dir)
-        except Exception:
+        except Exception as e:
             _logger.error(
                 "Could not find dataset {} in {}, please check that you have downloaded the correct version of the dataset".format(name, data_dir)
             )
+            _logger.error(e)
             sys.exit(1)
         self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort, pad_to_multiple=pad_to_multiple)
 

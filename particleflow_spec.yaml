@@ -5,15 +5,64 @@
 project:
   name: "particleflow"
   description: "Machine Learning for Particle Flow Reconstruction"
-  container: "/home/software/singularity/pytorch.simg:2026-02-04"
-  bind_mounts:
-    - "/local"
-    - "/cvmfs"
-    - "/scratch/local"
-    - "/scratch/persistent"
-  paths:
-    storage_root: "/local/joosep/mlpf/"
-    scratch_root: "/scratch/local/joosep/"
+
+  # Site-specific configurations (Anchors)
+  # To switch sites, update the merge key (<<: *lxplus
+  sites:
+    tallinn: &tallinn
+      site_name: "tallinn"
+      executor: "slurm"
+      slurm_account: "hepusers"
+      container: "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
+      bind_mounts:
+        - "/local"
+        - "/cvmfs"
+        - "/scratch/local"
+        - "/scratch/persistent"
+      paths:
+        storage_root: "/local/joosep/mlpf"
+        scratch_root: "/scratch/local/joosep"
+        project_root: "/home/joosep/particleflow"
+      cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5"
+      gpu_partition: "gpu"
+      cpu_partition: "main"
+
+    lxplus: &lxplus
+      site_name: "lxplus"
+      executor: "condor"
+      container: "/eos/user/j/jpata/www/pytorch-20260305-08d6950.sif"
+      bind_mounts:
+        - "/afs"
+        - "/cvmfs"
+        - "/eos/user/j/jpata"
+        - "/etc/pki/ca-trust"
+        - "/etc/tnsnames.ora"
+        - "/run"
+      paths:
+        storage_root: "/eos/user/j/jpata/mlpf"
+        scratch_root: "/tmp"
+        project_root: "/afs/cern.ch/work/j/jpata/particleflow"
+      cmssw_dir: "/cvmfs/cms.cern.ch"
+      gpu_partition: "tomorrow"
+      cpu_partition: "tomorrow"
+
+    local: &local
+      site_name: "local"
+      executor: "local"
+      container: "https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif"
+      bind_mounts:
+        - "/tmp"
+        - "/mnt/work"
+      paths:
+        storage_root: "/mnt/work/mlpf/"
+        scratch_root: "/tmp/particleflow"
+        project_root: "/home/joosep/particleflow"
+      cmssw_dir: "/home/joosep/particleflow/CMSSW_15_0_5"
+      gpu_partition: "local"
+      cpu_partition: "local"
+
+  # Selected site defaults (Merged into 'project'), choose 'tallinn' or 'lxplus'
+  <<: *tallinn
 
 # -----------------------------------------------------------------------------
 # Dataset Productions
@@ -25,25 +74,44 @@ project:
 # -----------------------------------------------------------------------------
 productions:
   # CMS Production Campaign
-  cms_2025_main:
+  cms_run3:
     type: "cms"
+    model: "pyg-cms-v1"
     comment: "Main production with CMSSW_15_0_5"
     workspace_dir: "${project.paths.storage_root}/cms/20260204_cmssw_15_0_5_117d32"
-    config_dir: "/home/joosep/particleflow/"
+    config_dir: "${project.paths.project_root}"
     gen_container: "/cvmfs/singularity.opensciencegrid.org/cmssw/cms:rhel8-x86_64"
 
     # Common execution environment for this campaign
     environment:
       cmssw_release: "CMSSW_15_0_5"
+      cmssw_dir: "${project.cmssw_dir}"
       scram_arch: "el8_amd64_gcc12"
 
     memory:
       gen: 6000
       post: 4000
       tfds: 8000
+      val: 8000 #fairly high mem limit due to CPU execution of the attention model and 8 threads
+      train: 16000
 
-    slurm_partition: "main"
-    slurm_runtime: "24h"
+    validation:
+      job_types: ["pf", "mlpf"]
+      use_cuda: False
+      threads: 8
+
+    validation_data:
+      job_types: ["pf", "mlpf"]
+      use_cuda: False
+      threads: 8
+      samples:
+        jetmet0:
+          input_filelist: "data/cms/run3/${project.site_name}/jetmet0.txt"
+          seed_range: [1, 100]
+          output_subdir: "Run2024C"
+
+    slurm_partition: "${project.cpu_partition}"
+    slurm_runtime: "48h"
 
     # Step 1: Generation
     # Defines the MC samples to be generated or processed
@@ -79,7 +147,7 @@ productions:
         events_per_job: 100
         output_subdir: "pu55to75_val"
         pu_type: "pu55to75"
-        copy_step2: true
+        copy_step2: True
 
       ttbar_nopu:
         process_name: "TTbar_13p6TeV_TuneCUETP8M1_cfi"
@@ -142,12 +210,13 @@ productions:
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # CLD Production
-  cld_2025_edm4hep:
+  cld:
     type: "key4hep"
+    model: "pyg-cld-v1"
     comment: "CLD production with Key4Hep"
     workspace_dir: "${project.paths.storage_root}/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9"
-    config_dir: "/home/joosep/particleflow/mlpf/data/key4hep/gen/cld/CLDConfig"
-    gen_container: "/home/software/singularity/alma9.simg"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
 
     memory:
       gen: 4000
@@ -232,12 +301,13 @@ productions:
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # CLIC Production
-  clic_2025_edm4hep:
+  clic:
     type: "key4hep"
+    model: "pyg-clic-v1"
     comment: "CLIC production with Key4Hep"
     workspace_dir: "${project.paths.storage_root}/clic/v1.2.4_key4hep_2025-05-29_CLIC_819e4e"
-    config_dir: "/home/joosep/particleflow/mlpf/data/key4hep/gen/clic"
-    gen_container: "/home/software/singularity/alma9.simg"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/clic"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
 
     memory:
       gen: 4000
@@ -285,22 +355,36 @@ productions:
 # -----------------------------------------------------------------------------
 # Model Configurations
 # Defines training recipes. Can inherit from defaults or other models.
+# The multipliers are tuned for an 80GB A100 for training.
 # -----------------------------------------------------------------------------
 models:
-  defaults: &model_defaults
+  defaults: &defaults
     backend: pytorch
     gpus: 1
-    gpu_type: l40
-    mem_per_gpu_mb: 100000
-    slurm_partition: "gpu"
+    threads: 16
+    gpu_type: a100
+    mem_per_gpu_mb: 80000
+    slurm_partition: "${project.gpu_partition}"
     slurm_runtime: "48h"
     optimizer: adamw
     lr_schedule: cosinedecay
     dtype: bfloat16
+    load: null
+    num_steps: 100000
+    comet: false
+    comet_step_freq: 10000
+    ntrain: null #use full train dataset for training
+    nvalid: null #use full valid dataset for validation
+    ntest: 100 #do test on a small subset
+    sort_data: false
+    num_workers: 1
+    prefetch_factor: 1
+    patience: 10000
+    checkpoint_freq: 10000
+    val_freq: 10000
 
-  # Example: CMS Model (GNN + Attention)
   pyg-cms-v1:
-    <<: *model_defaults
+    <<: *defaults
     dataset: cms
     gpu_batch_multiplier: 4
 
@@ -379,14 +463,14 @@ models:
       input_encoding: "split"
       attention:
         num_convs: 3
-        head_dim: 32
-        num_heads: 32
+        head_dim: 16
+        num_heads: 16
 
   # Example: CLD Model
   pyg-cld-v1:
-    <<: *model_defaults
+    <<: *defaults
     dataset: cld
-    gpu_batch_multiplier: 128
+    gpu_batch_multiplier: 1024
 
     hyperparameters:
       batch_size: 1
@@ -397,8 +481,8 @@ models:
       input_encoding: "split"
       attention:
         num_convs: 3
-        head_dim: 32
-        num_heads: 32
+        head_dim: 16
+        num_heads: 16
 
     # Dataset Selection
     train_datasets:
@@ -442,9 +526,9 @@ models:
 
   # CLIC Model
   pyg-clic-v1:
-    <<: *model_defaults
+    <<: *defaults
     dataset: clic
-    gpu_batch_multiplier: 128
+    gpu_batch_multiplier: 1024
 
     hyperparameters:
       batch_size: 1
@@ -455,8 +539,8 @@ models:
       input_encoding: "split"
       attention:
         num_convs: 3
-        head_dim: 32
-        num_heads: 32
+        head_dim: 16
+        num_heads: 16
 
     # Dataset Selection
     train_datasets:

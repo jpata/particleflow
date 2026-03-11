@@ -129,24 +129,19 @@ def build_config_from_spec(spec, model_name, production_name):
 
     # Initialize config with model parameters
     config = {}
-    config["load"] = None
-    config["num_steps"] = 100000
-    config["comet"] = False
-    config["comet_step_freq"] = 10000
-    config["ntrain"] = None
-    config["ntest"] = 1000
-    config["nvalid"] = None
-    config["sort_data"] = False
-    config["num_workers"] = 1
-    config["prefetch_factor"] = 1
-    config["patience"] = 10000
-    config["checkpoint_freq"] = 10000
-    config["val_freq"] = 1000
+
+    # Merge with model defaults if present
+    if "defaults" in spec["models"]:
+        for k, v in spec["models"]["defaults"].items():
+            if isinstance(v, str):
+                v = resolve_path(v, spec)
+            config[k] = v
 
     # Copy hyperparameters and other top-level settings
     for k, v in model_config.items():
         if k not in ["architecture", "train_datasets", "validation_datasets", "test_datasets"]:
-            print(k, v)
+            if isinstance(v, str):
+                v = resolve_path(v, spec)
             config[k] = v
 
     # Handle hyperparameters specifically if they are nested
@@ -329,7 +324,9 @@ def main():
         elif args.command in ["train", "test"]:
             if args.gpus is not None:
                 config["gpus"] = args.gpus
-            gpus = config.get("gpus", 0)
+            if "gpus" not in config:
+                config["gpus"] = 0
+            gpus = config["gpus"]
             world_size = gpus if gpus > 0 else 1
             device_agnostic_run(config, world_size, experiment_dir)
 

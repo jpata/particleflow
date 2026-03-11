@@ -1,4 +1,5 @@
 import math
+import time
 import numpy as np
 from typing import Union, List
 
@@ -70,6 +71,10 @@ def get_activation(activation):
     elif activation == "gelu":
         act = nn.GELU
     return act
+
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
 class SimpleMultiheadAttention(nn.MultiheadAttention):
@@ -330,6 +335,7 @@ class MLPF(nn.Module):
         save_attention=False,
     ):
         super(MLPF, self).__init__()
+        _logger.info(f"MLPF __init__ conv_type={conv_type} num_convs={num_convs} input_encoding={input_encoding}")
 
         self.conv_type = conv_type
 
@@ -352,22 +358,43 @@ class MLPF(nn.Module):
             width = num_heads * head_dim
 
         # embedding of the inputs
+        t0 = time.time()
         if self.input_encoding == "joint":
+            _logger.info("Initializing joint input encoding")
             self.nn0_id = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
             self.nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
         elif self.input_encoding == "split":
-            self.nn0_id = nn.ModuleList()
-            for ielem in range(len(self.elemtypes_nonzero)):
-                self.nn0_id.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
-            self.nn0_reg = nn.ModuleList()
-            for ielem in range(len(self.elemtypes_nonzero)):
-                self.nn0_reg.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
+            _logger.info("Initializing split input encoding, elemtypes_nonzero={}".format(self.elemtypes_nonzero))
+            # self.nn0_id = nn.ModuleList()
+            # for ielem in range(len(self.elemtypes_nonzero)):
+            #     t00 = time.time()
+            #     self.nn0_id.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
+            #     t01 = time.time()
+            #     _logger.info("Initializing nn0_id ielem={} took {:.2f}s".format(ielem, t01 - t00))
+            # self.nn0_reg = nn.ModuleList()
+            # for ielem in range(len(self.elemtypes_nonzero)):
+            #     t00 = time.time()
+            #     self.nn0_reg.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
+            #     t01 = time.time()
+            #     _logger.info("Initializing nn0_reg ielem={} took {:.2f}s".format(ielem, t01 - t00))
+
+            # Wide MLP approach: one large Linear layer to produce all embeddings at once
+            num_types = len(self.elemtypes_nonzero)
+            self.nn0_id = ffn(self.input_dim, num_types * embedding_dim, width, self.act, dropout_ff)
+            self.nn0_reg = ffn(self.input_dim, num_types * embedding_dim, width, self.act, dropout_ff)
+        _logger.info("Input encoding initialization took {:.2f}s".format(time.time() - t0))
+        _logger.info("nn0_id parameters: {}".format(count_parameters(self.nn0_id)))
+        _logger.info("nn0_reg parameters: {}".format(count_parameters(self.nn0_reg)))
+
         if self.num_convs != 0:
+            t0 = time.time()
             if self.conv_type == "attention":
+                _logger.info("Initializing attention convolution layers, num_convs={}".format(self.num_convs))
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
 
                 for i in range(self.num_convs):
+                    _logger.info(f"Initializing attention layer {i}")
                     lastlayer = i == self.num_convs - 1
                     self.conv_id.append(
                         PreLnSelfAttentionLayer(
@@ -404,9 +431,11 @@ class MLPF(nn.Module):
                         )
                     )
             elif self.conv_type == "gnn_lsh":
+                _logger.info("Initializing GNN-LSH convolution layers")
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(self.num_convs):
+                    _logger.info(f"Initializing GNN-LSH layer {i}")
                     gnn_conf = {
                         "inout_dim": embedding_dim,
                         "bin_size": self.bin_size,
@@ -420,12 +449,17 @@ class MLPF(nn.Module):
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
+            _logger.info("Convolution layers initialization took {:.2f}s".format(time.time() - t0))
+            _logger.info("conv_id parameters: {}".format(count_parameters(self.conv_id)))
+            _logger.info("conv_reg parameters: {}".format(count_parameters(self.conv_reg)))
 
         if self.learned_representation_mode == "concat":
             decoding_dim = self.num_convs * embedding_dim
         elif self.learned_representation_mode == "last":
             decoding_dim = embedding_dim
 
+        _logger.info("Initializing output DNNs")
+        t0 = time.time()
         # DNN that acts on the node level to predict the PID
         self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, dropout_ff)
         self.nn_pid = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
@@ -438,10 +472,24 @@ class MLPF(nn.Module):
         self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
         self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
+        _logger.info("Output DNNs initialization took {:.2f}s".format(time.time() - t0))
+
+        _logger.info("nn_binary_particle parameters: {}".format(count_parameters(self.nn_binary_particle)))
+        _logger.info("nn_pid parameters: {}".format(count_parameters(self.nn_pid)))
+        _logger.info("nn_pt parameters: {}".format(count_parameters(self.nn_pt)))
+        _logger.info("nn_eta parameters: {}".format(count_parameters(self.nn_eta)))
+        _logger.info("nn_sin_phi parameters: {}".format(count_parameters(self.nn_sin_phi)))
+        _logger.info("nn_cos_phi parameters: {}".format(count_parameters(self.nn_cos_phi)))
+        _logger.info("nn_energy parameters: {}".format(count_parameters(self.nn_energy)))
 
         if self.use_pre_layernorm:  # add final norm after last attention block as per https://arxiv.org/abs/2002.04745
+            _logger.info("Initializing final normalization layers")
             self.final_norm_id = torch.nn.LayerNorm(decoding_dim)
             self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
+            _logger.info("final_norm_id parameters: {}".format(count_parameters(self.final_norm_id)))
+            _logger.info("final_norm_reg parameters: {}".format(count_parameters(self.final_norm_reg)))
+        _logger.info("Total MLPF parameters: {}".format(count_parameters(self)))
+        _logger.info("MLPF __init__ done")
 
     # @torch.compile
     def forward(self, X_features, mask):
@@ -452,13 +500,27 @@ class MLPF(nn.Module):
             embedding_id = self.nn0_id(Xfeat_normed)
             embedding_reg = self.nn0_reg(Xfeat_normed)
         elif self.input_encoding == "split":
-            embedding_id = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_id], axis=-1)
-            elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
-            embedding_id = torch.sum(embedding_id * elemtype_mask.unsqueeze(-2), axis=-1)
+            # embedding_id = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_id], axis=-1)
+            # elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
+            # embedding_id = torch.sum(embedding_id * elemtype_mask.unsqueeze(-2), axis=-1)
 
-            embedding_reg = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_reg], axis=-1)
+            # embedding_reg = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_reg], axis=-1)
+            # elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
+            # embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
+
+            B, S, _ = Xfeat_normed.shape
+            num_types = len(self.elemtypes_nonzero)
+
+            # Wide MLP approach: compute all at once and reshape to [B, S, num_types, embedding_dim]
+            all_id = self.nn0_id(Xfeat_normed).view(B, S, num_types, -1)
+            all_reg = self.nn0_reg(Xfeat_normed).view(B, S, num_types, -1)
+
+            # Create mask [B, S, num_types]
             elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
-            embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
+
+            # Select relevant embedding: [B, S, num_types, D] * [B, S, num_types, 1] -> [B, S, num_types, D] -> sum over num_types -> [B, S, D]
+            embedding_id = torch.sum(all_id * elemtype_mask.unsqueeze(-1), axis=2)
+            embedding_reg = torch.sum(all_reg * elemtype_mask.unsqueeze(-1), axis=2)
         if self.num_convs != 0:
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]

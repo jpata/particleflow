@@ -43,7 +43,7 @@ mkdir -p experiments
 python mlpf/pipeline.py \
   --spec-file particleflow_spec.yaml \
   --model-name pyg-cms-v1 \
-  --production cms_2025_main \
+  --production cms_run3 \
   --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ \
   --pipeline \
@@ -69,7 +69,7 @@ export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
 python mlpf/pipeline.py \
   --spec-file particleflow_spec.yaml \
   --model-name pyg-cms-v1 \
-  --production cms_2025_main \
+  --production cms_run3 \
   --data-dir ./tensorflow_datasets/ \
   --prefix MLPF_test_ \
   --pipeline \
