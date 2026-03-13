@@ -28,7 +28,7 @@ from mlpf.model.utils import (
 def run_ray_training(config, args, outdir):
     import ray
     from ray import tune
-    from ray.train.torch import TorchTrainer, TorchConfig
+    from ray.train.torch import TorchTrainer  # , TorchConfig
 
     if not args.ray_local:
         _logger.info("Inititalizing ray...")
@@ -89,7 +89,7 @@ def run_ray_training(config, args, outdir):
             scaling_config=scaling_config,
             run_config=run_config,
             resume_from_checkpoint=resume_from_checkpoint,
-            #torch_config=TorchConfig(backend="gloo"),
+            # torch_config=TorchConfig(backend="gloo"),
         )
     result = trainer.fit()
 
