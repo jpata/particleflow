@@ -86,11 +86,18 @@ def particles_to_jets(pred, mask):
     jets = cluster.inclusive_jets(min_pt=3)
     return jets
 
+def sum_overflow_into_last_bin(all_values):
+    values = all_values[1:-1]
+    values[-1] = values[-1] + all_values[-1]
+    values[0] = values[0] + all_values[0]
+    return values
+
 def to_bh(data, bins, cumulative=False):
     h1 = bh.Histogram(bh.axis.Variable(bins))
     h1.fill(data)
     if cumulative:
         h1[:] = np.sum(h1.values()) - np.cumsum(h1)
+    h1[:] = sum_overflow_into_last_bin(h1.values(flow=True)[:])
     return h1
 
 @torch.no_grad()
@@ -251,7 +258,7 @@ def main():
     if args.device == "cuda": torch.cuda.synchronize()
 
     configs = ["PT_FLASH_BF16", "PT_FLASH_FP16", "ONNX_MATH_FP32", "ONNX_MATH_FP16", "ONNX_FLASH_FP16"]
-    results = {cfg: {"id": [], "momentum": [], "pu": [], "total_err": 0.0, "num_elems": 0, "num_invalid": 0, "runtime": [], "event_size": []} for cfg in configs}
+    results = {cfg: {"id": [], "momentum": [], "pu": [], "total_err": 0.0, "num_elems": 0, "num_invalid": 0, "runtime": [], "event_size": [], "jets_pt": []} for cfg in configs}
     
     print(f"Running validation on {args.num_events} events...")
     for i in tqdm(range(args.num_events)):
@@ -317,9 +324,6 @@ def main():
         results["ONNX_FLASH_FP16"]["runtime"].append(t1 - t0)
         p_fused_fp16 = tuple(torch.tensor(p).float() for p in p_fused_fp16)
 
-        for cfg in configs:
-            results[cfg]["event_size"].append(num_elements)
-
         all_preds = {
             "PT_FLASH_BF16": pred_baseline,
             "PT_FLASH_FP16": pred_pt_fp16,
@@ -327,6 +331,11 @@ def main():
             "ONNX_MATH_FP16": p_math_fp16,
             "ONNX_FLASH_FP16": p_fused_fp16
         }
+
+        for cfg in configs:
+            results[cfg]["event_size"].append(num_elements)
+            j = particles_to_jets(all_preds[cfg], mask.cpu())
+            results[cfg]["jets_pt"].append(awkward.to_numpy(awkward.flatten(j.pt)))
 
         for cfg, pred_test in all_preds.items():
             if cfg == "PT_FLASH_BF16":
@@ -363,7 +372,7 @@ def main():
             if cfg == "PT_FLASH_BF16":
                 continue
             d = np.concatenate(results[cfg][name])
-            plt.hist(d, bins=100, label=cfg, histtype="step", lw=2, color=colors[idx])
+            plt.hist(d, bins=np.logspace(-3,0,100), label=cfg, histtype="step", lw=2, color=colors[idx])
         plt.yscale("log")
         plt.xscale("log")
         plt.xlabel(f"Absolute difference in {name} (Ref: PT BF16)")
@@ -373,10 +382,14 @@ def main():
         plt.savefig(os.path.join(args.outdir, f"comp_abs_{name}.pdf"))
         plt.close()
 
+    sorted_runtime_configs = sorted(configs, key=lambda x: np.mean(results[x]["runtime"]))
+    avg_runtimes = [np.mean(results[cfg]["runtime"]) * 1000.0 for cfg in sorted_runtime_configs]
+    std_runtimes = [np.std(results[cfg]["runtime"]) * 1000.0 for cfg in sorted_runtime_configs]
+    
     # Runtime Distribution
     plt.figure(figsize=(12, 8))
     for idx, cfg in enumerate(configs):
-        plt.hist(np.array(results[cfg]["runtime"]) * 1000.0, bins=20, label=cfg, histtype="step", lw=2, color=colors[idx])
+        plt.hist(np.array(results[cfg]["runtime"]) * 1000.0, bins=np.linspace(0, 2*np.max(avg_runtimes),100), label=cfg, histtype="step", lw=2, color=colors[idx])
     plt.xlabel("Inference time [ms]")
     plt.ylabel("Number of events")
     plt.legend()
@@ -386,10 +399,6 @@ def main():
 
     # Runtime Ranking Bar Chart
     plt.figure(figsize=(12, 8))
-    sorted_runtime_configs = sorted(configs, key=lambda x: np.mean(results[x]["runtime"]))
-    avg_runtimes = [np.mean(results[cfg]["runtime"]) * 1000.0 for cfg in sorted_runtime_configs]
-    std_runtimes = [np.std(results[cfg]["runtime"]) * 1000.0 for cfg in sorted_runtime_configs]
-    
     plt.bar(sorted_runtime_configs, avg_runtimes, yerr=std_runtimes, capsize=5, color=[colors[configs.index(cfg)] for cfg in sorted_runtime_configs])
     plt.ylabel("Mean Inference Time [ms]")
     plt.title("Mean Inference Runtime Comparison (Sorted)", y=1.05)
@@ -429,6 +438,35 @@ def main():
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.savefig(os.path.join(args.outdir, "model_error_ranking.pdf"), bbox_inches="tight")
+    plt.close()
+
+    # Jet pT Distribution Plot
+    f, (a0, a1) = plt.subplots(2, 1, gridspec_kw={"height_ratios": [3, 1]}, sharex=True, figsize=(10, 10))
+    b = np.logspace(0, 2, 101)
+    
+    hists = {}
+    for cfg in configs:
+        data = np.concatenate(results[cfg]["jets_pt"]) if results[cfg]["jets_pt"] else np.array([])
+        hists[cfg] = to_bh(data, bins=b)
+    
+    for idx, cfg in enumerate(configs):
+        mplhep.histplot(hists[cfg], label=cfg, lw=1.5, yerr=0, color=colors[idx], ax=a0)
+
+    a0.set_yscale("log")
+    a0.set_xscale("log")
+    a0.set_ylabel("Number of jets")
+    a0.legend(fontsize=8)
+
+    h_ref = hists["PT_FLASH_BF16"]
+    for idx, cfg in enumerate(configs):
+        ratio = hists[cfg] / h_ref
+        mplhep.histplot(ratio, lw=1.5, yerr=0, color=colors[idx], ax=a1)
+    
+    a1.set_ylim(0.5, 1.5)
+    a1.set_xlim(0, 100)
+    a1.set_ylabel("vs. PT BF16")
+    a1.set_xlabel("jet $p_T$ [GeV]")
+    plt.savefig(os.path.join(args.outdir, "jet_pt_distribution.pdf"), bbox_inches="tight")
     plt.close()
 
     print(f"Done. Results saved in {args.outdir}")
