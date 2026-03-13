@@ -140,6 +140,58 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         return attn_output, None
 
 
+class LinearAttention(nn.Module):
+    def __init__(self, embed_dim: int, num_heads: int, dropout: float = 0.0) -> None:
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+
+        self.q_proj = nn.Linear(embed_dim, embed_dim)
+        self.k_proj = nn.Linear(embed_dim, embed_dim)
+        self.v_proj = nn.Linear(embed_dim, embed_dim)
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, need_weights=False, key_padding_mask: torch.Tensor = None) -> torch.Tensor:
+        # q, k, v: (bs, n, d)
+        bs, n, d = q.size()
+
+        # Projections and reshape to (bs, num_heads, n, head_dim)
+        q = self.q_proj(q).reshape(bs, n, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(k).reshape(bs, n, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(v).reshape(bs, n, self.num_heads, self.head_dim).transpose(1, 2)
+
+        # Apply non-negative feature map (elu(x) + 1)
+        q = torch.nn.functional.elu(q) + 1
+        k = torch.nn.functional.elu(k) + 1
+
+        if key_padding_mask is not None:
+            # key_padding_mask: (bs, n), 1 for real, 0 for padded
+            mask = key_padding_mask.unsqueeze(1).unsqueeze(-1)  # (bs, 1, n, 1)
+            k = k * mask
+            v = v * mask
+
+        # Linear Attention: (Q @ (K.T @ V)) / (Q @ K.sum)
+        # kv: (bs, heads, head_dim, head_dim)
+        kv = torch.matmul(k.transpose(-1, -2), v)
+
+        # num: (bs, heads, n, head_dim)
+        num = torch.matmul(q, kv)
+
+        # den: (bs, heads, n, 1)
+        den = torch.matmul(q, k.transpose(-1, -2).sum(dim=-1, keepdim=True))
+
+        attn_output = num / (den + 1e-9)
+
+        # Reshape and project out
+        attn_output = attn_output.transpose(1, 2).reshape(bs, n, d)
+        attn_output = self.out_proj(attn_output)
+        attn_output = self.dropout(attn_output)
+
+        return attn_output, None
+
+
 class PreLnSelfAttentionLayer(nn.Module):
     def __init__(
         self,
@@ -165,7 +217,10 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.attention_type = attention_type
         self.act = get_activation(activation)
 
-        if self.use_simplified_attention:
+        if self.attention_type == "linear":
+            _logger.info("layer {} using attention_type=linear".format(self.name))
+            self.mha = LinearAttention(embedding_dim, num_heads, dropout=dropout_mha)
+        elif self.use_simplified_attention:
             self.mha = SimpleMultiheadAttention(
                 embedding_dim, num_heads, dropout=dropout_mha, export_onnx_fused=export_onnx_fused, attention_type=attention_type
             )
@@ -177,7 +232,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
 
-        if not self.use_simplified_attention:
+        if not self.use_simplified_attention and self.attention_type != "linear":
             _logger.info("layer {} using attention_type={}".format(self.name, attention_type))
             self.attn_params = {
                 "math": [SDPBackend.MATH],
@@ -212,7 +267,9 @@ class PreLnSelfAttentionLayer(nn.Module):
         if mask is not None:
             q = q * mask_
 
-        if self.use_simplified_attention:
+        if self.attention_type == "linear":
+            mha_out = self.mha(q, x_norm, x_norm, key_padding_mask=mask)[0]
+        elif self.use_simplified_attention:
             mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
         else:
             with sdpa_kernel(self.attn_params[self.attention_type]):

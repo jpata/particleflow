@@ -762,6 +762,8 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
         "learned_representation_mode": config["model"]["learned_representation_mode"],
         **config["model"][config["conv_type"]],
     }
+    if "attention_type" in config["model"]:
+        model_kwargs["attention_type"] = config["model"]["attention_type"]
 
     start_step = 1
     lr_schedule = None
@@ -953,6 +955,7 @@ def override_config(config: dict, args, extra_args=None):
     # 2. Handle special mapping cases (convenience flags)
     if hasattr(args, "attention_type") and args.attention_type is not None:
         set_nested_dict(config, "model.attention.attention_type", args.attention_type)
+        set_nested_dict(config, "model.attention_type", args.attention_type)
 
     if hasattr(args, "num_convs") and args.num_convs is not None:
         for m in ["gnn_lsh", "attention"]:
