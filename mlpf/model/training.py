@@ -73,7 +73,7 @@ from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
-from mlpf.utils import create_comet_experiment, set_nested_dict, get_nested_dict
+from mlpf.utils import create_comet_experiment, set_nested_dict
 
 
 def model_step(batch, model, loss_fn):

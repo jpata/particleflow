@@ -3,17 +3,18 @@ import sys
 import re
 import os
 
+
 def resolve_variables(value, data):
     """
     Rudimentary variable resolution for strings like ${project.paths.storage_root}.
     """
     if isinstance(value, list):
         return [resolve_variables(v, data) for v in value]
-    
+
     if not isinstance(value, dict):
         if not isinstance(value, str):
             return value
-        
+
         matches = re.findall(r"\${([^}]+)}", value)
         for match in matches:
             keys = match.split(".")
@@ -31,12 +32,10 @@ def resolve_variables(value, data):
         # If it's a dict, resolve all its values
         return {k: resolve_variables(v, data) for k, v in value.items()}
 
+
 def get_param(yaml_file, param_path, default=""):
-    try:
-        with open(yaml_file, "r") as f:
-            data = yaml.safe_load(f)
-    except Exception as e:
-        return default
+    with open(yaml_file, "r") as f:
+        data = yaml.safe_load(f)
 
     # Runtime site override via environment variable
     site_override = os.environ.get("PF_SITE")
@@ -56,6 +55,7 @@ def get_param(yaml_file, param_path, default=""):
         return resolved
     except (KeyError, TypeError):
         return default
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
