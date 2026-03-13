@@ -9,4 +9,3 @@ DATA_DIR=$(python3 scripts/get_param.py particleflow_spec.yaml productions.cms_r
     --data-dir $DATA_DIR \
     --num-events 500 \
     --outdir ./onnx_validation_cms --device cuda
-
