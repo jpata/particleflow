@@ -57,7 +57,7 @@ python mlpf/pipeline.py \
   --dtype float32 \
   --attention-type math \
   --num-convs 1 \
-  --num-workers 1
+  --num-workers 1 --prefetch-factor 1
 
 ls experiments/MLPF_test_*/checkpoints/*
 
@@ -85,7 +85,7 @@ python mlpf/pipeline.py \
   --attention-type math \
   --num-convs 1 \
   --load ${EXP_DIR}/checkpoints/checkpoint-02.pth \
-  --num-workers 1
+  --num-workers 1 --prefetch-factor 1
 
 ls experiments/MLPF_test_*/checkpoints/*
 
