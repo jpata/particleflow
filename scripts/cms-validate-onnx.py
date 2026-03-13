@@ -223,14 +223,21 @@ def main():
     sess_math_fp16 = rt.InferenceSession(path_math_fp16, sess_options, providers=[execution_provider])
     sess_fused_fp16 = rt.InferenceSession(path_fused_fp16, sess_options, providers=[execution_provider])
 
-    # PyTorch Flash Models
+    # PyTorch Math Model
+    model_kwargs_math = copy.deepcopy(model_kwargs)
+    model_kwargs_math["attention_type"] = "math"
+    model_pt_math = MLPF(**model_kwargs_math, use_simplified_attention=False, export_onnx_fused=False, save_attention=False)
+    model_pt_math.eval()
+    model_pt_math.load_state_dict(model_state["model_state_dict"], strict=False)
+    model_pt_math = model_pt_math.to(device=args.device)
+
+    # PyTorch Flash Model
     model_kwargs_flash = copy.deepcopy(model_kwargs)
     model_kwargs_flash["attention_type"] = "flash" if args.device == "cuda" else "math"
-    
-    model_pt = MLPF(**model_kwargs_flash, use_simplified_attention=False, export_onnx_fused=False, save_attention=False)
-    model_pt.eval()
-    model_pt.load_state_dict(model_state["model_state_dict"], strict=False)
-    model_pt = model_pt.to(device=args.device)
+    model_pt_flash = MLPF(**model_kwargs_flash, use_simplified_attention=False, export_onnx_fused=False, save_attention=False)
+    model_pt_flash.eval()
+    model_pt_flash.load_state_dict(model_state["model_state_dict"], strict=False)
+    model_pt_flash = model_pt_flash.to(device=args.device)
 
     # Validation
     builder = tfds.builder(args.dataset, data_dir=args.data_dir)
@@ -248,16 +255,17 @@ def main():
 
     for _ in range(10):
         with torch.no_grad():
-            with torch.autocast(device_type=args.device, dtype=torch.bfloat16, enabled=(args.device == "cuda")):
-                _ = model_pt(X_warmup, mask_warmup)
+            _ = model_pt_math(X_warmup, mask_warmup)
             with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
-                _ = model_pt(X_warmup, mask_warmup)
+                _ = model_pt_math(X_warmup, mask_warmup)
+            with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
+                _ = model_pt_flash(X_warmup, mask_warmup)
         _ = sess_math_fp32.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup})
         _ = sess_math_fp16.run(None, {"Xfeat_normed": X_warmup_np_fp16, "mask": mask_f_warmup_fp16})
         _ = sess_fused_fp16.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup})
     if args.device == "cuda": torch.cuda.synchronize()
 
-    configs = ["PT_FLASH_BF16", "PT_FLASH_FP16", "ONNX_MATH_FP32", "ONNX_MATH_FP16", "ONNX_FLASH_FP16"]
+    configs = ["PT_MATH_FP32", "PT_MATH_FP16", "PT_FLASH_FP16", "ONNX_MATH_FP32", "ONNX_MATH_FP16", "ONNX_FLASH_FP16"]
     results = {cfg: {"id": [], "momentum": [], "pu": [], "total_err": 0.0, "num_elems": 0, "num_invalid": 0, "runtime": [], "event_size": [], "jets_pt": []} for cfg in configs}
     
     print(f"Running validation on {args.num_events} events...")
@@ -273,42 +281,52 @@ def main():
         mask = (X_features_padded[:, :, 0] != 0)
         mask_f = mask.float()
         m_cpu = mask.cpu()
-        eps = 1e-10
 
         # Pre-convert to numpy for ONNX
         X_features_np = X_features_padded.cpu().numpy()
         mask_f_np = mask_f.cpu().numpy()
 
-        # Baseline: PT Flash BF16
+        # 1. PT Math FP32 (Baseline)
         if args.device == "cuda": torch.cuda.synchronize()
         t0 = time.perf_counter()
         with torch.no_grad():
-            with torch.autocast(device_type=args.device, dtype=torch.bfloat16, enabled=(args.device == "cuda")):
-                pred_baseline = model_pt(X_features_padded, mask)
+            pred_pt_math_fp32 = model_pt_math(X_features_padded, mask)
         if args.device == "cuda": torch.cuda.synchronize()
         t1 = time.perf_counter()
-        results["PT_FLASH_BF16"]["runtime"].append(t1 - t0)
-        pred_baseline = tuple(p.cpu().float() for p in pred_baseline)
+        results["PT_MATH_FP32"]["runtime"].append(t1 - t0)
+        pred_pt_math_fp32 = tuple(p.cpu().float() for p in pred_pt_math_fp32)
+        pred_baseline = pred_pt_math_fp32
 
-        # 1. PT Flash FP16
+        # 2. PT Math FP16
         if args.device == "cuda": torch.cuda.synchronize()
         t0 = time.perf_counter()
         with torch.no_grad():
             with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
-                pred_pt_fp16 = model_pt(X_features_padded, mask)
+                pred_pt_math_fp16 = model_pt_math(X_features_padded, mask)
+        if args.device == "cuda": torch.cuda.synchronize()
+        t1 = time.perf_counter()
+        results["PT_MATH_FP16"]["runtime"].append(t1 - t0)
+        pred_pt_math_fp16 = tuple(p.cpu().float() for p in pred_pt_math_fp16)
+
+        # 3. PT Flash FP16
+        if args.device == "cuda": torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        with torch.no_grad():
+            with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
+                pred_pt_flash_fp16 = model_pt_flash(X_features_padded, mask)
         if args.device == "cuda": torch.cuda.synchronize()
         t1 = time.perf_counter()
         results["PT_FLASH_FP16"]["runtime"].append(t1 - t0)
-        pred_pt_fp16 = tuple(p.cpu().float() for p in pred_pt_fp16)
+        pred_pt_flash_fp16 = tuple(p.cpu().float() for p in pred_pt_flash_fp16)
         
-        # 2. ONNX Math FP32
+        # 4. ONNX Math FP32
         t0 = time.perf_counter()
         p_math_fp32 = sess_math_fp32.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
         t1 = time.perf_counter()
         results["ONNX_MATH_FP32"]["runtime"].append(t1 - t0)
         p_math_fp32 = tuple(torch.tensor(p) for p in p_math_fp32)
 
-        # 3. ONNX Math FP16
+        # 5. ONNX Math FP16
         X_features_np_fp16 = X_features_np.astype(np.float16)
         mask_f_np_fp16 = mask_f_np.astype(np.float16)
         t0 = time.perf_counter()
@@ -317,7 +335,7 @@ def main():
         results["ONNX_MATH_FP16"]["runtime"].append(t1 - t0)
         p_math_fp16 = tuple(torch.tensor(p).float() for p in p_math_fp16)
 
-        # 4. ONNX Flash FP16
+        # 6. ONNX Flash FP16
         t0 = time.perf_counter()
         p_fused_fp16 = sess_fused_fp16.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
         t1 = time.perf_counter()
@@ -325,8 +343,9 @@ def main():
         p_fused_fp16 = tuple(torch.tensor(p).float() for p in p_fused_fp16)
 
         all_preds = {
-            "PT_FLASH_BF16": pred_baseline,
-            "PT_FLASH_FP16": pred_pt_fp16,
+            "PT_MATH_FP32": pred_pt_math_fp32,
+            "PT_MATH_FP16": pred_pt_math_fp16,
+            "PT_FLASH_FP16": pred_pt_flash_fp16,
             "ONNX_MATH_FP32": p_math_fp32,
             "ONNX_MATH_FP16": p_math_fp16,
             "ONNX_FLASH_FP16": p_fused_fp16
@@ -352,7 +371,7 @@ def main():
 
     # Plotting
     print("Generating comparison plots...")
-    colors = ["gray", "blue", "red", "green", "orange"]
+    colors = ["black", "blue", "cyan", "red", "orange", "magenta"]
 
     # Runtime vs Event Size Scatter Plot
     plt.figure(figsize=(12, 8))
@@ -369,13 +388,13 @@ def main():
         # Absolute differences
         plt.figure(figsize=(12, 8))
         for idx, cfg in enumerate(configs):
-            if cfg == "PT_FLASH_BF16":
+            if cfg == "PT_MATH_FP32":
                 continue
             d = np.concatenate(results[cfg][name])
             plt.hist(d, bins=np.logspace(-3,0,100), label=cfg, histtype="step", lw=2, color=colors[idx])
         plt.yscale("log")
         plt.xscale("log")
-        plt.xlabel(f"Absolute difference in {name} (Ref: PT BF16)")
+        plt.xlabel(f"Absolute difference in {name} (Ref: PT MATH FP32)")
         plt.ylabel("Number of elements")
         plt.legend()
         plt.title(f"Comparison of Absolute Differences: {name}", y=1.05)
@@ -417,10 +436,10 @@ def main():
         else:
             results[cfg]["mae"] = 0.0
         
-    sorted_configs = sorted([c for c in configs if c != "PT_FLASH_BF16"], key=lambda x: results[x]["mae"])
+    sorted_configs = sorted([c for c in configs if c != "PT_MATH_FP32"], key=lambda x: results[x]["mae"])
     maes = [results[cfg]["mae"] for cfg in sorted_configs]
     
-    print("\nMean Absolute Error Ranking (relative to Baseline PT BF16):")
+    print("\nMean Absolute Error Ranking (relative to Baseline PT MATH FP32):")
     for cfg in sorted_configs:
         invalid_str = f" (Invalid: {results[cfg]['num_invalid']})" if results[cfg]['num_invalid'] > 0 else ""
         print(f"{cfg:20s}: {results[cfg]['mae']:.6e}{invalid_str}")
@@ -434,7 +453,7 @@ def main():
     plt.bar(sorted_configs, maes, color=[colors[configs.index(cfg)] for cfg in sorted_configs])
     plt.ylim(0, 1.5*np.max(maes) if len(maes) > 0 and np.max(maes) > 0 else 1)
     plt.ylabel("Mean Absolute Error (MAE)")
-    plt.title("Model Ranking by MAE (Relative to Baseline PT BF16)", y=1.05)
+    plt.title("Model Ranking by MAE (Relative to Baseline PT MATH FP32)", y=1.05)
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.savefig(os.path.join(args.outdir, "model_error_ranking.pdf"), bbox_inches="tight")
@@ -457,14 +476,14 @@ def main():
     a0.set_ylabel("Number of jets")
     a0.legend(fontsize=8)
 
-    h_ref = hists["PT_FLASH_BF16"]
+    h_ref = hists["PT_MATH_FP32"]
     for idx, cfg in enumerate(configs):
         ratio = hists[cfg] / h_ref
         mplhep.histplot(ratio, lw=1.5, yerr=0, color=colors[idx], ax=a1)
     
     a1.set_ylim(0.5, 1.5)
     a1.set_xlim(0, 100)
-    a1.set_ylabel("vs. PT BF16")
+    a1.set_ylabel("vs. PT MATH FP32")
     a1.set_xlabel("jet $p_T$ [GeV]")
     plt.savefig(os.path.join(args.outdir, "jet_pt_distribution.pdf"), bbox_inches="tight")
     plt.close()
