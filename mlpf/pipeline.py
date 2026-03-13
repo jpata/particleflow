@@ -18,6 +18,7 @@ from comet_ml import OfflineExperiment, Experiment  # noqa: F401, isort:skip
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["RAY_TRAIN_ENABLE_V2_MIGRATION_WARNINGS"] = "0"
 
 import yaml
 from mlpf.model.training import device_agnostic_run, override_config

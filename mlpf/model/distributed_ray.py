@@ -28,7 +28,7 @@ from mlpf.model.utils import (
 def run_ray_training(config, args, outdir):
     import ray
     from ray import tune
-    from ray.train.torch import TorchTrainer
+    from ray.train.torch import TorchTrainer, TorchConfig
 
     if not args.ray_local:
         _logger.info("Inititalizing ray...")
@@ -52,16 +52,33 @@ def run_ray_training(config, args, outdir):
     run_config = ray.train.RunConfig(
         name=Path(outdir).name,
         storage_path=storage_path,
-        log_to_file=False,
         failure_config=ray.train.FailureConfig(max_failures=2),
         checkpoint_config=ray.train.CheckpointConfig(num_to_keep=1),  # keep only latest checkpoint
-        sync_config=ray.train.SyncConfig(sync_artifacts=True),
     )
     trainable = tune.with_parameters(train_ray_trial, args=args, outdir=outdir)
     # Resume from checkpoint if a checkpoint is found in outdir
-    if TorchTrainer.can_restore(outdir):
+    can_restore = False
+    try:
+        can_restore = TorchTrainer.can_restore(outdir)
+    except DeprecationWarning:
+        # In some Ray versions, DeprecationWarning is raised as an error
+        _logger.warning("Caught DeprecationWarning from TorchTrainer.can_restore")
+        can_restore = False
+
+    if can_restore:
         _logger.info(f"Restoring Ray Trainer from {outdir}", color="bold")
-        trainer = TorchTrainer.restore(outdir, train_loop_per_worker=trainable, scaling_config=scaling_config)
+        try:
+            trainer = TorchTrainer.restore(outdir, train_loop_per_worker=trainable, scaling_config=scaling_config)
+        except DeprecationWarning:
+            _logger.warning("Caught DeprecationWarning from TorchTrainer.restore, falling back to new trainer")
+            resume_from_checkpoint = ray.train.Checkpoint(config["load"]) if config["load"] else None
+            trainer = TorchTrainer(
+                train_loop_per_worker=trainable,
+                train_loop_config=config,
+                scaling_config=scaling_config,
+                run_config=run_config,
+                resume_from_checkpoint=resume_from_checkpoint,
+            )
     else:
         resume_from_checkpoint = ray.train.Checkpoint(config["load"]) if config["load"] else None
         if resume_from_checkpoint:
@@ -72,6 +89,7 @@ def run_ray_training(config, args, outdir):
             scaling_config=scaling_config,
             run_config=run_config,
             resume_from_checkpoint=resume_from_checkpoint,
+            #torch_config=TorchConfig(backend="gloo"),
         )
     result = trainer.fit()
 
@@ -151,7 +169,7 @@ def run_hpo(config, args):
     scaling_config = ray.train.ScalingConfig(
         num_workers=args.gpus,
         use_gpu=True,
-        resources_per_worker={"CPU": args.ray_cpus // (args.gpus) - 1, "GPU": 1},  # -1 to avoid blocking
+        resources_per_worker={"CPU": args.ray_cpus // (args.gpus) - 1, "GPU": 1.0},  # -1 to avoid blocking
     )
 
     trainable = tune.with_parameters(set_searchspace_and_run_trial, config=config, args=args)
@@ -207,9 +225,19 @@ def train_ray_trial(config, args, outdir=None):
     import ray
 
     if outdir is None:
-        outdir = ray.train.get_context().get_trial_dir()
+        try:
+            # try to get the trial directory if running via Tune/HPO
+            outdir = ray.train.get_context().get_trial_dir()
+        except Exception:
+            # fallback for standard Ray Train
+            try:
+                outdir = ray.train.get_context().get_local_checkpoint_dir()
+            except Exception:
+                outdir = os.getcwd()
+
+    if outdir is not None:
         if not os.path.exists(outdir):
-            os.makedirs(outdir)
+            os.makedirs(outdir, exist_ok=True)
 
     use_cuda = args.gpus > 0
 
