@@ -28,7 +28,6 @@ Key Functions:
 - `run_test`: Runs inference on a specified test dataset.
 - `get_optimizer`: Utility to create an optimizer based on the configuration.
 - `configure_model_trainable`: Utility to set specific model layers as trainable.
-- `override_config`: Merges command-line arguments into the configuration dictionary.
 """
 
 import os
@@ -73,7 +72,7 @@ from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
-from mlpf.utils import create_comet_experiment, set_nested_dict
+from mlpf.utils import create_comet_experiment
 
 
 def model_step(batch, model, loss_fn):
@@ -915,72 +914,6 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
 
     if world_size > 1:
         dist.destroy_process_group()
-
-
-def parse_extra_args(extra_args):
-    """Parse unrecognized arguments from argparse.parse_known_args()."""
-    overrides = {}
-    i = 0
-    while i < len(extra_args):
-        arg = extra_args[i]
-        if arg.startswith("--"):
-            key = arg[2:]
-            if i + 1 < len(extra_args) and not extra_args[i + 1].startswith("--") and "=" not in extra_args[i + 1]:
-                overrides[key] = extra_args[i + 1]
-                i += 2
-            else:
-                overrides[key] = "True"
-                i += 1
-        elif "=" in arg:
-            key, val = arg.split("=", 1)
-            overrides[key] = val
-            i += 1
-        else:
-            i += 1
-    return overrides
-
-
-def override_config(config: dict, args, extra_args=None):
-    """override config dictionary with values from argparse Namespace and extra_args"""
-
-    # 1. Apply recognized arguments from argparse
-    for arg in vars(args):
-        arg_value = getattr(args, arg)
-        if arg_value is not None:
-            # Only override if it's already in config or it's a known "control" flag
-            if arg in config:
-                _logger.info("overriding config item {}={} with {} from cmdline".format(arg, config[arg], arg_value))
-                config[arg] = arg_value
-
-    # 2. Handle special mapping cases (convenience flags)
-    if hasattr(args, "attention_type") and args.attention_type is not None:
-        set_nested_dict(config, "model.attention.attention_type", args.attention_type)
-        set_nested_dict(config, "model.attention_type", args.attention_type)
-
-    if hasattr(args, "num_convs") and args.num_convs is not None:
-        for m in ["gnn_lsh", "attention"]:
-            if m in config["model"]:
-                set_nested_dict(config, f"model.{m}.num_convs", args.num_convs)
-
-    # 3. Apply unrecognized arguments (dot-notation overrides)
-    if extra_args:
-        overrides = parse_extra_args(extra_args)
-        for key, value in overrides.items():
-            _logger.info("overriding config item {} with {} from extra_args".format(key, value))
-            set_nested_dict(config, key, value)
-
-    # 4. Standard post-override adjustments
-    config["enabled_test_datasets"] = list(config["test_dataset"].keys())
-    if hasattr(args, "test_datasets"):
-        if len(args.test_datasets) != 0:
-            config["enabled_test_datasets"] = args.test_datasets
-
-    config["train"] = getattr(args, "train", False)
-    config["test"] = getattr(args, "test", False)
-    if hasattr(args, "make_plots"):
-        config["make_plots"] = args.make_plots
-
-    return config
 
 
 # Run either single GPU or single-node multi-GPU using pytorch DDP

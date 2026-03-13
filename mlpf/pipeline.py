@@ -21,22 +21,11 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["RAY_TRAIN_ENABLE_V2_MIGRATION_WARNINGS"] = "0"
 
 import yaml
-from mlpf.model.training import device_agnostic_run, override_config
+from mlpf.conf import MLPFConfig
+from mlpf.model.training import device_agnostic_run
 from mlpf.model.distributed_ray import run_hpo, run_ray_training
 from mlpf.model.PFDataset import SHARING_STRATEGY
-from mlpf.utils import create_experiment_dir, load_spec, resolve_path
-
-
-def flatten_dict(d, prefix=""):
-    """Flatten a nested dictionary into a dot-separated path dictionary."""
-    items = {}
-    for k, v in d.items():
-        new_key = f"{prefix}.{k}" if prefix else k
-        if isinstance(v, dict):
-            items.update(flatten_dict(v, new_key))
-        else:
-            items[new_key] = v
-    return items
+from mlpf.utils import create_experiment_dir, load_spec
 
 
 def get_parser():
@@ -93,117 +82,6 @@ def get_parser():
     return parser
 
 
-def build_config_from_spec(spec, model_name, production_name):
-    if model_name not in spec["models"]:
-        raise ValueError(f"Model {model_name} not found in spec")
-    if production_name not in spec["productions"]:
-        raise ValueError(f"Production {production_name} not found in spec")
-
-    model_config = spec["models"][model_name]
-    prod_config = spec["productions"][production_name]
-
-    # Initialize config with model parameters
-    config = {}
-
-    # Merge with model defaults if present
-    if "defaults" in spec["models"]:
-        for k, v in spec["models"]["defaults"].items():
-            if isinstance(v, str):
-                v = resolve_path(v, spec)
-            config[k] = v
-
-    # Copy hyperparameters and other top-level settings
-    for k, v in model_config.items():
-        if k not in ["architecture", "train_datasets", "validation_datasets", "test_datasets"]:
-            if isinstance(v, str):
-                v = resolve_path(v, spec)
-            config[k] = v
-
-    # Handle hyperparameters specifically if they are nested
-    if "hyperparameters" in model_config:
-        for k, v in model_config["hyperparameters"].items():
-            config[k] = v
-
-    # Model Architecture
-    config["model"] = model_config["architecture"]
-    config["conv_type"] = config["model"]["type"]
-
-    if "gnn_lsh" in config["model"]:
-        config["model"]["gnn_lsh"]["conv_type"] = "gnn_lsh"
-    if "attention" in config["model"]:
-        config["model"]["attention"]["conv_type"] = "attention"
-    config["model"]["trainable"] = "all"
-    config["model"]["learned_representation_mode"] = "last"
-    config["model"]["input_encoding"] = "split"
-    config["model"]["pt_mode"] = "direct-elemtype-split"
-    config["model"]["eta_mode"] = "linear"
-    config["model"]["sin_phi_mode"] = "linear"
-    config["model"]["cos_phi_mode"] = "linear"
-    config["model"]["energy_mode"] = "direct-elemtype-split"
-
-    # Dataset and Production
-    config["dataset"] = model_config.get("dataset", prod_config.get("type"))
-
-    workspace_dir = resolve_path(prod_config["workspace_dir"], spec)
-    config["data_dir"] = os.path.join(workspace_dir, "tfds")
-
-    def build_dataset_config(dataset_input):
-        ds_config = {}
-        ds_config[config["dataset"]] = {}
-        dataset_groups = dataset_input
-
-        for phys_key, phys_val in dataset_groups.items():
-            ds_config[config["dataset"]][phys_key] = {
-                "batch_size": phys_val.get("batch_size", config.get("batch_size", 1)),
-                "samples": {},
-            }
-            target_dict = ds_config[config["dataset"]][phys_key]["samples"]
-
-            for ds_item in phys_val["samples"]:
-                name = ds_item["name"]
-
-                entry = {}
-                if "version" in ds_item:
-                    entry["version"] = ds_item["version"]
-
-                if "splits" in ds_item:
-                    entry["splits"] = ds_item["splits"]
-
-                # Copy batch size if specific
-                if "batch_size" in ds_item:
-                    entry["batch_size"] = ds_item["batch_size"]
-
-                target_dict[name] = entry
-
-        return ds_config
-
-    if "train_datasets" in model_config:
-        config["train_dataset"] = build_dataset_config(model_config["train_datasets"])
-
-    if "validation_datasets" in model_config:
-        config["valid_dataset"] = build_dataset_config(model_config["validation_datasets"])
-
-    if "test_datasets" in model_config:
-        config["test_dataset"] = {}
-        for ds_item in model_config.get("test_datasets", []):
-            name = ds_item["name"]
-            entry = {}
-            entry["version"] = ds_item.get("version")
-            entry["splits"] = ds_item.get("splits", ["test"])
-            entry["batch_size"] = ds_item.get("batch_size", 1)
-            config["test_dataset"][name] = entry
-
-    # Ensure some defaults for testing/validation if not present
-    if "test_dataset" not in config:
-        config["test_dataset"] = {}
-
-    # Default fields expected by pipeline/training
-    if "comet_name" not in config:
-        config["comet_name"] = "particleflow"
-
-    return config
-
-
 def main():
     # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
     import torch
@@ -215,11 +93,7 @@ def main():
 
     logging.basicConfig(level=logging.DEBUG)
 
-    # Load Spec and Build Config
-    spec = load_spec(args.spec_file)
-    config = build_config_from_spec(spec, args.model_name, args.production_name)
-
-    # --- Manually set action flags based on the command, for override_config ---
+    # --- Manually set action flags based on the command, for MLPFConfig.from_spec ---
     if args.command == "train":
         args.train = True
         args.test = True  # By default, run testing after training
@@ -243,38 +117,12 @@ def main():
         args.ray_train = False
         args.gpus = args.ray_gpus
 
-    # override some options for the pipeline test
-    if args.pipeline:
-        if "gnn_lsh" not in config["model"]:
-            config["model"]["gnn_lsh"] = {}
-        config["model"]["gnn_lsh"]["num_convs"] = 1
-        config["model"]["gnn_lsh"]["width"] = 32
-        config["model"]["gnn_lsh"]["embedding_dim"] = 32
-
-        if "attention" not in config["model"]:
-            config["model"]["attention"] = {}
-        config["model"]["attention"]["num_convs"] = 1
-        config["model"]["attention"]["num_heads"] = 2
-        config["model"]["attention"]["head_dim"] = 2
-
-        if config["dataset"] == "cms":
-            for ds in ["train_dataset", "valid_dataset"]:
-                if ds in config:
-                    config[ds]["cms"] = {
-                        "physical_pu": {
-                            "batch_size": config[ds]["cms"]["physical_pu"]["batch_size"],
-                            "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "3.0.0"}},
-                        }
-                    }
-            if "cms_pf_ttbar" in config["test_dataset"]:
-                config["test_dataset"] = {"cms_pf_ttbar": config["test_dataset"]["cms_pf_ttbar"]}
-                config["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
-
-    # override loaded config with values from command line args
-    config = override_config(config, args, extra_args)
+    # Load Spec and Build Config using the new Pydantic-based system
+    config_obj = MLPFConfig.from_spec(args.spec_file, args.model_name, args.production_name, args, extra_args)
+    config = config_obj.model_dump()
 
     print("Final configuration (dot-notation):")
-    flat_config = flatten_dict(config)
+    flat_config = config_obj.flatten_config()
     for k in sorted(flat_config.keys()):
         print(f"  --{k} {flat_config[k]}")
 
@@ -297,6 +145,7 @@ def main():
             yaml.dump(config, file)
 
         # Also save the spec file for reproducibility
+        spec = load_spec(args.spec_file)
         with open((Path(experiment_dir) / "particleflow_spec.yaml"), "w") as file:
             yaml.dump(spec, file)
 

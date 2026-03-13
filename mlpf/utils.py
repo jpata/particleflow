@@ -64,6 +64,29 @@ def resolve_path(path, spec):
     return path
 
 
+def parse_extra_args(extra_args):
+    """Parse unrecognized arguments from argparse.parse_known_args()."""
+    overrides = {}
+    i = 0
+    while i < len(extra_args):
+        arg = extra_args[i]
+        if arg.startswith("--"):
+            key = arg[2:]
+            if i + 1 < len(extra_args) and not extra_args[i + 1].startswith("--") and "=" not in extra_args[i + 1]:
+                overrides[key] = extra_args[i + 1]
+                i += 2
+            else:
+                overrides[key] = "True"
+                i += 1
+        elif "=" in arg:
+            key, val = arg.split("=", 1)
+            overrides[key] = val
+            i += 1
+        else:
+            i += 1
+    return overrides
+
+
 def create_experiment_dir(prefix=None, suffix=None, experiments_dir="experiments"):
     if prefix is None:
         train_dir = Path(experiments_dir) / datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
