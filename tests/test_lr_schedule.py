@@ -4,6 +4,13 @@ from mlpf.model.utils import get_lr_schedule, save_checkpoint, load_lr_schedule
 import os
 
 
+class MockConfig:
+    def __init__(self, **kwargs):
+        self.lr_schedule_config = {}
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
 def test_lr_schedule_restoration():
     # 1. Dummy model and optimizer
     model = torch.nn.Linear(10, 2)
@@ -11,7 +18,7 @@ def test_lr_schedule_restoration():
 
     # 2. Original scheduler
     total_steps = 100
-    config = {"lr_schedule": "cosinedecay", "lr": 0.1}
+    config = MockConfig(lr_schedule="cosinedecay", lr=0.1)
     original_scheduler = get_lr_schedule(config, optimizer, total_steps)
 
     # 3. Simulate training (Part 1)
