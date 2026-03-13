@@ -55,7 +55,7 @@ def get_parser():
     common_parser.add_argument("--dtype", type=str, default=None, choices=["float32", "float16", "bfloat16"])
     common_parser.add_argument("--test-datasets", nargs="+", default=[], help="Test samples to process")
     common_parser.add_argument("--make-plots", action="store_true", help="Generate plots")
-    #common_parser.add_argument("--attention_type", type=str, default=None, help="Attention type to use (math, efficient, flash, linear)")
+    common_parser.add_argument("--attention_type", type=str, default=None, help="Attention type to use (math, efficient, flash, linear)")
 
     # --- 'train' command parser ---
     parser_train = subparsers.add_parser("train", parents=[common_parser], help="Run standard training")
@@ -152,13 +152,8 @@ def main():
         if args.command == "ray-train":
             run_ray_training(config, args, experiment_dir)
         elif args.command in ["train", "test"]:
-            if args.gpus is not None:
-                config["gpus"] = args.gpus
-            if "gpus" not in config:
-                config["gpus"] = 0
-            gpus = config["gpus"]
-            world_size = gpus if gpus > 0 else 1
-            device_agnostic_run(config, world_size, experiment_dir)
+            world_size = config_obj.gpus if config_obj.gpus > 0 else 1
+            device_agnostic_run(config_obj, world_size, experiment_dir)
 
 
 if __name__ == "__main__":

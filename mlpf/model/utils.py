@@ -6,6 +6,7 @@ import torch
 import torch.utils.data
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
 import logging
+from mlpf.conf import MLPFConfig
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
@@ -239,7 +240,7 @@ def unpack_predictions(preds):
     return ret
 
 
-def save_HPs(config, mlpf, model_kwargs, outdir):
+def save_HPs(config: MLPFConfig, mlpf, model_kwargs, outdir):
     """Simple function to store the model parameters and training hyperparameters."""
 
     with open(f"{outdir}/model_kwargs.pkl", "wb") as f:  # dump model architecture
@@ -249,7 +250,7 @@ def save_HPs(config, mlpf, model_kwargs, outdir):
 
     with open(f"{outdir}/hyperparameters.json", "w") as fp:  # dump hyperparameters
         outdict = {"num_mlpf_params": num_mlpf_parameters}
-        outdict.update(config)
+        outdict.update(config.model_dump())
         json.dump(outdict, fp)
 
 
@@ -326,30 +327,30 @@ def load_lr_schedule(lr_schedule, checkpoint, start_step=0):
         raise KeyError("Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(checkpoint["extra_state"].keys()))
 
 
-def get_lr_schedule(config, opt, num_steps, last_batch=-1):
-    if config["lr_schedule"] == "constant":
+def get_lr_schedule(config: MLPFConfig, opt, num_steps, last_batch=-1):
+    if config.lr_schedule == "constant":
         lr_schedule = ConstantLR(opt, factor=1.0, total_iters=num_steps)
-    elif config["lr_schedule"] == "onecycle":
+    elif config.lr_schedule == "onecycle":
         lr_schedule = OneCycleLR(
             opt,
-            max_lr=config["lr"],
+            max_lr=config.lr,
             total_steps=num_steps,
             last_epoch=last_batch,
-            pct_start=config["lr_schedule_config"]["onecycle"]["pct_start"] or 0.3,
+            pct_start=config.lr_schedule_config.get("onecycle", {}).get("pct_start") or 0.3,
         )
-    elif config["lr_schedule"] == "cosinedecay":
-        lr_schedule = CosineAnnealingLR(opt, T_max=num_steps, last_epoch=last_batch, eta_min=config["lr"] * 0.1)
-    elif config["lr_schedule"] == "reduce_lr_on_plateau":
+    elif config.lr_schedule == "cosinedecay":
+        lr_schedule = CosineAnnealingLR(opt, T_max=num_steps, last_epoch=last_batch, eta_min=config.lr * 0.1)
+    elif config.lr_schedule == "reduce_lr_on_plateau":
         lr_schedule = torch.optim.lr_scheduler.ReduceLROnPlateau(
             opt,
-            mode=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("mode", "min"),
-            factor=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("factor", 0.1),
-            patience=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("patience", 10),
-            threshold=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("threshold", 1e-4),
-            threshold_mode=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("threshold_mode", "rel"),
-            cooldown=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("cooldown", 0),
-            min_lr=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("min_lr", 0),
-            eps=config["lr_schedule_config"]["reduce_lr_on_plateau"].get("eps", 1e-8),
+            mode=config.lr_schedule_config.get("reduce_lr_on_plateau", {}).get("mode", "min"),
+            factor=config.lr_schedule_config.get("reduce_lr_on_plateau", {}).get("factor", 0.1),
+            patience=config.lr_schedule_config.get("reduce_lr_on_plateau", {}).get("patience", 10),
+            threshold=config.lr_schedule_config.get("reduce_lr_on_plateau", {}).get("threshold", 1e-4),
+            threshold_mode=config.lr_schedule_config.get("reduce_lr_on_plateau", {}).get("threshold_mode", "rel"),
+            cooldown=config.lr_schedule_config.get("reduce_lr_on_plateau", {}).get("cooldown", 0),
+            min_lr=config.lr_schedule_config.get("reduce_lr_on_plateau", {}).get("min_lr", 0),
+            eps=config.lr_schedule_config.get("reduce_lr_on_plateau", {}).get("eps", 1e-8),
         )
     else:
         raise ValueError("Supported values for lr_schedule are 'constant', 'onecycle' and 'cosinedecay'.")

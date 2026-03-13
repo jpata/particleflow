@@ -95,9 +95,11 @@ class MLPFConfig(BaseModel):
     gpu_batch_multiplier: int = 1
     dtype: str = "float32"
     lr: float = 0.0001
+    weight_decay: float = 0.01
     optimizer: str = "adamw"
     lr_schedule: str = "cosinedecay"
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
+    pad_to_multiple_elements: Optional[int] = None
 
     # Flags
     train: bool = False
@@ -112,6 +114,8 @@ class MLPFConfig(BaseModel):
     comet_offline: bool = False
     comet_name: str = "particleflow"
     comet_step_freq: int = 10000
+
+    raytune: Dict[str, Any] = Field(default_factory=dict)
 
     # Dataset specific
     train_dataset: Optional[Dict[str, Dict[str, PhysicalDataset]]] = None
