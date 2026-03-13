@@ -62,7 +62,7 @@ python mlpf/pipeline.py \
 ls experiments/MLPF_test_*/checkpoints/*
 
 # Capture the experiment directory created by the first run for the next steps
-export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
+export EXP_DIR_1=$(ls -d experiments/MLPF_test_*/ | tail -n 1)
 
 # --------------------------------------------------------------------------------------------
 # Test 2: Fine-tuning from a checkpoint in a NEW directory
@@ -84,10 +84,24 @@ python mlpf/pipeline.py \
   --dtype float32 \
   --attention-type math \
   --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-02.pth \
+  --load ${EXP_DIR_1}/checkpoints/checkpoint-02.pth \
   --num_workers 1 --prefetch_factor 1
 
 ls experiments/MLPF_test_*/checkpoints/*
+
+# Capture the latest experiment directory (from Test 2)
+export EXP_DIR_2=$(ls -d experiments/MLPF_test_*/ | tail -n 1)
+
+# --------------------------------------------------------------------------------------------
+# Test 3: ONNX export and validation
+# --------------------------------------------------------------------------------------------
+python scripts/cms-validate-onnx.py \
+  --checkpoint ${EXP_DIR_2}/checkpoints/checkpoint-04.pth \
+  --model-kwargs ${EXP_DIR_2}/model_kwargs.pkl \
+  --dataset cms_pf_ttbar \
+  --data-dir ./tensorflow_datasets/ \
+  --num-events 2 \
+  --outdir ./onnx_validation_cms --device cpu
 
 ## --------------------------------------------------------------------------------------------
 ## Test 3: Ray Train training using the 'ray-train' sub-command
