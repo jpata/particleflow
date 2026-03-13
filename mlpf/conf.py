@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import List, Optional, Dict, Union, Any, Literal
-import yaml
+from typing import List, Optional, Dict, Any, Literal
 import os
 from mlpf.utils import resolve_path, load_spec, set_nested_dict
 

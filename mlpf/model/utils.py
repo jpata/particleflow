@@ -8,13 +8,6 @@ from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
 import logging
 from mlpf.conf import (
     MLPFConfig,
-    ELEM_TYPES,
-    ELEM_TYPES_NONZERO,
-    CLASS_LABELS,
-    CLASS_NAMES_LATEX,
-    CLASS_NAMES,
-    CLASS_NAMES_CAPITALIZED,
-    X_FEATURES,
     Y_FEATURES,
 )
 

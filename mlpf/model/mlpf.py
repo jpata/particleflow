@@ -1,7 +1,7 @@
 import math
 import time
 import numpy as np
-from typing import Union, List, Optional
+from typing import Union, List
 
 import torch
 import torch.nn as nn
@@ -9,7 +9,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
-from mlpf.conf import MLPFConfig, ModelArchitectureConfig, AttentionConfig, GNNLSHConfig
+from mlpf.conf import MLPFConfig
 
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):

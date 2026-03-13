@@ -4,7 +4,7 @@ from mlpf.logger import _logger
 from mlpf.conf import MLPFConfig
 
 
-def get_optimizer(model, config):
+def get_optimizer(model: torch.nn.Module, config: MLPFConfig):
     """
     Returns the optimizer for the given model based on the configuration provided.
     Parameters:

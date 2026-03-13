@@ -36,7 +36,7 @@ import awkward
 import vector
 import fastjet
 from mlpf.model.mlpf import MLPF
-from mlpf.conf import MLPFConfig, ModelArchitectureConfig, AttentionConfig, GNNLSHConfig
+from mlpf.conf import MLPFConfig
 from mlpf.model.utils import unpack_predictions
 from mlpf.plotting.plot_utils import ELEM_NAMES_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CLIC
 
