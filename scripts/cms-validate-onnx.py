@@ -7,6 +7,7 @@ if "--device" in sys.argv:
 
 import os
 import time
+import gc
 # Ensure mlpf is in the path
 sys.path.append(os.getcwd())
 
@@ -136,6 +137,7 @@ def main():
     # Load model configuration
     with open(args.model_kwargs, "rb") as f:
         model_kwargs = pkl.load(f)
+    print(model_kwargs)
 
     # Load model weights
     model_state = torch.load(args.checkpoint, map_location=torch.device("cpu"), weights_only=True)
@@ -282,114 +284,107 @@ def main():
     configs = ["PT_MATH_FP32", "PT_MATH_FP16", "PT_FLASH_FP16", "ONNX_MATH_FP32", "ONNX_MATH_FP16", "ONNX_FLASH_FP32_FP16", "ONNX_FLASH_FP16"]
     results = {cfg: {"id": [], "momentum": [], "pu": [], "total_err": 0.0, "num_elems": 0, "num_invalid": 0, "runtime": [], "event_size": [], "jets_pt": []} for cfg in configs}
     
-    print(f"Running validation on {args.num_events} events...")
-    for i in tqdm(range(args.num_events)):
-        elem = ds[i]
-        X_features = torch.tensor(elem["X"]).to(torch.float32).to(args.device)
-        num_elements = X_features.shape[0]
-        
-        # Clip features to avoid FP16 overflow (max value ~65500)
-        X_features = torch.clamp(X_features, min=-60000, max=60000)
-        
-        X_features_padded = X_features.unsqueeze(0).contiguous()
-        mask = (X_features_padded[:, :, 0] != 0)
-        mask_f = mask.float()
-        m_cpu = mask.cpu()
+    baseline_predictions = {}
 
-        # Pre-convert to numpy for ONNX
-        X_features_np = X_features_padded.cpu().numpy()
-        mask_f_np = mask_f.cpu().numpy()
+    for cfg in configs:
+        print(f"Running validation for {cfg}...")
+        for i in tqdm(range(args.num_events)):
+            elem = ds[i]
+            X_features = torch.tensor(elem["X"]).to(torch.float32).to(args.device)
+            num_elements = X_features.shape[0]
+            
+            # Clip features to avoid FP16 overflow (max value ~65500)
+            X_features = torch.clamp(X_features, min=-60000, max=60000)
+            
+            X_features_padded = X_features.unsqueeze(0).contiguous()
+            mask = (X_features_padded[:, :, 0] != 0)
+            mask_f = mask.float()
+            m_cpu = mask.cpu()
 
-        # 1. PT Math FP32 (Baseline)
-        if args.device == "cuda": torch.cuda.synchronize()
-        t0 = time.perf_counter()
-        with torch.no_grad():
-            pred_pt_math_fp32 = model_pt_math(X_features_padded, mask)
-        if args.device == "cuda": torch.cuda.synchronize()
-        t1 = time.perf_counter()
-        results["PT_MATH_FP32"]["runtime"].append(t1 - t0)
-        pred_pt_math_fp32 = tuple(p.cpu().float() for p in pred_pt_math_fp32)
-        pred_baseline = pred_pt_math_fp32
+            # Pre-convert to numpy for ONNX
+            X_features_np = X_features_padded.cpu().numpy()
+            mask_f_np = mask_f.cpu().numpy()
 
-        # 2. PT Math FP16
-        if args.device == "cuda": torch.cuda.synchronize()
-        t0 = time.perf_counter()
-        with torch.no_grad():
-            with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
-                pred_pt_math_fp16 = model_pt_math(X_features_padded, mask)
-        if args.device == "cuda": torch.cuda.synchronize()
-        t1 = time.perf_counter()
-        results["PT_MATH_FP16"]["runtime"].append(t1 - t0)
-        pred_pt_math_fp16 = tuple(p.cpu().float() for p in pred_pt_math_fp16)
+            try:
+                if cfg == "PT_MATH_FP32":
+                    if args.device == "cuda": torch.cuda.synchronize()
+                    t0 = time.perf_counter()
+                    with torch.no_grad():
+                        pred = model_pt_math(X_features_padded, mask)
+                    if args.device == "cuda": torch.cuda.synchronize()
+                    t1 = time.perf_counter()
+                    pred = tuple(p.cpu().float() for p in pred)
+                    baseline_predictions[i] = (pred, m_cpu)
+                elif cfg == "PT_MATH_FP16":
+                    if args.device == "cuda": torch.cuda.synchronize()
+                    t0 = time.perf_counter()
+                    with torch.no_grad():
+                        with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
+                            pred = model_pt_math(X_features_padded, mask)
+                    if args.device == "cuda": torch.cuda.synchronize()
+                    t1 = time.perf_counter()
+                    pred = tuple(p.cpu().float() for p in pred)
+                elif cfg == "PT_FLASH_FP16":
+                    if args.device == "cuda": torch.cuda.synchronize()
+                    t0 = time.perf_counter()
+                    with torch.no_grad():
+                        with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
+                            pred = model_pt_flash(X_features_padded, mask)
+                    if args.device == "cuda": torch.cuda.synchronize()
+                    t1 = time.perf_counter()
+                    pred = tuple(p.cpu().float() for p in pred)
+                elif cfg == "ONNX_MATH_FP32":
+                    t0 = time.perf_counter()
+                    pred = sess_math_fp32.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
+                    t1 = time.perf_counter()
+                    pred = tuple(torch.tensor(p) for p in pred)
+                elif cfg == "ONNX_MATH_FP16":
+                    X_features_np_fp16 = X_features_np.astype(np.float16)
+                    mask_f_np_fp16 = mask_f_np.astype(np.float16)
+                    t0 = time.perf_counter()
+                    pred = sess_math_fp16.run(None, {"Xfeat_normed": X_features_np_fp16, "mask": mask_f_np_fp16})
+                    t1 = time.perf_counter()
+                    pred = tuple(torch.tensor(p).float() for p in pred)
+                elif cfg == "ONNX_FLASH_FP32_FP16":
+                    t0 = time.perf_counter()
+                    pred = sess_fused_fp32_fp16.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
+                    t1 = time.perf_counter()
+                    pred = tuple(torch.tensor(p).float() for p in pred)
+                elif cfg == "ONNX_FLASH_FP16":
+                    X_features_np_fp16 = X_features_np.astype(np.float16)
+                    mask_f_np_fp16 = mask_f_np.astype(np.float16)
+                    t0 = time.perf_counter()
+                    pred = sess_fused_fp16.run(None, {"Xfeat_normed": X_features_np_fp16, "mask": mask_f_np_fp16})
+                    t1 = time.perf_counter()
+                    pred = tuple(torch.tensor(p).float() for p in pred)
+            except (rt.capi.onnxruntime_pybind11_state.RuntimeException, torch.cuda.OutOfMemoryError) as e:
+                print(f"Skipping event {i} for {cfg} due to error: {e}")
+                if args.device == "cuda":
+                    torch.cuda.empty_cache()
+                continue
 
-        # 3. PT Flash FP16
-        if args.device == "cuda": torch.cuda.synchronize()
-        t0 = time.perf_counter()
-        with torch.no_grad():
-            with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
-                pred_pt_flash_fp16 = model_pt_flash(X_features_padded, mask)
-        if args.device == "cuda": torch.cuda.synchronize()
-        t1 = time.perf_counter()
-        results["PT_FLASH_FP16"]["runtime"].append(t1 - t0)
-        pred_pt_flash_fp16 = tuple(p.cpu().float() for p in pred_pt_flash_fp16)
-        
-        # 4. ONNX Math FP32
-        t0 = time.perf_counter()
-        p_math_fp32 = sess_math_fp32.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
-        t1 = time.perf_counter()
-        results["ONNX_MATH_FP32"]["runtime"].append(t1 - t0)
-        p_math_fp32 = tuple(torch.tensor(p) for p in p_math_fp32)
-
-        # 5. ONNX Math FP16
-        X_features_np_fp16 = X_features_np.astype(np.float16)
-        mask_f_np_fp16 = mask_f_np.astype(np.float16)
-        t0 = time.perf_counter()
-        p_math_fp16 = sess_math_fp16.run(None, {"Xfeat_normed": X_features_np_fp16, "mask": mask_f_np_fp16})
-        t1 = time.perf_counter()
-        results["ONNX_MATH_FP16"]["runtime"].append(t1 - t0)
-        p_math_fp16 = tuple(torch.tensor(p).float() for p in p_math_fp16)
-
-        # 6. ONNX Flash FP32_FP16
-        t0 = time.perf_counter()
-        p_fused_fp32_fp16 = sess_fused_fp32_fp16.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
-        t1 = time.perf_counter()
-        results["ONNX_FLASH_FP32_FP16"]["runtime"].append(t1 - t0)
-        p_fused_fp32_fp16 = tuple(torch.tensor(p).float() for p in p_fused_fp32_fp16)
-
-        # 7. ONNX Flash FP16
-        t0 = time.perf_counter()
-        p_fused_fp16 = sess_fused_fp16.run(None, {"Xfeat_normed": X_features_np_fp16, "mask": mask_f_np_fp16})
-        t1 = time.perf_counter()
-        results["ONNX_FLASH_FP16"]["runtime"].append(t1 - t0)
-        p_fused_fp16 = tuple(torch.tensor(p).float() for p in p_fused_fp16)
-
-        all_preds = {
-            "PT_MATH_FP32": pred_pt_math_fp32,
-            "PT_MATH_FP16": pred_pt_math_fp16,
-            "PT_FLASH_FP16": pred_pt_flash_fp16,
-            "ONNX_MATH_FP32": p_math_fp32,
-            "ONNX_MATH_FP16": p_math_fp16,
-            "ONNX_FLASH_FP32_FP16": p_fused_fp32_fp16,
-            "ONNX_FLASH_FP16": p_fused_fp16
-        }
-
-        for cfg in configs:
+            results[cfg]["runtime"].append(t1 - t0)
             results[cfg]["event_size"].append(num_elements)
-            j = particles_to_jets(all_preds[cfg], mask.cpu())
+            
+            j = particles_to_jets(pred, m_cpu)
             results[cfg]["jets_pt"].append(awkward.to_numpy(awkward.flatten(j.pt)))
 
-        for cfg, pred_test in all_preds.items():
-            if cfg == "PT_MATH_FP32":
-                continue
-            for name, idx in [("id", 1), ("momentum", 2), ("pu", 3)]:
-                diff_orig = (pred_baseline[idx][m_cpu] - pred_test[idx][m_cpu]).abs().flatten().numpy()
-                is_invalid = ~np.isfinite(diff_orig)
-                results[cfg]["num_invalid"] += np.sum(is_invalid)
-                
-                diff = np.nan_to_num(diff_orig, nan=1e6, posinf=1e6, neginf=1e6)
-                results[cfg][name].append(diff)
-                results[cfg]["total_err"] += np.sum(diff)
-                results[cfg]["num_elems"] += len(diff)
+            if cfg != "PT_MATH_FP32":
+                if i in baseline_predictions:
+                    pred_baseline, m_cpu_baseline = baseline_predictions[i]
+                    for name, idx in [("id", 1), ("momentum", 2), ("pu", 3)]:
+                        diff_orig = (pred_baseline[idx][m_cpu_baseline] - pred[idx][m_cpu]).abs().flatten().numpy()
+                        is_invalid = ~np.isfinite(diff_orig)
+                        results[cfg]["num_invalid"] += np.sum(is_invalid)
+                        
+                        diff = np.nan_to_num(diff_orig, nan=1e6, posinf=1e6, neginf=1e6)
+                        results[cfg][name].append(diff)
+                        results[cfg]["total_err"] += np.sum(diff)
+                        results[cfg]["num_elems"] += len(diff)
+
+        if args.device == "cuda":
+            torch.cuda.empty_cache()
+        gc.collect()
 
     # Plotting
     print("Generating comparison plots...")
