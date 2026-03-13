@@ -86,6 +86,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         device=None,
         dtype=None,
         export_onnx_fused=False,
+        attention_type="math",
     ) -> None:
         factory_kwargs = {"device": device, "dtype": dtype}
         bias = True
@@ -94,6 +95,12 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         self.head_dim = int(embed_dim // num_heads)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
         self.export_onnx_fused = export_onnx_fused
+        self.attention_type = attention_type
+        self.attn_params = {
+            "math": [SDPBackend.MATH],
+            "efficient": [SDPBackend.EFFICIENT_ATTENTION],
+            "flash": [SDPBackend.FLASH_ATTENTION],
+        }
 
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, need_weights=False, key_padding_mask=None) -> torch.Tensor:
         # q, k, v: 3D tensors (batch_size, seq_len, embed_dim), embed_dim = num_heads*head_dim
@@ -102,27 +109,31 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         num_heads = self.num_heads
 
         # split stacked in_proj_weight, in_proj_bias to q, k, v matrices
-        wq, wk, wv = torch.split(self.in_proj_weight.data, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
-        bq, bk, bv = torch.split(self.in_proj_bias.data, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
+        wq, wk, wv = torch.split(self.in_proj_weight, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
+        bq, bk, bv = torch.split(self.in_proj_bias, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
 
         q = torch.matmul(q, wq.T) + bq
         k = torch.matmul(k, wk.T) + bk
         v = torch.matmul(v, wv.T) + bv
 
-        # for pytorch internal scaled dot product attention, we need (bs*num_heads, seq_len, head_dim)
+        # for pytorch internal scaled dot product attention, we need (bs, num_heads, seq_len, head_dim)
         if not self.export_onnx_fused:
-            q = q.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2).reshape(bs * num_heads, seq_len, head_dim)
-            k = k.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2).reshape(bs * num_heads, seq_len, head_dim)
-            v = v.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2).reshape(bs * num_heads, seq_len, head_dim)
+            q = q.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
+            k = k.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
+            v = v.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
 
         # this function will have different shape signatures in native pytorch sdpa and in ONNX com.microsoft.MultiHeadAttention
-        # in pytorch: (bs*num_heads, seq_len, head_dim)
+        # in pytorch: (bs, num_heads, seq_len, head_dim)
         # in ONNX: (bs, seq_len, num_heads*head_dim)
-        attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout)
+        if self.export_onnx_fused:
+            attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout)
+        else:
+            with sdpa_kernel(self.attn_params[self.attention_type]):
+                attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout)
 
         # in case running with pytorch internal scaled dot product attention, reshape back to the original shape
         if not self.export_onnx_fused:
-            attn_output = attn_output.reshape(bs, num_heads, seq_len, head_dim).transpose(1, 2).reshape(bs, seq_len, num_heads * head_dim)
+            attn_output = attn_output.transpose(1, 2).reshape(bs, seq_len, num_heads * head_dim)
 
         # assert list(attn_output.size()) == [bs, seq_len, num_heads * head_dim]
         attn_output = self.out_proj(attn_output)
@@ -155,7 +166,9 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.act = get_activation(activation)
 
         if self.use_simplified_attention:
-            self.mha = SimpleMultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, export_onnx_fused=export_onnx_fused)
+            self.mha = SimpleMultiheadAttention(
+                embedding_dim, num_heads, dropout=dropout_mha, export_onnx_fused=export_onnx_fused, attention_type=attention_type
+            )
         else:
             self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
 
