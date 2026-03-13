@@ -381,9 +381,9 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
         if dataset_config is None:
             continue
 
-        for type_ in dataset_config[config.dataset]:
+        for type_ in dataset_config[config.dataset.value]:
             dataset = []
-            physical_ds = dataset_config[config.dataset][type_]
+            physical_ds = dataset_config[config.dataset.value][type_]
             for sample_name, sample in physical_ds.samples.items():
                 version = sample.version
                 split_configs = sample.splits

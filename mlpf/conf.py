@@ -1,51 +1,112 @@
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any
 import os
+from enum import Enum
 from mlpf.utils import resolve_path, load_spec, set_nested_dict
+
+
+class Dataset(Enum):
+    CMS = "cms"
+    CLIC = "clic"
+    CLD = "cld"
+    CLIC_HITS = "clic_hits"
+
+
+class ModelType(Enum):
+    ATTENTION = "attention"
+    GNN_LSH = "gnn_lsh"
+
+
+class InputEncoding(Enum):
+    JOINT = "joint"
+    SPLIT = "split"
+
+
+class LearnedRepresentationMode(Enum):
+    LAST = "last"
+    CONCAT = "concat"
+
+
+class RegressionMode(Enum):
+    DIRECT = "direct"
+    ADDITIVE = "additive"
+    MULTIPLICATIVE = "multiplicative"
+    DIRECT_ELEMTYPE = "direct-elemtype"
+    DIRECT_ELEMTYPE_SPLIT = "direct-elemtype-split"
+    LINEAR = "linear"
+    LINEAR_ELEMTYPE = "linear-elemtype"
+
+
+class Activation(Enum):
+    ELU = "elu"
+    RELU = "relu"
+    RELU6 = "relu6"
+    LEAKYRELU = "leakyrelu"
+    GELU = "gelu"
+
+
+class OptimizerType(Enum):
+    ADAMW = "adamw"
+    LAMB = "lamb"
+    SGD = "sgd"
+
+
+class LRSchedule(Enum):
+    CONSTANT = "constant"
+    ONECYCLE = "onecycle"
+    COSINEDECAY = "cosinedecay"
+    REDUCE_LR_ON_PLATEAU = "reduce_lr_on_plateau"
+
+
+class AttentionType(Enum):
+    MATH = "math"
+    EFFICIENT = "efficient"
+    FLASH = "flash"
+    LINEAR = "linear"
 
 
 # All possible PFElement types
 ELEM_TYPES = {
-    "cms": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-    "clic": [0, 1, 2],
-    "cld": [0, 1, 2],
+    Dataset.CMS.value: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    Dataset.CLIC.value: [0, 1, 2],
+    Dataset.CLD.value: [0, 1, 2],
 }
 
 # Some element types are defined, but do not exist in the dataset at all
 ELEM_TYPES_NONZERO = {
-    "cms": [1, 4, 5, 6, 8, 9, 10, 11],
-    "clic": [1, 2],
-    "cld": [1, 2],
+    Dataset.CMS.value: [1, 4, 5, 6, 8, 9, 10, 11],
+    Dataset.CLIC.value: [1, 2],
+    Dataset.CLD.value: [1, 2],
 }
 
 CLASS_LABELS = {
-    "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],  # we never actually predict 15/taus (not there in targets)
-    "clic": [0, 211, 130, 22, 11, 13],
-    "cld": [0, 211, 130, 22, 11, 13],
-    "clic_hits": [0, 211, 130, 22, 11, 13],
+    Dataset.CMS.value: [0, 211, 130, 1, 2, 22, 11, 13, 15],  # we never actually predict 15/taus (not there in targets)
+    Dataset.CLIC.value: [0, 211, 130, 22, 11, 13],
+    Dataset.CLD.value: [0, 211, 130, 22, 11, 13],
+    Dataset.CLIC_HITS.value: [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
-    "cms": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
-    "clic": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    "cld": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    "clic_hits": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    Dataset.CMS.value: ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
+    Dataset.CLIC.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    Dataset.CLD.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    Dataset.CLIC_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
-    "cms": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
-    "clic": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
-    "cld": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
-    "clic_hits": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.CMS.value: ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
+    Dataset.CLIC.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.CLD.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.CLIC_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
-    "cms": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
-    "clic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    "ccldlic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    "clic_hits": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    Dataset.CMS.value: ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
+    Dataset.CLIC.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    Dataset.CLD.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    Dataset.CLIC_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
 X_FEATURES = {
-    "cms": [
+    Dataset.CMS.value: [
         "typ_idx",
         "pt",
         "eta",
@@ -102,7 +163,7 @@ X_FEATURES = {
         "sigma_y",
         "sigma_z",
     ],
-    "clic": [
+    Dataset.CLIC.value: [
         "type",
         "pt | et",
         "eta",
@@ -121,7 +182,7 @@ X_FEATURES = {
         "time | sigma_y",
         "Null | sigma_z",
     ],
-    "cld": [
+    Dataset.CLD.value: [
         "type",
         "pt | et",
         "eta",
@@ -140,7 +201,7 @@ X_FEATURES = {
         "time | sigma_y",
         "Null | sigma_z",
     ],
-    "clic_hits": [
+    Dataset.CLIC_HITS.value: [
         "elemtype",
         "pt | et",
         "eta",
@@ -161,20 +222,20 @@ X_FEATURES = {
 }
 
 JET_CONFIG = {
-    "cms": {
+    Dataset.CMS.value: {
         "algo": "antikt_algorithm",
         "r": 0.4,
         "ptcut": 3.0,
         "match_dr": 0.1,
     },
-    "clic": {
+    Dataset.CLIC.value: {
         "algo": "ee_genkt_algorithm",
         "r": 0.4,
         "p": -1.0,
         "ptcut": 5.0,
         "match_dr": 0.1,
     },
-    "cld": {
+    Dataset.CLD.value: {
         "algo": "ee_genkt_algorithm",
         "r": 0.4,
         "p": -1.0,
@@ -202,12 +263,12 @@ Y_FEATURES = [
 
 class GNNLSHConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    conv_type: Literal["gnn_lsh"] = "gnn_lsh"
+    conv_type: ModelType = ModelType.GNN_LSH
     embedding_dim: int = 128
     width: int = 128
     num_convs: int = 2
     dropout_ff: float = 0.0
-    activation: str = "elu"
+    activation: Activation = Activation.ELU
     layernorm: bool = True
     bin_size: int = 640
     max_num_bins: int = 200
@@ -219,16 +280,16 @@ class GNNLSHConfig(BaseModel):
 
 class AttentionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    conv_type: Literal["attention"] = "attention"
+    conv_type: ModelType = ModelType.ATTENTION
     embedding_dim: int = 128
     width: int = 128
     num_convs: int = 2
     dropout_ff: float = 0.0
-    activation: str = "elu"
+    activation: Activation = Activation.ELU
     layernorm: bool = True
     num_heads: int = 16
     head_dim: int = 16
-    attention_type: str = "flash"
+    attention_type: AttentionType = AttentionType.FLASH
     dropout_conv_reg_mha: float = 0.0
     dropout_conv_reg_ff: float = 0.0
     dropout_conv_id_mha: float = 0.0
@@ -242,14 +303,14 @@ class AttentionConfig(BaseModel):
 class ModelArchitectureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["attention", "gnn_lsh"]
-    input_encoding: str = "split"
-    learned_representation_mode: str = "last"
-    pt_mode: str = "direct-elemtype-split"
-    eta_mode: str = "linear"
-    sin_phi_mode: str = "linear"
-    cos_phi_mode: str = "linear"
-    energy_mode: str = "direct-elemtype-split"
+    type: ModelType
+    input_encoding: InputEncoding = InputEncoding.SPLIT
+    learned_representation_mode: LearnedRepresentationMode = LearnedRepresentationMode.LAST
+    pt_mode: RegressionMode = RegressionMode.DIRECT_ELEMTYPE_SPLIT
+    eta_mode: RegressionMode = RegressionMode.LINEAR
+    sin_phi_mode: RegressionMode = RegressionMode.LINEAR
+    cos_phi_mode: RegressionMode = RegressionMode.LINEAR
+    energy_mode: RegressionMode = RegressionMode.DIRECT_ELEMTYPE_SPLIT
     trainable: str = "all"
 
     # Nested configs
@@ -280,10 +341,10 @@ class TestDatasetEntry(BaseModel):
 class MLPFConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    dataset: str
+    dataset: Dataset
     data_dir: str
     model: ModelArchitectureConfig
-    conv_type: str
+    conv_type: ModelType
 
     batch_size: Optional[int] = None
     hyperparameters: Dict[str, Any] = Field(default_factory=dict)
@@ -312,8 +373,8 @@ class MLPFConfig(BaseModel):
     dtype: str = "float32"
     lr: float = 0.0001
     weight_decay: float = 0.01
-    optimizer: str = "adamw"
-    lr_schedule: str = "cosinedecay"
+    optimizer: OptimizerType = OptimizerType.ADAMW
+    lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
     pad_to_multiple_elements: Optional[int] = None
 
@@ -349,13 +410,13 @@ class MLPFConfig(BaseModel):
 
     @model_validator(mode="after")
     def populate_defaults(self) -> "MLPFConfig":
-        if self.dataset in X_FEATURES:
+        if self.dataset.value in X_FEATURES:
             if self.input_dim is None:
-                self.input_dim = len(X_FEATURES[self.dataset])
+                self.input_dim = len(X_FEATURES[self.dataset.value])
             if self.num_classes is None:
-                self.num_classes = len(CLASS_LABELS[self.dataset])
+                self.num_classes = len(CLASS_LABELS[self.dataset.value])
             if self.elemtypes_nonzero is None:
-                self.elemtypes_nonzero = ELEM_TYPES_NONZERO[self.dataset]
+                self.elemtypes_nonzero = ELEM_TYPES_NONZERO[self.dataset.value]
         return self
 
     def flatten_config(self, prefix=""):
@@ -368,6 +429,8 @@ class MLPFConfig(BaseModel):
                 new_key = f"{prefix}.{k}" if prefix else k
                 if isinstance(v, dict):
                     _flatten(v, new_key)
+                elif isinstance(v, Enum):
+                    items[new_key] = v.value
                 else:
                     items[new_key] = v
 

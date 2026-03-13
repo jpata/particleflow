@@ -116,12 +116,13 @@ def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
 
 def get_jet_config(dataset):
     import fastjet
-    from mlpf.conf import JET_CONFIG
+    from mlpf.conf import JET_CONFIG, Dataset
 
-    if dataset not in JET_CONFIG:
-        raise Exception(f"jet configuration for dataset {dataset} not implemented")
+    ds_name = dataset.value if isinstance(dataset, Dataset) else dataset
+    if ds_name not in JET_CONFIG:
+        raise Exception(f"jet configuration for dataset {ds_name} not implemented")
 
-    config = JET_CONFIG[dataset]
+    config = JET_CONFIG[ds_name]
     algo = getattr(fastjet, config["algo"])
 
     if "p" in config:

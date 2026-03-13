@@ -9,7 +9,15 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
-from mlpf.conf import MLPFConfig
+from mlpf.conf import (
+    MLPFConfig,
+    Activation,
+    AttentionType,
+    ModelType,
+    InputEncoding,
+    LearnedRepresentationMode,
+    RegressionMode,
+)
 
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
@@ -60,17 +68,19 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
         return tensor
 
 
-def get_activation(activation):
-    if activation == "elu":
+def get_activation(activation: Activation):
+    if activation == Activation.ELU:
         act = nn.ELU
-    elif activation == "relu":
+    elif activation == Activation.RELU:
         act = nn.ReLU
-    elif activation == "relu6":
+    elif activation == Activation.RELU6:
         act = nn.ReLU6
-    elif activation == "leakyrelu":
+    elif activation == Activation.LEAKYRELU:
         act = nn.LeakyReLU
-    elif activation == "gelu":
+    elif activation == Activation.GELU:
         act = nn.GELU
+    else:
+        raise ValueError(f"Unknown activation {activation}")
     return act
 
 
@@ -87,7 +97,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         device=None,
         dtype=None,
         export_onnx_fused=False,
-        attention_type="math",
+        attention_type: AttentionType = AttentionType.MATH,
     ) -> None:
         factory_kwargs = {"device": device, "dtype": dtype}
         bias = True
@@ -98,9 +108,9 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         self.export_onnx_fused = export_onnx_fused
         self.attention_type = attention_type
         self.attn_params = {
-            "math": [SDPBackend.MATH],
-            "efficient": [SDPBackend.EFFICIENT_ATTENTION],
-            "flash": [SDPBackend.FLASH_ATTENTION],
+            AttentionType.MATH: [SDPBackend.MATH],
+            AttentionType.EFFICIENT: [SDPBackend.EFFICIENT_ATTENTION],
+            AttentionType.FLASH: [SDPBackend.FLASH_ATTENTION],
         }
 
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, need_weights=False, key_padding_mask=None) -> torch.Tensor:
@@ -197,13 +207,13 @@ class PreLnSelfAttentionLayer(nn.Module):
     def __init__(
         self,
         name="",
-        activation="elu",
+        activation: Activation = Activation.ELU,
         embedding_dim=128,
         num_heads=2,
         width=128,
         dropout_mha=0.1,
         dropout_ff=0.1,
-        attention_type="efficient",
+        attention_type: AttentionType = AttentionType.EFFICIENT,
         learnable_queries=False,
         elems_as_queries=False,
         use_simplified_attention=False,
@@ -218,7 +228,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.attention_type = attention_type
         self.act = get_activation(activation)
 
-        if self.attention_type == "linear":
+        if self.attention_type == AttentionType.LINEAR:
             _logger.info("layer {} using attention_type=linear".format(self.name))
             self.mha = LinearAttention(embedding_dim, num_heads, dropout=dropout_mha)
         elif self.use_simplified_attention:
@@ -233,12 +243,12 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
 
-        if not self.use_simplified_attention and self.attention_type != "linear":
+        if not self.use_simplified_attention and self.attention_type != AttentionType.LINEAR:
             _logger.info("layer {} using attention_type={}".format(self.name, attention_type))
             self.attn_params = {
-                "math": [SDPBackend.MATH],
-                "efficient": [SDPBackend.EFFICIENT_ATTENTION],
-                "flash": [SDPBackend.FLASH_ATTENTION],
+                AttentionType.MATH: [SDPBackend.MATH],
+                AttentionType.EFFICIENT: [SDPBackend.EFFICIENT_ATTENTION],
+                AttentionType.FLASH: [SDPBackend.FLASH_ATTENTION],
             }
 
         self.learnable_queries = learnable_queries
@@ -268,7 +278,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         if mask is not None:
             q = q * mask_
 
-        if self.attention_type == "linear":
+        if self.attention_type == AttentionType.LINEAR:
             mha_out = self.mha(q, x_norm, x_norm, key_padding_mask=mask)[0]
         elif self.use_simplified_attention:
             mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
@@ -308,53 +318,57 @@ def ffn(input_dim, output_dim, width, act, dropout):
 
 
 class RegressionOutput(nn.Module):
-    def __init__(self, mode, embed_dim, width, act, dropout, elemtypes):
+    def __init__(self, mode: RegressionMode, embed_dim, width, act, dropout, elemtypes):
         super(RegressionOutput, self).__init__()
         self.mode = mode
         self.elemtypes = elemtypes
 
         # single output
-        if self.mode == "direct" or self.mode == "additive" or self.mode == "multiplicative":
+        if (
+            self.mode == RegressionMode.DIRECT
+            or self.mode == RegressionMode.ADDITIVE
+            or self.mode == RegressionMode.MULTIPLICATIVE
+        ):
             self.nn = ffn(embed_dim, 1, width, act, dropout)
-        elif self.mode == "direct-elemtype":
+        elif self.mode == RegressionMode.DIRECT_ELEMTYPE:
             self.nn = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
-        elif self.mode == "direct-elemtype-split":
+        elif self.mode == RegressionMode.DIRECT_ELEMTYPE_SPLIT:
             self.nn = nn.ModuleList()
             for elem in range(len(self.elemtypes)):
                 self.nn.append(ffn(embed_dim, 1, width, act, dropout))
         # two outputs
-        elif self.mode == "linear":
+        elif self.mode == RegressionMode.LINEAR:
             self.nn = ffn(embed_dim, 2, width, act, dropout)
-        elif self.mode == "linear-elemtype":
+        elif self.mode == RegressionMode.LINEAR_ELEMTYPE:
             self.nn1 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
             self.nn2 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
 
     def forward(self, elems, x, orig_value):
-        if self.mode == "direct":
+        if self.mode == RegressionMode.DIRECT:
             nn_out = self.nn(x)
             return nn_out
-        elif self.mode == "direct-elemtype":
+        elif self.mode == RegressionMode.DIRECT_ELEMTYPE:
             nn_out = self.nn(x)
             elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
             nn_out = torch.sum(elemtype_mask * nn_out, axis=-1, keepdims=True)
             return nn_out
-        elif self.mode == "direct-elemtype-split":
+        elif self.mode == RegressionMode.DIRECT_ELEMTYPE_SPLIT:
             elem_outs = []
             for elem in range(len(self.elemtypes)):
                 elem_outs.append(self.nn[elem](x))
             elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
             elem_outs = torch.cat(elem_outs, axis=-1)
             return torch.sum(elem_outs * elemtype_mask, axis=-1, keepdims=True)
-        elif self.mode == "additive":
+        elif self.mode == RegressionMode.ADDITIVE:
             nn_out = self.nn(x)
             return orig_value + nn_out
-        elif self.mode == "multiplicative":
+        elif self.mode == RegressionMode.MULTIPLICATIVE:
             nn_out = self.nn(x)
             return orig_value * nn_out
-        elif self.mode == "linear":
+        elif self.mode == RegressionMode.LINEAR:
             nn_out = self.nn(x)
             return orig_value * nn_out[..., 0:1] + nn_out[..., 1:2]
-        elif self.mode == "linear-elemtype":
+        elif self.mode == RegressionMode.LINEAR_ELEMTYPE:
             nn_out1 = self.nn1(x)
             nn_out2 = self.nn2(x)
             elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
@@ -377,7 +391,7 @@ class MLPF(nn.Module):
 
         # Determine architecture parameters based on the chosen type
         self.conv_type = self.config.type
-        sub_config = getattr(self.config, self.conv_type)
+        sub_config = getattr(self.config, self.conv_type.value)
 
         # Extract parameters from the sub-config
         self.num_convs = sub_config.num_convs
@@ -398,7 +412,7 @@ class MLPF(nn.Module):
         self.act = get_activation(activation)
 
         # Defaults/extract specific parameters
-        if self.conv_type == "attention":
+        if self.conv_type == ModelType.ATTENTION:
             num_heads = sub_config.num_heads
             head_dim = sub_config.head_dim
             attention_type = sub_config.attention_type
@@ -415,7 +429,7 @@ class MLPF(nn.Module):
             embedding_dim = num_heads * head_dim
             width = num_heads * head_dim
             self.bin_size = 640  # default
-        elif self.conv_type == "gnn_lsh":
+        elif self.conv_type == ModelType.GNN_LSH:
             self.bin_size = sub_config.bin_size
             max_num_bins = sub_config.max_num_bins
             distance_dim = sub_config.distance_dim
@@ -429,11 +443,11 @@ class MLPF(nn.Module):
 
         # embedding of the inputs
         t0 = time.time()
-        if self.input_encoding == "joint":
+        if self.input_encoding == InputEncoding.JOINT:
             _logger.info("Initializing joint input encoding")
             self.nn0_id = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
             self.nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
-        elif self.input_encoding == "split":
+        elif self.input_encoding == InputEncoding.SPLIT:
             _logger.info("Initializing split input encoding, elemtypes_nonzero={}".format(self.elemtypes_nonzero))
             # self.nn0_id = nn.ModuleList()
             # for ielem in range(len(self.elemtypes_nonzero)):
@@ -458,7 +472,7 @@ class MLPF(nn.Module):
 
         if self.num_convs != 0:
             t0 = time.time()
-            if self.conv_type == "attention":
+            if self.conv_type == ModelType.ATTENTION:
                 _logger.info("Initializing attention convolution layers, num_convs={}".format(self.num_convs))
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -500,7 +514,7 @@ class MLPF(nn.Module):
                             save_attention=save_attention,
                         )
                     )
-            elif self.conv_type == "gnn_lsh":
+            elif self.conv_type == ModelType.GNN_LSH:
                 _logger.info("Initializing GNN-LSH convolution layers")
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
@@ -523,9 +537,9 @@ class MLPF(nn.Module):
             _logger.info("conv_id parameters: {}".format(count_parameters(self.conv_id)))
             _logger.info("conv_reg parameters: {}".format(count_parameters(self.conv_reg)))
 
-        if self.learned_representation_mode == "concat":
+        if self.learned_representation_mode == LearnedRepresentationMode.CONCAT:
             decoding_dim = self.num_convs * embedding_dim
-        elif self.learned_representation_mode == "last":
+        elif self.learned_representation_mode == LearnedRepresentationMode.LAST:
             decoding_dim = embedding_dim
 
         _logger.info("Initializing output DNNs")
@@ -566,10 +580,10 @@ class MLPF(nn.Module):
         Xfeat_normed = X_features
 
         embeddings_id, embeddings_reg = [], []
-        if self.input_encoding == "joint":
+        if self.input_encoding == InputEncoding.JOINT:
             embedding_id = self.nn0_id(Xfeat_normed)
             embedding_reg = self.nn0_reg(Xfeat_normed)
-        elif self.input_encoding == "split":
+        elif self.input_encoding == InputEncoding.SPLIT:
             # embedding_id = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_id], axis=-1)
             # elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
             # embedding_id = torch.sum(embedding_id * elemtype_mask.unsqueeze(-2), axis=-1)
@@ -605,9 +619,9 @@ class MLPF(nn.Module):
             embeddings_reg.append(embedding_reg)
 
         # id input
-        if self.learned_representation_mode == "concat":
+        if self.learned_representation_mode == LearnedRepresentationMode.CONCAT:
             final_embedding_id = torch.cat(embeddings_id, axis=-1)
-        elif self.learned_representation_mode == "last":
+        elif self.learned_representation_mode == LearnedRepresentationMode.LAST:
             final_embedding_id = torch.cat([embeddings_id[-1]], axis=-1)
 
         if self.use_pre_layernorm:
@@ -621,9 +635,9 @@ class MLPF(nn.Module):
         # pred_charge = self.nn_charge(final_embedding_id)
 
         # regression input
-        if self.learned_representation_mode == "concat":
+        if self.learned_representation_mode == LearnedRepresentationMode.CONCAT:
             final_embedding_reg = torch.cat(embeddings_reg, axis=-1)
-        elif self.learned_representation_mode == "last":
+        elif self.learned_representation_mode == LearnedRepresentationMode.LAST:
             final_embedding_reg = torch.cat([embeddings_reg[-1]], axis=-1)
 
         if self.use_pre_layernorm:

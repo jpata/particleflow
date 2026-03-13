@@ -3,7 +3,7 @@ import argparse
 import yaml
 import tempfile
 import os
-from mlpf.conf import MLPFConfig
+from mlpf.conf import MLPFConfig, ModelType, Dataset
 
 
 class TestConfigOverrides(unittest.TestCase):
@@ -54,9 +54,9 @@ class TestConfigOverrides(unittest.TestCase):
         self.assertEqual(config["batch_size"], 32)
         self.assertEqual(config["num_steps"], 100)
         self.assertEqual(config["lr"], 0.001)
-        self.assertEqual(config["conv_type"], "gnn_lsh")
+        self.assertEqual(config["conv_type"], ModelType.GNN_LSH)
         self.assertEqual(config["model"]["gnn_lsh"]["num_convs"], 2)
-        self.assertEqual(config["dataset"], "cms")
+        self.assertEqual(config["dataset"], Dataset.CMS)
         self.assertTrue("/tmp/particleflow/test_prod/tfds" in config["data_dir"])
 
     def test_override_config_basic(self):

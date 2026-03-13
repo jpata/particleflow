@@ -1,3 +1,4 @@
+from mlpf.conf import LRSchedule
 import torch
 from torch.optim import SGD
 from mlpf.model.utils import get_lr_schedule, save_checkpoint, load_lr_schedule
@@ -18,7 +19,7 @@ def test_lr_schedule_restoration():
 
     # 2. Original scheduler
     total_steps = 100
-    config = MockConfig(lr_schedule="cosinedecay", lr=0.1)
+    config = MockConfig(lr_schedule=LRSchedule.COSINEDECAY, lr=0.1)
     original_scheduler = get_lr_schedule(config, optimizer, total_steps)
 
     # 3. Simulate training (Part 1)

@@ -250,7 +250,7 @@ def train_ray_trial(config, args, outdir=None):
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # optimizer should be created after distributing the model to devices with ray.train.torch.prepare_model(model)
     model = ray.train.torch.prepare_model(model)
-    optimizer = get_optimizer(model, config)
+    optimizer = get_optimizer(model, mlpf_config)
 
     trainable_params, nontrainable_params, table = count_parameters(model)
     print(table)
@@ -271,10 +271,10 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
-    loaders, samplers = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
+    loaders, samplers = get_interleaved_dataloaders(world_size, rank, mlpf_config, use_cuda, use_ray=True)
 
     if args.comet:
-        comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
+        comet_experiment = create_comet_experiment(mlpf_config.comet_name, comet_offline=mlpf_config.comet_offline, outdir=outdir)
         comet_experiment.set_name(f"world_rank_{world_rank}_{Path(outdir).name}")
         comet_experiment.log_parameter("run_id", Path(outdir).name)
         comet_experiment.log_parameter("world_size", world_size)
@@ -298,7 +298,7 @@ def train_ray_trial(config, args, outdir=None):
     else:
         comet_experiment = None
 
-    lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
+    lr_schedule = get_lr_schedule(mlpf_config, optimizer, mlpf_config.num_steps)
 
     checkpoint_dir = os.path.join(outdir, "checkpoints")
     checkpoint_dir = Path(outdir) / "checkpoints"
@@ -325,19 +325,19 @@ def train_ray_trial(config, args, outdir=None):
         optimizer,
         loaders["train"],
         loaders["valid"],
-        config["num_steps"],
-        config["patience"],
+        mlpf_config.num_steps,
+        mlpf_config.patience,
         outdir,
-        config,
-        trainable=config["model"]["trainable"],
+        mlpf_config,
+        trainable=mlpf_config.model.trainable,
         start_step=start_step,
         lr_schedule=lr_schedule,
         use_ray=True,
-        checkpoint_freq=config["checkpoint_freq"],
+        checkpoint_freq=mlpf_config.checkpoint_freq,
         comet_experiment=comet_experiment,
-        comet_step_freq=config["comet_step_freq"],
-        dtype=getattr(torch, config["dtype"]),
-        val_freq=config["val_freq"],
+        comet_step_freq=mlpf_config.comet_step_freq,
+        dtype=getattr(torch, mlpf_config.dtype),
+        val_freq=mlpf_config.val_freq,
         checkpoint_dir=checkpoint_dir,
         train_sampler=samplers["train"],
         valid_sampler=samplers["valid"],

@@ -1,7 +1,7 @@
 import torch
 from mlpf.optimizers.lamb import Lamb
 from mlpf.logger import _logger
-from mlpf.conf import MLPFConfig
+from mlpf.conf import MLPFConfig, OptimizerType
 
 
 def get_optimizer(model: torch.nn.Module, config: MLPFConfig):
@@ -17,11 +17,11 @@ def get_optimizer(model: torch.nn.Module, config: MLPFConfig):
     """
 
     wd = config.weight_decay
-    if config.optimizer == "adamw":
+    if config.optimizer == OptimizerType.ADAMW:
         ret = torch.optim.AdamW(model.parameters(), lr=config.lr, weight_decay=wd)
-    elif config.optimizer == "lamb":
+    elif config.optimizer == OptimizerType.LAMB:
         ret = Lamb(model.parameters(), lr=config.lr, weight_decay=wd)
-    elif config.optimizer == "sgd":
+    elif config.optimizer == OptimizerType.SGD:
         ret = torch.optim.SGD(model.parameters(), lr=config.lr, weight_decay=wd)
     else:
         raise ValueError(f"Unsupported optimizer type: {config.optimizer}")

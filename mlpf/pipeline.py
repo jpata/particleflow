@@ -26,6 +26,14 @@ from mlpf.model.training import device_agnostic_run
 from mlpf.model.distributed_ray import run_hpo, run_ray_training
 from mlpf.model.PFDataset import SHARING_STRATEGY
 from mlpf.utils import create_experiment_dir, load_spec
+from enum import Enum
+
+
+class Command(Enum):
+    TRAIN = "train"
+    TEST = "test"
+    RAY_TRAIN = "ray-train"
+    RAY_HPO = "ray-hpo"
 
 
 def get_parser():
@@ -93,23 +101,24 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     # --- Manually set action flags based on the command, for MLPFConfig.from_spec ---
-    if args.command == "train":
+    cmd = Command(args.command)
+    if cmd == Command.TRAIN:
         args.train = True
         args.test = True  # By default, run testing after training
         args.hpo = None
         args.ray_train = False
-    elif args.command == "test":
+    elif cmd == Command.TEST:
         args.train = False
         args.test = True
         args.hpo = None
         args.ray_train = False
-    elif args.command == "ray-train":
+    elif cmd == Command.RAY_TRAIN:
         args.train = True
         args.test = True
         args.hpo = None
         args.ray_train = True
         args.gpus = args.ray_gpus
-    elif args.command == "ray-hpo":
+    elif cmd == Command.RAY_HPO:
         args.train = True
         args.test = False
         args.hpo = args.name  # Set hpo to the experiment name
@@ -126,7 +135,7 @@ def main():
         print(f"  --{k} {flat_config[k]}")
 
     # --- Main logic based on sub-command ---
-    if args.command == "ray-hpo":
+    if cmd == Command.RAY_HPO:
         run_hpo(config, args)
     else:
         experiment_dir = args.experiment_dir
@@ -139,7 +148,7 @@ def main():
             )
 
         # Save config for later reference.
-        config_filename = f"{args.command}-config.yaml"
+        config_filename = f"{cmd.value}-config.yaml"
         with open((Path(experiment_dir) / config_filename), "w") as file:
             yaml.dump(config, file)
 
@@ -148,9 +157,9 @@ def main():
         with open((Path(experiment_dir) / "particleflow_spec.yaml"), "w") as file:
             yaml.dump(spec, file)
 
-        if args.command == "ray-train":
+        if cmd == Command.RAY_TRAIN:
             run_ray_training(config, args, experiment_dir)
-        elif args.command in ["train", "test"]:
+        elif cmd in [Command.TRAIN, Command.TEST]:
             world_size = config_obj.gpus if config_obj.gpus > 0 else 1
             device_agnostic_run(config_obj, world_size, experiment_dir)
 

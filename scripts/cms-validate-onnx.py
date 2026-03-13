@@ -36,7 +36,7 @@ import awkward
 import vector
 import fastjet
 from mlpf.model.mlpf import MLPF
-from mlpf.conf import MLPFConfig
+from mlpf.conf import MLPFConfig, ModelType, AttentionType
 from mlpf.model.utils import unpack_predictions
 from mlpf.plotting.plot_utils import ELEM_NAMES_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CLIC
 
@@ -57,7 +57,7 @@ def make_mlpf_config(model_kwargs: MLPFConfig, **overrides):
     # Apply overrides
     for k, v in overrides.items():
         if k in ["use_simplified_attention", "export_onnx_fused", "save_attention", "attention_type"]:
-            if config.model.type == "attention":
+            if config.model.type == ModelType.ATTENTION:
                 setattr(config.model.attention, k, v)
         elif hasattr(config, k):
             setattr(config, k, v)
@@ -165,15 +165,15 @@ def main():
     # Load model weights
     model_state = torch.load(args.checkpoint, map_location=torch.device("cpu"), weights_only=True)
 
-    NUM_HEADS = model_kwargs.model.attention.num_heads if model_kwargs.model.type == "attention" else 1
+    NUM_HEADS = model_kwargs.model.attention.num_heads if model_kwargs.model.type == ModelType.ATTENTION else 1
     input_dim = model_kwargs.input_dim
 
     opset_version = 20
 
     # Model Variants for Export (always in float32 for export reliability)
     model_kwargs_export = model_kwargs.model_copy(deep=True)
-    if model_kwargs_export.model.type == "attention":
-        model_kwargs_export.model.attention.attention_type = "math"
+    if model_kwargs_export.model.type == ModelType.ATTENTION:
+        model_kwargs_export.model.attention.attention_type = AttentionType.MATH
 
     # Math attention model (for math exports)
     model_math = MLPF(

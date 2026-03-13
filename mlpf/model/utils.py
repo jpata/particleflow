@@ -9,6 +9,7 @@ import logging
 from mlpf.conf import (
     MLPFConfig,
     Y_FEATURES,
+    LRSchedule,
 )
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
@@ -159,9 +160,9 @@ def load_lr_schedule(lr_schedule, checkpoint, start_step=0):
 
 
 def get_lr_schedule(config: MLPFConfig, opt, num_steps, last_batch=-1):
-    if config.lr_schedule == "constant":
+    if config.lr_schedule == LRSchedule.CONSTANT:
         lr_schedule = ConstantLR(opt, factor=1.0, total_iters=num_steps)
-    elif config.lr_schedule == "onecycle":
+    elif config.lr_schedule == LRSchedule.ONECYCLE:
         lr_schedule = OneCycleLR(
             opt,
             max_lr=config.lr,
@@ -169,9 +170,9 @@ def get_lr_schedule(config: MLPFConfig, opt, num_steps, last_batch=-1):
             last_epoch=last_batch,
             pct_start=config.lr_schedule_config.get("onecycle", {}).get("pct_start") or 0.3,
         )
-    elif config.lr_schedule == "cosinedecay":
+    elif config.lr_schedule == LRSchedule.COSINEDECAY:
         lr_schedule = CosineAnnealingLR(opt, T_max=num_steps, last_epoch=last_batch, eta_min=config.lr * 0.1)
-    elif config.lr_schedule == "reduce_lr_on_plateau":
+    elif config.lr_schedule == LRSchedule.REDUCE_LR_ON_PLATEAU:
         lr_schedule = torch.optim.lr_scheduler.ReduceLROnPlateau(
             opt,
             mode=config.lr_schedule_config.get("reduce_lr_on_plateau", {}).get("mode", "min"),
@@ -184,7 +185,7 @@ def get_lr_schedule(config: MLPFConfig, opt, num_steps, last_batch=-1):
             eps=config.lr_schedule_config.get("reduce_lr_on_plateau", {}).get("eps", 1e-8),
         )
     else:
-        raise ValueError("Supported values for lr_schedule are 'constant', 'onecycle' and 'cosinedecay'.")
+        raise ValueError(f"Supported values for lr_schedule are {list(LRSchedule)}")
     return lr_schedule
 
 
