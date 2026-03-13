@@ -56,7 +56,8 @@ python mlpf/pipeline.py \
   --conv-type attention \
   --dtype float32 \
   --attention-type math \
-  --num-convs 1
+  --num-convs 1 \
+  --num-workers 1
 
 ls experiments/MLPF_test_*/checkpoints/*
 
@@ -83,7 +84,8 @@ python mlpf/pipeline.py \
   --dtype float32 \
   --attention-type math \
   --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-02.pth
+  --load ${EXP_DIR}/checkpoints/checkpoint-02.pth \
+  --num-workers 1
 
 ls experiments/MLPF_test_*/checkpoints/*
 
