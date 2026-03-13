@@ -291,7 +291,9 @@ def main():
     model_kwargs_math = model_kwargs.model_copy(deep=True)
 
     model_pt_math = MLPF(
-        config=make_mlpf_config(model_kwargs_math, attention_type="math", use_simplified_attention=False, export_onnx_fused=False, save_attention=False),
+        config=make_mlpf_config(
+            model_kwargs_math, attention_type="math", use_simplified_attention=False, export_onnx_fused=False, save_attention=False
+        ),
     )
     model_pt_math.eval()
     model_pt_math.load_state_dict(model_state["model_state_dict"], strict=False)

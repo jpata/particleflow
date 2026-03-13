@@ -512,4 +512,3 @@ class MLPFConfig(BaseModel):
 
         # 9. Validate with Pydantic
         return MLPFConfig.model_validate(config_dict)
-
