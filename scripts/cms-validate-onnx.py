@@ -36,6 +36,7 @@ import awkward
 import vector
 import fastjet
 from mlpf.model.mlpf import MLPF
+from mlpf.conf import ModelArchitectureConfig, AttentionConfig, GNNLSHConfig
 from mlpf.model.utils import unpack_predictions
 from mlpf.plotting.plot_utils import ELEM_NAMES_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CLIC
 
@@ -49,6 +50,71 @@ def get_labels(dataset):
         return ["NONE", "TRACK", "CLUSTER"], CLASS_NAMES_CLIC, [1, 2], "clic"
     else:
         return ELEM_NAMES_CMS, CLASS_NAMES_CMS, [1, 4, 5, 6, 8, 9], "cms"
+
+
+def make_mlpf_config(model_kwargs, **overrides):
+    if "config" in model_kwargs:
+        config = copy.deepcopy(model_kwargs["config"])
+        if isinstance(config, dict):
+            config = ModelArchitectureConfig.model_validate(config)
+    else:
+        # Reconstruct config from old-style model_kwargs
+        conv_type = model_kwargs["conv_type"]
+        if conv_type == "attention":
+            config = ModelArchitectureConfig(
+                type="attention",
+                attention=AttentionConfig(
+                    embedding_dim=model_kwargs["embedding_dim"],
+                    width=model_kwargs["width"],
+                    num_convs=model_kwargs["num_convs"],
+                    dropout_ff=model_kwargs["dropout_ff"],
+                    activation=model_kwargs["activation"],
+                    num_heads=model_kwargs["num_heads"],
+                    head_dim=model_kwargs["head_dim"],
+                    attention_type=model_kwargs["attention_type"],
+                    dropout_conv_reg_mha=model_kwargs["dropout_conv_reg_mha"],
+                    dropout_conv_reg_ff=model_kwargs["dropout_conv_reg_ff"],
+                    dropout_conv_id_mha=model_kwargs["dropout_conv_id_mha"],
+                    dropout_conv_id_ff=model_kwargs["dropout_conv_id_ff"],
+                    use_pre_layernorm=model_kwargs["use_pre_layernorm"],
+                    use_simplified_attention=model_kwargs["use_simplified_attention"],
+                    export_onnx_fused=model_kwargs["export_onnx_fused"],
+                    save_attention=model_kwargs["save_attention"],
+                ),
+            )
+        elif conv_type == "gnn_lsh":
+            config = ModelArchitectureConfig(
+                type="gnn_lsh",
+                gnn_lsh=GNNLSHConfig(
+                    embedding_dim=model_kwargs["embedding_dim"],
+                    width=model_kwargs["width"],
+                    num_convs=model_kwargs["num_convs"],
+                    dropout_ff=model_kwargs["dropout_ff"],
+                    activation=model_kwargs["activation"],
+                    layernorm=model_kwargs["layernorm"],
+                    bin_size=model_kwargs["bin_size"],
+                    max_num_bins=model_kwargs["max_num_bins"],
+                    distance_dim=model_kwargs["distance_dim"],
+                    num_node_messages=model_kwargs["num_node_messages"],
+                    ffn_dist_hidden_dim=model_kwargs["ffn_dist_hidden_dim"],
+                    ffn_dist_num_layers=model_kwargs["ffn_dist_num_layers"],
+                ),
+            )
+        config.input_encoding = model_kwargs["input_encoding"]
+        config.learned_representation_mode = model_kwargs["learned_representation_mode"]
+        config.pt_mode = model_kwargs["pt_mode"]
+        config.eta_mode = model_kwargs["eta_mode"]
+        config.sin_phi_mode = model_kwargs["sin_phi_mode"]
+        config.cos_phi_mode = model_kwargs["cos_phi_mode"]
+        config.energy_mode = model_kwargs["energy_mode"]
+
+    # Apply overrides
+    for k, v in overrides.items():
+        if k in ["use_simplified_attention", "export_onnx_fused", "save_attention", "attention_type"]:
+            setattr(config.attention, k, v)
+        else:
+            setattr(config, k, v)
+    return config
 
 
 def parse_args():
@@ -157,13 +223,23 @@ def main():
     model_kwargs_export["attention_type"] = "math"
 
     # Math attention model (for math exports)
-    model_math = MLPF(**model_kwargs_export, use_simplified_attention=True, export_onnx_fused=False)
+    model_math = MLPF(
+        input_dim=model_kwargs_export["input_dim"],
+        num_classes=model_kwargs_export["num_classes"],
+        elemtypes_nonzero=model_kwargs_export["elemtypes_nonzero"],
+        config=make_mlpf_config(model_kwargs_export, use_simplified_attention=True, export_onnx_fused=False),
+    )
     model_math.eval()
     model_math.load_state_dict(model_state["model_state_dict"], strict=False)
     model_math = model_math.to(device=args.device)
 
     # Fused attention model (for fused export)
-    model_fused = MLPF(**model_kwargs_export, use_simplified_attention=True, export_onnx_fused=True)
+    model_fused = MLPF(
+        input_dim=model_kwargs_export["input_dim"],
+        num_classes=model_kwargs_export["num_classes"],
+        elemtypes_nonzero=model_kwargs_export["elemtypes_nonzero"],
+        config=make_mlpf_config(model_kwargs_export, use_simplified_attention=True, export_onnx_fused=True),
+    )
     model_fused.eval()
     model_fused.load_state_dict(model_state["model_state_dict"], strict=False)
     model_fused = model_fused.to(device=args.device)
@@ -266,16 +342,30 @@ def main():
 
     # PyTorch Math Model
     model_kwargs_math = copy.deepcopy(model_kwargs)
-    model_kwargs_math["attention_type"] = "math"
-    model_pt_math = MLPF(**model_kwargs_math, use_simplified_attention=False, export_onnx_fused=False, save_attention=False)
+    model_pt_math = MLPF(
+        input_dim=model_kwargs_math["input_dim"],
+        num_classes=model_kwargs_math["num_classes"],
+        elemtypes_nonzero=model_kwargs_math["elemtypes_nonzero"],
+        config=make_mlpf_config(model_kwargs_math, attention_type="math", use_simplified_attention=False, export_onnx_fused=False, save_attention=False),
+    )
     model_pt_math.eval()
     model_pt_math.load_state_dict(model_state["model_state_dict"], strict=False)
     model_pt_math = model_pt_math.to(device=args.device)
 
     # PyTorch Flash Model
     model_kwargs_flash = copy.deepcopy(model_kwargs)
-    model_kwargs_flash["attention_type"] = "flash" if args.device == "cuda" else "math"
-    model_pt_flash = MLPF(**model_kwargs_flash, use_simplified_attention=False, export_onnx_fused=False, save_attention=False)
+    model_pt_flash = MLPF(
+        input_dim=model_kwargs_flash["input_dim"],
+        num_classes=model_kwargs_flash["num_classes"],
+        elemtypes_nonzero=model_kwargs_flash["elemtypes_nonzero"],
+        config=make_mlpf_config(
+            model_kwargs_flash,
+            attention_type="flash" if args.device == "cuda" else "math",
+            use_simplified_attention=False,
+            export_onnx_fused=False,
+            save_attention=False,
+        ),
+    )
     model_pt_flash.eval()
     model_pt_flash.load_state_dict(model_state["model_state_dict"], strict=False)
     model_pt_flash = model_pt_flash.to(device=args.device)

@@ -13,6 +13,7 @@ from mlpf.logger import _logger, _configLogger
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.utils import create_comet_experiment
 from mlpf.model.training import train_all_steps, get_optimizer
+from mlpf.conf import ModelArchitectureConfig
 
 from mlpf.model.utils import (
     load_checkpoint,
@@ -245,20 +246,12 @@ def train_ray_trial(config, args, outdir=None):
     world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
-    model_kwargs = {
-        "input_dim": len(X_FEATURES[config["dataset"]]),
-        "num_classes": len(CLASS_LABELS[config["dataset"]]),
-        "input_encoding": config["model"]["input_encoding"],
-        "pt_mode": config["model"]["pt_mode"],
-        "eta_mode": config["model"]["eta_mode"],
-        "sin_phi_mode": config["model"]["sin_phi_mode"],
-        "cos_phi_mode": config["model"]["cos_phi_mode"],
-        "energy_mode": config["model"]["energy_mode"],
-        "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
-        "learned_representation_mode": config["model"]["learned_representation_mode"],
-        **config["model"][config["conv_type"]],
-    }
-    model = MLPF(**model_kwargs)
+    model = MLPF(
+        input_dim=len(X_FEATURES[config["dataset"]]),
+        num_classes=len(CLASS_LABELS[config["dataset"]]),
+        elemtypes_nonzero=ELEM_TYPES_NONZERO[config["dataset"]],
+        config=ModelArchitectureConfig.model_validate(config["model"]),
+    )
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)

@@ -9,7 +9,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
-from mlpf.conf import ModelArchitectureConfig
+from mlpf.conf import ModelArchitectureConfig, AttentionConfig, GNNLSHConfig
 
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
@@ -366,105 +366,69 @@ class RegressionOutput(nn.Module):
 class MLPF(nn.Module):
     def __init__(
         self,
-        input_dim=34,
-        num_classes=8,
-        elemtypes_nonzero=[1, 4, 5, 6, 8, 9, 10, 11],
-        config: Optional[ModelArchitectureConfig] = None,
-        # deprecated arguments, only used if config is None
-        embedding_dim=128,
-        width=128,
-        num_convs=2,
-        dropout_ff=0.0,
-        activation="elu",
-        layernorm=True,
-        conv_type="attention",
-        input_encoding="joint",
-        pt_mode="linear",
-        eta_mode="linear",
-        sin_phi_mode="linear",
-        cos_phi_mode="linear",
-        energy_mode="linear",
-        # should the conv layer outputs be concatted (concat) or take the last (last)
-        learned_representation_mode="last",
-        # gnn-lsh specific parameters
-        bin_size=640,
-        max_num_bins=200,
-        distance_dim=128,
-        num_node_messages=2,
-        ffn_dist_hidden_dim=128,
-        ffn_dist_num_layers=2,
-        # self-attention specific parameters
-        num_heads=16,
-        head_dim=16,
-        attention_type="flash",
-        dropout_conv_reg_mha=0.0,
-        dropout_conv_reg_ff=0.0,
-        dropout_conv_id_mha=0.0,
-        dropout_conv_id_ff=0.0,
-        use_pre_layernorm=False,
-        use_simplified_attention=False,
-        export_onnx_fused=False,
-        save_attention=False,
+        input_dim: int,
+        num_classes: int,
+        elemtypes_nonzero: List[int],
+        config: ModelArchitectureConfig,
     ):
         super(MLPF, self).__init__()
 
-        if config is not None:
-            conv_type = config.type
-            num_convs = config.num_convs if hasattr(config, "num_convs") else getattr(config, conv_type).num_convs
-            input_encoding = config.input_encoding
-            learned_representation_mode = config.learned_representation_mode
-            activation = getattr(config, conv_type).activation
-            embedding_dim = getattr(config, conv_type).embedding_dim
-            width = getattr(config, conv_type).width
-            dropout_ff = getattr(config, conv_type).dropout_ff
-            pt_mode = config.pt_mode
-            eta_mode = config.eta_mode
-            sin_phi_mode = config.sin_phi_mode
-            cos_phi_mode = config.cos_phi_mode
-            energy_mode = config.energy_mode
+        self.config = config
+        self.input_dim = input_dim
+        self.num_classes = num_classes
+        self.elemtypes_nonzero = elemtypes_nonzero
 
-            if conv_type == "attention":
-                num_heads = config.attention.num_heads
-                head_dim = config.attention.head_dim
-                attention_type = config.attention.attention_type
-                dropout_conv_reg_mha = config.attention.dropout_conv_reg_mha
-                dropout_conv_reg_ff = config.attention.dropout_conv_reg_ff
-                dropout_conv_id_mha = config.attention.dropout_conv_id_mha
-                dropout_conv_id_ff = config.attention.dropout_conv_id_ff
-                use_pre_layernorm = config.attention.use_pre_layernorm
-                use_simplified_attention = config.attention.use_simplified_attention
-                export_onnx_fused = config.attention.export_onnx_fused
-                save_attention = config.attention.save_attention
-            elif conv_type == "gnn_lsh":
-                bin_size = config.gnn_lsh.bin_size
-                max_num_bins = config.gnn_lsh.max_num_bins
-                distance_dim = config.gnn_lsh.distance_dim
-                layernorm = config.gnn_lsh.layernorm
-                num_node_messages = config.gnn_lsh.num_node_messages
-                ffn_dist_hidden_dim = config.gnn_lsh.ffn_dist_hidden_dim
-                ffn_dist_num_layers = config.gnn_lsh.ffn_dist_num_layers
+        # Determine architecture parameters based on the chosen type
+        self.conv_type = config.type
+        sub_config = getattr(config, self.conv_type)
 
-        _logger.info(f"MLPF __init__ conv_type={conv_type} num_convs={num_convs} input_encoding={input_encoding}")
+        # Extract parameters from the sub-config
+        self.num_convs = sub_config.num_convs
+        activation = sub_config.activation
+        embedding_dim = sub_config.embedding_dim
+        width = sub_config.width
+        dropout_ff = sub_config.dropout_ff
 
-        self.conv_type = conv_type
+        # Extract architecture-level parameters
+        self.input_encoding = config.input_encoding
+        self.learned_representation_mode = config.learned_representation_mode
+        pt_mode = config.pt_mode
+        eta_mode = config.eta_mode
+        sin_phi_mode = config.sin_phi_mode
+        cos_phi_mode = config.cos_phi_mode
+        energy_mode = config.energy_mode
 
         self.act = get_activation(activation)
 
-        self.learned_representation_mode = learned_representation_mode
-
-        self.input_encoding = input_encoding
-
-        self.input_dim = input_dim
-        self.num_convs = num_convs
-
-        self.bin_size = bin_size
-        self.elemtypes_nonzero = elemtypes_nonzero
-
-        self.use_pre_layernorm = use_pre_layernorm
-
+        # Defaults/extract specific parameters
         if self.conv_type == "attention":
+            num_heads = sub_config.num_heads
+            head_dim = sub_config.head_dim
+            attention_type = sub_config.attention_type
+            dropout_conv_reg_mha = sub_config.dropout_conv_reg_mha
+            dropout_conv_reg_ff = sub_config.dropout_conv_reg_ff
+            dropout_conv_id_mha = sub_config.dropout_conv_id_mha
+            dropout_conv_id_ff = sub_config.dropout_conv_id_ff
+            self.use_pre_layernorm = sub_config.use_pre_layernorm
+            use_simplified_attention = sub_config.use_simplified_attention
+            export_onnx_fused = sub_config.export_onnx_fused
+            save_attention = sub_config.save_attention
+
+            # Recalculate dimensions for attention
             embedding_dim = num_heads * head_dim
             width = num_heads * head_dim
+            self.bin_size = 640  # default
+        elif self.conv_type == "gnn_lsh":
+            self.bin_size = sub_config.bin_size
+            max_num_bins = sub_config.max_num_bins
+            distance_dim = sub_config.distance_dim
+            layernorm = sub_config.layernorm
+            num_node_messages = sub_config.num_node_messages
+            ffn_dist_hidden_dim = sub_config.ffn_dist_hidden_dim
+            ffn_dist_num_layers = sub_config.ffn_dist_num_layers
+            self.use_pre_layernorm = False
+
+        _logger.info(f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} input_encoding={self.input_encoding}")
 
         # embedding of the inputs
         t0 = time.time()
