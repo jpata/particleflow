@@ -1,4 +1,3 @@
-
 import sys
 # Support for GPU executor: set onnxruntime path before imports
 if "--device" in sys.argv:
@@ -187,17 +186,16 @@ def main():
     )
     del model_math_half
 
-    # 3. Export ONNX Fused Flash FP16
+    # 3. Export ONNX Fused Flash Mixed/FP16
     custom_opset = onnxscript.values.Opset(domain="onnx-script", version=1)
     msft_op = onnxscript.values.Opset("com.microsoft", 1)
     @onnxscript.script(custom_opset)
     def SDPA(query, key, value):
-        query = op.Cast(query, to=onnx.TensorProto.FLOAT16)
-        key = op.Cast(key, to=onnx.TensorProto.FLOAT16)
-        value = op.Cast(value, to=onnx.TensorProto.FLOAT16)
-        output, _, _ = msft_op.MultiHeadAttention(query, key, value, num_heads=NUM_HEADS)
-        output = op.Cast(output, to=onnx.TensorProto.FLOAT)
-        return output
+        q16 = op.Cast(query, to=onnx.TensorProto.FLOAT16)
+        k16 = op.Cast(key, to=onnx.TensorProto.FLOAT16)
+        v16 = op.Cast(value, to=onnx.TensorProto.FLOAT16)
+        output, _, _ = msft_op.MultiHeadAttention(q16, k16, v16, num_heads=NUM_HEADS)
+        return op.CastLike(output, query)
     def custom_scaled_dot_product_attention(g, query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, enable_gqa=False):
         return g.onnxscript_op(SDPA, query, key, value).setType(query.type())
     torch.onnx.register_custom_op_symbolic(
@@ -205,14 +203,28 @@ def main():
         symbolic_fn=custom_scaled_dot_product_attention,
         opset_version=opset_version,
     )
-    path_fused_fp16 = os.path.join(args.outdir, "model_fused_fp16.onnx")
+    
+    # 3a. Export ONNX Fused Flash Mixed (FP32 model, FP16 attention)
+    path_fused_fp32_fp16 = os.path.join(args.outdir, "model_fused_fp32_fp16.onnx")
     torch.onnx.export(
-        model_fused, (dummy_features, dummy_mask), path_fused_fp16,
+        model_fused, (dummy_features, dummy_mask), path_fused_fp32_fp16,
         opset_version=opset_version, verbose=False,
         input_names=["Xfeat_normed", "mask"], output_names=["bid", "id", "momentum", "pu"],
         dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
         dynamo=False,
     )
+
+    # 3b. Export ONNX Fused Flash FP16 (Full FP16)
+    path_fused_fp16 = os.path.join(args.outdir, "model_fused_fp16.onnx")
+    model_fused_half = copy.deepcopy(model_fused).half()
+    torch.onnx.export(
+        model_fused_half, (dummy_features.half(), dummy_mask.half()), path_fused_fp16,
+        opset_version=opset_version, verbose=False,
+        input_names=["Xfeat_normed", "mask"], output_names=["bid", "id", "momentum", "pu"],
+        dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
+        dynamo=False,
+    )
+    del model_fused_half
 
     # Initialize ONNX sessions
     sess_options = rt.SessionOptions()
@@ -221,6 +233,7 @@ def main():
     
     sess_math_fp32 = rt.InferenceSession(path_math_fp32, sess_options, providers=[execution_provider])
     sess_math_fp16 = rt.InferenceSession(path_math_fp16, sess_options, providers=[execution_provider])
+    sess_fused_fp32_fp16 = rt.InferenceSession(path_fused_fp32_fp16, sess_options, providers=[execution_provider])
     sess_fused_fp16 = rt.InferenceSession(path_fused_fp16, sess_options, providers=[execution_provider])
 
     # PyTorch Math Model
@@ -262,10 +275,11 @@ def main():
                 _ = model_pt_flash(X_warmup, mask_warmup)
         _ = sess_math_fp32.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup})
         _ = sess_math_fp16.run(None, {"Xfeat_normed": X_warmup_np_fp16, "mask": mask_f_warmup_fp16})
-        _ = sess_fused_fp16.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup})
+        _ = sess_fused_fp32_fp16.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup})
+        _ = sess_fused_fp16.run(None, {"Xfeat_normed": X_warmup_np_fp16, "mask": mask_f_warmup_fp16})
     if args.device == "cuda": torch.cuda.synchronize()
 
-    configs = ["PT_MATH_FP32", "PT_MATH_FP16", "PT_FLASH_FP16", "ONNX_MATH_FP32", "ONNX_MATH_FP16", "ONNX_FLASH_FP16"]
+    configs = ["PT_MATH_FP32", "PT_MATH_FP16", "PT_FLASH_FP16", "ONNX_MATH_FP32", "ONNX_MATH_FP16", "ONNX_FLASH_FP32_FP16", "ONNX_FLASH_FP16"]
     results = {cfg: {"id": [], "momentum": [], "pu": [], "total_err": 0.0, "num_elems": 0, "num_invalid": 0, "runtime": [], "event_size": [], "jets_pt": []} for cfg in configs}
     
     print(f"Running validation on {args.num_events} events...")
@@ -335,9 +349,16 @@ def main():
         results["ONNX_MATH_FP16"]["runtime"].append(t1 - t0)
         p_math_fp16 = tuple(torch.tensor(p).float() for p in p_math_fp16)
 
-        # 6. ONNX Flash FP16
+        # 6. ONNX Flash FP32_FP16
         t0 = time.perf_counter()
-        p_fused_fp16 = sess_fused_fp16.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
+        p_fused_fp32_fp16 = sess_fused_fp32_fp16.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
+        t1 = time.perf_counter()
+        results["ONNX_FLASH_FP32_FP16"]["runtime"].append(t1 - t0)
+        p_fused_fp32_fp16 = tuple(torch.tensor(p).float() for p in p_fused_fp32_fp16)
+
+        # 7. ONNX Flash FP16
+        t0 = time.perf_counter()
+        p_fused_fp16 = sess_fused_fp16.run(None, {"Xfeat_normed": X_features_np_fp16, "mask": mask_f_np_fp16})
         t1 = time.perf_counter()
         results["ONNX_FLASH_FP16"]["runtime"].append(t1 - t0)
         p_fused_fp16 = tuple(torch.tensor(p).float() for p in p_fused_fp16)
@@ -348,6 +369,7 @@ def main():
             "PT_FLASH_FP16": pred_pt_flash_fp16,
             "ONNX_MATH_FP32": p_math_fp32,
             "ONNX_MATH_FP16": p_math_fp16,
+            "ONNX_FLASH_FP32_FP16": p_fused_fp32_fp16,
             "ONNX_FLASH_FP16": p_fused_fp16
         }
 
@@ -357,7 +379,7 @@ def main():
             results[cfg]["jets_pt"].append(awkward.to_numpy(awkward.flatten(j.pt)))
 
         for cfg, pred_test in all_preds.items():
-            if cfg == "PT_FLASH_BF16":
+            if cfg == "PT_MATH_FP32":
                 continue
             for name, idx in [("id", 1), ("momentum", 2), ("pu", 3)]:
                 diff_orig = (pred_baseline[idx][m_cpu] - pred_test[idx][m_cpu]).abs().flatten().numpy()
@@ -371,7 +393,7 @@ def main():
 
     # Plotting
     print("Generating comparison plots...")
-    colors = ["black", "blue", "cyan", "red", "orange", "magenta"]
+    colors = ["black", "blue", "cyan", "red", "orange", "magenta", "green"]
 
     # Runtime vs Event Size Scatter Plot
     plt.figure(figsize=(12, 8))
@@ -391,7 +413,7 @@ def main():
             if cfg == "PT_MATH_FP32":
                 continue
             d = np.concatenate(results[cfg][name])
-            plt.hist(d, bins=np.logspace(-3,0,100), label=cfg, histtype="step", lw=2, color=colors[idx])
+            plt.hist(d, bins=np.logspace(-6,0,100), label=cfg, histtype="step", lw=2, color=colors[idx])
         plt.yscale("log")
         plt.xscale("log")
         plt.xlabel(f"Absolute difference in {name} (Ref: PT MATH FP32)")
@@ -421,7 +443,7 @@ def main():
     plt.bar(sorted_runtime_configs, avg_runtimes, yerr=std_runtimes, capsize=5, color=[colors[configs.index(cfg)] for cfg in sorted_runtime_configs])
     plt.ylabel("Mean Inference Time [ms]")
     plt.title("Mean Inference Runtime Comparison (Sorted)", y=1.05)
-    plt.xticks(rotation=45)
+    plt.xticks(rotation=90)
     plt.tight_layout()
     plt.ylim(0, 2.0*np.max(avg_runtimes))
     plt.savefig(os.path.join(args.outdir, "runtime_ranking.pdf"), bbox_inches="tight")
@@ -454,7 +476,7 @@ def main():
     plt.ylim(0, 1.5*np.max(maes) if len(maes) > 0 and np.max(maes) > 0 else 1)
     plt.ylabel("Mean Absolute Error (MAE)")
     plt.title("Model Ranking by MAE (Relative to Baseline PT MATH FP32)", y=1.05)
-    plt.xticks(rotation=45)
+    plt.xticks(rotation=90)
     plt.tight_layout()
     plt.savefig(os.path.join(args.outdir, "model_error_ranking.pdf"), bbox_inches="tight")
     plt.close()
