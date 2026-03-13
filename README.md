@@ -1,3 +1,9 @@
+## **TLDR; I just want to run the code**
+```
+pip install -r requirements.txt
+./scripts/local_test_torch.sh
+```
+
 ### **Summary**
 
 **ML-based particle flow (MLPF)** focuses on developing full event reconstruction for particle detectors using computationally scalable and flexible machine learning models. The project aims to improve particle flow reconstruction across various detector environments, including CMS, as well as future detectors via Key4HEP.
@@ -61,6 +67,7 @@ Please ensure you use the correct version of the `jpata/particleflow` software w
 | [2.2.0](https://github.com/jpata/particleflow/releases/v2.2.0) | 2.5.0 | 2.5.0 | 2.5.0 |
 | [2.3.0](https://github.com/jpata/particleflow/releases/v2.3.0) | 2.5.0 | 2.5.0 | 2.5.0 |
 | [2.4.0](https://github.com/jpata/particleflow/releases/v2.4.0) | 2.6.0 | 2.5.0 | 2.5.0 |
+| [3.0.0](https://github.com/jpata/particleflow/releases/v3.0.0) | 3.0.0 | 3.0.0 | 3.0.0 |
 
 ---
 
