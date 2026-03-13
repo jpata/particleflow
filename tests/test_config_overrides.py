@@ -115,6 +115,28 @@ class TestConfigOverrides(unittest.TestCase):
         self.assertEqual(config["train_dataset"]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]["splits"], ["10"])
         self.assertEqual(config["test_dataset"]["cms_pf_ttbar"]["splits"], ["10"])
 
+    def test_invalid_extra_args(self):
+        args = argparse.Namespace()
+        args.train = True
+        args.test_datasets = []
+
+        # "invalid_arg" is not a flag (doesn't start with --) and not part of a key=value pair
+        extra_args = ["--num_steps", "200", "invalid_arg"]
+
+        with self.assertRaisesRegex(ValueError, "Could not parse extra argument: invalid_arg"):
+            MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args, extra_args=extra_args)
+
+    def test_extra_forbidden_args(self):
+        args = argparse.Namespace()
+        args.train = True
+        args.test_datasets = []
+
+        # This should fail during Pydantic validation
+        extra_args = ["--extra_forbidden_field", "value"]
+
+        with self.assertRaises(Exception):
+            MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args, extra_args=extra_args)
+
 
 if __name__ == "__main__":
     unittest.main()

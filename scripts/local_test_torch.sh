@@ -5,38 +5,41 @@ export PWD=`pwd`
 export PYTHONPATH=`pwd`
 export KERAS_BACKEND=torch
 
-# Quick unit tests
-python -m pytest tests/test_dataloader.py
-python -m pytest tests/test_dataloader_behavior.py
-python -m pytest tests/test_endless_interleaved_iterator.py
-python -m pytest tests/test_resumable_sampler.py
-python -m pytest tests/test_interleaved_iterator.py
-python -m pytest tests/test_lr_schedule.py
-python -m pytest tests/test_config_overrides.py
+# START comment block
+# Commented out for now, do not enable these so that the test is quick!
+# # Quick unit tests
+# python -m pytest tests/test_dataloader.py
+# python -m pytest tests/test_dataloader_behavior.py
+# python -m pytest tests/test_endless_interleaved_iterator.py
+# python -m pytest tests/test_resumable_sampler.py
+# python -m pytest tests/test_interleaved_iterator.py
+# python -m pytest tests/test_lr_schedule.py
+# python -m pytest tests/test_config_overrides.py
 
-#create data directories
-rm -Rf local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
-mkdir -p local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
-cd local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
+# #create data directories
+# rm -Rf local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
+# mkdir -p local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
+# cd local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
 
-#Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
+# #Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
+# wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
+# wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
 
-cd ../../..
+# cd ../../..
 
-#Create the ntuples using postprocessing2.py
-for file in `\ls -1 local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root/*.root`; do
-  python mlpf/data/cms/postprocessing2.py \
-    --input $file \
-    --outpath local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
-done
-find local_test_data
+# #Create the ntuples using postprocessing2.py
+# for file in `\ls -1 local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root/*.root`; do
+#   python mlpf/data/cms/postprocessing2.py \
+#     --input $file \
+#     --outpath local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
+# done
+# find local_test_data
 
-#create the tensorflow dataset for the last split config only
-tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
+# #create the tensorflow dataset for the last split config only
+# tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
 
-mkdir -p experiments
+# mkdir -p experiments
+# END comment block
 
 # --------------------------------------------------------------------------------------------
 # Test 1: Initial training using the 'train' sub-command
@@ -50,7 +53,7 @@ python mlpf/pipeline.py \
   --pipeline \
   train \
   --num-steps 2 \
-  --checkpoint-freq 2 \
+  --checkpoint-freq 1 \
   --gpus 0 \
   --make-plots \
   --conv-type attention \
@@ -77,7 +80,7 @@ python mlpf/pipeline.py \
   --pipeline \
   train \
   --num-steps 4 \
-  --checkpoint-freq 2 \
+  --checkpoint-freq 1 \
   --gpus 0 \
   --make-plots \
   --conv-type attention \

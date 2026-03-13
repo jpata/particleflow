@@ -307,6 +307,7 @@ def _log_and_checkpoint_step(
             }
 
             checkpoint_path = f"{checkpoint_dir}/checkpoint-{step:02d}.pth"
+            _logger.info("saving checkpoint {}".format(checkpoint_path))
             save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
             # Clean up old checkpoints, keeping the last num_patience

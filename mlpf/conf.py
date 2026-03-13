@@ -179,6 +179,7 @@ Y_FEATURES = [
 
 
 class GNNLSHConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     conv_type: Literal["gnn_lsh"] = "gnn_lsh"
     embedding_dim: int = 128
     width: int = 128
@@ -195,6 +196,7 @@ class GNNLSHConfig(BaseModel):
 
 
 class AttentionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     conv_type: Literal["attention"] = "attention"
     embedding_dim: int = 128
     width: int = 128
@@ -216,7 +218,7 @@ class AttentionConfig(BaseModel):
 
 
 class ModelArchitectureConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     type: Literal["attention", "gnn_lsh"]
     input_encoding: str = "split"
@@ -234,29 +236,43 @@ class ModelArchitectureConfig(BaseModel):
 
 
 class DatasetSample(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     version: str
     splits: List[str]
     batch_size: Optional[int] = None
 
 
 class PhysicalDataset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     batch_size: int = 1
     samples: Dict[str, DatasetSample]
 
 
 class TestDatasetEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     version: Optional[str] = None
     splits: List[str] = ["test"]
     batch_size: int = 1
 
 
 class MLPFConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     dataset: str
     data_dir: str
     model: ModelArchitectureConfig
     conv_type: str
+
+    batch_size: Optional[int] = None
+    hyperparameters: Dict[str, Any] = Field(default_factory=dict)
+
+    # Missing fields from spec
+    backend: Optional[str] = None
+    threads: Optional[int] = None
+    gpu_type: Optional[str] = None
+    mem_per_gpu_mb: Optional[int] = None
+    slurm_partition: Optional[str] = None
+    slurm_runtime: Optional[str] = None
 
     # Model dimensions (derived from dataset)
     input_dim: Optional[int] = None
@@ -445,6 +461,20 @@ class MLPFConfig(BaseModel):
             overrides = parse_extra_args(extra_args)
             for key, value in overrides.items():
                 set_nested_dict(config_dict, key, value)
+
+            # Check for leftover extra arguments that could not be parsed as overrides
+            i = 0
+            while i < len(extra_args):
+                arg = extra_args[i]
+                if arg.startswith("--"):
+                    if i + 1 < len(extra_args) and not extra_args[i + 1].startswith("--") and "=" not in extra_args[i + 1]:
+                        i += 2
+                    else:
+                        i += 1
+                elif "=" in arg:
+                    i += 1
+                else:
+                    raise ValueError(f"Could not parse extra argument: {arg}")
 
         # 7. Pipeline Overrides
         if args and hasattr(args, "pipeline") and args.pipeline:
