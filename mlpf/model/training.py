@@ -761,8 +761,6 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
         "learned_representation_mode": config["model"]["learned_representation_mode"],
         **config["model"][config["conv_type"]],
     }
-    if "attention_type" in config["model"]:
-        model_kwargs["attention_type"] = config["model"]["attention_type"]
 
     start_step = 1
     lr_schedule = None

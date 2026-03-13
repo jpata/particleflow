@@ -55,7 +55,7 @@ def get_parser():
     common_parser.add_argument("--dtype", type=str, default=None, choices=["float32", "float16", "bfloat16"])
     common_parser.add_argument("--test-datasets", nargs="+", default=[], help="Test samples to process")
     common_parser.add_argument("--make-plots", action="store_true", help="Generate plots")
-    common_parser.add_argument("--attention_type", type=str, default=None, help="Attention type to use (math, efficient, flash, linear)")
+    #common_parser.add_argument("--attention_type", type=str, default=None, help="Attention type to use (math, efficient, flash, linear)")
 
     # --- 'train' command parser ---
     parser_train = subparsers.add_parser("train", parents=[common_parser], help="Run standard training")

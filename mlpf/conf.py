@@ -54,7 +54,6 @@ class ModelArchitectureConfig(BaseModel):
     cos_phi_mode: str = "linear"
     energy_mode: str = "direct-elemtype-split"
     trainable: str = "all"
-    attention_type: Optional[str] = None
 
     # Nested configs
     gnn_lsh: Optional[GNNLSHConfig] = None
@@ -235,7 +234,6 @@ class MLPFConfig(BaseModel):
             # Special mapping cases (convenience flags)
             if hasattr(args, "attention_type") and args.attention_type is not None:
                 set_nested_dict(config_dict, "model.attention.attention_type", args.attention_type)
-                set_nested_dict(config_dict, "model.attention_type", args.attention_type)
 
             if hasattr(args, "num_convs") and args.num_convs is not None:
                 for m in ["gnn_lsh", "attention"]:
