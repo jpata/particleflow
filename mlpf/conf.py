@@ -160,6 +160,29 @@ X_FEATURES = {
     ],
 }
 
+JET_CONFIG = {
+    "cms": {
+        "algo": "antikt_algorithm",
+        "r": 0.4,
+        "ptcut": 3.0,
+        "match_dr": 0.1,
+    },
+    "clic": {
+        "algo": "ee_genkt_algorithm",
+        "r": 0.4,
+        "p": -1.0,
+        "ptcut": 5.0,
+        "match_dr": 0.1,
+    },
+    "cld": {
+        "algo": "ee_genkt_algorithm",
+        "r": 0.4,
+        "p": -1.0,
+        "ptcut": 5.0,
+        "match_dr": 0.1,
+    },
+}
+
 Y_FEATURES = [
     "PDG",
     "charge",

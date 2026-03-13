@@ -71,6 +71,7 @@ from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloader
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
 from mlpf.conf import MLPFConfig
+from mlpf.jet_utils import get_jet_config
 
 
 def model_step(batch, model, loss_fn):
@@ -698,19 +699,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     _logger.info(f"Running predictions on {sample}")
     torch.cuda.empty_cache()
 
-    # FIXME: import this from a central place
-    if config.dataset == "clic" or config.dataset == "cld":
-        import fastjet
-
-        jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
-        jet_ptcut = 5
-    elif config.dataset == "cms":
-        import fastjet
-
-        jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-        jet_ptcut = 3
-    else:
-        raise Exception("jet configuration for dataset {} not implemented".format(config.dataset))
+    jetdef, jet_ptcut, jet_match_dr = get_jet_config(config.dataset)
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
@@ -723,7 +712,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
             outdir,
             jetdef,
             jet_ptcut=jet_ptcut,
-            jet_match_dr=0.1,
+            jet_match_dr=jet_match_dr,
             dir_name=testdir_name,
         )
     if world_size > 1:

@@ -112,3 +112,21 @@ def match_two_jet_collections(jets_coll, name1, name2, jet_match_dr):
         c1_to_c2 = awkward.Array({name1: dummy, name2: dummy})
 
     return c1_to_c2
+
+
+def get_jet_config(dataset):
+    import fastjet
+    from mlpf.conf import JET_CONFIG
+
+    if dataset not in JET_CONFIG:
+        raise Exception(f"jet configuration for dataset {dataset} not implemented")
+
+    config = JET_CONFIG[dataset]
+    algo = getattr(fastjet, config["algo"])
+
+    if "p" in config:
+        jetdef = fastjet.JetDefinition(algo, config["r"], config["p"])
+    else:
+        jetdef = fastjet.JetDefinition(algo, config["r"])
+
+    return jetdef, config["ptcut"], config["match_dr"]
