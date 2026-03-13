@@ -13,6 +13,36 @@ def load_spec(spec_file):
     return spec
 
 
+def set_nested_dict(d, key_path, value):
+    """Set a value in a nested dictionary using a dot-separated path."""
+    keys = key_path.split(".")
+    for key in keys[:-1]:
+        d = d.setdefault(key, {})
+
+    # Try to parse string values as yaml to get correct types (int, float, bool, etc.)
+    if isinstance(value, str):
+        try:
+            # handle cases like "None" -> None, "1" -> 1, "True" -> True
+            parsed_value = yaml.safe_load(value)
+            # Only use parsed value if it's not a string (unless it was explicitly "None")
+            if not isinstance(parsed_value, str) or parsed_value == "None":
+                value = parsed_value
+        except Exception:
+            pass
+    d[keys[-1]] = value
+
+
+def get_nested_dict(d, key_path, default=None):
+    """Get a value from a nested dictionary using a dot-separated path."""
+    keys = key_path.split(".")
+    for key in keys:
+        if isinstance(d, dict):
+            d = d.get(key, default)
+        else:
+            return default
+    return d
+
+
 def resolve_path(path, spec):
     # Recursive substitution for ${...}
     def replace(match):

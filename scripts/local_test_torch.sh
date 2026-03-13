@@ -12,6 +12,7 @@ python -m pytest tests/test_endless_interleaved_iterator.py
 python -m pytest tests/test_resumable_sampler.py
 python -m pytest tests/test_interleaved_iterator.py
 python -m pytest tests/test_lr_schedule.py
+python -m pytest tests/test_config_overrides.py
 
 #create data directories
 rm -Rf local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
