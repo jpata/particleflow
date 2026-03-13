@@ -6,182 +6,20 @@ import torch
 import torch.utils.data
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
 import logging
-from mlpf.conf import MLPFConfig
+from mlpf.conf import (
+    MLPFConfig,
+    ELEM_TYPES,
+    ELEM_TYPES_NONZERO,
+    CLASS_LABELS,
+    CLASS_NAMES_LATEX,
+    CLASS_NAMES,
+    CLASS_NAMES_CAPITALIZED,
+    X_FEATURES,
+    Y_FEATURES,
+)
 
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
 # https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
-
-# All possible PFElement types
-ELEM_TYPES = {
-    "cms": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-    "clic": [0, 1, 2],
-    "cld": [0, 1, 2],
-}
-
-# Some element types are defined, but do not exist in the dataset at all
-ELEM_TYPES_NONZERO = {
-    "cms": [1, 4, 5, 6, 8, 9, 10, 11],
-    "clic": [1, 2],
-    "cld": [1, 2],
-}
-
-CLASS_LABELS = {
-    "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],  # we never actually predict 15/taus (not there in targets)
-    "clic": [0, 211, 130, 22, 11, 13],
-    "cld": [0, 211, 130, 22, 11, 13],
-    "clic_hits": [0, 211, 130, 22, 11, 13],
-}
-
-CLASS_NAMES_LATEX = {
-    "cms": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
-    "clic": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    "cld": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    "clic_hits": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-}
-CLASS_NAMES = {
-    "cms": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
-    "clic": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
-    "cld": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
-    "clic_hits": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
-}
-CLASS_NAMES_CAPITALIZED = {
-    "cms": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
-    "clic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    "ccldlic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    "clic_hits": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-}
-
-X_FEATURES = {
-    "cms": [
-        "typ_idx",
-        "pt",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "e",
-        "layer",
-        "depth",
-        "charge",
-        "trajpoint",
-        "eta_ecal",
-        "phi_ecal",
-        "eta_hcal",
-        "phi_hcal",
-        "muon_dt_hits",
-        "muon_csc_hits",
-        "muon_type",
-        "px",
-        "py",
-        "pz",
-        "deltap",
-        "sigmadeltap",
-        "gsf_electronseed_trkorecal",
-        "gsf_electronseed_dnn1",
-        "gsf_electronseed_dnn2",
-        "gsf_electronseed_dnn3",
-        "gsf_electronseed_dnn4",
-        "gsf_electronseed_dnn5",
-        "num_hits",
-        "cluster_flags",
-        "corr_energy",
-        "corr_energy_err",
-        "vx",
-        "vy",
-        "vz",
-        "pterror",
-        "etaerror",
-        "phierror",
-        "lambd",
-        "lambdaerror",
-        "theta",
-        "thetaerror",
-        "time",
-        "timeerror",
-        "etaerror1",
-        "etaerror2",
-        "etaerror3",
-        "etaerror4",
-        "phierror1",
-        "phierror2",
-        "phierror3",
-        "phierror4",
-        "sigma_x",
-        "sigma_y",
-        "sigma_z",
-    ],
-    "clic": [
-        "type",
-        "pt | et",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "p | energy",
-        "chi2 | position.x",
-        "ndf | position.y",
-        "dEdx | position.z",
-        "dEdxError | iTheta",
-        "radiusOfInnermostHit | energy_ecal",
-        "tanLambda | energy_hcal",
-        "D0 | energy_other",
-        "omega | num_hits",
-        "Z0 | sigma_x",
-        "time | sigma_y",
-        "Null | sigma_z",
-    ],
-    "cld": [
-        "type",
-        "pt | et",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "p | energy",
-        "chi2 | position.x",
-        "ndf | position.y",
-        "dEdx | position.z",
-        "dEdxError | iTheta",
-        "radiusOfInnermostHit | energy_ecal",
-        "tanLambda | energy_hcal",
-        "D0 | energy_other",
-        "omega | num_hits",
-        "Z0 | sigma_x",
-        "time | sigma_y",
-        "Null | sigma_z",
-    ],
-    "clic_hits": [
-        "elemtype",
-        "pt | et",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "p | energy",
-        "chi2 | position.x",
-        "ndf | position.y",
-        "dEdx | position.z",
-        "dEdxError | time",
-        "radiusOfInnermostHit | subdetector",
-        "tanLambda | type",
-        "D0 | Null",
-        "omega | Null",
-        "Z0 | Null",
-        "time | Null",
-    ],
-}
-
-Y_FEATURES = [
-    "PDG",
-    "charge",
-    "pt",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "ispu",
-    "generatorStatus",
-    "simulatorStatus",
-    "gp_to_track",
-    "gp_to_cluster",
-    "jet_idx",
-]
 
 
 def unpack_target(y, model):
@@ -240,11 +78,11 @@ def unpack_predictions(preds):
     return ret
 
 
-def save_HPs(config: MLPFConfig, mlpf, model_kwargs, outdir):
+def save_HPs(config: MLPFConfig, mlpf, outdir):
     """Simple function to store the model parameters and training hyperparameters."""
 
-    with open(f"{outdir}/model_kwargs.pkl", "wb") as f:  # dump model architecture
-        pkl.dump(model_kwargs, f, protocol=pkl.HIGHEST_PROTOCOL)
+    with open(f"{outdir}/model_kwargs.pkl", "wb") as f:
+        pkl.dump(config, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     num_mlpf_parameters = sum(p.numel() for p in mlpf.parameters() if p.requires_grad)
 

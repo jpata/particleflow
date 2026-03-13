@@ -13,13 +13,10 @@ from mlpf.logger import _logger, _configLogger
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.utils import create_comet_experiment
 from mlpf.model.training import train_all_steps, get_optimizer
-from mlpf.conf import ModelArchitectureConfig
+from mlpf.conf import MLPFConfig
 
 from mlpf.model.utils import (
     load_checkpoint,
-    CLASS_LABELS,
-    X_FEATURES,
-    ELEM_TYPES_NONZERO,
     save_HPs,
     get_lr_schedule,
     count_parameters,
@@ -246,12 +243,8 @@ def train_ray_trial(config, args, outdir=None):
     world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
-    model = MLPF(
-        input_dim=len(X_FEATURES[config["dataset"]]),
-        num_classes=len(CLASS_LABELS[config["dataset"]]),
-        elemtypes_nonzero=ELEM_TYPES_NONZERO[config["dataset"]],
-        config=ModelArchitectureConfig.model_validate(config["model"]),
-    )
+    mlpf_config = MLPFConfig.model_validate(config)
+    model = MLPF(mlpf_config)
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -274,7 +267,7 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info(table)
 
     if (rank == 0) or (rank == "cpu"):
-        save_HPs(config, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
+        save_HPs(mlpf_config, model, outdir)  # save config and hyperparameters
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 

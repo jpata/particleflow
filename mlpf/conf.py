@@ -5,6 +5,179 @@ import os
 from mlpf.utils import resolve_path, load_spec, set_nested_dict
 
 
+# All possible PFElement types
+ELEM_TYPES = {
+    "cms": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    "clic": [0, 1, 2],
+    "cld": [0, 1, 2],
+}
+
+# Some element types are defined, but do not exist in the dataset at all
+ELEM_TYPES_NONZERO = {
+    "cms": [1, 4, 5, 6, 8, 9, 10, 11],
+    "clic": [1, 2],
+    "cld": [1, 2],
+}
+
+CLASS_LABELS = {
+    "cms": [0, 211, 130, 1, 2, 22, 11, 13, 15],  # we never actually predict 15/taus (not there in targets)
+    "clic": [0, 211, 130, 22, 11, 13],
+    "cld": [0, 211, 130, 22, 11, 13],
+    "clic_hits": [0, 211, 130, 22, 11, 13],
+}
+
+CLASS_NAMES_LATEX = {
+    "cms": ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
+    "clic": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    "cld": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    "clic_hits": ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+}
+CLASS_NAMES = {
+    "cms": ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
+    "clic": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    "cld": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    "clic_hits": ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+}
+CLASS_NAMES_CAPITALIZED = {
+    "cms": ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
+    "clic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    "ccldlic": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    "clic_hits": ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+}
+
+X_FEATURES = {
+    "cms": [
+        "typ_idx",
+        "pt",
+        "eta",
+        "sin_phi",
+        "cos_phi",
+        "e",
+        "layer",
+        "depth",
+        "charge",
+        "trajpoint",
+        "eta_ecal",
+        "phi_ecal",
+        "eta_hcal",
+        "phi_hcal",
+        "muon_dt_hits",
+        "muon_csc_hits",
+        "muon_type",
+        "px",
+        "py",
+        "pz",
+        "deltap",
+        "sigmadeltap",
+        "gsf_electronseed_trkorecal",
+        "gsf_electronseed_dnn1",
+        "gsf_electronseed_dnn2",
+        "gsf_electronseed_dnn3",
+        "gsf_electronseed_dnn4",
+        "gsf_electronseed_dnn5",
+        "num_hits",
+        "cluster_flags",
+        "corr_energy",
+        "corr_energy_err",
+        "vx",
+        "vy",
+        "vz",
+        "pterror",
+        "etaerror",
+        "phierror",
+        "lambd",
+        "lambdaerror",
+        "theta",
+        "thetaerror",
+        "time",
+        "timeerror",
+        "etaerror1",
+        "etaerror2",
+        "etaerror3",
+        "etaerror4",
+        "phierror1",
+        "phierror2",
+        "phierror3",
+        "phierror4",
+        "sigma_x",
+        "sigma_y",
+        "sigma_z",
+    ],
+    "clic": [
+        "type",
+        "pt | et",
+        "eta",
+        "sin_phi",
+        "cos_phi",
+        "p | energy",
+        "chi2 | position.x",
+        "ndf | position.y",
+        "dEdx | position.z",
+        "dEdxError | iTheta",
+        "radiusOfInnermostHit | energy_ecal",
+        "tanLambda | energy_hcal",
+        "D0 | energy_other",
+        "omega | num_hits",
+        "Z0 | sigma_x",
+        "time | sigma_y",
+        "Null | sigma_z",
+    ],
+    "cld": [
+        "type",
+        "pt | et",
+        "eta",
+        "sin_phi",
+        "cos_phi",
+        "p | energy",
+        "chi2 | position.x",
+        "ndf | position.y",
+        "dEdx | position.z",
+        "dEdxError | iTheta",
+        "radiusOfInnermostHit | energy_ecal",
+        "tanLambda | energy_hcal",
+        "D0 | energy_other",
+        "omega | num_hits",
+        "Z0 | sigma_x",
+        "time | sigma_y",
+        "Null | sigma_z",
+    ],
+    "clic_hits": [
+        "elemtype",
+        "pt | et",
+        "eta",
+        "sin_phi",
+        "cos_phi",
+        "p | energy",
+        "chi2 | position.x",
+        "ndf | position.y",
+        "dEdx | position.z",
+        "dEdxError | time",
+        "radiusOfInnermostHit | subdetector",
+        "tanLambda | type",
+        "D0 | Null",
+        "omega | Null",
+        "Z0 | Null",
+        "time | Null",
+    ],
+}
+
+Y_FEATURES = [
+    "PDG",
+    "charge",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "energy",
+    "ispu",
+    "generatorStatus",
+    "simulatorStatus",
+    "gp_to_track",
+    "gp_to_cluster",
+    "jet_idx",
+]
+
+
 class GNNLSHConfig(BaseModel):
     conv_type: Literal["gnn_lsh"] = "gnn_lsh"
     embedding_dim: int = 128
@@ -85,6 +258,11 @@ class MLPFConfig(BaseModel):
     model: ModelArchitectureConfig
     conv_type: str
 
+    # Model dimensions (derived from dataset)
+    input_dim: Optional[int] = None
+    num_classes: Optional[int] = None
+    elemtypes_nonzero: Optional[List[int]] = None
+
     # Training parameters
     num_steps: int = 100000
     patience: int = 10000
@@ -130,6 +308,17 @@ class MLPFConfig(BaseModel):
 
     # Multi-GPU
     gpus: int = 0
+
+    @model_validator(mode="after")
+    def populate_defaults(self) -> "MLPFConfig":
+        if self.dataset in X_FEATURES:
+            if self.input_dim is None:
+                self.input_dim = len(X_FEATURES[self.dataset])
+            if self.num_classes is None:
+                self.num_classes = len(CLASS_LABELS[self.dataset])
+            if self.elemtypes_nonzero is None:
+                self.elemtypes_nonzero = ELEM_TYPES_NONZERO[self.dataset]
+        return self
 
     def flatten_config(self, prefix=""):
         """Flatten the nested configuration into a dot-separated path dictionary."""
@@ -188,6 +377,11 @@ class MLPFConfig(BaseModel):
         config_dict["dataset"] = model_config_raw.get("dataset", prod_config_raw.get("type"))
         workspace_dir = resolve_path(prod_config_raw["workspace_dir"], spec)
         config_dict["data_dir"] = os.path.join(workspace_dir, "tfds")
+
+        # Set model dimensions
+        config_dict["input_dim"] = len(X_FEATURES[config_dict["dataset"]])
+        config_dict["num_classes"] = len(CLASS_LABELS[config_dict["dataset"]])
+        config_dict["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[config_dict["dataset"]]
 
         # Helper for datasets
         def build_dataset_config_dict(dataset_input):
@@ -288,3 +482,4 @@ class MLPFConfig(BaseModel):
 
         # 9. Validate with Pydantic
         return MLPFConfig.model_validate(config_dict)
+

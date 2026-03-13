@@ -750,23 +750,19 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     if (rank == 0) | (rank == "cpu"):
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    model_kwargs = {
-        "input_dim": len(X_FEATURES[config.dataset]),
-        "num_classes": len(CLASS_LABELS[config.dataset]),
-        "elemtypes_nonzero": ELEM_TYPES_NONZERO[config.dataset],
-        "config": config.model,
-    }
-
     start_step = 1
     lr_schedule = None
     checkpoint = None
 
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
-    if config.load:
-        model = MLPF(**model_kwargs).to(torch.device(rank))
-        optimizer = get_optimizer(model, config)
-        lr_schedule = get_lr_schedule(config, optimizer, config.num_steps)
+    _logger.info("Instantiating model")
+    model = MLPF(config)
+    _logger.info("Instantiated model")
 
+    optimizer = get_optimizer(model, config)
+    lr_schedule = get_lr_schedule(config, optimizer, config.num_steps)
+
+    if config.load:
         checkpoint = torch.load(config.load, map_location=torch.device(rank))
         start_step = checkpoint["extra_state"]["step"] + 1
 
@@ -796,18 +792,10 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
         load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
-    else:  # instantiate a new model in the outdir created
-        _logger.info("Instantiating model")
-        _logger.info(f"model_kwargs: {model_kwargs}")
-        model = MLPF(**model_kwargs)
-        _logger.info("Instantiated model")
-        optimizer = get_optimizer(model, config)
-        lr_schedule = get_lr_schedule(config, optimizer, config.num_steps)
-
     _logger.info("Moving model to device rank={}".format(rank))
-    if rank != "cpu":
-        model.to(device="cuda:{}".format(rank))
+    model = model.to(torch.device(rank))
     _logger.info("Moved model to device rank={}".format(rank))
+    
     # CPU: the compilation does not work with bs>1
     # Nvidia: compilation should generally be used, but can be disabled
     # ROCM: compilation seems to be needed for ROCm to work properly
@@ -831,7 +819,7 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
 
     if config.train:
         if (rank == 0) or (rank == "cpu"):
-            save_HPs(config, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
+            save_HPs(config, model, outdir)  # save config and hyperparameters
             _logger.info("Creating experiment dir {}".format(outdir))
             _logger.info(f"Model directory {outdir}", color="bold")
 

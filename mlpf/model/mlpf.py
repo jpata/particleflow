@@ -9,7 +9,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
-from mlpf.conf import ModelArchitectureConfig, AttentionConfig, GNNLSHConfig
+from mlpf.conf import MLPFConfig, ModelArchitectureConfig, AttentionConfig, GNNLSHConfig
 
 
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
@@ -366,21 +366,18 @@ class RegressionOutput(nn.Module):
 class MLPF(nn.Module):
     def __init__(
         self,
-        input_dim: int,
-        num_classes: int,
-        elemtypes_nonzero: List[int],
-        config: ModelArchitectureConfig,
+        config: MLPFConfig,
     ):
         super(MLPF, self).__init__()
 
-        self.config = config
-        self.input_dim = input_dim
-        self.num_classes = num_classes
-        self.elemtypes_nonzero = elemtypes_nonzero
+        self.config = config.model
+        self.input_dim = config.input_dim
+        self.num_classes = config.num_classes
+        self.elemtypes_nonzero = config.elemtypes_nonzero
 
         # Determine architecture parameters based on the chosen type
-        self.conv_type = config.type
-        sub_config = getattr(config, self.conv_type)
+        self.conv_type = self.config.type
+        sub_config = getattr(self.config, self.conv_type)
 
         # Extract parameters from the sub-config
         self.num_convs = sub_config.num_convs
@@ -390,13 +387,13 @@ class MLPF(nn.Module):
         dropout_ff = sub_config.dropout_ff
 
         # Extract architecture-level parameters
-        self.input_encoding = config.input_encoding
-        self.learned_representation_mode = config.learned_representation_mode
-        pt_mode = config.pt_mode
-        eta_mode = config.eta_mode
-        sin_phi_mode = config.sin_phi_mode
-        cos_phi_mode = config.cos_phi_mode
-        energy_mode = config.energy_mode
+        self.input_encoding = self.config.input_encoding
+        self.learned_representation_mode = self.config.learned_representation_mode
+        pt_mode = self.config.pt_mode
+        eta_mode = self.config.eta_mode
+        sin_phi_mode = self.config.sin_phi_mode
+        cos_phi_mode = self.config.cos_phi_mode
+        energy_mode = self.config.energy_mode
 
         self.act = get_activation(activation)
 
@@ -535,7 +532,7 @@ class MLPF(nn.Module):
         t0 = time.time()
         # DNN that acts on the node level to predict the PID
         self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, dropout_ff)
-        self.nn_pid = ffn(decoding_dim, num_classes, width, self.act, dropout_ff)
+        self.nn_pid = ffn(decoding_dim, self.num_classes, width, self.act, dropout_ff)
         # self.nn_pu = ffn(decoding_dim, 2, width, self.act, dropout_ff)
 
         # elementwise DNN for node momentum regression

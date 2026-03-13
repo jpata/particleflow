@@ -106,7 +106,7 @@ class TestDataloaderRestoration(unittest.TestCase):
             run1_data.append(batch.X.clone())
         print(run1_data)
 
-        model = MLPF(input_dim=2, num_classes=2, elemtypes_nonzero=[1], config=config.model)
+        model = MLPF(config)
         optimizer = optim.Adam(model.parameters())
         checkpoint_path = os.path.join(self.tempdir, "checkpoint.pth")
         extra_state = {"step": 5, "train_loader_state_dict": train_loader1.state_dict()}
@@ -204,7 +204,7 @@ class TestDataloaderRestoration(unittest.TestCase):
         for _ in range(stop_at_batch):
             run1_data.append(next(iterator1).X.clone())
 
-        model = MLPF(input_dim=2, num_classes=2, elemtypes_nonzero=[1], config=config.model)
+        model = MLPF(config)
         optimizer = optim.Adam(model.parameters())
         checkpoint_path = os.path.join(self.tempdir, "checkpoint.pth")
         extra_state = {"step": stop_at_batch, "train_loader_state_dict": train_loader1.state_dict()}
