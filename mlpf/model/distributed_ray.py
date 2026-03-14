@@ -150,7 +150,7 @@ def run_hpo(config, args):
     )  # Copy the search space definition file to the train dir for later reference
     # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
     with open((dirname / "config.yaml"), "w") as file:
-        yaml.dump(config, file)
+        yaml.dump(MLPFConfig.model_validate(config).model_dump(mode="json"), file)
 
     if not args.ray_local:
         _logger.info("Inititalizing ray...")
@@ -293,7 +293,7 @@ def train_ray_trial(config, args, outdir=None):
         # save overridden config then log to comet
         config_filename = "overridden_config.yaml"
         with open((Path(outdir) / config_filename), "w") as file:
-            yaml.dump(config, file)
+            yaml.dump(mlpf_config.model_dump(mode="json"), file)
         comet_experiment.log_code(str(Path(outdir) / config_filename))
     else:
         comet_experiment = None

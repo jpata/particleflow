@@ -817,7 +817,7 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
                 comet_experiment.log_parameter("run_id", Path(outdir).name)
                 comet_experiment.log_parameter("world_size", world_size)
                 comet_experiment.log_parameter("rank", rank)
-                comet_experiment.log_parameters(config.model_dump(), prefix="config:")
+                comet_experiment.log_parameters(config.model_dump(mode="json"), prefix="config:")
                 comet_experiment.set_model_graph(model)
                 comet_experiment.log_parameter(trainable_params, "trainable_params")
                 comet_experiment.log_parameter(nontrainable_params, "nontrainable_params")
@@ -829,7 +829,7 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
                 # save overridden config, then log to comet
                 config_filename = "overridden_config.yaml"
                 with open((Path(outdir) / config_filename), "w") as file:
-                    yaml.dump(config.model_dump(), file)
+                    yaml.dump(config.model_dump(mode="json"), file)
                 comet_experiment.log_code(str(Path(outdir) / config_filename))
         else:
             comet_experiment = None

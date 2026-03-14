@@ -82,7 +82,7 @@ def save_HPs(config: MLPFConfig, mlpf, outdir):
 
     with open(f"{outdir}/hyperparameters.json", "w") as fp:  # dump hyperparameters
         outdict = {"num_mlpf_params": num_mlpf_parameters}
-        outdict.update(config.model_dump())
+        outdict.update(config.model_dump(mode="json"))
         json.dump(outdict, fp)
 
 

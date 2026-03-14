@@ -150,7 +150,7 @@ def main():
         # Save config for later reference.
         config_filename = f"{cmd.value}-config.yaml"
         with open((Path(experiment_dir) / config_filename), "w") as file:
-            yaml.dump(config, file)
+            yaml.dump(config_obj.model_dump(mode="json"), file)
 
         # Also save the spec file for reproducibility
         spec = load_spec(args.spec_file)

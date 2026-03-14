@@ -66,13 +66,14 @@ class AttentionType(Enum):
 
 
 # All possible PFElement types
+# 0 is placeholder for padded entries (generally only when batching events together)
 ELEM_TYPES = {
     Dataset.CMS.value: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-    Dataset.CLIC.value: [0, 1, 2],
-    Dataset.CLD.value: [0, 1, 2],
+    Dataset.CLIC.value: [0, 1, 2], #1 - track, 2 - cluster
+    Dataset.CLD.value: [0, 1, 2], #1 - track, 2 - cluster
 }
 
-# Some element types are defined, but do not exist in the dataset at all
+# Some element types are defined, but do not exist in the dataset at all or should be excluded for physics reasons
 ELEM_TYPES_NONZERO = {
     Dataset.CMS.value: [1, 4, 5, 6, 8, 9, 10, 11],
     Dataset.CLIC.value: [1, 2],
@@ -401,9 +402,9 @@ class MLPFConfig(BaseModel):
     enabled_test_datasets: List[str] = Field(default_factory=list)
 
     # Sample limits
-    ntrain: Optional[int] = None
-    nvalid: Optional[int] = None
-    ntest: Optional[int] = None
+    ntrain: Optional[int] = None #number of training events
+    nvalid: Optional[int] = None #number of validation events, ran at periodic intervals during training
+    ntest: Optional[int] = None #number of testing events, ran at the end of the training
 
     # Multi-GPU
     gpus: int = 0
@@ -480,20 +481,21 @@ class MLPFConfig(BaseModel):
         config_dict["data_dir"] = os.path.join(workspace_dir, "tfds")
 
         # Set model dimensions
-        config_dict["input_dim"] = len(X_FEATURES[config_dict["dataset"]])
-        config_dict["num_classes"] = len(CLASS_LABELS[config_dict["dataset"]])
-        config_dict["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[config_dict["dataset"]]
+        ds_name = config_dict["dataset"].value if isinstance(config_dict["dataset"], Dataset) else config_dict["dataset"]
+        config_dict["input_dim"] = len(X_FEATURES[ds_name])
+        config_dict["num_classes"] = len(CLASS_LABELS[ds_name])
+        config_dict["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[ds_name]
 
         # Helper for datasets
         def build_dataset_config_dict(dataset_input):
             ds_config = {}
-            ds_config[config_dict["dataset"]] = {}
+            ds_config[ds_name] = {}
             for phys_key, phys_val in dataset_input.items():
-                ds_config[config_dict["dataset"]][phys_key] = {
+                ds_config[ds_name][phys_key] = {
                     "batch_size": phys_val.get("batch_size", config_dict.get("batch_size", 1)),
                     "samples": {},
                 }
-                target_dict = ds_config[config_dict["dataset"]][phys_key]["samples"]
+                target_dict = ds_config[ds_name][phys_key]["samples"]
                 for ds_item in phys_val["samples"]:
                     name = ds_item["name"]
                     entry = {"version": ds_item.get("version"), "splits": ds_item.get("splits")}
@@ -576,12 +578,12 @@ class MLPFConfig(BaseModel):
             config_dict["model"]["attention"]["num_heads"] = 2
             config_dict["model"]["attention"]["head_dim"] = 2
 
-            if config_dict["dataset"] == "cms":
+            if ds_name == "cms":
                 for ds in ["train_dataset", "valid_dataset"]:
                     if ds in config_dict:
-                        config_dict[ds]["cms"] = {
+                        config_dict[ds][ds_name] = {
                             "physical_pu": {
-                                "batch_size": config_dict[ds]["cms"]["physical_pu"]["batch_size"],
+                                "batch_size": config_dict[ds][ds_name]["physical_pu"]["batch_size"],
                                 "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "3.0.0"}},
                             }
                         }
