@@ -158,7 +158,13 @@ def main():
 
     # Load model configuration
     with open(args.model_kwargs, "rb") as f:
-        model_kwargs: MLPFConfig = pkl.load(f)
+        model_kwargs_raw = pkl.load(f)
+        if isinstance(model_kwargs_raw, dict):
+            model_kwargs = MLPFConfig.model_validate(model_kwargs_raw)
+        else:
+            # if it was already an MLPFConfig object (from a previous version),
+            # re-validate it to ensure Enums are correct
+            model_kwargs = MLPFConfig.model_validate(model_kwargs_raw.model_dump())
 
     print(model_kwargs)
 

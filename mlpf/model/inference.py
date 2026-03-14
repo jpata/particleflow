@@ -7,7 +7,6 @@ import gc
 import awkward
 import fastjet
 import mplhep
-import numpy as np
 import torch
 import tqdm
 import vector
@@ -177,12 +176,12 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
 
     _logger.info(f"Time taken to make predictions on device {rank} is: {time_total_min:.2f} min")
 
+
 def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None):
     """Uses the predictions stored as .parquet files from run_predictions to make plots."""
     import matplotlib.pyplot as plt
-    from mlpf.conf import Dataset
 
-    ds_name = dataset.value if isinstance(dataset, Dataset) else dataset
+    ds_name = dataset.value
 
     ret_dict = {}
     mplhep.style.use(mplhep.styles.CMS)

@@ -1,7 +1,7 @@
 ## **TLDR; I just want to run the code**
+This runs the data preparation and training on a very small sample, so you can see how to run the code:
 ```
-pip install -r requirements.txt
-./scripts/local_test_torch.sh
+apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_torch.sh
 ```
 
 ### **Summary**

@@ -69,8 +69,7 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
 
 
 def get_activation(activation: Activation):
-    if isinstance(activation, str):
-        activation = Activation(activation)
+    activation = Activation(activation)
     if activation == Activation.ELU:
         act = nn.ELU
     elif activation == Activation.RELU:
@@ -108,7 +107,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         self.head_dim = int(embed_dim // num_heads)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
         self.export_onnx_fused = export_onnx_fused
-        self.attention_type = AttentionType(attention_type) if isinstance(attention_type, str) else attention_type
+        self.attention_type = AttentionType(attention_type)
         self.attn_params = {
             AttentionType.MATH: [SDPBackend.MATH],
             AttentionType.EFFICIENT: [SDPBackend.EFFICIENT_ATTENTION],
@@ -227,7 +226,7 @@ class PreLnSelfAttentionLayer(nn.Module):
 
         self.use_simplified_attention = use_simplified_attention
 
-        self.attention_type = AttentionType(attention_type) if isinstance(attention_type, str) else attention_type
+        self.attention_type = AttentionType(attention_type)
         self.act = get_activation(activation)
 
         if self.attention_type == AttentionType.LINEAR:
@@ -322,15 +321,11 @@ def ffn(input_dim, output_dim, width, act, dropout):
 class RegressionOutput(nn.Module):
     def __init__(self, mode: RegressionMode, embed_dim, width, act, dropout, elemtypes):
         super(RegressionOutput, self).__init__()
-        self.mode = RegressionMode(mode) if isinstance(mode, str) else mode
+        self.mode = RegressionMode(mode)
         self.elemtypes = elemtypes
 
         # single output
-        if (
-            self.mode == RegressionMode.DIRECT
-            or self.mode == RegressionMode.ADDITIVE
-            or self.mode == RegressionMode.MULTIPLICATIVE
-        ):
+        if self.mode == RegressionMode.DIRECT or self.mode == RegressionMode.ADDITIVE or self.mode == RegressionMode.MULTIPLICATIVE:
             self.nn = ffn(embed_dim, 1, width, act, dropout)
         elif self.mode == RegressionMode.DIRECT_ELEMTYPE:
             self.nn = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
@@ -392,28 +387,24 @@ class MLPF(nn.Module):
         self.elemtypes_nonzero = config.elemtypes_nonzero
 
         # Determine architecture parameters based on the chosen type
-        self.conv_type = ModelType(self.config.type) if isinstance(self.config.type, str) else self.config.type
+        self.conv_type = ModelType(self.config.type)
         sub_config = getattr(self.config, self.conv_type.value)
 
         # Extract parameters from the sub-config
         self.num_convs = sub_config.num_convs
-        activation = sub_config.activation
+        activation = Activation(sub_config.activation)
         embedding_dim = sub_config.embedding_dim
         width = sub_config.width
         dropout_ff = sub_config.dropout_ff
 
         # Extract architecture-level parameters
-        self.input_encoding = InputEncoding(self.config.input_encoding) if isinstance(self.config.input_encoding, str) else self.config.input_encoding
-        self.learned_representation_mode = (
-            LearnedRepresentationMode(self.config.learned_representation_mode)
-            if isinstance(self.config.learned_representation_mode, str)
-            else self.config.learned_representation_mode
-        )
-        pt_mode = RegressionMode(self.config.pt_mode) if isinstance(self.config.pt_mode, str) else self.config.pt_mode
-        eta_mode = RegressionMode(self.config.eta_mode) if isinstance(self.config.eta_mode, str) else self.config.eta_mode
-        sin_phi_mode = RegressionMode(self.config.sin_phi_mode) if isinstance(self.config.sin_phi_mode, str) else self.config.sin_phi_mode
-        cos_phi_mode = RegressionMode(self.config.cos_phi_mode) if isinstance(self.config.cos_phi_mode, str) else self.config.cos_phi_mode
-        energy_mode = RegressionMode(self.config.energy_mode) if isinstance(self.config.energy_mode, str) else self.config.energy_mode
+        self.input_encoding = InputEncoding(self.config.input_encoding)
+        self.learned_representation_mode = LearnedRepresentationMode(self.config.learned_representation_mode)
+        pt_mode = RegressionMode(self.config.pt_mode)
+        eta_mode = RegressionMode(self.config.eta_mode)
+        sin_phi_mode = RegressionMode(self.config.sin_phi_mode)
+        cos_phi_mode = RegressionMode(self.config.cos_phi_mode)
+        energy_mode = RegressionMode(self.config.energy_mode)
 
         self.act = get_activation(activation)
 

@@ -66,11 +66,14 @@ class AttentionType(Enum):
 
 
 # All possible PFElement types
+# CMS classes from
+# https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
+# https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
 # 0 is placeholder for padded entries (generally only when batching events together)
 ELEM_TYPES = {
     Dataset.CMS.value: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-    Dataset.CLIC.value: [0, 1, 2], #1 - track, 2 - cluster
-    Dataset.CLD.value: [0, 1, 2], #1 - track, 2 - cluster
+    Dataset.CLIC.value: [0, 1, 2],  # 1 - track, 2 - cluster
+    Dataset.CLD.value: [0, 1, 2],  # 1 - track, 2 - cluster
 }
 
 # Some element types are defined, but do not exist in the dataset at all or should be excluded for physics reasons
@@ -402,9 +405,9 @@ class MLPFConfig(BaseModel):
     enabled_test_datasets: List[str] = Field(default_factory=list)
 
     # Sample limits
-    ntrain: Optional[int] = None #number of training events
-    nvalid: Optional[int] = None #number of validation events, ran at periodic intervals during training
-    ntest: Optional[int] = None #number of testing events, ran at the end of the training
+    ntrain: Optional[int] = None  # number of training events
+    nvalid: Optional[int] = None  # number of validation events, ran at periodic intervals during training
+    ntest: Optional[int] = None  # number of testing events, ran at the end of the training
 
     # Multi-GPU
     gpus: int = 0
@@ -476,12 +479,12 @@ class MLPFConfig(BaseModel):
         config_dict["conv_type"] = config_dict["model"]["type"]
 
         # 4. Dataset and Production
-        config_dict["dataset"] = model_config_raw.get("dataset", prod_config_raw.get("type"))
+        config_dict["dataset"] = Dataset(model_config_raw.get("dataset", prod_config_raw.get("type")))
         workspace_dir = resolve_path(prod_config_raw["workspace_dir"], spec)
         config_dict["data_dir"] = os.path.join(workspace_dir, "tfds")
 
         # Set model dimensions
-        ds_name = config_dict["dataset"].value if isinstance(config_dict["dataset"], Dataset) else config_dict["dataset"]
+        ds_name = config_dict["dataset"].value
         config_dict["input_dim"] = len(X_FEATURES[ds_name])
         config_dict["num_classes"] = len(CLASS_LABELS[ds_name])
         config_dict["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[ds_name]

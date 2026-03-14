@@ -12,9 +12,6 @@ from mlpf.conf import (
     LRSchedule,
 )
 
-# https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
-# https://github.com/cms-sw/cmssw/blob/master/DataFormats/ParticleFlowCandidate/src/PFCandidate.cc#L254
-
 
 def unpack_target(y, model):
     ret = {}
