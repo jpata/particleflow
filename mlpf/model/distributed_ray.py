@@ -20,6 +20,7 @@ from mlpf.model.utils import (
     save_HPs,
     get_lr_schedule,
     count_parameters,
+    load_lr_schedule,
 )
 
 
@@ -54,41 +55,13 @@ def run_ray_training(config, args, outdir):
         checkpoint_config=ray.train.CheckpointConfig(num_to_keep=1),  # keep only latest checkpoint
     )
     trainable = tune.with_parameters(train_ray_trial, args=args, outdir=outdir)
-    # Resume from checkpoint if a checkpoint is found in outdir
-    can_restore = False
-    try:
-        can_restore = TorchTrainer.can_restore(outdir)
-    except DeprecationWarning:
-        # In some Ray versions, DeprecationWarning is raised as an error
-        _logger.warning("Caught DeprecationWarning from TorchTrainer.can_restore")
-        can_restore = False
 
-    if can_restore:
-        _logger.info(f"Restoring Ray Trainer from {outdir}", color="bold")
-        try:
-            trainer = TorchTrainer.restore(outdir, train_loop_per_worker=trainable, scaling_config=scaling_config)
-        except DeprecationWarning:
-            _logger.warning("Caught DeprecationWarning from TorchTrainer.restore, falling back to new trainer")
-            resume_from_checkpoint = ray.train.Checkpoint(config["load"]) if config["load"] else None
-            trainer = TorchTrainer(
-                train_loop_per_worker=trainable,
-                train_loop_config=config,
-                scaling_config=scaling_config,
-                run_config=run_config,
-                resume_from_checkpoint=resume_from_checkpoint,
-            )
-    else:
-        resume_from_checkpoint = ray.train.Checkpoint(config["load"]) if config["load"] else None
-        if resume_from_checkpoint:
-            _logger.info("Loading checkpoint {}".format(config["load"]), color="bold")
-        trainer = TorchTrainer(
-            train_loop_per_worker=trainable,
-            train_loop_config=config,
-            scaling_config=scaling_config,
-            run_config=run_config,
-            resume_from_checkpoint=resume_from_checkpoint,
-            # torch_config=TorchConfig(backend="gloo"),
-        )
+    trainer = TorchTrainer(
+        train_loop_per_worker=trainable,
+        train_loop_config=config,
+        scaling_config=scaling_config,
+        run_config=run_config,
+    )
     result = trainer.fit()
 
     for loss_key in sorted([k for k in result.metrics.keys() if k.startswith("train_")]):
@@ -189,13 +162,11 @@ def run_hpo(config, args):
                 search_alg=search_alg,
                 scheduler=sched,
             ),
-            run_config=ray.train.RunConfig(
+            run_config=ray.tune.RunConfig(
                 name=name,
                 storage_path=config["raytune"]["local_dir"],
-                log_to_file=False,
                 failure_config=ray.train.FailureConfig(max_failures=2),
                 checkpoint_config=ray.train.CheckpointConfig(num_to_keep=1),  # keep only latest checkpoint
-                sync_config=ray.train.SyncConfig(sync_artifacts=True),
             ),
         )
     start = datetime.now()
@@ -225,7 +196,7 @@ def train_ray_trial(config, args, outdir=None):
     if outdir is None:
         try:
             # try to get the trial directory if running via Tune/HPO
-            outdir = ray.train.get_context().get_trial_dir()
+            outdir = ray.tune.get_context().get_trial_dir()
         except Exception:
             # fallback for standard Ray Train
             try:
@@ -300,7 +271,6 @@ def train_ray_trial(config, args, outdir=None):
 
     lr_schedule = get_lr_schedule(mlpf_config, optimizer, mlpf_config.num_steps)
 
-    checkpoint_dir = os.path.join(outdir, "checkpoints")
     checkpoint_dir = Path(outdir) / "checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -311,7 +281,8 @@ def train_ray_trial(config, args, outdir=None):
             checkpoint_path = Path(_checkpoint_dir) / "checkpoint.pth"
             _logger.info(f"Loading checkpoint from {checkpoint_path}")
             checkpoint = torch.load(checkpoint_path, map_location=torch.device(rank))
-            model, optimizer, lr_schedule = load_checkpoint(checkpoint, model, optimizer, lr_schedule)
+            load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
+            model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict=True)
             start_step = checkpoint["extra_state"]["step"] + 1
             if "train_loader_state_dict" in checkpoint["extra_state"]:
                 loaders["train"].load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
