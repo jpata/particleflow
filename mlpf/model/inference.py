@@ -7,7 +7,6 @@ import gc
 import awkward
 import fastjet
 import mplhep
-import numpy as np
 import torch
 import tqdm
 import vector
@@ -182,6 +181,8 @@ def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None):
     """Uses the predictions stored as .parquet files from run_predictions to make plots."""
     import matplotlib.pyplot as plt
 
+    ds_name = dataset.value
+
     ret_dict = {}
     mplhep.style.use(mplhep.styles.CMS)
     # class_names = get_class_names(sample)
@@ -196,23 +197,25 @@ def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None):
     plot_num_elements(X, cp_dir=plots_path)
     _logger.info("Plotted number of elements")
 
-    # plot_elements(X, yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
+    # plot_elements(X, yvals, cp_dir=plots_path, dataset=ds_name, sample=sample)
 
     plot_jets(
         yvals,
         cp_dir=plots_path,
-        dataset=dataset,
         sample=sample,
+        dataset=ds_name,
     )
     _logger.info("Plotted jets")
+
     ret_dict["jet_ratio"] = plot_jet_ratio(
         yvals,
         cp_dir=plots_path,
-        bins=np.linspace(0, 5, 500),
-        logy=True,
-        dataset=dataset,
         sample=sample,
+        dataset=ds_name,
     )
+    _logger.info("Plotted jet ratio")
+
+    return ret_dict
 
     # commented out to save memory and make the validation runtime faster
     # _logger.info("Plotted jet ratio")

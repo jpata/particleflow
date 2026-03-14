@@ -28,7 +28,6 @@ Key Functions:
 - `run_test`: Runs inference on a specified test dataset.
 - `get_optimizer`: Utility to create an optimizer based on the configuration.
 - `configure_model_trainable`: Utility to set specific model layers as trainable.
-- `override_config`: Merges command-line arguments into the configuration dictionary.
 """
 
 import os
@@ -60,9 +59,6 @@ from mlpf.model.utils import (
     unpack_target,
     load_checkpoint,
     save_checkpoint,
-    CLASS_LABELS,
-    X_FEATURES,
-    ELEM_TYPES_NONZERO,
     save_HPs,
     get_lr_schedule,
     count_parameters,
@@ -74,6 +70,8 @@ from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
+from mlpf.conf import MLPFConfig
+from mlpf.jet_utils import get_jet_config
 
 
 def model_step(batch, model, loss_fn):
@@ -192,12 +190,12 @@ def evaluate(
     model: MLPF,
     valid_loader,
     step: int,
+    config: MLPFConfig,
     tensorboard_writer=None,
     comet_experiment=None,
     outdir=None,
     device_type="cuda",
     dtype=torch.float32,
-    make_plots=False,
 ):
     """Run one evaluation step
 
@@ -207,6 +205,7 @@ def evaluate(
         model: The neural network model
         valid_loader: Validation data loader
         step: Current step number
+        config: Configuration object
         tensorboard_writer: TensorBoard writer object
         comet_experiment: Comet.ml experiment object
         outdir: Output directory path
@@ -306,6 +305,7 @@ def _log_and_checkpoint_step(
             }
 
             checkpoint_path = f"{checkpoint_dir}/checkpoint-{step:02d}.pth"
+            _logger.info("saving checkpoint {}".format(checkpoint_path))
             save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
             # Clean up old checkpoints, keeping the last num_patience
@@ -328,7 +328,7 @@ def _run_validation_cycle(
     best_val_loss,
     stale_steps,
     outdir,
-    config,
+    config: MLPFConfig,
     device_type,
     dtype,
     tensorboard_writer_valid,
@@ -354,12 +354,12 @@ def _run_validation_cycle(
         model=model,
         valid_loader=valid_loader,
         step=step,
+        config=config,
         tensorboard_writer=tensorboard_writer_valid,
         comet_experiment=comet_experiment,
         outdir=outdir,
         device_type=device_type,
         dtype=dtype,
-        make_plots=config["make_plots"],
     )
     log_memory("evaluate_end", rank, tensorboard_writer_valid, step)
     valid_time = time.time() - train_time - t0_initial
@@ -419,15 +419,15 @@ def _run_validation_cycle(
     # Run inference and plotting on test datasets for this step
     testdir_name = f"_step_{step}"
     log_memory("run_test_start", rank, tensorboard_writer_valid, step)
-    for sample in config["enabled_test_datasets"]:
+    for sample in config.enabled_test_datasets:
         run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
     log_memory("run_test_end", rank, tensorboard_writer_valid, step)
 
     plot_metrics_sample = {}
     if (rank == 0) or (rank == "cpu"):
         log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
-        for sample in config["enabled_test_datasets"]:
-            plot_metrics = make_plots(outdir, sample, config["dataset"], testdir_name, config["ntest"])
+        for sample in config.enabled_test_datasets:
+            plot_metrics = make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
             plot_metrics_sample[sample] = plot_metrics
             # Log key jet metrics to TensorBoard and CometML
             for k in ["med", "iqr", "match_frac"]:
@@ -495,7 +495,7 @@ def train_all_steps(
     num_steps,
     patience,
     outdir,
-    config,
+    config: MLPFConfig,
     trainable="all",
     dtype=torch.float32,
     start_step=1,
@@ -603,7 +603,7 @@ def train_all_steps(
             valid_loader,
             train_sampler,
             valid_sampler,
-            config["patience"],
+            config.patience,
         )
 
         # Run validation, testing, and plotting cycle at specified frequency, or at the last step
@@ -649,21 +649,21 @@ def train_all_steps(
         tensorboard_writer_valid.close()
 
 
-def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype):
-    batch_size = config["test_dataset"][sample]["batch_size"] * config["gpu_batch_multiplier"]
-    version = config["test_dataset"][sample]["version"]
+def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdir_name, dtype):
+    batch_size = config.test_dataset[sample].batch_size * config.gpu_batch_multiplier
+    version = config.test_dataset[sample].version
 
-    split_configs = config["test_dataset"][sample]["splits"]
+    split_configs = config.test_dataset[sample].splits
     _logger.info("split_configs={}".format(split_configs))
 
     dataset = []
 
     ntest = None
-    if not (config["ntest"] is None):
-        ntest = config["ntest"] // len(split_configs)
+    if config.ntest is not None:
+        ntest = config.ntest // len(split_configs)
 
     for split_config in split_configs:
-        ds = PFDataset(config["data_dir"], f"{sample}/{split_config}:{version}", "test", num_samples=ntest).ds
+        ds = PFDataset(config.data_dir, f"{sample}/{split_config}:{version}", "test", num_samples=ntest).ds
         dataset.append(ds)
     ds = torch.utils.data.ConcatDataset(dataset)
 
@@ -678,7 +678,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     vals_for_test = ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"]
 
     # pythia branch was introduced for cms in version 2.8.0
-    if sample.startswith("cms_") and Version(version) >= Version("2.8.0"):
+    if sample.startswith("cms_") and version and Version(version) >= Version("2.8.0"):
         vals_for_test += ["pythia"]
 
     test_loader = torch.utils.data.DataLoader(
@@ -686,8 +686,8 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
         batch_size=batch_size,
         collate_fn=Collater(vals_for_test, ["genmet"]),
         sampler=sampler,
-        num_workers=config["num_workers"],
-        prefetch_factor=config["prefetch_factor"],
+        num_workers=config.num_workers,
+        prefetch_factor=config.prefetch_factor,
         # pin_memory=use_cuda,
         # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
     )
@@ -699,19 +699,7 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
     _logger.info(f"Running predictions on {sample}")
     torch.cuda.empty_cache()
 
-    # FIXME: import this from a central place
-    if config["dataset"] == "clic" or config["dataset"] == "cld":
-        import fastjet
-
-        jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
-        jet_ptcut = 5
-    elif config["dataset"] == "cms":
-        import fastjet
-
-        jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
-        jet_ptcut = 3
-    else:
-        raise Exception("jet configuration for dataset {} not implemented".format(config["dataset"]))
+    jetdef, jet_ptcut, jet_match_dr = get_jet_config(config.dataset)
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
@@ -724,20 +712,20 @@ def run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtyp
             outdir,
             jetdef,
             jet_ptcut=jet_ptcut,
-            jet_match_dr=0.1,
+            jet_match_dr=jet_match_dr,
             dir_name=testdir_name,
         )
     if world_size > 1:
         dist.barrier()  # block until all workers finished executing run_predictions()
 
 
-def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: str):
+def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfile: str):
     # per-rank log
     _configLogger("mlpf", rank, filename=f"{logfile}.{rank}")
 
     use_cuda = rank != "cpu"
 
-    dtype = getattr(torch, config["dtype"])
+    dtype = getattr(torch, config.dtype)
     _logger.info("configured dtype={} for autocast".format(dtype))
 
     if world_size > 1:
@@ -749,31 +737,20 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
     if (rank == 0) | (rank == "cpu"):
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    model_kwargs = {
-        "input_dim": len(X_FEATURES[config["dataset"]]),
-        "num_classes": len(CLASS_LABELS[config["dataset"]]),
-        "input_encoding": config["model"]["input_encoding"],
-        "pt_mode": config["model"]["pt_mode"],
-        "eta_mode": config["model"]["eta_mode"],
-        "sin_phi_mode": config["model"]["sin_phi_mode"],
-        "cos_phi_mode": config["model"]["cos_phi_mode"],
-        "energy_mode": config["model"]["energy_mode"],
-        "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
-        "learned_representation_mode": config["model"]["learned_representation_mode"],
-        **config["model"][config["conv_type"]],
-    }
-
     start_step = 1
     lr_schedule = None
     checkpoint = None
 
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
-    if config["load"]:
-        model = MLPF(**model_kwargs).to(torch.device(rank))
-        optimizer = get_optimizer(model, config)
-        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
+    _logger.info("Instantiating model")
+    model = MLPF(config)
+    _logger.info("Instantiated model")
 
-        checkpoint = torch.load(config["load"], map_location=torch.device(rank))
+    optimizer = get_optimizer(model, config)
+    lr_schedule = get_lr_schedule(config, optimizer, config.num_steps)
+
+    if config.load:
+        checkpoint = torch.load(config.load, map_location=torch.device(rank))
         start_step = checkpoint["extra_state"]["step"] + 1
 
         missing_keys, strict = [], True
@@ -789,37 +766,29 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
 
         if len(missing_keys) > 0:
             _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
-            if config.get("relaxed_load", True):
+            if config.relaxed_load:
                 _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
                 strict = False
             else:
                 _logger.warning("Use option --relaxed-load if you insist to ignore the missing parameters")
                 raise KeyError
 
-        _logger.info("Loaded model weights from {}".format(config["load"]), color="bold")
+        _logger.info("Loaded model weights from {}".format(config.load), color="bold")
         _logger.info(f"Restoring training from step {start_step}")
 
         load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
-    else:  # instantiate a new model in the outdir created
-        _logger.info("Instantiating model")
-        _logger.info(f"model_kwargs: {model_kwargs}")
-        model = MLPF(**model_kwargs)
-        _logger.info("Instantiated model")
-        optimizer = get_optimizer(model, config)
-        lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
-
     _logger.info("Moving model to device rank={}".format(rank))
-    if rank != "cpu":
-        model.to(device="cuda:{}".format(rank))
+    model = model.to(torch.device(rank))
     _logger.info("Moved model to device rank={}".format(rank))
+
     # CPU: the compilation does not work with bs>1
     # Nvidia: compilation should generally be used, but can be disabled
     # ROCM: compilation seems to be needed for ROCm to work properly
     if rank != "cpu":
         model.compile()
-    configure_model_trainable(model, config["model"]["trainable"], True)
+    configure_model_trainable(model, config.model.trainable, True)
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -835,20 +804,20 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
     _logger.info(f"Total parameters: {trainable_params + nontrainable_params}")
     _logger.info(table.to_string(index=False))
 
-    if config["train"]:
+    if config.train:
         if (rank == 0) or (rank == "cpu"):
-            save_HPs(config, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
+            save_HPs(config, model, outdir)  # save config and hyperparameters
             _logger.info("Creating experiment dir {}".format(outdir))
             _logger.info(f"Model directory {outdir}", color="bold")
 
-        if config["comet"]:
-            comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
+        if config.comet:
+            comet_experiment = create_comet_experiment(config.comet_name, comet_offline=config.comet_offline, outdir=outdir)
             if comet_experiment is not None:
                 comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
                 comet_experiment.log_parameter("run_id", Path(outdir).name)
                 comet_experiment.log_parameter("world_size", world_size)
                 comet_experiment.log_parameter("rank", rank)
-                comet_experiment.log_parameters(config, prefix="config:")
+                comet_experiment.log_parameters(config.model_dump(mode="json"), prefix="config:")
                 comet_experiment.set_model_graph(model)
                 comet_experiment.log_parameter(trainable_params, "trainable_params")
                 comet_experiment.log_parameter(nontrainable_params, "nontrainable_params")
@@ -860,7 +829,7 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
                 # save overridden config, then log to comet
                 config_filename = "overridden_config.yaml"
                 with open((Path(outdir) / config_filename), "w") as file:
-                    yaml.dump(config, file)
+                    yaml.dump(config.model_dump(mode="json"), file)
                 comet_experiment.log_code(str(Path(outdir) / config_filename))
         else:
             comet_experiment = None
@@ -875,7 +844,7 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
         )
         _logger.info("Got dataloaders")
 
-        if config["load"] and checkpoint:
+        if config.load and checkpoint:
             train_loader = loaders["train"]
             valid_loader = loaders["valid"]
             if "train_loader_state_dict" in checkpoint["extra_state"]:
@@ -893,19 +862,19 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
             optimizer,
             loaders["train"],
             loaders["valid"],
-            config["num_steps"],
-            config["patience"],
+            config.num_steps,
+            config.patience,
             outdir,
             config,
-            trainable=config["model"]["trainable"],
+            trainable=config.model.trainable,
             dtype=dtype,
             start_step=start_step,
             lr_schedule=lr_schedule,
             use_ray=False,
-            checkpoint_freq=config["checkpoint_freq"],
+            checkpoint_freq=config.checkpoint_freq,
             comet_experiment=comet_experiment,
-            comet_step_freq=config["comet_step_freq"],
-            val_freq=config["val_freq"],
+            comet_step_freq=config.comet_step_freq,
+            val_freq=config.val_freq,
             checkpoint_dir=str(checkpoint_dir),
             train_sampler=samplers["train"],
             valid_sampler=samplers["valid"],
@@ -915,46 +884,15 @@ def run(rank: int | str, world_size: int, config: dict, outdir: str, logfile: st
         dist.destroy_process_group()
 
 
-def override_config(config: dict, args):
-    """override config dictionary with values from argparse Namespace"""
-    for arg in vars(args):
-        arg_value = getattr(args, arg)
-        if arg_value is not None:
-            if arg in config:
-                _logger.info("overriding config item {}={} with {} from cmdline".format(arg, config[arg], arg_value))
-                config[arg] = arg_value
-            else:
-                _logger.info("skipping {}".format(arg))
-
-    if "attention_type" in args and args.attention_type is not None:
-        config["model"]["attention"]["attention_type"] = args.attention_type
-
-    if "num_convs" in args and args.num_convs is not None:
-        for model in ["gnn_lsh", "attention"]:
-            config["model"][model]["num_convs"] = args.num_convs
-
-    config["enabled_test_datasets"] = list(config["test_dataset"].keys())
-    if "test_datasets" in args:
-        if len(args.test_datasets) != 0:
-            config["enabled_test_datasets"] = args.test_datasets
-
-    config["train"] = args.train
-    config["test"] = args.test
-    if "make_plots" in args:
-        config["make_plots"] = args.make_plots
-
-    return config
-
-
 # Run either single GPU or single-node multi-GPU using pytorch DDP
-def device_agnostic_run(config, world_size, outdir):
-    if config["train"]:
+def device_agnostic_run(config: MLPFConfig, world_size, outdir):
+    if config.train:
         logfile = f"{outdir}/train.log"
     else:
         logfile = f"{outdir}/test.log"
     _configLogger("mlpf", 0, filename=logfile)
 
-    if config["gpus"]:
+    if config.gpus:
         assert (
             world_size <= torch.cuda.device_count()
         ), f"--gpus is too high (specified {world_size} gpus but only {torch.cuda.device_count()} gpus are available)"

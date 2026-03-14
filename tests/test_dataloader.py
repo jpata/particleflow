@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.model.utils import save_checkpoint, load_checkpoint
 from mlpf.model.mlpf import MLPF
+from mlpf.conf import MLPFConfig
 
 
 class MockTorchDataset(Dataset):
@@ -44,9 +45,14 @@ class TestDataloaderRestoration(unittest.TestCase):
         torch.manual_seed(0)
 
         # 1. Create mock config
-        config = {
+        config_dict = {
             "dataset": "cms",
             "data_dir": "/tmp/dummy_data",
+            "model": {
+                "type": "attention",
+                "attention": {"num_convs": 2},
+            },
+            "conv_type": "attention",
             "train_dataset": {
                 "cms": {
                     "type1": {
@@ -71,6 +77,7 @@ class TestDataloaderRestoration(unittest.TestCase):
             "pad_to_multiple_elements": None,
             "gpu_batch_multiplier": 1,
         }
+        config = MLPFConfig.model_validate(config_dict)
 
         world_size = 1
         rank = 0
@@ -99,7 +106,7 @@ class TestDataloaderRestoration(unittest.TestCase):
             run1_data.append(batch.X.clone())
         print(run1_data)
 
-        model = MLPF(input_dim=2, num_classes=2)
+        model = MLPF(config)
         optimizer = optim.Adam(model.parameters())
         checkpoint_path = os.path.join(self.tempdir, "checkpoint.pth")
         extra_state = {"step": 5, "train_loader_state_dict": train_loader1.state_dict()}
@@ -138,9 +145,14 @@ class TestDataloaderRestoration(unittest.TestCase):
         mock_pf_instance.ds = MockTorchDataset(size=21)  # 10 batches per epoch
 
         torch.manual_seed(0)
-        config = {
+        config_dict = {
             "dataset": "cms",
             "data_dir": "/tmp/dummy_data",
+            "model": {
+                "type": "attention",
+                "attention": {"num_convs": 2},
+            },
+            "conv_type": "attention",
             "train_dataset": {
                 "cms": {
                     "type1": {
@@ -165,6 +177,7 @@ class TestDataloaderRestoration(unittest.TestCase):
             "pad_to_multiple_elements": None,
             "gpu_batch_multiplier": 1,
         }
+        config = MLPFConfig.model_validate(config_dict)
         world_size = 1
         rank = 0
 
@@ -191,7 +204,7 @@ class TestDataloaderRestoration(unittest.TestCase):
         for _ in range(stop_at_batch):
             run1_data.append(next(iterator1).X.clone())
 
-        model = MLPF(input_dim=2, num_classes=2)
+        model = MLPF(config)
         optimizer = optim.Adam(model.parameters())
         checkpoint_path = os.path.join(self.tempdir, "checkpoint.pth")
         extra_state = {"step": stop_at_batch, "train_loader_state_dict": train_loader1.state_dict()}
