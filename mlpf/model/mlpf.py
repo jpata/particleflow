@@ -425,7 +425,6 @@ class MLPF(nn.Module):
             # Recalculate dimensions for attention
             embedding_dim = num_heads * head_dim
             width = num_heads * head_dim
-            self.bin_size = 640  # default
         elif self.conv_type == ModelType.GNN_LSH:
             self.bin_size = sub_config.bin_size
             max_num_bins = sub_config.max_num_bins

@@ -274,7 +274,7 @@ class GNNLSHConfig(BaseModel):
     dropout_ff: float = 0.0
     activation: Activation = Activation.ELU
     layernorm: bool = True
-    bin_size: int = 640
+    bin_size: int = 32
     max_num_bins: int = 200
     distance_dim: int = 128
     num_node_messages: int = 2
