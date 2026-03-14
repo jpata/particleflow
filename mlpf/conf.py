@@ -385,6 +385,7 @@ class MLPFConfig(BaseModel):
     # Flags
     train: bool = False
     test: bool = False
+    compile: bool = False
     make_plots: bool = False
     sort_data: bool = False
     load: Optional[str] = None
@@ -531,7 +532,7 @@ class MLPFConfig(BaseModel):
                         config_dict[arg] = val
 
             # Action flags
-            for flag in ["train", "test", "make_plots", "gpus", "load"]:
+            for flag in ["train", "test", "compile", "make_plots", "gpus", "load"]:
                 if hasattr(args, flag) and getattr(args, flag) is not None:
                     config_dict[flag] = getattr(args, flag)
 

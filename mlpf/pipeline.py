@@ -58,6 +58,7 @@ def get_parser():
     common_parser = argparse.ArgumentParser(add_help=False)
     common_parser.add_argument("--gpus", type=int, default=None, help="Number of GPUs to use. Set to 0 for CPU.")
     common_parser.add_argument("--load", type=str, default=None, help="Load a checkpoint")
+    common_parser.add_argument("--compile", action="store_true", help="Compile the model (Torch 2.0+)")
     common_parser.add_argument("--comet", action="store_true", help="Use comet.ml logging")
     common_parser.add_argument("--comet-offline", action="store_true", help="Save comet logs locally")
     common_parser.add_argument("--dtype", type=str, default=None, choices=["float32", "float16", "bfloat16"])

@@ -783,11 +783,10 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     model = model.to(torch.device(rank))
     _logger.info("Moved model to device rank={}".format(rank))
 
-    # CPU: the compilation does not work with bs>1
-    # Nvidia: compilation should generally be used, but can be disabled
-    # ROCM: compilation seems to be needed for ROCm to work properly
-    # if rank != "cpu":
-    #     model.compile()
+    if config.compile:
+        _logger.info("Compiling model")
+        model = torch.compile(model)
+
     configure_model_trainable(model, config.model.trainable, True)
 
     if world_size > 1:
