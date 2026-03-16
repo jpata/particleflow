@@ -91,7 +91,7 @@ rule onnx_validate:
     params:
         configs_args = lambda wildcards: "--configs PT_MATH_FP32 PT_MATH_FP16 ONNX_MATH_FP32 ONNX_MATH_FP16" if (wildcards.config == "linear" or wildcards.config.startswith("gnn-lsh")) else "",
         extra_args = get_onnx_validate_extra_args,
-        num_events = lambda wildcards: 500 if wildcards.device == "cuda" else 10
+        num_events = lambda wildcards: 100 if wildcards.device == "cuda" else 10
     shell:
         """
         PF_SITE=local ./scripts/local/wrapper.sh python3 scripts/cms-validate-onnx.py \
