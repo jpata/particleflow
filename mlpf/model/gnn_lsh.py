@@ -59,7 +59,7 @@ def pairwise_l2_dist(A, B):
     # This is critical for ONNX export with mixed precision
     A_fp32 = A.to(torch.float32)
     B_fp32 = B.to(torch.float32)
-    
+
     na = torch.sum(torch.square(A_fp32), -1)
     nb = torch.sum(torch.square(B_fp32), -1)
 
@@ -70,7 +70,7 @@ def pairwise_l2_dist(A, B):
     # return pairwise euclidean difference matrix
     # note that this matrix multiplication can go out of range for float16 in case the absolute values of A and B are large
     D = torch.sqrt(torch.clip(na - 2 * torch.matmul(A_fp32, torch.transpose(B_fp32, -1, -2)) + nb, 1e-6, 1e6))
-    
+
     # Cast result back to the original dtype of inputs to maintain consistency
     # This prevents dtype mismatches in downstream operations
     return D.to(A.dtype)
