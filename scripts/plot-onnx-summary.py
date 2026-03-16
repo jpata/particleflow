@@ -121,9 +121,11 @@ def plot_mae_vs_runtime(data, outdir, system_info):
     plt.title("Numerical Error (MAE) vs. Inference Runtime", y=1.05)
     plt.grid(True, linestyle='--', alpha=0.7)
     
-    # Log scales can be useful for error and runtime
+    # Log scales can be useful for error
     plt.yscale("log")
-    plt.xscale("log")
+
+    # Add margins to ensure space for labels and error bars
+    plt.margins(x=0.3, y=0.2)
     
     # Add system info text
     system_text = f"Device: {system_info.get('device', 'Unknown')}\nCPU: {system_info.get('cpu', 'Unknown')}\nGPU: {system_info.get('gpu', 'Unknown')}\nPyTorch: {system_info.get('pytorch_version', 'Unknown')}\nONNX Runtime: {system_info.get('onnxruntime_version', 'Unknown')}"
@@ -204,11 +206,11 @@ def plot_loss_vs_runtime(data, model_metadata, outdir, system_info):
     by_label = dict(zip(labels, handles))
     plt.legend(by_label.values(), by_label.keys())
 
-    # Set plot limits
+    # Set plot limits with generous margin for labels
     max_x = (df["Avg Runtime [ms]"] + df["Std Runtime [ms]"]).max()
     max_y = df["Train Loss"].max()
-    plt.xlim(0, 1.5 * max_x)
-    plt.ylim(0, 1.5 * max_y)
+    plt.xlim(0, 1.8 * max_x)
+    plt.ylim(0, 1.8 * max_y)
 
     plt.xlabel("Avg Runtime [ms]")
     plt.ylabel("Train Loss")
@@ -389,7 +391,10 @@ def save_text_summary(data, model_metadata, outdir):
         train_loss = model_metadata[model].get("train_loss")
         if isinstance(train_loss, list) and len(train_loss) > 0:
             train_loss = train_loss[-1]
-        summary_lines.append(f"  Train Loss: {train_loss}")
+        if train_loss is not None:
+            summary_lines.append(f"  Train Loss: {train_loss:.4g}")
+        else:
+            summary_lines.append(f"  Train Loss: None")
 
         # Best Scenario
         model_scenarios = {k: v for k, v in data.items() if v["model"] == model}
@@ -407,6 +412,12 @@ def save_text_summary(data, model_metadata, outdir):
             scenario_name = data[best_scenario_key]["scenario"]
             summary_lines.append(f"  Best Scenario: {scenario_name}")
             summary_lines.append(f"  Best Avg Runtime: {min_mean_rt:.2f} ms")
+
+            # Add Avg MAE for the best scenario
+            maes = data[best_scenario_key].get("maes", [])
+            if maes:
+                avg_mae = np.mean(maes)
+                summary_lines.append(f"  Best Scenario Avg MAE: {avg_mae:.4g}")
 
         # OOMs
         total_ooms = 0
@@ -483,6 +494,7 @@ def main():
 
     plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
     plt.grid(True, which="both", ls="-", alpha=0.2)
+    plt.margins(0.1)
     plt.tight_layout()
 
     plot_path = os.path.join(args.outdir, "runtime_scaling_summary.pdf")
