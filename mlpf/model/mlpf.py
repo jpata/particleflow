@@ -178,6 +178,10 @@ class LinearAttention(nn.Module):
         q = torch.nn.functional.elu(q) + 1
         k = torch.nn.functional.elu(k) + 1
 
+        # Clamp to avoid overflows in FP16
+        q = torch.clamp(q, max=10.0)
+        k = torch.clamp(k, max=10.0)
+
         if key_padding_mask is not None:
             # key_padding_mask: (bs, n), 1 for real, 0 for padded
             mask = key_padding_mask.unsqueeze(1).unsqueeze(-1)  # (bs, 1, n, 1)
@@ -186,15 +190,22 @@ class LinearAttention(nn.Module):
 
         # Linear Attention: (Q @ (K.T @ V)) / (Q @ K.sum)
         # kv: (bs, heads, head_dim, head_dim)
-        kv = torch.matmul(k.transpose(-1, -2), v)
+        # perform in FP32 to avoid overflow in FP16
+        with torch.autocast(enabled=False, device_type="cuda"):
+            q_32 = q.float()
+            k_32 = k.float()
+            v_32 = v.float()
+            kv = torch.matmul(k_32.transpose(-1, -2), v_32)
 
-        # num: (bs, heads, n, head_dim)
-        num = torch.matmul(q, kv)
+            # num: (bs, heads, n, head_dim)
+            num = torch.matmul(q_32, kv)
 
-        # den: (bs, heads, n, 1)
-        den = torch.matmul(q, k.transpose(-1, -2).sum(dim=-1, keepdim=True))
+            # den: (bs, heads, n, 1)
+            den = torch.matmul(q_32, k_32.transpose(-1, -2).sum(dim=-1, keepdim=True))
 
-        attn_output = num / (den + 1e-9)
+            attn_output = num / (den + 1e-4)
+
+        attn_output = attn_output.to(q.dtype)
 
         # Reshape and project out
         attn_output = attn_output.transpose(1, 2).reshape(bs, n, d)
@@ -657,6 +668,12 @@ class MLPF(nn.Module):
         e_real[torch.isnan(e_real)] = 0
         preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
+
+        # Guard against nan/inf to prevent segfaults in downstream libraries like fastjet
+        preds_binary_particle = torch.nan_to_num(preds_binary_particle, nan=0.0, posinf=0.0, neginf=0.0)
+        preds_pid = torch.nan_to_num(preds_pid, nan=0.0, posinf=0.0, neginf=0.0)
+        preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
+
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
 
 
