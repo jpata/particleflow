@@ -4,6 +4,7 @@ import sys
 if "--device" in sys.argv:
     idx = sys.argv.index("--device")
     if sys.argv[idx + 1] == "cuda":
+        print("device=cuda, using onnxruntime-gpu from /opt/onnxruntime-gpu/lib/python3.12/site-packages/")
         sys.path.insert(0, "/opt/onnxruntime-gpu/lib/python3.12/site-packages/")
 
 import os
@@ -101,6 +102,7 @@ def parse_args():
         default=SUPPORTED_CONFIGS,
         help="List of configurations to run",
     )
+    parser.add_argument("--num-threads", type=int, default=1, help="Number of CPU threads to use")
     return parser.parse_args()
 
 
@@ -193,6 +195,7 @@ def get_gpu_info():
 
 def main():
     args = parse_args()
+    torch.set_num_threads(args.num_threads)
     os.makedirs(args.outdir, exist_ok=True)
     mplhep.style.use("CMS")
 
@@ -212,6 +215,23 @@ def main():
 
     # Load model weights
     model_state = torch.load(args.checkpoint, map_location=torch.device("cpu"), weights_only=True)
+
+    # Load step losses if available
+    train_loss = None
+    valid_loss = None
+    try:
+        checkpoint_dir = os.path.dirname(args.checkpoint)
+        experiment_dir = os.path.dirname(checkpoint_dir)
+        step_num = os.path.basename(args.checkpoint).split("-")[1].split(".")[0]
+        history_path = os.path.join(experiment_dir, "history", f"step_{step_num}.json")
+        if os.path.exists(history_path):
+            with open(history_path, "r") as f:
+                history_data = json.load(f)
+                train_loss = history_data.get("train", {}).get("Total")
+                valid_loss = history_data.get("valid", {}).get("Total")
+                print(f"Loaded losses from {history_path}: train={train_loss}, valid={valid_loss}")
+    except Exception as e:
+        print(f"Could not load step losses: {e}")
 
     NUM_HEADS = model_kwargs.model.attention.num_heads if model_kwargs.model.type == ModelType.ATTENTION else 1
     input_dim = model_kwargs.input_dim
@@ -340,7 +360,8 @@ def main():
 
     # Initialize ONNX sessions
     sess_options = rt.SessionOptions()
-    sess_options.intra_op_num_threads = 32
+    sess_options.intra_op_num_threads = args.num_threads
+    sess_options.inter_op_num_threads = args.num_threads
     execution_provider = "CPUExecutionProvider" if args.device == "cpu" else "CUDAExecutionProvider"
 
     if "ONNX_MATH_FP32" in configs:
@@ -529,6 +550,8 @@ def main():
             if cfg != baseline:
                 if i in baseline_predictions:
                     pred_baseline, m_cpu_baseline = baseline_predictions[i]
+                    event_total_err = 0.0
+                    event_num_elems = 0
                     for name, idx in [("id", 1), ("momentum", 2), ("pu", 3)]:
                         diff_orig = (pred_baseline[idx][m_cpu_baseline] - pred[idx][m_cpu]).abs().flatten().numpy()
                         is_invalid = ~np.isfinite(diff_orig)
@@ -538,6 +561,13 @@ def main():
                         results[cfg][name].append(diff)
                         results[cfg]["total_err"] += np.sum(diff)
                         results[cfg]["num_elems"] += len(diff)
+                        event_total_err += np.sum(diff)
+                        event_num_elems += len(diff)
+                    results[cfg]["runs"][-1]["mae"] = float(event_total_err / event_num_elems)
+                else:
+                    results[cfg]["runs"][-1]["mae"] = None
+            else:
+                results[cfg]["runs"][-1]["mae"] = 0.0
 
         if args.device == "cuda":
             torch.cuda.empty_cache()
@@ -555,7 +585,7 @@ def main():
     plt.ylabel("Inference time [ms]")
     plt.legend()
     plt.title("Inference Runtime vs. Event Size", y=1.05)
-    plt.savefig(os.path.join(args.outdir, "runtime_vs_size.pdf"))
+    plt.savefig(os.path.join(args.outdir, "runtime_vs_size.pdf"), bbox_inches="tight")
     plt.close()
 
     for name in ["id", "momentum", "pu"]:
@@ -572,7 +602,7 @@ def main():
         plt.ylabel("Number of elements")
         plt.legend()
         plt.title(f"Comparison of Absolute Differences: {name}", y=1.05)
-        plt.savefig(os.path.join(args.outdir, f"comp_abs_{name}.pdf"))
+        plt.savefig(os.path.join(args.outdir, f"comp_abs_{name}.pdf"), bbox_inches="tight")
         plt.close()
 
     sorted_runtime_configs = sorted(configs, key=lambda x: np.mean(results[x]["runtime"]))
@@ -594,7 +624,7 @@ def main():
     plt.ylabel("Number of events")
     plt.legend()
     plt.title("Distribution of Inference Runtime", y=1.05)
-    plt.savefig(os.path.join(args.outdir, "runtime_dist.pdf"))
+    plt.savefig(os.path.join(args.outdir, "runtime_dist.pdf"), bbox_inches="tight")
     plt.close()
 
     # Runtime Ranking Bar Chart
@@ -673,9 +703,15 @@ def main():
     summary = {
         "num_processed_events": args.num_events,
         "event_size_distribution": all_event_sizes,
+        "train_loss": train_loss,
+        "valid_loss": valid_loss,
         "system": {
+            "device": args.device,
+            "num_threads": args.num_threads,
             "cpu": get_cpu_info(),
             "gpu": get_gpu_info(),
+            "pytorch_version": torch.__version__,
+            "onnxruntime_version": rt.__version__,
         },
         "scenarios": {cfg: results[cfg]["runs"] for cfg in configs},
     }

@@ -10,6 +10,8 @@ from mlpf.conf import MLPFConfig, ModelType
 
 # Configuration
 CONFIGS = ["standard", "linear", "gnn-lsh"]
+DEVICES = ["cuda", "cpu"]
+#DEVICES = ["cuda"]
 MODEL_NAME = "pyg-cms-v1"
 PRODUCTION = "cms_run3"
 NUM_STEPS = 100
@@ -49,7 +51,8 @@ DATA_DIR = get_data_dir()
 
 rule all:
     input:
-        expand(os.path.join(ONNX_DIR, "{config}", "model_math_fp32.onnx"), config=CONFIGS)
+        expand(os.path.join(ONNX_DIR, "{device}", "{config}", "model_math_fp32.onnx"), device=DEVICES, config=CONFIGS),
+        expand(os.path.join(ONNX_DIR, "{device}", "plots", "runtime_scaling_summary.png"), device=DEVICES)
 
 rule train:
     output:
@@ -82,7 +85,8 @@ rule onnx_validate:
         checkpoint = os.path.join(EXPERIMENTS_DIR, "training_{config}", "checkpoints", f"checkpoint-{NUM_STEPS}.pth"),
         model_kwargs = os.path.join(EXPERIMENTS_DIR, "training_{config}", "model_kwargs.pkl")
     output:
-        onnx_model = os.path.join(ONNX_DIR, "{config}", "model_math_fp32.onnx")
+        onnx_model = os.path.join(ONNX_DIR, "{device}", "{config}", "model_math_fp32.onnx"),
+        summary = os.path.join(ONNX_DIR, "{device}", "{config}", "summary.json")
     params:
         configs_args = lambda wildcards: "--configs PT_MATH_FP32 PT_MATH_FP16 ONNX_MATH_FP32 ONNX_MATH_FP16" if wildcards.config in ["linear", "gnn-lsh"] else "",
         extra_args = get_onnx_validate_extra_args
@@ -93,9 +97,19 @@ rule onnx_validate:
             --model-kwargs {input.model_kwargs} \
             --dataset cms_pf_ttbar \
             --data-dir {DATA_DIR} \
-            --num-events 100 \
-            --outdir {ONNX_DIR}/{wildcards.config} \
-            --device cuda \
+            --num-events 10 \
+            --outdir {ONNX_DIR}/{wildcards.device}/{wildcards.config} \
+            --device {wildcards.device} \
             {params.configs_args} \
             {params.extra_args}
+        """
+
+rule plot_onnx_summary:
+    input:
+        lambda wildcards: expand(os.path.join(ONNX_DIR, wildcards.device, "{config}", "summary.json"), config=CONFIGS)
+    output:
+        os.path.join(ONNX_DIR, "{device}", "plots", "runtime_scaling_summary.png")
+    shell:
+        """
+        PF_SITE=local ./scripts/local/wrapper.sh python3 scripts/plot-onnx-summary.py --indir {ONNX_DIR}/{wildcards.device} --outdir {ONNX_DIR}/{wildcards.device}/plots
         """
