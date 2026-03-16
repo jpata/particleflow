@@ -9,6 +9,9 @@ if "--device" in sys.argv:
 import os
 import time
 import gc
+import json
+import platform
+import subprocess
 
 # Ensure mlpf is in the path
 sys.path.append(os.getcwd())
@@ -170,6 +173,22 @@ def calculate_delta_r_numba(particles):
         return delta_r_matrix
 
     return _calculate_delta_r(particles)
+
+
+def get_cpu_info():
+    try:
+        return subprocess.check_output("lscpu | grep 'Model name'", shell=True).decode().split(":")[1].strip()
+    except Exception:
+        return platform.processor() or "Unknown CPU"
+
+
+def get_gpu_info():
+    try:
+        if torch.cuda.is_available():
+            return torch.cuda.get_device_name(0)
+    except Exception:
+        pass
+    return "Unknown GPU"
 
 
 def main():
@@ -404,9 +423,24 @@ def main():
         torch.cuda.synchronize()
 
     results = {
-        cfg: {"id": [], "momentum": [], "pu": [], "total_err": 0.0, "num_elems": 0, "num_invalid": 0, "runtime": [], "event_size": [], "jets_pt": []}
+        cfg: {
+            "id": [],
+            "momentum": [],
+            "pu": [],
+            "total_err": 0.0,
+            "num_elems": 0,
+            "num_invalid": 0,
+            "runtime": [],
+            "event_size": [],
+            "jets_pt": [],
+            "runs": [],
+        }
         for cfg in configs
     }
+
+    all_event_sizes = []
+    for i in range(args.num_events):
+        all_event_sizes.append(ds[i]["X"].shape[0])
 
     baseline_predictions = {}
 
@@ -477,14 +511,17 @@ def main():
 
                 if cfg == baseline:
                     baseline_predictions[i] = (pred, m_cpu)
+
+                results[cfg]["runtime"].append(t1 - t0)
+                results[cfg]["event_size"].append(num_elements)
+                results[cfg]["runs"].append({"event_idx": i, "size": num_elements, "runtime": t1 - t0, "oom": False})
             except (rt.capi.onnxruntime_pybind11_state.RuntimeException, torch.cuda.OutOfMemoryError) as e:
+                is_oom = "Out of memory" in str(e) or isinstance(e, torch.cuda.OutOfMemoryError)
+                results[cfg]["runs"].append({"event_idx": i, "size": num_elements, "runtime": None, "oom": is_oom})
                 print(f"Skipping event {i} for {cfg} due to error: {e}")
                 if args.device == "cuda":
                     torch.cuda.empty_cache()
                 continue
-
-            results[cfg]["runtime"].append(t1 - t0)
-            results[cfg]["event_size"].append(num_elements)
 
             j = particles_to_jets(pred, m_cpu)
             results[cfg]["jets_pt"].append(awkward.to_numpy(awkward.flatten(j.pt)))
@@ -631,6 +668,20 @@ def main():
     a1.set_xlabel("jet $p_T$ [GeV]")
     plt.savefig(os.path.join(args.outdir, "jet_pt_distribution.pdf"), bbox_inches="tight")
     plt.close()
+
+    # Save JSON summary
+    summary = {
+        "num_processed_events": args.num_events,
+        "event_size_distribution": all_event_sizes,
+        "system": {
+            "cpu": get_cpu_info(),
+            "gpu": get_gpu_info(),
+        },
+        "scenarios": {cfg: results[cfg]["runs"] for cfg in configs},
+    }
+
+    with open(os.path.join(args.outdir, "summary.json"), "w") as f:
+        json.dump(summary, f, indent=4)
 
     print(f"Done. Results saved in {args.outdir}")
 
