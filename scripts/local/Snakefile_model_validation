@@ -1,5 +1,12 @@
 import os
 import subprocess
+import pickle as pkl
+import sys
+
+# Ensure mlpf is in the path for unpickling
+sys.path.append(os.getcwd())
+
+from mlpf.conf import MLPFConfig, ModelType
 
 # Configuration
 CONFIGS = ["standard", "linear", "gnn-lsh"]
@@ -11,6 +18,22 @@ CHECKPOINT_FREQ = 100
 # Directory paths
 EXPERIMENTS_DIR = "experiments"
 ONNX_DIR = "onnx_validation"
+
+def get_onnx_validate_extra_args(wildcards):
+    extra_args = ""
+    if wildcards.config == "gnn-lsh":
+        model_kwargs_path = os.path.join(EXPERIMENTS_DIR, f"training_{wildcards.config}", "model_kwargs.pkl")
+        if os.path.exists(model_kwargs_path):
+            with open(model_kwargs_path, "rb") as f:
+                config_raw = pkl.load(f)
+                if isinstance(config_raw, dict):
+                    config = MLPFConfig.model_validate(config_raw)
+                else:
+                    config = MLPFConfig.model_validate(config_raw.model_dump())
+
+                if config.model.type == ModelType.GNN_LSH:
+                    extra_args += f" --pad-bin-size {config.model.gnn_lsh.bin_size}"
+    return extra_args
 
 # Helper to retrieve DATA_DIR from the spec file
 def get_data_dir():
@@ -36,7 +59,7 @@ rule train:
         extra_args = lambda wildcards: {
             "standard": "--model.attention.attention_type flash",
             "linear": "--model.attention.attention_type linear",
-            "gnn-lsh": "--model.type gnn_lsh --model.gnn_lsh.num_convs 3"
+            "gnn-lsh": "--model.type gnn_lsh --model.gnn_lsh.num_convs 3 --pad_to_multiple_elements 32"
         }[wildcards.config]
     shell:
         """
@@ -61,7 +84,8 @@ rule onnx_validate:
     output:
         onnx_model = os.path.join(ONNX_DIR, "{config}", "model_math_fp32.onnx")
     params:
-        configs_args = lambda wildcards: "--configs PT_MATH_FP32 PT_MATH_FP16 ONNX_MATH_FP32 ONNX_MATH_FP16" if wildcards.config in ["linear", "gnn-lsh"] else ""
+        configs_args = lambda wildcards: "--configs PT_MATH_FP32 PT_MATH_FP16 ONNX_MATH_FP32 ONNX_MATH_FP16" if wildcards.config in ["linear", "gnn-lsh"] else "",
+        extra_args = get_onnx_validate_extra_args
     shell:
         """
         PF_SITE=local ./scripts/local/wrapper.sh python3 scripts/cms-validate-onnx.py \
@@ -72,5 +96,6 @@ rule onnx_validate:
             --num-events 100 \
             --outdir {ONNX_DIR}/{wildcards.config} \
             --device cuda \
-            {params.configs_args}
+            {params.configs_args} \
+            {params.extra_args}
         """

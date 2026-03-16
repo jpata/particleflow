@@ -89,6 +89,7 @@ def parse_args():
     parser.add_argument("--outdir", type=str, default="./onnx_validation", help="Output directory for ONNX and plots")
     parser.add_argument("--num-events", type=int, default=10, help="Number of events for validation")
     parser.add_argument("--device", type=str, default="cpu", help="Device to use (cpu or cuda)")
+    parser.add_argument("--pad-bin-size", type=int, default=0, help="Pad events to the nearest multiple of this size")
     parser.add_argument(
         "--configs",
         type=str,
@@ -369,7 +370,13 @@ def main():
     # Warmup
     print("Performing warmup...")
     elem_warmup = ds[0]
-    X_warmup = torch.tensor(elem_warmup["X"]).to(torch.float32).to(args.device).unsqueeze(0).contiguous()
+    X_warmup = torch.tensor(elem_warmup["X"]).to(torch.float32).to(args.device)
+    if args.pad_bin_size > 0:
+        if X_warmup.shape[0] % args.pad_bin_size != 0:
+            num_to_pad = args.pad_bin_size - (X_warmup.shape[0] % args.pad_bin_size)
+            X_warmup = torch.nn.functional.pad(X_warmup, (0, 0, 0, num_to_pad), mode="constant", value=0)
+
+    X_warmup = X_warmup.unsqueeze(0).contiguous()
     mask_warmup = X_warmup[:, :, 0] != 0
     mask_f_warmup = mask_warmup.float().cpu().numpy()
     X_warmup_np = X_warmup.cpu().numpy()
@@ -409,6 +416,12 @@ def main():
             elem = ds[i]
             X_features = torch.tensor(elem["X"]).to(torch.float32).to(args.device)
             num_elements = X_features.shape[0]
+
+            # Pad elements to the nearest multiple if specified
+            if args.pad_bin_size > 0:
+                if num_elements % args.pad_bin_size != 0:
+                    num_to_pad = args.pad_bin_size - (num_elements % args.pad_bin_size)
+                    X_features = torch.nn.functional.pad(X_features, (0, 0, 0, num_to_pad), mode="constant", value=0)
 
             # Clip features to avoid FP16 overflow (max value ~65500)
             X_features = torch.clamp(X_features, min=-60000, max=60000)
