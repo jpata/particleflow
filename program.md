@@ -29,11 +29,11 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 - Install new packages or add dependencies. 
 - Modify the evaluation code.
 
-**The goal is simple: get the lowest validation loss.** Since the time budget is fixed, you don't need to worry about training time — it's always 2 minutes. Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size. In particular, focus on creative architectural exploration beyond just changing the hyperparameters. The only constraint is that the code runs without crashing and finishes within the time budget.
+**The goal is simple: get the lowest validation jet interquartile range.** Since the time budget is fixed, you don't need to worry about training time — it's always 2 minutes. Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size, the optimizer, the loss configuration. In particular, focus on creative architectural exploration beyond just changing the hyperparameter values. The only constraint is that the code runs without crashing and finishes within the time budget.
 
-**VRAM** is a soft constraint. Some increase is acceptable for meaningful validation loss gains, but it should not blow up dramatically.
+**VRAM** is a soft constraint. Some increase is acceptable for meaningful validation jet iqr gains, but it should not blow up dramatically.
 
-**Simplicity criterion**: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude. A 0.001 validation loss improvement that adds 20 lines of hacky code? Probably not worth it. A 0.001 validation loss improvement from deleting code? Definitely keep. An improvement of ~0 but much simpler code? Keep.
+**Simplicity criterion**: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude. A 0.001 validation jet iqr improvement that adds 20 lines of hacky code? Probably not worth it. A 0.001 validation jet iqr improvement from deleting code? Definitely keep. An improvement of ~0 but much simpler code? Keep.
 
 **The first run**: Your very first run should always be to establish the baseline, so you will run the training script as is.
 

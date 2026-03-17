@@ -48,7 +48,9 @@ def evaluate(model, loader, device):
     
     with torch.no_grad():
         for i, batch in enumerate(loader):
-            if i > 100: # Limit evaluation to 100 batches for speed
+            if i % 10 == 0:
+                print("eval batch {}".format(i))
+            if i > 10: # Limit evaluation for speed
                 break
                 
             X = batch.X.to(device)
@@ -59,38 +61,42 @@ def evaluate(model, loader, device):
             
             # Predicted
             pred_id = torch.argmax(logits_pid, dim=-1)
-            mask_pred = (pred_id != 0) & mask
             
-            pred_pt = torch.exp(preds_momentum[..., 0]) * X[..., 1]
-            pred_eta = preds_momentum[..., 1]
-            pred_sin_phi = preds_momentum[..., 2]
-            pred_cos_phi = preds_momentum[..., 3]
-            pred_phi = torch.atan2(pred_sin_phi, pred_cos_phi)
-            pred_e = torch.exp(preds_momentum[..., 4]) * X[..., 5]
+            pt = (torch.exp(preds_momentum[..., 0]) * X[..., 1]).detach().cpu().numpy()
+            eta = preds_momentum[..., 1].detach().cpu().numpy()
+            sin_phi = preds_momentum[..., 2].detach().cpu().numpy()
+            cos_phi = preds_momentum[..., 3].detach().cpu().numpy()
+            phi = np.arctan2(sin_phi, cos_phi)
+            energy = (torch.exp(preds_momentum[..., 4]) * X[..., 5]).detach().cpu().numpy()
             
             # Target
-            target_id = batch.ytarget[:, :, 0].to(device)
-            mask_target = (target_id != 0) & mask
+            target_id = batch.ytarget[:, :, 0].detach().cpu().numpy()
+            target_pt_log = batch.ytarget[:, :, 2].detach().cpu().numpy()
+            target_eta_val = batch.ytarget[:, :, 3].detach().cpu().numpy()
+            target_sin_phi = batch.ytarget[:, :, 4].detach().cpu().numpy()
+            target_cos_phi = batch.ytarget[:, :, 5].detach().cpu().numpy()
+            target_energy_log = batch.ytarget[:, :, 6].detach().cpu().numpy()
             
-            target_pt = torch.exp(batch.ytarget[:, :, 2].to(device)) * X[..., 1]
-            target_eta = batch.ytarget[:, :, 3].to(device)
-            target_phi = torch.atan2(batch.ytarget[:, :, 4].to(device), batch.ytarget[:, :, 5].to(device))
-            target_e = torch.exp(batch.ytarget[:, :, 6].to(device)) * X[..., 5]
+            X_pt = X[..., 1].detach().cpu().numpy()
+            X_e = X[..., 5].detach().cpu().numpy()
+            mask_np = mask.detach().cpu().numpy()
+            pred_id_np = pred_id.detach().cpu().numpy()
 
             # Collect particles for jet clustering
             for b in range(X.shape[0]):
-                p_pred = vector.awk([
-                    {"pt": pt, "eta": eta, "phi": phi, "e": e}
-                    for pt, eta, phi, e, m in zip(pred_pt[b], pred_eta[b], pred_phi[b], pred_e[b], mask_pred[b])
-                    if m
-                ])
+                p_pred = []
+                for j in range(X.shape[1]):
+                    if mask_np[b, j] and pred_id_np[b, j] != 0:
+                        p_pred.append(vector.obj(pt=pt[b, j], eta=eta[b, j], phi=phi[b, j], e=energy[b, j]))
                 all_pred_p4.append(p_pred)
                 
-                p_target = vector.awk([
-                    {"pt": pt, "eta": eta, "phi": phi, "e": e}
-                    for pt, eta, phi, e, m in zip(target_pt[b], target_eta[b], target_phi[b], target_e[b], mask_target[b])
-                    if m
-                ])
+                p_target = []
+                for j in range(X.shape[1]):
+                    if mask_np[b, j] and target_id[b, j] != 0:
+                        t_pt = np.exp(target_pt_log[b, j]) * X_pt[b, j]
+                        t_phi = np.arctan2(target_sin_phi[b, j], target_cos_phi[b, j])
+                        t_e = np.exp(target_energy_log[b, j]) * X_e[b, j]
+                        p_target.append(vector.obj(pt=t_pt, eta=target_eta_val[b, j], phi=t_phi, e=t_e))
                 all_target_p4.append(p_target)
 
     # Convert to awkward for fastjet
