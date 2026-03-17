@@ -7,6 +7,7 @@ import torch
 import torch.utils.data
 
 from mlpf.logger import _logger
+from mlpf.conf import MLPFConfig
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
@@ -369,36 +370,42 @@ def set_worker_sharing_strategy(worker_id: int) -> None:
     torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
 
 
-def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray, shuffle_train=True):
+def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, use_ray, shuffle_train=True):
     loaders = {}
     samplers = {}
     # build train, valid dataset and dataloaders
     for split in ["train", "valid"]:
         loaders[split] = []
         samplers[split] = []
-        for type_ in config[f"{split}_dataset"][config["dataset"]]:
+        dataset_config = getattr(config, f"{split}_dataset")
+        if dataset_config is None:
+            continue
+
+        for type_ in dataset_config[config.dataset.value]:
             dataset = []
-            for sample in config[f"{split}_dataset"][config["dataset"]][type_]["samples"]:
-                version = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["version"]
-                split_configs = config[f"{split}_dataset"][config["dataset"]][type_]["samples"][sample]["splits"]
-                _logger.info(f"sample={sample} split={split} split_configs={split_configs}")
+            physical_ds = dataset_config[config.dataset.value][type_]
+            for sample_name, sample in physical_ds.samples.items():
+                version = sample.version
+                split_configs = sample.splits
+                _logger.info(f"sample={sample_name} split={split} split_configs={split_configs}")
 
                 nevents = None
-                if not (config[f"n{split}"] is None):
-                    nevents = config[f"n{split}"] // len(split_configs)
+                n_split_val = getattr(config, f"n{split}")
+                if n_split_val is not None:
+                    nevents = n_split_val // len(split_configs)
 
                 for split_config in split_configs:
                     ds = PFDataset(
-                        config["data_dir"],
-                        f"{sample}/{split_config}:{version}",
+                        config.data_dir,
+                        f"{sample_name}/{split_config}:{version}",
                         split,
                         num_samples=nevents,
-                        sort=config["sort_data"],
-                        pad_to_multiple=config.get("pad_to_multiple_elements", None),
+                        sort=config.sort_data,
+                        pad_to_multiple=config.pad_to_multiple_elements,
                     ).ds
 
                     if (rank == 0) or (rank == "cpu"):
-                        _logger.info(f"{split}_dataset: {sample}, {len(ds)}", color="blue")
+                        _logger.info(f"{split}_dataset: {sample_name}, {len(ds)}", color="blue")
 
                     dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
@@ -418,19 +425,19 @@ def get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray, shu
             sampler.name = f"{type_}:{split}"
 
             # build dataloaders
-            batch_size = config[f"{split}_dataset"][config["dataset"]][type_]["batch_size"] * config["gpu_batch_multiplier"]
+            batch_size = physical_ds.batch_size * config.gpu_batch_multiplier
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
                 collate_fn=Collater(["X", "ytarget"], ["genmet"]),
                 sampler=sampler,
-                num_workers=config["num_workers"],
-                prefetch_factor=config["prefetch_factor"],
+                num_workers=config.num_workers,
+                prefetch_factor=config.prefetch_factor,
                 # pin_memory=use_cuda,
                 # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
                 worker_init_fn=set_worker_sharing_strategy,
-                persistent_workers=config["num_workers"] > 0,
+                persistent_workers=config.num_workers > 0,
             )
 
             loaders[split].append(loader)

@@ -6,12 +6,7 @@ export PYTHONPATH=`pwd`
 export KERAS_BACKEND=torch
 
 # Quick unit tests
-python -m pytest tests/test_dataloader.py
-python -m pytest tests/test_dataloader_behavior.py
-python -m pytest tests/test_endless_interleaved_iterator.py
-python -m pytest tests/test_resumable_sampler.py
-python -m pytest tests/test_interleaved_iterator.py
-python -m pytest tests/test_lr_schedule.py
+python -m pytest tests
 
 #create data directories
 rm -Rf local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
@@ -48,19 +43,20 @@ python mlpf/pipeline.py \
   --prefix MLPF_test_ \
   --pipeline \
   train \
-  --num-steps 2 \
-  --checkpoint-freq 2 \
+  --num_steps 2 \
+  --checkpoint_freq 1 \
   --gpus 0 \
   --make-plots \
-  --conv-type attention \
+  --conv_type attention \
   --dtype float32 \
-  --attention-type math \
-  --num-convs 1
+  --model.attention.attention_type math \
+  --model.attention.num_convs 1 \
+  --num_workers 1 --prefetch_factor 1
 
 ls experiments/MLPF_test_*/checkpoints/*
 
 # Capture the experiment directory created by the first run for the next steps
-export EXP_DIR=$(ls -d experiments/MLPF_test_*/)
+export EXP_DIR_1=$(ls -d experiments/MLPF_test_*/ | tail -n 1)
 
 # --------------------------------------------------------------------------------------------
 # Test 2: Fine-tuning from a checkpoint in a NEW directory
@@ -75,16 +71,31 @@ python mlpf/pipeline.py \
   --pipeline \
   train \
   --num-steps 4 \
-  --checkpoint-freq 2 \
+  --checkpoint_freq 1 \
   --gpus 0 \
   --make-plots \
-  --conv-type attention \
+  --conv_type attention \
   --dtype float32 \
-  --attention-type math \
-  --num-convs 1 \
-  --load ${EXP_DIR}/checkpoints/checkpoint-02.pth
+  --model.attention.attention_type math \
+  --model.attention.num_convs 1 \
+  --load ${EXP_DIR_1}/checkpoints/checkpoint-02.pth \
+  --num_workers 1 --prefetch_factor 1
 
 ls experiments/MLPF_test_*/checkpoints/*
+
+# Capture the latest experiment directory (from Test 2)
+export EXP_DIR_2=$(ls -d experiments/MLPF_test_*/ | tail -n 1)
+
+# --------------------------------------------------------------------------------------------
+# Test 3: ONNX export and validation
+# --------------------------------------------------------------------------------------------
+python scripts/cms-validate-onnx.py \
+  --checkpoint ${EXP_DIR_2}/checkpoints/checkpoint-04.pth \
+  --model-kwargs ${EXP_DIR_2}/model_kwargs.pkl \
+  --dataset cms_pf_ttbar/10 \
+  --data-dir ./tensorflow_datasets/ \
+  --num-events 50 \
+  --outdir ./onnx_validation_cms --device cpu
 
 ## --------------------------------------------------------------------------------------------
 ## Test 3: Ray Train training using the 'ray-train' sub-command

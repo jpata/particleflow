@@ -377,8 +377,8 @@ models:
     nvalid: null #use full valid dataset for validation
     ntest: 100 #do test on a small subset
     sort_data: false
-    num_workers: 1
-    prefetch_factor: 1
+    num_workers: 8
+    prefetch_factor: 2
     patience: 10000
     checkpoint_freq: 10000
     val_freq: 10000

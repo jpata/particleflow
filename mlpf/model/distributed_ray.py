@@ -13,12 +13,10 @@ from mlpf.logger import _logger, _configLogger
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.utils import create_comet_experiment
 from mlpf.model.training import train_all_steps, get_optimizer
+from mlpf.conf import MLPFConfig
 
 from mlpf.model.utils import (
     load_checkpoint,
-    CLASS_LABELS,
-    X_FEATURES,
-    ELEM_TYPES_NONZERO,
     save_HPs,
     get_lr_schedule,
     count_parameters,
@@ -28,7 +26,7 @@ from mlpf.model.utils import (
 def run_ray_training(config, args, outdir):
     import ray
     from ray import tune
-    from ray.train.torch import TorchTrainer
+    from ray.train.torch import TorchTrainer  # , TorchConfig
 
     if not args.ray_local:
         _logger.info("Inititalizing ray...")
@@ -52,16 +50,33 @@ def run_ray_training(config, args, outdir):
     run_config = ray.train.RunConfig(
         name=Path(outdir).name,
         storage_path=storage_path,
-        log_to_file=False,
         failure_config=ray.train.FailureConfig(max_failures=2),
         checkpoint_config=ray.train.CheckpointConfig(num_to_keep=1),  # keep only latest checkpoint
-        sync_config=ray.train.SyncConfig(sync_artifacts=True),
     )
     trainable = tune.with_parameters(train_ray_trial, args=args, outdir=outdir)
     # Resume from checkpoint if a checkpoint is found in outdir
-    if TorchTrainer.can_restore(outdir):
+    can_restore = False
+    try:
+        can_restore = TorchTrainer.can_restore(outdir)
+    except DeprecationWarning:
+        # In some Ray versions, DeprecationWarning is raised as an error
+        _logger.warning("Caught DeprecationWarning from TorchTrainer.can_restore")
+        can_restore = False
+
+    if can_restore:
         _logger.info(f"Restoring Ray Trainer from {outdir}", color="bold")
-        trainer = TorchTrainer.restore(outdir, train_loop_per_worker=trainable, scaling_config=scaling_config)
+        try:
+            trainer = TorchTrainer.restore(outdir, train_loop_per_worker=trainable, scaling_config=scaling_config)
+        except DeprecationWarning:
+            _logger.warning("Caught DeprecationWarning from TorchTrainer.restore, falling back to new trainer")
+            resume_from_checkpoint = ray.train.Checkpoint(config["load"]) if config["load"] else None
+            trainer = TorchTrainer(
+                train_loop_per_worker=trainable,
+                train_loop_config=config,
+                scaling_config=scaling_config,
+                run_config=run_config,
+                resume_from_checkpoint=resume_from_checkpoint,
+            )
     else:
         resume_from_checkpoint = ray.train.Checkpoint(config["load"]) if config["load"] else None
         if resume_from_checkpoint:
@@ -72,6 +87,7 @@ def run_ray_training(config, args, outdir):
             scaling_config=scaling_config,
             run_config=run_config,
             resume_from_checkpoint=resume_from_checkpoint,
+            # torch_config=TorchConfig(backend="gloo"),
         )
     result = trainer.fit()
 
@@ -134,7 +150,7 @@ def run_hpo(config, args):
     )  # Copy the search space definition file to the train dir for later reference
     # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
     with open((dirname / "config.yaml"), "w") as file:
-        yaml.dump(config, file)
+        yaml.dump(MLPFConfig.model_validate(config).model_dump(mode="json"), file)
 
     if not args.ray_local:
         _logger.info("Inititalizing ray...")
@@ -151,7 +167,7 @@ def run_hpo(config, args):
     scaling_config = ray.train.ScalingConfig(
         num_workers=args.gpus,
         use_gpu=True,
-        resources_per_worker={"CPU": args.ray_cpus // (args.gpus) - 1, "GPU": 1},  # -1 to avoid blocking
+        resources_per_worker={"CPU": args.ray_cpus // (args.gpus) - 1, "GPU": 1.0},  # -1 to avoid blocking
     )
 
     trainable = tune.with_parameters(set_searchspace_and_run_trial, config=config, args=args)
@@ -207,9 +223,19 @@ def train_ray_trial(config, args, outdir=None):
     import ray
 
     if outdir is None:
-        outdir = ray.train.get_context().get_trial_dir()
+        try:
+            # try to get the trial directory if running via Tune/HPO
+            outdir = ray.train.get_context().get_trial_dir()
+        except Exception:
+            # fallback for standard Ray Train
+            try:
+                outdir = ray.train.get_context().get_local_checkpoint_dir()
+            except Exception:
+                outdir = os.getcwd()
+
+    if outdir is not None:
         if not os.path.exists(outdir):
-            os.makedirs(outdir)
+            os.makedirs(outdir, exist_ok=True)
 
     use_cuda = args.gpus > 0
 
@@ -217,26 +243,14 @@ def train_ray_trial(config, args, outdir=None):
     world_rank = ray.train.get_context().get_world_rank()
     world_size = ray.train.get_context().get_world_size()
 
-    model_kwargs = {
-        "input_dim": len(X_FEATURES[config["dataset"]]),
-        "num_classes": len(CLASS_LABELS[config["dataset"]]),
-        "input_encoding": config["model"]["input_encoding"],
-        "pt_mode": config["model"]["pt_mode"],
-        "eta_mode": config["model"]["eta_mode"],
-        "sin_phi_mode": config["model"]["sin_phi_mode"],
-        "cos_phi_mode": config["model"]["cos_phi_mode"],
-        "energy_mode": config["model"]["energy_mode"],
-        "elemtypes_nonzero": ELEM_TYPES_NONZERO[config["dataset"]],
-        "learned_representation_mode": config["model"]["learned_representation_mode"],
-        **config["model"][config["conv_type"]],
-    }
-    model = MLPF(**model_kwargs)
+    mlpf_config = MLPFConfig.model_validate(config)
+    model = MLPF(mlpf_config)
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # optimizer should be created after distributing the model to devices with ray.train.torch.prepare_model(model)
     model = ray.train.torch.prepare_model(model)
-    optimizer = get_optimizer(model, config)
+    optimizer = get_optimizer(model, mlpf_config)
 
     trainable_params, nontrainable_params, table = count_parameters(model)
     print(table)
@@ -253,14 +267,14 @@ def train_ray_trial(config, args, outdir=None):
         _logger.info(table)
 
     if (rank == 0) or (rank == "cpu"):
-        save_HPs(config, model, model_kwargs, outdir)  # save model_kwargs and hyperparameters
+        save_HPs(mlpf_config, model, outdir)  # save config and hyperparameters
         _logger.info("Creating experiment dir {}".format(outdir))
         _logger.info(f"Model directory {outdir}", color="bold")
 
-    loaders, samplers = get_interleaved_dataloaders(world_size, rank, config, use_cuda, use_ray=True)
+    loaders, samplers = get_interleaved_dataloaders(world_size, rank, mlpf_config, use_cuda, use_ray=True)
 
     if args.comet:
-        comet_experiment = create_comet_experiment(config["comet_name"], comet_offline=config["comet_offline"], outdir=outdir)
+        comet_experiment = create_comet_experiment(mlpf_config.comet_name, comet_offline=mlpf_config.comet_offline, outdir=outdir)
         comet_experiment.set_name(f"world_rank_{world_rank}_{Path(outdir).name}")
         comet_experiment.log_parameter("run_id", Path(outdir).name)
         comet_experiment.log_parameter("world_size", world_size)
@@ -279,12 +293,12 @@ def train_ray_trial(config, args, outdir=None):
         # save overridden config then log to comet
         config_filename = "overridden_config.yaml"
         with open((Path(outdir) / config_filename), "w") as file:
-            yaml.dump(config, file)
+            yaml.dump(mlpf_config.model_dump(mode="json"), file)
         comet_experiment.log_code(str(Path(outdir) / config_filename))
     else:
         comet_experiment = None
 
-    lr_schedule = get_lr_schedule(config, optimizer, config["num_steps"])
+    lr_schedule = get_lr_schedule(mlpf_config, optimizer, mlpf_config.num_steps)
 
     checkpoint_dir = os.path.join(outdir, "checkpoints")
     checkpoint_dir = Path(outdir) / "checkpoints"
@@ -311,19 +325,19 @@ def train_ray_trial(config, args, outdir=None):
         optimizer,
         loaders["train"],
         loaders["valid"],
-        config["num_steps"],
-        config["patience"],
+        mlpf_config.num_steps,
+        mlpf_config.patience,
         outdir,
-        config,
-        trainable=config["model"]["trainable"],
+        mlpf_config,
+        trainable=mlpf_config.model.trainable,
         start_step=start_step,
         lr_schedule=lr_schedule,
         use_ray=True,
-        checkpoint_freq=config["checkpoint_freq"],
+        checkpoint_freq=mlpf_config.checkpoint_freq,
         comet_experiment=comet_experiment,
-        comet_step_freq=config["comet_step_freq"],
-        dtype=getattr(torch, config["dtype"]),
-        val_freq=config["val_freq"],
+        comet_step_freq=mlpf_config.comet_step_freq,
+        dtype=getattr(torch, mlpf_config.dtype),
+        val_freq=mlpf_config.val_freq,
         checkpoint_dir=checkpoint_dir,
         train_sampler=samplers["train"],
         valid_sampler=samplers["valid"],

@@ -42,7 +42,7 @@ def split_indices_to_bins_batch(cmul, nbins, bin_size, msk, stable_sort=False):
 
     b = torch.zeros(msk.shape, dtype=torch.int64, device=cmul.device)
     # JP: check if this should be ~msk or msk (both here and in the TF implementation)
-    b[~msk] = nbins - 1
+    b[~msk.to(torch.bool)] = nbins - 1
 
     bin_idx = a + b
     if stable_sort:
@@ -55,8 +55,13 @@ def split_indices_to_bins_batch(cmul, nbins, bin_size, msk, stable_sort=False):
 
 
 def pairwise_l2_dist(A, B):
-    na = torch.sum(torch.square(A), -1)
-    nb = torch.sum(torch.square(B), -1)
+    # Ensure computation happens in fp32 to avoid overflow in fp16
+    # This is critical for ONNX export with mixed precision
+    A_fp32 = A.to(torch.float32)
+    B_fp32 = B.to(torch.float32)
+
+    na = torch.sum(torch.square(A_fp32), -1)
+    nb = torch.sum(torch.square(B_fp32), -1)
 
     # na as a row and nb as a column vectors
     na = torch.unsqueeze(na, -1)
@@ -64,8 +69,11 @@ def pairwise_l2_dist(A, B):
 
     # return pairwise euclidean difference matrix
     # note that this matrix multiplication can go out of range for float16 in case the absolute values of A and B are large
-    D = torch.sqrt(torch.clip(na - 2 * torch.matmul(A, torch.transpose(B, -1, -2)) + nb, 1e-6, 1e6))
-    return D
+    D = torch.sqrt(torch.clip(na - 2 * torch.matmul(A_fp32, torch.transpose(B_fp32, -1, -2)) + nb, 1e-6, 1e6))
+
+    # Cast result back to the original dtype of inputs to maintain consistency
+    # This prevents dtype mismatches in downstream operations
+    return D.to(A.dtype)
 
 
 class GHConvDense(nn.Module):
@@ -104,17 +112,29 @@ class GHConvDense(nn.Module):
             # add epsilon to prevent numerical issues from 1/sqrt(x)
             norm = torch.unsqueeze(torch.pow(in_degrees + 1e-6, -0.5), -1) * msk
 
-        f_hom = torch.linalg.matmul(x * msk, self.theta) * msk
-        if self.normalize_degrees:
-            f_hom = torch.linalg.matmul(adj, f_hom * norm) * norm
-        else:
-            f_hom = torch.linalg.matmul(adj, f_hom)
+        # ensure matrix multiplications are done in fp32 to avoid overflow in fp16
+        with torch.autocast(enabled=False, device_type="cuda"):
+            x_32 = x.float()
+            theta_32 = self.theta.float()
+            W_h_32 = self.W_h.float()
+            W_t_32 = self.W_t.float()
+            b_t_32 = self.b_t.float()
+            adj_32 = adj.float()
+            msk_32 = msk.float()
 
-        f_het = torch.linalg.matmul(x * msk, self.W_h)
-        gate = torch.sigmoid(torch.linalg.matmul(x, self.W_t) + self.b_t)
+            f_hom = torch.linalg.matmul(x_32 * msk_32, theta_32) * msk_32
+            if self.normalize_degrees:
+                norm_32 = norm.float()
+                f_hom = torch.linalg.matmul(adj_32, f_hom * norm_32) * norm_32
+            else:
+                f_hom = torch.linalg.matmul(adj_32, f_hom)
 
-        out = gate * f_hom + (1.0 - gate) * f_het
-        return self.activation(out) * msk
+            f_het = torch.linalg.matmul(x_32 * msk_32, W_h_32)
+            gate = torch.sigmoid(torch.linalg.matmul(x_32, W_t_32) + b_t_32)
+
+            out = gate * f_hom + (1.0 - gate) * f_het
+
+        return self.activation(out.to(x.dtype)) * msk
 
 
 class NodePairGaussianKernel(nn.Module):
@@ -168,7 +188,7 @@ def reverse_lsh(bins_split, points_binned_enc):
     bins_split_flat = torch.reshape(bins_split, (batch_dim, n_points))
     points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, n_points, n_features))
 
-    ret = torch.zeros(batch_dim, n_points, n_features, device=points_binned_enc.device)
+    ret = torch.zeros(batch_dim, n_points, n_features, device=points_binned_enc.device, dtype=points_binned_enc.dtype)
     for ibatch in range(batch_dim):
         # torch._assert(torch.min(bins_split_flat[ibatch]) >= 0, "reverse_lsh n_points min")
         # torch._assert(torch.max(bins_split_flat[ibatch]) < n_points, "reverse_lsh n_points max")
@@ -195,20 +215,25 @@ class MessageBuildingLayerLSH(nn.Module):
 
     def forward(self, x_msg, x_node, msk, training=False):
         shp = x_msg.shape
-        n_points = torch.tensor(shp[1])
+        # Keep n_points as integer for better ONNX tracing
+        n_points = shp[1]
 
         if n_points % self.bin_size != 0:
             raise Exception("Number of elements per event must be exactly divisible by the bin size")
 
         # compute the number of LSH bins to divide the input points into on the fly
         # n_points must be divisible by bin_size exactly due to the use of reshape
-        n_bins = torch.floor_divide(n_points, self.bin_size)
+        n_bins = n_points // self.bin_size
 
-        mul = torch.linalg.matmul(
-            x_msg,
-            self.codebook_random_rotations[:, : torch.maximum(torch.tensor(1), n_bins // 2)],
-        )
-        cmul = torch.concatenate([mul, -mul], axis=-1)
+        # Use ONNX-friendly operations for codebook slicing
+        codebook_slice = max(1, n_bins // 2)
+        # perform in FP32 to avoid overflow in FP16
+        with torch.autocast(enabled=False, device_type="cuda"):
+            mul = torch.linalg.matmul(
+                x_msg.float(),
+                self.codebook_random_rotations[:, :codebook_slice].float(),
+            )
+        cmul = torch.concatenate([mul.to(x_msg.dtype), -mul.to(x_msg.dtype)], axis=-1)
         bins_split = split_indices_to_bins_batch(cmul, n_bins, self.bin_size, msk, self.stable_sort)
 
         # replaced tf.gather with torch.vmap, indexing and reshape
@@ -273,16 +298,6 @@ class CombinedGraphLayer(nn.Module):
             self.dropout_layer = torch.nn.Dropout(self.dropout)
 
     def forward(self, x, msk, initial_embedding):
-        n_elems = x.shape[1]
-        bins_to_pad_to = -torch.floor_divide(-n_elems, self.bin_size)
-
-        # pad the element dimension
-        pad_size = (0, 0, 0, bins_to_pad_to * self.bin_size - n_elems)
-        x = torch.nn.functional.pad(x, pad_size)
-
-        pad_size = (0, bins_to_pad_to * self.bin_size - n_elems)
-        msk = torch.nn.functional.pad(msk, pad_size, value=True)
-
         if self.do_layernorm:
             x = self.layernorm1(x)
 
@@ -302,4 +317,4 @@ class CombinedGraphLayer(nn.Module):
         # undo the binning according to the element-to-bin indices
         x = reverse_lsh(bins_split, x)
 
-        return x[:, :n_elems, :]
+        return x

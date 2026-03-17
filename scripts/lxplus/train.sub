@@ -1,0 +1,10 @@
+executable              = scripts/lxplus/train.sh
+output                  = logs/train.$(ClusterId).$(ProcId).out
+error                   = logs/train.$(ClusterId).$(ProcId).err
+log                     = logs/train.$(ClusterId).log
+request_GPUs            = 1
+request_CPUs            = 4
+request_memory          = 16000
++JobFlavour             = "tomorrow"
+getenv                  = True
+queue 1
