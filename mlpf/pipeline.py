@@ -105,7 +105,7 @@ def main():
     cmd = Command(args.command)
     if cmd == Command.TRAIN:
         args.train = True
-        args.test = True  # By default, run testing after training
+        args.test = False
         args.hpo = None
         args.ray_train = False
     elif cmd == Command.TEST:
