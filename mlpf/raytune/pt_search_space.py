@@ -1,7 +1,9 @@
-from ray.tune import grid_search  # grid_search, choice, loguniform, quniform
+from ray.tune import choice  # grid_search, choice, loguniform, quniform
+from mlpf.utils import set_nested_dict
 
-raytune_num_samples = 1  # Number of random samples to draw from search space. Set to 1 for grid search.
-samp = grid_search
+
+raytune_num_samples = 10  # Number of random samples to draw from search space. Set to 1 for grid search.
+samp = choice
 
 search_space = {
     # dataset parameters
@@ -25,17 +27,9 @@ search_space = {
     "model.attention.num_convs": samp([1, 2, 3, 4, 5]),
     "model.attention.num_heads": samp([8, 16, 32]),
     "model.attention.head_dim": samp([8, 16, 32]),
-    "model.attention.dropout": samp([0.0, 0.01, 0.1, 0.2]),
+    "model.attention.dropout_ff": samp([0.0, 0.01, 0.1, 0.2]),
     "model.attention.activation": samp(["elu", "relu", "relu6", "leakyrelu"]),
-    # gnn_lsh parameters
-    "model.gnn_lsh.num_convs": samp([1, 2, 3, 4, 5]),
-    "model.gnn_lsh.width": samp([32, 64, 128, 256, 512]),
-    "model.gnn_lsh.embedding_dim": samp([32, 64, 128, 256, 512]),
-    "model.gnn_lsh.activation": samp(["elu", "relu", "relu6", "leakyrelu"]),
 }
-
-
-from mlpf.utils import set_nested_dict
 
 
 def set_hps_from_search_space(search_space, config):
