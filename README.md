@@ -82,19 +82,10 @@ curl -fsSL https://pixi.sh/install.sh | bash
 ```
 
 ### **2. Select Your Site**
-Set the `PIXI_PROJECT_MANIFEST` environment variable to point to the configuration for your cluster. It is recommended to add this to your `.bashrc` or export it in your session.
+Pick the site that you are using. Supported sites are Tallinn, lxplus, or local.
 
-*   **Tallinn (Slurm):**
 ```bash
-export PIXI_PROJECT_MANIFEST=configs/tallinn/pixi.toml
-```
-*   **lxplus (HTCondor):**
-```bash
-export PIXI_PROJECT_MANIFEST=configs/lxplus/pixi.toml
-```
-*   **Local Execution:**
-```bash
-export PIXI_PROJECT_MANIFEST=configs/local/pixi.toml
+ln -s configs/{local,tallinn,lxplus}/pixi.toml pixi.toml
 ```
 
 ### **3. Initialize Your Site**
