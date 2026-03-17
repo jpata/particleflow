@@ -219,7 +219,7 @@ productions:
     gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
 
     memory:
-      gen: 4000
+      gen: 6000
       post: 4000
       tfds: 8000
 

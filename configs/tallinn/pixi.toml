@@ -24,6 +24,7 @@ init = """
 mkdir -p .profiles/tallinn \
 && echo '#!/bin/bash
 # properties = {properties}
+env
 {exec_job}' > .profiles/tallinn/jobscript.sh \
 && echo 'executor: "slurm"
 jobscript: "jobscript.sh"
