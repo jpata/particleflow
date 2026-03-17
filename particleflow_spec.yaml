@@ -119,7 +119,7 @@ productions:
       ttbar_pu:
         process_name: "TTbar_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [100000, 100210]
+        seed_range: [100000, 110010]
         events_per_job: 50
         output_subdir: "pu55to75"
         pu_type: "pu55to75"
@@ -127,7 +127,7 @@ productions:
       ztt_pu:
         process_name: "ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [200000, 200210]
+        seed_range: [200000, 210010]
         events_per_job: 100
         output_subdir: "pu55to75"
         pu_type: "pu55to75"
@@ -135,7 +135,7 @@ productions:
       qcd_pu:
         process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [300000, 300210]
+        seed_range: [300000, 310010]
         events_per_job: 100
         output_subdir: "pu55to75"
         pu_type: "pu55to75"
@@ -143,7 +143,7 @@ productions:
       qcd_val:
         process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [400000, 400210]
+        seed_range: [400000, 401010]
         events_per_job: 100
         output_subdir: "pu55to75_val"
         pu_type: "pu55to75"
@@ -152,7 +152,7 @@ productions:
       ttbar_nopu:
         process_name: "TTbar_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [800000, 800210]
+        seed_range: [800000, 810010]
         events_per_job: 100
         output_subdir: "nopu"
         pu_type: "nopu"
@@ -160,7 +160,7 @@ productions:
       qcd_nopu:
         process_name: "QCDForPF_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [1000000, 1000210]
+        seed_range: [1000000, 1010010]
         events_per_job: 100
         output_subdir: "nopu"
         pu_type: "nopu"
@@ -168,7 +168,7 @@ productions:
       ztt_nopu:
         process_name: "ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi"
         gen_script: "mlpf/data/cms/genjob_pu.sh"
-        seed_range: [1100000, 1100210]
+        seed_range: [1100000, 1110010]
         events_per_job: 100
         output_subdir: "nopu"
         pu_type: "nopu"
@@ -214,7 +214,7 @@ productions:
     type: "key4hep"
     model: "pyg-cld-v1"
     comment: "CLD production with Key4Hep"
-    workspace_dir: "${project.paths.storage_root}/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9"
+    workspace_dir: "${project.paths.storage_root}/cld/v1.2.5_key4hep_2025-05-29"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
     gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
 
@@ -230,52 +230,52 @@ productions:
       zz:
         process_name: "p8_ee_ZZ_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [100000, 101010]
+        seed_range: [100000, 105010]
         events_per_job: 100
       zz_tautau_365:
         process_name: "p8_ee_ZZ_tautau_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [100000, 101010]
+        seed_range: [100000, 105010]
         events_per_job: 100
       zz_tautau_240:
         process_name: "p8_ee_ZZ_tautau_ecm240"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [100000, 101010]
+        seed_range: [100000, 105010]
         events_per_job: 100
       zh_tautau_365:
         process_name: "p8_ee_ZH_Htautau_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [200000, 201010]
+        seed_range: [200000, 205010]
         events_per_job: 100
       zh_tautau_240:
         process_name: "p8_ee_ZH_Htautau_ecm240"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [200000, 201010]
+        seed_range: [200000, 205010]
         events_per_job: 100
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [300000, 301010]
+        seed_range: [300000, 305010]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [400000, 401010]
+        seed_range: [400000, 405010]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [500000, 501010]
+        seed_range: [500000, 505010]
         events_per_job: 100
       z_qq:
         process_name: "p8_ee_Z_qq_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [600000, 601010]
+        seed_range: [600000, 605010]
         events_per_job: 100
       z_tautau:
         process_name: "p8_ee_Z_tautau_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [700000, 701010]
+        seed_range: [700000, 705010]
         events_per_job: 100
 
     postprocessing:
@@ -305,7 +305,7 @@ productions:
     type: "key4hep"
     model: "pyg-clic-v1"
     comment: "CLIC production with Key4Hep"
-    workspace_dir: "${project.paths.storage_root}/clic/v1.2.4_key4hep_2025-05-29_CLIC_819e4e"
+    workspace_dir: "${project.paths.storage_root}/clic/v1.2.5_key4hep_2025-05-29"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/clic"
     gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
 
@@ -321,17 +321,17 @@ productions:
       ttbar:
         process_name: "p8_ee_ttbar_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [300000, 301010]
+        seed_range: [300000, 305010]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [400000, 401010]
+        seed_range: [400000, 405010]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [500000, 501010]
+        seed_range: [500000, 505010]
         events_per_job: 100
 
     postprocessing:

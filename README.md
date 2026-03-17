@@ -73,7 +73,7 @@ Please ensure you use the correct version of the `jpata/particleflow` software w
 
 ## **Getting Started with Pixi & Snakemake**
 
-The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment management and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration.
+The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment management and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration. We provide site-specific configurations for Tallinn, LXPlus, and local execution.
 
 ### **1. Install Pixi**
 ```bash
@@ -81,35 +81,45 @@ curl -fsSL https://pixi.sh/install.sh | bash
 # Restart your shell or source your .bashrc
 ```
 
-### **2. Initialize Your Site**
-Configure the environment for your specific cluster. This sets up the necessary Snakemake profiles and site defaults.
+### **2. Select Your Site**
+Set the `PIXI_PROJECT_MANIFEST` environment variable to point to the configuration for your cluster. It is recommended to add this to your `.bashrc` or export it in your session.
 
 *   **Tallinn (Slurm):**
 ```bash
-pixi run -e tallinn init
+export PIXI_PROJECT_MANIFEST=configs/tallinn/pixi.toml
 ```
 *   **lxplus (HTCondor):**
 ```bash
-pixi run -e lxplus init
+export PIXI_PROJECT_MANIFEST=configs/lxplus/pixi.toml
+```
+*   **Local Execution:**
+```bash
+export PIXI_PROJECT_MANIFEST=configs/local/pixi.toml
 ```
 
-### **3. Generate the Workflow**
-Generate the `Snakefile` for a production campaign corresponding to your site.
+### **3. Initialize Your Site**
+Configure the environment for your specific cluster. This sets up the necessary Snakemake profiles and site defaults.
 ```bash
-PROD=cms_run3 STEPS=gen,post,tfds,train pixi run -e lxplus generate
+pixi run init
+```
+
+### **4. Generate the Workflow**
+Generate the `Snakefile` for a production campaign.
+```bash
+PROD=cms_run3 STEPS=gen,post,tfds,train pixi run generate
 ```
 You can inspect `snakemake_jobs/cms_run3/Snakefile` and the related scripts to understand the workflow.
 
-### **4. Execute the Workflow**
+### **5. Execute the Workflow**
 Launch the workflow on the batch system. It is recommended to run this inside a `tmux` or `screen` session.
 ```bash
-PROD=cms_run3 STEPS=gen,post,tfds,train pixi run -e lxplus run
+PROD=cms_run3 STEPS=gen,post,tfds,train pixi run run
 ```
 
-### **5. Validation & Plots**
+### **6. Validation & Plots**
 To run the validation plotting workflow:
 ```bash
-PROD=cms_run3 pixi run -e lxplus validation
+PROD=cms_run3 pixi run validation
 ```
 
 ---

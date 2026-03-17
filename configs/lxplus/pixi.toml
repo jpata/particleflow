@@ -8,44 +8,18 @@ platforms = ["linux-64"]
 [dependencies]
 python = ">=3.10"
 snakemake = ">=8.0"
-python-htcondor = "==23.4.0"
 snakemake-executor-plugin-cluster-generic = "*"
-snakemake-executor-plugin-slurm = "*"
+python-htcondor = ">=23.4.0"
 pyyaml = "*"
 
 [pypi-dependencies]
 comet-ml = "*"
 snakemake-executor-plugin-htcondor = { git = "https://github.com/htcondor/snakemake-executor-plugin-htcondor" }
 
-[feature.tallinn.activation]
-env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv" }
-
-[feature.lxplus.activation]
+[activation]
 env = { SITE = "lxplus", PROFILE = ".profiles/lxbatch", APPTAINER_ARGS = "-B /afs -B /cvmfs -B /eos -B /etc/pki/ca-trust -B /etc/tnsnames.ora -B /run --nv" }
 
-[feature.local.activation]
-env = { SITE = "local", PROFILE = ".profiles/local", APPTAINER_ARGS = "-B /tmp -B /mnt --nv" }
-
-[feature.tallinn.tasks]
-setup = "sed -i '0,/^  <<: \\*.*$/s//  <<: \\*tallinn/' particleflow_spec.yaml"
-init = """
-mkdir -p .profiles/tallinn \
-&& echo '#!/bin/bash
-# properties = {properties}
-{exec_job}' > .profiles/tallinn/jobscript.sh \
-&& echo 'executor: "slurm"
-jobscript: "jobscript.sh"
-jobs: unlimited
-restart-times: 0
-max-jobs-per-second: 10
-max-status-checks-per-second: 10
-verbose: true
-use-conda: false
-default-resources:
-  - slurm_account="hepusers"' > .profiles/tallinn/config.v8+.yaml
-"""
-
-[feature.lxplus.tasks]
+[tasks]
 setup = "sed -i '0,/^  <<: \\*.*$/s//  <<: \\*lxplus/' particleflow_spec.yaml"
 init = """
 mkdir -p .profiles/lxbatch \
@@ -62,33 +36,11 @@ default-resources:
   - getenv=True
   - job_wrapper="scripts/lxplus/test_wrapper.sh"' > .profiles/lxbatch/config.v8+.yaml
 """
-
-[feature.local.tasks]
-setup = "sed -i '0,/^  <<: \\*.*$/s//  <<: \\*local/' particleflow_spec.yaml"
-init = """
-mkdir -p .profiles/local \
-&& echo 'executor: "local"
-jobs: 1
-restart-times: 0
-local-cores: 1
-verbose: false' > .profiles/local/config.v8+.yaml
-"""
-
-[tasks]
 # Unified generation step
 generate = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --model \"${MODEL:-}\" --steps ${STEPS:-gen,post,tfds,train}'", depends-on = ["setup"] }
-
 # Unified run step
 run = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["generate"] }
-
 # Unified validation step
 validation = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config ${VAL_CONFIG:-validation_cms.yaml} && snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/validation_${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1'", depends-on = ["setup"] }
-
 # Local dry-run
 dry-run = "bash -c 'snakemake --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --dry-run'"
-
-[environments]
-tallinn = ["tallinn"]
-lxplus = ["lxplus"]
-local = ["local"]
-default = ["tallinn"]

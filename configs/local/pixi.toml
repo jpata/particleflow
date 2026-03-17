@@ -1,0 +1,37 @@
+[workspace]
+name = "particleflow"
+version = "2.5.0"
+description = "Machine Learning for Particle Flow Reconstruction"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.10"
+snakemake = ">=8.0"
+snakemake-executor-plugin-cluster-generic = "*"
+pyyaml = "*"
+
+[pypi-dependencies]
+comet-ml = "*"
+
+[activation]
+env = { SITE = "local", PROFILE = ".profiles/local", APPTAINER_ARGS = "-B /tmp -B /mnt --nv" }
+
+[tasks]
+setup = "sed -i '0,/^  <<: \\*.*$/s//  <<: \\*local/' particleflow_spec.yaml"
+init = """
+mkdir -p .profiles/local \
+&& echo 'executor: "local"
+jobs: 1
+restart-times: 0
+local-cores: 1
+verbose: false' > .profiles/local/config.v8+.yaml
+"""
+# Unified generation step
+generate = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --model \"${MODEL:-}\" --steps ${STEPS:-gen,post,tfds,train}'", depends-on = ["setup"] }
+# Unified run step
+run = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["generate"] }
+# Unified validation step
+validation = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config ${VAL_CONFIG:-validation_cms.yaml} && snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/validation_${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1'", depends-on = ["setup"] }
+# Local dry-run
+dry-run = "bash -c 'snakemake --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --dry-run'"
