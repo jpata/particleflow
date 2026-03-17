@@ -39,10 +39,8 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         k = k.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
         v = v.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
 
-        # Flash Attention is available on this device and we use it here.
-        # Masking is handled by zeroing out padded elements before and after the attention block, 
-        # as Flash Attention does not support arbitrary masks efficiently.
-        with sdpa_kernel([SDPBackend.FLASH_ATTENTION]):
+        # Use Flash Attention if possible, otherwise fall back to other kernels
+        with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
             attn_output = torch.nn.functional.scaled_dot_product_attention(
                 q, k, v, 
                 dropout_p=self.dropout if self.training else 0.0
@@ -107,10 +105,9 @@ class RegressionOutput(nn.Module):
         self.elemtypes = elemtypes
         self.nn = ffn(embed_dim, len(elemtypes), width)
 
-    def forward(self, X, x, orig_value):
+    def forward(self, X, x):
         # X: [B, N, 25] (original features)
         # x: [B, N, D] (latent representation)
-        # orig_value: [B, N, 1]
         
         nn_out = self.nn(x) # [B, N, num_elemtypes]
         
@@ -120,7 +117,7 @@ class RegressionOutput(nn.Module):
         # Select the output corresponding to the element type
         res = torch.sum(elemtype_mask * nn_out, dim=-1, keepdim=True)
         
-        return orig_value + res
+        return res
 
 class MLPF(nn.Module):
     def __init__(self, input_dim=25, num_classes=8, embedding_dim=128, width=128, num_convs=3, num_heads=8):
@@ -177,14 +174,22 @@ class MLPF(nn.Module):
         logits_binary = self.nn_binary_particle(emb_id)
         logits_pid = self.nn_pid(emb_id)
         
-        preds_pt = self.nn_pt(X, emb_reg, X[..., 1:2])
-        preds_eta = self.nn_eta(X, emb_reg, X[..., 2:3])
-        preds_sin_phi = self.nn_sin_phi(X, emb_reg, X[..., 3:4])
-        preds_cos_phi = self.nn_cos_phi(X, emb_reg, X[..., 4:5])
-        preds_energy = self.nn_energy(X, emb_reg, X[..., 5:6])
+        # For pt and energy, return just the residual (the log-ratio)
+        preds_pt = self.nn_pt(X, emb_reg)
+        preds_energy = self.nn_energy(X, emb_reg)
+
+        # For eta, sin_phi, cos_phi, add to the original element value (residual learning)
+        preds_eta = X[..., 2:3] + self.nn_eta(X, emb_reg)
+        preds_sin_phi = X[..., 3:4] + self.nn_sin_phi(X, emb_reg)
+        preds_cos_phi = X[..., 4:5] + self.nn_cos_phi(X, emb_reg)
         
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], dim=-1)
         
+        # Guard against nan/inf to prevent segfaults in downstream libraries like fastjet
+        logits_binary = torch.nan_to_num(logits_binary, nan=0.0, posinf=0.0, neginf=0.0)
+        logits_pid = torch.nan_to_num(logits_pid, nan=0.0, posinf=0.0, neginf=0.0)
+        preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
+
         return logits_binary, logits_pid, preds_momentum
 
 # --- Loss Function ---

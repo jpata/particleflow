@@ -29,7 +29,7 @@ def cluster_jets(p4s):
     # p4s: awkward array of vectors
     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
     cluster = fastjet.ClusterSequence(p4s, jetdef)
-    jets = cluster.inclusive_jets(ptmin=5.0)
+    jets = cluster.inclusive_jets()
     return jets
 
 def med_iqr(arr):
@@ -43,8 +43,8 @@ def med_iqr(arr):
 
 def evaluate(model, loader, device):
     model.eval()
-    all_pred_p4 = []
-    all_target_p4 = []
+    all_pred_particles = []
+    all_target_particles = []
     
     with torch.no_grad():
         for i, batch in enumerate(loader):
@@ -87,8 +87,11 @@ def evaluate(model, loader, device):
                 p_pred = []
                 for j in range(X.shape[1]):
                     if mask_np[b, j] and pred_id_np[b, j] != 0:
-                        p_pred.append(vector.obj(pt=pt[b, j], eta=eta[b, j], phi=phi[b, j], e=energy[b, j]))
-                all_pred_p4.append(p_pred)
+                        p_pred.append({"pt": pt[b, j], "eta": eta[b, j], "phi": phi[b, j], "e": energy[b, j]})
+                if len(p_pred) > 0:
+                    all_pred_particles.append(vector.awk(ak.from_iter(p_pred)))
+                else:
+                    all_pred_particles.append(None)
                 
                 p_target = []
                 for j in range(X.shape[1]):
@@ -96,29 +99,70 @@ def evaluate(model, loader, device):
                         t_pt = np.exp(target_pt_log[b, j]) * X_pt[b, j]
                         t_phi = np.arctan2(target_sin_phi[b, j], target_cos_phi[b, j])
                         t_e = np.exp(target_energy_log[b, j]) * X_e[b, j]
-                        p_target.append(vector.obj(pt=t_pt, eta=target_eta_val[b, j], phi=t_phi, e=t_e))
-                all_target_p4.append(p_target)
+                        p_target.append({"pt": t_pt, "eta": target_eta_val[b, j], "phi": t_phi, "e": t_e})
+                if len(p_target) > 0:
+                    all_target_particles.append(vector.awk(ak.from_iter(p_target)))
+                else:
+                    all_target_particles.append(None)
 
-    # Convert to awkward for fastjet
-    all_pred_p4 = ak.from_iter(all_pred_p4)
-    all_target_p4 = ak.from_iter(all_target_p4)
-    
-    # Cluster jets
-    jets_pred = cluster_jets(all_pred_p4)
-    jets_target = cluster_jets(all_target_p4)
-    
-    # Match jets
-    jet_match_dr = 0.4
-    j1_idx, j2_idx = match_jets(jets_target, jets_pred, jet_match_dr)
-    
-    # Compute response
+    # Compute response by clustering event-by-event
     responses = []
-    for ev in range(len(jets_target)):
-        for i_target, i_pred in zip(j1_idx[ev], j2_idx[ev]):
-            pt_target = jets_target[ev][i_target].pt
-            pt_pred = jets_pred[ev][i_pred].pt
-            responses.append(pt_pred / pt_target)
+    jet_match_dr = 0.4
+    jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
+
+    for ev in range(len(all_target_particles)):
+        if all_target_particles[ev] is not None and all_pred_particles[ev] is not None:
+            if np.sum(all_target_particles[ev].pt>0)>0 and np.sum(all_pred_particles[ev].pt>0)>0:
+                # Cluster target jets
+                cluster_target = fastjet.ClusterSequence(all_target_particles[ev], jetdef)
+                jets_target = cluster_target.inclusive_jets(min_pt=5.0)
+                
+                # Cluster predicted jets
+                cluster_pred = fastjet.ClusterSequence(all_pred_particles[ev], jetdef)
+                jets_pred = cluster_pred.inclusive_jets(min_pt=5.0)
+                
+                if len(jets_target) > 0 and len(jets_pred) > 0:
+                    # Prepare jets for matching by converting to spherical awkward array
+                    jets_target_v = vector.awk(ak.zip({
+                        "px": jets_target.px,
+                        "py": jets_target.py,
+                        "pz": jets_target.pz,
+                        "E": jets_target.E
+                    }))
+                    jets_pred_v = vector.awk(ak.zip({
+                        "px": jets_pred.px,
+                        "py": jets_pred.py,
+                        "pz": jets_pred.pz,
+                        "E": jets_pred.E
+                    }))
+
+                    jets_target_sph = ak.zip({
+                        "pt": jets_target_v.pt,
+                        "eta": jets_target_v.eta,
+                        "phi": jets_target_v.phi,
+                        "e": jets_target_v.E
+                    })
+                    jets_pred_sph = ak.zip({
+                        "pt": jets_pred_v.pt,
+                        "eta": jets_pred_v.eta,
+                        "phi": jets_pred_v.phi,
+                        "e": jets_pred_v.E
+                    })
+
+                    # Match jets
+                    j1_idx, j2_idx = match_jets(ak.Array([jets_target_sph]), ak.Array([jets_pred_sph]), jet_match_dr)
+                    
+                    if len(j1_idx[0]) > 0:
+                        for i_target, i_pred in zip(j1_idx[0], j2_idx[0]):
+                            pt_target = jets_target_sph[i_target].pt
+                            pt_pred = jets_pred_sph[i_pred].pt
+                            if pt_target > 0:
+                                responses.append(pt_pred / pt_target)
             
+    if len(responses) == 0:
+        print("No matched jets found.")
+        return 0.0
+
     res_med, res_iqr = med_iqr(responses)
     return res_iqr
 
@@ -133,20 +177,20 @@ if __name__ == "__main__":
     ds_valid = PFDataset(data_dir, "cms_pf_ttbar/1:3.0.0", "test", num_samples=200).ds
     
     collater = Collater(["X", "ytarget"], ["genmet"])
-    train_loader = DataLoader(ds_train, batch_size=4, collate_fn=collater, shuffle=True)
-    valid_loader = DataLoader(ds_valid, batch_size=4, collate_fn=collater)
+    train_loader = DataLoader(ds_train, batch_size=8, collate_fn=collater, shuffle=True)
+    valid_loader = DataLoader(ds_valid, batch_size=8, collate_fn=collater)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # 55 features for CMS
     model = MLPF(input_dim=55, num_classes=8, embedding_dim=128, width=128, num_convs=3, num_heads=8).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=4e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
     
     # Record start time
     start_total = time.time()
     
     # Train for 2 minutes
-    avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
+    avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=20)
     
     training_seconds = time.time() - start_total
     
@@ -167,6 +211,42 @@ if __name__ == "__main__":
     depth = 3 # num_convs
     
     # Final output
+    print("Benchmarking...")
+    model.eval()
+    sample_input = torch.randn(1, 4096, 55)
+    sample_mask = torch.ones(1, 4096).bool()
+
+    # CPU runtime
+    model_cpu = model.to("cpu")
+    cpu_times = []
+    with torch.no_grad():
+        for _ in range(10):
+            start = time.time()
+            _ = model_cpu(sample_input, sample_mask)
+            cpu_times.append((time.time() - start) * 1000)
+    runtime_cpu_ms = np.median(cpu_times)
+
+    # GPU runtime
+    if torch.cuda.is_available():
+        model_gpu = model.to("cuda")
+        sample_input_gpu = sample_input.to("cuda")
+        sample_mask_gpu = sample_mask.to("cuda")
+        gpu_times = []
+        # Warmup
+        for _ in range(5):
+            _ = model_gpu(sample_input_gpu, sample_mask_gpu)
+        with torch.no_grad():
+            for _ in range(10):
+                torch.cuda.synchronize()
+                start = time.time()
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    _ = model_gpu(sample_input_gpu, sample_mask_gpu)
+                torch.cuda.synchronize()
+                gpu_times.append((time.time() - start) * 1000)
+        runtime_gpu_ms = np.median(gpu_times)
+    else:
+        runtime_gpu_ms = 0.0
+
     print("---")
     print(f"val_jet_iqr:      {val_jet_iqr:.6f}")
     print(f"training_seconds: {training_seconds:.1f}")
@@ -175,3 +255,5 @@ if __name__ == "__main__":
     print(f"num_steps:        {num_steps}")
     print(f"num_params_M:     {num_params_M:.1f}")
     print(f"depth:            {depth}")
+    print(f"runtime_cpu_ms:   {int(runtime_cpu_ms)}")
+    print(f"runtime_gpu_ms:   {int(runtime_gpu_ms)}")

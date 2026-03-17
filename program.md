@@ -11,7 +11,7 @@ To set up a new experiment, work with the user to:
 3. **Read the in-scope files**: The repo is small. Read these files for full context:
    - `README.md` — repository context.
    - `mlpf/standalone/eval.py` — fixed constants, data prep, dataloader, evaluation. Do not modify.
-   - `mlpf/standalone/train.py` — you can modify this. Model architecture setup. Try to modify the architecture in creative ways, for example experiment with the attention backbone structure.
+   - `mlpf/standalone/train.py` — you can modify this. Model architecture setup. Try to modify the architecture in creative ways, for example experiment with the attention backbone structure, or different linear or approximate attention strategies.
 4. **Initialize results.tsv**: Create `results.tsv` with just the header row. The baseline will be recorded after the first run.
 5. **Confirm and go**: Confirm setup looks good.
 
@@ -29,7 +29,7 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 - Install new packages or add dependencies. 
 - Modify the evaluation code.
 
-**The goal is simple: get the lowest validation jet interquartile range.** Since the time budget is fixed, you don't need to worry about training time — it's always 2 minutes. Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size, the optimizer, the loss configuration. In particular, focus on creative architectural exploration beyond just changing the hyperparameter values. The only constraint is that the code runs without crashing and finishes within the time budget.
+**The goal is simple: get the lowest validation jet interquartile range and lowest model runtime on CPU and GPU.** Since the time budget is fixed, you don't need to worry about training time — it's always 2 minutes. Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size, the optimizer, the loss configuration. In particular, focus on creative architectural exploration beyond just changing the hyperparameter values. The only constraint is that the code runs without crashing and finishes within the time budget.
 
 **VRAM** is a soft constraint. Some increase is acceptable for meaningful validation jet iqr gains, but it should not blow up dramatically.
 
@@ -50,6 +50,8 @@ peak_vram_mb:     45060.2
 num_steps:        953
 num_params_M:     50.3
 depth:            8
+runtime_cpu_ms:   1040
+runtime_gpu_ms:   5
 ```
 
 Note that the script is configured to always stop after 2 minutes, so depending on the computing platform of this computer the numbers might look different. You can extract the key metric from the log file:
@@ -65,7 +67,7 @@ When an experiment is done, log it to `results.tsv` (tab-separated, NOT comma-se
 The TSV has a header row and 5 columns:
 
 ```
-commit	val_jet_iqr	memory_gb	status	description
+commit	val_jet_iqr	runtime_cpu_ms	runtime_gpu_ms	memory_gb	status	description
 ```
 
 1. git commit hash (short, 7 chars)
@@ -77,11 +79,11 @@ commit	val_jet_iqr	memory_gb	status	description
 Example:
 
 ```
-commit	val_jet_iqr	memory_gb	status	description
-a1b2c3d	0.997900	44.0	keep	baseline
-b2c3d4e	0.993200	44.2	keep	increase LR to 0.04
-c3d4e5f	1.005000	44.0	discard	switch to GeLU activation
-d4e5f6g	0.000000	0.0	crash	double model width (OOM)
+commit	val_jet_iqr	runtime_cpu_ms	runtime_gpu_ms	memory_gb	status	description
+a1b2c3d	0.997900	138	11	44.0	keep	baseline
+b2c3d4e	0.993200	242	12	44.2	keep	increase LR to 0.04
+c3d4e5f	1.005000	433	13	44.0	discard	switch to GeLU activation
+d4e5f6g	0.000000	152	15	0.0	crash	double model width (OOM)
 ```
 
 ## The experiment loop
@@ -94,7 +96,7 @@ LOOP FOREVER:
 2. Tune `mlpf/model/mlpf.py` with an experimental idea by directly hacking the code.
 3. git commit
 4. Run the experiment: ./scripts/local/train.sh > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context)
-5. Read out the results: `grep "^val_jet_iqr:\|^peak_vram_mb:" run.log`
+5. Read out the results: `grep "^val_jet_iqr:\|^peak_vram_mb:\|^runtime_cpu_ms:\|^runtime_gpu_ms:" run.log`
 6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
 7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
 8. If val_jet_iqr improved (lower), you "advance" the branch, keeping the git commit
