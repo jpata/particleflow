@@ -10,9 +10,8 @@ To set up a new experiment, work with the user to:
 2. **Create the branch**: `git checkout -b autoresearch/<tag>` from current master.
 3. **Read the in-scope files**: The repo is small. Read these files for full context:
    - `README.md` — repository context.
-   - `mlpf/training.py` — fixed constants, data prep, dataloader, evaluation. Do not modify.
-   - `mlpf/model/mlpf.py` — the file you modify. Model architecture setup.
-   - `mlpf/conf.py` — the file you modify. Model configuration.
+   - `mlpf/standalone/eval.py` — fixed constants, data prep, dataloader, evaluation. Do not modify.
+   - `mlpf/standalone/train.py` — you can modify this. Model architecture setup. Try to modify the architecture in creative ways, for example experiment with the attention backbone structure.
 4. **Initialize results.tsv**: Create `results.tsv` with just the header row. The baseline will be recorded after the first run.
 5. **Confirm and go**: Confirm setup looks good.
 
@@ -23,14 +22,14 @@ Once you get confirmation, kick off the experimentation.
 Each experiment runs on a single GPU. The training script runs for a **fixed time budget of 2 minutes** (wall clock training time, excluding startup/compilation). You launch it simply as: `./scripts/local/train.sh`
 
 **What you CAN do:**
-- Modify `mlpf/model/mlpf.py` — this is the only file you edit. Everything is fair game: model architecture, hyperparameters size, model size, etc.
+- Modify `mlpf/standalone/train.py` — this is the only file you edit. Everything is fair game: model architecture, hyperparameters size, model size, etc.
 
 **What you CANNOT do:**
-- Modify `mlpf/training.py`. It is read-only.
+- Modify `mlpf/standalone/eval.py`. It is read-only.
 - Install new packages or add dependencies. 
 - Modify the evaluation code.
 
-**The goal is simple: get the lowest validation loss.** Since the time budget is fixed, you don't need to worry about training time — it's always 2 minutes. Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size. The only constraint is that the code runs without crashing and finishes within the time budget.
+**The goal is simple: get the lowest validation loss.** Since the time budget is fixed, you don't need to worry about training time — it's always 2 minutes. Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size. In particular, focus on creative architectural exploration beyond just changing the hyperparameters. The only constraint is that the code runs without crashing and finishes within the time budget.
 
 **VRAM** is a soft constraint. Some increase is acceptable for meaningful validation loss gains, but it should not blow up dramatically.
 
@@ -44,7 +43,7 @@ Once the script finishes it prints a summary like this:
 
 ```
 ---
-val_loss:         0.997900
+val_jet_iqr:      0.997900
 training_seconds: 300.1
 total_seconds:    325.9
 peak_vram_mb:     45060.2
@@ -56,7 +55,7 @@ depth:            8
 Note that the script is configured to always stop after 2 minutes, so depending on the computing platform of this computer the numbers might look different. You can extract the key metric from the log file:
 
 ```
-grep "^val_loss:" run.log
+grep "^val_jet_iqr:" run.log
 ```
 
 ## Logging results
@@ -66,11 +65,11 @@ When an experiment is done, log it to `results.tsv` (tab-separated, NOT comma-se
 The TSV has a header row and 5 columns:
 
 ```
-commit	val_loss	memory_gb	status	description
+commit	val_jet_iqr	memory_gb	status	description
 ```
 
 1. git commit hash (short, 7 chars)
-2. val_loss achieved (e.g. 1.234567) — use 0.000000 for crashes
+2. val_jet_iqr achieved (e.g. 1.234567) — use 0.000000 for crashes
 3. peak memory in GB, round to .1f (e.g. 12.3 — divide peak_vram_mb by 1024) — use 0.0 for crashes
 4. status: `keep`, `discard`, or `crash`
 5. short text description of what this experiment tried
@@ -78,7 +77,7 @@ commit	val_loss	memory_gb	status	description
 Example:
 
 ```
-commit	val_loss	memory_gb	status	description
+commit	val_jet_iqr	memory_gb	status	description
 a1b2c3d	0.997900	44.0	keep	baseline
 b2c3d4e	0.993200	44.2	keep	increase LR to 0.04
 c3d4e5f	1.005000	44.0	discard	switch to GeLU activation
@@ -95,11 +94,11 @@ LOOP FOREVER:
 2. Tune `mlpf/model/mlpf.py` with an experimental idea by directly hacking the code.
 3. git commit
 4. Run the experiment: ./scripts/local/train.sh > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context)
-5. Read out the results: `grep "^val_loss:\|^peak_vram_mb:" run.log`
+5. Read out the results: `grep "^val_jet_iqr:\|^peak_vram_mb:" run.log`
 6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
 7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
-8. If val_loss improved (lower), you "advance" the branch, keeping the git commit
-9. If val_loss is equal or worse, you git reset back to where you started
+8. If val_jet_iqr improved (lower), you "advance" the branch, keeping the git commit
+9. If val_jet_iqr is equal or worse, you git reset back to where you started
 
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
 
