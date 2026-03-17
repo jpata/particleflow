@@ -404,6 +404,25 @@ models:
     checkpoint_freq: 10000
     val_freq: 10000
 
+    raytune:
+      local_dir: "/mnt/ceph/users/ewulff/raytune_experiments"
+      sched: asha  # asha, hyperband, bohb, pbt, pb2
+      search_alg:  # bayes, bohb, hyperopt, nevergrad
+      default_metric: "val_loss"
+      default_mode: "min"
+      asha:
+        max_t: 200
+        reduction_factor: 4
+        brackets: 1
+        grace_period: 10
+      hyperband:
+        max_t: 200
+        reduction_factor: 4
+      hyperopt:
+        n_random_steps: 10
+      nevergrad:
+        n_random_steps: 10
+
   pyg-cms-v1:
     <<: *defaults
     dataset: cms
