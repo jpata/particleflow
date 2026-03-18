@@ -33,36 +33,53 @@ def get_activation(activation):
     return nn.ReLU
 
 
-class SimpleMultiheadAttention(nn.MultiheadAttention):
+class SimpleMultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_heads, dropout=0.0):
-        super().__init__(embed_dim, num_heads, dropout=dropout, bias=True, batch_first=True)
-        self.head_dim = int(embed_dim // num_heads)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        
+        self.q_proj = nn.Linear(embed_dim, embed_dim)
+        self.k_proj = nn.Linear(embed_dim, embed_dim)
+        self.v_proj = nn.Linear(embed_dim, embed_dim)
+        
+        self.q_alpha = nn.Parameter(torch.randn(num_heads, self.head_dim))
+        self.k_beta = nn.Parameter(torch.randn(num_heads, self.head_dim))
+        
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, q, k, v, key_padding_mask=None):
-        bs, seq_len, _ = q.size()
-        head_dim = self.head_dim
-        num_heads = self.num_heads
+        bs, n, d = q.size()
+        
+        Q = self.q_proj(q).reshape(bs, n, self.num_heads, self.head_dim)
+        K = self.k_proj(k).reshape(bs, n, self.num_heads, self.head_dim)
+        V = self.v_proj(v).reshape(bs, n, self.num_heads, self.head_dim)
 
-        # split stacked in_proj_weight, in_proj_bias to q, k, v matrices
-        wq, wk, wv = torch.split(self.in_proj_weight, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
-        bq, bk, bv = torch.split(self.in_proj_bias, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
-
-        q = torch.matmul(q, wq.T) + bq
-        k = torch.matmul(k, wk.T) + bk
-        v = torch.matmul(v, wv.T) + bv
-
-        q = q.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
-        k = k.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
-        v = v.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
-
-        # Use Flash Attention if possible, otherwise fall back to other kernels
-        with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
-            attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout if self.training else 0.0)
-
-        attn_output = attn_output.transpose(1, 2).reshape(bs, seq_len, num_heads * head_dim)
-        attn_output = self.out_proj(attn_output)
-        return attn_output, None
+        alpha = (Q * self.q_alpha).sum(dim=-1) # (bs, n, num_heads)
+        if key_padding_mask is not None:
+            mask_inf = (key_padding_mask == 0).unsqueeze(-1) # (bs, n, 1)
+            alpha = alpha.masked_fill(mask_inf, float('-inf'))
+        alpha = torch.softmax(alpha, dim=1) # (bs, n, num_heads)
+        
+        global_q = (Q * alpha.unsqueeze(-1)).sum(dim=1, keepdim=True) # (bs, 1, num_heads, head_dim)
+        
+        P = K * global_q # (bs, n, num_heads, head_dim)
+        
+        beta = (P * self.k_beta).sum(dim=-1) # (bs, n, num_heads)
+        if key_padding_mask is not None:
+            beta = beta.masked_fill(mask_inf, float('-inf'))
+        beta = torch.softmax(beta, dim=1)
+        
+        global_v = (V * beta.unsqueeze(-1)).sum(dim=1, keepdim=True) # (bs, 1, num_heads, head_dim)
+        
+        out = Q + global_v # (bs, n, num_heads, head_dim)
+        out = out.reshape(bs, n, d)
+        
+        out = self.out_proj(out)
+        out = self.dropout(out)
+        return out, None
 
 
 class PreLnSelfAttentionLayer(nn.Module):
@@ -87,7 +104,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         if mask is not None:
             q = q * mask_
 
-        mha_out, _ = self.mha(q, x_norm, x_norm)
+        mha_out, _ = self.mha(q, x_norm, x_norm, key_padding_mask=mask)
         x = residual + mha_out
 
         residual = x
