@@ -363,7 +363,7 @@ if __name__ == "__main__":
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
             start_time = time.time()
-            avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=20)
+            avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
             elapsed = time.time() - start_time
 
             all_results.append({"avg_loss": avg_loss, "num_steps": num_steps, "seconds": elapsed})

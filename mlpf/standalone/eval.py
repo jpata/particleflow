@@ -177,7 +177,7 @@ if __name__ == "__main__":
         start_total = time.time()
 
         # Train for 60 seconds
-        avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=60)
+        avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
 
         training_seconds = time.time() - start_total
 
