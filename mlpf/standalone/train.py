@@ -71,7 +71,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.mha = SimpleMultiheadAttention(embedding_dim, num_heads, dropout=dropout)
         self.norm0 = nn.LayerNorm(embedding_dim)
         self.norm1 = nn.LayerNorm(embedding_dim)
-        self.seq = nn.Sequential(nn.Linear(embedding_dim, width * 2), nn.GELU(), nn.Linear(width * 2, embedding_dim), nn.GELU())
+        self.seq = nn.Sequential(nn.Linear(embedding_dim, width * 4), nn.GELU(), nn.Linear(width * 4, embedding_dim), nn.GELU())
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, mask):
@@ -363,7 +363,7 @@ if __name__ == "__main__":
                 embedding_dim=128,
                 width=128,
                 num_convs=3,
-                num_heads=8,
+                num_heads=16,
             ).to(device)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
