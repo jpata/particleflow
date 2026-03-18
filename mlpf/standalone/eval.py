@@ -24,6 +24,7 @@ from mlpf.jet_utils import match_jets
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=str, default=None, help="Path to tfds directory")
+    parser.add_argument("--attention-type", type=str, default="hept", choices=["hept", "global", "standard", "fastformer"], help="Attention type")
     return parser.parse_args()
 
 
@@ -167,7 +168,7 @@ if __name__ == "__main__":
     all_results = []
 
     # Run training 3 times
-    for i in range(3):
+    for i in range(1):
         print(f"\n--- Run {i+1}/3 ---")
 
         # Fresh loaders for each run (especially for shuffling)
@@ -182,15 +183,15 @@ if __name__ == "__main__":
             width=128,
             num_convs=6,
             num_heads=16,
-            use_hept=True,
+            attention_type=args.attention_type,
         ).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
         # Record start time
         start_total = time.time()
 
-        # Train for 120 seconds
-        avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
+        # Train for a fixed time
+        avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=20)
 
         training_seconds = time.time() - start_total
 

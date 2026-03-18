@@ -8,6 +8,7 @@ import argparse
 import sys
 import random
 from torch.utils.data import DataLoader
+import einops
 from einops import rearrange
 
 # Ensure unbuffered output
@@ -23,6 +24,18 @@ except ImportError:
     pass
 
 # --- HEPT Utilities ---
+# Adapted from https://github.com/mova/HEPT
+# Paper: "HEPT: Hashed Efficient Particle Transformer", https://arxiv.org/abs/2405.21051
+# MIT License
+# Copyright (c) 2024 Graph-COM
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
 
 
 def uniform(a, b, shape, device="cpu"):
@@ -225,6 +238,10 @@ def get_activation(activation):
 
 
 class SimpleMultiheadAttention(nn.Module):
+    """
+    A simplified linear-time attention mechanism that pools sequence information into a global context.
+    Related to: "Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention", https://arxiv.org/abs/2006.16236
+    """
     def __init__(self, embed_dim, num_heads, dropout=0.0):
         super().__init__()
         self.embed_dim = embed_dim
@@ -375,16 +392,16 @@ class HEPTAttentionLayer(nn.Module):
         return x
 
 
-class PreLnSelfAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim, num_heads, width, dropout=0.1):
-        super(PreLnSelfAttentionLayer, self).__init__()
+class GlobalAttentionLayer(nn.Module):
+    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, **kwargs):
+        super(GlobalAttentionLayer, self).__init__()
         self.mha = SimpleMultiheadAttention(embedding_dim, num_heads, dropout=dropout)
         self.norm0 = nn.LayerNorm(embedding_dim)
         self.norm1 = nn.LayerNorm(embedding_dim)
-        self.seq = nn.Sequential(nn.Linear(embedding_dim, width * 4), nn.GELU(), nn.Linear(width * 4, embedding_dim), nn.GELU())
+        self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.GELU(), nn.Linear(width, embedding_dim), nn.GELU())
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, mask):
+    def forward(self, x, mask, X=None):
         # x: [B, N, D]
         # mask: [B, N]
         if mask is not None:
@@ -409,6 +426,156 @@ class PreLnSelfAttentionLayer(nn.Module):
         if mask is not None:
             x = x * mask_
         return x
+
+
+class StandardAttentionLayer(nn.Module):
+    """
+    Standard $O(N^2)$ attention using fused kernels (FlashAttention-2 when available).
+    Reference: "Attention Is All You Need", https://arxiv.org/abs/1706.03762
+    """
+    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, **kwargs):
+        super(StandardAttentionLayer, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.head_dim = embedding_dim // num_heads
+        
+        self.q_proj = nn.Linear(embedding_dim, embedding_dim)
+        self.k_proj = nn.Linear(embedding_dim, embedding_dim)
+        self.v_proj = nn.Linear(embedding_dim, embedding_dim)
+        self.out_proj = nn.Linear(embedding_dim, embedding_dim)
+        
+        self.norm0 = nn.LayerNorm(embedding_dim)
+        self.norm1 = nn.LayerNorm(embedding_dim)
+        self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.GELU(), nn.Linear(width, embedding_dim), nn.GELU())
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, mask, X=None):
+        B, N, D = x.shape
+        
+        residual = x
+        x_norm = self.norm0(x)
+        
+        q = self.q_proj(x_norm).reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(x_norm).reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(x_norm).reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
+        
+        # mask: [B, N]
+        attn_mask = None
+        if mask is not None:
+             attn_mask = mask.view(B, 1, 1, N).expand(-1, self.num_heads, N, -1).bool()
+        
+        mha_out = F.scaled_dot_product_attention(
+            q, k, v, 
+            attn_mask=attn_mask, 
+            dropout_p=self.dropout.p if self.training else 0.0
+        )
+        mha_out = mha_out.transpose(1, 2).reshape(B, N, D)
+        mha_out = self.out_proj(mha_out)
+        
+        x = residual + self.dropout(mha_out)
+        
+        residual = x
+        x_norm = self.norm1(x)
+        ffn_out = self.seq(x_norm)
+        ffn_out = self.dropout(ffn_out)
+        
+        x = residual + ffn_out
+        
+        if mask is not None:
+            x = x * mask.unsqueeze(-1)
+        return x
+
+
+class Fastformer(nn.Module):
+    """
+    Fastformer: Additive Attention is All You Need.
+    Paper: https://arxiv.org/abs/2108.09084
+    Code adapted from: https://github.com/wilile26811249/Fastformer-PyTorch
+    License: MIT
+    """
+    def __init__(self, dim=3, decode_dim=16):
+        super(Fastformer, self).__init__()
+        # Generate weight for Wquery、Wkey and Wvalue
+        self.to_qkv = nn.Linear(dim, decode_dim * 3, bias=False)
+        self.weight_q = nn.Linear(dim, decode_dim, bias=False)
+        self.weight_k = nn.Linear(dim, decode_dim, bias=False)
+        self.weight_v = nn.Linear(dim, decode_dim, bias=False)
+        self.weight_r = nn.Linear(decode_dim, decode_dim, bias=False)
+        self.weight_alpha = nn.Parameter(torch.randn(decode_dim))
+        self.weight_beta = nn.Parameter(torch.randn(decode_dim))
+        self.scale_factor = decode_dim**-0.5
+
+    def forward(self, x, mask=None):
+        query = self.weight_q(x)
+        key = self.weight_k(x)
+        value = self.weight_v(x)
+        b, n, d = query.shape
+
+        mask_value = -torch.finfo(x.dtype).max
+        if mask is not None:
+            mask = rearrange(mask, "b n -> b n ()").bool()
+
+        # Caculate the global query
+        alpha_weight = torch.mul(query, self.weight_alpha) * self.scale_factor
+        if mask is not None:
+            alpha_weight = alpha_weight.masked_fill(~mask, mask_value)
+        alpha_weight = torch.softmax(alpha_weight, dim=-1)
+        global_query = query * alpha_weight
+        global_query = torch.einsum("b n d -> b d", global_query)
+
+        # Model the interaction between global query vector and the key vector
+        repeat_global_query = einops.repeat(global_query, "b d -> b copy d", copy=n)
+        p = repeat_global_query * key
+        beta_weight = torch.mul(p, self.weight_beta) * self.scale_factor
+        if mask is not None:
+            beta_weight = beta_weight.masked_fill(~mask, mask_value)
+        beta_weight = torch.softmax(beta_weight, dim=-1)
+        global_key = p * beta_weight
+        global_key = torch.einsum("b n d -> b d", global_key)
+
+        # key-value
+        key_value_interaction = torch.einsum("b j, b n j -> b n j", global_key, value)
+        key_value_interaction_out = self.weight_r(key_value_interaction)
+        result = key_value_interaction_out + query
+        return result
+
+
+class FastformerAttentionLayer(nn.Module):
+    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, **kwargs):
+        super(FastformerAttentionLayer, self).__init__()
+        self.attn = Fastformer(dim=embedding_dim, decode_dim=embedding_dim)
+        self.norm0 = nn.LayerNorm(embedding_dim)
+        self.norm1 = nn.LayerNorm(embedding_dim)
+        self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.GELU(), nn.Linear(width, embedding_dim), nn.GELU())
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, mask, X=None):
+        # x: [B, N, D]
+        # mask: [B, N]
+        residual = x
+        x_norm = self.norm0(x)
+
+        attn_out = self.attn(x_norm, mask=mask)
+        x = residual + self.dropout(attn_out)
+
+        residual = x
+        x_norm = self.norm1(x)
+        ffn_out = self.seq(x_norm)
+        ffn_out = self.dropout(ffn_out)
+
+        x = residual + ffn_out
+        if mask is not None:
+            x = x * mask.unsqueeze(-1)
+        return x
+
+
+# Registry of available attention layers
+SUPPORTED_ATTENTION_LAYERS = {
+    "hept": HEPTAttentionLayer,
+    "global": GlobalAttentionLayer,
+    "standard": StandardAttentionLayer,
+    "fastformer": FastformerAttentionLayer,
+}
 
 
 def ffn(input_dim, output_dim, width, dropout=0.1):
@@ -443,10 +610,24 @@ class RegressionOutput(nn.Module):
 
 
 class MLPF(nn.Module):
-    def __init__(self, input_dim=25, num_classes=8, embedding_dim=128, width=128, num_convs=6, num_heads=16, use_hept=False, hept_kwargs=None):
+    def __init__(
+        self,
+        input_dim=25,
+        num_classes=8,
+        embedding_dim=128,
+        width=128,
+        num_convs=6,
+        num_heads=16,
+        use_hept=False,
+        hept_kwargs=None,
+        attention_type=None,
+    ):
         super(MLPF, self).__init__()
 
-        self.use_hept = use_hept
+        if attention_type is None:
+            attention_type = "hept" if use_hept else "global"
+
+        self.attention_type = attention_type
         self.elemtypes = [1, 2, 3, 4, 5, 8, 9, 10, 11]
         num_types = len(self.elemtypes)
 
@@ -455,17 +636,25 @@ class MLPF(nn.Module):
         self.type_emb = nn.Embedding(12, embedding_dim)
 
         # Attention layers
-        if use_hept:
-            if hept_kwargs is None:
-                hept_kwargs = {
-                    "block_size": 100,
-                    "n_hashes": 3,
-                    "num_regions": 140,
-                    "num_w_per_dist": 10,
-                }
-            self.conv = nn.ModuleList([HEPTAttentionLayer(embedding_dim, num_heads, width*4, **hept_kwargs) for _ in range(num_convs)])
-        else:
-            self.conv = nn.ModuleList([PreLnSelfAttentionLayer(embedding_dim, num_heads, width*4) for _ in range(num_convs)])
+        layer_cls = SUPPORTED_ATTENTION_LAYERS.get(attention_type)
+        if layer_cls is None:
+            raise ValueError(
+                f"Unsupported attention_type: {attention_type}. Supported: {list(SUPPORTED_ATTENTION_LAYERS.keys())}"
+            )
+
+        if attention_type == "hept" and hept_kwargs is None:
+            hept_kwargs = {
+                "block_size": 100,
+                "n_hashes": 3,
+                "num_regions": 140,
+                "num_w_per_dist": 10,
+            }
+
+        layer_kwargs = hept_kwargs if hept_kwargs is not None else {}
+
+        self.conv = nn.ModuleList(
+            [layer_cls(embedding_dim, num_heads, width * 4, **layer_kwargs) for _ in range(num_convs)]
+        )
 
         # Final output heads
         self.nn_binary_particle = ffn(embedding_dim, 2, width * 2)
@@ -486,10 +675,7 @@ class MLPF(nn.Module):
 
         # Attention layers
         for conv in self.conv:
-            if self.use_hept:
-                emb = conv(emb, mask, X)
-            else:
-                emb = conv(emb, mask)
+            emb = conv(emb, mask, X)
 
         # Outputs
         logits_binary = self.nn_binary_particle(emb)
