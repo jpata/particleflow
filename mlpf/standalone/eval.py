@@ -189,6 +189,35 @@ if __name__ == "__main__":
             attention_type=args.attention_type,
         ).to(device)
         
+        model.train()
+
+        # Fresh loaders for each run (especially for shuffling)
+        train_loader = DataLoader(ds_train, batch_size=4, collate_fn=collater, shuffle=True, num_workers=1, persistent_workers=True)
+        valid_loader = DataLoader(ds_valid, batch_size=4, collate_fn=collater, num_workers=1, persistent_workers=True)
+
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+
+        # Record start time
+        start_total = time.time()
+
+        # Train for a fixed time
+        avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
+
+        training_seconds = time.time() - start_total
+
+        # Evaluate
+        print("Evaluating...")
+        val_jet_iqr, val_jet_matched_frac = evaluate(model, valid_loader, device)
+
+        total_seconds = time.time() - start_total
+
+        # Peak VRAM
+        if torch.cuda.is_available():
+            peak_vram_mb = torch.cuda.max_memory_allocated() / (1024 * 1024)
+            torch.cuda.reset_peak_memory_stats()
+        else:
+            peak_vram_mb = 0.0
+        
         # Benchmarking
         model.eval()
         sample_input = torch.randn(1, 4096, 55)
@@ -230,34 +259,6 @@ if __name__ == "__main__":
         else:
             runtime_gpu_ms = 0.0
 
-        model.train()
-
-        # Fresh loaders for each run (especially for shuffling)
-        train_loader = DataLoader(ds_train, batch_size=4, collate_fn=collater, shuffle=True, num_workers=1, persistent_workers=True)
-        valid_loader = DataLoader(ds_valid, batch_size=4, collate_fn=collater, num_workers=1, persistent_workers=True)
-
-        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-
-        # Record start time
-        start_total = time.time()
-
-        # Train for a fixed time
-        avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
-
-        training_seconds = time.time() - start_total
-
-        # Evaluate
-        print("Evaluating...")
-        val_jet_iqr, val_jet_matched_frac = evaluate(model, valid_loader, device)
-
-        total_seconds = time.time() - start_total
-
-        # Peak VRAM
-        if torch.cuda.is_available():
-            peak_vram_mb = torch.cuda.max_memory_allocated() / (1024 * 1024)
-            torch.cuda.reset_peak_memory_stats()
-        else:
-            peak_vram_mb = 0.0
 
 
         all_results.append(
