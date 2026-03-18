@@ -21,10 +21,13 @@ from mlpf.logger import _configLogger
 from mlpf.jet_utils import match_jets
 
 
+from mlpf.standalone.dsl import parse_dsl
+
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=str, default=None, help="Path to tfds directory")
-    parser.add_argument("--attention-type", type=str, default="hept", choices=["hept", "global", "standard", "fastformer"], help="Attention type")
+    parser.add_argument("--attention-type", type=str, default="global", choices=["hept", "global", "standard", "fastformer"], help="Attention type (ignored if --dsl is used)")
+    parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string")
     return parser.parse_args()
 
 
@@ -178,16 +181,21 @@ if __name__ == "__main__":
     for i in range(3):
         print(f"\n--- Run {i+1}/3 ---")
 
-        # 55 features for CMS, re-initialize model for each run
-        model = MLPF(
-            input_dim=55,
-            num_classes=8,
-            embedding_dim=128,
-            width=128,
-            num_convs=6,
-            num_heads=16,
-            attention_type=args.attention_type,
-        ).to(device)
+        if args.dsl:
+            print(f"Using DSL: {args.dsl}")
+            config = parse_dsl(args.dsl)
+            model = MLPF(config=config).to(device)
+        else:
+            # 55 features for CMS, re-initialize model for each run
+            model = MLPF(
+                input_dim=55,
+                num_classes=8,
+                embedding_dim=128,
+                width=128,
+                num_convs=6,
+                num_heads=16,
+                attention_type=args.attention_type,
+            ).to(device)
         
         model.train()
 

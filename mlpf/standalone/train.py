@@ -15,13 +15,9 @@ from einops import rearrange
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
-# Import library modules
-try:
-    from mlpf.model.PFDataset import Collater, PFDataset
-    from mlpf.logger import _configLogger
-except ImportError:
-    # Fallback for cases where the library is not in the path
-    pass
+from mlpf.model.PFDataset import Collater, PFDataset
+from mlpf.logger import _configLogger
+from mlpf.standalone.dsl import ModelConfig, LayerConfig, HEPTConfig, GlobalConfig, StandardConfig, FastformerConfig
 
 # --- HEPT Utilities ---
 # Adapted from https://github.com/mova/HEPT
@@ -291,7 +287,7 @@ class SimpleMultiheadAttention(nn.Module):
 
 
 class HEPTAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, **kwargs):
+    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
         super(HEPTAttentionLayer, self).__init__()
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
@@ -322,11 +318,15 @@ class HEPTAttentionLayer(nn.Module):
         self.norm1 = nn.LayerNorm(embedding_dim)
         self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.ELU(), nn.Linear(width, embedding_dim), nn.ELU())
         self.dropout = nn.Dropout(dropout)
+        self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
 
     def forward(self, x, mask, X):
         # x: [B, N, D]
         # mask: [B, N]
         # X: [B, N, 25] or [B, N, 55] (original features)
+        if self.pos_embed:
+            x = self.pos_embed(x, X)
+
         if mask is not None:
             mask_ = mask.unsqueeze(-1)
 
@@ -398,15 +398,19 @@ class HEPTAttentionLayer(nn.Module):
 
 
 class GlobalAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, **kwargs):
+    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
         super(GlobalAttentionLayer, self).__init__()
         self.mha = SimpleMultiheadAttention(embedding_dim, num_heads, dropout=dropout)
         self.norm0 = nn.LayerNorm(embedding_dim)
         self.norm1 = nn.LayerNorm(embedding_dim)
         self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.GELU(), nn.Linear(width, embedding_dim), nn.GELU())
         self.dropout = nn.Dropout(dropout)
+        self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
 
     def forward(self, x, mask, X=None):
+        if self.pos_embed and X is not None:
+            x = self.pos_embed(x, X)
+
         # x: [B, N, D]
         # mask: [B, N]
         if mask is not None:
@@ -438,7 +442,7 @@ class StandardAttentionLayer(nn.Module):
     Standard $O(N^2)$ attention using fused kernels (FlashAttention-2 when available).
     Reference: "Attention Is All You Need", https://arxiv.org/abs/1706.03762
     """
-    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, **kwargs):
+    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
         super(StandardAttentionLayer, self).__init__()
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
@@ -453,8 +457,12 @@ class StandardAttentionLayer(nn.Module):
         self.norm1 = nn.LayerNorm(embedding_dim)
         self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.GELU(), nn.Linear(width, embedding_dim), nn.GELU())
         self.dropout = nn.Dropout(dropout)
+        self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
 
     def forward(self, x, mask, X=None):
+        if self.pos_embed and X is not None:
+            x = self.pos_embed(x, X)
+
         B, N, D = x.shape
         if mask is not None:
             mask_ = mask.unsqueeze(-1)
@@ -547,15 +555,19 @@ class Fastformer(nn.Module):
 
 
 class FastformerAttentionLayer(nn.Module):
-    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, **kwargs):
+    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
         super(FastformerAttentionLayer, self).__init__()
         self.attn = Fastformer(dim=embedding_dim, decode_dim=embedding_dim)
         self.norm0 = nn.LayerNorm(embedding_dim)
         self.norm1 = nn.LayerNorm(embedding_dim)
         self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.GELU(), nn.Linear(width, embedding_dim), nn.GELU())
         self.dropout = nn.Dropout(dropout)
+        self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
 
     def forward(self, x, mask, X=None):
+        if self.pos_embed and X is not None:
+            x = self.pos_embed(x, X)
+
         # x: [B, N, D]
         # mask: [B, N]
         if mask is not None:
@@ -599,6 +611,19 @@ def ffn(input_dim, output_dim, width, dropout=0.1):
     )
 
 
+class PositionalEncoding(nn.Module):
+    def __init__(self, embedding_dim):
+        super(PositionalEncoding, self).__init__()
+        self.proj = nn.Linear(2, embedding_dim)
+
+    def forward(self, x, X):
+        # Extract eta and phi
+        eta = X[..., 2:3]
+        phi = torch.atan2(X[..., 3:4], X[..., 4:5])
+        coords = torch.cat([eta, phi], dim=-1)  # [B, N, 2]
+        return x + self.proj(coords)
+
+
 class RegressionOutput(nn.Module):
     def __init__(self, embed_dim, width, elemtypes):
         super(RegressionOutput, self).__init__()
@@ -620,83 +645,132 @@ class RegressionOutput(nn.Module):
         return res
 
 
+
 class MLPF(nn.Module):
-    def __init__(
-        self,
-        input_dim=25,
-        num_classes=8,
-        embedding_dim=128,
-        width=128,
-        num_convs=6,
-        num_heads=16,
-        use_hept=False,
-        hept_kwargs=None,
-        attention_type=None,
-    ):
+    def __init__(self, config=None, **kwargs):
         super(MLPF, self).__init__()
 
-        if attention_type is None:
-            attention_type = "hept" if use_hept else "global"
-
-        self.attention_type = attention_type
-        self.elemtypes = [1, 2, 3, 4, 5, 8, 9, 10, 11]
-        num_types = len(self.elemtypes)
-
-        # Input encoding
-        self.nn0 = ffn(input_dim, embedding_dim, width * 2)
-        self.type_emb = nn.Embedding(12, embedding_dim)
-
-        # Attention layers
-        layer_cls = SUPPORTED_ATTENTION_LAYERS.get(attention_type)
-        if layer_cls is None:
-            raise ValueError(
-                f"Unsupported attention_type: {attention_type}. Supported: {list(SUPPORTED_ATTENTION_LAYERS.keys())}"
+        if config is None:
+            # Backward compatibility or manual construction
+            from mlpf.standalone.dsl import i, h, g, o, ModelConfig
+            input_dim = kwargs.get("input_dim", 55)
+            embedding_dim = kwargs.get("embedding_dim", 128)
+            width = kwargs.get("width", 128)
+            num_convs = kwargs.get("num_convs", 6)
+            num_heads = kwargs.get("num_heads", 16)
+            attention_type = kwargs.get("attention_type", "global")
+            
+            if attention_type == "hept":
+                layer = h(num_heads, embedding_dim, width * 4)
+            elif attention_type == "standard":
+                from mlpf.standalone.dsl import s
+                layer = s(num_heads, embedding_dim, width * 4)
+            elif attention_type == "fastformer":
+                from mlpf.standalone.dsl import f
+                layer = f(embedding_dim, width * 4)
+            else:
+                layer = g(num_heads, embedding_dim, width * 4)
+                
+            config = ModelConfig(
+                input=i(input_dim, embedding_dim, width * 2),
+                backbone=layer * num_convs,
+                output=o(kwargs.get("num_classes", 8), width * 2)
             )
 
-        if attention_type == "hept" and hept_kwargs is None:
-            hept_kwargs = {
-                "block_size": 100,
-                "n_hashes": 3,
-                "num_regions": 140,
-                "num_w_per_dist": 10,
-            }
+        self.config = config
+        self.elemtypes = [1, 2, 3, 4, 5, 8, 9, 10, 11]
 
-        layer_kwargs = hept_kwargs if hept_kwargs is not None else {}
+        # 1. Input encoding
+        if config.input.type == "default":
+            self.nn0 = ffn(config.input.input_dim, config.input.embedding_dim, config.input.width)
+            self.type_emb = nn.Embedding(12, config.input.embedding_dim)
+        elif config.input.type == "projection_only":
+            self.nn0 = nn.Linear(config.input.input_dim, config.input.embedding_dim)
+            self.type_emb = None
+        else:
+            self.nn0 = ffn(config.input.input_dim, config.input.embedding_dim, config.input.width)
+            self.type_emb = nn.Embedding(12, config.input.embedding_dim)
 
-        self.conv = nn.ModuleList(
-            [layer_cls(embedding_dim, num_heads, width * 4, **layer_kwargs) for _ in range(num_convs)]
-        )
+        # 2. Backbone
+        def build_layers(layer_configs):
+            layers = nn.ModuleList()
+            for lc in layer_configs:
+                layer_cls = SUPPORTED_ATTENTION_LAYERS[lc.type]
+                # Map lc to layer_cls kwargs
+                kwargs = {
+                    "embedding_dim": lc.embedding_dim,
+                    "num_heads": lc.num_heads,
+                    "width": lc.width,
+                    "pos": lc.pos,
+                }
+                if isinstance(lc, HEPTConfig):
+                    kwargs.update({
+                        "block_size": lc.block_size,
+                        "n_hashes": lc.n_hashes,
+                        "num_regions": lc.num_regions,
+                        "num_w_per_dist": lc.num_w_per_dist,
+                    })
+                layers.append(layer_cls(**kwargs))
+            return layers
 
-        # Final output heads
-        self.nn_binary_particle = ffn(embedding_dim, 2, width * 2)
-        self.nn_pid = ffn(embedding_dim, num_classes, width * 2)
+        if isinstance(config.backbone, list):
+            self.shared_backbone = build_layers(config.backbone)
+            self.pid_backbone = None
+            self.reg_backbone = None
+        else:
+            self.shared_backbone = build_layers(config.backbone.get("shared", []))
+            self.pid_backbone = build_layers(config.backbone.get("pid", []))
+            self.reg_backbone = build_layers(config.backbone.get("reg", []))
+            self.binary_backbone = build_layers(config.backbone.get("binary", []))
 
-        self.nn_pt = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
-        self.nn_eta = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
-        self.nn_sin_phi = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
-        self.nn_cos_phi = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
-        self.nn_energy = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
+        # 3. Output heads
+        self.nn_binary_particle = ffn(config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim, 2, config.output.width)
+        self.nn_pid = ffn(config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim, config.output.num_classes, config.output.width)
+
+        out_dim = config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim
+        self.nn_pt = RegressionOutput(out_dim, config.output.width, self.elemtypes)
+        self.nn_eta = RegressionOutput(out_dim, config.output.width, self.elemtypes)
+        self.nn_sin_phi = RegressionOutput(out_dim, config.output.width, self.elemtypes)
+        self.nn_cos_phi = RegressionOutput(out_dim, config.output.width, self.elemtypes)
+        self.nn_energy = RegressionOutput(out_dim, config.output.width, self.elemtypes)
 
     def forward(self, X, mask):
         B, N, _ = X.shape
 
         # Shared input encoding
-        type_idx = X[..., 0].long().clamp(0, 11)
-        emb = self.nn0(X) + self.type_emb(type_idx)
+        if self.type_emb is not None:
+            type_idx = X[..., 0].long().clamp(0, 11)
+            emb = self.nn0(X) + self.type_emb(type_idx)
+        else:
+            emb = self.nn0(X)
 
-        # Attention layers
-        for conv in self.conv:
-            emb = conv(emb, mask, X)
+        # Backbone
+        for layer in self.shared_backbone:
+            emb = layer(emb, mask, X)
+        
+        emb_shared = emb
+
+        # PID branch
+        emb_pid = emb_shared
+        if self.pid_backbone is not None:
+            for layer in self.pid_backbone:
+                emb_pid = layer(emb_pid, mask, X)
+        
+        # Regression branch
+        emb_reg = emb_shared
+        if self.reg_backbone is not None:
+            for layer in self.reg_backbone:
+                emb_reg = layer(emb_reg, mask, X)
 
         # Outputs
-        logits_binary = self.nn_binary_particle(emb)
-        logits_pid = self.nn_pid(emb)
+        logits_binary = self.nn_binary_particle(emb_pid) # Use PID branch for binary too
+        logits_pid = self.nn_pid(emb_pid)
 
-        preds_pt = self.nn_pt(X, emb)
-        preds_energy = self.nn_energy(X, emb)
-        preds_eta = X[..., 2:3] + self.nn_eta(X, emb)
-        preds_sin_phi = X[..., 3:4] + self.nn_sin_phi(X, emb)
-        preds_cos_phi = X[..., 4:5] + self.nn_cos_phi(X, emb)
+        preds_pt = self.nn_pt(X, emb_reg)
+        preds_energy = self.nn_energy(X, emb_reg)
+        preds_eta = X[..., 2:3] + self.nn_eta(X, emb_reg)
+        preds_sin_phi = X[..., 3:4] + self.nn_sin_phi(X, emb_reg)
+        preds_cos_phi = X[..., 4:5] + self.nn_cos_phi(X, emb_reg)
 
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], dim=-1)
 
@@ -705,6 +779,7 @@ class MLPF(nn.Module):
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
 
         return logits_binary, logits_pid, preds_momentum
+
 
 
 # --- Loss Function ---
