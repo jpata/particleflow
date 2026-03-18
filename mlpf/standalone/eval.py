@@ -115,6 +115,9 @@ def evaluate(model, loader, device):
     jet_match_dr = 0.4
     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 
+    total_jets_pred = 0
+    total_matched_jets_pred = 0
+
     for ev in range(len(all_target_particles)):
         if all_target_particles[ev] is not None and all_pred_particles[ev] is not None:
             if np.sum(all_target_particles[ev].pt > 0) > 0 and np.sum(all_pred_particles[ev].pt > 0) > 0:
@@ -127,6 +130,8 @@ def evaluate(model, loader, device):
                 jets_pred = cluster_pred.inclusive_jets(min_pt=5.0)
 
                 if len(jets_target) > 0 and len(jets_pred) > 0:
+                    total_jets_pred += len(jets_pred)
+
                     # Prepare jets for matching by converting to spherical awkward array
                     jets_target_v = vector.awk(ak.zip({"px": jets_target.px, "py": jets_target.py, "pz": jets_target.pz, "E": jets_target.E}))
                     jets_pred_v = vector.awk(ak.zip({"px": jets_pred.px, "py": jets_pred.py, "pz": jets_pred.pz, "E": jets_pred.E}))
@@ -138,6 +143,7 @@ def evaluate(model, loader, device):
                     j1_idx, j2_idx = match_jets(ak.Array([jets_target_sph]), ak.Array([jets_pred_sph]), jet_match_dr)
 
                     if len(j1_idx[0]) > 0:
+                        total_matched_jets_pred += len(j1_idx[0])
                         for i_target, i_pred in zip(j1_idx[0], j2_idx[0]):
                             pt_target = jets_target_sph[i_target].pt
                             pt_pred = jets_pred_sph[i_pred].pt
@@ -146,10 +152,11 @@ def evaluate(model, loader, device):
 
     if len(responses) == 0:
         print("No matched jets found.")
-        return 0.0
+        return 0.0, 0.0
 
     res_med, res_iqr = med_iqr(responses)
-    return res_iqr
+    matched_fraction = total_matched_jets_pred / total_jets_pred if total_jets_pred > 0 else 0.0
+    return res_iqr, matched_fraction
 
 
 if __name__ == "__main__":
@@ -241,7 +248,7 @@ if __name__ == "__main__":
 
         # Evaluate
         print("Evaluating...")
-        val_jet_iqr = evaluate(model, valid_loader, device)
+        val_jet_iqr, val_jet_matched_frac = evaluate(model, valid_loader, device)
 
         total_seconds = time.time() - start_total
 
@@ -256,6 +263,7 @@ if __name__ == "__main__":
         all_results.append(
             {
                 "val_jet_iqr": val_jet_iqr,
+                "val_jet_matched_frac": val_jet_matched_frac,
                 "training_seconds": training_seconds,
                 "total_seconds": total_seconds,
                 "peak_vram_mb": peak_vram_mb,
