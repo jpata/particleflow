@@ -19,7 +19,7 @@ Once you get confirmation, kick off the experimentation.
 
 ## Experimentation
 
-Each experiment runs on a single GPU. The training script runs for a **fixed total time budget of 60 seconds** (comprised of 3 training runs of 20 seconds each, with dataset shuffling). You launch it simply as: `timeout 10m stdbuf -o0 -e0 ./scripts/local/train.sh > run.log 2>&1`
+Each experiment runs on a single GPU. The training script runs for a **fixed total time budget of 7 minutes** (comprised of 3 training runs of two minutes each, with dataset shuffling). You launch it simply as: `timeout 15m stdbuf -o0 -e0 ./scripts/local/train.sh > run.log 2>&1`
 
 **What you CAN do:**
 - Modify `mlpf/standalone/train.py` — this is the only file you edit. Everything is fair game: model architecture, hyperparameters size, model size, etc.
@@ -98,7 +98,7 @@ LOOP FOREVER:
 1. Look at the git state: the current branch/commit we're on
 2. Tune `mlpf/model/mlpf.py` with an experimental idea by directly hacking the code.
 3. git commit
-4. Run the experiment: `timeout 10m stdbuf -o0 -e0 ./scripts/local/train.sh > run.log 2>&1` (redirect everything without buffering — do NOT use tee or let output flood your context)
+4. Run the experiment: `timeout 15m stdbuf -o0 -e0 ./scripts/local/train.sh > run.log 2>&1` (redirect everything without buffering — do NOT use tee or let output flood your context)
 5. Read out the results: `grep "^val_jet_iqr:\|^peak_vram_mb:\|^runtime_cpu_ms:\|^runtime_gpu_ms:" run.log`
 6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
 7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
