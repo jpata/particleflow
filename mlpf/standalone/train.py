@@ -133,68 +133,52 @@ class RegressionOutput(nn.Module):
 
 
 class MLPF(nn.Module):
-    def __init__(self, input_dim=25, num_classes=8, embedding_dim=128, width=128, num_convs=3, num_heads=8):
+    def __init__(self, input_dim=25, num_classes=8, embedding_dim=128, width=128, num_convs=6, num_heads=16):
         super(MLPF, self).__init__()
 
         self.elemtypes = [1, 2, 3, 4, 5, 8, 9, 10, 11]
         num_types = len(self.elemtypes)
 
         # Input encoding
-        self.nn0_id = ffn(input_dim, num_types * embedding_dim, width)
-        self.nn0_reg = ffn(input_dim, num_types * embedding_dim, width)
+        self.nn0 = ffn(input_dim, embedding_dim, width * 2)
+        self.type_emb = nn.Embedding(12, embedding_dim)
 
         # Attention layers
-        self.conv_id = nn.ModuleList([PreLnSelfAttentionLayer(embedding_dim, num_heads, width) for _ in range(num_convs)])
-        self.conv_reg = nn.ModuleList([PreLnSelfAttentionLayer(embedding_dim, num_heads, width) for _ in range(num_convs)])
+        self.conv = nn.ModuleList([PreLnSelfAttentionLayer(embedding_dim, num_heads, width * 4) for _ in range(num_convs)])
 
         # Final output heads
-        self.nn_binary_particle = ffn(embedding_dim, 2, width)
-        self.nn_pid = ffn(embedding_dim, num_classes, width)
+        self.nn_binary_particle = ffn(embedding_dim, 2, width * 2)
+        self.nn_pid = ffn(embedding_dim, num_classes, width * 2)
 
-        self.nn_pt = RegressionOutput(embedding_dim, width, self.elemtypes)
-        self.nn_eta = RegressionOutput(embedding_dim, width, self.elemtypes)
-        self.nn_sin_phi = RegressionOutput(embedding_dim, width, self.elemtypes)
-        self.nn_cos_phi = RegressionOutput(embedding_dim, width, self.elemtypes)
-        self.nn_energy = RegressionOutput(embedding_dim, width, self.elemtypes)
+        self.nn_pt = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
+        self.nn_eta = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
+        self.nn_sin_phi = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
+        self.nn_cos_phi = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
+        self.nn_energy = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
 
     def forward(self, X, mask):
-        # X: [B, N, 25]
-        # mask: [B, N]
-
         B, N, _ = X.shape
-        num_types = len(self.elemtypes)
 
-        # Split input encoding
-        all_id = self.nn0_id(X).view(B, N, num_types, -1)
-        all_reg = self.nn0_reg(X).view(B, N, num_types, -1)
-
-        elemtype_mask = torch.stack([X[..., 0] == elemtype for elemtype in self.elemtypes], dim=-1)
-
-        emb_id = torch.sum(all_id * elemtype_mask.unsqueeze(-1), dim=2)
-        emb_reg = torch.sum(all_reg * elemtype_mask.unsqueeze(-1), dim=2)
+        # Shared input encoding
+        type_idx = X[..., 0].long().clamp(0, 11)
+        emb = self.nn0(X) + self.type_emb(type_idx)
 
         # Attention layers
-        for conv in self.conv_id:
-            emb_id = conv(emb_id, mask)
-        for conv in self.conv_reg:
-            emb_reg = conv(emb_reg, mask)
+        for conv in self.conv:
+            emb = conv(emb, mask)
 
         # Outputs
-        logits_binary = self.nn_binary_particle(emb_id)
-        logits_pid = self.nn_pid(emb_id)
+        logits_binary = self.nn_binary_particle(emb)
+        logits_pid = self.nn_pid(emb)
 
-        # For pt and energy, return just the residual (the log-ratio)
-        preds_pt = self.nn_pt(X, emb_reg)
-        preds_energy = self.nn_energy(X, emb_reg)
-
-        # For eta, sin_phi, cos_phi, add to the original element value (residual learning)
-        preds_eta = X[..., 2:3] + self.nn_eta(X, emb_reg)
-        preds_sin_phi = X[..., 3:4] + self.nn_sin_phi(X, emb_reg)
-        preds_cos_phi = X[..., 4:5] + self.nn_cos_phi(X, emb_reg)
+        preds_pt = self.nn_pt(X, emb)
+        preds_energy = self.nn_energy(X, emb)
+        preds_eta = X[..., 2:3] + self.nn_eta(X, emb)
+        preds_sin_phi = X[..., 3:4] + self.nn_sin_phi(X, emb)
+        preds_cos_phi = X[..., 4:5] + self.nn_cos_phi(X, emb)
 
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], dim=-1)
 
-        # Guard against nan/inf to prevent segfaults in downstream libraries like fastjet
         logits_binary = torch.nan_to_num(logits_binary, nan=0.0, posinf=0.0, neginf=0.0)
         logits_pid = torch.nan_to_num(logits_pid, nan=0.0, posinf=0.0, neginf=0.0)
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
