@@ -71,7 +71,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.mha = SimpleMultiheadAttention(embedding_dim, num_heads, dropout=dropout)
         self.norm0 = nn.LayerNorm(embedding_dim)
         self.norm1 = nn.LayerNorm(embedding_dim)
-        self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.ELU(), nn.Linear(width, embedding_dim), nn.ELU())
+        self.seq = nn.Sequential(nn.Linear(embedding_dim, width * 2), nn.GELU(), nn.Linear(width * 2, embedding_dim), nn.GELU())
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, mask):
@@ -104,7 +104,7 @@ class PreLnSelfAttentionLayer(nn.Module):
 def ffn(input_dim, output_dim, width, dropout=0.1):
     return nn.Sequential(
         nn.Linear(input_dim, width),
-        nn.ELU(),
+        nn.GELU(),
         nn.LayerNorm(width),
         nn.Dropout(dropout),
         nn.Linear(width, output_dim),
