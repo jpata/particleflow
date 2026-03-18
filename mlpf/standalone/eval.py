@@ -171,11 +171,19 @@ if __name__ == "__main__":
         print(f"\n--- Run {i+1}/3 ---")
 
         # Fresh loaders for each run (especially for shuffling)
-        train_loader = DataLoader(ds_train, batch_size=8, collate_fn=collater, shuffle=True)
-        valid_loader = DataLoader(ds_valid, batch_size=8, collate_fn=collater)
+        train_loader = DataLoader(ds_train, batch_size=4, collate_fn=collater, shuffle=True, num_workers=1, persistent_workers=True)
+        valid_loader = DataLoader(ds_valid, batch_size=4, collate_fn=collater, num_workers=1, persistent_workers=True)
 
         # 55 features for CMS, re-initialize model for each run
-        model = MLPF(input_dim=55, num_classes=8, embedding_dim=128, width=128, num_convs=6, num_heads=16).to(device)
+        model = MLPF(
+            input_dim=55,
+            num_classes=8,
+            embedding_dim=128,
+            width=128,
+            num_convs=6,
+            num_heads=16,
+            use_hept=True,
+        ).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
         # Record start time
