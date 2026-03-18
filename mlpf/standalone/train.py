@@ -33,36 +33,53 @@ def get_activation(activation):
     return nn.ReLU
 
 
-class SimpleMultiheadAttention(nn.MultiheadAttention):
+class SimpleMultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_heads, dropout=0.0):
-        super().__init__(embed_dim, num_heads, dropout=dropout, bias=True, batch_first=True)
-        self.head_dim = int(embed_dim // num_heads)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        
+        self.q_proj = nn.Linear(embed_dim, embed_dim)
+        self.k_proj = nn.Linear(embed_dim, embed_dim)
+        self.v_proj = nn.Linear(embed_dim, embed_dim)
+        
+        self.q_alpha = nn.Parameter(torch.randn(num_heads, self.head_dim))
+        self.k_beta = nn.Parameter(torch.randn(num_heads, self.head_dim))
+        
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, q, k, v, key_padding_mask=None):
-        bs, seq_len, _ = q.size()
-        head_dim = self.head_dim
-        num_heads = self.num_heads
+        bs, n, d = q.size()
+        
+        Q = self.q_proj(q).reshape(bs, n, self.num_heads, self.head_dim)
+        K = self.k_proj(k).reshape(bs, n, self.num_heads, self.head_dim)
+        V = self.v_proj(v).reshape(bs, n, self.num_heads, self.head_dim)
 
-        # split stacked in_proj_weight, in_proj_bias to q, k, v matrices
-        wq, wk, wv = torch.split(self.in_proj_weight, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
-        bq, bk, bv = torch.split(self.in_proj_bias, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
-
-        q = torch.matmul(q, wq.T) + bq
-        k = torch.matmul(k, wk.T) + bk
-        v = torch.matmul(v, wv.T) + bv
-
-        q = q.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
-        k = k.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
-        v = v.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
-
-        # Use Flash Attention if possible, otherwise fall back to other kernels
-        with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
-            attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout if self.training else 0.0)
-
-        attn_output = attn_output.transpose(1, 2).reshape(bs, seq_len, num_heads * head_dim)
-        attn_output = self.out_proj(attn_output)
-        return attn_output, None
+        alpha = (Q * self.q_alpha).sum(dim=-1) # (bs, n, num_heads)
+        if key_padding_mask is not None:
+            mask_inf = (key_padding_mask == 0).unsqueeze(-1) # (bs, n, 1)
+            alpha = alpha.masked_fill(mask_inf, float('-inf'))
+        alpha = torch.softmax(alpha, dim=1) # (bs, n, num_heads)
+        
+        global_q = (Q * alpha.unsqueeze(-1)).sum(dim=1, keepdim=True) # (bs, 1, num_heads, head_dim)
+        
+        P = K * global_q # (bs, n, num_heads, head_dim)
+        
+        beta = (P * self.k_beta).sum(dim=-1) # (bs, n, num_heads)
+        if key_padding_mask is not None:
+            beta = beta.masked_fill(mask_inf, float('-inf'))
+        beta = torch.softmax(beta, dim=1)
+        
+        global_v = (V * beta.unsqueeze(-1)).sum(dim=1, keepdim=True) # (bs, 1, num_heads, head_dim)
+        
+        out = Q + global_v # (bs, n, num_heads, head_dim)
+        out = out.reshape(bs, n, d)
+        
+        out = self.out_proj(out)
+        out = self.dropout(out)
+        return out, None
 
 
 class PreLnSelfAttentionLayer(nn.Module):
@@ -71,7 +88,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.mha = SimpleMultiheadAttention(embedding_dim, num_heads, dropout=dropout)
         self.norm0 = nn.LayerNorm(embedding_dim)
         self.norm1 = nn.LayerNorm(embedding_dim)
-        self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.ELU(), nn.Linear(width, embedding_dim), nn.ELU())
+        self.seq = nn.Sequential(nn.Linear(embedding_dim, width * 4), nn.GELU(), nn.Linear(width * 4, embedding_dim), nn.GELU())
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, mask):
@@ -87,7 +104,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         if mask is not None:
             q = q * mask_
 
-        mha_out, _ = self.mha(q, x_norm, x_norm)
+        mha_out, _ = self.mha(q, x_norm, x_norm, key_padding_mask=mask)
         x = residual + mha_out
 
         residual = x
@@ -104,7 +121,7 @@ class PreLnSelfAttentionLayer(nn.Module):
 def ffn(input_dim, output_dim, width, dropout=0.1):
     return nn.Sequential(
         nn.Linear(input_dim, width),
-        nn.ELU(),
+        nn.GELU(),
         nn.LayerNorm(width),
         nn.Dropout(dropout),
         nn.Linear(width, output_dim),
@@ -133,68 +150,52 @@ class RegressionOutput(nn.Module):
 
 
 class MLPF(nn.Module):
-    def __init__(self, input_dim=25, num_classes=8, embedding_dim=128, width=128, num_convs=3, num_heads=8):
+    def __init__(self, input_dim=25, num_classes=8, embedding_dim=128, width=128, num_convs=6, num_heads=16):
         super(MLPF, self).__init__()
 
         self.elemtypes = [1, 2, 3, 4, 5, 8, 9, 10, 11]
         num_types = len(self.elemtypes)
 
         # Input encoding
-        self.nn0_id = ffn(input_dim, num_types * embedding_dim, width)
-        self.nn0_reg = ffn(input_dim, num_types * embedding_dim, width)
+        self.nn0 = ffn(input_dim, embedding_dim, width * 2)
+        self.type_emb = nn.Embedding(12, embedding_dim)
 
         # Attention layers
-        self.conv_id = nn.ModuleList([PreLnSelfAttentionLayer(embedding_dim, num_heads, width) for _ in range(num_convs)])
-        self.conv_reg = nn.ModuleList([PreLnSelfAttentionLayer(embedding_dim, num_heads, width) for _ in range(num_convs)])
+        self.conv = nn.ModuleList([PreLnSelfAttentionLayer(embedding_dim, num_heads, width * 4) for _ in range(num_convs)])
 
         # Final output heads
-        self.nn_binary_particle = ffn(embedding_dim, 2, width)
-        self.nn_pid = ffn(embedding_dim, num_classes, width)
+        self.nn_binary_particle = ffn(embedding_dim, 2, width * 2)
+        self.nn_pid = ffn(embedding_dim, num_classes, width * 2)
 
-        self.nn_pt = RegressionOutput(embedding_dim, width, self.elemtypes)
-        self.nn_eta = RegressionOutput(embedding_dim, width, self.elemtypes)
-        self.nn_sin_phi = RegressionOutput(embedding_dim, width, self.elemtypes)
-        self.nn_cos_phi = RegressionOutput(embedding_dim, width, self.elemtypes)
-        self.nn_energy = RegressionOutput(embedding_dim, width, self.elemtypes)
+        self.nn_pt = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
+        self.nn_eta = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
+        self.nn_sin_phi = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
+        self.nn_cos_phi = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
+        self.nn_energy = RegressionOutput(embedding_dim, width * 2, self.elemtypes)
 
     def forward(self, X, mask):
-        # X: [B, N, 25]
-        # mask: [B, N]
-
         B, N, _ = X.shape
-        num_types = len(self.elemtypes)
 
-        # Split input encoding
-        all_id = self.nn0_id(X).view(B, N, num_types, -1)
-        all_reg = self.nn0_reg(X).view(B, N, num_types, -1)
-
-        elemtype_mask = torch.stack([X[..., 0] == elemtype for elemtype in self.elemtypes], dim=-1)
-
-        emb_id = torch.sum(all_id * elemtype_mask.unsqueeze(-1), dim=2)
-        emb_reg = torch.sum(all_reg * elemtype_mask.unsqueeze(-1), dim=2)
+        # Shared input encoding
+        type_idx = X[..., 0].long().clamp(0, 11)
+        emb = self.nn0(X) + self.type_emb(type_idx)
 
         # Attention layers
-        for conv in self.conv_id:
-            emb_id = conv(emb_id, mask)
-        for conv in self.conv_reg:
-            emb_reg = conv(emb_reg, mask)
+        for conv in self.conv:
+            emb = conv(emb, mask)
 
         # Outputs
-        logits_binary = self.nn_binary_particle(emb_id)
-        logits_pid = self.nn_pid(emb_id)
+        logits_binary = self.nn_binary_particle(emb)
+        logits_pid = self.nn_pid(emb)
 
-        # For pt and energy, return just the residual (the log-ratio)
-        preds_pt = self.nn_pt(X, emb_reg)
-        preds_energy = self.nn_energy(X, emb_reg)
-
-        # For eta, sin_phi, cos_phi, add to the original element value (residual learning)
-        preds_eta = X[..., 2:3] + self.nn_eta(X, emb_reg)
-        preds_sin_phi = X[..., 3:4] + self.nn_sin_phi(X, emb_reg)
-        preds_cos_phi = X[..., 4:5] + self.nn_cos_phi(X, emb_reg)
+        preds_pt = self.nn_pt(X, emb)
+        preds_energy = self.nn_energy(X, emb)
+        preds_eta = X[..., 2:3] + self.nn_eta(X, emb)
+        preds_sin_phi = X[..., 3:4] + self.nn_sin_phi(X, emb)
+        preds_cos_phi = X[..., 4:5] + self.nn_cos_phi(X, emb)
 
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], dim=-1)
 
-        # Guard against nan/inf to prevent segfaults in downstream libraries like fastjet
         logits_binary = torch.nan_to_num(logits_binary, nan=0.0, posinf=0.0, neginf=0.0)
         logits_pid = torch.nan_to_num(logits_pid, nan=0.0, posinf=0.0, neginf=0.0)
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
@@ -363,7 +364,7 @@ if __name__ == "__main__":
                 embedding_dim=128,
                 width=128,
                 num_convs=3,
-                num_heads=8,
+                num_heads=16,
             ).to(device)
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 

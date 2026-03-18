@@ -175,7 +175,7 @@ if __name__ == "__main__":
         valid_loader = DataLoader(ds_valid, batch_size=8, collate_fn=collater)
 
         # 55 features for CMS, re-initialize model for each run
-        model = MLPF(input_dim=55, num_classes=8, embedding_dim=128, width=128, num_convs=3, num_heads=8).to(device)
+        model = MLPF(input_dim=55, num_classes=8, embedding_dim=128, width=128, num_convs=6, num_heads=16).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
         # Record start time
