@@ -19,7 +19,7 @@ Once you get confirmation, kick off the experimentation.
 
 ## Experimentation
 
-Each experiment runs on a single GPU. The training script runs for a **fixed time budget of 2 minutes** (wall clock training time, excluding startup/compilation). You launch it simply as: `./scripts/local/train.sh`
+Each experiment runs on a single GPU. The training script runs for a **fixed total time budget of 60 seconds** (comprised of 3 training runs of 20 seconds each, with dataset shuffling). You launch it simply as: `./scripts/local/train.sh`
 
 **What you CAN do:**
 - Modify `mlpf/standalone/train.py` — this is the only file you edit. Everything is fair game: model architecture, hyperparameters size, model size, etc.
@@ -29,7 +29,7 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 - Install new packages or add dependencies. 
 - Modify the evaluation code.
 
-**The goal is simple: get the lowest validation jet interquartile range and lowest model runtime on CPU and GPU.** Since the time budget is fixed, you don't need to worry about training time — it's always 2 minutes. Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size, the optimizer, the loss configuration. In particular, focus on creative architectural exploration beyond just changing the hyperparameter values. The only constraint is that the code runs without crashing and finishes within the time budget.
+**The goal is simple: get the lowest validation jet interquartile range and lowest model runtime on CPU and GPU.** Since the time budget is fixed, you don't need to worry about training time — it's always 60 seconds (3x20s). Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size, the optimizer, the loss configuration. In particular, focus on creative architectural exploration beyond just changing the hyperparameter values. The only constraint is that the code runs without crashing and finishes within the time budget.
 
 **VRAM** is a soft constraint. Some increase is acceptable for meaningful validation jet iqr gains, but it should not blow up dramatically.
 
@@ -39,30 +39,31 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tim
 
 ## Output format
 
-Once the script finishes it prints a summary like this:
+Once the script finishes it prints a summary of the 3 runs like this:
 
 ```
----
-val_jet_iqr:      0.997900
-training_seconds: 300.1
-total_seconds:    325.9
-peak_vram_mb:     45060.2
-num_steps:        953
-num_params_M:     50.3
-depth:            8
-runtime_cpu_ms:   1040
-runtime_gpu_ms:   5
+--- Final Results (3 runs) ---
+val_jet_iqr     : 0.997900 ± 0.000001 (var)
+training_seconds: 20.000000 ± 0.000000 (var)
+total_seconds   : 25.000000 ± 0.000001 (var)
+peak_vram_mb    : 100.000000 ± 0.000000 (var)
+num_steps       : 100.000000 ± 0.000000 (var)
+runtime_cpu_ms  : 10.000000 ± 0.000000 (var)
+runtime_gpu_ms  : 5.000000 ± 0.000000 (var)
+
+num_params_M:     0.1
+depth:            3
 ```
 
-Note that the script is configured to always stop after 2 minutes, so depending on the computing platform of this computer the numbers might look different. You can extract the key metric from the log file:
+Note that the script is configured to always stop after a fixed duration per run, so depending on the computing platform of this computer the numbers might look different. You can extract the mean metrics from the log file:
 
 ```
-grep "^val_jet_iqr:" run.log
+grep "^val_jet_iqr" run.log
 ```
 
 ## Logging results
 
-When an experiment is done, log it to `results.tsv` (tab-separated, NOT comma-separated — commas break in descriptions).
+When an experiment is done, log the **mean values** from the final results to `results.tsv` (tab-separated, NOT comma-separated — commas break in descriptions).
 
 The TSV has a header row and 5 columns:
 
@@ -71,10 +72,12 @@ commit	val_jet_iqr	runtime_cpu_ms	runtime_gpu_ms	memory_gb	status	description
 ```
 
 1. git commit hash (short, 7 chars)
-2. val_jet_iqr achieved (e.g. 1.234567) — use 0.000000 for crashes
-3. peak memory in GB, round to .1f (e.g. 12.3 — divide peak_vram_mb by 1024) — use 0.0 for crashes
-4. status: `keep`, `discard`, or `crash`
-5. short text description of what this experiment tried
+2. mean val_jet_iqr achieved (e.g. 1.234567) — use 0.000000 for crashes
+3. mean runtime_cpu_ms in ms
+4. mean runtime_gpu_ms in ms
+5. mean peak memory in GB, round to .1f (e.g. 12.3 — divide peak_vram_mb by 1024) — use 0.0 for crashes
+6. status: `keep`, `discard`, or `crash`
+7. short text description of what this experiment tried
 
 Example:
 

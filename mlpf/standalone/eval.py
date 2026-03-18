@@ -177,83 +177,101 @@ if __name__ == "__main__":
     ds_valid = PFDataset(data_dir, "cms_pf_ttbar/1:3.0.0", "test", num_samples=200).ds
     
     collater = Collater(["X", "ytarget"], ["genmet"])
-    train_loader = DataLoader(ds_train, batch_size=8, collate_fn=collater, shuffle=True)
-    valid_loader = DataLoader(ds_valid, batch_size=8, collate_fn=collater)
-    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # 55 features for CMS
-    model = MLPF(input_dim=55, num_classes=8, embedding_dim=128, width=128, num_convs=3, num_heads=8).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    all_results = []
     
-    # Record start time
-    start_total = time.time()
-    
-    # Train for 2 minutes
-    avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=20)
-    
-    training_seconds = time.time() - start_total
-    
-    # Evaluate
-    print("Evaluating...")
-    val_jet_iqr = evaluate(model, valid_loader, device)
-    
-    total_seconds = time.time() - start_total
-    
-    # Peak VRAM
-    if torch.cuda.is_available():
-        peak_vram_mb = torch.cuda.max_memory_allocated() / (1024 * 1024)
-    else:
-        peak_vram_mb = 0.0
+    # Run training 3 times
+    for i in range(3):
+        print(f"\n--- Run {i+1}/3 ---")
         
+        # Fresh loaders for each run (especially for shuffling)
+        train_loader = DataLoader(ds_train, batch_size=8, collate_fn=collater, shuffle=True)
+        valid_loader = DataLoader(ds_valid, batch_size=8, collate_fn=collater)
+        
+        # 55 features for CMS, re-initialize model for each run
+        model = MLPF(input_dim=55, num_classes=8, embedding_dim=128, width=128, num_convs=3, num_heads=8).to(device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+        
+        # Record start time
+        start_total = time.time()
+        
+        # Train for 20 seconds
+        avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=20)
+        
+        training_seconds = time.time() - start_total
+        
+        # Evaluate
+        print("Evaluating...")
+        val_jet_iqr = evaluate(model, valid_loader, device)
+        
+        total_seconds = time.time() - start_total
+        
+        # Peak VRAM
+        if torch.cuda.is_available():
+            peak_vram_mb = torch.cuda.max_memory_allocated() / (1024 * 1024)
+            torch.cuda.reset_peak_memory_stats()
+        else:
+            peak_vram_mb = 0.0
+            
+        # Benchmarking
+        model.eval()
+        sample_input = torch.randn(1, 4096, 55)
+        sample_mask = torch.ones(1, 4096).bool()
+
+        # CPU runtime
+        model_cpu = model.to("cpu")
+        cpu_times = []
+        with torch.no_grad():
+            for _ in range(10):
+                start = time.time()
+                _ = model_cpu(sample_input, sample_mask)
+                cpu_times.append((time.time() - start) * 1000)
+        runtime_cpu_ms = np.median(cpu_times)
+
+        # GPU runtime
+        if torch.cuda.is_available():
+            model_gpu = model.to("cuda")
+            sample_input_gpu = sample_input.to("cuda")
+            sample_mask_gpu = sample_mask.to("cuda")
+            gpu_times = []
+            # Warmup
+            for _ in range(5):
+                _ = model_gpu(sample_input_gpu, sample_mask_gpu)
+            with torch.no_grad():
+                for _ in range(10):
+                    torch.cuda.synchronize()
+                    start = time.time()
+                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                        _ = model_gpu(sample_input_gpu, sample_mask_gpu)
+                    torch.cuda.synchronize()
+                    gpu_times.append((time.time() - start) * 1000)
+            runtime_gpu_ms = np.median(gpu_times)
+        else:
+            runtime_gpu_ms = 0.0
+
+        all_results.append({
+            "val_jet_iqr": val_jet_iqr,
+            "training_seconds": training_seconds,
+            "total_seconds": total_seconds,
+            "peak_vram_mb": peak_vram_mb,
+            "num_steps": num_steps,
+            "runtime_cpu_ms": runtime_cpu_ms,
+            "runtime_gpu_ms": runtime_gpu_ms
+        })
+
     # Model info
     num_params_M = sum(p.numel() for p in model.parameters()) / 1e6
     depth = 3 # num_convs
     
     # Final output
-    print("Benchmarking...")
-    model.eval()
-    sample_input = torch.randn(1, 4096, 55)
-    sample_mask = torch.ones(1, 4096).bool()
-
-    # CPU runtime
-    model_cpu = model.to("cpu")
-    cpu_times = []
-    with torch.no_grad():
-        for _ in range(10):
-            start = time.time()
-            _ = model_cpu(sample_input, sample_mask)
-            cpu_times.append((time.time() - start) * 1000)
-    runtime_cpu_ms = np.median(cpu_times)
-
-    # GPU runtime
-    if torch.cuda.is_available():
-        model_gpu = model.to("cuda")
-        sample_input_gpu = sample_input.to("cuda")
-        sample_mask_gpu = sample_mask.to("cuda")
-        gpu_times = []
-        # Warmup
-        for _ in range(5):
-            _ = model_gpu(sample_input_gpu, sample_mask_gpu)
-        with torch.no_grad():
-            for _ in range(10):
-                torch.cuda.synchronize()
-                start = time.time()
-                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                    _ = model_gpu(sample_input_gpu, sample_mask_gpu)
-                torch.cuda.synchronize()
-                gpu_times.append((time.time() - start) * 1000)
-        runtime_gpu_ms = np.median(gpu_times)
-    else:
-        runtime_gpu_ms = 0.0
-
-    print("---")
-    print(f"val_jet_iqr:      {val_jet_iqr:.6f}")
-    print(f"training_seconds: {training_seconds:.1f}")
-    print(f"total_seconds:    {total_seconds:.1f}")
-    print(f"peak_vram_mb:     {peak_vram_mb:.1f}")
-    print(f"num_steps:        {num_steps}")
+    print("\n--- Final Results (3 runs) ---")
+    for key in all_results[0].keys():
+        values = [res[key] for res in all_results]
+        mean = np.mean(values)
+        variance = np.var(values)
+        print(f"{key:16}: {mean:.6f} ± {variance:.6f} (var)")
+    
     print(f"num_params_M:     {num_params_M:.1f}")
     print(f"depth:            {depth}")
-    print(f"runtime_cpu_ms:   {int(runtime_cpu_ms)}")
-    print(f"runtime_gpu_ms:   {int(runtime_gpu_ms)}")
+

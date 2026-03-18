@@ -4,6 +4,17 @@ from torch.nn import functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 import time
 import os
+import numpy as np
+import argparse
+from torch.utils.data import DataLoader
+
+# Import library modules
+try:
+    from mlpf.model.PFDataset import Collater, PFDataset
+    from mlpf.logger import _configLogger
+except ImportError:
+    # Fallback for cases where the library is not in the path
+    pass
 
 # --- Model Definition ---
 
@@ -314,7 +325,64 @@ def train(model, train_loader, optimizer, device, duration_seconds=120):
 
 if __name__ == "__main__":
     # This is for testing standalone, but usually will be called from eval.py or a script
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = MLPF().to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-    print("Model initialized. Ready for training.")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-dir", type=str, default=None, help="Path to tfds directory")
+    args = parser.parse_args()
+
+    data_dir = args.data_dir
+    if data_dir is None:
+        print("Data directory not provided. Model initialized. Ready for training.")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = MLPF().to(device)
+        print(
+            f"Model has {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M parameters."
+        )
+    else:
+        _configLogger("mlpf", 0)
+        print(f"Data directory: {data_dir}")
+
+        # Load dataset
+        ds_train = PFDataset(
+            data_dir, "cms_pf_ttbar/1:3.0.0", "train", num_samples=1000
+        ).ds
+        collater = Collater(["X", "ytarget"], ["genmet"])
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        all_results = []
+
+        for i in range(3):
+            print(f"\n--- Run {i+1}/3 ---")
+            train_loader = DataLoader(
+                ds_train, batch_size=8, collate_fn=collater, shuffle=True
+            )
+
+            # 55 features for CMS, re-initialize model for each run
+            model = MLPF(
+                input_dim=55,
+                num_classes=8,
+                embedding_dim=128,
+                width=128,
+                num_convs=3,
+                num_heads=8,
+            ).to(device)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+
+            start_time = time.time()
+            avg_loss, num_steps = train(
+                model, train_loader, optimizer, device, duration_seconds=20
+            )
+            elapsed = time.time() - start_time
+
+            all_results.append(
+                {"avg_loss": avg_loss, "num_steps": num_steps, "seconds": elapsed}
+            )
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        print("\n--- Final Results (3 runs) ---")
+        for key in all_results[0].keys():
+            values = [res[key] for res in all_results]
+            mean = np.mean(values)
+            variance = np.var(values)
+            print(f"{key:16}: {mean:.6f} ± {variance:.6f} (var)")
