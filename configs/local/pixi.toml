@@ -28,9 +28,11 @@ local-cores: 1
 verbose: false' > .profiles/local/config.v8+.yaml
 """
 # Unified generation step
-generate = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --model \"${MODEL:-}\" --steps ${STEPS:-gen,post,tfds,train}'", depends-on = ["setup"] }
-# Unified run step
-run = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["generate"] }
+snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --model \"${MODEL:-}\" --steps ${STEPS:-gen,post,tfds,train} --split'", depends-on = ["setup"] }
+gen = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile.gen --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["setup"] }
+post = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile.post --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["setup"] }
+tfds = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile.tfds --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["setup"] }
+train = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile.train --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["setup"] }
 # Unified validation step
 validation = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config ${VAL_CONFIG:-validation_cms.yaml} && snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/validation_${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1'", depends-on = ["setup"] }
 # Local dry-run
