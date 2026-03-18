@@ -27,18 +27,22 @@ while IFS= read -r DSL || [ -n "$DSL" ]; do
 #!/bin/bash
 #SBATCH --job-name=mlpf_dsl_${LINE_NUM}
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:l40:1
 #SBATCH --mem-per-gpu=40G
 #SBATCH --cpus-per-task=4
 #SBATCH --time=01:00:00
 #SBATCH -o ${LOG_DIR}/job_${LINE_NUM}.out
 #SBATCH -e ${LOG_DIR}/job_${LINE_NUM}.err
 
+set -e
+set -o xtrace
+
 export PF_SITE=tallinn
-./scripts/tallinn/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "$DSL"
+env
+apptainer exec --nv -B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --env PYTHONPATH=/home/joosep/particleflow2 /scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "$DSL"
 EOT
 
     LINE_NUM=$((LINE_NUM + 1))
 done < "$CONFIG_FILE"
 
-echo "All $LINE_NUM jobs submitted."
+echo "All jobs submitted."
