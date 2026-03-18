@@ -3,11 +3,8 @@ import torch.nn as nn
 from torch.nn import functional as F
 from torch.nn.attention import SDPBackend, sdpa_kernel
 import time
-import numpy as np
-import argparse
 import sys
 import random
-from torch.utils.data import DataLoader
 import einops
 from einops import rearrange
 
@@ -15,9 +12,7 @@ from einops import rearrange
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
-from mlpf.model.PFDataset import Collater, PFDataset
-from mlpf.logger import _configLogger
-from mlpf.standalone.dsl import ModelConfig, LayerConfig, HEPTConfig, GlobalConfig, StandardConfig, FastformerConfig
+from mlpf.standalone.dsl import HEPTConfig
 
 # --- HEPT Utilities ---
 # Adapted from https://github.com/mova/HEPT
@@ -98,9 +93,9 @@ def qkv_res(s_query, s_key, s_value):
 def prep_qk(query, key, w, coords):
     qw = w.sum(dim=1).clamp(max=50).exp().sum(dim=-1)
     new_qw_expand_dim = torch.cat([qw[:, :1], qw], dim=-1)
-    
+
     sqrt_w_r = torch.sqrt(2 * new_qw_expand_dim)[None] * coords[:, None]
-    
+
     q_hat = torch.cat([query, sqrt_w_r], dim=-1)
     k_hat = torch.cat([key, sqrt_w_r], dim=-1)
     return q_hat, k_hat
@@ -238,49 +233,50 @@ class SimpleMultiheadAttention(nn.Module):
     A simplified linear-time attention mechanism that pools sequence information into a global context.
     Related to: "Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention", https://arxiv.org/abs/2006.16236
     """
+
     def __init__(self, embed_dim, num_heads, dropout=0.0):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
-        
+
         self.q_proj = nn.Linear(embed_dim, embed_dim)
         self.k_proj = nn.Linear(embed_dim, embed_dim)
         self.v_proj = nn.Linear(embed_dim, embed_dim)
-        
+
         self.q_alpha = nn.Parameter(torch.randn(num_heads, self.head_dim))
         self.k_beta = nn.Parameter(torch.randn(num_heads, self.head_dim))
-        
+
         self.out_proj = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, q, k, v, key_padding_mask=None):
         bs, n, d = q.size()
-        
+
         Q = self.q_proj(q).reshape(bs, n, self.num_heads, self.head_dim)
         K = self.k_proj(k).reshape(bs, n, self.num_heads, self.head_dim)
         V = self.v_proj(v).reshape(bs, n, self.num_heads, self.head_dim)
 
-        alpha = (Q * self.q_alpha).sum(dim=-1) # (bs, n, num_heads)
+        alpha = (Q * self.q_alpha).sum(dim=-1)  # (bs, n, num_heads)
         if key_padding_mask is not None:
-            mask_inf = (key_padding_mask == 0).unsqueeze(-1) # (bs, n, 1)
-            alpha = alpha.masked_fill(mask_inf, float('-inf'))
-        alpha = torch.softmax(alpha, dim=1) # (bs, n, num_heads)
-        
-        global_q = (Q * alpha.unsqueeze(-1)).sum(dim=1, keepdim=True) # (bs, 1, num_heads, head_dim)
-        
-        P = K * global_q # (bs, n, num_heads, head_dim)
-        
-        beta = (P * self.k_beta).sum(dim=-1) # (bs, n, num_heads)
+            mask_inf = (key_padding_mask == 0).unsqueeze(-1)  # (bs, n, 1)
+            alpha = alpha.masked_fill(mask_inf, float("-inf"))
+        alpha = torch.softmax(alpha, dim=1)  # (bs, n, num_heads)
+
+        global_q = (Q * alpha.unsqueeze(-1)).sum(dim=1, keepdim=True)  # (bs, 1, num_heads, head_dim)
+
+        P = K * global_q  # (bs, n, num_heads, head_dim)
+
+        beta = (P * self.k_beta).sum(dim=-1)  # (bs, n, num_heads)
         if key_padding_mask is not None:
-            beta = beta.masked_fill(mask_inf, float('-inf'))
+            beta = beta.masked_fill(mask_inf, float("-inf"))
         beta = torch.softmax(beta, dim=1)
-        
-        global_v = (V * beta.unsqueeze(-1)).sum(dim=1, keepdim=True) # (bs, 1, num_heads, head_dim)
-        
-        out = Q + global_v # (bs, n, num_heads, head_dim)
+
+        global_v = (V * beta.unsqueeze(-1)).sum(dim=1, keepdim=True)  # (bs, 1, num_heads, head_dim)
+
+        out = Q + global_v  # (bs, n, num_heads, head_dim)
         out = out.reshape(bs, n, d)
-        
+
         out = self.out_proj(out)
         out = self.dropout(out)
         return out, None
@@ -347,7 +343,7 @@ class HEPTAttentionLayer(nn.Module):
 
         x_flat = x.view(B * N, D)
         coords_flat = coords.view(B * N, 2)
-        
+
         raw_size = B * N
         x_flat_padded = pad_to_multiple(x_flat, self.block_size, dims=0)
         coords_flat_padded = pad_to_multiple(coords_flat, self.block_size, dims=0, value=float("inf"))
@@ -442,17 +438,18 @@ class StandardAttentionLayer(nn.Module):
     Standard $O(N^2)$ attention using fused kernels (FlashAttention-2 when available).
     Reference: "Attention Is All You Need", https://arxiv.org/abs/1706.03762
     """
+
     def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
         super(StandardAttentionLayer, self).__init__()
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
         self.head_dim = embedding_dim // num_heads
-        
+
         self.q_proj = nn.Linear(embedding_dim, embedding_dim)
         self.k_proj = nn.Linear(embedding_dim, embedding_dim)
         self.v_proj = nn.Linear(embedding_dim, embedding_dim)
         self.out_proj = nn.Linear(embedding_dim, embedding_dim)
-        
+
         self.norm0 = nn.LayerNorm(embedding_dim)
         self.norm1 = nn.LayerNorm(embedding_dim)
         self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.GELU(), nn.Linear(width, embedding_dim), nn.GELU())
@@ -478,11 +475,7 @@ class StandardAttentionLayer(nn.Module):
 
         # Call without attn_mask to ensure Flash Attention is used
         with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-            mha_out = F.scaled_dot_product_attention(
-                q, k, v,
-                attn_mask=None,
-                dropout_p=self.dropout.p if self.training else 0.0
-            )
+            mha_out = F.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout.p if self.training else 0.0)
         mha_out = mha_out.transpose(1, 2).reshape(B, N, D)
         mha_out = self.out_proj(mha_out)
 
@@ -507,6 +500,7 @@ class Fastformer(nn.Module):
     Code adapted from: https://github.com/wilile26811249/Fastformer-PyTorch
     License: MIT
     """
+
     def __init__(self, dim=3, decode_dim=16):
         super(Fastformer, self).__init__()
         # Generate weight for Wquery、Wkey and Wvalue
@@ -662,7 +656,6 @@ class RegressionOutput(nn.Module):
                 return res
 
 
-
 class MLPF(nn.Module):
     def __init__(self, config=None, **kwargs):
         super(MLPF, self).__init__()
@@ -670,28 +663,29 @@ class MLPF(nn.Module):
         if config is None:
             # Backward compatibility or manual construction
             from mlpf.standalone.dsl import i, h, g, o, ModelConfig
+
             input_dim = kwargs.get("input_dim", 55)
             embedding_dim = kwargs.get("embedding_dim", 128)
             width = kwargs.get("width", 128)
             num_convs = kwargs.get("num_convs", 6)
             num_heads = kwargs.get("num_heads", 16)
             attention_type = kwargs.get("attention_type", "global")
-            
+
             if attention_type == "hept":
                 layer = h(num_heads, embedding_dim, width * 4)
             elif attention_type == "standard":
                 from mlpf.standalone.dsl import s
+
                 layer = s(num_heads, embedding_dim, width * 4)
             elif attention_type == "fastformer":
                 from mlpf.standalone.dsl import f
+
                 layer = f(embedding_dim, width * 4)
             else:
                 layer = g(num_heads, embedding_dim, width * 4)
-                
+
             config = ModelConfig(
-                input=i(input_dim, embedding_dim, width * 2),
-                backbone=layer * num_convs,
-                output=o(kwargs.get("num_classes", 8), width * 2)
+                input=i(input_dim, embedding_dim, width * 2), backbone=layer * num_convs, output=o(kwargs.get("num_classes", 8), width * 2)
             )
 
         self.config = config
@@ -721,12 +715,14 @@ class MLPF(nn.Module):
                     "pos": lc.pos,
                 }
                 if isinstance(lc, HEPTConfig):
-                    kwargs.update({
-                        "block_size": lc.block_size,
-                        "n_hashes": lc.n_hashes,
-                        "num_regions": lc.num_regions,
-                        "num_w_per_dist": lc.num_w_per_dist,
-                    })
+                    kwargs.update(
+                        {
+                            "block_size": lc.block_size,
+                            "n_hashes": lc.n_hashes,
+                            "num_regions": lc.num_regions,
+                            "num_w_per_dist": lc.num_w_per_dist,
+                        }
+                    )
                 layers.append(layer_cls(**kwargs))
             return layers
 
@@ -741,11 +737,17 @@ class MLPF(nn.Module):
             self.binary_backbone = build_layers(config.backbone.get("binary", []))
 
         # 3. Output heads
-        self.nn_binary_particle = ffn(config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim, 2, config.output.width)
-        self.nn_pid = ffn(config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim, config.output.num_classes, config.output.width)
+        self.nn_binary_particle = ffn(
+            config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim, 2, config.output.width
+        )
+        self.nn_pid = ffn(
+            config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim,
+            config.output.num_classes,
+            config.output.width,
+        )
 
         out_dim = config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim
-        
+
         # Get regression modes from config
         rg = config.output.rg_mode
         if isinstance(rg, str):
@@ -773,7 +775,7 @@ class MLPF(nn.Module):
         # Backbone
         for layer in self.shared_backbone:
             emb = layer(emb, mask, X)
-        
+
         emb_shared = emb
 
         # PID branch
@@ -781,7 +783,7 @@ class MLPF(nn.Module):
         if self.pid_backbone is not None:
             for layer in self.pid_backbone:
                 emb_pid = layer(emb_pid, mask, X)
-        
+
         # Regression branch
         emb_reg = emb_shared
         if self.reg_backbone is not None:
@@ -789,7 +791,7 @@ class MLPF(nn.Module):
                 emb_reg = layer(emb_reg, mask, X)
 
         # Outputs
-        logits_binary = self.nn_binary_particle(emb_pid) # Use PID branch for binary too
+        logits_binary = self.nn_binary_particle(emb_pid)  # Use PID branch for binary too
         logits_pid = self.nn_pid(emb_pid)
 
         preds_pt = self.nn_pt(X, emb_reg, X[..., 1:2])
@@ -805,7 +807,6 @@ class MLPF(nn.Module):
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
 
         return logits_binary, logits_pid, preds_momentum
-
 
 
 # --- Loss Function ---

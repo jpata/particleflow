@@ -23,10 +23,17 @@ from mlpf.jet_utils import match_jets
 
 from mlpf.standalone.dsl import parse_dsl
 
+
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=str, default=None, help="Path to tfds directory")
-    parser.add_argument("--attention-type", type=str, default="global", choices=["hept", "global", "standard", "fastformer"], help="Attention type (ignored if --dsl is used)")
+    parser.add_argument(
+        "--attention-type",
+        type=str,
+        default="global",
+        choices=["hept", "global", "standard", "fastformer"],
+        help="Attention type (ignored if --dsl is used)",
+    )
     parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string")
     return parser.parse_args()
 
@@ -196,10 +203,10 @@ if __name__ == "__main__":
                 num_heads=16,
                 attention_type=args.attention_type,
             ).to(device)
-        
+
         if i == 0:
             print(model)
-        
+
         model.train()
 
         # Fresh loaders for each run (especially for shuffling)
@@ -228,7 +235,7 @@ if __name__ == "__main__":
             torch.cuda.reset_peak_memory_stats()
         else:
             peak_vram_mb = 0.0
-        
+
         # Benchmarking
         model.eval()
         sample_input = torch.randn(1, 4096, 55)
@@ -269,8 +276,6 @@ if __name__ == "__main__":
                 runtime_gpu_ms = np.median(gpu_times)
         else:
             runtime_gpu_ms = 0.0
-
-
 
         all_results.append(
             {
