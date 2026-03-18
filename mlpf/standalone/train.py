@@ -327,9 +327,14 @@ class HEPTAttentionLayer(nn.Module):
         # x: [B, N, D]
         # mask: [B, N]
         # X: [B, N, 25] or [B, N, 55] (original features)
+        if mask is not None:
+            mask_ = mask.unsqueeze(-1)
 
         B, N, D = x.shape
         device = x.device
+
+        if mask is not None:
+            x = x * mask_
 
         # Extract eta and phi for hashing
         eta = X[..., 2:3]
@@ -387,7 +392,7 @@ class HEPTAttentionLayer(nn.Module):
         x = residual + ffn_out
 
         if mask is not None:
-            x = x * mask.unsqueeze(-1)
+            x = x * mask_
 
         return x
 
@@ -451,38 +456,39 @@ class StandardAttentionLayer(nn.Module):
 
     def forward(self, x, mask, X=None):
         B, N, D = x.shape
-        
+        if mask is not None:
+            mask_ = mask.unsqueeze(-1)
+
         residual = x
         x_norm = self.norm0(x)
-        
+        if mask is not None:
+            x_norm = x_norm * mask_
+
         q = self.q_proj(x_norm).reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x_norm).reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x_norm).reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
-        
-        # mask: [B, N]
-        attn_mask = None
-        if mask is not None:
-             attn_mask = mask.view(B, 1, 1, N).expand(-1, self.num_heads, N, -1).bool()
-        
-        mha_out = F.scaled_dot_product_attention(
-            q, k, v, 
-            attn_mask=attn_mask, 
-            dropout_p=self.dropout.p if self.training else 0.0
-        )
+
+        # Call without attn_mask to ensure Flash Attention is used
+        with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
+            mha_out = F.scaled_dot_product_attention(
+                q, k, v,
+                attn_mask=None,
+                dropout_p=self.dropout.p if self.training else 0.0
+            )
         mha_out = mha_out.transpose(1, 2).reshape(B, N, D)
         mha_out = self.out_proj(mha_out)
-        
+
         x = residual + self.dropout(mha_out)
-        
+
         residual = x
         x_norm = self.norm1(x)
         ffn_out = self.seq(x_norm)
         ffn_out = self.dropout(ffn_out)
-        
+
         x = residual + ffn_out
-        
+
         if mask is not None:
-            x = x * mask.unsqueeze(-1)
+            x = x * mask_
         return x
 
 
@@ -552,8 +558,13 @@ class FastformerAttentionLayer(nn.Module):
     def forward(self, x, mask, X=None):
         # x: [B, N, D]
         # mask: [B, N]
+        if mask is not None:
+            mask_ = mask.unsqueeze(-1)
+
         residual = x
         x_norm = self.norm0(x)
+        if mask is not None:
+            x_norm = x_norm * mask_
 
         attn_out = self.attn(x_norm, mask=mask)
         x = residual + self.dropout(attn_out)
@@ -565,7 +576,7 @@ class FastformerAttentionLayer(nn.Module):
 
         x = residual + ffn_out
         if mask is not None:
-            x = x * mask.unsqueeze(-1)
+            x = x * mask_
         return x
 
 

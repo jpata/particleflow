@@ -168,7 +168,7 @@ if __name__ == "__main__":
     all_results = []
 
     # Run training 3 times
-    for i in range(1):
+    for i in range(3):
         print(f"\n--- Run {i+1}/3 ---")
 
         # Fresh loaders for each run (especially for shuffling)
@@ -191,7 +191,7 @@ if __name__ == "__main__":
         start_total = time.time()
 
         # Train for a fixed time
-        avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=20)
+        avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=60)
 
         training_seconds = time.time() - start_total
 
@@ -262,7 +262,6 @@ if __name__ == "__main__":
 
     # Model info
     num_params_M = sum(p.numel() for p in model.parameters()) / 1e6
-    depth = 3  # num_convs
 
     # Final output
     print("\n--- Final Results (3 runs) ---")
@@ -273,4 +272,3 @@ if __name__ == "__main__":
         print(f"{key:16}: {mean:.6f} ± {variance:.6f} (var)")
 
     print(f"num_params_M:     {num_params_M:.1f}")
-    print(f"depth:            {depth}")
