@@ -97,15 +97,23 @@ pixi run init
 ### **4. Generate the Workflow**
 Generate the `Snakefile` for a production campaign.
 ```bash
-PROD=cms_run3 STEPS=gen,post,tfds,train pixi run generate
+PROD=cms_run3 STEPS=gen,post,tfds,train pixi run snakefile
 ```
 You can inspect `snakemake_jobs/cms_run3/Snakefile` and the related scripts to understand the workflow.
 
 ### **5. Execute the Workflow**
-Launch the workflow on the batch system. It is recommended to run this inside a `tmux` or `screen` session.
+Launch the workflow on the batch system. You can run the steps individually.
 ```bash
-PROD=cms_run3 STEPS=gen,post,tfds,train pixi run run
+PROD=cms_run3 pixi run gen
+PROD=cms_run3 pixi run post
+PROD=cms_run3 pixi run tfds
+PROD=cms_run3 pixi run train
 ```
+On clusters like Tallinn, you can run the `gen` and `post` steps in batches using the `BATCH` environment variable:
+```bash
+PROD=cms_run3 BATCH=1/10 pixi run gen
+```
+It is recommended to run this inside a `tmux` or `screen` session.
 
 ### **6. Validation & Plots**
 To run the validation plotting workflow:
