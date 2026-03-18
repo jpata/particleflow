@@ -26,7 +26,7 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tot
 
 **What you CANNOT do:**
 - Modify `mlpf/standalone/eval.py`. It is read-only.
-- Install new packages or add dependencies. 
+- Install new packages or add dependencies.
 - Modify the evaluation code.
 
 **The goal is simple: get the lowest validation jet interquartile range and lowest model runtime on CPU and GPU.** Since the time budget is fixed, you don't need to worry about training time — it's always 60 seconds (3x20s). Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size, the optimizer, the loss configuration. In particular, focus on creative architectural exploration beyond just changing the hyperparameter values. The only constraint is that the code runs without crashing and finishes within the time budget.
@@ -114,4 +114,3 @@ The idea is that you are a completely autonomous researcher trying things out. I
 **NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, think harder — read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes. The loop runs until the human interrupts you, period.
 
 As an example use case, a user might leave you running while they sleep. If each experiment takes you ~5 minutes then you can run approx 10/hour, for a total of about 80 over the duration of the average human sleep. The user then wakes up to experimental results, all completed by you while they slept!
-

@@ -1,14 +1,10 @@
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
 import time
-import os
-import sys
 import numpy as np
 import fastjet
 import vector
 import awkward as ak
-import yaml
 import argparse
 
 # Import standalone model
@@ -16,14 +12,15 @@ from mlpf.standalone.train import MLPF, train
 
 # Import library modules
 from mlpf.model.PFDataset import Collater, PFDataset
-from mlpf.logger import _logger, _configLogger
-from mlpf.conf import MLPFConfig
+from mlpf.logger import _configLogger
 from mlpf.jet_utils import match_jets
+
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=str, default=None, help="Path to tfds directory")
     return parser.parse_args()
+
 
 def cluster_jets(p4s):
     # p4s: awkward array of vectors
@@ -31,6 +28,7 @@ def cluster_jets(p4s):
     cluster = fastjet.ClusterSequence(p4s, jetdef)
     jets = cluster.inclusive_jets()
     return jets
+
 
 def med_iqr(arr):
     if len(arr) == 0:
@@ -41,34 +39,35 @@ def med_iqr(arr):
     iqr = p75 - p25
     return p50, iqr
 
+
 def evaluate(model, loader, device):
     model.eval()
     all_pred_particles = []
     all_target_particles = []
-    
+
     with torch.no_grad():
         for i, batch in enumerate(loader):
             if i % 10 == 0:
                 print("eval batch {}".format(i))
-            if i > 10: # Limit evaluation for speed
+            if i > 10:  # Limit evaluation for speed
                 break
-                
+
             X = batch.X.to(device)
             mask = batch.mask.to(device)
-            
+
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
                 logits_binary, logits_pid, preds_momentum = model(X, mask)
-            
+
             # Predicted
             pred_id = torch.argmax(logits_pid, dim=-1)
-            
+
             pt = (torch.exp(preds_momentum[..., 0]) * X[..., 1]).detach().cpu().numpy()
             eta = preds_momentum[..., 1].detach().cpu().numpy()
             sin_phi = preds_momentum[..., 2].detach().cpu().numpy()
             cos_phi = preds_momentum[..., 3].detach().cpu().numpy()
             phi = np.arctan2(sin_phi, cos_phi)
             energy = (torch.exp(preds_momentum[..., 4]) * X[..., 5]).detach().cpu().numpy()
-            
+
             # Target
             target_id = batch.ytarget[:, :, 0].detach().cpu().numpy()
             target_pt_log = batch.ytarget[:, :, 2].detach().cpu().numpy()
@@ -76,7 +75,7 @@ def evaluate(model, loader, device):
             target_sin_phi = batch.ytarget[:, :, 4].detach().cpu().numpy()
             target_cos_phi = batch.ytarget[:, :, 5].detach().cpu().numpy()
             target_energy_log = batch.ytarget[:, :, 6].detach().cpu().numpy()
-            
+
             X_pt = X[..., 1].detach().cpu().numpy()
             X_e = X[..., 5].detach().cpu().numpy()
             mask_np = mask.detach().cpu().numpy()
@@ -92,7 +91,7 @@ def evaluate(model, loader, device):
                     all_pred_particles.append(vector.awk(ak.from_iter(p_pred)))
                 else:
                     all_pred_particles.append(None)
-                
+
                 p_target = []
                 for j in range(X.shape[1]):
                     if mask_np[b, j] and target_id[b, j] != 0:
@@ -112,53 +111,33 @@ def evaluate(model, loader, device):
 
     for ev in range(len(all_target_particles)):
         if all_target_particles[ev] is not None and all_pred_particles[ev] is not None:
-            if np.sum(all_target_particles[ev].pt>0)>0 and np.sum(all_pred_particles[ev].pt>0)>0:
+            if np.sum(all_target_particles[ev].pt > 0) > 0 and np.sum(all_pred_particles[ev].pt > 0) > 0:
                 # Cluster target jets
                 cluster_target = fastjet.ClusterSequence(all_target_particles[ev], jetdef)
                 jets_target = cluster_target.inclusive_jets(min_pt=5.0)
-                
+
                 # Cluster predicted jets
                 cluster_pred = fastjet.ClusterSequence(all_pred_particles[ev], jetdef)
                 jets_pred = cluster_pred.inclusive_jets(min_pt=5.0)
-                
+
                 if len(jets_target) > 0 and len(jets_pred) > 0:
                     # Prepare jets for matching by converting to spherical awkward array
-                    jets_target_v = vector.awk(ak.zip({
-                        "px": jets_target.px,
-                        "py": jets_target.py,
-                        "pz": jets_target.pz,
-                        "E": jets_target.E
-                    }))
-                    jets_pred_v = vector.awk(ak.zip({
-                        "px": jets_pred.px,
-                        "py": jets_pred.py,
-                        "pz": jets_pred.pz,
-                        "E": jets_pred.E
-                    }))
+                    jets_target_v = vector.awk(ak.zip({"px": jets_target.px, "py": jets_target.py, "pz": jets_target.pz, "E": jets_target.E}))
+                    jets_pred_v = vector.awk(ak.zip({"px": jets_pred.px, "py": jets_pred.py, "pz": jets_pred.pz, "E": jets_pred.E}))
 
-                    jets_target_sph = ak.zip({
-                        "pt": jets_target_v.pt,
-                        "eta": jets_target_v.eta,
-                        "phi": jets_target_v.phi,
-                        "e": jets_target_v.E
-                    })
-                    jets_pred_sph = ak.zip({
-                        "pt": jets_pred_v.pt,
-                        "eta": jets_pred_v.eta,
-                        "phi": jets_pred_v.phi,
-                        "e": jets_pred_v.E
-                    })
+                    jets_target_sph = ak.zip({"pt": jets_target_v.pt, "eta": jets_target_v.eta, "phi": jets_target_v.phi, "e": jets_target_v.E})
+                    jets_pred_sph = ak.zip({"pt": jets_pred_v.pt, "eta": jets_pred_v.eta, "phi": jets_pred_v.phi, "e": jets_pred_v.E})
 
                     # Match jets
                     j1_idx, j2_idx = match_jets(ak.Array([jets_target_sph]), ak.Array([jets_pred_sph]), jet_match_dr)
-                    
+
                     if len(j1_idx[0]) > 0:
                         for i_target, i_pred in zip(j1_idx[0], j2_idx[0]):
                             pt_target = jets_target_sph[i_target].pt
                             pt_pred = jets_pred_sph[i_pred].pt
                             if pt_target > 0:
                                 responses.append(pt_pred / pt_target)
-            
+
     if len(responses) == 0:
         print("No matched jets found.")
         return 0.0
@@ -166,54 +145,55 @@ def evaluate(model, loader, device):
     res_med, res_iqr = med_iqr(responses)
     return res_iqr
 
+
 if __name__ == "__main__":
     _configLogger("mlpf", 0)
     args = get_args()
     data_dir = args.data_dir
     print(f"Data directory: {data_dir}")
-    
+
     # Load dataset
     ds_train = PFDataset(data_dir, "cms_pf_ttbar/1:3.0.0", "train", num_samples=1000).ds
     ds_valid = PFDataset(data_dir, "cms_pf_ttbar/1:3.0.0", "test", num_samples=200).ds
-    
+
     collater = Collater(["X", "ytarget"], ["genmet"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+
     all_results = []
-    
+
     # Run training 3 times
     for i in range(3):
         print(f"\n--- Run {i+1}/3 ---")
-        
+
         # Fresh loaders for each run (especially for shuffling)
         train_loader = DataLoader(ds_train, batch_size=8, collate_fn=collater, shuffle=True)
         valid_loader = DataLoader(ds_valid, batch_size=8, collate_fn=collater)
-        
+
         # 55 features for CMS, re-initialize model for each run
         model = MLPF(input_dim=55, num_classes=8, embedding_dim=128, width=128, num_convs=3, num_heads=8).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-        
+
         # Record start time
         start_total = time.time()
-        
+
         # Train for 60 seconds
         avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=60)
-        
+
         training_seconds = time.time() - start_total
-        
+
         # Evaluate
         print("Evaluating...")
         val_jet_iqr = evaluate(model, valid_loader, device)
-        
+
         total_seconds = time.time() - start_total
-        
+
         # Peak VRAM
         if torch.cuda.is_available():
             peak_vram_mb = torch.cuda.max_memory_allocated() / (1024 * 1024)
             torch.cuda.reset_peak_memory_stats()
         else:
             peak_vram_mb = 0.0
-            
+
         # Benchmarking
         model.eval()
         sample_input = torch.randn(1, 4096, 55)
@@ -250,20 +230,22 @@ if __name__ == "__main__":
         else:
             runtime_gpu_ms = 0.0
 
-        all_results.append({
-            "val_jet_iqr": val_jet_iqr,
-            "training_seconds": training_seconds,
-            "total_seconds": total_seconds,
-            "peak_vram_mb": peak_vram_mb,
-            "num_steps": num_steps,
-            "runtime_cpu_ms": runtime_cpu_ms,
-            "runtime_gpu_ms": runtime_gpu_ms
-        })
+        all_results.append(
+            {
+                "val_jet_iqr": val_jet_iqr,
+                "training_seconds": training_seconds,
+                "total_seconds": total_seconds,
+                "peak_vram_mb": peak_vram_mb,
+                "num_steps": num_steps,
+                "runtime_cpu_ms": runtime_cpu_ms,
+                "runtime_gpu_ms": runtime_gpu_ms,
+            }
+        )
 
     # Model info
     num_params_M = sum(p.numel() for p in model.parameters()) / 1e6
-    depth = 3 # num_convs
-    
+    depth = 3  # num_convs
+
     # Final output
     print("\n--- Final Results (3 runs) ---")
     for key in all_results[0].keys():
@@ -271,7 +253,6 @@ if __name__ == "__main__":
         mean = np.mean(values)
         variance = np.var(values)
         print(f"{key:16}: {mean:.6f} ± {variance:.6f} (var)")
-    
+
     print(f"num_params_M:     {num_params_M:.1f}")
     print(f"depth:            {depth}")
-

@@ -424,7 +424,7 @@ def _run_validation_cycle(
         for sample in config.enabled_test_datasets:
             run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
         log_memory("run_test_end", rank, tensorboard_writer_valid, step)
-    
+
         plot_metrics_sample = {}
         if config.make_plots and ((rank == 0) or (rank == "cpu")):
             log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
