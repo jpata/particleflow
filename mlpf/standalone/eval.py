@@ -197,6 +197,9 @@ if __name__ == "__main__":
                 attention_type=args.attention_type,
             ).to(device)
         
+        if i == 0:
+            print(model)
+        
         model.train()
 
         # Fresh loaders for each run (especially for shuffling)
