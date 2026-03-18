@@ -625,24 +625,41 @@ class PositionalEncoding(nn.Module):
 
 
 class RegressionOutput(nn.Module):
-    def __init__(self, embed_dim, width, elemtypes):
+    def __init__(self, mode, embed_dim, width, elemtypes):
         super(RegressionOutput, self).__init__()
+        self.mode = mode  # "direct", "additive", "multiplicative", "linear"
         self.elemtypes = elemtypes
-        self.nn = ffn(embed_dim, len(elemtypes), width)
+        if mode == "linear":
+            self.nn = ffn(embed_dim, 2 * len(elemtypes), width)
+        else:
+            self.nn = ffn(embed_dim, len(elemtypes), width)
 
-    def forward(self, X, x):
-        # X: [B, N, 25] (original features)
+    def forward(self, X, x, orig_value):
+        # X: [B, N, 25] or [B, N, 55] (original features)
         # x: [B, N, D] (latent representation)
+        # orig_value: [B, N, 1] (the feature to regress from)
 
-        nn_out = self.nn(x)  # [B, N, num_elemtypes]
+        nn_out = self.nn(x)
+        elemtype_mask = torch.stack([X[..., 0] == elemtype for elemtype in self.elemtypes], dim=-1)
 
-        # Create mask for each element type
-        elemtype_mask = torch.stack([X[..., 0] == elemtype for elemtype in self.elemtypes], dim=-1)  # [B, N, num_elemtypes]
-
-        # Select the output corresponding to the element type
-        res = torch.sum(elemtype_mask * nn_out, dim=-1, keepdim=True)
-
-        return res
+        if self.mode == "linear":
+            # nn_out: [B, N, 2 * len(elemtypes)]
+            num_types = len(self.elemtypes)
+            a_all = nn_out[..., :num_types]
+            b_all = nn_out[..., num_types:]
+            a = torch.sum(elemtype_mask * a_all, dim=-1, keepdim=True)
+            b = torch.sum(elemtype_mask * b_all, dim=-1, keepdim=True)
+            return orig_value * a + b
+        else:
+            res = torch.sum(elemtype_mask * nn_out, dim=-1, keepdim=True)
+            if self.mode == "direct":
+                return res
+            elif self.mode == "additive":
+                return orig_value + res
+            elif self.mode == "multiplicative":
+                return orig_value * res
+            else:
+                return res
 
 
 
@@ -728,11 +745,20 @@ class MLPF(nn.Module):
         self.nn_pid = ffn(config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim, config.output.num_classes, config.output.width)
 
         out_dim = config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim
-        self.nn_pt = RegressionOutput(out_dim, config.output.width, self.elemtypes)
-        self.nn_eta = RegressionOutput(out_dim, config.output.width, self.elemtypes)
-        self.nn_sin_phi = RegressionOutput(out_dim, config.output.width, self.elemtypes)
-        self.nn_cos_phi = RegressionOutput(out_dim, config.output.width, self.elemtypes)
-        self.nn_energy = RegressionOutput(out_dim, config.output.width, self.elemtypes)
+        
+        # Get regression modes from config
+        rg = config.output.rg_mode
+        if isinstance(rg, str):
+            modes = {k: rg for k in ["pt", "eta", "sin_phi", "cos_phi", "energy"]}
+        else:
+            modes = {"pt": "direct", "eta": "additive", "sin_phi": "additive", "cos_phi": "additive", "energy": "direct"}
+            modes.update(rg)
+
+        self.nn_pt = RegressionOutput(modes["pt"], out_dim, config.output.width, self.elemtypes)
+        self.nn_eta = RegressionOutput(modes["eta"], out_dim, config.output.width, self.elemtypes)
+        self.nn_sin_phi = RegressionOutput(modes["sin_phi"], out_dim, config.output.width, self.elemtypes)
+        self.nn_cos_phi = RegressionOutput(modes["cos_phi"], out_dim, config.output.width, self.elemtypes)
+        self.nn_energy = RegressionOutput(modes["energy"], out_dim, config.output.width, self.elemtypes)
 
     def forward(self, X, mask):
         B, N, _ = X.shape
@@ -766,11 +792,11 @@ class MLPF(nn.Module):
         logits_binary = self.nn_binary_particle(emb_pid) # Use PID branch for binary too
         logits_pid = self.nn_pid(emb_pid)
 
-        preds_pt = self.nn_pt(X, emb_reg)
-        preds_energy = self.nn_energy(X, emb_reg)
-        preds_eta = X[..., 2:3] + self.nn_eta(X, emb_reg)
-        preds_sin_phi = X[..., 3:4] + self.nn_sin_phi(X, emb_reg)
-        preds_cos_phi = X[..., 4:5] + self.nn_cos_phi(X, emb_reg)
+        preds_pt = self.nn_pt(X, emb_reg, X[..., 1:2])
+        preds_energy = self.nn_energy(X, emb_reg, X[..., 5:6])
+        preds_eta = self.nn_eta(X, emb_reg, X[..., 2:3])
+        preds_sin_phi = self.nn_sin_phi(X, emb_reg, X[..., 3:4])
+        preds_cos_phi = self.nn_cos_phi(X, emb_reg, X[..., 4:5])
 
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], dim=-1)
 

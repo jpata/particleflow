@@ -53,11 +53,14 @@ class OutputConfig:
     num_classes: int = 8
     width: int = 256
     type: str = "default"
+    # rg_mode can be "direct", "additive", "multiplicative", "linear"
+    # can be a single string for all, or a dict for each target
+    rg_mode: Union[str, Dict[str, str]] = "direct"
 
 @dataclass(frozen=True)
 class ModelConfig:
     input: InputConfig
-    backbone: Union[List[LayerConfig], Dict[str, List[LayerConfig]]]
+    backbone: Dict[str, List[LayerConfig]]
     output: OutputConfig
 
     def validate(self):
@@ -70,11 +73,8 @@ class ModelConfig:
                 if layer.embedding_dim % layer.num_heads != 0:
                     raise ValueError(f"embedding_dim ({layer.embedding_dim}) must be divisible by num_heads ({layer.num_heads}) for {layer.type}")
         
-        if isinstance(self.backbone, list):
-            check_backbone(self.backbone)
-        else:
-            for k, layers in self.backbone.items():
-                check_backbone(layers)
+        for k, layers in self.backbone.items():
+            check_backbone(layers)
         
         print("ModelConfig validated successfully.")
 
@@ -93,13 +93,14 @@ def s(num_heads=16, embedding_dim=128, width=512, pos=False):
 def f(num_heads=16, embedding_dim=128, width=512, pos=False):
     return FastformerConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=pos)
 
-def o(num_classes=8, width=256, type="default"):
-    return OutputConfig(num_classes, width, type)
+def o(num_classes=8, width=256, type="default", rg="direct"):
+    return OutputConfig(num_classes, width, type, rg)
 
 def parse_dsl(dsl_str: str) -> ModelConfig:
     """
     Parses a DSL string like 'i(55,128,256)|h(16,128,512,pos=True)*6|o(8,256)'
     or 'i(55,128,256)|{shared:h(16,128,512)*3;pid:g(16,128,512)*3;reg:s(16,128,512)*3}|o(8,256)'
+    or 'i(55,128,256)|h(16,128,512)*2 + {pid:g(16,128,512)*2;reg:s(16,128,512)*2}|o(8,256)'
     """
     parts = dsl_str.split('|')
     if len(parts) != 3:
@@ -117,37 +118,59 @@ def parse_dsl(dsl_str: str) -> ModelConfig:
     
     # 2. Parse backbone
     backbone_str = parts[1].strip()
-    if backbone_str.startswith('{') and backbone_str.endswith('}'):
-        # Split backbones: {name1:layer*n;name2:layer*m}
-        backbone_str = backbone_str[1:-1]
-        backbone_dict = {}
-        for part in backbone_str.split(';'):
-            if not part.strip(): continue
-            name, layers_expr = part.split(':')
-            name = name.strip()
-            # Evaluate layers_expr
-            layers = eval(layers_expr, {"__builtins__": {}}, ns)
-            if not isinstance(layers, list):
-                layers = [layers]
-            backbone_dict[name] = layers
-        backbone_cfg = backbone_dict
+    
+    final_backbone = {"shared": [], "pid": [], "reg": [], "binary": []}
+    
+    if '{' in backbone_str:
+        # Check for joint part followed by split part: "joint_expr + {branches}"
+        if backbone_str.count('{') == 1 and backbone_str.find('{') > 0:
+            idx = backbone_str.find('{')
+            joint_expr = backbone_str[:idx].strip()
+            if joint_expr.endswith('+'):
+                joint_expr = joint_expr[:-1].strip()
+            
+            if joint_expr:
+                joint_layers = eval(joint_expr, {"__builtins__": {}}, ns)
+                if not isinstance(joint_layers, list): joint_layers = [joint_layers]
+                final_backbone["shared"] = joint_layers
+            
+            dict_str = backbone_str[idx:]
+        else:
+            dict_str = backbone_str
+            
+        # Parse dict part: {key:expr; key:expr}
+        dict_str = dict_str.strip()
+        if dict_str.startswith('{') and dict_str.endswith('}'):
+            dict_str = dict_str[1:-1]
+            for part in dict_str.split(';'):
+                if not part.strip(): continue
+                name, layers_expr = part.split(':')
+                name = name.strip()
+                layers = eval(layers_expr, {"__builtins__": {}}, ns)
+                if not isinstance(layers, list):
+                    layers = [layers]
+                
+                if name == "shared":
+                    final_backbone["shared"].extend(layers)
+                else:
+                    final_backbone[name] = layers
     else:
         # Sequential backbone
         layers = eval(backbone_str, {"__builtins__": {}}, ns)
         if not isinstance(layers, list):
             layers = [layers]
-        backbone_cfg = layers
+        final_backbone["shared"] = layers
         
     # 3. Parse output
     output_cfg = eval(parts[2], {"__builtins__": {}}, ns)
     
-    config = ModelConfig(input_cfg, backbone_cfg, output_cfg)
+    config = ModelConfig(input_cfg, final_backbone, output_cfg)
     config.validate()
     return config
 
 def config_to_string(cfg: ModelConfig) -> str:
     def layers_to_str(layers):
-        if not layers: return "[]"
+        if not layers: return ""
         res = []
         
         i = 0
@@ -169,9 +192,19 @@ def config_to_string(cfg: ModelConfig) -> str:
         return "+".join(res)
 
     i_str = f"i({cfg.input.input_dim},{cfg.input.embedding_dim},{cfg.input.width},'{cfg.input.type}')"
-    if isinstance(cfg.backbone, list):
-        b_str = layers_to_str(cfg.backbone)
+    
+    shared_str = layers_to_str(cfg.backbone.get("shared", []))
+    
+    branches = {k: v for k, v in cfg.backbone.items() if k != "shared" and v}
+    if branches:
+        branch_str = "{" + ";".join([f"{k}:{layers_to_str(v)}" for k, v in branches.items()]) + "}"
+        if shared_str:
+            b_str = f"{shared_str}+{branch_str}"
+        else:
+            b_str = branch_str
     else:
-        b_str = "{" + ";".join([f"{k}:{layers_to_str(v)}" for k, v in cfg.backbone.items()]) + "}"
-    o_str = f"o({cfg.output.num_classes},{cfg.output.width},'{cfg.output.type}')"
+        b_str = shared_str
+    
+    rg_str = f",rg=\"{cfg.output.rg_mode}\"" if cfg.output.rg_mode != "direct" else ""
+    o_str = f"o({cfg.output.num_classes},{cfg.output.width},'{cfg.output.type}'{rg_str})"
     return f"{i_str}|{b_str}|{o_str}"
