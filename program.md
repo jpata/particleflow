@@ -29,11 +29,11 @@ Each experiment runs on a single GPU. The training script runs for a **fixed tot
 - Install new packages or add dependencies.
 - Modify the evaluation code.
 
-**The goal is simple: get the lowest validation jet interquartile range and lowest model runtime on CPU and GPU.** Since the time budget is fixed, you don't need to worry about training time — it's always 60 seconds (3x20s). Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size, the optimizer, the loss configuration. In particular, focus on creative architectural exploration beyond just changing the hyperparameter values. The only constraint is that the code runs without crashing and finishes within the time budget.
+**The goal is to strike a balance between the lowest validation jet interquartile range and computational performance on CPU and GPU.** A 2x reduction in runtime with nearly the same `val_jet_iqr` is a good outcome. Prioritize architectural optimizations around linear or approximate attention, or otherwise small and efficient models. Since the time budget is fixed, you don't need to worry about training time — it's always 60 seconds (3x20s). Everything is fair game: change the architecture, the hyperparameters, the batch size, the model size, the optimizer, the loss configuration. In particular, focus on creative architectural exploration beyond just changing the hyperparameter values. The only constraint is that the code runs without crashing and finishes within the time budget.
 
 **VRAM** is a soft constraint. Some increase is acceptable for meaningful validation jet iqr gains, but it should not blow up dramatically.
 
-**Simplicity criterion**: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude. A 0.001 validation jet iqr improvement that adds 20 lines of hacky code? Probably not worth it. A 0.001 validation jet iqr improvement from deleting code? Definitely keep. An improvement of ~0 but much simpler code? Keep.
+**Simplicity and Performance criterion**: All else being equal, simpler and faster is better. A small improvement that adds ugly complexity or significantly slows down the model is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity and runtime costs against the improvement magnitude. A 2x runtime reduction with nearly the same `val_jet_iqr` is a win. A 0.001 validation jet iqr improvement that adds 20 lines of hacky code or slows the model down by 20%? Probably not worth it. A 0.001 validation jet iqr improvement from deleting code? Definitely keep. An improvement of ~0 but much simpler or faster code? Keep.
 
 **The first run**: Your very first run should always be to establish the baseline, so you will run the training script as is.
 
@@ -102,8 +102,8 @@ LOOP FOREVER:
 5. Read out the results: `grep "^val_jet_iqr:\|^peak_vram_mb:\|^runtime_cpu_ms:\|^runtime_gpu_ms:" run.log`
 6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
 7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
-8. If val_jet_iqr improved (lower), you "advance" the branch, keeping the git commit
-9. If val_jet_iqr is equal or worse, you git reset back to where you started
+8. If the experiment improved `val_jet_iqr` or achieved a significant runtime reduction (with nearly the same `val_jet_iqr`), you "advance" the branch, keeping the git commit
+9. If both metrics are equal or worse, you git reset back to where you started
 
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
 
