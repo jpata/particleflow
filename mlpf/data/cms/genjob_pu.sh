@@ -2,6 +2,7 @@
 set -e
 set -x
 unset PYTHONPATH
+export PYTHONUNBUFFERED=1
 
 #seed must be greater than 0
 SAMPLE=$1

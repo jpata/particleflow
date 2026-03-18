@@ -18,6 +18,8 @@ def write_bash_script(path, content):
     with open(path, "w") as f:
         f.write("#!/bin/bash\n")
         f.write("set -e\n")
+        # Ensure all output is unbuffered
+        f.write("export PYTHONUNBUFFERED=1\n")
         f.write(content)
     os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
 

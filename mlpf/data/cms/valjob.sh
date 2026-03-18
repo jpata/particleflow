@@ -2,6 +2,7 @@
 set -e
 set -x
 unset PYTHONPATH
+export PYTHONUNBUFFERED=1
 
 # Parameters
 SAMPLE=$1

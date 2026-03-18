@@ -24,8 +24,9 @@ init = """
 mkdir -p .profiles/tallinn \
 && echo '#!/bin/bash
 # properties = {properties}
+export PYTHONUNBUFFERED=1
 env
-{exec_job}' > .profiles/tallinn/jobscript.sh \
+stdbuf -oL -eL {exec_job}' > .profiles/tallinn/jobscript.sh \
 && echo 'executor: "slurm"
 jobscript: "jobscript.sh"
 jobs: unlimited
