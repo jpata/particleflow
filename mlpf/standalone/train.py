@@ -5,7 +5,12 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 import time
 import numpy as np
 import argparse
+import sys
 from torch.utils.data import DataLoader
+
+# Ensure unbuffered output
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 # Import library modules
 try:

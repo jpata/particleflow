@@ -6,6 +6,11 @@ import fastjet
 import vector
 import awkward as ak
 import argparse
+import sys
+
+# Ensure unbuffered output
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 # Import standalone model
 from mlpf.standalone.train import MLPF, train
@@ -176,7 +181,7 @@ if __name__ == "__main__":
         # Record start time
         start_total = time.time()
 
-        # Train for 60 seconds
+        # Train for 120 seconds
         avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
 
         training_seconds = time.time() - start_total
@@ -201,6 +206,8 @@ if __name__ == "__main__":
 
         # CPU runtime
         model_cpu = model.to("cpu")
+        model_cpu.compile()
+        model_cpu(sample_input, sample_mask)
         cpu_times = []
         with torch.no_grad():
             for _ in range(10):
@@ -214,6 +221,8 @@ if __name__ == "__main__":
             model_gpu = model.to("cuda")
             sample_input_gpu = sample_input.to("cuda")
             sample_mask_gpu = sample_mask.to("cuda")
+            model_gpu.compile()
+            model_gpu(sample_input_gpu, sample_mask_gpu)
             gpu_times = []
             # Warmup
             for _ in range(5):
