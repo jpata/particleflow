@@ -9,6 +9,8 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import glob
 import math
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 import awkward
 import fastjet
@@ -17,6 +19,42 @@ import tqdm
 import uproot
 import vector
 from scipy.sparse import coo_matrix
+
+# Type aliases for clarity
+SparseMatrixCOO = Tuple[np.ndarray, np.ndarray, np.ndarray]
+
+
+class GenFeatures(TypedDict):
+    PDG: np.ndarray
+    generatorStatus: np.ndarray
+    charge: np.ndarray
+    pt: np.ndarray
+    eta: np.ndarray
+    phi: np.ndarray
+    sin_phi: np.ndarray
+    cos_phi: np.ndarray
+    energy: np.ndarray
+    ispu: np.ndarray
+    simulatorStatus: np.ndarray
+    gp_to_track: np.ndarray
+    gp_to_cluster: np.ndarray
+    jet_idx: np.ndarray
+    daughters_begin: np.ndarray
+    daughters_end: np.ndarray
+    index: Optional[np.ndarray]
+
+
+class EventRecord(TypedDict):
+    X_track: np.ndarray
+    X_cluster: np.ndarray
+    ytarget_track: np.ndarray
+    ytarget_cluster: np.ndarray
+    ycand_track: np.ndarray
+    ycand_cluster: np.ndarray
+    genmet: float
+    genjet: np.ndarray
+    targetjet: np.ndarray
+
 
 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
 jet_ptcut = 5
@@ -96,19 +134,19 @@ hit_feature_order = [
 ]
 
 
-def deltaphi(phi1, phi2):
+def deltaphi(phi1: float, phi2: float) -> float:
     diff = phi1 - phi2
     return np.arctan2(np.sin(diff), np.cos(diff))
 
 
-def deltar(eta1, phi1, eta2, phi2):
+def deltar(eta1: float, phi1: float, eta2: float, phi2: float) -> float:
     deta = eta1 - eta2
     dphi = deltaphi(phi1, phi2)
     return np.sqrt(deta**2 + dphi**2)
 
 
 # https://stackoverflow.com/questions/2413522/weighted-standard-deviation-in-numpy
-def weighted_avg_and_std(values, weights):
+def weighted_avg_and_std(values: np.ndarray, weights: np.ndarray) -> Tuple[float, float]:
     """
     Return the weighted average and standard deviation.
 
@@ -123,13 +161,13 @@ def weighted_avg_and_std(values, weights):
     return (average, math.sqrt(variance))
 
 
-def track_pt(omega):
+def track_pt(omega: np.ndarray) -> np.ndarray:
     a = 3 * 10**-4
     b = 4  # B-field in tesla
     return a * np.abs(b / omega)
 
 
-def map_pdgid_to_candid(pdgid, charge):
+def map_pdgid_to_candid(pdgid: int, charge: float) -> int:
     if pdgid == 0:
         return 0
 
@@ -145,7 +183,7 @@ def map_pdgid_to_candid(pdgid, charge):
     return 130
 
 
-def map_charged_to_neutral(pdg):
+def map_charged_to_neutral(pdg: int) -> int:
     if pdg == 0:
         return 0
     if pdg == 11 or pdg == 22:
@@ -153,38 +191,29 @@ def map_charged_to_neutral(pdg):
     return 130
 
 
-def map_neutral_to_charged(pdg):
+def map_neutral_to_charged(pdg: int) -> int:
     if pdg == 130 or pdg == 22:
         return 211
     return pdg
 
 
-def sanitize(arr):
+def sanitize(arr: np.ndarray) -> None:
     arr[np.isnan(arr)] = 0.0
     arr[np.isinf(arr)] = 0.0
 
 
+@dataclass
 class EventData:
-    def __init__(
-        self,
-        gen_features,
-        hit_features,
-        cluster_features,
-        track_features,
-        genparticle_to_hit,
-        genparticle_to_track,
-        hit_to_cluster,
-        gp_merges,
-    ):
-        self.gen_features = gen_features  # feature matrix of the genparticles
-        self.hit_features = hit_features  # feature matrix of the calo hits
-        self.cluster_features = cluster_features  # feature matrix of the calo clusters
-        self.track_features = track_features  # feature matrix of the tracks
-        self.genparticle_to_hit = genparticle_to_hit  # sparse COO matrix of genparticles to hits (idx_gp, idx_hit, weight)
-        self.genparticle_to_track = genparticle_to_track  # sparse COO matrix of genparticles to tracks (idx_gp, idx_track, weight)
-        self.hit_to_cluster = hit_to_cluster  # sparse COO matrix of hits to clusters (idx_hit, idx_cluster, weight)
-        self.gp_merges = gp_merges  # sparse COO matrix of any merged genparticles
+    gen_features: awkward.Record  # feature matrix of the genparticles
+    hit_features: awkward.Record  # feature matrix of the calo hits
+    cluster_features: awkward.Record  # feature matrix of the calo clusters
+    track_features: awkward.Record  # feature matrix of the tracks
+    genparticle_to_hit: SparseMatrixCOO  # sparse COO matrix of genparticles to hits (idx_gp, idx_hit, weight)
+    genparticle_to_track: SparseMatrixCOO  # sparse COO matrix of genparticles to tracks (idx_gp, idx_track, weight)
+    hit_to_cluster: SparseMatrixCOO  # sparse COO matrix of hits to clusters (idx_hit, idx_cluster, weight)
+    gp_merges: Tuple[np.ndarray, np.ndarray]  # sparse COO matrix of any merged genparticles
 
+    def __post_init__(self):
         self.genparticle_to_hit = (
             np.array(self.genparticle_to_hit[0]),
             np.array(self.genparticle_to_hit[1]),
@@ -200,10 +229,10 @@ class EventData:
             np.array(self.hit_to_cluster[1]),
             np.array(self.hit_to_cluster[2]),
         )
-        self.gp_merges = np.array(self.gp_merges[0]), np.array(self.gp_merges[1])
+        self.gp_merges = (np.array(self.gp_merges[0]), np.array(self.gp_merges[1]))
 
 
-def hits_to_features(hit_data, iev, coll, feats):
+def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[str]) -> awkward.Record:
     feat_arr = {f: hit_data[coll + "." + f][iev] for f in feats}
 
     # set the subdetector type
@@ -232,7 +261,9 @@ def hits_to_features(hit_data, iev, coll, feats):
     return awkward.Record(feat_arr)
 
 
-def get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs):
+def get_calohit_matrix_and_genadj(
+    hit_data: Dict[str, awkward.Array], calohit_links: awkward.Record, iev: int, collectionIDs: Dict[str, int]
+) -> Tuple[awkward.Record, SparseMatrixCOO, Dict[Tuple[int, int], int]]:
     feats = ["type", "cellID", "energy", "energyError", "time", "position.x", "position.y", "position.z"]
 
     hit_idx_global = 0
@@ -282,7 +313,7 @@ def get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs):
     )
 
 
-def hit_cluster_adj(prop_data, hit_idx_local_to_global, iev):
+def hit_cluster_adj(prop_data: awkward.Record, hit_idx_local_to_global: Dict[Tuple[int, int], int], iev: int) -> SparseMatrixCOO:
 
     coll_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.collectionID"][iev]
     idx_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.index"][iev]
@@ -311,10 +342,14 @@ def hit_cluster_adj(prop_data, hit_idx_local_to_global, iev):
             hit_to_cluster_matrix_coo0.append(hit_idx_local_to_global[(icol, idx)])
             hit_to_cluster_matrix_coo1.append(icluster)
             hit_to_cluster_matrix_w.append(1.0)
-    return hit_to_cluster_matrix_coo0, hit_to_cluster_matrix_coo1, hit_to_cluster_matrix_w
+    return (
+        np.array(hit_to_cluster_matrix_coo0),
+        np.array(hit_to_cluster_matrix_coo1),
+        np.array(hit_to_cluster_matrix_w),
+    )
 
 
-def gen_to_features(prop_data, iev):
+def gen_to_features(prop_data: awkward.Record, iev: int) -> GenFeatures:
 
     gen_arr = prop_data[mc_coll][iev]
 
@@ -333,7 +368,7 @@ def gen_to_features(prop_data, iev):
     # placeholder flag
     gen_arr["ispu"] = np.zeros_like(gen_arr["phi"])
 
-    ret = {
+    ret: GenFeatures = {
         "PDG": gen_arr["PDG"],
         "generatorStatus": gen_arr["generatorStatus"],
         "charge": gen_arr["charge"],
@@ -350,14 +385,13 @@ def gen_to_features(prop_data, iev):
         "jet_idx": np.zeros(len(gen_arr["PDG"]), dtype=np.int64),
         "daughters_begin": gen_arr["daughters_begin"],
         "daughters_end": gen_arr["daughters_end"],
+        "index": prop_data["_MCParticles_daughters/_MCParticles_daughters.index"][iev],
     }
-
-    ret["index"] = prop_data["_MCParticles_daughters/_MCParticles_daughters.index"][iev]
 
     return ret
 
 
-def genparticle_track_adj(sitrack_links, iev):
+def genparticle_track_adj(sitrack_links: Any, iev: int) -> SparseMatrixCOO:
 
     trk_to_gen_trkidx = sitrack_links["_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index"][iev]
     trk_to_gen_genidx = sitrack_links["_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index"][iev]
@@ -370,7 +404,7 @@ def genparticle_track_adj(sitrack_links, iev):
     return genparticle_to_track_matrix_coo0, genparticle_to_track_matrix_coo1, genparticle_to_track_matrix_w
 
 
-def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
+def cluster_to_features(prop_data: Any, hit_features: awkward.Record, hit_to_cluster: SparseMatrixCOO, iev: int) -> awkward.Record:
     cluster_arr = prop_data["PandoraClusters"][iev]
     feats = ["type", "position.x", "position.y", "position.z", "iTheta", "phi", "energy"]
     ret = {feat: cluster_arr["PandoraClusters." + feat] for feat in feats}
@@ -442,7 +476,7 @@ def cluster_to_features(prop_data, hit_features, hit_to_cluster, iev):
     return awkward.Record(ret)
 
 
-def track_to_features(prop_data, iev):
+def track_to_features(prop_data: Any, iev: int) -> awkward.Record:
     track_arr = prop_data[track_coll][iev]
     # the following are needed since they are no longer defined under SiTracks_Refitted
     track_arr_dQdx = prop_data["SiTracks_Refitted_dQdx"][iev]
@@ -504,7 +538,7 @@ def track_to_features(prop_data, iev):
     return awkward.Record(ret)
 
 
-def filter_adj(adj, all_to_filtered):
+def filter_adj(adj: SparseMatrixCOO, all_to_filtered: Dict[int, int]) -> SparseMatrixCOO:
     i0s_new = []
     i1s_new = []
     ws_new = []
@@ -520,7 +554,9 @@ def filter_adj(adj, all_to_filtered):
 # loop over status 1 particles and collect the hits of their immediate daughters
 # genparticle_to_hit: tuple with 3 arrays (genparticle_indices, hit_indices, weights)
 # genparticle_to_trk: tuple with 3 arrays (genparticle_indices, track_indices, weights)
-def add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk):
+def add_daughters_to_status1(
+    gen_features: GenFeatures, genparticle_to_hit: SparseMatrixCOO, genparticle_to_trk: SparseMatrixCOO
+) -> Tuple[SparseMatrixCOO, SparseMatrixCOO]:
     mask_status1 = gen_features["generatorStatus"] == 1
     dau_beg = gen_features["daughters_begin"]
     dau_end = gen_features["daughters_end"]
@@ -536,7 +572,7 @@ def add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_tr
         if pdg not in [12, 14, 16]:
             db = dau_beg[idx_st1]
             de = dau_end[idx_st1]
-            daus = dau_ind[db:de]
+            daus = dau_ind[db:de] if dau_ind is not None else []
             for dau in daus:
                 dau_hit_idx = genparticle_to_hit[1][genparticle_to_hit[0] == dau]
                 dau_hit_w = genparticle_to_hit[2][genparticle_to_hit[0] == dau]
@@ -565,7 +601,14 @@ def add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_tr
     return genparticle_to_hit, genparticle_to_trk
 
 
-def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack_links, iev, collectionIDs):
+def get_genparticles_and_adjacencies(
+    prop_data: awkward.Record,
+    hit_data: Dict[str, awkward.Array],
+    calohit_links: awkward.Record,
+    sitrack_links: awkward.Record,
+    iev: int,
+    collectionIDs: Dict[str, int],
+) -> Optional[EventData]:
     gen_features = gen_to_features(prop_data, iev)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs)
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev)
@@ -615,15 +658,15 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
 
     if len(np.array(mask_visible)) == 1:
         # event has only one particle (then index will be empty because no daughters)
-        gen_features = awkward.Record({feat: (gen_features[feat][mask_visible] if feat != "index" else None) for feat in gen_features.keys()})
+        gen_features_record = {feat: (gen_features[feat][mask_visible] if feat != "index" else None) for feat in gen_features.keys()}  # type: ignore
     else:
-        gen_features = awkward.Record({feat: gen_features[feat][mask_visible] for feat in gen_features.keys()})
+        gen_features_record = {feat: gen_features[feat][mask_visible] for feat in gen_features.keys()}  # type: ignore
 
     genparticle_to_hit = filter_adj(genparticle_to_hit, genpart_idx_all_to_filtered)
     genparticle_to_trk = filter_adj(genparticle_to_trk, genpart_idx_all_to_filtered)
 
     return EventData(
-        gen_features,
+        awkward.Record(gen_features_record),
         hit_features,
         cluster_features,
         track_features,
@@ -634,7 +677,7 @@ def get_genparticles_and_adjacencies(prop_data, hit_data, calohit_links, sitrack
     )
 
 
-def assign_genparticles_to_obj_and_merge(gpdata):
+def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, np.ndarray]:
 
     n_gp = awkward.count(gpdata.gen_features["PDG"])
     n_track = awkward.count(gpdata.track_features["type"])
@@ -764,7 +807,7 @@ def assign_genparticles_to_obj_and_merge(gpdata):
             genparticle_to_hit,
             genparticle_to_track,
             gpdata.hit_to_cluster,
-            (gp_merges_gp0, gp_merges_gp1),
+            (np.array(gp_merges_gp0), np.array(gp_merges_gp1)),
         ),
         gp_to_obj,
     )
@@ -772,7 +815,7 @@ def assign_genparticles_to_obj_and_merge(gpdata):
 
 # for each PF element (track, cluster), get the index of the best-matched particle (gen or reco)
 # if the PF element has no best-matched particle, returns -1
-def assign_to_recoobj(n_obj, obj_to_ptcl, used_particles):
+def assign_to_recoobj(n_obj: int, obj_to_ptcl: Dict[int, int], used_particles: np.ndarray) -> np.ndarray:
     obj_to_ptcl_all = -1 * np.ones(n_obj, dtype=np.int64)
     for iobj in range(n_obj):
         if iobj in obj_to_ptcl:
@@ -783,7 +826,9 @@ def assign_to_recoobj(n_obj, obj_to_ptcl, used_particles):
     return obj_to_ptcl_all
 
 
-def get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track, idx_rp_to_cluster):
+def get_recoptcl_to_obj(
+    n_rps: int, reco_arr: awkward.Record, idx_rp_to_track: np.ndarray, idx_rp_to_cluster: np.ndarray
+) -> Tuple[Dict[int, int], Dict[int, int]]:
     track_to_rp = {}
     cluster_to_rp = {}
 
@@ -817,7 +862,7 @@ def get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track, idx_rp_to_cluster):
     return track_to_rp, cluster_to_rp
 
 
-def get_reco_properties(prop_data, iev):
+def get_reco_properties(prop_data: Any, iev: int) -> awkward.Record:
 
     reco_arr = prop_data["PandoraPFOs"][iev]
     reco_arr = {k.replace("PandoraPFOs.", ""): reco_arr[k] for k in reco_arr.fields}
@@ -836,7 +881,7 @@ def get_reco_properties(prop_data, iev):
     return reco_arr
 
 
-def get_particle_feature_matrix(pfelem_to_particle, feature_dict, features):
+def get_particle_feature_matrix(pfelem_to_particle: np.ndarray, feature_dict: Any, features: List[str]) -> np.ndarray:
     feats = []
     for feat in features:
         feat_arr = feature_dict[feat]
@@ -850,7 +895,7 @@ def get_particle_feature_matrix(pfelem_to_particle, feature_dict, features):
     return feats.T
 
 
-def get_feature_matrix(feature_dict, features):
+def get_feature_matrix(feature_dict: Any, features: List[str]) -> np.ndarray:
     feats = []
     for feat in features:
         feat_arr = awkward.to_numpy(feature_dict[feat])
@@ -859,7 +904,7 @@ def get_feature_matrix(feature_dict, features):
     return feats.T
 
 
-def get_p4(part, prefix="MCParticles"):
+def get_p4(part: Any, prefix: str = "MCParticles") -> Any:
     p4_x = part[prefix + ".momentum.x"]
     p4_y = part[prefix + ".momentum.y"]
     p4_z = part[prefix + ".momentum.z"]
@@ -879,14 +924,14 @@ def get_p4(part, prefix="MCParticles"):
     return p4
 
 
-def compute_met(p4):
+def compute_met(p4: Any) -> np.ndarray:
     sum_px = awkward.sum(p4.px, axis=1)
     sum_py = awkward.sum(p4.py, axis=1)
     met = np.sqrt(sum_px**2 + sum_py**2)
     return met
 
 
-def compute_jets(particles_p4, min_pt=jet_ptcut, with_indices=False):
+def compute_jets(particles_p4: Any, min_pt: float = jet_ptcut, with_indices: bool = False) -> Any:
     cluster = fastjet.ClusterSequence(particles_p4, jetdef)
     jets = vector.awk(cluster.inclusive_jets(min_pt=min_pt))
     jets = vector.awk(awkward.zip({"energy": jets["t"], "px": jets["x"], "py": jets["y"], "pz": jets["z"]}))
@@ -898,7 +943,7 @@ def compute_jets(particles_p4, min_pt=jet_ptcut, with_indices=False):
     return ret
 
 
-def process_one_file(fn, ofn):
+def process_one_file(fn: str, ofn: str) -> None:
 
     # output exists, do not recreate
     if os.path.isfile(ofn):
@@ -1124,26 +1169,27 @@ def process_one_file(fn, ofn):
         ytarget_track[:, particle_feature_order.index("jet_idx")] = ytarget_track_constituents
         ytarget_cluster[:, particle_feature_order.index("jet_idx")] = ytarget_cluster_constituents
 
-        this_ev = awkward.Record(
-            {
-                "X_track": X_track,
-                "X_cluster": X_cluster,
-                "ytarget_track": ytarget_track,
-                "ytarget_cluster": ytarget_cluster,
-                "ycand_track": ycand_track,
-                "ycand_cluster": ycand_cluster,
-                "genmet": met_st1[iev],
-                "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
-                "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
-            }
-        )
+        this_ev: EventRecord = {
+            "X_track": X_track,
+            "X_cluster": X_cluster,
+            "ytarget_track": ytarget_track,
+            "ytarget_cluster": ytarget_cluster,
+            "ycand_track": ycand_track,
+            "ycand_cluster": ycand_cluster,
+            "genmet": float(met_st1[iev]),
+            "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
+            "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
+        }
         ret.append(this_ev)
 
-    ret = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].fields})
-    awkward.to_parquet(ret, ofn)
+    if len(ret) == 0:
+        return
+
+    ret_record = awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0].keys()})
+    awkward.to_parquet(ret_record, ofn)
 
 
-def parse_args():
+def parse_args() -> Any:
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -1154,7 +1200,7 @@ def parse_args():
     return args
 
 
-def process(args):
+def process(args: Any) -> None:
 
     if os.path.isdir(args.input) is True:
         print("Will process all files in " + args.input)
