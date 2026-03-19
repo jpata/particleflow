@@ -809,9 +809,14 @@ def get_genparticles_and_adjacencies(
     else:
         gp_to_track = np.zeros((n_gp, 1))
 
-    gp_to_calohit = coo_matrix((genparticle_to_hit[2], (genparticle_to_hit[0], genparticle_to_hit[1])), shape=(n_gp, n_hit))
+    gp_to_hit = coo_matrix((genparticle_to_hit[2], (genparticle_to_hit[0], genparticle_to_hit[1])), shape=(n_gp, n_hit))
+    # check that gp_to_hit contains both tracker hits (subdetector 3) and calorimeter hits (subdetector 0, 1, or 2)
+    # this confirms that it indeed contains all hits
+    assert np.any(hit_features["subdetector"][genparticle_to_hit[1]] == 3)
+    assert np.any(hit_features["subdetector"][genparticle_to_hit[1]] != 3)
+
     calohit_to_cluster = coo_matrix((hit_to_cluster[2], (hit_to_cluster[0], hit_to_cluster[1])), shape=(n_hit, n_cluster))
-    gp_to_cluster = (gp_to_calohit * calohit_to_cluster).sum(axis=1)
+    gp_to_cluster = (gp_to_hit * calohit_to_cluster).sum(axis=1)
 
     # 20% of the hits of a track must come from the genparticle
     gp_in_tracker = np.array(gp_to_track >= 0.2)[:, 0]
@@ -867,10 +872,10 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         ).todense()
     )
 
-    gp_to_calohit = coo_matrix((gpdata.genparticle_to_hit[2], (gpdata.genparticle_to_hit[0], gpdata.genparticle_to_hit[1])), shape=(n_gp, n_hit))
+    gp_to_hit = coo_matrix((gpdata.genparticle_to_hit[2], (gpdata.genparticle_to_hit[0], gpdata.genparticle_to_hit[1])), shape=(n_gp, n_hit))
     calohit_to_cluster = coo_matrix((gpdata.hit_to_cluster[2], (gpdata.hit_to_cluster[0], gpdata.hit_to_cluster[1])), shape=(n_hit, n_cluster))
 
-    gp_to_cluster = np.array((gp_to_calohit * calohit_to_cluster).todense())
+    gp_to_cluster = np.array((gp_to_hit * calohit_to_cluster).todense())
 
     # map each genparticle to a track or a cluster
     gp_to_obj = -1 * np.ones((n_gp, 2), dtype=np.int32)
@@ -903,12 +908,12 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
                     break
 
     # assign genparticle to hit separately
-    gp_to_hit = -1 * np.ones(n_gp, dtype=np.int32)
-    gp_to_hit_weights = np.array(gp_to_calohit.todense())
+    gp_to_hit_idx = -1 * np.ones(n_gp, dtype=np.int32)
+    gp_to_hit_weights = np.array(gp_to_hit.todense())
     for igp in range(n_gp):
         matched_hits = gp_to_hit_weights[igp]
         if np.any(matched_hits > 0):
-            gp_to_hit[igp] = np.argmax(matched_hits)
+            gp_to_hit_idx[igp] = np.argmax(matched_hits)
 
     # the genparticles that could not be matched to a track or cluster are merged to the closest genparticle
     unmatched = np.where((gp_to_obj[:, 0] == -1) & (gp_to_obj[:, 1] == -1))[0]
@@ -988,7 +993,7 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
     genparticle_to_hit = filter_adj(gpdata.genparticle_to_hit, genpart_idx_all_to_filtered)
     genparticle_to_track = filter_adj(gpdata.genparticle_to_track, genpart_idx_all_to_filtered)
     gp_to_obj = gp_to_obj[mask_gp_unmatched]
-    gp_to_hit = gp_to_hit[mask_gp_unmatched]
+    gp_to_hit_idx = gp_to_hit_idx[mask_gp_unmatched]
 
     return (
         EventData(
@@ -1002,7 +1007,7 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
             (np.array(gp_merges_gp0), np.array(gp_merges_gp1)),
         ),
         gp_to_obj,
-        gp_to_hit,
+        gp_to_hit_idx,
     )
 
 
@@ -1308,7 +1313,7 @@ def process_one_file(fn: str, ofn: str) -> None:
         )
 
         # find the reconstructable genparticles and associate them to the best track/cluster
-        gpdata_cleaned, gp_to_obj, gp_to_hit = assign_genparticles_to_obj_and_merge(gpdata)
+        gpdata_cleaned, gp_to_obj, gp_to_hit_idx = assign_genparticles_to_obj_and_merge(gpdata)
 
         n_tracks = len(gpdata_cleaned.track_features["type"])
         n_clusters = len(gpdata_cleaned.cluster_features["type"])
@@ -1325,7 +1330,7 @@ def process_one_file(fn: str, ofn: str) -> None:
         # get the track/cluster/hit -> genparticle map
         track_to_gp = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
         cluster_to_gp = {icl: igp for igp, icl in enumerate(gp_to_obj[:, 1]) if icl != -1}
-        hit_to_gp = {ihit: igp for igp, ihit in enumerate(gp_to_hit) if ihit != -1}
+        hit_to_gp = {ihit: igp for igp, ihit in enumerate(gp_to_hit_idx) if ihit != -1}
 
         used_gps = np.zeros(n_gps, dtype=np.int64)
         track_to_gp_all = assign_to_recoobj(n_tracks, track_to_gp, used_gps)
