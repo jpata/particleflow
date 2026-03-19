@@ -111,11 +111,19 @@ class HitCollections:
     HCALEndcap: Optional[awkward.Array] = None
     HCALOther: Optional[awkward.Array] = None
     MUON: Optional[awkward.Array] = None
+    LumiCalHits: Optional[awkward.Array] = None
+    ITrackerHits: Optional[awkward.Array] = None
+    ITrackerEndcapHits: Optional[awkward.Array] = None
+    OTrackerHits: Optional[awkward.Array] = None
+    OTrackerEndcapHits: Optional[awkward.Array] = None
+    VXDTrackerHits: Optional[awkward.Array] = None
+    VXDEndcapTrackerHits: Optional[awkward.Array] = None
 
 @dataclass
 class EventRecord:
     X_track: np.ndarray
     X_cluster: np.ndarray
+    X_hit: np.ndarray
     ytarget_track: np.ndarray
     ytarget_cluster: np.ndarray
     ycand_track: np.ndarray
@@ -305,30 +313,59 @@ class EventData:
 
 
 def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[str]) -> awkward.Record:
-    feat_arr = {f: hit_data[coll + "." + f][iev] for f in feats}
+    available_fields = hit_data.fields
+    feat_arr = {}
+    n_hits = 0
+    # first find the number of hits from any available field
+    for field in available_fields:
+        if field.startswith(coll + "."):
+            n_hits = len(hit_data[field][iev])
+            break
+
+    for f in feats:
+        full_f = coll + "." + f
+        if full_f in available_fields:
+            feat_arr[f] = hit_data[full_f][iev]
+        elif f == "energy" and coll + ".eDep" in available_fields:
+            feat_arr[f] = hit_data[coll + ".eDep"][iev]
+        elif f == "energyError" and coll + ".eDepError" in available_fields:
+            feat_arr[f] = hit_data[coll + ".eDepError"][iev]
+        else:
+            print("feature {} not available in coll".format(full_f, coll))
+            feat_arr[f] = np.zeros(n_hits, dtype=np.float32)
 
     # set the subdetector type
     sdcoll = "subdetector"
-    feat_arr[sdcoll] = np.zeros(len(feat_arr["type"]), dtype=np.int32)
-    if coll.startswith("ECAL"):
+    feat_arr[sdcoll] = np.zeros(n_hits, dtype=np.int32)
+    if coll.startswith("ECAL") or coll.startswith("ECal"):
         feat_arr[sdcoll][:] = 0
-    elif coll.startswith("HCAL"):
+    elif coll.startswith("HCAL") or coll.startswith("HCal"):
         feat_arr[sdcoll][:] = 1
+    elif "Tracker" in coll or "VXD" in coll or "Tracker" in coll or "VXD" in coll or coll.startswith("ITracker") or coll.startswith("OTracker"):
+        feat_arr[sdcoll][:] = 3
     else:
         feat_arr[sdcoll][:] = 2
 
     # hit elemtype is always 2
-    feat_arr["elemtype"] = 2 * np.ones(len(feat_arr["type"]), dtype=np.int32)
+    feat_arr["elemtype"] = 2 * np.ones(n_hits, dtype=np.int32)
 
     # precompute some approximate et, eta, phi
-    pos_mag = np.sqrt(feat_arr["position.x"] ** 2 + feat_arr["position.y"] ** 2 + feat_arr["position.z"] ** 2)
-    px = (feat_arr["position.x"] / pos_mag) * feat_arr["energy"]
-    py = (feat_arr["position.y"] / pos_mag) * feat_arr["energy"]
-    pz = (feat_arr["position.z"] / pos_mag) * feat_arr["energy"]
-    feat_arr["et"] = np.sqrt(px**2 + py**2)
-    feat_arr["eta"] = 0.5 * np.log((feat_arr["energy"] + pz) / (feat_arr["energy"] - pz))
-    feat_arr["sin_phi"] = py / feat_arr["energy"]
-    feat_arr["cos_phi"] = px / feat_arr["energy"]
+    if n_hits > 0:
+        pos_mag = np.sqrt(feat_arr["position.x"] ** 2 + feat_arr["position.y"] ** 2 + feat_arr["position.z"] ** 2)
+        px = (feat_arr["position.x"] / pos_mag) * feat_arr["energy"]
+        py = (feat_arr["position.y"] / pos_mag) * feat_arr["energy"]
+        pz = (feat_arr["position.z"] / pos_mag) * feat_arr["energy"]
+        feat_arr["et"] = np.sqrt(px**2 + py**2)
+        # add small epsilon to energy to avoid division by zero or log of zero
+        eps = 1e-12
+        feat_arr["eta"] = 0.5 * np.log((feat_arr["energy"] + pz + eps) / (feat_arr["energy"] - pz + eps))
+        feat_arr["sin_phi"] = py / (feat_arr["energy"] + eps)
+        feat_arr["cos_phi"] = px / (feat_arr["energy"] + eps)
+    else:
+        feat_arr["et"] = np.zeros(0, dtype=np.float32)
+        feat_arr["eta"] = np.zeros(0, dtype=np.float32)
+        feat_arr["sin_phi"] = np.zeros(0, dtype=np.float32)
+        feat_arr["cos_phi"] = np.zeros(0, dtype=np.float32)
 
     return awkward.Record(feat_arr)
 
@@ -345,7 +382,8 @@ def get_calohit_matrix_and_genadj(
         icol = collectionIDs[col]
         hit_features = hits_to_features(hit_data[col], iev, col, feats)
         hit_feature_matrix.append(hit_features)
-        for ihit in range(len(hit_data[col][col + ".energy"][iev])):
+        n_hits = len(hit_features["energy"])
+        for ihit in range(n_hits):
             hit_idx_global_to_local[hit_idx_global] = (icol, ihit)
             hit_idx_global += 1
     hit_idx_local_to_global = {v: k for k, v in hit_idx_global_to_local.items()}
@@ -354,25 +392,28 @@ def get_calohit_matrix_and_genadj(
     )
 
     # add all edges from genparticle to calohit
-    calohit_to_gen_weight = calohit_links["CalohitMCTruthLink.weight"][iev]
-    calohit_to_gen_calo_colid = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"][iev]
-    calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID"][iev]
-    calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]
-    calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index"][iev]
-
     genparticle_to_hit_matrix_coo0 = []
     genparticle_to_hit_matrix_coo1 = []
     genparticle_to_hit_matrix_w = []
-    for calo_colid, calo_idx, gen_colid, gen_idx, w in zip(
-        calohit_to_gen_calo_colid,
-        calohit_to_gen_calo_idx,
-        calohit_to_gen_gen_colid,
-        calohit_to_gen_gen_idx,
-        calohit_to_gen_weight,
-    ):
-        genparticle_to_hit_matrix_coo0.append(gen_idx)
-        genparticle_to_hit_matrix_coo1.append(hit_idx_local_to_global[(calo_colid, calo_idx)])
-        genparticle_to_hit_matrix_w.append(w)
+
+    if "CalohitMCTruthLink.weight" in calohit_links.fields:
+        calohit_to_gen_weight = calohit_links["CalohitMCTruthLink.weight"][iev]
+        calohit_to_gen_calo_colid = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"][iev]
+        calohit_to_gen_gen_colid = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID"][iev]
+        calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]
+        calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index"][iev]
+
+        for calo_colid, calo_idx, gen_colid, gen_idx, w in zip(
+            calohit_to_gen_calo_colid,
+            calohit_to_gen_calo_idx,
+            calohit_to_gen_gen_colid,
+            calohit_to_gen_gen_idx,
+            calohit_to_gen_weight,
+        ):
+            if (calo_colid, calo_idx) in hit_idx_local_to_global:
+                genparticle_to_hit_matrix_coo0.append(gen_idx)
+                genparticle_to_hit_matrix_coo1.append(hit_idx_local_to_global[(calo_colid, calo_idx)])
+                genparticle_to_hit_matrix_w.append(w)
 
     return (
         hit_feature_matrix,
@@ -385,7 +426,9 @@ def get_calohit_matrix_and_genadj(
     )
 
 
-def hit_cluster_adj(prop_data: awkward.Record, hit_idx_local_to_global: Dict[Tuple[int, int], int], iev: int) -> SparseMatrixCOO:
+def hit_cluster_adj(
+    prop_data: awkward.Record, hit_idx_local_to_global: Dict[Tuple[int, int], int], iev: int, collectionIDs_reverse: Dict[int, str]
+) -> SparseMatrixCOO:
 
     coll_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.collectionID"][iev]
     idx_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.index"][iev]
@@ -410,10 +453,16 @@ def hit_cluster_adj(prop_data: awkward.Record, hit_idx_local_to_global: Dict[Tup
         coll_range = coll_arr[hbeg:hend]
 
         # add edges from hit to cluster
-        for icol, idx in zip(coll_range, idx_range):
-            hit_to_cluster_matrix_coo0.append(hit_idx_local_to_global[(icol, idx)])
-            hit_to_cluster_matrix_coo1.append(icluster)
-            hit_to_cluster_matrix_w.append(1.0)
+        try:
+            for icol, idx in zip(coll_range, idx_range):
+                hit_to_cluster_matrix_coo0.append(hit_idx_local_to_global[(icol, idx)])
+                hit_to_cluster_matrix_coo1.append(icluster)
+                hit_to_cluster_matrix_w.append(1.0)
+        except KeyError as e:
+            coll_name = collectionIDs_reverse.get(icol, "unknown")
+            print(f"Could not find {icol} ({coll_name}) in hit_idx_local_to_global, probably the hit collection is missing.")
+            raise (e)
+
     return (
         np.array(hit_to_cluster_matrix_coo0),
         np.array(hit_to_cluster_matrix_coo1),
@@ -680,10 +729,11 @@ def get_genparticles_and_adjacencies(
     sitrack_links: awkward.Record,
     iev: int,
     collectionIDs: Dict[str, int],
+    collectionIDs_reverse: Dict[int, str],
 ) -> EventData:
     gen_features = gen_to_features(prop_data, iev)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs)
-    hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev)
+    hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
     track_features = track_to_features(prop_data, iev)
     genparticle_to_trk = genparticle_track_adj(sitrack_links, iev)
@@ -1032,6 +1082,8 @@ def process_one_file(fn: str, ofn: str) -> None:
     fi = uproot.open(fn)
     arrs = fi["events"]
 
+
+    #map collection ID name to numerical key
     collectionIDs = {
         k: v
         for k, v in zip(
@@ -1043,6 +1095,7 @@ def process_one_file(fn: str, ofn: str) -> None:
             ][0],
         )
     }
+    collectionIDs_reverse = {v: k for (k, v) in collectionIDs.items()}
 
     prop_data = arrs.arrays(
         [
@@ -1091,15 +1144,29 @@ def process_one_file(fn: str, ofn: str) -> None:
     idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
-    hit_collections = ["ECALOther", "ECALBarrel", "ECALEndcap", "HCALBarrel", "HCALEndcap", "HCALOther", "MUON"]
+    hit_collections = [
+        "ECALBarrel",
+        "ECALEndcap",
+        # ECALOther is missing in CLD, but there in CLIC. Need to check and make this configurable later.
+        # "ECALOther",
+        "HCALBarrel",
+        "HCALEndcap",
+        "HCALOther",
+        "MUON",
+        "LumiCalHits",
+        "ITrackerHits",
+        "ITrackerEndcapHits",
+        "OTrackerHits",
+        "OTrackerEndcapHits",
+        "VXDTrackerHits",
+        "VXDEndcapTrackerHits",
+    ]
     hit_data = {}
     for k in hit_collections:
         if k in arrs:
             hit_data[k] = arrs[k].array()
         else:
-            if "Other" not in k:
-                raise KeyError(f"Mandatory hit collection {k} not found in the input file!")
-            print(f"Optional hit collection {k} not found, skipping.")
+            raise KeyError(f"Hit collection {k} not found in the input file! Available collections: {arrs.keys()}")
 
     # Compute truth MET and jets from status=1 pythia particles
     mc_pdg = np.abs(prop_data["MCParticles.PDG"])
@@ -1152,6 +1219,7 @@ def process_one_file(fn: str, ofn: str) -> None:
             sitrack_links,
             iev,
             collectionIDs,
+            collectionIDs_reverse,
         )
 
         # find the reconstructable genparticles and associate them to the best track/cluster
@@ -1254,6 +1322,7 @@ def process_one_file(fn: str, ofn: str) -> None:
         this_ev: EventRecord = {
             "X_track": X_track,
             "X_cluster": X_cluster,
+            "X_hit": get_feature_matrix(gpdata_cleaned.hit_features, hit_feature_order),
             "ytarget_track": ytarget_track,
             "ytarget_cluster": ytarget_cluster,
             "ycand_track": ycand_track,
