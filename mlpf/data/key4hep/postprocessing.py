@@ -824,12 +824,20 @@ def get_genparticles_and_adjacencies(
     # at least 5% of the energy of the genparticle should be matched to a calorimeter cluster
     gp_in_calo = (np.array(gp_to_cluster)[:, 0] / gen_features["energy"]) > 0.05
 
-    gp_interacted_with_detector = gp_in_tracker | gp_in_calo
+    # new hit-based visibility mask: genparticles that leave at least 10% of their energy to hits
+    gp_energy_in_hits = np.array(gp_to_hit.sum(axis=1))[:, 0]
+    mask_visible_hit = (gp_energy_in_hits / gen_features["energy"]) > 0.10
+
+    # temporary logging to debug visibility logic
+    print(f"debug_visibility: iev={iev} n_gp={n_gp} n_st1={np.sum(mask_status1)}")
+    print(f"debug_visibility:  gp_in_tracker (st1): {np.sum(mask_status1 & gp_in_tracker)}")
+    print(f"debug_visibility:  gp_in_calo (st1): {np.sum(mask_status1 & gp_in_calo)}")
+    print(f"debug_visibility:  mask_visible_hit (st1): {np.sum(mask_status1 & mask_visible_hit)}")
 
     gen_features["gp_to_track"] = np.asarray(gp_to_track)[:, 0]
     gen_features["gp_to_cluster"] = np.asarray(gp_to_cluster)[:, 0]
 
-    mask_visible = awkward.to_numpy(mask_status1 & gp_interacted_with_detector)
+    mask_visible = awkward.to_numpy(mask_status1 & mask_visible_hit)
 
     idx_all_masked = np.where(mask_visible)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
