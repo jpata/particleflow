@@ -1417,12 +1417,17 @@ def process_one_file(fn: str, ofn: str) -> None:
         ytarget_cluster[:, particle_feature_order.index("jet_idx")] = ytarget_cluster_constituents
 
         this_ev: EventRecord = {
+            #if we want to train on clusters
             "X_track": X_track,
             "X_cluster": X_cluster,
-            "X_hit": get_feature_matrix(gpdata_cleaned.hit_features, hit_feature_order),
             "ytarget_track": ytarget_track,
             "ytarget_cluster": ytarget_cluster,
+
+            #if we want to train on hits
+            "X_hit": get_feature_matrix(gpdata_cleaned.hit_features, hit_feature_order),
             "ytarget_hit": ytarget_hit,
+
+            #these are used for validation only
             "ycand_track": ycand_track,
             "ycand_cluster": ycand_cluster,
             "genmet": float(met_st1[iev]),

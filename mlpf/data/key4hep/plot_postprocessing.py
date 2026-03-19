@@ -217,7 +217,7 @@ def plot_event(event_data, event_idx, output_dir):
 
 def main():
     parser = argparse.ArgumentParser(description="Plot events from MLPF post-processed parquet file.")
-    parser.add_argument("--input", type=str, required=True, help="Input parquet file")
+    parser.add_argument("--input", type=str, nargs='+', required=True, help="Input parquet file(s)")
     parser.add_argument("--num-events", type=int, default=3, help="Number of events to plot")
     parser.add_argument("--output-dir", type=str, default="plots", help="Output directory for plots")
     
@@ -227,7 +227,24 @@ def main():
         os.makedirs(args.output_dir)
         
     print(f"Loading {args.input}")
-    data = awkward.from_parquet(args.input)
+    
+    data_list = []
+    for f in args.input:
+        data_list.append(awkward.from_parquet(f))
+        
+    if len(data_list) == 1:
+        data = data_list[0]
+    else:
+        # Check if they are records
+        if all(isinstance(d, awkward.Record) for d in data_list):
+            # Concatenate fields
+            fields = data_list[0].fields
+            concatenated_data = {}
+            for field in fields:
+                concatenated_data[field] = awkward.concatenate([d[field] for d in data_list])
+            data = awkward.Array(concatenated_data)
+        else:
+            data = awkward.concatenate(data_list)
     
     # Plot distributions across all events
     plot_distributions(data, args.output_dir)
