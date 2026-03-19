@@ -40,6 +40,7 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
             else:
                 res["gpu"] = gpus
         res["cpus_per_task"] = threads
+        res["threads"] = threads
     elif executor == "condor":
 
         res["mem_mb"] = mem
@@ -292,7 +293,14 @@ rule {plot_id}:
     def fmt_list(lst):
         return "[" + ", ".join([f'"{x}"' for x in lst]) + "]"
 
-    snakefile_content = "rule all:\n    input:\n"
+    snakefile_content = "import os\n\n"
+    snakefile_content += 'os.environ["GOTO_NUM_THREADS"]="1"\n'
+    snakefile_content += 'os.environ["MKL_NUM_THREADS"]="1"\n'
+    snakefile_content += 'os.environ["NUMEXPR_NUM_THREADS"]="1"\n'
+    snakefile_content += 'os.environ["OMP_NUM_THREADS"]="1"\n'
+    snakefile_content += 'os.environ["OPENBLAS_NUM_THREADS"]="1"\n'
+    snakefile_content += 'os.environ["VECLIB_MAXIMUM_THREADS"]="1"\n\n'
+    snakefile_content += "rule all:\n    input:\n"
     snakefile_content += "        " + fmt_list(final_targets) + "\n"
     snakefile_content += rules_content
 

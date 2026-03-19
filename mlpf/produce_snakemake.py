@@ -55,6 +55,7 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
             else:
                 res["gpu"] = gpus
         res["cpus_per_task"] = threads
+        res["threads"] = threads
     elif executor == "condor":
         res["mem_mb"] = mem
         res["job_flavour"] = f'"{partition}"'
@@ -557,6 +558,13 @@ rule train_{args.model.replace("-", "_")}:{train_rule_input}
         if not targets and not rules:
             return
         with open(path, "w") as f:
+            f.write("import os\n\n")
+            f.write('os.environ["GOTO_NUM_THREADS"]="1"\n')
+            f.write('os.environ["MKL_NUM_THREADS"]="1"\n')
+            f.write('os.environ["NUMEXPR_NUM_THREADS"]="1"\n')
+            f.write('os.environ["OMP_NUM_THREADS"]="1"\n')
+            f.write('os.environ["OPENBLAS_NUM_THREADS"]="1"\n')
+            f.write('os.environ["VECLIB_MAXIMUM_THREADS"]="1"\n\n')
             f.write("rule all:\n    input:\n        " + ",\n        ".join(targets) + "\n")
             f.write(rules)
 
