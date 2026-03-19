@@ -23,16 +23,13 @@ from mlpf.standalone.dsl import (
 
 
 def get_available_gpus():
-    if "CUDA_VISIBLE_DEVICES" in os.environ:
-        gpus = os.environ["CUDA_VISIBLE_DEVICES"].split(",")
-        return [g.strip() for g in gpus if g.strip()]
-
+    all_uuids = []
     try:
         output = subprocess.check_output(["nvidia-smi", "-L"]).decode("utf-8")
-        lines = output.strip().split("\n")
-        gpus = []
+        lines = [line.strip() for line in output.strip().split("\n") if line.strip()]
         for i, line in enumerate(lines):
             # If the current line is a GPU, check if the next line is a MIG device
+            # If it is, we skip the parent GPU and only use the MIG devices
             if line.startswith("GPU"):
                 if i + 1 < len(lines) and "MIG" in lines[i + 1]:
                     continue
@@ -40,13 +37,37 @@ def get_available_gpus():
             # Extract UUID
             match = re.search(r"UUID: ([\w-]+)", line)
             if match:
-                gpus.append(match.group(1))
-
-        if gpus:
-            return gpus
-        return ["0"]
+                all_uuids.append(match.group(1))
     except Exception:
-        return ["0"]
+        pass
+
+    if "CUDA_VISIBLE_DEVICES" in os.environ:
+        cvd = os.environ["CUDA_VISIBLE_DEVICES"].split(",")
+        cvd = [g.strip() for g in cvd if g.strip()]
+
+        # If they are already UUIDs, return as is
+        if cvd and (cvd[0].startswith("GPU-") or cvd[0].startswith("MIG-")):
+            return cvd
+
+        # If they are indices, try to map to discovered UUIDs
+        if all_uuids:
+            mapped_gpus = []
+            for g in cvd:
+                try:
+                    idx = int(g)
+                    if 0 <= idx < len(all_uuids):
+                        mapped_gpus.append(all_uuids[idx])
+                    else:
+                        mapped_gpus.append(g)
+                except ValueError:
+                    mapped_gpus.append(g)
+            return mapped_gpus
+        return cvd
+
+    if all_uuids:
+        return all_uuids
+
+    return ["0"]
 
 
 def generate_random_config():
