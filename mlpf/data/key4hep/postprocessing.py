@@ -126,6 +126,7 @@ class EventRecord:
     X_hit: np.ndarray
     ytarget_track: np.ndarray
     ytarget_cluster: np.ndarray
+    ytarget_hit: np.ndarray
     ycand_track: np.ndarray
     ycand_cluster: np.ndarray
     genmet: float
@@ -141,6 +142,24 @@ jet_ptcut = 5
 
 track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
+
+tracker_hit_relations = {
+    "ITrackerHits": "InnerTrackerBarrelHitsRelations",
+    "ITrackerEndcapHits": "InnerTrackerEndcapHitsRelations",
+    "OTrackerHits": "OuterTrackerBarrelHitsRelations",
+    "OTrackerEndcapHits": "OuterTrackerEndcapHitsRelations",
+    "VXDEndcapTrackerHits": "VXDEndcapTrackerHitRelations",
+    "VXDTrackerHits": "VXDTrackerHitRelations",
+}
+
+tracker_hit_sim = {
+    "ITrackerHits": "InnerTrackerBarrelCollection",
+    "ITrackerEndcapHits": "InnerTrackerEndcapCollection",
+    "OTrackerHits": "OuterTrackerBarrelCollection",
+    "OTrackerEndcapHits": "OuterTrackerEndcapCollection",
+    "VXDEndcapTrackerHits": "VertexEndcapCollection",
+    "VXDTrackerHits": "VertexBarrelCollection",
+}
 
 # the feature matrices will be saved in this order
 particle_feature_order = [
@@ -370,31 +389,63 @@ def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[s
     return awkward.Record(feat_arr)
 
 
-def get_calohit_matrix_and_genadj(
-    hit_data: Dict[str, awkward.Array], calohit_links: awkward.Record, iev: int, collectionIDs: Dict[str, int]
+def get_hit_matrix_and_genadj(
+    hit_data: Dict[str, awkward.Array],
+    calohit_links: awkward.Record,
+    tracker_links: awkward.Record,
+    iev: int,
+    collectionIDs: Dict[str, int],
+    mcp_id: int,
 ) -> Tuple[awkward.Record, SparseMatrixCOO, Dict[Tuple[int, int], int]]:
     feats = ["type", "cellID", "energy", "energyError", "time", "position.x", "position.y", "position.z"]
 
     hit_idx_global = 0
     hit_idx_global_to_local = {}
     hit_feature_matrix = []
+
+    # add all edges from genparticle to hit
+    genparticle_to_hit_matrix_coo0 = []
+    genparticle_to_hit_matrix_coo1 = []
+    genparticle_to_hit_matrix_w = []
+
     for col in sorted(hit_data.keys()):
         icol = collectionIDs[col]
         hit_features = hits_to_features(hit_data[col], iev, col, feats)
         hit_feature_matrix.append(hit_features)
         n_hits = len(hit_features["energy"])
+
+        if col in tracker_hit_relations:
+            rel_name = tracker_hit_relations[col]
+            sim_name = tracker_hit_sim[col]
+
+            # Reco -> Sim mapping
+            rel_from = tracker_links[f"_{rel_name}_from/_{rel_name}_from.index"][iev]
+            rel_to = tracker_links[f"_{rel_name}_to/_{rel_name}_to.index"][iev]
+            reco_to_sim = {f: t for f, t in zip(rel_from, rel_to)}
+
+            # Sim -> MCParticle mapping
+            sim_mcp_idx = tracker_links[f"_{sim_name}_particle/_{sim_name}_particle.index"][iev]
+            sim_mcp_cid = tracker_links[f"_{sim_name}_particle/_{sim_name}_particle.collectionID"][iev]
+        else:
+            reco_to_sim = None
+
         for ihit in range(n_hits):
             hit_idx_global_to_local[hit_idx_global] = (icol, ihit)
+
+            if reco_to_sim and ihit in reco_to_sim:
+                isim = reco_to_sim[ihit]
+                if isim < len(sim_mcp_idx) and sim_mcp_cid[isim] == mcp_id:
+                    mcp_idx = sim_mcp_idx[isim]
+                    genparticle_to_hit_matrix_coo0.append(mcp_idx)
+                    genparticle_to_hit_matrix_coo1.append(hit_idx_global)
+                    genparticle_to_hit_matrix_w.append(1.0)
+
             hit_idx_global += 1
+
     hit_idx_local_to_global = {v: k for k, v in hit_idx_global_to_local.items()}
     hit_feature_matrix = awkward.Record(
         {k: awkward.concatenate([hit_feature_matrix[i][k] for i in range(len(hit_feature_matrix))]) for k in hit_feature_matrix[0].fields}
     )
-
-    # add all edges from genparticle to calohit
-    genparticle_to_hit_matrix_coo0 = []
-    genparticle_to_hit_matrix_coo1 = []
-    genparticle_to_hit_matrix_w = []
 
     if "CalohitMCTruthLink.weight" in calohit_links.fields:
         calohit_to_gen_weight = calohit_links["CalohitMCTruthLink.weight"][iev]
@@ -727,12 +778,16 @@ def get_genparticles_and_adjacencies(
     hit_data: Dict[str, awkward.Array],
     calohit_links: awkward.Record,
     sitrack_links: awkward.Record,
+    tracker_links: awkward.Record,
     iev: int,
     collectionIDs: Dict[str, int],
     collectionIDs_reverse: Dict[int, str],
+    mcp_id: int,
 ) -> EventData:
     gen_features = gen_to_features(prop_data, iev)
-    hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs)
+    hit_features, genparticle_to_hit, hit_idx_local_to_global = get_hit_matrix_and_genadj(
+        hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id
+    )
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
     track_features = track_to_features(prop_data, iev)
@@ -798,7 +853,7 @@ def get_genparticles_and_adjacencies(
     )
 
 
-def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, np.ndarray]:
+def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, np.ndarray, np.ndarray]:
 
     n_gp = awkward.count(gpdata.gen_features["PDG"])
     n_track = awkward.count(gpdata.track_features["type"])
@@ -846,6 +901,14 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
                     gp_to_obj[igp, 1] = cl
                     set_used_clusters.add(cl)
                     break
+
+    # assign genparticle to hit separately
+    gp_to_hit = -1 * np.ones(n_gp, dtype=np.int32)
+    gp_to_hit_weights = np.array(gp_to_calohit.todense())
+    for igp in range(n_gp):
+        matched_hits = gp_to_hit_weights[igp]
+        if np.any(matched_hits > 0):
+            gp_to_hit[igp] = np.argmax(matched_hits)
 
     # the genparticles that could not be matched to a track or cluster are merged to the closest genparticle
     unmatched = np.where((gp_to_obj[:, 0] == -1) & (gp_to_obj[:, 1] == -1))[0]
@@ -925,6 +988,7 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
     genparticle_to_hit = filter_adj(gpdata.genparticle_to_hit, genpart_idx_all_to_filtered)
     genparticle_to_track = filter_adj(gpdata.genparticle_to_track, genpart_idx_all_to_filtered)
     gp_to_obj = gp_to_obj[mask_gp_unmatched]
+    gp_to_hit = gp_to_hit[mask_gp_unmatched]
 
     return (
         EventData(
@@ -938,6 +1002,7 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
             (np.array(gp_merges_gp0), np.array(gp_merges_gp1)),
         ),
         gp_to_obj,
+        gp_to_hit,
     )
 
 
@@ -1139,6 +1204,24 @@ def process_one_file(fn: str, ofn: str) -> None:
         ]
     )
 
+    tracker_link_branches = []
+    for rel_name in tracker_hit_relations.values():
+        tracker_link_branches.extend(
+            [
+                f"_{rel_name}_from/_{rel_name}_from.index",
+                f"_{rel_name}_to/_{rel_name}_to.index",
+            ]
+        )
+    for sim_name in tracker_hit_sim.values():
+        tracker_link_branches.extend(
+            [
+                f"_{sim_name}_particle/_{sim_name}_particle.index",
+                f"_{sim_name}_particle/_{sim_name}_particle.collectionID",
+            ]
+        )
+    tracker_links = arrs.arrays(tracker_link_branches)
+    mcp_id = collectionIDs["MCParticles"]
+
     # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
     # to the index in the track/cluster collection
     idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
@@ -1217,16 +1300,19 @@ def process_one_file(fn: str, ofn: str) -> None:
             hit_data,
             calohit_links,
             sitrack_links,
+            tracker_links,
             iev,
             collectionIDs,
             collectionIDs_reverse,
+            mcp_id,
         )
 
         # find the reconstructable genparticles and associate them to the best track/cluster
-        gpdata_cleaned, gp_to_obj = assign_genparticles_to_obj_and_merge(gpdata)
+        gpdata_cleaned, gp_to_obj, gp_to_hit = assign_genparticles_to_obj_and_merge(gpdata)
 
         n_tracks = len(gpdata_cleaned.track_features["type"])
         n_clusters = len(gpdata_cleaned.cluster_features["type"])
+        n_hits = len(gpdata_cleaned.hit_features["type"])
         n_gps = len(gpdata_cleaned.gen_features["PDG"])
 
         assert len(gp_to_obj) == len(gpdata_cleaned.gen_features["PDG"])
@@ -1236,15 +1322,22 @@ def process_one_file(fn: str, ofn: str) -> None:
         # construct track/cluster -> recoparticle maps
         track_to_rp, cluster_to_rp = get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track[iev], idx_rp_to_cluster[iev])
 
-        # get the track/cluster -> genparticle map
+        # get the track/cluster/hit -> genparticle map
         track_to_gp = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
         cluster_to_gp = {icl: igp for igp, icl in enumerate(gp_to_obj[:, 1]) if icl != -1}
+        hit_to_gp = {ihit: igp for igp, ihit in enumerate(gp_to_hit) if ihit != -1}
 
         used_gps = np.zeros(n_gps, dtype=np.int64)
         track_to_gp_all = assign_to_recoobj(n_tracks, track_to_gp, used_gps)
         cluster_to_gp_all = assign_to_recoobj(n_clusters, cluster_to_gp, used_gps)
+
+        # assignment between the target particles and hits separately
+        used_gps_hit = np.zeros(n_gps, dtype=np.int64)
+        hit_to_gp_all = assign_to_recoobj(n_hits, hit_to_gp, used_gps_hit)
+
         # all genparticles must be assigned to some PFElement
         assert np.all(used_gps == 1)
+        assert np.all(used_gps_hit == 1)
 
         used_rps = np.zeros(n_rps, dtype=np.int64)
         track_to_rp_all = assign_to_recoobj(n_tracks, track_to_rp, used_rps)
@@ -1257,6 +1350,8 @@ def process_one_file(fn: str, ofn: str) -> None:
         gps_cluster = get_particle_feature_matrix(cluster_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
         gps_cluster[:, 0] = np.array([map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(gps_cluster[:, 0], gps_cluster[:, 1])])
         gps_cluster[:, 1] = 0
+
+        gps_hit = get_particle_feature_matrix(hit_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
 
         rps_track = get_particle_feature_matrix(track_to_rp_all, reco_features, particle_feature_order)
         rps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])])
@@ -1277,6 +1372,7 @@ def process_one_file(fn: str, ofn: str) -> None:
         X_cluster = get_feature_matrix(gpdata_cleaned.cluster_features, cluster_feature_order)
         ytarget_track = gps_track
         ytarget_cluster = gps_cluster
+        ytarget_hit = gps_hit
         ycand_track = rps_track
         ycand_cluster = rps_cluster
 
@@ -1284,6 +1380,7 @@ def process_one_file(fn: str, ofn: str) -> None:
         sanitize(X_cluster)
         sanitize(ytarget_track)
         sanitize(ytarget_cluster)
+        sanitize(ytarget_hit)
         sanitize(ycand_track)
         sanitize(ycand_cluster)
 
@@ -1325,6 +1422,7 @@ def process_one_file(fn: str, ofn: str) -> None:
             "X_hit": get_feature_matrix(gpdata_cleaned.hit_features, hit_feature_order),
             "ytarget_track": ytarget_track,
             "ytarget_cluster": ytarget_cluster,
+            "ytarget_hit": ytarget_hit,
             "ycand_track": ycand_track,
             "ycand_cluster": ycand_cluster,
             "genmet": float(met_st1[iev]),
