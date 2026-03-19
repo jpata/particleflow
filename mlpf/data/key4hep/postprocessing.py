@@ -24,7 +24,8 @@ from scipy.sparse import coo_matrix
 SparseMatrixCOO = Tuple[np.ndarray, np.ndarray, np.ndarray]
 
 
-class GenFeatures(TypedDict):
+@dataclass
+class GenFeatures:
     PDG: np.ndarray
     generatorStatus: np.ndarray
     charge: np.ndarray
@@ -44,7 +45,75 @@ class GenFeatures(TypedDict):
     index: Optional[np.ndarray]
 
 
-class EventRecord(TypedDict):
+@dataclass
+class TrackFeatures:
+    elemtype: np.ndarray
+    pt: np.ndarray
+    eta: np.ndarray
+    sin_phi: np.ndarray
+    cos_phi: np.ndarray
+    p: np.ndarray
+    chi2: np.ndarray
+    ndf: np.ndarray
+    dEdx: np.ndarray
+    dEdxError: np.ndarray
+    radiusOfInnermostHit: np.ndarray
+    tanLambda: np.ndarray
+    D0: np.ndarray
+    omega: np.ndarray
+    Z0: np.ndarray
+    time: np.ndarray
+
+
+@dataclass
+class ClusterFeatures:
+    elemtype: np.ndarray
+    et: np.ndarray
+    eta: np.ndarray
+    sin_phi: np.ndarray
+    cos_phi: np.ndarray
+    energy: np.ndarray
+    position_x: np.ndarray
+    position_y: np.ndarray
+    position_z: np.ndarray
+    iTheta: np.ndarray
+    energy_ecal: np.ndarray
+    energy_hcal: np.ndarray
+    energy_other: np.ndarray
+    num_hits: np.ndarray
+    sigma_x: np.ndarray
+    sigma_y: np.ndarray
+    sigma_z: np.ndarray
+
+
+@dataclass
+class HitFeatures:
+    elemtype: np.ndarray
+    et: np.ndarray
+    eta: np.ndarray
+    sin_phi: np.ndarray
+    cos_phi: np.ndarray
+    energy: np.ndarray
+    position_x: np.ndarray
+    position_y: np.ndarray
+    position_z: np.ndarray
+    time: np.ndarray
+    subdetector: np.ndarray
+    type: np.ndarray
+
+
+@dataclass
+class HitCollections:
+    ECALOther: Optional[awkward.Array] = None
+    ECALBarrel: Optional[awkward.Array] = None
+    ECALEndcap: Optional[awkward.Array] = None
+    HCALBarrel: Optional[awkward.Array] = None
+    HCALEndcap: Optional[awkward.Array] = None
+    HCALOther: Optional[awkward.Array] = None
+    MUON: Optional[awkward.Array] = None
+
+@dataclass
+class EventRecord:
     X_track: np.ndarray
     X_cluster: np.ndarray
     ytarget_track: np.ndarray
@@ -54,6 +123,9 @@ class EventRecord(TypedDict):
     genmet: float
     genjet: np.ndarray
     targetjet: np.ndarray
+
+    def keys(self):
+        return self.__dataclass_fields__.keys()
 
 
 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
@@ -608,7 +680,7 @@ def get_genparticles_and_adjacencies(
     sitrack_links: awkward.Record,
     iev: int,
     collectionIDs: Dict[str, int],
-) -> Optional[EventData]:
+) -> EventData:
     gen_features = gen_to_features(prop_data, iev)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_calohit_matrix_and_genadj(hit_data, calohit_links, iev, collectionIDs)
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev)
@@ -653,8 +725,7 @@ def get_genparticles_and_adjacencies(
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
 
     if np.array(mask_visible).sum() == 0:
-        print("event does not have even one 'visible' particle. will skip event")
-        return None
+        raise ValueError(f"Event {iev} does not have even one 'visible' particle.")
 
     if len(np.array(mask_visible)) == 1:
         # event has only one particle (then index will be empty because no daughters)
@@ -749,7 +820,14 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         # if the genparticle is not matched to any cluster, then it left a few hits to some other track
         # this is rare, happens only for low-pT particles and we don't want to try to reconstruct it
         if len(idx_gp_bestcluster) != 1:
-            print("unmatched pt=", pt_arr[igp_unmatched])
+            # raise RuntimeError(
+            #     f"Unmatched genparticle {igp_unmatched} with pt={pt_arr[igp_unmatched]:.2f} "
+            #     f"could not be associated with a unique cluster (found {len(idx_gp_bestcluster)})"
+            # )
+            print (
+                f"Unmatched genparticle {igp_unmatched} with pt={pt_arr[igp_unmatched]:.2f} "
+                f"could not be associated with a unique cluster (found {len(idx_gp_bestcluster)})"
+            )
             continue
 
         idx_gp_bestcluster = idx_gp_bestcluster[0]
@@ -1013,9 +1091,15 @@ def process_one_file(fn: str, ofn: str) -> None:
     idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
-    hit_data = {
-        k: arrs[k].array() for k in ["ECALOther", "ECALBarrel", "ECALEndcap", "HCALBarrel", "HCALEndcap", "HCALOther", "MUON"] if k in arrs.keys()
-    }
+    hit_collections = ["ECALOther", "ECALBarrel", "ECALEndcap", "HCALBarrel", "HCALEndcap", "HCALOther", "MUON"]
+    hit_data = {}
+    for k in hit_collections:
+        if k in arrs:
+            hit_data[k] = arrs[k].array()
+        else:
+            if "Other" not in k:
+                raise KeyError(f"Mandatory hit collection {k} not found in the input file!")
+            print(f"Optional hit collection {k} not found, skipping.")
 
     # Compute truth MET and jets from status=1 pythia particles
     mc_pdg = np.abs(prop_data["MCParticles.PDG"])
@@ -1069,8 +1153,6 @@ def process_one_file(fn: str, ofn: str) -> None:
             iev,
             collectionIDs,
         )
-        if gpdata is None:
-            continue
 
         # find the reconstructable genparticles and associate them to the best track/cluster
         gpdata_cleaned, gp_to_obj = assign_genparticles_to_obj_and_merge(gpdata)
