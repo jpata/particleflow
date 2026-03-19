@@ -71,9 +71,13 @@ def plot_jet_performance(event_data, output_dir):
         num_events = len(event_data[fields[0]])
     else:
         num_events = len(event_data)
+        fields = event_data.fields
 
     for i in range(num_events):
         # Genjets from parquet
+        if "genjet" not in fields:
+            continue
+            
         genjets_raw = event_data["genjet"][i]
         if len(genjets_raw) == 0:
             continue
@@ -86,36 +90,38 @@ def plot_jet_performance(event_data, output_dir):
         })
         
         # ytarget_track + ytarget_cluster
-        y_track = event_data["ytarget_track"][i]
-        y_cluster = event_data["ytarget_cluster"][i]
-        
-        # Filter PDG != 0
-        y_track = y_track[y_track[:, 0] != 0]
-        y_cluster = y_cluster[y_cluster[:, 0] != 0]
-        
-        if len(y_track) > 0 or len(y_cluster) > 0:
-            y_track_cluster = np.concatenate([y_track, y_cluster], axis=0)
-            target_track_cluster_jets = compute_jets(y_track_cluster, jetdef)
+        if "ytarget_track" in fields and "ytarget_cluster" in fields:
+            y_track = event_data["ytarget_track"][i]
+            y_cluster = event_data["ytarget_cluster"][i]
             
-            if len(target_track_cluster_jets) > 0:
-                idx1, idx2 = match_jets([target_track_cluster_jets], [genjets], 0.4)
-                for i1, i2 in zip(idx1[0], idx2[0]):
-                    ratios_track_cluster.append(target_track_cluster_jets[i1].pt / genjets[i2].pt)
+            # Filter PDG != 0
+            y_track = y_track[y_track[:, 0] != 0]
+            y_cluster = y_cluster[y_cluster[:, 0] != 0]
+            
+            if len(y_track) > 0 or len(y_cluster) > 0:
+                y_track_cluster = np.concatenate([y_track, y_cluster], axis=0)
+                target_track_cluster_jets = compute_jets(y_track_cluster, jetdef)
+                
+                if len(target_track_cluster_jets) > 0:
+                    idx1, idx2 = match_jets([target_track_cluster_jets], [genjets], 0.4)
+                    for i1, i2 in zip(idx1[0], idx2[0]):
+                        ratios_track_cluster.append(target_track_cluster_jets[i1].pt / genjets[i2].pt)
         
         # ytarget_hit
-        y_hit = event_data["ytarget_hit"][i]
-        y_hit = y_hit[y_hit[:, 0] != 0]
-        if len(y_hit) > 0:
-            target_hit_jets = compute_jets(y_hit, jetdef)
-            
-            if len(target_hit_jets) > 0:
-                idx1, idx2 = match_jets([target_hit_jets], [genjets], 0.4)
-                for i1, i2 in zip(idx1[0], idx2[0]):
-                    ratios_hit.append(target_hit_jets[i1].pt / genjets[i2].pt)
+        if "ytarget_hit" in fields:
+            y_hit = event_data["ytarget_hit"][i]
+            y_hit = y_hit[y_hit[:, 0] != 0]
+            if len(y_hit) > 0:
+                target_hit_jets = compute_jets(y_hit, jetdef)
+                
+                if len(target_hit_jets) > 0:
+                    idx1, idx2 = match_jets([target_hit_jets], [genjets], 0.4)
+                    for i1, i2 in zip(idx1[0], idx2[0]):
+                        ratios_hit.append(target_hit_jets[i1].pt / genjets[i2].pt)
 
     # Plotting ratios
     plt.figure(figsize=(8, 6))
-    bins = np.linspace(0, 2, 101)
+    bins = np.linspace(0, 2, 501)
     if len(ratios_track_cluster) > 0:
         plt.hist(ratios_track_cluster, bins=bins, histtype='step', label='Track+Cluster jets / Gen jets')
     if len(ratios_hit) > 0:
@@ -155,17 +161,20 @@ def plot_distributions(event_data, output_dir):
         num_events = len(event_data[fields[0]])
     else:
         num_events = len(event_data)
+        fields = event_data.fields
 
     for i in range(num_events):
         # Calculate target MET
         t_px, t_py = 0, 0
         
         # Collections to process: (key_X, key_Y, type_name)
-        collections = [
-            ("X_track", "ytarget_track", "track"),
-            ("X_cluster", "ytarget_cluster", "cluster"),
-            ("X_hit", "ytarget_hit", "hit")
-        ]
+        collections = []
+        if "X_track" in fields and "ytarget_track" in fields:
+            collections.append(("X_track", "ytarget_track", "track"))
+        if "X_cluster" in fields and "ytarget_cluster" in fields:
+            collections.append(("X_cluster", "ytarget_cluster", "cluster"))
+        if "X_hit" in fields and "ytarget_hit" in fields:
+            collections.append(("X_hit", "ytarget_hit", "hit"))
         
         for k_x, k_y, name in collections:
             x = event_data[k_x][i]
@@ -200,8 +209,9 @@ def plot_distributions(event_data, output_dir):
                 corr_data[name]["phi"][0].extend(x_phi)
                 corr_data[name]["phi"][1].extend(y_phi)
 
-        genmet.append(event_data["genmet"][i])
-        target_met.append(np.sqrt(t_px**2 + t_py**2))
+        if "genmet" in fields:
+            genmet.append(event_data["genmet"][i])
+            target_met.append(np.sqrt(t_px**2 + t_py**2))
 
     # 1D Plots
     plt.figure(figsize=(12, 6))
@@ -271,38 +281,43 @@ def plot_distributions(event_data, output_dir):
 def plot_event(event_data, event_idx, output_dir):
     plt.figure(figsize=(10, 8))
     
+    fields = event_data.fields
+
     # Extract Tracks
-    x_track = event_data["X_track"][event_idx]
-    if len(x_track) > 0:
-        eta = x_track[:, TRACK_ETA_IDX]
-        phi = np.arctan2(x_track[:, TRACK_SIN_PHI_IDX], x_track[:, TRACK_COS_PHI_IDX])
-        plt.scatter(eta, phi, marker='x', color='black', label='Tracks', alpha=0.5, s=20)
+    if "X_track" in fields:
+        x_track = event_data["X_track"][event_idx]
+        if len(x_track) > 0:
+            eta = x_track[:, TRACK_ETA_IDX]
+            phi = np.arctan2(x_track[:, TRACK_SIN_PHI_IDX], x_track[:, TRACK_COS_PHI_IDX])
+            plt.scatter(eta, phi, marker='x', color='black', label='Tracks', alpha=0.5, s=20)
         
     # Extract Clusters
-    x_cluster = event_data["X_cluster"][event_idx]
-    if len(x_cluster) > 0:
-        eta = x_cluster[:, CLUSTER_ETA_IDX]
-        phi = np.arctan2(x_cluster[:, CLUSTER_SIN_PHI_IDX], x_cluster[:, CLUSTER_COS_PHI_IDX])
-        plt.scatter(eta, phi, marker='o', facecolors='none', edgecolors='blue', label='Clusters', alpha=0.5, s=50)
+    if "X_cluster" in fields:
+        x_cluster = event_data["X_cluster"][event_idx]
+        if len(x_cluster) > 0:
+            eta = x_cluster[:, CLUSTER_ETA_IDX]
+            phi = np.arctan2(x_cluster[:, CLUSTER_SIN_PHI_IDX], x_cluster[:, CLUSTER_COS_PHI_IDX])
+            plt.scatter(eta, phi, marker='o', facecolors='none', edgecolors='blue', label='Clusters', alpha=0.5, s=50)
 
     # Extract Hits
-    x_hit = event_data["X_hit"][event_idx]
-    if len(x_hit) > 0:
-        subdet = x_hit[:, HIT_SUBDETECTOR_IDX]
-        eta = x_hit[:, HIT_ETA_IDX]
-        phi = np.arctan2(x_hit[:, HIT_SIN_PHI_IDX], x_hit[:, HIT_COS_PHI_IDX])
-        
-        # Plot hits by subdetector
-        # 0: ECAL, 1: HCAL, 3: Tracker, 2: Others
-        subdet_names = {0: "ECAL", 1: "HCAL", 3: "Tracker", 2: "Other"}
-        colors = {0: "green", 1: "red", 3: "cyan", 2: "gray"}
-        markers = {0: 's', 1: '^', 3: '.', 2: 'v'}
-        
-        for sd in np.unique(subdet):
-            mask = subdet == sd
-            name = subdet_names.get(sd, f"Subdet {sd}")
-            plt.scatter(eta[mask], phi[mask], marker=markers.get(sd, '.'), color=colors.get(sd, 'gray'), 
-                        label=f'Hits ({name})', alpha=0.3, s=10)
+    if "X_hit" in fields:
+        x_hit = event_data["X_hit"][event_idx]
+        if len(x_hit) > 0:
+            subdet = x_hit[:, HIT_SUBDETECTOR_IDX]
+            eta = x_hit[:, HIT_ETA_IDX]
+            phi = np.arctan2(x_hit[:, HIT_SIN_PHI_IDX], x_hit[:, HIT_COS_PHI_IDX])
+            
+            # Plot hits by subdetector
+            # 0: ECAL, 1: HCAL, 3: Tracker, 2: Others
+            subdet_names = {0: "ECAL", 1: "HCAL", 3: "Tracker", 2: "Other"}
+            colors = {0: "green", 1: "red", 3: "cyan", 2: "gray"}
+            markers = {0: 's', 1: '^', 3: '.', 2: 'v'}
+            
+            for sd in np.unique(subdet):
+                mask = subdet == sd
+                name = subdet_names.get(sd, f"Subdet {sd}")
+                plt.scatter(eta[mask], phi[mask], marker=markers.get(sd, '.'), color=colors.get(sd, 'gray'), 
+                            label=f'Hits ({name})', alpha=0.3, s=10)
 
     plt.xlabel('Eta')
     plt.ylabel('Phi')
