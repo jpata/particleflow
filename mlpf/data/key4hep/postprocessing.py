@@ -10,7 +10,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import glob
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple
 
 import awkward
 import fastjet
@@ -118,6 +118,7 @@ class HitCollections:
     OTrackerEndcapHits: Optional[awkward.Array] = None
     VXDTrackerHits: Optional[awkward.Array] = None
     VXDEndcapTrackerHits: Optional[awkward.Array] = None
+
 
 @dataclass
 class EventRecord:
@@ -350,7 +351,7 @@ def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[s
         elif f == "energyError" and coll + ".eDepError" in available_fields:
             feat_arr[f] = hit_data[coll + ".eDepError"][iev]
         else:
-            print("feature {} not available in coll".format(full_f, coll))
+            print(f"feature {full_f} not available in {coll}")
             feat_arr[f] = np.zeros(n_hits, dtype=np.float32)
 
     # set the subdetector type
@@ -982,7 +983,7 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
             #     f"Unmatched genparticle {igp_unmatched} with pt={pt_arr[igp_unmatched]:.2f} "
             #     f"could not be associated with a unique cluster (found {len(idx_gp_bestcluster)})"
             # )
-            print (
+            print(
                 f"Unmatched genparticle {igp_unmatched} with pt={pt_arr[igp_unmatched]:.2f} "
                 f"could not be associated with a unique cluster (found {len(idx_gp_bestcluster)})"
             )
@@ -1192,8 +1193,7 @@ def process_one_file(fn: str, ofn: str) -> None:
     fi = uproot.open(fn)
     arrs = fi["events"]
 
-
-    #map collection ID name to numerical key
+    # map collection ID name to numerical key
     collectionIDs = {
         k: v
         for k, v in zip(
@@ -1462,17 +1462,15 @@ def process_one_file(fn: str, ofn: str) -> None:
         ytarget_cluster[:, particle_feature_order.index("jet_idx")] = ytarget_cluster_constituents
 
         this_ev: EventRecord = {
-            #if we want to train on clusters
+            # if we want to train on clusters
             "X_track": X_track,
             "X_cluster": X_cluster,
             "ytarget_track": ytarget_track,
             "ytarget_cluster": ytarget_cluster,
-
-            #if we want to train on hits
+            # if we want to train on hits
             "X_hit": get_feature_matrix(gpdata_cleaned.hit_features, hit_feature_order),
             "ytarget_hit": ytarget_hit,
-
-            #these are used for validation only
+            # these are used for validation only
             "ycand_track": ycand_track,
             "ycand_cluster": ycand_cluster,
             "genmet": float(met_st1[iev]),
