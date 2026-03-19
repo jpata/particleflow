@@ -26,11 +26,25 @@ def get_available_gpus():
     if "CUDA_VISIBLE_DEVICES" in os.environ:
         gpus = os.environ["CUDA_VISIBLE_DEVICES"].split(",")
         return [g.strip() for g in gpus if g.strip()]
-    
+
     try:
-        output = subprocess.check_output(["nvidia-smi", "--query-gpu=index", "--format=csv,noheader"])
-        gpus = output.decode("utf-8").strip().split("\n")
-        return [g.strip() for g in gpus if g.strip()]
+        output = subprocess.check_output(["nvidia-smi", "-L"]).decode("utf-8")
+        lines = output.strip().split("\n")
+        gpus = []
+        for i, line in enumerate(lines):
+            # If the current line is a GPU, check if the next line is a MIG device
+            if line.startswith("GPU"):
+                if i + 1 < len(lines) and "MIG" in lines[i + 1]:
+                    continue
+
+            # Extract UUID
+            match = re.search(r"UUID: ([\w-]+)", line)
+            if match:
+                gpus.append(match.group(1))
+
+        if gpus:
+            return gpus
+        return ["0"]
     except Exception:
         return ["0"]
 
