@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 import os
+import vector
+import fastjet
 
 # Feature indices from mlpf/data/key4hep/postprocessing.py
 # track_feature_order = ["elemtype", "pt", "eta", "sin_phi", "cos_phi", ...]
@@ -29,6 +31,105 @@ PARTICLE_PT_IDX = 2
 PARTICLE_ETA_IDX = 3
 PARTICLE_SIN_PHI_IDX = 4
 PARTICLE_COS_PHI_IDX = 5
+PARTICLE_ENERGY_IDX = 6
+
+def compute_jets(particles, jetdef):
+    if len(particles) == 0:
+        # Return an empty array of the correct type
+        return awkward.zip({"pt": [], "eta": [], "phi": [], "energy": []})
+    
+    # Extract p4
+    pt = particles[:, PARTICLE_PT_IDX]
+    eta = particles[:, PARTICLE_ETA_IDX]
+    phi = np.arctan2(particles[:, PARTICLE_SIN_PHI_IDX], particles[:, PARTICLE_COS_PHI_IDX])
+    energy = particles[:, PARTICLE_ENERGY_IDX]
+    
+    p4 = vector.awk(awkward.zip({"pt": pt, "eta": eta, "phi": phi, "energy": energy}))
+    cluster = fastjet.ClusterSequence(p4, jetdef)
+    jets = vector.awk(cluster.inclusive_jets(min_pt=5.0))
+    
+    # Return a simple record with eta/phi for numba match_jets
+    return awkward.zip({
+        "pt": jets.pt,
+        "eta": jets.eta,
+        "phi": jets.phi,
+        "energy": jets.t
+    })
+
+def plot_jet_performance(event_data, output_dir):
+    from mlpf.jet_utils import match_jets
+    
+    print("Clustering jets and matching to genjets...")
+    
+    jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
+    
+    ratios_track_cluster = []
+    ratios_hit = []
+
+    if isinstance(event_data, awkward.Record):
+        fields = event_data.fields
+        num_events = len(event_data[fields[0]])
+    else:
+        num_events = len(event_data)
+
+    for i in range(num_events):
+        # Genjets from parquet
+        genjets_raw = event_data["genjet"][i]
+        if len(genjets_raw) == 0:
+            continue
+            
+        genjets = awkward.zip({
+            "pt": genjets_raw[:, 0],
+            "eta": genjets_raw[:, 1],
+            "phi": genjets_raw[:, 2],
+            "energy": genjets_raw[:, 3]
+        })
+        
+        # ytarget_track + ytarget_cluster
+        y_track = event_data["ytarget_track"][i]
+        y_cluster = event_data["ytarget_cluster"][i]
+        
+        # Filter PDG != 0
+        y_track = y_track[y_track[:, 0] != 0]
+        y_cluster = y_cluster[y_cluster[:, 0] != 0]
+        
+        if len(y_track) > 0 or len(y_cluster) > 0:
+            y_track_cluster = np.concatenate([y_track, y_cluster], axis=0)
+            target_track_cluster_jets = compute_jets(y_track_cluster, jetdef)
+            
+            if len(target_track_cluster_jets) > 0:
+                idx1, idx2 = match_jets([target_track_cluster_jets], [genjets], 0.4)
+                for i1, i2 in zip(idx1[0], idx2[0]):
+                    ratios_track_cluster.append(target_track_cluster_jets[i1].pt / genjets[i2].pt)
+        
+        # ytarget_hit
+        y_hit = event_data["ytarget_hit"][i]
+        y_hit = y_hit[y_hit[:, 0] != 0]
+        if len(y_hit) > 0:
+            target_hit_jets = compute_jets(y_hit, jetdef)
+            
+            if len(target_hit_jets) > 0:
+                idx1, idx2 = match_jets([target_hit_jets], [genjets], 0.4)
+                for i1, i2 in zip(idx1[0], idx2[0]):
+                    ratios_hit.append(target_hit_jets[i1].pt / genjets[i2].pt)
+
+    # Plotting ratios
+    plt.figure(figsize=(8, 6))
+    bins = np.linspace(0, 2, 101)
+    if len(ratios_track_cluster) > 0:
+        plt.hist(ratios_track_cluster, bins=bins, histtype='step', label='Track+Cluster jets / Gen jets')
+    if len(ratios_hit) > 0:
+        plt.hist(ratios_hit, bins=bins, histtype='step', label='Hit jets / Gen jets')
+    plt.xlabel('Matched Jet pT ratio (Target / Gen)')
+    plt.ylabel('Counts')
+    plt.yscale('log')
+    plt.legend()
+    plt.title('Jet Response (Target Match to Gen)')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'jet_response.png'))
+    print(f"Saved jet response plot (log scale) to {output_dir}/jet_response.png")
+    plt.close()
 
 def plot_distributions(event_data, output_dir):
     print("Collecting distributions across all events...")
@@ -248,6 +349,9 @@ def main():
     
     # Plot distributions across all events
     plot_distributions(data, args.output_dir)
+    
+    # Plot jet performance
+    plot_jet_performance(data, args.output_dir)
 
     # In some awkward versions or depending on how it's saved, from_parquet may return a Record
     if isinstance(data, awkward.Record):

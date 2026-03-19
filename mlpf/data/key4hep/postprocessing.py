@@ -723,9 +723,8 @@ def filter_adj(adj: SparseMatrixCOO, all_to_filtered: Dict[int, int]) -> SparseM
     return np.array(i0s_new), np.array(i1s_new), np.array(ws_new)
 
 
-# loop over status 1 particles and collect the hits of their immediate daughters
-# genparticle_to_hit: tuple with 3 arrays (genparticle_indices, hit_indices, weights)
-# genparticle_to_trk: tuple with 3 arrays (genparticle_indices, track_indices, weights)
+# loop over status 1 particles and collect the links of all their descendants
+# since we want to process status 1 particles even if they don't leave hits directly, but only through their daughters
 def add_daughters_to_status1(
     gen_features: GenFeatures, genparticle_to_hit: SparseMatrixCOO, genparticle_to_trk: SparseMatrixCOO
 ) -> Tuple[SparseMatrixCOO, SparseMatrixCOO]:
@@ -733,43 +732,78 @@ def add_daughters_to_status1(
     dau_beg = gen_features["daughters_begin"]
     dau_end = gen_features["daughters_end"]
     dau_ind = gen_features["index"]
+
+    # Pre-index for faster lookup
+    hit_map = {}
+    for gp, hit, w in zip(genparticle_to_hit[0], genparticle_to_hit[1], genparticle_to_hit[2]):
+        if gp not in hit_map:
+            hit_map[gp] = []
+        hit_map[gp].append((hit, w))
+
+    trk_map = {}
+    for gp, trk, w in zip(genparticle_to_trk[0], genparticle_to_trk[1], genparticle_to_trk[2]):
+        if gp not in trk_map:
+            trk_map[gp] = []
+        trk_map[gp].append((trk, w))
+
     genparticle_to_hit_additional_gp = []
     genparticle_to_hit_additional_hit = []
     genparticle_to_hit_additional_w = []
     genparticle_to_trk_additional_gp = []
     genparticle_to_trk_additional_trk = []
     genparticle_to_trk_additional_w = []
+
     for idx_st1 in np.where(mask_status1)[0]:
         pdg = abs(gen_features["PDG"][idx_st1])
+        # in case the particle was a neutrino, don't go further
         if pdg not in [12, 14, 16]:
+            stack = []
             db = dau_beg[idx_st1]
             de = dau_end[idx_st1]
-            daus = dau_ind[db:de] if dau_ind is not None else []
-            for dau in daus:
-                dau_hit_idx = genparticle_to_hit[1][genparticle_to_hit[0] == dau]
-                dau_hit_w = genparticle_to_hit[2][genparticle_to_hit[0] == dau]
-                for dh_idx, dh_w in zip(dau_hit_idx, dau_hit_w):
-                    genparticle_to_hit_additional_gp.append(idx_st1)
-                    genparticle_to_hit_additional_hit.append(dh_idx)
-                    genparticle_to_hit_additional_w.append(dh_w)
+            if dau_ind is not None:
+                stack.extend(dau_ind[db:de])
 
-                dau_trk_idx = genparticle_to_trk[1][genparticle_to_trk[0] == dau]
-                dau_trk_w = genparticle_to_trk[2][genparticle_to_trk[0] == dau]
-                for dt_idx, dt_w in zip(dau_trk_idx, dau_trk_w):
-                    genparticle_to_trk_additional_gp.append(idx_st1)
-                    genparticle_to_trk_additional_trk.append(dt_idx)
-                    genparticle_to_trk_additional_w.append(dt_w)
+            visited = set()
+            while stack:
+                dau_idx = stack.pop()
+                if dau_idx in visited:
+                    continue
+                visited.add(dau_idx)
 
-    genparticle_to_hit = (
-        np.concatenate([genparticle_to_hit[0], genparticle_to_hit_additional_gp]),
-        np.concatenate([genparticle_to_hit[1], genparticle_to_hit_additional_hit]),
-        np.concatenate([genparticle_to_hit[2], genparticle_to_hit_additional_w]),
-    )
-    genparticle_to_trk = (
-        np.concatenate([genparticle_to_trk[0], genparticle_to_trk_additional_gp]),
-        np.concatenate([genparticle_to_trk[1], genparticle_to_trk_additional_trk]),
-        np.concatenate([genparticle_to_trk[2], genparticle_to_trk_additional_w]),
-    )
+                # Add hits of this descendant to the status 1 particle
+                if dau_idx in hit_map:
+                    for hit, w in hit_map[dau_idx]:
+                        genparticle_to_hit_additional_gp.append(idx_st1)
+                        genparticle_to_hit_additional_hit.append(hit)
+                        genparticle_to_hit_additional_w.append(w)
+
+                # Add tracks of this descendant to the status 1 particle
+                if dau_idx in trk_map:
+                    for trk, w in trk_map[dau_idx]:
+                        genparticle_to_trk_additional_gp.append(idx_st1)
+                        genparticle_to_trk_additional_trk.append(trk)
+                        genparticle_to_trk_additional_w.append(w)
+
+                # Add grand-daughters to the stack
+                db_dau = dau_beg[dau_idx]
+                de_dau = dau_end[dau_idx]
+                if dau_ind is not None:
+                    stack.extend(dau_ind[db_dau:de_dau])
+
+    if len(genparticle_to_hit_additional_gp) > 0:
+        genparticle_to_hit = (
+            np.concatenate([genparticle_to_hit[0], genparticle_to_hit_additional_gp]),
+            np.concatenate([genparticle_to_hit[1], genparticle_to_hit_additional_hit]),
+            np.concatenate([genparticle_to_hit[2], genparticle_to_hit_additional_w]),
+        )
+
+    if len(genparticle_to_trk_additional_gp) > 0:
+        genparticle_to_trk = (
+            np.concatenate([genparticle_to_trk[0], genparticle_to_trk_additional_gp]),
+            np.concatenate([genparticle_to_trk[1], genparticle_to_trk_additional_trk]),
+            np.concatenate([genparticle_to_trk[2], genparticle_to_trk_additional_w]),
+        )
+
     return genparticle_to_hit, genparticle_to_trk
 
 
@@ -793,11 +827,8 @@ def get_genparticles_and_adjacencies(
     track_features = track_to_features(prop_data, iev)
     genparticle_to_trk = genparticle_track_adj(sitrack_links, iev)
 
-    # collect hits of st=1 daughters to the st=1 particles
-    mask_status1 = gen_features["generatorStatus"] == 1
-
-    if gen_features["index"] is not None:  # if there are daughters
-        genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
+    # collect hits of st=1 direct daughters to the st=1 particles
+    genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
 
     n_gp = awkward.count(gen_features["PDG"])
     n_track = awkward.count(track_features["type"])
@@ -829,6 +860,7 @@ def get_genparticles_and_adjacencies(
     mask_visible_hit = (gp_energy_in_hits / gen_features["energy"]) > 0.10
 
     # temporary logging to debug visibility logic
+    mask_status1 = gen_features["generatorStatus"] == 1
     print(f"debug_visibility: iev={iev} n_gp={n_gp} n_st1={np.sum(mask_status1)}")
     print(f"debug_visibility:  gp_in_tracker (st1): {np.sum(mask_status1 & gp_in_tracker)}")
     print(f"debug_visibility:  gp_in_calo (st1): {np.sum(mask_status1 & gp_in_calo)}")
