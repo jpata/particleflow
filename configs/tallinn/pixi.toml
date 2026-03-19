@@ -25,14 +25,21 @@ mkdir -p .profiles/tallinn \
 && echo '#!/bin/bash
 # properties = {properties}
 export PYTHONUNBUFFERED=1
+export GOTO_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
 env
+sleep $((RANDOM % 10))
 stdbuf -oL -eL {exec_job}' > .profiles/tallinn/jobscript.sh \
 && echo 'executor: "slurm"
 jobscript: "jobscript.sh"
 jobs: unlimited
 restart-times: 0
-max-jobs-per-second: 10
-max-status-checks-per-second: 10
+max-jobs-per-second: 2
+max-status-checks-per-second: 2
 verbose: true
 use-conda: false
 default-resources:

@@ -219,12 +219,12 @@ productions:
     gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
 
     memory:
-      gen: 6000
+      gen: 4000
       post: 4000
       tfds: 8000
 
     slurm_partition: "main"
-    slurm_runtime: "600m"
+    slurm_runtime: "120m"
 
     samples:
       zz:
@@ -315,7 +315,7 @@ productions:
       tfds: 8000
 
     slurm_partition: "main"
-    slurm_runtime: "240m"
+    slurm_runtime: "120m"
 
     samples:
       ttbar:
