@@ -307,6 +307,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         x_norm = self.norm1(x)
         ffn_out = self.seq(x_norm)
         ffn_out = self.dropout(ffn_out)
+        x = residual + ffn_out
         if mask is not None:
             x = x * mask_
         if not self.use_simplified_attention and self.save_attention:

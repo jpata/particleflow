@@ -882,7 +882,7 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
                 valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
 
         for split in loaders.keys():
-            _logger.info("loader {} rank={} len={}".format(split, rank, len(loaders[split])))
+            _logger.info("loader split={} rank={} len={}".format(split, rank, len(loaders[split])))
 
         train_all_steps(
             rank,

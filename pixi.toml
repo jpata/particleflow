@@ -8,14 +8,14 @@ platforms = ["linux-64"]
 [dependencies]
 python = ">=3.10"
 snakemake = ">=8.0"
-python-htcondor = "==23.4.0"
-snakemake-executor-plugin-cluster-generic = "*"
-snakemake-executor-plugin-slurm = "*"
+#python-htcondor = "==23.4.0"
+#snakemake-executor-plugin-cluster-generic = "*"
+#snakemake-executor-plugin-slurm = "*"
 pyyaml = "*"
 
 [pypi-dependencies]
 comet-ml = "*"
-snakemake-executor-plugin-htcondor = { git = "https://github.com/htcondor/snakemake-executor-plugin-htcondor" }
+#snakemake-executor-plugin-htcondor = { git = "https://github.com/htcondor/snakemake-executor-plugin-htcondor" }
 
 [feature.tallinn.activation]
 env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv" }
