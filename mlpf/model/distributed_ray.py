@@ -273,7 +273,7 @@ def train_ray_trial(config, args, outdir=None):
 
     loaders, samplers = get_interleaved_dataloaders(world_size, rank, mlpf_config, use_cuda, use_ray=True)
 
-    if args.comet:
+    if mlpf_config.comet:
         comet_experiment = create_comet_experiment(mlpf_config.comet_name, comet_offline=mlpf_config.comet_offline, outdir=outdir)
         comet_experiment.set_name(f"world_rank_{world_rank}_{Path(outdir).name}")
         comet_experiment.log_parameter("run_id", Path(outdir).name)
