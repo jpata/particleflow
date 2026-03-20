@@ -317,6 +317,7 @@ rule val_{val_id}:{val_rule_input}
 
                 if prod_type == "cms":
                     cmd = f"""
+export PYTHONPATH=$(pwd):$PYTHONPATH
 if [ ! -f {post_file_final} ]; then
     if [ -f {root_file} ]; then
         echo "Postprocessing {root_file}"
@@ -337,6 +338,7 @@ fi
 """
                 else:  # key4hep / parquet
                     cmd = f"""
+export PYTHONPATH=$(pwd):$PYTHONPATH
 if [ ! -f {post_file_final} ]; then
     if [ -f {root_file} ]; then
         echo "Postprocessing {root_file}"

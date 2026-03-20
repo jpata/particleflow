@@ -5,8 +5,7 @@ import numpy as np
 import tensorflow_datasets as tfds
 from .utils_hits import (
     NUM_SPLITS,
-    X_FEATURES_TRK,
-    X_FEATURES_CL,
+    X_FEATURES,
     Y_FEATURES,
     generate_examples,
     split_sample,
@@ -50,7 +49,7 @@ class CldEdmTtbarHits(tfds.core.GeneratorBasedBuilder):
                     "X": tfds.features.Tensor(
                         shape=(
                             None,
-                            max(len(X_FEATURES_TRK), len(X_FEATURES_CL)),
+                            len(X_FEATURES),
                         ),
                         dtype=np.float32,
                     ),
@@ -65,8 +64,7 @@ class CldEdmTtbarHits(tfds.core.GeneratorBasedBuilder):
             homepage="https://github.com/jpata/particleflow",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(
-                x_features_track=X_FEATURES_TRK,
-                x_features_cluster=X_FEATURES_CL,
+                x_features=X_FEATURES,
                 y_features=Y_FEATURES,
             ),
         )

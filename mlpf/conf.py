@@ -66,6 +66,115 @@ class AttentionType(Enum):
     LINEAR = "linear"
 
 
+from dataclasses import dataclass, fields
+
+
+class EDM4HEP:
+    @dataclass
+    class HitFeatures:
+        elemtype: Any
+        et: Any
+        eta: Any
+        sin_phi: Any
+        cos_phi: Any
+        energy: Any
+        position_x: Any
+        position_y: Any
+        position_z: Any
+        time: Any
+        subdetector: Any
+        type: Any
+
+        @classmethod
+        def get_names(cls):
+            return [f.name.replace("position_", "position.") for f in fields(cls)]
+
+    @dataclass
+    class TrackFeatures:
+        elemtype: Any
+        pt: Any
+        eta: Any
+        sin_phi: Any
+        cos_phi: Any
+        p: Any
+        chi2: Any
+        ndf: Any
+        dEdx: Any
+        dEdxError: Any
+        radiusOfInnermostHit: Any
+        tanLambda: Any
+        D0: Any
+        omega: Any
+        Z0: Any
+        time: Any
+
+        @classmethod
+        def get_names(cls):
+            return [f.name for f in fields(cls)]
+
+    @dataclass
+    class ClusterFeatures:
+        elemtype: Any
+        et: Any
+        eta: Any
+        sin_phi: Any
+        cos_phi: Any
+        energy: Any
+        position_x: Any
+        position_y: Any
+        position_z: Any
+        iTheta: Any
+        energy_ecal: Any
+        energy_hcal: Any
+        energy_other: Any
+        num_hits: Any
+        sigma_x: Any
+        sigma_y: Any
+        sigma_z: Any
+
+        @classmethod
+        def get_names(cls):
+            return [f.name.replace("position_", "position.") for f in fields(cls)]
+
+
+def get_edm4hep_x_features():
+    track_names = EDM4HEP.TrackFeatures.get_names()
+    cluster_names = EDM4HEP.ClusterFeatures.get_names()
+    max_len = max(len(track_names), len(cluster_names))
+    features = []
+    for i in range(max_len):
+        t = track_names[i] if i < len(track_names) else "Null"
+        c = cluster_names[i] if i < len(cluster_names) else "Null"
+        if t == "elemtype" and c == "elemtype":
+            features.append("type")
+        elif t == c:
+            features.append(t)
+        else:
+            features.append(f"{t} | {c}")
+    return features
+
+
+@dataclass
+class ParticleFeatures:
+    PDG: Any
+    charge: Any
+    pt: Any
+    eta: Any
+    sin_phi: Any
+    cos_phi: Any
+    energy: Any
+    ispu: Any
+    generatorStatus: Any
+    simulatorStatus: Any
+    gp_to_track: Any
+    gp_to_cluster: Any
+    jet_idx: Any
+
+    @classmethod
+    def get_names(cls):
+        return [f.name for f in fields(cls)]
+
+
 # All possible PFElement types
 # CMS classes from
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
@@ -174,58 +283,9 @@ X_FEATURES = {
         "sigma_y",
         "sigma_z",
     ],
-    Dataset.CLIC.value: [
-        "type",
-        "pt | et",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "p | energy",
-        "chi2 | position.x",
-        "ndf | position.y",
-        "dEdx | position.z",
-        "dEdxError | iTheta",
-        "radiusOfInnermostHit | energy_ecal",
-        "tanLambda | energy_hcal",
-        "D0 | energy_other",
-        "omega | num_hits",
-        "Z0 | sigma_x",
-        "time | sigma_y",
-        "Null | sigma_z",
-    ],
-    Dataset.CLD.value: [
-        "type",
-        "pt | et",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "p | energy",
-        "chi2 | position.x",
-        "ndf | position.y",
-        "dEdx | position.z",
-        "dEdxError | iTheta",
-        "radiusOfInnermostHit | energy_ecal",
-        "tanLambda | energy_hcal",
-        "D0 | energy_other",
-        "omega | num_hits",
-        "Z0 | sigma_x",
-        "time | sigma_y",
-        "Null | sigma_z",
-    ],
-    Dataset.CLD_HITS.value: [
-        "elemtype",
-        "et",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "energy",
-        "position.x",
-        "position.y",
-        "position.z",
-        "time",
-        "subdetector",
-        "type",
-    ],
+    Dataset.CLIC.value: get_edm4hep_x_features(),
+    Dataset.CLD.value: get_edm4hep_x_features(),
+    Dataset.CLD_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
 JET_CONFIG = {
@@ -258,21 +318,7 @@ JET_CONFIG = {
     },
 }
 
-Y_FEATURES = [
-    "PDG",
-    "charge",
-    "pt",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "ispu",
-    "generatorStatus",
-    "simulatorStatus",
-    "gp_to_track",
-    "gp_to_cluster",
-    "jet_idx",
-]
+Y_FEATURES = ParticleFeatures.get_names()
 
 
 class GNNLSHConfig(BaseModel):

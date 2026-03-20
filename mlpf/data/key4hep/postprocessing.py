@@ -1,5 +1,7 @@
 import os
 
+from mlpf.conf import EDM4HEP, ParticleFeatures as GenFeatures
+
 # noqa: to prevent https://stackoverflow.com/questions/52026652/openblas-blas-thread-init-pthread-create-resource-temporarily-unavailable
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -22,84 +24,6 @@ from scipy.sparse import coo_matrix
 
 # Type aliases for clarity
 SparseMatrixCOO = Tuple[np.ndarray, np.ndarray, np.ndarray]
-
-
-@dataclass
-class GenFeatures:
-    PDG: np.ndarray
-    generatorStatus: np.ndarray
-    charge: np.ndarray
-    pt: np.ndarray
-    eta: np.ndarray
-    phi: np.ndarray
-    sin_phi: np.ndarray
-    cos_phi: np.ndarray
-    energy: np.ndarray
-    ispu: np.ndarray
-    simulatorStatus: np.ndarray
-    gp_to_track: np.ndarray
-    gp_to_cluster: np.ndarray
-    jet_idx: np.ndarray
-    daughters_begin: np.ndarray
-    daughters_end: np.ndarray
-    index: Optional[np.ndarray]
-
-
-@dataclass
-class TrackFeatures:
-    elemtype: np.ndarray
-    pt: np.ndarray
-    eta: np.ndarray
-    sin_phi: np.ndarray
-    cos_phi: np.ndarray
-    p: np.ndarray
-    chi2: np.ndarray
-    ndf: np.ndarray
-    dEdx: np.ndarray
-    dEdxError: np.ndarray
-    radiusOfInnermostHit: np.ndarray
-    tanLambda: np.ndarray
-    D0: np.ndarray
-    omega: np.ndarray
-    Z0: np.ndarray
-    time: np.ndarray
-
-
-@dataclass
-class ClusterFeatures:
-    elemtype: np.ndarray
-    et: np.ndarray
-    eta: np.ndarray
-    sin_phi: np.ndarray
-    cos_phi: np.ndarray
-    energy: np.ndarray
-    position_x: np.ndarray
-    position_y: np.ndarray
-    position_z: np.ndarray
-    iTheta: np.ndarray
-    energy_ecal: np.ndarray
-    energy_hcal: np.ndarray
-    energy_other: np.ndarray
-    num_hits: np.ndarray
-    sigma_x: np.ndarray
-    sigma_y: np.ndarray
-    sigma_z: np.ndarray
-
-
-@dataclass
-class HitFeatures:
-    elemtype: np.ndarray
-    et: np.ndarray
-    eta: np.ndarray
-    sin_phi: np.ndarray
-    cos_phi: np.ndarray
-    energy: np.ndarray
-    position_x: np.ndarray
-    position_y: np.ndarray
-    position_z: np.ndarray
-    time: np.ndarray
-    subdetector: np.ndarray
-    type: np.ndarray
 
 
 @dataclass
@@ -165,75 +89,13 @@ tracker_hit_sim = {
 }
 
 # the feature matrices will be saved in this order
-particle_feature_order = [
-    "PDG",
-    "charge",
-    "pt",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "ispu",
-    "generatorStatus",
-    "simulatorStatus",
-    "gp_to_track",
-    "gp_to_cluster",
-    "jet_idx",
-]
+particle_feature_order = GenFeatures.get_names()
 
 # arrange track and cluster features such that pt (et), eta, phi, p (energy) are in the same spot
 # so we can easily use them in skip connections
-track_feature_order = [
-    "elemtype",
-    "pt",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "p",
-    "chi2",
-    "ndf",
-    "dEdx",
-    "dEdxError",
-    "radiusOfInnermostHit",
-    "tanLambda",
-    "D0",
-    "omega",
-    "Z0",
-    "time",
-]
-cluster_feature_order = [
-    "elemtype",
-    "et",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "position.x",
-    "position.y",
-    "position.z",
-    "iTheta",
-    "energy_ecal",
-    "energy_hcal",
-    "energy_other",
-    "num_hits",
-    "sigma_x",
-    "sigma_y",
-    "sigma_z",
-]
-hit_feature_order = [
-    "elemtype",
-    "et",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "position.x",
-    "position.y",
-    "position.z",
-    "time",
-    "subdetector",
-    "type",
-]
+track_feature_order = EDM4HEP.TrackFeatures.get_names()
+cluster_feature_order = EDM4HEP.ClusterFeatures.get_names()
+hit_feature_order = EDM4HEP.HitFeatures.get_names()
 
 
 def deltaphi(phi1: float, phi2: float) -> float:

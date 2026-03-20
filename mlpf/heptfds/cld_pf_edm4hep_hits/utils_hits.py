@@ -10,44 +10,16 @@ except Exception:
 
     sys.modules["importlib_resources"] = importlib.resources
 
+from mlpf.conf import CLASS_LABELS, Dataset, EDM4HEP, ParticleFeatures
+
 NUM_SPLITS = 10
 
-# For hits, the features are the same for tracker and calorimeter, but we define them separately
-# to keep the structure similar to the track/cluster-based dataset.
-X_FEATURES_TRK = [
-    "elemtype",
-    "et",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "position.x",
-    "position.y",
-    "position.z",
-    "time",
-    "subdetector",
-    "type",
-]
-X_FEATURES_CL = X_FEATURES_TRK
+X_FEATURES = EDM4HEP.HitFeatures.get_names()
+Y_FEATURES = ParticleFeatures.get_names()
 
-Y_FEATURES = [
-    "PDG",
-    "charge",
-    "pt",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "ispu",
-    "generatorStatus",
-    "simulatorStatus",
-    "gp_to_track",
-    "gp_to_cluster",
-    "jet_idx",
-]
-labels = [0, 211, 130, 22, 11, 13]
+labels = CLASS_LABELS[Dataset.CLD_HITS.value]
 
-N_X_FEATURES = max(len(X_FEATURES_CL), len(X_FEATURES_TRK))
+N_X_FEATURES = len(X_FEATURES)
 N_Y_FEATURES = len(Y_FEATURES)
 
 
