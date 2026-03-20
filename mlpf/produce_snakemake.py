@@ -556,10 +556,13 @@ nvidia-smi
         write_bash_script(train_script_path, cmd, project_root=project_root)
 
         train_inputs = []
-        if "tfds" in req_steps:
-            train_inputs.extend(tfds_sentinels)
-        if "tfds_hit" in req_steps:
-            train_inputs.extend(tfds_hit_sentinels)
+        model_dataset = model_spec.get("dataset", prod_config.get("type"))
+        if "hits" in model_dataset:
+            if "tfds_hit" in req_steps:
+                train_inputs.extend(tfds_hit_sentinels)
+        else:
+            if "tfds" in req_steps:
+                train_inputs.extend(tfds_sentinels)
 
         input_sentinels_str = " ,\n        ".join([f'"{s}"' for s in train_inputs])
         train_rule_input = ""
