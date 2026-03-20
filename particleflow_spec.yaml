@@ -9,6 +9,7 @@ project:
   # Site-specific configurations (Anchors)
   # To switch sites, update the merge key (<<: *lxplus
   sites:
+    #Tallinn has been tested extensively
     tallinn: &tallinn
       site_name: "tallinn"
       executor: "slurm"
@@ -27,6 +28,7 @@ project:
       gpu_partition: "gpu"
       cpu_partition: "main"
 
+    #lxplus has been tested to some extent, but not fully due to htcondor being quite overloaded
     lxplus: &lxplus
       site_name: "lxplus"
       executor: "condor"
@@ -46,6 +48,7 @@ project:
       gpu_partition: "tomorrow"
       cpu_partition: "tomorrow"
 
+    #Running on a local machine is possible, change the paths below as needed
     local: &local
       site_name: "local"
       executor: "local"
@@ -220,8 +223,8 @@ productions:
 
     memory:
       gen: 4000
-      post: 4000
-      tfds: 8000
+      post: 2000
+      tfds: 4000
 
     slurm_partition: "main"
     slurm_runtime: "120m"
@@ -300,6 +303,24 @@ productions:
         version: "3.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
+    tfds_hit_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ttbar"
+        version: "3.1.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ww_fullhad:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ww_fullhad"
+        version: "3.1.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      zz:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/zz"
+        version: "3.1.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qq:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/qq"
+        version: "3.1.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
   # CLIC Production
   clic:
     type: "key4hep"
@@ -311,7 +332,7 @@ productions:
 
     memory:
       gen: 4000
-      post: 4000
+      post: 1000
       tfds: 8000
 
     slurm_partition: "main"
@@ -522,6 +543,72 @@ models:
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_qq_pf"
         version: "3.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  pyg-cld-hits-v1:
+    <<: *defaults
+    dataset: cld_hits
+    gpu_batch_multiplier: 16
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0001
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 3
+        head_dim: 16
+        num_heads: 16
+
+    # Dataset Selection
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "cld_edm_ttbar_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_zz_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "cld_edm_ttbar_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_zz_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "cld_edm_ttbar_hits"
+        version: "3.1.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_ww_fullhad_hits"
+        version: "3.1.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_qq_hits"
+        version: "3.1.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_zz_hits"
+        version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # CLIC Model

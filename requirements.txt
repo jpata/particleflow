@@ -27,6 +27,7 @@ plotly
 pre-commit
 protobuf
 pyarrow
+pydantic
 pytest
 ray[tune]
 scikit-learn

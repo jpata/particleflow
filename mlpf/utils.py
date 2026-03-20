@@ -7,9 +7,20 @@ from pathlib import Path
 from comet_ml import OfflineExperiment, Experiment  # isort:skip
 
 
+import os
+
+
 def load_spec(spec_file):
     with open(spec_file, "r") as f:
         spec = yaml.safe_load(f)
+
+    # Runtime site override via environment variable
+    site_override = os.environ.get("PF_SITE")
+    if site_override and "project" in spec and "sites" in spec["project"]:
+        if site_override in spec["project"]["sites"]:
+            # Perform a shallow merge similar to YAML's '<<'
+            spec["project"].update(spec["project"]["sites"][site_override])
+
     return spec
 
 
