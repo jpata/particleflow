@@ -1,3 +1,5 @@
+# This file contains the structure of the MLPF configuration and some generic defaults.
+# Dataset-specific overrides are in particleflow_spec.yaml
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional, Dict, Any
 import os
@@ -10,6 +12,7 @@ class Dataset(Enum):
     CLIC = "clic"
     CLD = "cld"
     CLIC_HITS = "clic_hits"
+    CLD_HITS = "cld_hits"
 
 
 class ModelType(Enum):
@@ -65,6 +68,115 @@ class AttentionType(Enum):
     LINEAR = "linear"
 
 
+from dataclasses import dataclass, fields
+
+
+class EDM4HEP:
+    @dataclass
+    class HitFeatures:
+        elemtype: Any
+        et: Any
+        eta: Any
+        sin_phi: Any
+        cos_phi: Any
+        energy: Any
+        position_x: Any
+        position_y: Any
+        position_z: Any
+        time: Any
+        subdetector: Any
+        type: Any
+
+        @classmethod
+        def get_names(cls):
+            return [f.name.replace("position_", "position.") for f in fields(cls)]
+
+    @dataclass
+    class TrackFeatures:
+        elemtype: Any
+        pt: Any
+        eta: Any
+        sin_phi: Any
+        cos_phi: Any
+        p: Any
+        chi2: Any
+        ndf: Any
+        dEdx: Any
+        dEdxError: Any
+        radiusOfInnermostHit: Any
+        tanLambda: Any
+        D0: Any
+        omega: Any
+        Z0: Any
+        time: Any
+
+        @classmethod
+        def get_names(cls):
+            return [f.name for f in fields(cls)]
+
+    @dataclass
+    class ClusterFeatures:
+        elemtype: Any
+        et: Any
+        eta: Any
+        sin_phi: Any
+        cos_phi: Any
+        energy: Any
+        position_x: Any
+        position_y: Any
+        position_z: Any
+        iTheta: Any
+        energy_ecal: Any
+        energy_hcal: Any
+        energy_other: Any
+        num_hits: Any
+        sigma_x: Any
+        sigma_y: Any
+        sigma_z: Any
+
+        @classmethod
+        def get_names(cls):
+            return [f.name.replace("position_", "position.") for f in fields(cls)]
+
+
+def get_edm4hep_x_features():
+    track_names = EDM4HEP.TrackFeatures.get_names()
+    cluster_names = EDM4HEP.ClusterFeatures.get_names()
+    max_len = max(len(track_names), len(cluster_names))
+    features = []
+    for i in range(max_len):
+        t = track_names[i] if i < len(track_names) else "Null"
+        c = cluster_names[i] if i < len(cluster_names) else "Null"
+        if t == "elemtype" and c == "elemtype":
+            features.append("type")
+        elif t == c:
+            features.append(t)
+        else:
+            features.append(f"{t} | {c}")
+    return features
+
+
+@dataclass
+class ParticleFeatures:
+    PDG: Any
+    charge: Any
+    pt: Any
+    eta: Any
+    sin_phi: Any
+    cos_phi: Any
+    energy: Any
+    ispu: Any
+    generatorStatus: Any
+    simulatorStatus: Any
+    gp_to_track: Any
+    gp_to_cluster: Any
+    jet_idx: Any
+
+    @classmethod
+    def get_names(cls):
+        return [f.name for f in fields(cls)]
+
+
 # All possible PFElement types
 # CMS classes from
 # https://github.com/ahlinist/cmssw/blob/1df62491f48ef964d198f574cdfcccfd17c70425/DataFormats/ParticleFlowReco/interface/PFBlockElement.h#L33
@@ -74,6 +186,7 @@ ELEM_TYPES = {
     Dataset.CMS.value: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
     Dataset.CLIC.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.CLD.value: [0, 1, 2],  # 1 - track, 2 - cluster
+    Dataset.CLD_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
 }
 
 # Some element types are defined, but do not exist in the dataset at all or should be excluded for physics reasons
@@ -81,6 +194,7 @@ ELEM_TYPES_NONZERO = {
     Dataset.CMS.value: [1, 4, 5, 6, 8, 9, 10, 11],
     Dataset.CLIC.value: [1, 2],
     Dataset.CLD.value: [1, 2],
+    Dataset.CLD_HITS.value: [1, 2],
 }
 
 CLASS_LABELS = {
@@ -88,6 +202,7 @@ CLASS_LABELS = {
     Dataset.CLIC.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLD.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLIC_HITS.value: [0, 211, 130, 22, 11, 13],
+    Dataset.CLD_HITS.value: [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
@@ -95,18 +210,21 @@ CLASS_NAMES_LATEX = {
     Dataset.CLIC.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     Dataset.CLD.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     Dataset.CLIC_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    Dataset.CLD_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
     Dataset.CMS.value: ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
     Dataset.CLIC.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLD.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLIC_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.CLD_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
     Dataset.CMS.value: ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
     Dataset.CLIC.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     Dataset.CLD.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     Dataset.CLIC_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    Dataset.CLD_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
 X_FEATURES = {
@@ -167,62 +285,9 @@ X_FEATURES = {
         "sigma_y",
         "sigma_z",
     ],
-    Dataset.CLIC.value: [
-        "type",
-        "pt | et",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "p | energy",
-        "chi2 | position.x",
-        "ndf | position.y",
-        "dEdx | position.z",
-        "dEdxError | iTheta",
-        "radiusOfInnermostHit | energy_ecal",
-        "tanLambda | energy_hcal",
-        "D0 | energy_other",
-        "omega | num_hits",
-        "Z0 | sigma_x",
-        "time | sigma_y",
-        "Null | sigma_z",
-    ],
-    Dataset.CLD.value: [
-        "type",
-        "pt | et",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "p | energy",
-        "chi2 | position.x",
-        "ndf | position.y",
-        "dEdx | position.z",
-        "dEdxError | iTheta",
-        "radiusOfInnermostHit | energy_ecal",
-        "tanLambda | energy_hcal",
-        "D0 | energy_other",
-        "omega | num_hits",
-        "Z0 | sigma_x",
-        "time | sigma_y",
-        "Null | sigma_z",
-    ],
-    Dataset.CLIC_HITS.value: [
-        "elemtype",
-        "pt | et",
-        "eta",
-        "sin_phi",
-        "cos_phi",
-        "p | energy",
-        "chi2 | position.x",
-        "ndf | position.y",
-        "dEdx | position.z",
-        "dEdxError | time",
-        "radiusOfInnermostHit | subdetector",
-        "tanLambda | type",
-        "D0 | Null",
-        "omega | Null",
-        "Z0 | Null",
-        "time | Null",
-    ],
+    Dataset.CLIC.value: get_edm4hep_x_features(),
+    Dataset.CLD.value: get_edm4hep_x_features(),
+    Dataset.CLD_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
 JET_CONFIG = {
@@ -246,23 +311,16 @@ JET_CONFIG = {
         "ptcut": 5.0,
         "match_dr": 0.1,
     },
+    Dataset.CLD_HITS.value: {
+        "algo": "ee_genkt_algorithm",
+        "r": 0.4,
+        "p": -1.0,
+        "ptcut": 5.0,
+        "match_dr": 0.1,
+    },
 }
 
-Y_FEATURES = [
-    "PDG",
-    "charge",
-    "pt",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "ispu",
-    "generatorStatus",
-    "simulatorStatus",
-    "gp_to_track",
-    "gp_to_cluster",
-    "jet_idx",
-]
+Y_FEATURES = ParticleFeatures.get_names()
 
 
 class GNNLSHConfig(BaseModel):
@@ -594,6 +652,31 @@ class MLPFConfig(BaseModel):
                 if "cms_pf_ttbar" in config_dict["test_dataset"]:
                     config_dict["test_dataset"] = {"cms_pf_ttbar": config_dict["test_dataset"]["cms_pf_ttbar"]}
                     config_dict["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
+            elif ds_name == "cld":
+                config_dict["gpu_batch_multiplier"] = 8
+                for ds in ["train_dataset", "valid_dataset"]:
+                    if ds in config_dict:
+                        config_dict[ds][ds_name] = {
+                            "physical": {
+                                "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
+                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.0.0"}},
+                            }
+                        }
+                if "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
+                    config_dict["test_dataset"] = {"cld_edm_ttbar_pf": config_dict["test_dataset"]["cld_edm_ttbar_pf"]}
+                    config_dict["test_dataset"]["cld_edm_ttbar_pf"]["splits"] = ["10"]
+            elif ds_name == "clic":
+                for ds in ["train_dataset", "valid_dataset"]:
+                    if ds in config_dict:
+                        config_dict[ds][ds_name] = {
+                            "physical": {
+                                "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
+                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.0.0"}},
+                            }
+                        }
+                if "clic_edm_ttbar_pf" in config_dict["test_dataset"]:
+                    config_dict["test_dataset"] = {"clic_edm_ttbar_pf": config_dict["test_dataset"]["clic_edm_ttbar_pf"]}
+                    config_dict["test_dataset"]["clic_edm_ttbar_pf"]["splits"] = ["10"]
 
         # 8. Post-override adjustments
         if "test_dataset" in config_dict:

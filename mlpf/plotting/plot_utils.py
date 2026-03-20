@@ -126,6 +126,9 @@ EVALUATION_DATASET_NAMES = {
     "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "cld_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
     "cld_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
+    "cld_edm_ttbar_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "cld_edm_qq_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "cld_edm_ww_fullhad_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$, PU10",
     "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
@@ -293,6 +296,8 @@ EXPERIMENT_LABELS = {
     "cms": cms_label,
     "clic": clic_label,
     "cld": cld_label,
+    "clic_hits": clic_label,
+    "cld_hits": cld_label,
 }
 
 

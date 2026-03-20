@@ -2,46 +2,13 @@ import awkward as ak
 import numpy as np
 import random
 
+from mlpf.conf import EDM4HEP
+
 NUM_SPLITS = 10
 
 # from fcc/postprocessing.py
-X_FEATURES_TRK = [
-    "elemtype",
-    "pt",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "p",
-    "chi2",
-    "ndf",
-    "dEdx",
-    "dEdxError",
-    "radiusOfInnermostHit",
-    "tanLambda",
-    "D0",
-    "omega",
-    "Z0",
-    "time",
-]
-X_FEATURES_CL = [
-    "elemtype",
-    "et",
-    "eta",
-    "sin_phi",
-    "cos_phi",
-    "energy",
-    "position.x",
-    "position.y",
-    "position.z",
-    "iTheta",
-    "energy_ecal",
-    "energy_hcal",
-    "energy_other",
-    "num_hits",
-    "sigma_x",
-    "sigma_y",
-    "sigma_z",
-]
+X_FEATURES_TRK = EDM4HEP.TrackFeatures.get_names()
+X_FEATURES_CL = EDM4HEP.ClusterFeatures.get_names()
 
 Y_FEATURES = [
     "PDG",
