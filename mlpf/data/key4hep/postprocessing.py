@@ -124,10 +124,12 @@ class HitCollections:
 class EventRecord:
     X_track: np.ndarray
     X_cluster: np.ndarray
-    X_hit: np.ndarray
+    X_hit_tracker: np.ndarray
+    X_hit_calo: np.ndarray
     ytarget_track: np.ndarray
     ytarget_cluster: np.ndarray
-    ytarget_hit: np.ndarray
+    ytarget_hit_tracker: np.ndarray
+    ytarget_hit_calo: np.ndarray
     ycand_track: np.ndarray
     ycand_cluster: np.ndarray
     genmet: float
@@ -1397,6 +1399,7 @@ def process_one_file(fn: str, ofn: str) -> None:
         gps_cluster[:, 1] = 0
 
         gps_hit = get_particle_feature_matrix(hit_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
+        gps_hit[:, 0] = np.array([map_pdgid_to_candid(p, c) for p, c in zip(gps_hit[:, 0], gps_hit[:, 1])])
 
         rps_track = get_particle_feature_matrix(track_to_rp_all, reco_features, particle_feature_order)
         rps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])])
@@ -1415,17 +1418,29 @@ def process_one_file(fn: str, ofn: str) -> None:
 
         X_track = get_feature_matrix(gpdata_cleaned.track_features, track_feature_order)
         X_cluster = get_feature_matrix(gpdata_cleaned.cluster_features, cluster_feature_order)
+        X_hit = get_feature_matrix(gpdata_cleaned.hit_features, hit_feature_order)
+
+        mask_tracker = gpdata_cleaned.hit_features["subdetector"] == 3
+        mask_calo = gpdata_cleaned.hit_features["subdetector"] != 3
+
+        X_hit_tracker = X_hit[mask_tracker]
+        X_hit_calo = X_hit[mask_calo]
+
         ytarget_track = gps_track
         ytarget_cluster = gps_cluster
-        ytarget_hit = gps_hit
+        ytarget_hit_tracker = gps_hit[mask_tracker]
+        ytarget_hit_calo = gps_hit[mask_calo]
         ycand_track = rps_track
         ycand_cluster = rps_cluster
 
         sanitize(X_track)
         sanitize(X_cluster)
+        sanitize(X_hit_tracker)
+        sanitize(X_hit_calo)
         sanitize(ytarget_track)
         sanitize(ytarget_cluster)
-        sanitize(ytarget_hit)
+        sanitize(ytarget_hit_tracker)
+        sanitize(ytarget_hit_calo)
         sanitize(ycand_track)
         sanitize(ycand_cluster)
 
@@ -1468,8 +1483,10 @@ def process_one_file(fn: str, ofn: str) -> None:
             "ytarget_track": ytarget_track,
             "ytarget_cluster": ytarget_cluster,
             # if we want to train on hits
-            "X_hit": get_feature_matrix(gpdata_cleaned.hit_features, hit_feature_order),
-            "ytarget_hit": ytarget_hit,
+            "X_hit_tracker": X_hit_tracker,
+            "X_hit_calo": X_hit_calo,
+            "ytarget_hit_tracker": ytarget_hit_tracker,
+            "ytarget_hit_calo": ytarget_hit_calo,
             # these are used for validation only
             "ycand_track": ycand_track,
             "ycand_cluster": ycand_cluster,
