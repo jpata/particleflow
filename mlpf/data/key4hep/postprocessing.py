@@ -865,10 +865,6 @@ def get_genparticles_and_adjacencies(
     # temporary logging to debug visibility logic
     mask_status1 = gen_features["generatorStatus"] == 1
     print(f"debug_visibility: iev={iev} n_gp={n_gp} n_st1={np.sum(mask_status1)}")
-    for idx in np.where(mask_status1)[0]:
-        if gen_features["pt"][idx] > 10:
-            print(f"debug_visibility: st1 gp idx={idx} PID={gen_features['PDG'][idx]} pt={gen_features['pt'][idx]:.2f} energy={gen_features['energy'][idx]:.2f} energy_in_hits={gp_energy_in_hits[idx]:.2f} vis_hit={mask_visible_hit[idx]}")
-
     print(f"debug_visibility:  gp_in_tracker (st1): {np.sum(mask_status1 & gp_in_tracker)}")
     print(f"debug_visibility:  gp_in_calo (st1): {np.sum(mask_status1 & gp_in_calo)}")
     print(f"debug_visibility:  mask_visible_hit (st1): {np.sum(mask_status1 & mask_visible_hit)}")
@@ -955,12 +951,21 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
                     break
 
     # assign genparticle to hit separately
+    # we use a set to ensure each genparticle is assigned to a unique hit
+    # this prevents errors where multiple genparticles are mapped to the same hit
     gp_to_hit_idx = -1 * np.ones(n_gp, dtype=np.int32)
     gp_to_hit_weights = np.array(gp_to_hit.todense())
-    for igp in range(n_gp):
+    set_used_hits = set([])
+    for igp in gps_sorted_energy:
         matched_hits = gp_to_hit_weights[igp]
         if np.any(matched_hits > 0):
-            gp_to_hit_idx[igp] = np.argmax(matched_hits)
+            hits = np.where(matched_hits > 0)[0]
+            hits = sorted(hits, key=lambda x: matched_hits[x], reverse=True)
+            for ihit in hits:
+                if ihit not in set_used_hits:
+                    gp_to_hit_idx[igp] = ihit
+                    set_used_hits.add(ihit)
+                    break
 
     # the genparticles that could not be matched to a track or cluster are merged to the closest genparticle
     unmatched = np.where((gp_to_obj[:, 0] == -1) & (gp_to_obj[:, 1] == -1))[0]
@@ -1319,8 +1324,7 @@ def process_one_file(fn: str, ofn: str) -> None:
     genjets_st1 = compute_jets(mc_st1_p4)
 
     ret = []
-    #for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
-    for iev in [38]:
+    for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
 
         # get the reco particles
         reco_arr = get_reco_properties(prop_data, iev)
@@ -1387,12 +1391,19 @@ def process_one_file(fn: str, ofn: str) -> None:
         used_gps_hit = np.zeros(n_gps, dtype=np.int64)
         hit_to_gp_all = assign_to_recoobj(n_hits, hit_to_gp, used_gps_hit)
 
-        # all genparticles must be assigned to some PFElement
+        # all genparticles must be assigned to some track or cluster
+        if not np.all(used_gps == 1):
+            for idx in np.where(used_gps==0)[0]:
+                print("ERROR: iev={} genparticle idx={}, PID={}, pt={:.2f} not assigned to any track or cluster".format(
+                    iev, idx, gpdata_cleaned.gen_features["PDG"][idx], gpdata_cleaned.gen_features["pt"][idx])) 
         assert np.all(used_gps == 1)
+
+        # all genparticles must be assigned to some hit.
         if not np.all(used_gps_hit == 1):
             for idx in np.where(used_gps_hit==0)[0]:
                 print("ERROR: iev={} genparticle idx={}, PID={}, pt={:.2f} not assigned to any hit".format(
                     iev, idx, gpdata_cleaned.gen_features["PDG"][idx], gpdata_cleaned.gen_features["pt"][idx])) 
+        assert(np.all(used_gps_hit == 1))
 
         used_rps = np.zeros(n_rps, dtype=np.int64)
         track_to_rp_all = assign_to_recoobj(n_tracks, track_to_rp, used_rps)
