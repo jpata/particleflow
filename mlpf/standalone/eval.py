@@ -40,6 +40,7 @@ def get_args():
         help="Attention type (ignored if --dsl is used)",
     )
     parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string")
+    parser.add_argument("--show-attention", action="store_true", help="Save attention visualization")
     return parser.parse_args()
 
 
@@ -314,9 +315,10 @@ if __name__ == "__main__":
         training_seconds = time.time() - start_total
 
         # Save attention visualization for one event
-        print("Saving attention visualization...")
-        one_batch = next(iter(valid_loader))
-        save_attention_visualization(model, one_batch, device)
+        if args.show_attention:
+            print("Saving attention visualization...")
+            one_batch = next(iter(valid_loader))
+            save_attention_visualization(model, one_batch, device)
 
         # Validation loss
         print("Computing validation loss...")
