@@ -110,7 +110,7 @@ def create_comet_experiment(comet_exp_name, comet_offline=False, outdir=None):
 
             experiment = OfflineExperiment(
                 project_name=comet_exp_name,
-                auto_metric_logging=True,
+                auto_metric_logging=False,
                 auto_param_logging=True,
                 auto_histogram_weight_logging=True,
                 auto_histogram_gradient_logging=False,
@@ -123,7 +123,7 @@ def create_comet_experiment(comet_exp_name, comet_offline=False, outdir=None):
 
             experiment = Experiment(
                 project_name=comet_exp_name,
-                auto_metric_logging=True,
+                auto_metric_logging=False,
                 auto_param_logging=True,
                 auto_histogram_weight_logging=True,
                 auto_histogram_gradient_logging=False,
