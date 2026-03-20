@@ -28,6 +28,20 @@ from mlpf.standalone.dsl import HEPTConfig
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
+# Implementation Differences from Official HEPT (HEPT/example/hept.py & HEPT/hept.md):
+# 1. Batching & Precision: Supports batched inputs [B, N, D] via flattening. Coordinates
+#    and offsets are forced to float32. Note: Large batch sizes (>500) may cause "smearing"
+#    of hit coordinates due to float32 precision limits when adding large offsets.
+# 2. Query-Key Alignment (Sec 4.3): Implements coordinate-based AND LSH codes via
+#    quantile_partition() and get_geo_shift() specifically for HEP 2D eta-phi space.
+# 3. Output Projection: HEPTAttention projects to full embedding dim (num_heads * dim_per_head)
+#    instead of dim_per_head as seen in some official examples.
+# 4. Numerical Stability & Gradient Safety: Core RBF distance and weighted sums are performed
+#    in float32. Includes 1e-20 eps and crops outputs back to raw_size before projection
+#    to ensure stable training and finite gradients in highly sparse attention patterns.
+# 5. Backbone Integration: Uses ELU activations and integrated PositionalEncoding
+#    as used in the paper's Tracking experiments.
+
 
 def uniform(a, b, shape, device="cpu"):
     return (b - a) * torch.rand(shape, device=device) + a
@@ -80,6 +94,8 @@ def unsort_from_buckets(s_x, perm_inverse):
 
 
 def qkv_res(s_query, s_key, s_value):
+    # Upcast to float32 for stable RBF distance and weighted sum
+    s_query, s_key, s_value = s_query.float(), s_key.float(), s_value.float()
     q_sq_05 = -0.5 * (s_query**2).sum(dim=-1, keepdim=True)
     k_sq_05 = -0.5 * (s_key**2).sum(dim=-1, keepdim=True)
     clustered_dists = torch.einsum("...id,...jd->...ij", s_query, s_key)
@@ -91,13 +107,16 @@ def qkv_res(s_query, s_key, s_value):
 
 
 def prep_qk(query, key, w, coords):
+    # Ensure coords are float32 for consistent precision
+    coords = coords.float()
     qw = w.sum(dim=1).clamp(max=50).exp().sum(dim=-1)
     new_qw_expand_dim = torch.cat([qw[:, :1], qw], dim=-1)
 
     sqrt_w_r = torch.sqrt(2 * new_qw_expand_dim)[None] * coords[:, None]
 
-    q_hat = torch.cat([query, sqrt_w_r], dim=-1)
-    k_hat = torch.cat([key, sqrt_w_r], dim=-1)
+    # Combine in float32
+    q_hat = torch.cat([query.float(), sqrt_w_r], dim=-1)
+    k_hat = torch.cat([key.float(), sqrt_w_r], dim=-1)
     return q_hat, k_hat
 
 
@@ -119,11 +138,11 @@ def pad_to_multiple(tensor, multiple, dims=-1, value=0):
 
 def quantile_partition(sorted_indices, num_regions):
     total_elements = sorted_indices.shape[-1]
-    region_size = (total_elements + num_regions - 1) // num_regions
+    region_size = torch.ceil(torch.tensor(total_elements, device=sorted_indices.device) / torch.as_tensor(num_regions, device=sorted_indices.device))
     inverse_indices = torch.argsort(sorted_indices, dim=-1)
     base = torch.arange(total_elements, device=sorted_indices.device)[None]
     region_indices = base // region_size + 1
-    reassigned_regions = region_indices[:, inverse_indices]
+    reassigned_regions = region_indices.gather(-1, inverse_indices.expand(region_indices.shape[0], -1))
     return reassigned_regions
 
 
@@ -160,9 +179,9 @@ class HEPTAttention(nn.Module):
         self.dim_per_head = kwargs["h_dim"]
         self.num_heads = kwargs["num_heads"]
         self.out_linear = nn.Linear(self.num_heads * self.dim_per_head, self.num_heads * self.dim_per_head)
-        self.block_size = kwargs["block_size"]
-        self.n_hashes = kwargs["n_hashes"]
-        self.num_w_per_dist = kwargs["num_w_per_dist"]
+        self.block_size = kwargs.get("block_size", 100)
+        self.n_hashes = kwargs.get("n_hashes", 3)
+        self.num_w_per_dist = kwargs.get("num_w_per_dist", 10)
         self.e2lsh = E2LSH(n_hashes=self.n_hashes, n_heads=self.num_heads, dim=hash_dim)
 
     def forward(self, query, key, value, **kwargs):
@@ -210,6 +229,11 @@ class HEPTAttention(nn.Module):
         q_rev_positions = invert_permutation(q_positions)
         o = unsort_from_buckets(so, q_rev_positions)
         logits = unsort_from_buckets(denom, q_rev_positions)
+
+        # Crop back to raw_size to match queries/keys and ensure gradients are safe
+        o = o[:, :, :raw_size]
+        logits = logits[:, :, :raw_size]
+
         out = o.sum(dim=0) / (logits.sum(dim=0) + 1e-20)
         out = self.out_linear(rearrange(out, "h n d -> n (h d)"))
         return out
@@ -332,13 +356,14 @@ class HEPTAttentionLayer(nn.Module):
         if mask is not None:
             x = x * mask_
 
-        # Extract eta and phi for hashing
-        eta = X[..., 2:3]
-        phi = torch.atan2(X[..., 3:4], X[..., 4:5])
+        # Extract eta and phi for hashing, explicitly in float32 for safety
+        eta = X[..., 2:3].float()
+        phi = torch.atan2(X[..., 3:4].float(), X[..., 4:5].float())
         coords = torch.cat([eta, phi], dim=-1)  # [B, N, 2]
 
         # Flatten batch to support HEPT which expects [N_total, D]
-        offsets = torch.arange(B, device=device).view(B, 1, 1) * 100.0
+        # Use large float32 offsets to ensure sample isolation
+        offsets = torch.arange(B, device=device).view(B, 1, 1).float() * 100.0
         coords = coords + offsets
 
         x_flat = x.view(B * N, D)
@@ -374,8 +399,8 @@ class HEPTAttentionLayer(nn.Module):
             raw_size=raw_size,
         )
 
-        # Crop back to raw_size and reshape to [B, N, D]
-        attn_out = attn_out[:raw_size].view(B, N, D)
+        # Reshape to [B, N, D]
+        attn_out = attn_out.view(B, N, D)
 
         # Residual and FFN
         x = x + self.dropout(attn_out)
@@ -462,6 +487,8 @@ class StandardAttentionLayer(nn.Module):
 
         B, N, D = x.shape
         if mask is not None:
+            # Ensure elements with zero features are also masked
+            mask = mask * (x.abs().sum(dim=-1) > 1e-6).float()
             mask_ = mask.unsqueeze(-1)
 
         residual = x
@@ -473,9 +500,8 @@ class StandardAttentionLayer(nn.Module):
         k = self.k_proj(x_norm).reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x_norm).reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # Use Flash Attention if available, but allow fallbacks for compatibility
         # If mask is provided, use it as attn_mask for proper padding handling
-        attn_mask = (mask == 0).unsqueeze(1).unsqueeze(2) if mask is not None else None
+        attn_mask = mask.bool().unsqueeze(1).unsqueeze(2) if mask is not None else None
 
         with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
             mha_out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout.p if self.training else 0.0)
@@ -944,3 +970,35 @@ def train(model, train_loader, optimizer, device, duration_seconds=120):
                 print(f"Step {num_steps}, Loss: {loss.item():.4f}, Elapsed: {elapsed:.1f}s")
 
     return total_loss / num_steps if num_steps > 0 else 0, num_steps
+
+
+@torch.no_grad()
+def validate(model, loader, device):
+    model.eval()
+    total_loss = 0
+    num_steps = 0
+
+    for batch in loader:
+        X = batch.X.to(device)
+        mask = batch.mask.to(device)
+
+        # Prepare targets
+        y = {
+            "cls_id": batch.ytarget[:, :, 0].to(device),
+            "pt": batch.ytarget[:, :, 2].to(device),
+            "eta": batch.ytarget[:, :, 3].to(device),
+            "sin_phi": batch.ytarget[:, :, 4].to(device),
+            "cos_phi": batch.ytarget[:, :, 5].to(device),
+            "energy": batch.ytarget[:, :, 6].to(device),
+        }
+
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
+            ypred = model(X, mask)
+            loss = mlpf_loss(y, ypred, mask, X)
+
+        total_loss += loss.item()
+        num_steps += 1
+        if num_steps > 10:  # Limit validation for speed
+            break
+
+    return total_loss / num_steps if num_steps > 0 else 0

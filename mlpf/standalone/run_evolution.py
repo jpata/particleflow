@@ -89,14 +89,14 @@ def generate_random_config():
         t = ltype or random.choice(["h", "g", "s", "f"])
         num = n or random.randint(1, 4)
         p = random.choice(["T", "F"])
-        
+
         extra_params = ""
         if t == "h" and random.random() < 0.4:
             if random.random() < 0.5:
                 extra_params += f",block_size={random.choice([50, 100, 200, 400])}"
             if random.random() < 0.5:
                 extra_params += f",n_hashes={random.choice([2, 3, 4, 5])}"
-        
+
         return f"{t}({n_heads},{emb_dim},{width},pos={p}{extra_params})*{num}"
 
     # 3. Backbone structure
@@ -123,7 +123,7 @@ def mutate_layer(layer: LayerConfig) -> LayerConfig:
         "width": layer.width,
         "pos": layer.pos,
     }
-    
+
     hept_fields = []
     if isinstance(layer, HEPTConfig):
         hept_fields = ["block_size", "n_hashes", "num_regions", "num_w_per_dist"]
@@ -156,7 +156,7 @@ def mutate_layer(layer: LayerConfig) -> LayerConfig:
     # Re-create the appropriate layer type
     if isinstance(layer, HEPTConfig):
         return HEPTConfig(**params)
-    
+
     # Filter only base parameters for non-HEPT layers
     base_params = {k: params[k] for k in ["num_heads", "embedding_dim", "width", "pos"]}
     if isinstance(layer, GlobalConfig):
@@ -204,20 +204,20 @@ def mutate_config(config: ModelConfig) -> ModelConfig:
 
     elif mutation_type == "output":
         rg_modes = ["direct", "additive", "linear", "multiplicative"]
-        
+
         if random.random() < 0.3:
             # Mutate one of the individual target modes
             if isinstance(config.output.rg_mode, dict):
                 rg_val = dict(config.output.rg_mode)
             else:
                 rg_val = {k: config.output.rg_mode for k in ["pt", "eta", "sin_phi", "cos_phi", "energy"]}
-            
+
             target = random.choice(list(rg_val.keys()))
             rg_val[target] = random.choice(rg_modes)
         else:
             # Global rg mode change
             rg_val = random.choice(rg_modes)
-            
+
         new_output = OutputConfig(config.output.num_classes, config.output.width, config.output.type, rg_val)
 
     return ModelConfig(new_input, new_backbone, new_output)
@@ -291,6 +291,7 @@ def parse_log(file_path):
     # Looking for final results section
     # Example: val_jet_iqr     : 1.709958 ± 0.000408 (var)
     metric_patterns = {
+        "val_loss": r"val_loss\s+:\s+([\d\.]+)",
         "val_jet_iqr": r"val_jet_iqr\s+:\s+([\d\.]+)",
         "val_jet_matched_frac": r"val_jet_matched_frac:\s+([\d\.]+)",
         "runtime_cpu_ms": r"runtime_cpu_ms\s+:\s+([\d\.]+)",
@@ -420,9 +421,16 @@ def main():
                     iqr = metrics.get("val_jet_iqr", 2.0)
                     matched_frac = metrics.get("val_jet_matched_frac", 0.5)
                     runtime_cpu = metrics.get("runtime_cpu_ms", 1000.0)
+                    val_loss = metrics.get("val_loss", 10.0)
 
-                    # Higher is better
-                    fitness = matched_frac / (iqr * (1.0 + runtime_cpu / 1000.0))
+                    # Individual terms for fitness
+                    term_matching = matched_frac
+                    term_iqr = 1.0 / max(iqr, 0.01)
+                    term_loss = 1.0 / (1.0 + val_loss)
+                    term_runtime = 1.0 / (1.0 + runtime_cpu / 1000.0)
+
+                    # Total fitness
+                    fitness = term_matching * term_iqr * term_loss * term_runtime
 
                     cfg = parse_dsl(dsl)
                     pop_with_fitness.append((cfg, fitness))

@@ -13,7 +13,7 @@ sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
 # Import standalone model
-from mlpf.standalone.train import MLPF, train
+from mlpf.standalone.train import MLPF, train, validate
 
 # Import library modules
 from mlpf.model.PFDataset import Collater, PFDataset
@@ -210,8 +210,8 @@ if __name__ == "__main__":
         model.train()
 
         # Fresh loaders for each run (especially for shuffling)
-        train_loader = DataLoader(ds_train, batch_size=4, collate_fn=collater, shuffle=True, num_workers=1, persistent_workers=True)
-        valid_loader = DataLoader(ds_valid, batch_size=4, collate_fn=collater, num_workers=1, persistent_workers=True)
+        train_loader = DataLoader(ds_train, batch_size=8, collate_fn=collater, shuffle=True, num_workers=1, persistent_workers=True)
+        valid_loader = DataLoader(ds_valid, batch_size=8, collate_fn=collater, num_workers=1, persistent_workers=True)
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
@@ -219,12 +219,16 @@ if __name__ == "__main__":
         start_total = time.time()
 
         # Train for a fixed time
-        avg_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
+        train_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
 
         training_seconds = time.time() - start_total
 
-        # Evaluate
-        print("Evaluating...")
+        # Validation loss
+        print("Computing validation loss...")
+        val_loss = validate(model, valid_loader, device)
+
+        # Evaluate jet metrics
+        print("Evaluating jet metrics...")
         val_jet_iqr, val_jet_matched_frac = evaluate(model, valid_loader, device)
 
         total_seconds = time.time() - start_total
@@ -279,6 +283,8 @@ if __name__ == "__main__":
 
         all_results.append(
             {
+                "train_loss": train_loss,
+                "val_loss": val_loss,
                 "val_jet_iqr": val_jet_iqr,
                 "val_jet_matched_frac": val_jet_matched_frac,
                 "training_seconds": training_seconds,
