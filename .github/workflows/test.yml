@@ -5,14 +5,17 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-
   workflow_dispatch:
 
 jobs:
-  test-in-container:
+  test:
     runs-on: ubuntu-latest
     container:
       image: pytorch/pytorch:2.9.1-cuda13.0-cudnn9-runtime
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [cms, cld]
 
     steps:
       - name: Checkout repository
@@ -29,12 +32,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Install wget
-        run: |
-          apt-get update && apt-get install -y wget gcc g++ build-essential
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y wget gcc g++ build-essential
 
-      - name: Run CMS test
-        run: bash scripts/local_test_cms.sh
-
-      - name: Run CLD test
-        run: bash scripts/local_test_cld.sh
+      - name: Run ${{ matrix.target }} test
+        run: bash scripts/local_test_${{ matrix.target }}.sh

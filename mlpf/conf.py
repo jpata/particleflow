@@ -1,3 +1,5 @@
+# This file contains the structure of the MLPF configuration and some generic defaults.
+# Dataset-specific overrides are in particleflow_spec.yaml
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional, Dict, Any
 import os
