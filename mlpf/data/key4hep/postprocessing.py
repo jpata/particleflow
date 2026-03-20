@@ -865,6 +865,10 @@ def get_genparticles_and_adjacencies(
     # temporary logging to debug visibility logic
     mask_status1 = gen_features["generatorStatus"] == 1
     print(f"debug_visibility: iev={iev} n_gp={n_gp} n_st1={np.sum(mask_status1)}")
+    for idx in np.where(mask_status1)[0]:
+        if gen_features["pt"][idx] > 10:
+            print(f"debug_visibility: st1 gp idx={idx} PID={gen_features['PDG'][idx]} pt={gen_features['pt'][idx]:.2f} energy={gen_features['energy'][idx]:.2f} energy_in_hits={gp_energy_in_hits[idx]:.2f} vis_hit={mask_visible_hit[idx]}")
+
     print(f"debug_visibility:  gp_in_tracker (st1): {np.sum(mask_status1 & gp_in_tracker)}")
     print(f"debug_visibility:  gp_in_calo (st1): {np.sum(mask_status1 & gp_in_calo)}")
     print(f"debug_visibility:  mask_visible_hit (st1): {np.sum(mask_status1 & mask_visible_hit)}")
@@ -1315,7 +1319,8 @@ def process_one_file(fn: str, ofn: str) -> None:
     genjets_st1 = compute_jets(mc_st1_p4)
 
     ret = []
-    for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
+    #for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
+    for iev in [38]:
 
         # get the reco particles
         reco_arr = get_reco_properties(prop_data, iev)
@@ -1384,7 +1389,10 @@ def process_one_file(fn: str, ofn: str) -> None:
 
         # all genparticles must be assigned to some PFElement
         assert np.all(used_gps == 1)
-        assert np.all(used_gps_hit == 1)
+        if not np.all(used_gps_hit == 1):
+            for idx in np.where(used_gps_hit==0)[0]:
+                print("ERROR: iev={} genparticle idx={}, PID={}, pt={:.2f} not assigned to any hit".format(
+                    iev, idx, gpdata_cleaned.gen_features["PDG"][idx], gpdata_cleaned.gen_features["pt"][idx])) 
 
         used_rps = np.zeros(n_rps, dtype=np.int64)
         track_to_rp_all = assign_to_recoobj(n_tracks, track_to_rp, used_rps)

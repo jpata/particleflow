@@ -73,7 +73,7 @@ def main():
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
     parser.add_argument("--model", type=str, default=None, help="Model name from spec file to train")
     parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
-    parser.add_argument("--steps", type=str, default="gen,post,tfds,train", help="Comma-separated steps to run: gen,post,tfds,train")
+    parser.add_argument("--steps", type=str, default="gen,post,tfds,train", help="Comma-separated steps to run: gen,post,tfds,tfds_hit,train")
     args = parser.parse_args()
 
     req_steps = args.steps.split(",")
@@ -136,6 +136,7 @@ def main():
     ensure_dir(f"{jobs_dir}/gen")
     ensure_dir(f"{jobs_dir}/post")
     ensure_dir(f"{jobs_dir}/tfds")
+    ensure_dir(f"{jobs_dir}/tfds_hit")
     ensure_dir(f"{jobs_dir}/val")
     ensure_dir(tfds_root_dir)
 
@@ -424,41 +425,48 @@ rule val_data_{val_id}:
     # PART 2: TFDS Conversion (Per Config ID / Split)
     # -------------------------------------------------------------------------
     tfds_sentinels = []
+    tfds_hit_sentinels = []
 
-    for sample_key, mapping in tfds_mappings.items():
-        if sample_key not in samples:
-            print(f"Warning: TFDS mapping found for {sample_key} but no sample definition.")
-            continue
+    tfds_mappings_to_process = {
+        "tfds": (prod_config.get("tfds_mapping", {}), tfds_sentinels),
+        "tfds_hit": (prod_config.get("tfds_hit_mapping", {}), tfds_hit_sentinels),
+    }
 
-        sample_data = samples[sample_key]
-        builder_path = mapping["builder_path"]
-        config_ids = mapping.get("config_ids", [1])
+    for step_name, (tfds_mappings, sentinels_list) in tfds_mappings_to_process.items():
+        for sample_key, mapping in tfds_mappings.items():
+            if sample_key not in samples:
+                print(f"Warning: {step_name} mapping found for {sample_key} but no sample definition.")
+                continue
 
-        process_name = sample_data["process_name"]
-        output_subdir = sample_data.get("output_subdir", process_name)
+            sample_data = samples[sample_key]
+            builder_path = mapping["builder_path"]
+            config_ids = mapping.get("config_ids", [1])
 
-        # Determine manual_dir for TFDS
-        if prod_type == "cms":
-            # For CMS, data is in workspace/post/subdir/process
-            # TFDS builder expects workspace/post/subdir (containing process folder)
-            manual_dir = os.path.join(workspace_dir, "post", output_subdir)
-        else:
-            # For Key4Hep, data is in workspace/post/process
-            # TFDS builder expects workspace/post (containing process folder)
-            manual_dir = os.path.join(workspace_dir, "post")
+            process_name = sample_data["process_name"]
+            output_subdir = sample_data.get("output_subdir", process_name)
 
-        for config_id in config_ids:
-            tfds_id = f"{sample_key}_tfds_{config_id}"
-            tfds_script_path = f"{jobs_dir}/tfds/tfds_{tfds_id}.sh"
-            tfds_sentinel = f"{jobs_dir}/tfds/tfds_{tfds_id}.done"
+            # Determine manual_dir for TFDS
+            if prod_type == "cms":
+                # For CMS, data is in workspace/post/subdir/process
+                # TFDS builder expects workspace/post/subdir (containing process folder)
+                manual_dir = os.path.join(workspace_dir, "post", output_subdir)
+            else:
+                # For Key4Hep, data is in workspace/post/process
+                # TFDS builder expects workspace/post (containing process folder)
+                manual_dir = os.path.join(workspace_dir, "post")
 
-            # Use a scratch directory for TFDS generation to avoid IO bottleneck on shared storage
-            job_scratch_dir = os.path.join(scratch_root, "tfds_tmp", tfds_id)
+            for config_id in config_ids:
+                tfds_id = f"{sample_key}_{step_name}_{config_id}"
+                tfds_script_path = f"{jobs_dir}/{step_name}/{step_name}_{tfds_id}.sh"
+                tfds_sentinel = f"{jobs_dir}/{step_name}/{step_name}_{tfds_id}.done"
 
-            version = mapping.get("version")
-            tfds_build_cmd = f"tfds build {builder_path} --config {config_id} --data_dir {job_scratch_dir} --manual_dir {manual_dir} --overwrite"
+                # Use a scratch directory for TFDS generation to avoid IO bottleneck on shared storage
+                job_scratch_dir = os.path.join(scratch_root, "tfds_tmp", tfds_id)
 
-            cmd = f"""
+                version = mapping.get("version")
+                tfds_build_cmd = f"tfds build {builder_path} --config {config_id} --data_dir {job_scratch_dir} --manual_dir {manual_dir} --overwrite"
+
+                cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export KERAS_BACKEND=torch
 hostname
@@ -485,19 +493,19 @@ trap cleanup EXIT
 echo "Copying from {job_scratch_dir} to {tfds_root_dir}"
 cp -r {job_scratch_dir}/* {tfds_root_dir}/
 """
-            write_bash_script(tfds_script_path, cmd, project_root=project_root)
+                write_bash_script(tfds_script_path, cmd, project_root=project_root)
 
-            tfds_sentinels.append(tfds_sentinel)
-            if "tfds" in req_steps:
-                final_targets.append(tfds_sentinel)
+                sentinels_list.append(tfds_sentinel)
+                if step_name in req_steps:
+                    final_targets.append(tfds_sentinel)
 
-                input_sentinels_str = ",\n        ".join([f'"{s}"' for s in all_sample_post_sentinels.get(sample_key, [])])
-                tfds_rule_input = ""
-                if "post" in req_steps:
-                    tfds_rule_input = f"\n    input:\n        {input_sentinels_str}"
+                    input_sentinels_str = ",\n        ".join([f'"{s}"' for s in all_sample_post_sentinels.get(sample_key, [])])
+                    tfds_rule_input = ""
+                    if "post" in req_steps:
+                        tfds_rule_input = f"\n    input:\n        {input_sentinels_str}"
 
-                rules_content += f"""
-rule tfds_{tfds_id}:{tfds_rule_input}
+                    rules_content += f"""
+rule {step_name}_{tfds_id}:{tfds_rule_input}
     output:
         "{tfds_sentinel}"
     resources:
@@ -547,9 +555,15 @@ nvidia-smi
 """
         write_bash_script(train_script_path, cmd, project_root=project_root)
 
-        input_sentinels_str = " ,\n        ".join([f'"{s}"' for s in tfds_sentinels])
-        train_rule_input = ""
+        train_inputs = []
         if "tfds" in req_steps:
+            train_inputs.extend(tfds_sentinels)
+        if "tfds_hit" in req_steps:
+            train_inputs.extend(tfds_hit_sentinels)
+
+        input_sentinels_str = " ,\n        ".join([f'"{s}"' for s in train_inputs])
+        train_rule_input = ""
+        if train_inputs:
             train_rule_input = f"\n    input:\n        {input_sentinels_str}"
 
         # snakemake rule names cannot contain hyphens

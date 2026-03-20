@@ -10,6 +10,7 @@ class Dataset(Enum):
     CLIC = "clic"
     CLD = "cld"
     CLIC_HITS = "clic_hits"
+    CLD_HITS = "cld_hits"
 
 
 class ModelType(Enum):
@@ -74,6 +75,7 @@ ELEM_TYPES = {
     Dataset.CMS.value: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
     Dataset.CLIC.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.CLD.value: [0, 1, 2],  # 1 - track, 2 - cluster
+    Dataset.CLD_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
 }
 
 # Some element types are defined, but do not exist in the dataset at all or should be excluded for physics reasons
@@ -81,6 +83,7 @@ ELEM_TYPES_NONZERO = {
     Dataset.CMS.value: [1, 4, 5, 6, 8, 9, 10, 11],
     Dataset.CLIC.value: [1, 2],
     Dataset.CLD.value: [1, 2],
+    Dataset.CLD_HITS.value: [1, 2],
 }
 
 CLASS_LABELS = {
@@ -88,6 +91,7 @@ CLASS_LABELS = {
     Dataset.CLIC.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLD.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLIC_HITS.value: [0, 211, 130, 22, 11, 13],
+    Dataset.CLD_HITS.value: [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
@@ -95,18 +99,21 @@ CLASS_NAMES_LATEX = {
     Dataset.CLIC.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     Dataset.CLD.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     Dataset.CLIC_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    Dataset.CLD_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
     Dataset.CMS.value: ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
     Dataset.CLIC.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLD.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLIC_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.CLD_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
     Dataset.CMS.value: ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
     Dataset.CLIC.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     Dataset.CLD.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     Dataset.CLIC_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    Dataset.CLD_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
 X_FEATURES = {
@@ -205,7 +212,7 @@ X_FEATURES = {
         "time | sigma_y",
         "Null | sigma_z",
     ],
-    Dataset.CLIC_HITS.value: [
+    Dataset.CLD_HITS.value: [
         "elemtype",
         "pt | et",
         "eta",
@@ -240,6 +247,13 @@ JET_CONFIG = {
         "match_dr": 0.1,
     },
     Dataset.CLD.value: {
+        "algo": "ee_genkt_algorithm",
+        "r": 0.4,
+        "p": -1.0,
+        "ptcut": 5.0,
+        "match_dr": 0.1,
+    },
+    Dataset.CLD_HITS.value: {
         "algo": "ee_genkt_algorithm",
         "r": 0.4,
         "p": -1.0,
