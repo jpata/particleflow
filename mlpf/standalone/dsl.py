@@ -18,6 +18,11 @@ class LayerConfig:
             return [self] + other
         return [self, other]
 
+    def __radd__(self, other):
+        if isinstance(other, list):
+            return other + [self]
+        return [other, self]
+
 
 @dataclass(frozen=True)
 class HEPTConfig(LayerConfig):
@@ -198,6 +203,7 @@ def config_to_string(cfg: ModelConfig) -> str:
             return ""
         res = []
         i = 0
+        type_to_func = {"hept": "h", "global": "g", "standard": "s", "fastformer": "f"}
         while i < len(layers):
             curr = layers[i]
             count = 1
@@ -206,7 +212,18 @@ def config_to_string(cfg: ModelConfig) -> str:
                 i += 1
             p_str = ",pos=T" if curr.pos else ""
             params = f"{curr.num_heads},{curr.embedding_dim},{curr.width}{p_str}"
-            layer_str = f"{curr.type[0]}({params})"
+            if isinstance(curr, HEPTConfig):
+                if curr.block_size != 100:
+                    params += f",block_size={curr.block_size}"
+                if curr.n_hashes != 3:
+                    params += f",n_hashes={curr.n_hashes}"
+                if curr.num_regions != 140:
+                    params += f",num_regions={curr.num_regions}"
+                if curr.num_w_per_dist != 10:
+                    params += f",num_w_per_dist={curr.num_w_per_dist}"
+
+            func = type_to_func.get(curr.type, curr.type[0])
+            layer_str = f"{func}({params})"
             if count > 1:
                 layer_str += f"*{count}"
             res.append(layer_str)

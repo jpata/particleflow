@@ -89,7 +89,15 @@ def generate_random_config():
         t = ltype or random.choice(["h", "g", "s", "f"])
         num = n or random.randint(1, 4)
         p = random.choice(["T", "F"])
-        return f"{t}({n_heads},{emb_dim},{width},pos={p})*{num}"
+        
+        extra_params = ""
+        if t == "h" and random.random() < 0.4:
+            if random.random() < 0.5:
+                extra_params += f",block_size={random.choice([50, 100, 200, 400])}"
+            if random.random() < 0.5:
+                extra_params += f",n_hashes={random.choice([2, 3, 4, 5])}"
+        
+        return f"{t}({n_heads},{emb_dim},{width},pos={p}{extra_params})*{num}"
 
     # 3. Backbone structure
     b_type = random.choice(["joint", "split", "hybrid"])
@@ -115,17 +123,31 @@ def mutate_layer(layer: LayerConfig) -> LayerConfig:
         "width": layer.width,
         "pos": layer.pos,
     }
+    
+    hept_fields = []
+    if isinstance(layer, HEPTConfig):
+        hept_fields = ["block_size", "n_hashes", "num_regions", "num_w_per_dist"]
+        for field in hept_fields:
+            params[field] = getattr(layer, field)
 
     # Mutate one parameter
-    param_name = random.choice(list(params.keys()))
-    if param_name == "num_heads":
-        params[param_name] = random.choice([8, 16, 32])
-    elif param_name == "embedding_dim":
-        params[param_name] = random.choice([128, 256])
-    elif param_name == "width":
-        params[param_name] = params["embedding_dim"] * random.choice([2, 4, 8])
-    elif param_name == "pos":
-        params[param_name] = not params[param_name]
+    p = random.choice(list(params.keys()))
+    if p == "num_heads":
+        params[p] = random.choice([8, 16, 32])
+    elif p == "embedding_dim":
+        params[p] = random.choice([128, 256])
+    elif p == "width":
+        params[p] = params["embedding_dim"] * random.choice([2, 4, 8])
+    elif p == "pos":
+        params[p] = not params[p]
+    elif p == "block_size":
+        params[p] = random.choice([50, 100, 200, 400])
+    elif p == "n_hashes":
+        params[p] = random.choice([2, 3, 4, 5, 6])
+    elif p == "num_regions":
+        params[p] = random.randint(100, 300)
+    elif p == "num_w_per_dist":
+        params[p] = random.randint(5, 20)
 
     # Ensure divisibility
     if params["embedding_dim"] % params["num_heads"] != 0:
@@ -134,13 +156,16 @@ def mutate_layer(layer: LayerConfig) -> LayerConfig:
     # Re-create the appropriate layer type
     if isinstance(layer, HEPTConfig):
         return HEPTConfig(**params)
-    elif isinstance(layer, GlobalConfig):
-        return GlobalConfig(**params)
+    
+    # Filter only base parameters for non-HEPT layers
+    base_params = {k: params[k] for k in ["num_heads", "embedding_dim", "width", "pos"]}
+    if isinstance(layer, GlobalConfig):
+        return GlobalConfig(**base_params)
     elif isinstance(layer, StandardConfig):
-        return StandardConfig(**params)
+        return StandardConfig(**base_params)
     elif isinstance(layer, FastformerConfig):
-        return FastformerConfig(**params)
-    return LayerConfig(type=layer.type, **params)
+        return FastformerConfig(**base_params)
+    return LayerConfig(type=layer.type, **base_params)
 
 
 def mutate_config(config: ModelConfig) -> ModelConfig:
@@ -178,12 +203,21 @@ def mutate_config(config: ModelConfig) -> ModelConfig:
             new_backbone[branch].pop(random.randint(0, len(new_backbone[branch]) - 1))
 
     elif mutation_type == "output":
-        rg = random.choice(["direct", "additive", "linear", "{pt:linear,eta:additive}"])
-        # We need to parse rg if it's a string representation of a dict or use it directly
-        if "{" in rg:
-            rg_val = {"pt": "linear", "eta": "additive"}
+        rg_modes = ["direct", "additive", "linear", "multiplicative"]
+        
+        if random.random() < 0.3:
+            # Mutate one of the individual target modes
+            if isinstance(config.output.rg_mode, dict):
+                rg_val = dict(config.output.rg_mode)
+            else:
+                rg_val = {k: config.output.rg_mode for k in ["pt", "eta", "sin_phi", "cos_phi", "energy"]}
+            
+            target = random.choice(list(rg_val.keys()))
+            rg_val[target] = random.choice(rg_modes)
         else:
-            rg_val = rg
+            # Global rg mode change
+            rg_val = random.choice(rg_modes)
+            
         new_output = OutputConfig(config.output.num_classes, config.output.width, config.output.type, rg_val)
 
     return ModelConfig(new_input, new_backbone, new_output)

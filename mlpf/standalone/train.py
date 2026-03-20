@@ -119,7 +119,7 @@ def pad_to_multiple(tensor, multiple, dims=-1, value=0):
 
 def quantile_partition(sorted_indices, num_regions):
     total_elements = sorted_indices.shape[-1]
-    region_size = torch.ceil(torch.tensor(total_elements / num_regions, device=sorted_indices.device))
+    region_size = (total_elements + num_regions - 1) // num_regions
     inverse_indices = torch.argsort(sorted_indices, dim=-1)
     base = torch.arange(total_elements, device=sorted_indices.device)[None]
     region_indices = base // region_size + 1
@@ -473,9 +473,12 @@ class StandardAttentionLayer(nn.Module):
         k = self.k_proj(x_norm).reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x_norm).reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # Call without attn_mask to ensure Flash Attention is used
-        with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
-            mha_out = F.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout.p if self.training else 0.0)
+        # Use Flash Attention if available, but allow fallbacks for compatibility
+        # If mask is provided, use it as attn_mask for proper padding handling
+        attn_mask = (mask == 0).unsqueeze(1).unsqueeze(2) if mask is not None else None
+
+        with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
+            mha_out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout.p if self.training else 0.0)
         mha_out = mha_out.transpose(1, 2).reshape(B, N, D)
         mha_out = self.out_proj(mha_out)
 
@@ -730,6 +733,7 @@ class MLPF(nn.Module):
             self.shared_backbone = build_layers(config.backbone)
             self.pid_backbone = None
             self.reg_backbone = None
+            self.binary_backbone = None
         else:
             self.shared_backbone = build_layers(config.backbone.get("shared", []))
             self.pid_backbone = build_layers(config.backbone.get("pid", []))
@@ -784,6 +788,12 @@ class MLPF(nn.Module):
             for layer in self.pid_backbone:
                 emb_pid = layer(emb_pid, mask, X)
 
+        # Binary branch
+        emb_binary = emb_shared
+        if self.binary_backbone is not None:
+            for layer in self.binary_backbone:
+                emb_binary = layer(emb_binary, mask, X)
+
         # Regression branch
         emb_reg = emb_shared
         if self.reg_backbone is not None:
@@ -791,7 +801,7 @@ class MLPF(nn.Module):
                 emb_reg = layer(emb_reg, mask, X)
 
         # Outputs
-        logits_binary = self.nn_binary_particle(emb_pid)  # Use PID branch for binary too
+        logits_binary = self.nn_binary_particle(emb_binary)
         logits_pid = self.nn_pid(emb_pid)
 
         preds_pt = self.nn_pt(X, emb_reg, X[..., 1:2])
