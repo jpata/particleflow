@@ -9,6 +9,7 @@ from comet_ml import OfflineExperiment, Experiment  # isort:skip
 
 import os
 
+
 def load_spec(spec_file):
     with open(spec_file, "r") as f:
         spec = yaml.safe_load(f)

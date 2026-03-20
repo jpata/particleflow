@@ -1393,17 +1393,23 @@ def process_one_file(fn: str, ofn: str) -> None:
 
         # all genparticles must be assigned to some track or cluster
         if not np.all(used_gps == 1):
-            for idx in np.where(used_gps==0)[0]:
-                print("ERROR: iev={} genparticle idx={}, PID={}, pt={:.2f} not assigned to any track or cluster".format(
-                    iev, idx, gpdata_cleaned.gen_features["PDG"][idx], gpdata_cleaned.gen_features["pt"][idx])) 
+            for idx in np.where(used_gps == 0)[0]:
+                print(
+                    "ERROR: iev={} genparticle idx={}, PID={}, pt={:.2f} not assigned to any track or cluster".format(
+                        iev, idx, gpdata_cleaned.gen_features["PDG"][idx], gpdata_cleaned.gen_features["pt"][idx]
+                    )
+                )
         assert np.all(used_gps == 1)
 
         # all genparticles must be assigned to some hit.
         if not np.all(used_gps_hit == 1):
-            for idx in np.where(used_gps_hit==0)[0]:
-                print("ERROR: iev={} genparticle idx={}, PID={}, pt={:.2f} not assigned to any hit".format(
-                    iev, idx, gpdata_cleaned.gen_features["PDG"][idx], gpdata_cleaned.gen_features["pt"][idx])) 
-        assert(np.all(used_gps_hit == 1))
+            for idx in np.where(used_gps_hit == 0)[0]:
+                print(
+                    "ERROR: iev={} genparticle idx={}, PID={}, pt={:.2f} not assigned to any hit".format(
+                        iev, idx, gpdata_cleaned.gen_features["PDG"][idx], gpdata_cleaned.gen_features["pt"][idx]
+                    )
+                )
+        assert np.all(used_gps_hit == 1)
 
         used_rps = np.zeros(n_rps, dtype=np.int64)
         track_to_rp_all = assign_to_recoobj(n_tracks, track_to_rp, used_rps)
