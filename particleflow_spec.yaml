@@ -270,12 +270,12 @@ productions:
       z_qq:
         process_name: "p8_ee_Z_qq_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [600000, 600110]
+        seed_range: [600000, 605010]
         events_per_job: 100
       z_tautau:
         process_name: "p8_ee_Z_tautau_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [700000, 700110]
+        seed_range: [700000, 705010]
         events_per_job: 100
 
     postprocessing:
