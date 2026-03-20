@@ -548,7 +548,7 @@ models:
   pyg-cld-hits-v1:
     <<: *defaults
     dataset: cld_hits
-    gpu_batch_multiplier: 32
+    gpu_batch_multiplier: 16
 
     hyperparameters:
       batch_size: 1

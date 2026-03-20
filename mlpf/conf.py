@@ -650,6 +650,31 @@ class MLPFConfig(BaseModel):
                 if "cms_pf_ttbar" in config_dict["test_dataset"]:
                     config_dict["test_dataset"] = {"cms_pf_ttbar": config_dict["test_dataset"]["cms_pf_ttbar"]}
                     config_dict["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
+            elif ds_name == "cld":
+                config_dict["gpu_batch_multiplier"] = 8
+                for ds in ["train_dataset", "valid_dataset"]:
+                    if ds in config_dict:
+                        config_dict[ds][ds_name] = {
+                            "physical": {
+                                "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
+                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.0.0"}},
+                            }
+                        }
+                if "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
+                    config_dict["test_dataset"] = {"cld_edm_ttbar_pf": config_dict["test_dataset"]["cld_edm_ttbar_pf"]}
+                    config_dict["test_dataset"]["cld_edm_ttbar_pf"]["splits"] = ["10"]
+            elif ds_name == "clic":
+                for ds in ["train_dataset", "valid_dataset"]:
+                    if ds in config_dict:
+                        config_dict[ds][ds_name] = {
+                            "physical": {
+                                "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
+                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.0.0"}},
+                            }
+                        }
+                if "clic_edm_ttbar_pf" in config_dict["test_dataset"]:
+                    config_dict["test_dataset"] = {"clic_edm_ttbar_pf": config_dict["test_dataset"]["clic_edm_ttbar_pf"]}
+                    config_dict["test_dataset"]["clic_edm_ttbar_pf"]["splits"] = ["10"]
 
         # 8. Post-override adjustments
         if "test_dataset" in config_dict:
