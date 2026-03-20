@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Optional
 
 
 @dataclass(frozen=True)
@@ -8,6 +8,7 @@ class LayerConfig:
     num_heads: int = 16
     embedding_dim: int = 128
     width: int = 512
+    dropout: float = 0.1
     pos: bool = False
 
     def __mul__(self, n: int):
@@ -46,7 +47,6 @@ class StandardConfig(LayerConfig):
 @dataclass(frozen=True)
 class FastformerConfig(LayerConfig):
     type: str = "fastformer"
-    num_heads: int = 16
 
 
 @dataclass(frozen=True)
@@ -55,6 +55,7 @@ class InputConfig:
     embedding_dim: int = 128
     width: int = 256
     type: str = "default"  # "default" or "projection_only" or "advanced"
+    dropout: float = 0.1
 
 
 @dataclass(frozen=True)
@@ -62,9 +63,9 @@ class OutputConfig:
     num_classes: int = 8
     width: int = 256
     type: str = "default"
-    # rg_mode can be "direct", "additive", "multiplicative", "linear"
-    # can be a single string for all, or a dict for each target
     rg_mode: Union[str, Dict[str, str]] = "direct"
+    dropout: float = 0.1
+    embedding_dim: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -78,39 +79,49 @@ class ModelConfig:
         if self.input.embedding_dim <= 0:
             raise ValueError("embedding_dim must be positive")
 
-        def check_backbone(layers):
+        def check_backbone(layers, prev_dim):
+            d = prev_dim
             for layer in layers:
                 if layer.embedding_dim % layer.num_heads != 0:
                     raise ValueError(f"embedding_dim ({layer.embedding_dim}) must be divisible by num_heads ({layer.num_heads}) for {layer.type}")
+                if layer.embedding_dim != d:
+                    raise ValueError(
+                        f"Dimension mismatch: layer {layer.type} expects embedding_dim={layer.embedding_dim} but previous layer/input produced {d}"
+                    )
+                d = layer.embedding_dim
+            return d
 
-        for k, layers in self.backbone.items():
-            check_backbone(layers)
+        shared_dim = check_backbone(self.backbone.get("shared", []), self.input.embedding_dim)
+
+        for k in ["pid", "reg", "binary"]:
+            if self.backbone.get(k):
+                check_backbone(self.backbone[k], shared_dim)
 
         print("ModelConfig validated successfully.")
 
 
-def i(input_dim=55, embedding_dim=128, width=256, type="default"):
-    return InputConfig(input_dim, embedding_dim, width, str(type))
+def i(input_dim=55, embedding_dim=128, width=256, type="default", dropout=0.1):
+    return InputConfig(input_dim, embedding_dim, width, str(type), float(dropout))
 
 
-def h(num_heads=16, embedding_dim=128, width=512, pos=False, **kwargs):
-    return HEPTConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos), **kwargs)
+def h(num_heads=16, embedding_dim=128, width=512, pos=False, dropout=0.1, **kwargs):
+    return HEPTConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos), dropout=float(dropout), **kwargs)
 
 
-def g(num_heads=16, embedding_dim=128, width=512, pos=False):
-    return GlobalConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos))
+def g(num_heads=16, embedding_dim=128, width=512, pos=False, dropout=0.1):
+    return GlobalConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos), dropout=float(dropout))
 
 
-def s(num_heads=16, embedding_dim=128, width=512, pos=False):
-    return StandardConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos))
+def s(num_heads=16, embedding_dim=128, width=512, pos=False, dropout=0.1):
+    return StandardConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos), dropout=float(dropout))
 
 
-def f(num_heads=16, embedding_dim=128, width=512, pos=False):
-    return FastformerConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos))
+def f(num_heads=16, embedding_dim=128, width=512, pos=False, dropout=0.1):
+    return FastformerConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos), dropout=float(dropout))
 
 
-def o(num_classes=8, width=256, type="default", rg="direct"):
-    return OutputConfig(num_classes, width, str(type), rg)
+def o(num_classes=8, width=256, type="default", rg="direct", dropout=0.1, embedding_dim=None):
+    return OutputConfig(num_classes, width, str(type), rg, float(dropout), embedding_dim)
 
 
 def parse_dsl(dsl_str: str) -> ModelConfig:
@@ -211,7 +222,8 @@ def config_to_string(cfg: ModelConfig) -> str:
                 count += 1
                 i += 1
             p_str = ",pos=T" if curr.pos else ""
-            params = f"{curr.num_heads},{curr.embedding_dim},{curr.width}{p_str}"
+            d_str = f",dropout={curr.dropout}" if curr.dropout != 0.1 else ""
+            params = f"{curr.num_heads},{curr.embedding_dim},{curr.width}{p_str}{d_str}"
             if isinstance(curr, HEPTConfig):
                 if curr.block_size != 100:
                     params += f",block_size={curr.block_size}"
@@ -230,7 +242,8 @@ def config_to_string(cfg: ModelConfig) -> str:
             i += 1
         return "+".join(res)
 
-    i_str = f"i({cfg.input.input_dim},{cfg.input.embedding_dim},{cfg.input.width},{cfg.input.type})"
+    d_str = f",dropout={cfg.input.dropout}" if cfg.input.dropout != 0.1 else ""
+    i_str = f"i({cfg.input.input_dim},{cfg.input.embedding_dim},{cfg.input.width},{cfg.input.type}{d_str})"
     shared_str = layers_to_str(cfg.backbone.get("shared", []))
     branches = {k: v for k, v in cfg.backbone.items() if k != "shared" and v}
 
@@ -246,9 +259,11 @@ def config_to_string(cfg: ModelConfig) -> str:
     else:
         rg_str = str(rg_val)
 
+    d_str = f",dropout={cfg.output.dropout}" if cfg.output.dropout != 0.1 else ""
+    e_str = f",embedding_dim={cfg.output.embedding_dim}" if cfg.output.embedding_dim is not None else ""
     o_str = (
-        f"o({cfg.output.num_classes},{cfg.output.width},{cfg.output.type},rg={rg_str})"
+        f"o({cfg.output.num_classes},{cfg.output.width},{cfg.output.type},rg={rg_str}{d_str}{e_str})"
         if rg_val != "direct"
-        else f"o({cfg.output.num_classes},{cfg.output.width},{cfg.output.type})"
+        else f"o({cfg.output.num_classes},{cfg.output.width},{cfg.output.type}{d_str}{e_str})"
     )
     return f"{i_str}|{b_str}|{o_str}"

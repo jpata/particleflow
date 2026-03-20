@@ -79,16 +79,18 @@ def generate_random_config():
         n_heads = 16 if emb_dim == 128 else 32
 
     width = emb_dim * 4
+    dropout = random.choice([0.0, 0.1, 0.2])
 
     # 1. Input
     i_type = random.choice(["default", "projection_only"])
-    input_str = f"i(55,{emb_dim},{emb_dim*2},{i_type})"
+    input_str = f"i(55,{emb_dim},{emb_dim*2},{i_type},dropout={dropout})"
 
     # 2. Layers helpers
     def get_layer_expr(ltype=None, n=None):
         t = ltype or random.choice(["h", "g", "s", "f"])
         num = n or random.randint(1, 4)
         p = random.choice(["T", "F"])
+        d = random.choice([0.0, 0.1, 0.2])
 
         extra_params = ""
         if t == "h" and random.random() < 0.4:
@@ -97,7 +99,7 @@ def generate_random_config():
             if random.random() < 0.5:
                 extra_params += f",n_hashes={random.choice([2, 3, 4, 5])}"
 
-        return f"{t}({n_heads},{emb_dim},{width},pos={p}{extra_params})*{num}"
+        return f"{t}({n_heads},{emb_dim},{width},pos={p},dropout={d}{extra_params})*{num}"
 
     # 3. Backbone structure
     b_type = random.choice(["joint", "split", "hybrid"])
@@ -110,7 +112,8 @@ def generate_random_config():
 
     # 4. Output
     rg = random.choice(["direct", "additive", "linear", "{pt:linear,eta:additive}"])
-    output_str = f"o(8,{emb_dim*2},default,rg={rg})"
+    d_out = random.choice([0.0, 0.1, 0.2])
+    output_str = f"o(8,{emb_dim*2},default,rg={rg},dropout={d_out})"
 
     return f"{input_str}|{backbone_str}|{output_str}"
 
@@ -122,6 +125,7 @@ def mutate_layer(layer: LayerConfig) -> LayerConfig:
         "embedding_dim": layer.embedding_dim,
         "width": layer.width,
         "pos": layer.pos,
+        "dropout": layer.dropout,
     }
 
     hept_fields = []
@@ -140,6 +144,8 @@ def mutate_layer(layer: LayerConfig) -> LayerConfig:
         params[p] = params["embedding_dim"] * random.choice([2, 4, 8])
     elif p == "pos":
         params[p] = not params[p]
+    elif p == "dropout":
+        params[p] = random.choice([0.0, 0.05, 0.1, 0.15, 0.2])
     elif p == "block_size":
         params[p] = random.choice([50, 100, 200, 400])
     elif p == "n_hashes":
@@ -158,7 +164,7 @@ def mutate_layer(layer: LayerConfig) -> LayerConfig:
         return HEPTConfig(**params)
 
     # Filter only base parameters for non-HEPT layers
-    base_params = {k: params[k] for k in ["num_heads", "embedding_dim", "width", "pos"]}
+    base_params = {k: params[k] for k in ["num_heads", "embedding_dim", "width", "pos", "dropout"]}
     if isinstance(layer, GlobalConfig):
         return GlobalConfig(**base_params)
     elif isinstance(layer, StandardConfig):
@@ -178,7 +184,8 @@ def mutate_config(config: ModelConfig) -> ModelConfig:
 
     if mutation_type == "input":
         i_type = random.choice(["default", "projection_only"])
-        new_input = InputConfig(config.input.input_dim, config.input.embedding_dim, config.input.width, i_type)
+        dropout = random.choice([0.0, 0.05, 0.1, 0.15, 0.2])
+        new_input = InputConfig(config.input.input_dim, config.input.embedding_dim, config.input.width, i_type, dropout)
 
     elif mutation_type == "backbone_layer":
         # Mutate a random layer in a random branch
@@ -218,7 +225,12 @@ def mutate_config(config: ModelConfig) -> ModelConfig:
             # Global rg mode change
             rg_val = random.choice(rg_modes)
 
-        new_output = OutputConfig(config.output.num_classes, config.output.width, config.output.type, rg_val)
+        dropout = random.choice([0.0, 0.05, 0.1, 0.15, 0.2])
+        emb_dim = config.output.embedding_dim
+        if random.random() < 0.2:
+            emb_dim = random.choice([None, 128, 256])
+
+        new_output = OutputConfig(config.output.num_classes, config.output.width, config.output.type, rg_val, dropout, emb_dim)
 
     return ModelConfig(new_input, new_backbone, new_output)
 

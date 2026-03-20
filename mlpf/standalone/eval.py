@@ -7,6 +7,11 @@ import vector
 import awkward as ak
 import argparse
 import sys
+import os
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 # Ensure unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
@@ -169,6 +174,91 @@ def evaluate(model, loader, device):
     return res_iqr, matched_fraction
 
 
+def save_attention_visualization(model, batch, device, output_dir="plots"):
+    model.eval()
+    X = batch.X.to(device)
+    mask = batch.mask.to(device)
+
+    # We must run with batch size one for visualization to be interpretable
+    X = X[0:1]
+    mask = mask[0:1]
+    assert X.shape[0] == 1
+
+    with torch.no_grad():
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
+            _, _, _, attns = model(X, mask, return_attn=True)
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Take the last layer's attention for visualization
+    attn = attns[-1]
+
+    if isinstance(attn, torch.Tensor):
+        plt.figure(figsize=(10, 8))
+        # Standard attention: [B=1, heads, N, N]
+        # Average over heads
+        mat = attn[0].mean(dim=0).cpu().numpy()
+        plt.imshow(mat, cmap="viridis", interpolation="nearest")
+        plt.colorbar()
+        plt.title("Standard Attention Matrix (Mean over heads)")
+    elif isinstance(attn, tuple) and len(attn) == 3:
+        # HEPT: (qk, q_positions, k_positions)
+        # qk: [hashes, heads, nbuckets, bsz, bsz]
+        qk, q_pos, k_pos = attn
+        n = X.shape[1]
+        hashes, heads, nbuckets, bsz, _ = qk.shape
+
+        # 1. Natural Order reconstruction
+        full_matrix = torch.zeros((n, n), device=qk.device)
+        for i in range(hashes):
+            for j in range(heads):
+                for b in range(nbuckets):
+                    q_idx = q_pos[i, j, b * bsz : (b + 1) * bsz]
+                    k_idx = k_pos[i, j, b * bsz : (b + 1) * bsz]
+                    q_mask = q_idx < n
+                    k_mask = k_idx < n
+
+                    valid_qk = qk[i, j, b][q_mask][:, k_mask]
+                    valid_q_idx = q_idx[q_mask]
+                    valid_k_idx = k_idx[k_mask]
+
+                    if len(valid_q_idx) > 0 and len(valid_k_idx) > 0:
+                        for row_local, row_global in enumerate(valid_q_idx):
+                            full_matrix[row_global, valid_k_idx] += valid_qk[row_local]
+
+        full_matrix /= hashes * heads
+
+        # 2. LSH-Sorted Order reconstruction (for the first hash)
+        sorted_matrix = torch.zeros((nbuckets * bsz, nbuckets * bsz), device=qk.device)
+        sorted_blocks = qk[0].mean(dim=0)  # Average over heads for the first hash
+        for b in range(nbuckets):
+            sorted_matrix[b * bsz : (b + 1) * bsz, b * bsz : (b + 1) * bsz] = sorted_blocks[b]
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+
+        im1 = ax1.imshow(full_matrix.cpu().numpy(), cmap="viridis", interpolation="nearest")
+        fig.colorbar(im1, ax=ax1)
+        ax1.set_title("HEPT Natural Order\n(Input sequence indices)")
+
+        im2 = ax2.imshow(sorted_matrix.cpu().numpy(), cmap="viridis", interpolation="nearest")
+        fig.colorbar(im2, ax=ax2)
+        ax2.set_title("HEPT LSH-Sorted Order\n(Block-diagonal structure)")
+
+    elif isinstance(attn, tuple) and len(attn) == 2:
+        plt.figure(figsize=(10, 8))
+        # Global or Fastformer: (alpha, beta)
+        alpha, beta = attn
+        # alpha: [B=1, N, heads]
+        mat = alpha[0].mean(dim=-1).cpu().numpy()
+        plt.plot(mat)
+        plt.title("Global Attention Weights (alpha, mean over heads)")
+
+    plt.savefig(os.path.join(output_dir, "attention_matrix.png"))
+    plt.close()
+    print(f"Attention visualization saved to {output_dir}/attention_matrix.png")
+
+
 if __name__ == "__main__":
     _configLogger("mlpf", 0)
     args = get_args()
@@ -222,6 +312,11 @@ if __name__ == "__main__":
         train_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
 
         training_seconds = time.time() - start_total
+
+        # Save attention visualization for one event
+        print("Saving attention visualization...")
+        one_batch = next(iter(valid_loader))
+        save_attention_visualization(model, one_batch, device)
 
         # Validation loss
         print("Computing validation loss...")

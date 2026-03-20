@@ -5,6 +5,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 import time
 import sys
 import random
+import math
 import einops
 from einops import rearrange
 
@@ -93,7 +94,7 @@ def unsort_from_buckets(s_x, perm_inverse):
     return batched_index_select(b_x, perm_inverse)
 
 
-def qkv_res(s_query, s_key, s_value):
+def qkv_res(s_query, s_key, s_value, return_attn=False):
     # Upcast to float32 for stable RBF distance and weighted sum
     s_query, s_key, s_value = s_query.float(), s_key.float(), s_value.float()
     q_sq_05 = -0.5 * (s_query**2).sum(dim=-1, keepdim=True)
@@ -103,6 +104,8 @@ def qkv_res(s_query, s_key, s_value):
     denom = clustered_dists.sum(dim=-1, keepdim=True) + (1e-20)
     qk = clustered_dists
     so = torch.einsum("...ij,...jd->...id", qk, s_value)
+    if return_attn:
+        return denom, so, qk
     return denom, so
 
 
@@ -184,7 +187,7 @@ class HEPTAttention(nn.Module):
         self.num_w_per_dist = kwargs.get("num_w_per_dist", 10)
         self.e2lsh = E2LSH(n_hashes=self.n_hashes, n_heads=self.num_heads, dim=hash_dim)
 
-    def forward(self, query, key, value, **kwargs):
+    def forward(self, query, key, value, return_attn=False, **kwargs):
         # query, key, value: [N_padded, num_heads * dim_per_head]
         query = query.view(-1, self.num_heads, self.dim_per_head)
         key = key.view(-1, self.num_heads, self.dim_per_head)
@@ -224,7 +227,10 @@ class HEPTAttention(nn.Module):
         s_key = sort_to_buckets(k_hat, k_positions, self.block_size)
         s_value = sort_to_buckets(value, k_positions, self.block_size)
 
-        denom, so = qkv_res(s_query, s_key, s_value)
+        if return_attn:
+            denom, so, qk = qkv_res(s_query, s_key, s_value, return_attn=True)
+        else:
+            denom, so = qkv_res(s_query, s_key, s_value)
 
         q_rev_positions = invert_permutation(q_positions)
         o = unsort_from_buckets(so, q_rev_positions)
@@ -236,6 +242,8 @@ class HEPTAttention(nn.Module):
 
         out = o.sum(dim=0) / (logits.sum(dim=0) + 1e-20)
         out = self.out_linear(rearrange(out, "h n d -> n (h d)"))
+        if return_attn:
+            return out, (qk, q_positions, k_positions)
         return out
 
 
@@ -263,6 +271,7 @@ class SimpleMultiheadAttention(nn.Module):
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
+        self.dropout_p = dropout
 
         self.q_proj = nn.Linear(embed_dim, embed_dim)
         self.k_proj = nn.Linear(embed_dim, embed_dim)
@@ -274,7 +283,10 @@ class SimpleMultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, q, k, v, key_padding_mask=None):
+    def extra_repr(self):
+        return f"embed_dim={self.embed_dim}, num_heads={self.num_heads}, dropout={self.dropout_p}"
+
+    def forward(self, q, k, v, key_padding_mask=None, return_attn=False):
         bs, n, d = q.size()
 
         Q = self.q_proj(q).reshape(bs, n, self.num_heads, self.head_dim)
@@ -303,6 +315,8 @@ class SimpleMultiheadAttention(nn.Module):
 
         out = self.out_proj(out)
         out = self.dropout(out)
+        if return_attn:
+            return out, (alpha, beta)
         return out, None
 
 
@@ -312,6 +326,8 @@ class HEPTAttentionLayer(nn.Module):
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
         self.width = width
+        self.dropout_p = dropout
+        self.pos = pos
         self.dim_per_head = embedding_dim // num_heads
 
         self.block_size = kwargs.get("block_size", 100)
@@ -340,7 +356,14 @@ class HEPTAttentionLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
 
-    def forward(self, x, mask, X):
+    def extra_repr(self):
+        return (
+            f"embedding_dim={self.embedding_dim}, num_heads={self.num_heads}, width={self.width}, "
+            f"dropout={self.dropout_p}, pos={self.pos}, block_size={self.block_size}, "
+            f"n_hashes={self.n_hashes}, num_regions={self.num_regions}, num_w_per_dist={self.num_w_per_dist}"
+        )
+
+    def forward(self, x, mask, X, return_attn=False):
         # x: [B, N, D]
         # mask: [B, N]
         # X: [B, N, 25] or [B, N, 55] (original features)
@@ -388,16 +411,29 @@ class HEPTAttentionLayer(nn.Module):
         x_norm = self.norm0(x_flat_padded)
         q, k, v = self.w_q(x_norm), self.w_k(x_norm), self.w_v(x_norm)
 
-        attn_out = self.attn(
-            q,
-            k,
-            v,
-            coords=coords_flat_padded,
-            w_rpe=self.w_rpe,
-            regions_h=regions_h,
-            region_indices=region_indices,
-            raw_size=raw_size,
-        )
+        if return_attn:
+            attn_out, attn_data = self.attn(
+                q,
+                k,
+                v,
+                coords=coords_flat_padded,
+                w_rpe=self.w_rpe,
+                regions_h=regions_h,
+                region_indices=region_indices,
+                raw_size=raw_size,
+                return_attn=True,
+            )
+        else:
+            attn_out = self.attn(
+                q,
+                k,
+                v,
+                coords=coords_flat_padded,
+                w_rpe=self.w_rpe,
+                regions_h=regions_h,
+                region_indices=region_indices,
+                raw_size=raw_size,
+            )
 
         # Reshape to [B, N, D]
         attn_out = attn_out.view(B, N, D)
@@ -415,12 +451,20 @@ class HEPTAttentionLayer(nn.Module):
         if mask is not None:
             x = x * mask_
 
+        if return_attn:
+            return x, attn_data
         return x
 
 
 class GlobalAttentionLayer(nn.Module):
     def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
         super(GlobalAttentionLayer, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.width = width
+        self.dropout_p = dropout
+        self.pos = pos
+
         self.mha = SimpleMultiheadAttention(embedding_dim, num_heads, dropout=dropout)
         self.norm0 = nn.LayerNorm(embedding_dim)
         self.norm1 = nn.LayerNorm(embedding_dim)
@@ -428,7 +472,10 @@ class GlobalAttentionLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
 
-    def forward(self, x, mask, X=None):
+    def extra_repr(self):
+        return f"embedding_dim={self.embedding_dim}, num_heads={self.num_heads}, width={self.width}, dropout={self.dropout_p}, pos={self.pos}"
+
+    def forward(self, x, mask, X=None, return_attn=False):
         if self.pos_embed and X is not None:
             x = self.pos_embed(x, X)
 
@@ -444,7 +491,7 @@ class GlobalAttentionLayer(nn.Module):
         if mask is not None:
             q = q * mask_
 
-        mha_out, _ = self.mha(q, x_norm, x_norm, key_padding_mask=mask)
+        mha_out, attn = self.mha(q, x_norm, x_norm, key_padding_mask=mask, return_attn=return_attn)
         x = residual + mha_out
 
         residual = x
@@ -455,6 +502,8 @@ class GlobalAttentionLayer(nn.Module):
         x = residual + ffn_out
         if mask is not None:
             x = x * mask_
+        if return_attn:
+            return x, attn
         return x
 
 
@@ -468,6 +517,9 @@ class StandardAttentionLayer(nn.Module):
         super(StandardAttentionLayer, self).__init__()
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
+        self.width = width
+        self.dropout_p = dropout
+        self.pos = pos
         self.head_dim = embedding_dim // num_heads
 
         self.q_proj = nn.Linear(embedding_dim, embedding_dim)
@@ -481,7 +533,10 @@ class StandardAttentionLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
 
-    def forward(self, x, mask, X=None):
+    def extra_repr(self):
+        return f"embedding_dim={self.embedding_dim}, num_heads={self.num_heads}, width={self.width}, dropout={self.dropout_p}, pos={self.pos}"
+
+    def forward(self, x, mask, X=None, return_attn=False):
         if self.pos_embed and X is not None:
             x = self.pos_embed(x, X)
 
@@ -503,8 +558,15 @@ class StandardAttentionLayer(nn.Module):
         # If mask is provided, use it as attn_mask for proper padding handling
         attn_mask = mask.bool().unsqueeze(1).unsqueeze(2) if mask is not None else None
 
-        with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
-            mha_out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout.p if self.training else 0.0)
+        if return_attn:
+            attn_weights = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
+            if attn_mask is not None:
+                attn_weights = attn_weights.masked_fill(~attn_mask, float("-inf"))
+            attn_weights = F.softmax(attn_weights, dim=-1)
+            mha_out = torch.matmul(attn_weights, v)
+        else:
+            with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
+                mha_out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout.p if self.training else 0.0)
         mha_out = mha_out.transpose(1, 2).reshape(B, N, D)
         mha_out = self.out_proj(mha_out)
 
@@ -519,6 +581,8 @@ class StandardAttentionLayer(nn.Module):
 
         if mask is not None:
             x = x * mask_
+        if return_attn:
+            return x, attn_weights
         return x
 
 
@@ -532,6 +596,8 @@ class Fastformer(nn.Module):
 
     def __init__(self, dim=3, decode_dim=16):
         super(Fastformer, self).__init__()
+        self.dim = dim
+        self.decode_dim = decode_dim
         # Generate weight for Wquery、Wkey and Wvalue
         self.to_qkv = nn.Linear(dim, decode_dim * 3, bias=False)
         self.weight_q = nn.Linear(dim, decode_dim, bias=False)
@@ -542,7 +608,10 @@ class Fastformer(nn.Module):
         self.weight_beta = nn.Parameter(torch.randn(decode_dim))
         self.scale_factor = decode_dim**-0.5
 
-    def forward(self, x, mask=None):
+    def extra_repr(self):
+        return f"dim={self.dim}, decode_dim={self.decode_dim}"
+
+    def forward(self, x, mask=None, return_attn=False):
         query = self.weight_q(x)
         key = self.weight_k(x)
         value = self.weight_v(x)
@@ -556,6 +625,9 @@ class Fastformer(nn.Module):
         alpha_weight = torch.mul(query, self.weight_alpha) * self.scale_factor
         if mask is not None:
             alpha_weight = alpha_weight.masked_fill(~mask, mask_value)
+        # NOTE: Potential bug - Fastformer paper uses softmax over the sequence dimension (dim=1)
+        # to ensure particles compete to form the global query. Using dim=-1 makes it a
+        # per-particle feature gating, which lacks cross-particle normalization.
         alpha_weight = torch.softmax(alpha_weight, dim=-1)
         global_query = query * alpha_weight
         global_query = torch.einsum("b n d -> b d", global_query)
@@ -566,6 +638,8 @@ class Fastformer(nn.Module):
         beta_weight = torch.mul(p, self.weight_beta) * self.scale_factor
         if mask is not None:
             beta_weight = beta_weight.masked_fill(~mask, mask_value)
+
+        # NOTE: Same potential bug as above (should likely be dim=1)
         beta_weight = torch.softmax(beta_weight, dim=-1)
         global_key = p * beta_weight
         global_key = torch.einsum("b n d -> b d", global_key)
@@ -574,12 +648,20 @@ class Fastformer(nn.Module):
         key_value_interaction = torch.einsum("b j, b n j -> b n j", global_key, value)
         key_value_interaction_out = self.weight_r(key_value_interaction)
         result = key_value_interaction_out + query
+        if return_attn:
+            return result, (alpha_weight, beta_weight)
         return result
 
 
 class FastformerAttentionLayer(nn.Module):
     def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
         super(FastformerAttentionLayer, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.width = width
+        self.dropout_p = dropout
+        self.pos = pos
+
         self.attn = Fastformer(dim=embedding_dim, decode_dim=embedding_dim)
         self.norm0 = nn.LayerNorm(embedding_dim)
         self.norm1 = nn.LayerNorm(embedding_dim)
@@ -587,7 +669,10 @@ class FastformerAttentionLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
 
-    def forward(self, x, mask, X=None):
+    def extra_repr(self):
+        return f"embedding_dim={self.embedding_dim}, num_heads={self.num_heads}, width={self.width}, dropout={self.dropout_p}, pos={self.pos}"
+
+    def forward(self, x, mask, X=None, return_attn=False):
         if self.pos_embed and X is not None:
             x = self.pos_embed(x, X)
 
@@ -601,7 +686,11 @@ class FastformerAttentionLayer(nn.Module):
         if mask is not None:
             x_norm = x_norm * mask_
 
-        attn_out = self.attn(x_norm, mask=mask)
+        if return_attn:
+            attn_out, attn = self.attn(x_norm, mask=mask, return_attn=True)
+        else:
+            attn_out = self.attn(x_norm, mask=mask)
+
         x = residual + self.dropout(attn_out)
 
         residual = x
@@ -612,6 +701,8 @@ class FastformerAttentionLayer(nn.Module):
         x = residual + ffn_out
         if mask is not None:
             x = x * mask_
+        if return_attn:
+            return x, attn
         return x
 
 
@@ -648,14 +739,20 @@ class PositionalEncoding(nn.Module):
 
 
 class RegressionOutput(nn.Module):
-    def __init__(self, mode, embed_dim, width, elemtypes):
+    def __init__(self, mode, embed_dim, width, elemtypes, dropout=0.1):
         super(RegressionOutput, self).__init__()
         self.mode = mode  # "direct", "additive", "multiplicative", "linear"
+        self.embed_dim = embed_dim
+        self.width = width
+        self.dropout_p = dropout
         self.elemtypes = elemtypes
         if mode == "linear":
-            self.nn = ffn(embed_dim, 2 * len(elemtypes), width)
+            self.nn = ffn(embed_dim, 2 * len(elemtypes), width, dropout=dropout)
         else:
-            self.nn = ffn(embed_dim, len(elemtypes), width)
+            self.nn = ffn(embed_dim, len(elemtypes), width, dropout=dropout)
+
+    def extra_repr(self):
+        return f"mode={self.mode}, embed_dim={self.embed_dim}, width={self.width}, dropout={self.dropout_p}"
 
     def forward(self, X, x, orig_value):
         # X: [B, N, 25] or [B, N, 55] (original features)
@@ -722,13 +819,13 @@ class MLPF(nn.Module):
 
         # 1. Input encoding
         if config.input.type == "default":
-            self.nn0 = ffn(config.input.input_dim, config.input.embedding_dim, config.input.width)
+            self.nn0 = ffn(config.input.input_dim, config.input.embedding_dim, config.input.width, dropout=config.input.dropout)
             self.type_emb = nn.Embedding(12, config.input.embedding_dim)
         elif config.input.type == "projection_only":
             self.nn0 = nn.Linear(config.input.input_dim, config.input.embedding_dim)
             self.type_emb = None
         else:
-            self.nn0 = ffn(config.input.input_dim, config.input.embedding_dim, config.input.width)
+            self.nn0 = ffn(config.input.input_dim, config.input.embedding_dim, config.input.width, dropout=config.input.dropout)
             self.type_emb = nn.Embedding(12, config.input.embedding_dim)
 
         # 2. Backbone
@@ -741,6 +838,7 @@ class MLPF(nn.Module):
                     "embedding_dim": lc.embedding_dim,
                     "num_heads": lc.num_heads,
                     "width": lc.width,
+                    "dropout": lc.dropout,
                     "pos": lc.pos,
                 }
                 if isinstance(lc, HEPTConfig):
@@ -768,15 +866,19 @@ class MLPF(nn.Module):
 
         # 3. Output heads
         self.nn_binary_particle = ffn(
-            config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim, 2, config.output.width
+            config.output.embedding_dim if config.output.embedding_dim is not None else config.input.embedding_dim,
+            2,
+            config.output.width,
+            dropout=config.output.dropout,
         )
         self.nn_pid = ffn(
-            config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim,
+            config.output.embedding_dim if config.output.embedding_dim is not None else config.input.embedding_dim,
             config.output.num_classes,
             config.output.width,
+            dropout=config.output.dropout,
         )
 
-        out_dim = config.output.embedding_dim if hasattr(config.output, "embedding_dim") else config.input.embedding_dim
+        out_dim = config.output.embedding_dim if config.output.embedding_dim is not None else config.input.embedding_dim
 
         # Get regression modes from config
         rg = config.output.rg_mode
@@ -786,13 +888,13 @@ class MLPF(nn.Module):
             modes = {"pt": "direct", "eta": "additive", "sin_phi": "additive", "cos_phi": "additive", "energy": "direct"}
             modes.update(rg)
 
-        self.nn_pt = RegressionOutput(modes["pt"], out_dim, config.output.width, self.elemtypes)
-        self.nn_eta = RegressionOutput(modes["eta"], out_dim, config.output.width, self.elemtypes)
-        self.nn_sin_phi = RegressionOutput(modes["sin_phi"], out_dim, config.output.width, self.elemtypes)
-        self.nn_cos_phi = RegressionOutput(modes["cos_phi"], out_dim, config.output.width, self.elemtypes)
-        self.nn_energy = RegressionOutput(modes["energy"], out_dim, config.output.width, self.elemtypes)
+        self.nn_pt = RegressionOutput(modes["pt"], out_dim, config.output.width, self.elemtypes, dropout=config.output.dropout)
+        self.nn_eta = RegressionOutput(modes["eta"], out_dim, config.output.width, self.elemtypes, dropout=config.output.dropout)
+        self.nn_sin_phi = RegressionOutput(modes["sin_phi"], out_dim, config.output.width, self.elemtypes, dropout=config.output.dropout)
+        self.nn_cos_phi = RegressionOutput(modes["cos_phi"], out_dim, config.output.width, self.elemtypes, dropout=config.output.dropout)
+        self.nn_energy = RegressionOutput(modes["energy"], out_dim, config.output.width, self.elemtypes, dropout=config.output.dropout)
 
-    def forward(self, X, mask):
+    def forward(self, X, mask, return_attn=False):
         B, N, _ = X.shape
 
         # Shared input encoding
@@ -803,8 +905,13 @@ class MLPF(nn.Module):
             emb = self.nn0(X)
 
         # Backbone
+        all_attns = []
         for layer in self.shared_backbone:
-            emb = layer(emb, mask, X)
+            if return_attn:
+                emb, attn = layer(emb, mask, X, return_attn=True)
+                all_attns.append(attn)
+            else:
+                emb = layer(emb, mask, X)
 
         emb_shared = emb
 
@@ -842,6 +949,8 @@ class MLPF(nn.Module):
         logits_pid = torch.nan_to_num(logits_pid, nan=0.0, posinf=0.0, neginf=0.0)
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
 
+        if return_attn:
+            return logits_binary, logits_pid, preds_momentum, all_attns
         return logits_binary, logits_pid, preds_momentum
 
 
