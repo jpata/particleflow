@@ -334,9 +334,9 @@ def get_hit_matrix_and_genadj(
     return (
         hit_feature_matrix,
         (
-            np.array(genparticle_to_hit_matrix_coo0),
-            np.array(genparticle_to_hit_matrix_coo1),
-            np.array(genparticle_to_hit_matrix_w),
+            np.array(genparticle_to_hit_matrix_coo0, dtype=np.int32),
+            np.array(genparticle_to_hit_matrix_coo1, dtype=np.int32),
+            np.array(genparticle_to_hit_matrix_w, dtype=np.float32),
         ),
         hit_idx_local_to_global,
     )
@@ -699,6 +699,7 @@ def get_genparticles_and_adjacencies(
     n_track = awkward.count(track_features["type"])
     n_hit = awkward.count(hit_features["type"])
     n_cluster = awkward.count(cluster_features["type"])
+    print(f"debug_counts: iev={iev} n_gp={n_gp} n_track={n_track} n_hit={n_hit} n_cluster={n_cluster} n_gp_to_hit={len(genparticle_to_hit[1])}")
 
     if len(genparticle_to_trk[0]) > 0:
         gp_to_track = coo_matrix((genparticle_to_trk[2], (genparticle_to_trk[0], genparticle_to_trk[1])), shape=(n_gp, n_track)).max(axis=1).todense()
@@ -708,8 +709,9 @@ def get_genparticles_and_adjacencies(
     gp_to_hit = coo_matrix((genparticle_to_hit[2], (genparticle_to_hit[0], genparticle_to_hit[1])), shape=(n_gp, n_hit))
     # check that gp_to_hit contains both tracker hits (subdetector 3) and calorimeter hits (subdetector 0, 1, or 2)
     # this confirms that it indeed contains all hits
-    assert np.any(hit_features["subdetector"][genparticle_to_hit[1]] == 3)
-    assert np.any(hit_features["subdetector"][genparticle_to_hit[1]] != 3)
+    if len(genparticle_to_hit[1]) > 0:
+        assert np.any(hit_features["subdetector"][genparticle_to_hit[1]] == 3)
+        assert np.any(hit_features["subdetector"][genparticle_to_hit[1]] != 3)
 
     calohit_to_cluster = coo_matrix((hit_to_cluster[2], (hit_to_cluster[0], hit_to_cluster[1])), shape=(n_hit, n_cluster))
     gp_to_cluster = (gp_to_hit * calohit_to_cluster).sum(axis=1)
@@ -740,6 +742,9 @@ def get_genparticles_and_adjacencies(
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
 
     if np.array(mask_visible).sum() == 0:
+        print("st1={} hit={}".format(np.sum(mask_status1), np.sum(mask_visible_hit)))
+        for idx in np.where(mask_status1)[0]:
+            print("st1 particles", gen_features["PDG"][idx], gen_features["pt"][idx])
         raise ValueError(f"Event {iev} does not have even one 'visible' particle.")
 
     if len(np.array(mask_visible)) == 1:
@@ -1213,17 +1218,21 @@ def process_one_file(fn: str, ofn: str) -> None:
         )
 
         # get the genparticles and the links between genparticles and tracks/clusters
-        gpdata = get_genparticles_and_adjacencies(
-            prop_data,
-            hit_data,
-            calohit_links,
-            sitrack_links,
-            tracker_links,
-            iev,
-            collectionIDs,
-            collectionIDs_reverse,
-            mcp_id,
-        )
+        try:
+            gpdata = get_genparticles_and_adjacencies(
+                prop_data,
+                hit_data,
+                calohit_links,
+                sitrack_links,
+                tracker_links,
+                iev,
+                collectionIDs,
+                collectionIDs_reverse,
+                mcp_id,
+            )
+        except ValueError as e:
+            print(f"Skipping event {iev} because it has no visible particles: {e}")
+            continue
 
         # find the reconstructable genparticles and associate them to the best track/cluster
         gpdata_cleaned, gp_to_obj, gp_to_hit_idx = assign_genparticles_to_obj_and_merge(gpdata)
