@@ -50,6 +50,21 @@ class FastformerConfig(LayerConfig):
 
 
 @dataclass(frozen=True)
+class GLAConfig(LayerConfig):
+    type: str = "gla"
+
+
+@dataclass(frozen=True)
+class DeltaNetConfig(LayerConfig):
+    type: str = "deltanet"
+
+
+@dataclass(frozen=True)
+class GSAConfig(LayerConfig):
+    type: str = "gsa"
+
+
+@dataclass(frozen=True)
 class InputConfig:
     input_dim: int = 55
     embedding_dim: int = 128
@@ -120,6 +135,18 @@ def f(num_heads=16, embedding_dim=128, width=512, pos=False, dropout=0.1):
     return FastformerConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos), dropout=float(dropout))
 
 
+def gla(num_heads=16, embedding_dim=128, width=512, pos=False, dropout=0.1):
+    return GLAConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos), dropout=float(dropout))
+
+
+def d(num_heads=16, embedding_dim=128, width=512, pos=False, dropout=0.1):
+    return DeltaNetConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos), dropout=float(dropout))
+
+
+def gsa(num_heads=16, embedding_dim=128, width=512, pos=False, dropout=0.1):
+    return GSAConfig(num_heads=num_heads, embedding_dim=embedding_dim, width=width, pos=bool(pos), dropout=float(dropout))
+
+
 def o(num_classes=8, width=256, type="default", rg="direct", dropout=0.1, embedding_dim=None):
     return OutputConfig(num_classes, width, str(type), rg, float(dropout), embedding_dim)
 
@@ -141,12 +168,18 @@ def parse_dsl(dsl_str: str) -> ModelConfig:
         "g": g,
         "s": s,
         "f": f,
+        "gla": gla,
+        "d": d,
+        "gsa": gsa,
         "o": o,
         "input": i,
         "hept": h,
         "global": g,
         "standard": s,
         "fastformer": f,
+        "gated_linear_attention": gla,
+        "deltanet": d,
+        "gated_slot_attention": gsa,
         "output": o,
         "True": True,
         "False": False,
@@ -214,7 +247,7 @@ def config_to_string(cfg: ModelConfig) -> str:
             return ""
         res = []
         i = 0
-        type_to_func = {"hept": "h", "global": "g", "standard": "s", "fastformer": "f"}
+        type_to_func = {"hept": "h", "global": "g", "standard": "s", "fastformer": "f", "gla": "gla", "deltanet": "d", "gsa": "gsa"}
         while i < len(layers):
             curr = layers[i]
             count = 1

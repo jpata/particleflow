@@ -14,4 +14,11 @@ mv plots/attention_matrix.png plots/attention_fast.png
 ./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|g(16,128,512)*4|o(8,256,default)" --show-attention > log_global.txt
 mv plots/attention_matrix.png plots/attention_global.png
 
+./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|gla(16,128,512)*4|o(8,256,default)" --show-attention > log_gla.txt
+mv plots/attention_matrix.png plots/attention_gla.png
+./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|d(16,128,512)*4|o(8,256,default)" --show-attention > log_deltanet.txt
+mv plots/attention_matrix.png plots/attention_deltanet.png
+./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|gsa(16,128,512)*4|o(8,256,default)" --show-attention > log_gsa.txt
+mv plots/attention_matrix.png plots/attention_gsa.png
+
 #./scripts/local/wrapper.sh python3 mlpf/standalone/run_evolution.py --pop-size 2 --generations 1 --data-dir $DATA_DIR

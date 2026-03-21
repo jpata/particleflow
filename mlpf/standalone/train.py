@@ -9,6 +9,8 @@ import math
 import einops
 from einops import rearrange
 
+from fla.layers import GatedLinearAttention, DeltaNet, GatedSlotAttention
+
 # Ensure unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
@@ -625,10 +627,8 @@ class Fastformer(nn.Module):
         alpha_weight = torch.mul(query, self.weight_alpha) * self.scale_factor
         if mask is not None:
             alpha_weight = alpha_weight.masked_fill(~mask, mask_value)
-        # NOTE: Potential bug - Fastformer paper uses softmax over the sequence dimension (dim=1)
-        # to ensure particles compete to form the global query. Using dim=-1 makes it a
-        # per-particle feature gating, which lacks cross-particle normalization.
-        alpha_weight = torch.softmax(alpha_weight, dim=-1)
+        # Fix: Softmax over sequence dimension (dim=1)
+        alpha_weight = torch.softmax(alpha_weight, dim=1)
         global_query = query * alpha_weight
         global_query = torch.einsum("b n d -> b d", global_query)
 
@@ -639,8 +639,8 @@ class Fastformer(nn.Module):
         if mask is not None:
             beta_weight = beta_weight.masked_fill(~mask, mask_value)
 
-        # NOTE: Same potential bug as above (should likely be dim=1)
-        beta_weight = torch.softmax(beta_weight, dim=-1)
+        # Fix: Softmax over sequence dimension (dim=1)
+        beta_weight = torch.softmax(beta_weight, dim=1)
         global_key = p * beta_weight
         global_key = torch.einsum("b n d -> b d", global_key)
 
@@ -706,12 +706,163 @@ class FastformerAttentionLayer(nn.Module):
         return x
 
 
+class GLAAttentionLayer(nn.Module):
+    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
+        super(GLAAttentionLayer, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.width = width
+        self.dropout_p = dropout
+        self.pos = pos
+
+        self.attn = GatedLinearAttention(hidden_size=embedding_dim, num_heads=num_heads)
+        self.norm0 = nn.LayerNorm(embedding_dim)
+        self.norm1 = nn.LayerNorm(embedding_dim)
+        self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.GELU(), nn.Linear(width, embedding_dim), nn.GELU())
+        self.dropout = nn.Dropout(dropout)
+        self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
+
+    def extra_repr(self):
+        return f"embedding_dim={self.embedding_dim}, num_heads={self.num_heads}, width={self.width}, dropout={self.dropout_p}, pos={self.pos}"
+
+    def forward(self, x, mask, X=None, return_attn=False):
+        if self.pos_embed and X is not None:
+            x = self.pos_embed(x, X)
+
+        B, N, D = x.shape
+        if mask is not None:
+            mask_ = mask.unsqueeze(-1)
+
+        residual = x
+        x_norm = self.norm0(x)
+        if mask is not None:
+            x_norm = x_norm * mask_
+
+        # FLA layers return (output, attentions, cache)
+        attn_out, _, _ = self.attn(x_norm, attention_mask=mask)
+
+        x = residual + self.dropout(attn_out)
+
+        residual = x
+        x_norm = self.norm1(x)
+        ffn_out = self.seq(x_norm)
+        ffn_out = self.dropout(ffn_out)
+
+        x = residual + ffn_out
+        if mask is not None:
+            x = x * mask_
+        if return_attn:
+            return x, None
+        return x
+
+
+class DeltaNetAttentionLayer(nn.Module):
+    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
+        super(DeltaNetAttentionLayer, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.width = width
+        self.dropout_p = dropout
+        self.pos = pos
+
+        self.attn = DeltaNet(hidden_size=embedding_dim, num_heads=num_heads)
+        self.norm0 = nn.LayerNorm(embedding_dim)
+        self.norm1 = nn.LayerNorm(embedding_dim)
+        self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.GELU(), nn.Linear(width, embedding_dim), nn.GELU())
+        self.dropout = nn.Dropout(dropout)
+        self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
+
+    def extra_repr(self):
+        return f"embedding_dim={self.embedding_dim}, num_heads={self.num_heads}, width={self.width}, dropout={self.dropout_p}, pos={self.pos}"
+
+    def forward(self, x, mask, X=None, return_attn=False):
+        if self.pos_embed and X is not None:
+            x = self.pos_embed(x, X)
+
+        B, N, D = x.shape
+        if mask is not None:
+            mask_ = mask.unsqueeze(-1)
+
+        residual = x
+        x_norm = self.norm0(x)
+        if mask is not None:
+            x_norm = x_norm * mask_
+
+        attn_out, _, _ = self.attn(x_norm, attention_mask=mask)
+
+        x = residual + self.dropout(attn_out)
+
+        residual = x
+        x_norm = self.norm1(x)
+        ffn_out = self.seq(x_norm)
+        ffn_out = self.dropout(ffn_out)
+
+        x = residual + ffn_out
+        if mask is not None:
+            x = x * mask_
+        if return_attn:
+            return x, None
+        return x
+
+
+class GSAAttentionLayer(nn.Module):
+    def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
+        super(GSAAttentionLayer, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.width = width
+        self.dropout_p = dropout
+        self.pos = pos
+
+        self.attn = GatedSlotAttention(hidden_size=embedding_dim, num_heads=num_heads)
+        self.norm0 = nn.LayerNorm(embedding_dim)
+        self.norm1 = nn.LayerNorm(embedding_dim)
+        self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.GELU(), nn.Linear(width, embedding_dim), nn.GELU())
+        self.dropout = nn.Dropout(dropout)
+        self.pos_embed = PositionalEncoding(embedding_dim) if pos else None
+
+    def extra_repr(self):
+        return f"embedding_dim={self.embedding_dim}, num_heads={self.num_heads}, width={self.width}, dropout={self.dropout_p}, pos={self.pos}"
+
+    def forward(self, x, mask, X=None, return_attn=False):
+        if self.pos_embed and X is not None:
+            x = self.pos_embed(x, X)
+
+        B, N, D = x.shape
+        if mask is not None:
+            mask_ = mask.unsqueeze(-1)
+
+        residual = x
+        x_norm = self.norm0(x)
+        if mask is not None:
+            x_norm = x_norm * mask_
+
+        attn_out, _, _ = self.attn(x_norm, attention_mask=mask)
+
+        x = residual + self.dropout(attn_out)
+
+        residual = x
+        x_norm = self.norm1(x)
+        ffn_out = self.seq(x_norm)
+        ffn_out = self.dropout(ffn_out)
+
+        x = residual + ffn_out
+        if mask is not None:
+            x = x * mask_
+        if return_attn:
+            return x, None
+        return x
+
+
 # Registry of available attention layers
 SUPPORTED_ATTENTION_LAYERS = {
     "hept": HEPTAttentionLayer,
     "global": GlobalAttentionLayer,
     "standard": StandardAttentionLayer,
     "fastformer": FastformerAttentionLayer,
+    "gla": GLAAttentionLayer,
+    "deltanet": DeltaNetAttentionLayer,
+    "gsa": GSAAttentionLayer,
 }
 
 

@@ -36,7 +36,7 @@ def get_args():
         "--attention-type",
         type=str,
         default="global",
-        choices=["hept", "global", "standard", "fastformer"],
+        choices=["hept", "global", "standard", "fastformer", "gla", "deltanet", "gsa"],
         help="Attention type (ignored if --dsl is used)",
     )
     parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string")
@@ -195,6 +195,10 @@ def save_attention_visualization(model, batch, device, output_dir="plots"):
     # Take the last layer's attention for visualization
     attn = attns[-1]
 
+    if attn is None:
+        print("No attention weights available for this model type.")
+        return
+
     if isinstance(attn, torch.Tensor):
         plt.figure(figsize=(10, 8))
         # Standard attention: [B=1, heads, N, N]
@@ -343,16 +347,20 @@ if __name__ == "__main__":
         sample_mask = torch.ones(1, 4096).bool()
 
         # CPU runtime
-        model_cpu = model.to("cpu")
-        model_cpu.compile()
-        model_cpu(sample_input, sample_mask)
-        cpu_times = []
-        with torch.no_grad():
-            for _ in range(10):
-                start = time.time()
-                _ = model_cpu(sample_input, sample_mask)
-                cpu_times.append((time.time() - start) * 1000)
-        runtime_cpu_ms = np.median(cpu_times)
+        try:
+            model_cpu = model.to("cpu")
+            model_cpu.compile()
+            model_cpu(sample_input, sample_mask)
+            cpu_times = []
+            with torch.no_grad():
+                for _ in range(10):
+                    start = time.time()
+                    _ = model_cpu(sample_input, sample_mask)
+                    cpu_times.append((time.time() - start) * 1000)
+            runtime_cpu_ms = np.median(cpu_times)
+        except Exception as e:
+            print(f"CPU benchmarking failed: {e}")
+            runtime_cpu_ms = 0.0
 
         # GPU runtime
         if torch.cuda.is_available():
