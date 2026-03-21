@@ -17,6 +17,12 @@ def write_bash_script(path, content, project_root=None, tmpdir=None):
     with open(path, "w") as f:
         f.write("#!/bin/bash\n")
         f.write("set -e\n")
+        f.write("export GOTO_NUM_THREADS=1\n")
+        f.write("export MKL_NUM_THREADS=1\n")
+        f.write("export NUMEXPR_NUM_THREADS=1\n")
+        f.write("export OMP_NUM_THREADS=1\n")
+        f.write("export OPENBLAS_NUM_THREADS=1\n")
+        f.write("export VECLIB_MAXIMUM_THREADS=1\n")
         if tmpdir:
             f.write(f"export TMPDIR={tmpdir}\n")
             f.write(f"export TEMPDIR={tmpdir}\n")

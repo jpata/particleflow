@@ -97,7 +97,7 @@ productions:
     memory:
       gen: 6000
       post: 4000
-      tfds: 8000
+      tfds: 16000
       val: 8000 #fairly high mem limit due to CPU execution of the attention model and 8 threads
       train: 16000
 
@@ -227,7 +227,7 @@ productions:
     memory:
       gen: 4000
       post: 2000
-      tfds: 4000
+      tfds: 16000
 
     slurm_partition: "main"
     slurm_runtime: "120m"
@@ -336,7 +336,7 @@ productions:
     memory:
       gen: 4000
       post: 1000
-      tfds: 8000
+      tfds: 16000
 
     slurm_partition: "main"
     slurm_runtime: "120m"

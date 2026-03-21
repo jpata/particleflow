@@ -57,7 +57,7 @@ rm -rf $TMPDIR' > .profiles/tallinn/jobscript.sh \
 jobscript: "jobscript.sh"
 jobs: unlimited
 restart-times: 0
-max-jobs-per-timespan: 10/1m
+max-jobs-per-timespan: 120/1m
 max-status-checks-per-second: 1
 verbose: true
 use-conda: false
@@ -67,7 +67,6 @@ default-resources:
 
 snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --model \"${MODEL:-}\" --steps ${STEPS:-gen,post,tfds,tfds_hit,train}'", depends-on = ["setup"] }
 all = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} all'", depends-on = ["setup"] }
-test = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} snakemake_jobs/cld/tfds/tfds_ttbar_tfds_4.done'", depends-on = ["setup"] }
 gen = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_gen --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} gen'", depends-on = ["setup"] }
 post = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_post --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} post'", depends-on = ["setup"] }
 tfds = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds'", depends-on = ["setup"] }
