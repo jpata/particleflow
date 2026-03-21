@@ -36,7 +36,7 @@ def get_args():
         "--attention-type",
         type=str,
         default="global",
-        choices=["hept", "global", "standard", "fastformer", "gla", "deltanet", "gsa"],
+        choices=["hept", "global", "standard", "fastformer"],
         help="Attention type (ignored if --dsl is used)",
     )
     parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string")
