@@ -19,6 +19,9 @@ from mlpf.standalone.dsl import (
     GlobalConfig,
     StandardConfig,
     FastformerConfig,
+    GLAConfig,
+    DeltaNetConfig,
+    GSAConfig,
 )
 
 
@@ -87,7 +90,7 @@ def generate_random_config():
 
     # 2. Layers helpers
     def get_layer_expr(ltype=None, n=None):
-        t = ltype or random.choice(["h", "g", "s", "f"])
+        t = ltype or random.choice(["h", "g", "s", "f", "gla", "d", "gsa"])
         num = n or random.randint(1, 4)
         p = random.choice(["T", "F"])
         d = random.choice([0.0, 0.1, 0.2])
@@ -171,6 +174,12 @@ def mutate_layer(layer: LayerConfig) -> LayerConfig:
         return StandardConfig(**base_params)
     elif isinstance(layer, FastformerConfig):
         return FastformerConfig(**base_params)
+    elif isinstance(layer, GLAConfig):
+        return GLAConfig(**base_params)
+    elif isinstance(layer, DeltaNetConfig):
+        return DeltaNetConfig(**base_params)
+    elif isinstance(layer, GSAConfig):
+        return GSAConfig(**base_params)
     return LayerConfig(type=layer.type, **base_params)
 
 

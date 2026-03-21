@@ -96,13 +96,18 @@ def unsort_from_buckets(s_x, perm_inverse):
     return batched_index_select(b_x, perm_inverse)
 
 
-def qkv_res(s_query, s_key, s_value, return_attn=False):
+def qkv_res(s_query, s_key, s_value, s_mask_q=None, s_mask_k=None, return_attn=False):
     # Upcast to float32 for stable RBF distance and weighted sum
     s_query, s_key, s_value = s_query.float(), s_key.float(), s_value.float()
     q_sq_05 = -0.5 * (s_query**2).sum(dim=-1, keepdim=True)
     k_sq_05 = -0.5 * (s_key**2).sum(dim=-1, keepdim=True)
     clustered_dists = torch.einsum("...id,...jd->...ij", s_query, s_key)
-    clustered_dists = (clustered_dists + q_sq_05 + k_sq_05.transpose(-1, -2)).clamp(max=0.0).exp()
+    clustered_dists = clustered_dists + q_sq_05 + k_sq_05.transpose(-1, -2)
+    if s_mask_k is not None:
+        clustered_dists = clustered_dists.masked_fill(s_mask_k.transpose(-1, -2) == 0, float("-inf"))
+    clustered_dists = clustered_dists.clamp(max=0.0).exp()
+    if s_mask_q is not None:
+        clustered_dists = clustered_dists * s_mask_q.float()
     denom = clustered_dists.sum(dim=-1, keepdim=True) + (1e-20)
     qk = clustered_dists
     so = torch.einsum("...ij,...jd->...id", qk, s_value)
@@ -209,14 +214,24 @@ class HEPTAttention(nn.Module):
         value = rearrange(value, "n h d -> h n d")
 
         raw_size = kwargs["raw_size"]
-        q_hat[:, raw_size:] = 0.0
-        k_hat[:, raw_size:] = 0.0
-        value[:, raw_size:] = 0.0
+        padding_mask = kwargs.get("padding_mask", None)
 
         q_hashed, k_hashed, hash_shift = lsh_mapping(self.e2lsh, q_hat, k_hat)
         hash_shift = rearrange(hash_shift, "c h d -> (c h) d")
-        q_hashed[..., raw_size:] = float("inf")
-        k_hashed[..., raw_size:] = float("inf")
+
+        if padding_mask is not None:
+            pm_expanded = padding_mask.view(1, -1, 1)
+            q_hat = q_hat.masked_fill(pm_expanded == 0, 0.0)
+            k_hat = k_hat.masked_fill(pm_expanded == 0, 0.0)
+            value = value.masked_fill(pm_expanded == 0, 0.0)
+            q_hashed = q_hashed.masked_fill(padding_mask.view(1, 1, -1) == 0, float("inf"))
+            k_hashed = k_hashed.masked_fill(padding_mask.view(1, 1, -1) == 0, float("inf"))
+        else:
+            q_hat[:, raw_size:] = 0.0
+            k_hat[:, raw_size:] = 0.0
+            value[:, raw_size:] = 0.0
+            q_hashed[..., raw_size:] = float("inf")
+            k_hashed[..., raw_size:] = float("inf")
 
         q_shifts, k_shifts = get_geo_shift(kwargs["regions_h"], hash_shift, kwargs["region_indices"], self.n_hashes)
         q_hashed = q_hashed + q_shifts
@@ -229,10 +244,23 @@ class HEPTAttention(nn.Module):
         s_key = sort_to_buckets(k_hat, k_positions, self.block_size)
         s_value = sort_to_buckets(value, k_positions, self.block_size)
 
-        if return_attn:
-            denom, so, qk = qkv_res(s_query, s_key, s_value, return_attn=True)
+        s_mask_q = None
+        s_mask_k = None
+        if padding_mask is not None:
+            pm_exp = padding_mask.view(1, -1, 1).expand(self.num_heads, -1, 1)
+            s_mask_q = sort_to_buckets(pm_exp, q_positions, self.block_size)
+            s_mask_k = sort_to_buckets(pm_exp, k_positions, self.block_size)
         else:
-            denom, so = qkv_res(s_query, s_key, s_value)
+            pm = torch.ones(q_hat.shape[1], device=q_hat.device)
+            pm[raw_size:] = 0.0
+            pm_exp = pm.view(1, -1, 1).expand(self.num_heads, -1, 1)
+            s_mask_q = sort_to_buckets(pm_exp, q_positions, self.block_size)
+            s_mask_k = sort_to_buckets(pm_exp, k_positions, self.block_size)
+
+        if return_attn:
+            denom, so, qk = qkv_res(s_query, s_key, s_value, s_mask_q=s_mask_q, s_mask_k=s_mask_k, return_attn=True)
+        else:
+            denom, so = qkv_res(s_query, s_key, s_value, s_mask_q=s_mask_q, s_mask_k=s_mask_k)
 
         q_rev_positions = invert_permutation(q_positions)
         o = unsort_from_buckets(so, q_rev_positions)
@@ -266,6 +294,20 @@ class SimpleMultiheadAttention(nn.Module):
     """
     A simplified linear-time attention mechanism that pools sequence information into a global context.
     Related to: "Transformers are RNNs: Fast Autoregressive Transformers with Linear Attention", https://arxiv.org/abs/2006.16236
+
+    Notation:
+    - X: Input sequence of shape [B, N, D]
+    - Q, K, V: Projected query, key, value matrices of shape [B, N, H, D_h] (H=heads, D_h=head_dim)
+    - W_alpha, W_beta: Learnable parameter weights of shape [H, D_h]
+    - N: Sequence length
+
+    Mechanism:
+    1. α = Softmax_N( (Q * W_alpha) / √D_h )  -> shape [B, N, H]
+    2. Q_global = Σ_N (Q * α)                -> shape [B, 1, H, D_h]
+    3. P = K * Q_global                      -> shape [B, N, H, D_h]
+    4. β = Softmax_N( (P * W_beta) / √D_h )   -> shape [B, N, H]
+    5. V_global = Σ_N (V * β)                -> shape [B, 1, H, D_h]
+    6. Out = Q + V_global                    -> shape [B, N, H, D_h]
     """
 
     def __init__(self, embed_dim, num_heads, dropout=0.0):
@@ -274,6 +316,7 @@ class SimpleMultiheadAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
         self.dropout_p = dropout
+        self.scale_factor = self.head_dim**-0.5
 
         self.q_proj = nn.Linear(embed_dim, embed_dim)
         self.k_proj = nn.Linear(embed_dim, embed_dim)
@@ -295,7 +338,7 @@ class SimpleMultiheadAttention(nn.Module):
         K = self.k_proj(k).reshape(bs, n, self.num_heads, self.head_dim)
         V = self.v_proj(v).reshape(bs, n, self.num_heads, self.head_dim)
 
-        alpha = (Q * self.q_alpha).sum(dim=-1)  # (bs, n, num_heads)
+        alpha = (Q * self.q_alpha).sum(dim=-1) * self.scale_factor  # (bs, n, num_heads)
         if key_padding_mask is not None:
             mask_inf = (key_padding_mask == 0).unsqueeze(-1)  # (bs, n, 1)
             alpha = alpha.masked_fill(mask_inf, float("-inf"))
@@ -305,7 +348,7 @@ class SimpleMultiheadAttention(nn.Module):
 
         P = K * global_q  # (bs, n, num_heads, head_dim)
 
-        beta = (P * self.k_beta).sum(dim=-1)  # (bs, n, num_heads)
+        beta = (P * self.k_beta).sum(dim=-1) * self.scale_factor  # (bs, n, num_heads)
         if key_padding_mask is not None:
             beta = beta.masked_fill(mask_inf, float("-inf"))
         beta = torch.softmax(beta, dim=1)
@@ -323,6 +366,26 @@ class SimpleMultiheadAttention(nn.Module):
 
 
 class HEPTAttentionLayer(nn.Module):
+    """
+    HEPT (Hashed Efficient Particle Transformer) Layer.
+    Paper: "HEPT: Hashed Efficient Particle Transformer", https://arxiv.org/abs/2405.21051
+
+    Notation:
+    - X: Input sequence of shape [B, N, D]
+    - Q, K, V: Projected query, key, value matrices of shape [B, N, H, D_h] (H=heads, D_h=head_dim)
+    - W_rpe: Relative positional encoding weight matrix
+    - N: Sequence length
+
+    Mechanism (approximate/sparse attention):
+    1. LSH (Locality Sensitive Hashing) + Spatial Sorting clusters Q, K based on features and (eta, phi) coords
+    2. Sequence N is divided into contiguous buckets of size `block_size`
+    3. Q, K are enriched with continuous positional distance embeddings (RBF Kernel) via W_rpe
+    4. Distance = exp(-0.5 ||Q_bucket - K_bucket||^2)       -> shape [B, H, Bucket, Bucket]
+    5. Attention = Distance / (Sum(Distance) + ε)           -> Softmax-like sparse distribution
+    6. Context = Attention * V_bucket
+    7. Sequence unsorted back to original permutation
+    """
+
     def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
         super(HEPTAttentionLayer, self).__init__()
         self.embedding_dim = embedding_dim
@@ -400,14 +463,23 @@ class HEPTAttentionLayer(nn.Module):
 
         # Precompute regions and indices
         with torch.no_grad():
-            sorted_eta_idx = torch.argsort(coords_flat_padded[..., 0], dim=-1)
-            sorted_phi_idx = torch.argsort(coords_flat_padded[..., 1], dim=-1)
+            coords_for_sort = coords_flat_padded.clone()
+            if mask is not None:
+                mask_flat = mask.view(-1)
+                mask_flat_padded = pad_to_multiple(mask_flat, self.block_size, dims=0, value=0.0)
+                coords_for_sort[mask_flat_padded == 0] = float("inf")
+            else:
+                mask_flat_padded = torch.ones_like(coords_flat_padded[..., 0])
+                mask_flat_padded[raw_size:] = 0.0
+
+            sorted_eta_idx = torch.argsort(coords_for_sort[..., 0], dim=-1)
+            sorted_phi_idx = torch.argsort(coords_for_sort[..., 1], dim=-1)
             regions_h = rearrange(self.regions, "c a h -> a (c h)")
             region_indices_eta = quantile_partition(sorted_eta_idx, regions_h[0][:, None])
             region_indices_phi = quantile_partition(sorted_phi_idx, regions_h[1][:, None])
             region_indices = [region_indices_eta, region_indices_phi]
 
-            coords_flat_padded[raw_size:] = 0.0
+            coords_flat_padded[mask_flat_padded == 0] = 0.0
 
         # Run attention
         x_norm = self.norm0(x_flat_padded)
@@ -423,6 +495,7 @@ class HEPTAttentionLayer(nn.Module):
                 regions_h=regions_h,
                 region_indices=region_indices,
                 raw_size=raw_size,
+                padding_mask=mask_flat_padded,
                 return_attn=True,
             )
         else:
@@ -435,6 +508,7 @@ class HEPTAttentionLayer(nn.Module):
                 regions_h=regions_h,
                 region_indices=region_indices,
                 raw_size=raw_size,
+                padding_mask=mask_flat_padded,
             )
 
         # Reshape to [B, N, D]
@@ -459,6 +533,13 @@ class HEPTAttentionLayer(nn.Module):
 
 
 class GlobalAttentionLayer(nn.Module):
+    """
+    Wrapper layer for the SimpleMultiheadAttention.
+    Uses linear-time additive global attention.
+
+    See `SimpleMultiheadAttention` for the mathematical formulation.
+    """
+
     def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
         super(GlobalAttentionLayer, self).__init__()
         self.embedding_dim = embedding_dim
@@ -488,12 +569,10 @@ class GlobalAttentionLayer(nn.Module):
 
         residual = x
         x_norm = self.norm0(x)
-
-        q = x_norm
         if mask is not None:
-            q = q * mask_
+            x_norm = x_norm * mask_
 
-        mha_out, attn = self.mha(q, x_norm, x_norm, key_padding_mask=mask, return_attn=return_attn)
+        mha_out, attn = self.mha(x_norm, x_norm, x_norm, key_padding_mask=mask, return_attn=return_attn)
         x = residual + mha_out
 
         residual = x
@@ -513,6 +592,18 @@ class StandardAttentionLayer(nn.Module):
     """
     Standard $O(N^2)$ attention using fused kernels (FlashAttention-2 when available).
     Reference: "Attention Is All You Need", https://arxiv.org/abs/1706.03762
+
+    Notation:
+    - X: Input sequence of shape [B, N, D]
+    - Q, K, V: Projected query, key, value matrices of shape [B, N, H, D_h] (H=heads, D_h=head_dim)
+    - W_q, W_k, W_v, W_o: Learnable projection weight matrices
+    - N: Sequence length
+
+    Mechanism (per head):
+    1. Q, K, V = X * W_q, X * W_k, X * W_v          -> shape [B, N, H, D_h]
+    2. Attention = Softmax( (Q * K^T) / √D_h )      -> shape [B, H, N, N]
+    3. Context = Attention * V                      -> shape [B, H, N, D_h]
+    4. Out = Context * W_o                          -> shape [B, N, D]
     """
 
     def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
@@ -594,14 +685,28 @@ class Fastformer(nn.Module):
     Paper: https://arxiv.org/abs/2108.09084
     Code adapted from: https://github.com/wilile26811249/Fastformer-PyTorch
     License: MIT
+
+    Notation:
+    - X: Input sequence of shape [B, N, D]
+    - Q, K, V: Projected query, key, value matrices of shape [B, N, D_decode]
+    - W_alpha, W_beta: Learnable parameter weights of shape [D_decode]
+    - W_r: Learnable linear projection of shape [D_decode, D_decode]
+    - N: Sequence length
+
+    Mechanism (Single Headed context):
+    1. α = Softmax_N( (Q * W_alpha) / √D_decode )  -> shape [B, N, D_decode]
+    2. Q_global = Σ_N (Q * α)                      -> shape [B, D_decode]
+    3. P = K * Q_global                            -> shape [B, N, D_decode]
+    4. β = Softmax_N( (P * W_beta) / √D_decode )   -> shape [B, N, D_decode]
+    5. K_global = Σ_N (P * β)                      -> shape [B, D_decode]
+    6. KV_interaction = K_global * V               -> shape [B, N, D_decode]
+    7. Out = W_r(KV_interaction) + Q               -> shape [B, N, D_decode]
     """
 
     def __init__(self, dim=3, decode_dim=16):
         super(Fastformer, self).__init__()
         self.dim = dim
         self.decode_dim = decode_dim
-        # Generate weight for Wquery、Wkey and Wvalue
-        self.to_qkv = nn.Linear(dim, decode_dim * 3, bias=False)
         self.weight_q = nn.Linear(dim, decode_dim, bias=False)
         self.weight_k = nn.Linear(dim, decode_dim, bias=False)
         self.weight_v = nn.Linear(dim, decode_dim, bias=False)
@@ -619,14 +724,13 @@ class Fastformer(nn.Module):
         value = self.weight_v(x)
         b, n, d = query.shape
 
-        mask_value = -torch.finfo(x.dtype).max
         if mask is not None:
             mask = rearrange(mask, "b n -> b n ()").bool()
 
         # Caculate the global query
         alpha_weight = torch.mul(query, self.weight_alpha) * self.scale_factor
         if mask is not None:
-            alpha_weight = alpha_weight.masked_fill(~mask, mask_value)
+            alpha_weight = alpha_weight.masked_fill(~mask, float("-inf"))
         # Fix: Softmax over sequence dimension (dim=1)
         alpha_weight = torch.softmax(alpha_weight, dim=1)
         global_query = query * alpha_weight
@@ -637,7 +741,7 @@ class Fastformer(nn.Module):
         p = repeat_global_query * key
         beta_weight = torch.mul(p, self.weight_beta) * self.scale_factor
         if mask is not None:
-            beta_weight = beta_weight.masked_fill(~mask, mask_value)
+            beta_weight = beta_weight.masked_fill(~mask, float("-inf"))
 
         # Fix: Softmax over sequence dimension (dim=1)
         beta_weight = torch.softmax(beta_weight, dim=1)
@@ -654,6 +758,13 @@ class Fastformer(nn.Module):
 
 
 class FastformerAttentionLayer(nn.Module):
+    """
+    Wrapper layer for the Fastformer mechanism.
+    Uses linear-time additive global attention.
+
+    See `Fastformer` for the mathematical formulation.
+    """
+
     def __init__(self, embedding_dim, num_heads, width, dropout=0.1, pos=False, **kwargs):
         super(FastformerAttentionLayer, self).__init__()
         self.embedding_dim = embedding_dim

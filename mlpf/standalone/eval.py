@@ -360,7 +360,7 @@ if __name__ == "__main__":
             runtime_cpu_ms = np.median(cpu_times)
         except Exception as e:
             print(f"CPU benchmarking failed: {e}")
-            runtime_cpu_ms = 0.0
+            runtime_cpu_ms = 10000.0
 
         # GPU runtime
         if torch.cuda.is_available():

@@ -354,5 +354,130 @@ def test_standard_attention_mask_exclusion(device):
     assert diff < 1e-6, f"StandardAttentionLayer still attends to masked elements (diff={diff:.6f})"
 
 
+@pytest.mark.parametrize(
+    "layer_class",
+    [
+        GlobalAttentionLayer,
+        StandardAttentionLayer,
+        FastformerAttentionLayer,
+    ],
+)
+def test_attention_weights_normalization(device, layer_class):
+    if layer_class == StandardAttentionLayer and device.type == "cpu":
+        pytest.skip("StandardAttentionLayer with FLASH_ATTENTION requires CUDA")
+
+    embedding_dim = 32
+    num_heads = 2
+    width = 64
+    batch_size = 2
+    seq_len = 16
+
+    layer = layer_class(embedding_dim, num_heads, width).to(device)
+    layer.eval()
+
+    x = torch.randn(batch_size, seq_len, embedding_dim, device=device)
+    mask = torch.ones(batch_size, seq_len, device=device)
+    # Mask out the last 4 elements
+    mask[:, -4:] = 0.0
+
+    X = torch.randn(batch_size, seq_len, 25, device=device)
+    X[..., 0] = 1.0
+
+    with torch.no_grad():
+        with torch.amp.autocast(device_type=device.type, enabled=(device.type == "cuda")):
+            out, attn = layer(x, mask, X, return_attn=True)
+
+    if layer_class == StandardAttentionLayer:
+        # attn is [B, num_heads, seq_len, seq_len]
+        # Sum over the last dimension (keys) should be 1.0 for valid queries
+        attn_sum = attn.sum(dim=-1)
+        # Check unmasked queries
+        assert torch.allclose(attn_sum[:, :, :-4], torch.ones_like(attn_sum[:, :, :-4]), atol=1e-5)
+
+        # Masked queries (rows) might sum to 0 or 1 depending on implementation.
+        # But for unmasked queries, the attention to masked keys should be exactly 0
+        assert torch.allclose(attn[:, :, :-4, -4:], torch.zeros_like(attn[:, :, :-4, -4:]), atol=1e-5)
+
+    elif layer_class == GlobalAttentionLayer:
+        # attn is (alpha, beta), shapes: [B, seq_len, num_heads]
+        alpha, beta = attn
+        # alpha and beta are probability distributions over the sequence dimension (dim=1)
+        alpha_sum = alpha.sum(dim=1)
+        beta_sum = beta.sum(dim=1)
+        assert torch.allclose(alpha_sum, torch.ones_like(alpha_sum), atol=1e-5)
+        assert torch.allclose(beta_sum, torch.ones_like(beta_sum), atol=1e-5)
+
+        # Masked elements should have exactly 0 probability
+        assert torch.allclose(alpha[:, -4:, :], torch.zeros_like(alpha[:, -4:, :]), atol=1e-5)
+        assert torch.allclose(beta[:, -4:, :], torch.zeros_like(beta[:, -4:, :]), atol=1e-5)
+
+    elif layer_class == FastformerAttentionLayer:
+        # attn is (alpha, beta), shapes: [B, seq_len, decode_dim]
+        alpha, beta = attn
+        alpha_sum = alpha.sum(dim=1)
+        beta_sum = beta.sum(dim=1)
+        assert torch.allclose(alpha_sum, torch.ones_like(alpha_sum), atol=1e-5)
+        assert torch.allclose(beta_sum, torch.ones_like(beta_sum), atol=1e-5)
+
+        # Masked elements should have exactly 0 probability
+        assert torch.allclose(alpha[:, -4:, :], torch.zeros_like(alpha[:, -4:, :]), atol=1e-5)
+        assert torch.allclose(beta[:, -4:, :], torch.zeros_like(beta[:, -4:, :]), atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "layer_class",
+    [
+        HEPTAttentionLayer,
+        GlobalAttentionLayer,
+        StandardAttentionLayer,
+        FastformerAttentionLayer,
+    ],
+)
+def test_qkv_gradient_flow(device, layer_class):
+    if layer_class == StandardAttentionLayer and device.type == "cpu":
+        pytest.skip("StandardAttentionLayer with FLASH_ATTENTION requires CUDA")
+
+    embedding_dim = 32
+    num_heads = 2
+    width = 64
+    batch_size = 1
+    seq_len = 16
+
+    kwargs = {}
+    if layer_class == HEPTAttentionLayer:
+        kwargs["block_size"] = 8
+
+    layer = layer_class(embedding_dim, num_heads, width, **kwargs).to(device)
+
+    x = torch.randn(batch_size, seq_len, embedding_dim, device=device, requires_grad=True)
+    mask = torch.ones(batch_size, seq_len, device=device)
+    X = torch.randn(batch_size, seq_len, 25, device=device)
+    X[..., 0] = 1.0
+
+    with torch.amp.autocast(device_type=device.type, enabled=(device.type == "cuda")):
+        out = layer(x, mask, X)
+
+    loss = out.sum()
+    loss.backward()
+
+    # Check gradients on projection layers
+    if layer_class == HEPTAttentionLayer:
+        assert layer.w_q.weight.grad is not None and (layer.w_q.weight.grad.abs() > 0).any()
+        assert layer.w_k.weight.grad is not None and (layer.w_k.weight.grad.abs() > 0).any()
+        assert layer.w_v.weight.grad is not None and (layer.w_v.weight.grad.abs() > 0).any()
+    elif layer_class == GlobalAttentionLayer:
+        assert layer.mha.q_proj.weight.grad is not None and (layer.mha.q_proj.weight.grad.abs() > 0).any()
+        assert layer.mha.k_proj.weight.grad is not None and (layer.mha.k_proj.weight.grad.abs() > 0).any()
+        assert layer.mha.v_proj.weight.grad is not None and (layer.mha.v_proj.weight.grad.abs() > 0).any()
+    elif layer_class == StandardAttentionLayer:
+        assert layer.q_proj.weight.grad is not None and (layer.q_proj.weight.grad.abs() > 0).any()
+        assert layer.k_proj.weight.grad is not None and (layer.k_proj.weight.grad.abs() > 0).any()
+        assert layer.v_proj.weight.grad is not None and (layer.v_proj.weight.grad.abs() > 0).any()
+    elif layer_class == FastformerAttentionLayer:
+        assert layer.attn.weight_q.weight.grad is not None and (layer.attn.weight_q.weight.grad.abs() > 0).any()
+        assert layer.attn.weight_k.weight.grad is not None and (layer.attn.weight_k.weight.grad.abs() > 0).any()
+        assert layer.attn.weight_v.weight.grad is not None and (layer.attn.weight_v.weight.grad.abs() > 0).any()
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
