@@ -23,6 +23,7 @@ project:
       paths:
         storage_root: "/local/joosep/mlpf"
         scratch_root: "/scratch/local/joosep"
+        tmpdir: "/scratch/local/joosep/tmp"
         project_root: "/home/joosep/particleflow"
       cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5"
       gpu_partition: "gpu"
@@ -43,6 +44,7 @@ project:
       paths:
         storage_root: "/eos/user/j/jpata/mlpf"
         scratch_root: "/tmp"
+        tmpdir: "/tmp"
         project_root: "/afs/cern.ch/work/j/jpata/particleflow"
       cmssw_dir: "/cvmfs/cms.cern.ch"
       gpu_partition: "tomorrow"
@@ -59,6 +61,7 @@ project:
       paths:
         storage_root: "/mnt/work/mlpf/"
         scratch_root: "/tmp/particleflow"
+        tmpdir: "/tmp/particleflow/tmp"
         project_root: "/home/joosep/particleflow"
       cmssw_dir: "/home/joosep/particleflow/CMSSW_15_0_5"
       gpu_partition: "local"

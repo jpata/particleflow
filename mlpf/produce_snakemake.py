@@ -13,10 +13,16 @@ def ensure_dir(d):
     os.makedirs(d, exist_ok=True)
 
 
-def write_bash_script(path, content, project_root=None):
+def write_bash_script(path, content, project_root=None, tmpdir=None):
     with open(path, "w") as f:
         f.write("#!/bin/bash\n")
         f.write("set -e\n")
+        if tmpdir:
+            f.write(f"export TMPDIR={tmpdir}\n")
+            f.write(f"export TEMPDIR={tmpdir}\n")
+            f.write(f"export TEMP={tmpdir}\n")
+            f.write(f"export TMP={tmpdir}\n")
+            f.write("mkdir -p $TMPDIR\n")
         if project_root:
             f.write(f"cd {project_root}\n")
         f.write(content)
@@ -38,9 +44,11 @@ def parse_runtime(runtime_str):
         return runtime_str
 
 
-def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0, slurm_account=None):
+def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0, slurm_account=None, tmpdir=None):
     res = {}
     runtime_m = parse_runtime(runtime)
+    if tmpdir:
+        res["tmpdir"] = f'"{tmpdir}"'
     if executor == "slurm":
         res["mem_mb"] = mem
         if gpus > 0 and mem_per_gpu > 0:
@@ -111,22 +119,27 @@ def main():
     # Unify TFDS output directory to be within the workspace
     tfds_root_dir = os.path.join(workspace_dir, "tfds")
 
+    # Resolve paths and directories
+    scratch_root = resolve_path(spec["project"]["paths"]["scratch_root"], spec)
+    tmpdir = resolve_path(spec["project"]["paths"].get("tmpdir", "/tmp"), spec)
+    os.makedirs(tmpdir, exist_ok=True)
+
     # Apptainer/Singularity configuration
     main_container_img = spec["project"].get("container")
     gen_container_img = prod_config.get("gen_container", main_container_img)
 
     bind_mounts = spec["project"].get("bind_mounts", [])
-    bind_args = ""
+    bind_args = "--writable-tmpfs"
     for bm in bind_mounts:
         bind_args += f" -B {bm}"
+    if tmpdir and not any(bm.split(":")[0] == tmpdir for bm in bind_mounts):
+        bind_args += f" -B {tmpdir}:/tmp"
 
     # Get postprocessing script from spec
     postproc_script = prod_config["postprocessing"]["script"]
     postproc_extra_args = prod_config["postprocessing"].get("args", {})
 
     config_dir = resolve_path(prod_config.get("config_dir", ""), spec)
-
-    scratch_root = resolve_path(spec["project"]["paths"]["scratch_root"], spec)
 
     samples = prod_config["samples"]
     tfds_mappings = prod_config.get("tfds_mapping", {})
@@ -228,7 +241,7 @@ fi
 """
                 gen_cmd_lines.append(cmd)
 
-            write_bash_script(gen_script_path, "\n".join(gen_cmd_lines), project_root=project_root)
+            write_bash_script(gen_script_path, "\n".join(gen_cmd_lines), project_root=project_root, tmpdir=tmpdir)
 
             # 1.5 Validation scripts
             if copy_step2 and "val" in req_steps and prod_type == "cms":
@@ -242,7 +255,7 @@ fi
                             + f"NTHREADS={val_threads} bash mlpf/data/cms/valjob.sh {process_name} {seed} {job_type} {val_use_cuda}"
                         )
                         val_cmd_lines.append(val_cmd)
-                    write_bash_script(val_script_path, "\n".join(val_cmd_lines), project_root=project_root)
+                    write_bash_script(val_script_path, "\n".join(val_cmd_lines), project_root=project_root, tmpdir=tmpdir)
 
             # 2. Postprocessing Script
             post_script_path = f"{jobs_dir}/post/post_{chunk_id}.sh"
@@ -308,7 +321,7 @@ else
 fi
 """
                 post_cmd_lines.append(cmd)
-            write_bash_script(post_script_path, "\n".join(post_cmd_lines), project_root=project_root)
+            write_bash_script(post_script_path, "\n".join(post_cmd_lines), project_root=project_root, tmpdir=tmpdir)
 
         # Add targets to rule all for this sample
         if "gen" in req_steps:
@@ -358,7 +371,7 @@ rule gen_task:
     output:
         "{jobs_dir}/gen/gen_{{sample}}_{{seed}}.done"
     resources:
-        {get_resource_str(executor, mem_gen, cpu_partition, cpu_runtime, slurm_account=slurm_account)}
+        {get_resource_str(executor, mem_gen, cpu_partition, cpu_runtime, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{gen_container_img}"
     shell:
@@ -383,7 +396,7 @@ rule val_task:{val_rule_input}
         "{jobs_dir}/val/val_{{sample}}_{{job_type}}_{{seed}}.done"
     threads: {val_threads}
     resources:
-        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_threads, slurm_account=slurm_account)}
+        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_threads, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{gen_container_img}"
     shell:
@@ -407,7 +420,7 @@ rule post_task:{post_rule_input}
     output:
         "{jobs_dir}/post/post_{{sample}}_{{seed}}.done"
     resources:
-        {get_resource_str(executor, mem_post, cpu_partition, cpu_runtime, slurm_account=slurm_account)}
+        {get_resource_str(executor, mem_post, cpu_partition, cpu_runtime, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{main_container_img}"
     shell:
@@ -442,7 +455,7 @@ rule post_task:{post_rule_input}
                             + f"NTHREADS={val_data_threads} bash mlpf/data/cms/valjob_data.sh {val_sample_key} {seed} {job_type} {val_data_use_cuda}"
                         )
                         val_cmd_lines.append(val_cmd)
-                    write_bash_script(val_script_path, "\n".join(val_cmd_lines), project_root=project_root)
+                    write_bash_script(val_script_path, "\n".join(val_cmd_lines), project_root=project_root, tmpdir=tmpdir)
 
         step_data["val_data"][
             "rules"
@@ -460,7 +473,7 @@ rule val_data_task:
         "{jobs_dir}/val/val_data_{{sample}}_{{job_type}}_{{seed}}.done"
     threads: {val_data_threads}
     resources:
-        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_data_threads, slurm_account=slurm_account)}
+        {get_resource_str(executor, mem_val, cpu_partition, cpu_runtime, threads=val_data_threads, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{gen_container_img}"
     shell:
@@ -530,11 +543,15 @@ cleanup() {{
     fi
 }}
 trap cleanup EXIT
+export TMPDIR={job_scratch_dir}
+export TEMPDIR={job_scratch_dir}
+export TEMP={job_scratch_dir}
+export TMP={job_scratch_dir}
 {tfds_build_cmd}
 echo "Copying from {job_scratch_dir} to {tfds_root_dir}"
 cp -r {job_scratch_dir}/* {tfds_root_dir}/
 """
-                write_bash_script(tfds_script_path, cmd, project_root=project_root)
+                write_bash_script(tfds_script_path, cmd, project_root=project_root, tmpdir=tmpdir)
 
             if step_name in req_steps:
                 target_expand = f"expand('{jobs_dir}/{step_name}/{step_name}_{sample_key}_{step_name}_{{config}}.done', config={config_ids})"
@@ -553,7 +570,7 @@ rule {step_name}_task:{tfds_rule_input}
     output:
         "{jobs_dir}/{step_name}/{step_name}_{{sample}}_{step_name}_{{config}}.done"
     resources:
-        {get_resource_str(executor, mem_tfds, cpu_partition, cpu_runtime, slurm_account=slurm_account)}
+        {get_resource_str(executor, mem_tfds, cpu_partition, cpu_runtime, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{main_container_img}"
     shell:
@@ -614,7 +631,7 @@ env
 nvidia-smi
 {train_cmd}
 """
-        write_bash_script(train_script_path, cmd, project_root=project_root)
+        write_bash_script(train_script_path, cmd, project_root=project_root, tmpdir=tmpdir)
 
         train_inputs = []
         model_dataset = model_spec.get("dataset", prod_config.get("type"))
@@ -642,7 +659,7 @@ rule train_{rule_model_name}:{train_rule_input}
         "{train_sentinel}"
     threads: {gpu_threads}
     resources:
-        {get_resource_str(executor, mem_train, gpu_partition, gpu_runtime, threads=gpu_threads, gpus=gpu_count, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu_mb, slurm_account=slurm_account)}
+        {get_resource_str(executor, mem_train, gpu_partition, gpu_runtime, threads=gpu_threads, gpus=gpu_count, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu_mb, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{main_container_img}"
     shell:
@@ -652,7 +669,7 @@ rule train_{rule_model_name}:{train_rule_input}
     # -------------------------------------------------------------------------
     # Finalize Snakefile(s)
     # -------------------------------------------------------------------------
-    def write_snakefile(path, targets, rules):
+    def write_snakefile(path, targets, rules, tmpdir=None):
         if not targets and not rules:
             return
         with open(path, "w") as f:
@@ -662,9 +679,25 @@ rule train_{rule_model_name}:{train_rule_input}
             f.write('os.environ["NUMEXPR_NUM_THREADS"]="1"\n')
             f.write('os.environ["OMP_NUM_THREADS"]="1"\n')
             f.write('os.environ["OPENBLAS_NUM_THREADS"]="1"\n')
-            f.write('os.environ["VECLIB_MAXIMUM_THREADS"]="1"\n\n')
+            f.write('os.environ["VECLIB_MAXIMUM_THREADS"]="1"\n')
+            f.write('os.environ["PYTHONNOUSERSITE"]="1"\n')
+            if tmpdir:
+                f.write(f'os.environ["TMPDIR"]="{tmpdir}"\n')
+                f.write(f'os.environ["TEMPDIR"]="{tmpdir}"\n')
+                f.write(f'os.environ["TEMP"]="{tmpdir}"\n')
+                f.write(f'os.environ["TMP"]="{tmpdir}"\n')
+                f.write(f'os.environ["APPTAINER_TMPDIR"]="{tmpdir}"\n')
+                f.write(f'os.environ["APPTAINER_CACHEDIR"]="{tmpdir}"\n')
+                f.write(f'os.environ["SINGULARITY_TMPDIR"]="{tmpdir}"\n')
+                f.write(f'os.environ["SINGULARITY_CACHEDIR"]="{tmpdir}"\n')
+            f.write("\n")
             f.write("rule all:\n    input:\n        " + ",\n        ".join(targets) + "\n")
             f.write(rules)
+
+    # Write individual Snakefiles for each step
+    for step, data in step_data.items():
+        if data["targets"] or data["rules"]:
+            write_snakefile(f"{jobs_dir}/Snakefile_{step}", data["targets"], data["rules"], tmpdir=tmpdir)
 
     # Combine everything into one Snakefile
     all_targets = []
@@ -672,7 +705,7 @@ rule train_{rule_model_name}:{train_rule_input}
     for step in step_data.values():
         all_targets.extend(step["targets"])
         all_rules += step["rules"]
-    write_snakefile(f"{jobs_dir}/Snakefile", all_targets, all_rules)
+    write_snakefile(f"{jobs_dir}/Snakefile", all_targets, all_rules, tmpdir=tmpdir)
 
     print(f"Generated Snakemake workflow in {jobs_dir}")
     print(f'Run with: snakemake --snakefile {jobs_dir}/Snakefile --cores 1 --use-apptainer --apptainer-args "{bind_args} --nv"')

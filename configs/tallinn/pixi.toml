@@ -16,7 +16,7 @@ pyyaml = "*"
 comet-ml = "*"
 
 [activation]
-env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/persistent --nv" }
+env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/local/joosep/tmp:/tmp -B /scratch/persistent --nv --writable-tmpfs" }
 
 [tasks]
 setup = "sed -i '0,/^  <<: \\*.*$/s//  <<: \\*tallinn/' particleflow_spec.yaml"
@@ -31,14 +31,33 @@ export NUMEXPR_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export VECLIB_MAXIMUM_THREADS=1
+
+# Create a unique TMPDIR for this job to avoid collisions
+export TMPDIR=/scratch/local/joosep/tmp/job_${SLURM_JOB_ID:-manual}
+mkdir -p $TMPDIR
+export TEMPDIR=$TMPDIR
+export TEMP=$TMPDIR
+export TMP=$TMPDIR
+
+# Ensure Apptainer uses this unique directory for extractions/cache
+export APPTAINER_TMPDIR=$TMPDIR
+export APPTAINER_CACHEDIR=$TMPDIR
+export SINGULARITY_TMPDIR=$TMPDIR
+export SINGULARITY_CACHEDIR=$TMPDIR
+
 env
-sleep $((RANDOM % 10))
-stdbuf -oL -eL {exec_job}' > .profiles/tallinn/jobscript.sh \
+sleep $((RANDOM % 60))
+
+# Run the job
+stdbuf -oL -eL {exec_job}
+
+# Cleanup
+rm -rf $TMPDIR' > .profiles/tallinn/jobscript.sh \
 && echo 'executor: "slurm"
 jobscript: "jobscript.sh"
 jobs: unlimited
 restart-times: 0
-max-jobs-per-timespan: 60/1m
+max-jobs-per-timespan: 10/1m
 max-status-checks-per-second: 1
 verbose: true
 use-conda: false
@@ -46,10 +65,13 @@ default-resources:
   - slurm_account="hepusers"' > .profiles/tallinn/config.v8+.yaml
 """
 
-snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --model \"${MODEL:-}\" --steps ${STEPS:-gen,post,tfds,train}'", depends-on = ["setup"] }
-gen = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} gen'", depends-on = ["setup"] }
-post = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} post'", depends-on = ["setup"] }
-tfds = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds'", depends-on = ["setup"] }
-train = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["setup"] }
+snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} --model \"${MODEL:-}\" --steps ${STEPS:-gen,post,tfds,tfds_hit,train}'", depends-on = ["setup"] }
+all = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} all'", depends-on = ["setup"] }
+test = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} snakemake_jobs/cld/tfds/tfds_ttbar_tfds_4.done'", depends-on = ["setup"] }
+gen = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_gen --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} gen'", depends-on = ["setup"] }
+post = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_post --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} post'", depends-on = ["setup"] }
+tfds = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds'", depends-on = ["setup"] }
+tfds_hit = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds_hit --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds_hit'", depends-on = ["setup"] }
+train = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_train --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1}'", depends-on = ["setup"] }
 validation = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config ${VAL_CONFIG:-validation_cms.yaml} && snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/validation_${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1'", depends-on = ["setup"] }
 dry-run = "bash -c 'snakemake --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --dry-run'"
