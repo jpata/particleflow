@@ -205,129 +205,137 @@ def main():
         ensure_dir(sample_gen_root_dir)
         ensure_dir(sample_post_dir)
 
-        # Iterate in chunks to write scripts
-        for chunk_start in range(seed_start, seed_end, CHUNK_SIZE):
-            chunk_end = min(chunk_start + CHUNK_SIZE, seed_end)
-            chunk_id = f"{sample_key}_{chunk_start}"
+        # 1. Generation Prototype Script
+        gen_proto_path = f"{jobs_dir}/gen/gen_{sample_key}.sh"
+        if prod_type == "cms":
+            root_file_proto = os.path.join(sample_gen_root_dir, "pfntuple_${seed}.root")
+            gen_base_dir = os.path.join(workspace_dir, "gen", output_subdir)
+        elif prod_type == "key4hep":
+            root_file_proto = os.path.join(sample_gen_root_dir, f"reco_{process_name}_" + "${seed}.root")
+            gen_base_dir = os.path.join(workspace_dir, "gen")
 
-            # 1. Generation Script
-            gen_script_path = f"{jobs_dir}/gen/gen_{chunk_id}.sh"
-            gen_cmd_lines = []
+        gen_cmd = f"bash {gen_script} {process_name} $seed {pu_type}"
+        if copy_step2:
+            gen_cmd += " True"
+        if args.ignore_failures:
+            gen_cmd += " || echo 'WARNING: Generation failed'"
 
-            for seed in range(chunk_start, chunk_end):
-                if prod_type == "cms":
-                    gen_base_dir = os.path.join(workspace_dir, "gen", output_subdir)
-                    root_file = os.path.join(sample_gen_root_dir, f"pfntuple_{seed}.root")
-                elif prod_type == "key4hep":
-                    gen_base_dir = os.path.join(workspace_dir, "gen")
-                    root_file = os.path.join(sample_gen_root_dir, f"reco_{process_name}_{seed}.root")
+        exports = (
+            f"export OUTDIR={gen_base_dir}/"
+            + f" && export CONFIG_DIR={config_dir}"
+            + (f" && export CMSSWDIR={cmssw_dir}" if cmssw_dir else "")
+            + f" && export WORKDIR={scratch_root}/{process_name}_$seed"
+            + f" && export NEV={events_per_job}"
+        )
 
-                exports = (
-                    f"export OUTDIR={gen_base_dir}/"
-                    + f" && export CONFIG_DIR={config_dir}"
-                    + (f" && export CMSSWDIR={cmssw_dir}" if cmssw_dir else "")
-                    + f" && export WORKDIR={scratch_root}/{process_name}_{seed}"
-                    + f" && export NEV={events_per_job}"
-                )
-                gen_cmd = f"bash {gen_script} {process_name} {seed} {pu_type}"
-                if copy_step2:
-                    gen_cmd += " True"
-
-                if args.ignore_failures:
-                    gen_cmd += " || echo 'WARNING: Generation failed'"
-
-                cmd = f"""
-if [ ! -f {root_file} ]; then
-    echo "Generating {root_file}"
-    {exports}
-    {gen_cmd}
-else
-    echo "Skipping {root_file}, already exists"
-fi
+        gen_proto_content = f"""
+start_seed=$1
+for (( i=0; i<{CHUNK_SIZE}; i++ )); do
+    seed=$((start_seed + i))
+    if [ ! -f {root_file_proto} ]; then
+        echo "Generating {root_file_proto}"
+        {exports}
+        {gen_cmd}
+        echo "Validating {root_file_proto}"
+        python3 -c "import uproot; uproot.open('{root_file_proto}')"
+    else
+        echo "Skipping {root_file_proto}, already exists"
+    fi
+done
 """
-                gen_cmd_lines.append(cmd)
+        write_bash_script(gen_proto_path, gen_proto_content, project_root=project_root, tmpdir=tmpdir)
 
-            write_bash_script(gen_script_path, "\n".join(gen_cmd_lines), project_root=project_root, tmpdir=tmpdir)
+        # 1.5 Validation Prototype Script
+        if copy_step2 and "val" in req_steps and prod_type == "cms":
+            for job_type in val_job_types:
+                val_proto_path = f"{jobs_dir}/val/val_{sample_key}_{job_type}.sh"
+                val_cmd = (
+                    f"WORKSPACE_DIR={workspace_dir} OUTPUT_SUBDIR={output_subdir} {f'CMSSWDIR={cmssw_dir} ' if cmssw_dir else ''}"
+                    + f"NTHREADS={val_threads} bash mlpf/data/cms/valjob.sh {process_name} $seed {job_type} {val_use_cuda}"
+                )
+                val_proto_content = f"""
+start_seed=$1
+for (( i=0; i<{CHUNK_SIZE}; i++ )); do
+    seed=$((start_seed + i))
+    {val_cmd}
+done
+"""
+                write_bash_script(val_proto_path, val_proto_content, project_root=project_root, tmpdir=tmpdir)
 
-            # 1.5 Validation scripts
-            if copy_step2 and "val" in req_steps and prod_type == "cms":
-                for job_type in val_job_types:
-                    val_id = f"{sample_key}_{job_type}_{chunk_start}"
-                    val_script_path = f"{jobs_dir}/val/val_{val_id}.sh"
-                    val_cmd_lines = []
-                    for seed in range(chunk_start, chunk_end):
-                        val_cmd = (
-                            f"WORKSPACE_DIR={workspace_dir} OUTPUT_SUBDIR={output_subdir} {f'CMSSWDIR={cmssw_dir} ' if cmssw_dir else ''}"
-                            + f"NTHREADS={val_threads} bash mlpf/data/cms/valjob.sh {process_name} {seed} {job_type} {val_use_cuda}"
-                        )
-                        val_cmd_lines.append(val_cmd)
-                    write_bash_script(val_script_path, "\n".join(val_cmd_lines), project_root=project_root, tmpdir=tmpdir)
+        # 2. Postprocessing Prototype Script
+        post_proto_path = f"{jobs_dir}/post/post_{sample_key}.sh"
+        if prod_type == "cms":
+            root_file_proto = os.path.join(sample_gen_root_dir, "pfntuple_${seed}.root")
+            post_file_final_proto = os.path.join(sample_post_dir, "pfntuple_${seed}.pkl.bz2")
+            post_file_inter_proto = os.path.join(sample_post_dir, "pfntuple_${seed}.pkl")
+        elif prod_type == "key4hep":
+            root_file_proto = os.path.join(sample_gen_root_dir, f"reco_{process_name}_" + "${seed}.root")
+            post_file_final_proto = os.path.join(sample_post_dir, f"reco_{process_name}_" + "${seed}.parquet")
+            post_file_inter_proto = post_file_final_proto
 
-            # 2. Postprocessing Script
-            post_script_path = f"{jobs_dir}/post/post_{chunk_id}.sh"
-            post_cmd_lines = []
-            for seed in range(chunk_start, chunk_end):
-                if prod_type == "cms":
-                    root_file = os.path.join(sample_gen_root_dir, f"pfntuple_{seed}.root")
-                    post_file_final = os.path.join(sample_post_dir, f"pfntuple_{seed}.pkl.bz2")
-                    post_file_inter = os.path.join(sample_post_dir, f"pfntuple_{seed}.pkl")
-                elif prod_type == "key4hep":
-                    root_file = os.path.join(sample_gen_root_dir, f"reco_{process_name}_{seed}.root")
-                    post_file_final = os.path.join(sample_post_dir, f"reco_{process_name}_{seed}.parquet")
-                    post_file_inter = post_file_final
+        args_str = f"--input {root_file_proto} --outpath {sample_post_dir}"
+        for k, v in postproc_extra_args.items():
+            if isinstance(v, bool):
+                if v:
+                    args_str += f" --{k}"
+            else:
+                args_str += f" --{k} {v}"
 
-                args_str = f"--input {root_file} --outpath {sample_post_dir}"
-                for k, v in postproc_extra_args.items():
-                    if isinstance(v, bool):
-                        if v:
-                            args_str += f" --{k}"
-                    else:
-                        args_str += f" --{k} {v}"
+        postproc_cmd = f"python3 {postproc_script} {args_str}"
+        exit_cmd = "exit 1"
+        if args.ignore_failures:
+            postproc_cmd += " || echo 'WARNING: Postprocessing failed'"
+            exit_cmd = "echo 'Ignoring failure'; true"
 
-                postproc_cmd = f"python3 {postproc_script} {args_str}"
-                exit_cmd = "exit 1"
-                if args.ignore_failures:
-                    postproc_cmd += " || echo 'WARNING: Postprocessing failed'"
-                    exit_cmd = "echo 'Ignoring failure'; true"
-
-                if prod_type == "cms":
-                    cmd = f"""
-export PYTHONPATH=$(pwd):$PYTHONPATH
-if [ ! -f {post_file_final} ]; then
-    if [ -f {root_file} ]; then
-        echo "Postprocessing {root_file}"
-        {postproc_cmd}
-        if [ -f {post_file_inter} ]; then
-            bzip2 -z {post_file_inter}
+        if prod_type == "cms":
+            post_cmd = f"""
+    if [ ! -f {post_file_final_proto} ]; then
+        if [ -f {root_file_proto} ]; then
+            echo "Postprocessing {root_file_proto}"
+            {postproc_cmd}
+            if [ -f {post_file_inter_proto} ]; then
+                bzip2 -z {post_file_inter_proto}
+            else
+                echo "Error: Postprocessing failed to produce {post_file_inter_proto}"
+                {exit_cmd}
+            fi
         else
-            echo "Error: Postprocessing failed to produce {post_file_inter}"
+            echo "Error: Input file {root_file_proto} missing for postprocessing"
             {exit_cmd}
         fi
     else
-        echo "Error: Input file {root_file} missing for postprocessing"
-        {exit_cmd}
+        echo "Skipping {post_file_final_proto}, already exists"
     fi
-else
-    echo "Skipping {post_file_final}, already exists"
-fi
 """
-                else:  # key4hep / parquet
-                    cmd = f"""
-export PYTHONPATH=$(pwd):$PYTHONPATH
-if [ ! -f {post_file_final} ]; then
-    if [ -f {root_file} ]; then
-        echo "Postprocessing {root_file}"
-        {postproc_cmd}
+        else:  # key4hep / parquet
+            post_cmd = f"""
+    if [ ! -f {post_file_final_proto} ]; then
+        if [ -f {root_file_proto} ]; then
+            echo "Postprocessing {root_file_proto}"
+            {postproc_cmd}
+            if [ -f {post_file_final_proto} ]; then
+                python3 -c "import awkward as ak; ak.from_parquet('{post_file_final_proto}')"
+            else
+                echo "Error: Postprocessing failed to produce {post_file_final_proto}"
+                {exit_cmd}
+            fi
+        else
+            echo "Error: Input file {root_file_proto} missing for postprocessing"
+            {exit_cmd}
+        fi
     else
-        echo "Error: Input file {root_file} missing for postprocessing"
-        {exit_cmd}
+        echo "Skipping {post_file_final_proto}, already exists"
     fi
-else
-    echo "Skipping {post_file_final}, already exists"
-fi
 """
-                post_cmd_lines.append(cmd)
-            write_bash_script(post_script_path, "\n".join(post_cmd_lines), project_root=project_root, tmpdir=tmpdir)
+        post_proto_content = f"""
+export PYTHONPATH=$(pwd):$PYTHONPATH
+start_seed=$1
+for (( i=0; i<{CHUNK_SIZE}; i++ )); do
+    seed=$((start_seed + i))
+    {post_cmd}
+done
+"""
+        write_bash_script(post_proto_path, post_proto_content, project_root=project_root, tmpdir=tmpdir)
 
         # Add targets to rule all for this sample
         if "gen" in req_steps:
@@ -381,7 +389,7 @@ rule gen_task:
     container:
         "{gen_container_img}"
     shell:
-        "{jobs_dir}/gen/gen_{{wildcards.sample}}_{{wildcards.seed}}.sh && touch {{output}}"
+        "{jobs_dir}/gen/gen_{{wildcards.sample}}.sh {{wildcards.seed}} && touch {{output}}"
 """
 
     if "val" in req_steps and prod_type == "cms":
@@ -406,7 +414,7 @@ rule val_task:{val_rule_input}
     container:
         "{gen_container_img}"
     shell:
-        "{jobs_dir}/val/val_{{wildcards.sample}}_{{wildcards.job_type}}_{{wildcards.seed}}.sh && touch {{output}}"
+        "{jobs_dir}/val/val_{{wildcards.sample}}_{{wildcards.job_type}}.sh {{wildcards.seed}} && touch {{output}}"
 """
 
     if "post" in req_steps:
@@ -430,7 +438,7 @@ rule post_task:{post_rule_input}
     container:
         "{main_container_img}"
     shell:
-        "{jobs_dir}/post/post_{{wildcards.sample}}_{{wildcards.seed}}.sh && touch {{output}}"
+        "{jobs_dir}/post/post_{{wildcards.sample}}.sh {{wildcards.seed}} && touch {{output}}"
 """
 
     # 1.6 Data Validation
@@ -449,19 +457,20 @@ rule post_task:{post_rule_input}
             )
 
             for job_type in val_data_job_types:
-                for chunk_start in range(seed_start, seed_end, CHUNK_SIZE):
-                    chunk_end = min(chunk_start + CHUNK_SIZE, seed_end)
-                    val_id = f"{val_sample_key}_{job_type}_{chunk_start}"
-                    val_script_path = f"{jobs_dir}/val/val_data_{val_id}.sh"
-                    val_cmd_lines = []
-                    for seed in range(chunk_start, chunk_end):
-                        val_cmd = (
-                            f"WORKSPACE_DIR={workspace_dir} OUTPUT_SUBDIR={val_sample_data.get('output_subdir', val_sample_key)} {f'CMSSWDIR={cmssw_dir} ' if cmssw_dir else ''} "
-                            + f"INPUT_FILELIST={config_dir}/{input_filelist} "
-                            + f"NTHREADS={val_data_threads} bash mlpf/data/cms/valjob_data.sh {val_sample_key} {seed} {job_type} {val_data_use_cuda}"
-                        )
-                        val_cmd_lines.append(val_cmd)
-                    write_bash_script(val_script_path, "\n".join(val_cmd_lines), project_root=project_root, tmpdir=tmpdir)
+                val_data_proto_path = f"{jobs_dir}/val/val_data_{val_sample_key}_{job_type}.sh"
+                val_data_cmd = (
+                    f"WORKSPACE_DIR={workspace_dir} OUTPUT_SUBDIR={val_sample_data.get('output_subdir', val_sample_key)} {f'CMSSWDIR={cmssw_dir} ' if cmssw_dir else ''} "
+                    + f"INPUT_FILELIST={config_dir}/{input_filelist} "
+                    + f"NTHREADS={val_data_threads} bash mlpf/data/cms/valjob_data.sh {val_sample_key} $seed {job_type} {val_data_use_cuda}"
+                )
+                val_data_proto_content = f"""
+start_seed=$1
+for (( i=0; i<{CHUNK_SIZE}; i++ )); do
+    seed=$((start_seed + i))
+    {val_data_cmd}
+done
+"""
+                write_bash_script(val_data_proto_path, val_data_proto_content, project_root=project_root, tmpdir=tmpdir)
 
         step_data["val_data"][
             "rules"
@@ -483,7 +492,7 @@ rule val_data_task:
     container:
         "{gen_container_img}"
     shell:
-        "{jobs_dir}/val/val_data_{{wildcards.sample}}_{{wildcards.job_type}}_{{wildcards.seed}}.sh && touch {{output}}"
+        "{jobs_dir}/val/val_data_{{wildcards.sample}}_{{wildcards.job_type}}.sh {{wildcards.seed}} && touch {{output}}"
 """
 
     # -------------------------------------------------------------------------

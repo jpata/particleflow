@@ -57,7 +57,7 @@ rm -rf $TMPDIR' > .profiles/tallinn/jobscript.sh \
 jobscript: "jobscript.sh"
 jobs: unlimited
 restart-times: 0
-max-jobs-per-timespan: 120/1m
+max-jobs-per-timespan: 5/1s
 max-status-checks-per-second: 1
 verbose: true
 use-conda: false

@@ -291,19 +291,19 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
-        version: "3.0.0"
+        version: "3.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ww_fullhad"
-        version: "3.0.0"
+        version: "3.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       zz:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/zz"
-        version: "3.0.0"
+        version: "3.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/qq"
-        version: "3.0.0"
+        version: "3.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     tfds_hit_mapping:

@@ -1,0 +1,76 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        expand('snakemake_jobs/cld/post/post_zz_{seed}.done', seed=range(100000, 105010, 1)),
+        expand('snakemake_jobs/cld/post/post_ttbar_{seed}.done', seed=range(300000, 305010, 1)),
+        expand('snakemake_jobs/cld/post/post_ww_fullhad_{seed}.done', seed=range(400000, 405010, 1)),
+        expand('snakemake_jobs/cld/post/post_qq_{seed}.done', seed=range(500000, 505010, 1))
+
+rule post_zz_all:
+    input:
+        expand("snakemake_jobs/cld/post/post_zz_{seed}.done", seed=range(100000, 105010, 1))
+    output:
+        "snakemake_jobs/cld/post/post_zz_all.done"
+    shell:
+        "touch {output}"
+
+rule post_ttbar_all:
+    input:
+        expand("snakemake_jobs/cld/post/post_ttbar_{seed}.done", seed=range(300000, 305010, 1))
+    output:
+        "snakemake_jobs/cld/post/post_ttbar_all.done"
+    shell:
+        "touch {output}"
+
+rule post_ww_fullhad_all:
+    input:
+        expand("snakemake_jobs/cld/post/post_ww_fullhad_{seed}.done", seed=range(400000, 405010, 1))
+    output:
+        "snakemake_jobs/cld/post/post_ww_fullhad_all.done"
+    shell:
+        "touch {output}"
+
+rule post_qq_all:
+    input:
+        expand("snakemake_jobs/cld/post/post_qq_{seed}.done", seed=range(500000, 505010, 1))
+    output:
+        "snakemake_jobs/cld/post/post_qq_all.done"
+    shell:
+        "touch {output}"
+
+rule post:
+    input:
+        expand('snakemake_jobs/cld/post/post_zz_{seed}.done', seed=range(100000, 105010, 1)), expand('snakemake_jobs/cld/post/post_ttbar_{seed}.done', seed=range(300000, 305010, 1)), expand('snakemake_jobs/cld/post/post_ww_fullhad_{seed}.done', seed=range(400000, 405010, 1)), expand('snakemake_jobs/cld/post/post_qq_{seed}.done', seed=range(500000, 505010, 1))
+    output:
+        "snakemake_jobs/cld/post/all.done"
+    shell:
+        "touch {output}"
+
+rule post_task:
+    input:
+        "snakemake_jobs/cld/gen/gen_{sample}_{seed}.done"
+    output:
+        "snakemake_jobs/cld/post/post_{sample}_{seed}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=2000, slurm_partition="main", runtime=120, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
+    shell:
+        "snakemake_jobs/cld/post/post_{wildcards.sample}.sh {wildcards.seed} && touch {output}"
