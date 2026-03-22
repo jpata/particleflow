@@ -7,12 +7,12 @@ DATA_DIR=$(python3 scripts/get_param.py particleflow_spec.yaml productions.cms_r
 
 ./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|s(16,128,512)*4|o(8,256,default)" --show-attention > log_standard.txt
 mv plots/attention_matrix.png plots/attention_standard.png
+
 ./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|h(16,128,512)*4|o(8,256,default)" --show-attention > log_hept.txt
 mv plots/attention_matrix.png plots/attention_hept.png
+
 ./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|f(16,128,512)*4|o(8,256,default)" > log_fast.txt
+
 ./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|g(16,128,512)*4|o(8,256,default)" > log_global.txt
-./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|gla(16,128,512)*4|o(8,256,default)" > log_gla.txt
-./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|d(16,128,512)*4|o(8,256,default)" > log_deltanet.txt
-./scripts/local/wrapper.sh python3 mlpf/standalone/eval.py --data-dir $DATA_DIR --dsl "i(55,128,256,default)|gsa(16,128,512)*4|o(8,256,default)" > log_gsa.txt
 
 #./scripts/local/wrapper.sh python3 mlpf/standalone/run_evolution.py --pop-size 2 --generations 1 --data-dir $DATA_DIR

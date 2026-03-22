@@ -314,7 +314,7 @@ if __name__ == "__main__":
         start_total = time.time()
 
         # Train for a fixed time
-        train_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=120)
+        train_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=300)
 
         training_seconds = time.time() - start_total
 
