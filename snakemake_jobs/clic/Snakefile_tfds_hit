@@ -1,0 +1,33 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        
+
+rule tfds_hit_task:
+    input:
+        "snakemake_jobs/clic/post/post_{sample}_all.done"
+    output:
+        "snakemake_jobs/clic/tfds_hit/tfds_hit_{sample}_tfds_hit_{config}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, slurm_partition="main", runtime=120, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
+    shell:
+        "snakemake_jobs/clic/tfds_hit/tfds_hit_{wildcards.sample}.sh {wildcards.config} && touch {output}"

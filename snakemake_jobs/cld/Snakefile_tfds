@@ -33,7 +33,7 @@ rule tfds_task:
     container:
         "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
     shell:
-        "snakemake_jobs/cld/tfds/tfds_{wildcards.sample}_tfds_{wildcards.config}.sh && touch {output}"
+        "snakemake_jobs/cld/tfds/tfds_{wildcards.sample}.sh {wildcards.config} && touch {output}"
 
 rule tfds:
     input:

@@ -149,6 +149,7 @@ def main():
 
     samples = prod_config["samples"]
     tfds_mappings = prod_config.get("tfds_mapping", {})
+    tfds_hit_mappings = prod_config.get("tfds_hit_mapping", {})
 
     # Update jobs dir to include production name to avoid conflicts
     jobs_dir = f"{LOCAL_JOBS_DIR}/{args.production}"
@@ -349,13 +350,8 @@ done
                     f"expand('{jobs_dir}/val/val_{sample_key}_{job_type}_{{seed}}.done', seed=range({seed_start}, {seed_end}, {CHUNK_SIZE}))"
                 )
 
-        if "post" in req_steps and (sample_key in tfds_mappings):
-            step_data["post"]["targets"].append(
-                f"expand('{jobs_dir}/post/post_{sample_key}_{{seed}}.done', seed=range({seed_start}, {seed_end}, {CHUNK_SIZE}))"
-            )
-
-        # Grouping rule for TFDS input
-        if "post" in req_steps and sample_key in tfds_mappings:
+        if "post" in req_steps and (sample_key in tfds_mappings or sample_key in tfds_hit_mappings):
+            step_data["post"]["targets"].append(f'"{jobs_dir}/post/post_{sample_key}_all.done"')
             step_data["post"][
                 "rules"
             ] += f"""
@@ -529,44 +525,41 @@ rule val_data_task:
                 # TFDS builder expects workspace/post (containing process folder)
                 manual_dir = os.path.join(workspace_dir, "post")
 
-            for config_id in config_ids:
-                tfds_id = f"{sample_key}_{step_name}_{config_id}"
-                tfds_script_path = f"{jobs_dir}/{step_name}/{step_name}_{tfds_id}.sh"
+            tfds_script_path = f"{jobs_dir}/{step_name}/{step_name}_{sample_key}.sh"
+            version = mapping.get("version")
 
-                # Use a scratch directory for TFDS generation to avoid IO bottleneck on shared storage
-                job_scratch_dir = os.path.join(scratch_root, "tfds_tmp", tfds_id)
+            cmd = f"""
+config_id=$1
+tfds_id={sample_key}_{step_name}_$config_id
+job_scratch_dir={scratch_root}/tfds_tmp/$tfds_id
 
-                version = mapping.get("version")
-                tfds_build_cmd = f"tfds build {builder_path} --config {config_id} --data_dir {job_scratch_dir} --manual_dir {manual_dir} --overwrite"
-
-                cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export KERAS_BACKEND=torch
 hostname
 {f'export TFDS_VERSION={version}' if version else ''}
 env
 
-echo "Building TFDS for {builder_path} config {config_id}"
+echo "Building TFDS for {builder_path} config $config_id"
 echo "Manual dir: {manual_dir}"
-echo "Scratch dir: {job_scratch_dir}"
+echo "Scratch dir: $job_scratch_dir"
 
-mkdir -p {job_scratch_dir}
+mkdir -p $job_scratch_dir
 cleanup() {{
-    if [ ! -z "{job_scratch_dir}" ] && [ "{job_scratch_dir}" != "{scratch_root}" ]; then
-        echo "Cleaning up scratch directory {job_scratch_dir}"
-        rm -Rf {job_scratch_dir}
+    if [ ! -z "$job_scratch_dir" ] && [ "$job_scratch_dir" != "{scratch_root}" ]; then
+        echo "Cleaning up scratch directory $job_scratch_dir"
+        rm -Rf $job_scratch_dir
     fi
 }}
 trap cleanup EXIT
-export TMPDIR={job_scratch_dir}
-export TEMPDIR={job_scratch_dir}
-export TEMP={job_scratch_dir}
-export TMP={job_scratch_dir}
-{tfds_build_cmd}
-echo "Copying from {job_scratch_dir} to {tfds_root_dir}"
-cp -r {job_scratch_dir}/* {tfds_root_dir}/
+export TMPDIR=$job_scratch_dir
+export TEMPDIR=$job_scratch_dir
+export TEMP=$job_scratch_dir
+export TMP=$job_scratch_dir
+tfds build {builder_path} --config $config_id --data_dir $job_scratch_dir --manual_dir {manual_dir} --overwrite
+echo "Copying from $job_scratch_dir to {tfds_root_dir}"
+cp -r $job_scratch_dir/* {tfds_root_dir}/
 """
-                write_bash_script(tfds_script_path, cmd, project_root=project_root, tmpdir=tmpdir)
+            write_bash_script(tfds_script_path, cmd, project_root=project_root, tmpdir=tmpdir)
 
             if step_name in req_steps:
                 target_expand = f"expand('{jobs_dir}/{step_name}/{step_name}_{sample_key}_{step_name}_{{config}}.done', config={config_ids})"
@@ -589,7 +582,7 @@ rule {step_name}_task:{tfds_rule_input}
     container:
         "{main_container_img}"
     shell:
-        "{jobs_dir}/{step_name}/{step_name}_{{wildcards.sample}}_{step_name}_{{wildcards.config}}.sh && touch {{output}}"
+        "{jobs_dir}/{step_name}/{step_name}_{{wildcards.sample}}.sh {{wildcards.config}} && touch {{output}}"
 """
 
     if tfds_sentinels and "tfds" in req_steps:
@@ -714,16 +707,8 @@ rule train_{rule_model_name}:{train_rule_input}
         if data["targets"] or data["rules"]:
             write_snakefile(f"{jobs_dir}/Snakefile_{step}", data["targets"], data["rules"], tmpdir=tmpdir)
 
-    # Combine everything into one Snakefile
-    all_targets = []
-    all_rules = ""
-    for step in step_data.values():
-        all_targets.extend(step["targets"])
-        all_rules += step["rules"]
-    write_snakefile(f"{jobs_dir}/Snakefile", all_targets, all_rules, tmpdir=tmpdir)
-
     print(f"Generated Snakemake workflow in {jobs_dir}")
-    print(f'Run with: snakemake --snakefile {jobs_dir}/Snakefile --cores 1 --use-apptainer --apptainer-args "{bind_args} --nv"')
+    print(f'Run with: snakemake --snakefile {jobs_dir}/Snakefile_STEP --cores 1 --use-apptainer --apptainer-args "{bind_args} --nv"')
 
 
 if __name__ == "__main__":

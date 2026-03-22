@@ -261,27 +261,27 @@ productions:
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [300000, 305010]
+        seed_range: [300000, 310010]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [400000, 405010]
+        seed_range: [400000, 410010]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [500000, 505010]
+        seed_range: [500000, 510010]
         events_per_job: 100
       z_qq:
         process_name: "p8_ee_Z_qq_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [600000, 605010]
+        seed_range: [600000, 610010]
         events_per_job: 100
       z_tautau:
         process_name: "p8_ee_Z_tautau_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [700000, 705010]
+        seed_range: [700000, 710010]
         events_per_job: 100
 
     postprocessing:
@@ -514,13 +514,13 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -528,24 +528,24 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "cld_edm_ttbar_pf"
-        version: "3.0.0"
+        version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_ww_fullhad_pf"
-        version: "3.0.0"
+        version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_qq_pf"
-        version: "3.0.0"
+        version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-cld-hits-v1:
