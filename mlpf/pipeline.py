@@ -99,7 +99,7 @@ def main():
     parser = get_parser()
     args, extra_args = parser.parse_known_args()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 
     # --- Manually set action flags based on the command, for MLPFConfig.from_spec ---
     cmd = Command(args.command)

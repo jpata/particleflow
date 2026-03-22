@@ -11,6 +11,7 @@ from mlpf.conf import MLPFConfig
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
+# preferred over file_system to avoid stale open files
 SHARING_STRATEGY = "file_descriptor"
 
 
@@ -438,6 +439,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                 drop_last=True,
                 worker_init_fn=set_worker_sharing_strategy,
                 persistent_workers=config.num_workers > 0,
+                sharing_strategy="file_system",
             )
 
             loaders[split].append(loader)

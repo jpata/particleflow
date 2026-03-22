@@ -401,8 +401,8 @@ models:
     nvalid: null #use full valid dataset for validation
     ntest: 100 #do test on a small subset
     sort_data: false
-    num_workers: 8
-    prefetch_factor: 2
+    num_workers: 2
+    prefetch_factor: 1
     patience: 10000
     checkpoint_freq: 10000
     val_freq: 10000
@@ -573,15 +573,12 @@ models:
           - name: "cld_edm_ttbar_hits"
             version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "cld_edm_ww_fullhad_hits"
-            version: "3.1.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "cld_edm_qq_hits"
-            version: "3.1.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "cld_edm_zz_hits"
-            version: "3.1.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+#          - name: "cld_edm_ww_fullhad_hits"
+#            version: "3.1.0"
+#            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+#          - name: "cld_edm_qq_hits"
+#            version: "3.1.0"
+#            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
       physical:
@@ -596,9 +593,6 @@ models:
           - name: "cld_edm_qq_hits"
             version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "cld_edm_zz_hits"
-            version: "3.1.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "cld_edm_ttbar_hits"
@@ -608,9 +602,6 @@ models:
         version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_qq_hits"
-        version: "3.1.0"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-      - name: "cld_edm_zz_hits"
         version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
