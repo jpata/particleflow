@@ -86,14 +86,18 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
-    parser.add_argument("--model", type=str, default=None, help="Model name from spec file to train")
     parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
-    parser.add_argument("--steps", type=str, default="gen,post,tfds,tfds_hit,train", help="Comma-separated steps to run: gen,post,tfds,train")
     args = parser.parse_args()
 
-    req_steps = args.steps.split(",")
-
     spec = load_spec(SPEC_FILE)
+
+    if "cms" in args.production:
+        req_steps = ["gen", "post", "tfds", "train"]
+    elif "cld" in args.production or "clic" in args.production:
+        req_steps = ["gen", "post", "tfds", "tfds_hit", "train"]
+    else:
+        req_steps = ["gen", "post", "tfds", "train"]
+
     project_root = resolve_path("${project.paths.project_root}", spec)
 
     # Target specific production
@@ -103,8 +107,22 @@ def main():
     prod_config = spec["productions"][args.production]
     prod_type = prod_config.get("type", "cms")
 
-    if not args.model:
-        args.model = prod_config.get("model", "pyg-cms-v1")
+    # Determine models to train
+    models_to_train = []
+    # Resolve production type to match with model datasets
+    # e.g. "cms_run3" -> "cms", "cld" -> "cld", "clic" -> "clic"
+    prod_key = args.production.split("_")[0] if "cms" in args.production else args.production
+    for mname, mspec in spec.get("models", {}).items():
+        if mname == "defaults":
+            continue
+        m_dataset = mspec.get("dataset", "")
+        if m_dataset == prod_key or m_dataset.startswith(prod_key + "_"):
+            models_to_train.append(mname)
+
+    if not models_to_train:
+        # Fallback to the model specified in the production config if any
+        if "model" in prod_config:
+            models_to_train = [prod_config["model"]]
 
     executor = spec["project"].get("executor", "slurm")
     slurm_account = spec["project"].get("slurm_account")
@@ -609,28 +627,31 @@ rule tfds_hit:
         "{jobs_dir}/tfds_hit/all.done"
     shell:
         "touch {{output}}"
-"""  # -------------------------------------------------------------------------
+"""
+
+    # -------------------------------------------------------------------------
     # PART 3: Model Training
     # -------------------------------------------------------------------------
-    if args.model:
+    if "train" in req_steps and models_to_train:
         ensure_dir(f"{jobs_dir}/train")
-        model_spec = spec["models"][args.model]
-        model_defaults = spec["models"].get("defaults", {})
-        gpu_threads = model_spec.get("threads", model_defaults.get("threads", 16))
-        gpu_count = model_spec.get("gpus", model_defaults.get("gpus", 0))
-        gpu_type = model_spec.get("gpu_type", model_defaults.get("gpu_type", ""))
-        mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", model_defaults.get("mem_per_gpu_mb", 8000))
-        gpu_partition = resolve_path(model_spec.get("slurm_partition", model_defaults.get("slurm_partition", "gpu")), spec)
-        gpu_runtime = resolve_path(model_spec.get("slurm_runtime", model_defaults.get("slurm_runtime", "120m")), spec)
+        for mname in models_to_train:
+            model_spec = spec["models"][mname]
+            model_defaults = spec["models"].get("defaults", {})
+            gpu_threads = model_spec.get("threads", model_defaults.get("threads", 16))
+            gpu_count = model_spec.get("gpus", model_defaults.get("gpus", 0))
+            gpu_type = model_spec.get("gpu_type", model_defaults.get("gpu_type", ""))
+            mem_per_gpu_mb = model_spec.get("mem_per_gpu_mb", model_defaults.get("mem_per_gpu_mb", 8000))
+            gpu_partition = resolve_path(model_spec.get("slurm_partition", model_defaults.get("slurm_partition", "gpu")), spec)
+            gpu_runtime = resolve_path(model_spec.get("slurm_runtime", model_defaults.get("slurm_runtime", "120m")), spec)
 
-        exp_name = f"{args.model}_{args.production}"
-        train_script_path = f"{jobs_dir}/train/train_{exp_name}.sh"
-        train_sentinel = f"{jobs_dir}/train/train_{exp_name}.done"
-        train_cmd = (
-            f"python3 mlpf/pipeline.py --spec-file {SPEC_FILE} --model-name {args.model} --production-name {args.production} train --gpus {gpu_count}"
-        )
+            exp_name = f"{mname}_{args.production}"
+            train_script_path = f"{jobs_dir}/train/train_{exp_name}.sh"
+            train_sentinel = f"{jobs_dir}/train/train_{exp_name}.done"
+            train_cmd = (
+                f"python3 mlpf/pipeline.py --spec-file {SPEC_FILE} --model-name {mname} --production-name {args.production} train --gpus {gpu_count}"
+            )
 
-        cmd = f"""
+            cmd = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export TFDS_DATA_DIR={tfds_root_dir}
 export KERAS_BACKEND=torch
@@ -639,25 +660,24 @@ env
 nvidia-smi
 {train_cmd}
 """
-        write_bash_script(train_script_path, cmd, project_root=project_root, tmpdir=tmpdir)
+            write_bash_script(train_script_path, cmd, project_root=project_root, tmpdir=tmpdir)
 
-        train_inputs = []
-        model_dataset = model_spec.get("dataset", prod_config.get("type"))
-        if "hits" in model_dataset:
-            if "tfds_hit" in req_steps:
-                train_inputs.append(f'"{jobs_dir}/tfds_hit/all.done"')
-        else:
-            if "tfds" in req_steps:
-                train_inputs.append(f'"{jobs_dir}/tfds/all.done"')
+            train_inputs = []
+            model_dataset = model_spec.get("dataset", prod_config.get("type"))
+            if "hits" in model_dataset:
+                if "tfds_hit" in req_steps:
+                    train_inputs.append(f'"{jobs_dir}/tfds_hit/all.done"')
+            else:
+                if "tfds" in req_steps:
+                    train_inputs.append(f'"{jobs_dir}/tfds/all.done"')
 
-        train_rule_input = ""
-        if train_inputs:
-            train_rule_input = f"\n    input:\n        {', '.join(train_inputs)}"
+            train_rule_input = ""
+            if train_inputs:
+                train_rule_input = f"\n    input:\n        {', '.join(train_inputs)}"
 
-        # snakemake rule names cannot contain hyphens
-        rule_model_name = args.model.replace("-", "_")
+            # snakemake rule names cannot contain hyphens
+            rule_model_name = mname.replace("-", "_")
 
-        if "train" in req_steps:
             step_data["train"]["targets"].append(f'"{train_sentinel}"')
             step_data["train"][
                 "rules"

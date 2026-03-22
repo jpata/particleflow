@@ -69,7 +69,7 @@ rule post_task:
     output:
         "snakemake_jobs/cld/post/post_{sample}_{seed}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=2000, slurm_partition="main", runtime=120, slurm_account="hepusers", cpus_per_task=1, threads=1
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=2000, slurm_partition="main", runtime=240, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
     shell:

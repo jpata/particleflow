@@ -41,7 +41,7 @@ rule gen_task:
     output:
         "snakemake_jobs/cld/gen/gen_{sample}_{seed}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=4000, slurm_partition="main", runtime=120, slurm_account="hepusers", cpus_per_task=1, threads=1
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=4000, slurm_partition="main", runtime=240, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
     shell:

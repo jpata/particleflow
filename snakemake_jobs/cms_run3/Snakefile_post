@@ -18,12 +18,12 @@ os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
 
 rule all:
     input:
-        expand('snakemake_jobs/cms_run3/post/post_ttbar_pu_{seed}.done', seed=range(100000, 110010, 1)),
-        expand('snakemake_jobs/cms_run3/post/post_ztt_pu_{seed}.done', seed=range(200000, 210010, 1)),
-        expand('snakemake_jobs/cms_run3/post/post_qcd_pu_{seed}.done', seed=range(300000, 310010, 1)),
-        expand('snakemake_jobs/cms_run3/post/post_ttbar_nopu_{seed}.done', seed=range(800000, 810010, 1)),
-        expand('snakemake_jobs/cms_run3/post/post_qcd_nopu_{seed}.done', seed=range(1000000, 1010010, 1)),
-        expand('snakemake_jobs/cms_run3/post/post_ztt_nopu_{seed}.done', seed=range(1100000, 1110010, 1))
+        "snakemake_jobs/cms_run3/post/post_ttbar_pu_all.done",
+        "snakemake_jobs/cms_run3/post/post_ztt_pu_all.done",
+        "snakemake_jobs/cms_run3/post/post_qcd_pu_all.done",
+        "snakemake_jobs/cms_run3/post/post_ttbar_nopu_all.done",
+        "snakemake_jobs/cms_run3/post/post_qcd_nopu_all.done",
+        "snakemake_jobs/cms_run3/post/post_ztt_nopu_all.done"
 
 rule post_ttbar_pu_all:
     input:
@@ -75,7 +75,7 @@ rule post_ztt_nopu_all:
 
 rule post:
     input:
-        expand('snakemake_jobs/cms_run3/post/post_ttbar_pu_{seed}.done', seed=range(100000, 110010, 1)), expand('snakemake_jobs/cms_run3/post/post_ztt_pu_{seed}.done', seed=range(200000, 210010, 1)), expand('snakemake_jobs/cms_run3/post/post_qcd_pu_{seed}.done', seed=range(300000, 310010, 1)), expand('snakemake_jobs/cms_run3/post/post_ttbar_nopu_{seed}.done', seed=range(800000, 810010, 1)), expand('snakemake_jobs/cms_run3/post/post_qcd_nopu_{seed}.done', seed=range(1000000, 1010010, 1)), expand('snakemake_jobs/cms_run3/post/post_ztt_nopu_{seed}.done', seed=range(1100000, 1110010, 1))
+        "snakemake_jobs/cms_run3/post/post_ttbar_pu_all.done", "snakemake_jobs/cms_run3/post/post_ztt_pu_all.done", "snakemake_jobs/cms_run3/post/post_qcd_pu_all.done", "snakemake_jobs/cms_run3/post/post_ttbar_nopu_all.done", "snakemake_jobs/cms_run3/post/post_qcd_nopu_all.done", "snakemake_jobs/cms_run3/post/post_ztt_nopu_all.done"
     output:
         "snakemake_jobs/cms_run3/post/all.done"
     shell:

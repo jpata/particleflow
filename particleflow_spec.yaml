@@ -230,7 +230,7 @@ productions:
       tfds: 16000
 
     slurm_partition: "main"
-    slurm_runtime: "120m"
+    slurm_runtime: "240m"
 
     samples:
       zz:
@@ -386,7 +386,7 @@ models:
     backend: pytorch
     gpus: 1
     threads: 16
-    gpu_type: a100
+    gpu_type: l40
     mem_per_gpu_mb: 80000
     slurm_partition: "${project.gpu_partition}"
     slurm_runtime: "48h"

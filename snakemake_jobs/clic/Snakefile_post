@@ -18,9 +18,9 @@ os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
 
 rule all:
     input:
-        expand('snakemake_jobs/clic/post/post_ttbar_{seed}.done', seed=range(300000, 305010, 1)),
-        expand('snakemake_jobs/clic/post/post_ww_fullhad_{seed}.done', seed=range(400000, 405010, 1)),
-        expand('snakemake_jobs/clic/post/post_qq_{seed}.done', seed=range(500000, 505010, 1))
+        "snakemake_jobs/clic/post/post_ttbar_all.done",
+        "snakemake_jobs/clic/post/post_ww_fullhad_all.done",
+        "snakemake_jobs/clic/post/post_qq_all.done"
 
 rule post_ttbar_all:
     input:
@@ -48,7 +48,7 @@ rule post_qq_all:
 
 rule post:
     input:
-        expand('snakemake_jobs/clic/post/post_ttbar_{seed}.done', seed=range(300000, 305010, 1)), expand('snakemake_jobs/clic/post/post_ww_fullhad_{seed}.done', seed=range(400000, 405010, 1)), expand('snakemake_jobs/clic/post/post_qq_{seed}.done', seed=range(500000, 505010, 1))
+        "snakemake_jobs/clic/post/post_ttbar_all.done", "snakemake_jobs/clic/post/post_ww_fullhad_all.done", "snakemake_jobs/clic/post/post_qq_all.done"
     output:
         "snakemake_jobs/clic/post/all.done"
     shell:
