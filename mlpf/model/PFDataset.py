@@ -439,7 +439,6 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                 drop_last=True,
                 worker_init_fn=set_worker_sharing_strategy,
                 persistent_workers=config.num_workers > 0,
-                sharing_strategy="file_system",
             )
 
             loaders[split].append(loader)
