@@ -405,7 +405,7 @@ models:
     val_freq: 10000
 
     raytune:
-      local_dir: "/mnt/ceph/users/ewulff/raytune_experiments"
+      local_dir:  # absolute path to store raytune results, e.g. "/scratch/local/user/raytune_results"
       sched: asha  # asha, hyperband, bohb, pbt, pb2
       search_alg:  # bayes, bohb, hyperopt, nevergrad
       default_metric: "val_loss"
