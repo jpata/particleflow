@@ -45,6 +45,11 @@ export APPTAINER_CACHEDIR=$TMPDIR
 export SINGULARITY_TMPDIR=$TMPDIR
 export SINGULARITY_CACHEDIR=$TMPDIR
 
+ulimit -n 1048576
+echo "Initial ulimit -n: $(ulimit -Sn) (soft), $(ulimit -Hn) (hard)"
+ulimit -n $(ulimit -Hn)
+echo "Final ulimit -n: $(ulimit -Sn) (soft), $(ulimit -Hn) (hard)"
+
 env
 sleep $((RANDOM % 60))
 
