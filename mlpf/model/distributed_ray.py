@@ -32,12 +32,19 @@ def _init_ray(args):
         return
 
     _logger.info("Inititalizing ray...")
-    _logger.info("IP: " + os.environ["head_node_ip"])
-    ray.init(
-        address=os.environ["ip_head"],
-        _node_ip_address=os.environ["head_node_ip"],
-    )
-    _logger.info("Done.")
+    ip_head = os.environ.get("ip_head")
+    head_node_ip = os.environ.get("head_node_ip")
+
+    if ip_head and head_node_ip:
+        _logger.info("IP: " + head_node_ip)
+        ray.init(
+            address=ip_head,
+            _node_ip_address=head_node_ip,
+        )
+    else:
+        _logger.info("Ray cluster env vars not set, using auto address discovery.")
+        ray.init(address="auto")
+    _logger.info("Ray initialized.")
 
 
 def _get_scaling_config(args):
