@@ -99,7 +99,8 @@ def main():
     parser = get_parser()
     args, extra_args = parser.parse_known_args()
 
-    logging.basicConfig(level=logging.DEBUG)
+    loglevel = logging.DEBUG
+    logging.basicConfig(level=loglevel)
 
     # --- Manually set action flags based on the command, for MLPFConfig.from_spec ---
     cmd = Command(args.command)
@@ -113,6 +114,8 @@ def main():
         args.test = True
         args.hpo = None
         args.ray_train = False
+        loglevel = logging.INFO
+        logging.getLogger().setLevel(loglevel)
     elif cmd == Command.RAY_TRAIN:
         args.train = True
         args.test = True
@@ -137,7 +140,7 @@ def main():
 
     # --- Main logic based on sub-command ---
     if cmd == Command.RAY_HPO:
-        run_hpo(config, args)
+        run_hpo(config, args, loglevel=loglevel)
     else:
         experiment_dir = args.experiment_dir
         if experiment_dir is None:
@@ -159,10 +162,10 @@ def main():
             yaml.dump(spec, file)
 
         if cmd == Command.RAY_TRAIN:
-            run_ray_training(config, args, experiment_dir)
+            run_ray_training(config, args, experiment_dir, loglevel=loglevel)
         elif cmd in [Command.TRAIN, Command.TEST]:
             world_size = config_obj.gpus if config_obj.gpus > 0 else 1
-            device_agnostic_run(config_obj, world_size, experiment_dir)
+            device_agnostic_run(config_obj, world_size, experiment_dir, loglevel=loglevel)
 
 
 if __name__ == "__main__":

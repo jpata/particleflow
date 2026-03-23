@@ -145,6 +145,8 @@ class PFDataset:
             )
             _logger.error(e)
             sys.exit(1)
+
+        _logger.debug(f"PFDataset opening dataset {name} in {builder.data_path} for split {split}")
         self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort, pad_to_multiple=pad_to_multiple)
 
         if num_samples and num_samples < len(self.ds):
