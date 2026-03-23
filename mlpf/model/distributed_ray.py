@@ -56,7 +56,7 @@ def _get_scaling_config(args):
 
 
 def _apply_search_space_overrides(search_overrides, base_config):
-    from mlpf.raytune.pt_search_space import set_hps_from_search_space
+    from mlpf.raytune.search_space import set_hps_from_search_space
 
     return set_hps_from_search_space(search_overrides, deepcopy(base_config))
 
@@ -157,7 +157,7 @@ def run_hpo(config, args):
     import ray
     from ray import tune
 
-    from mlpf.raytune.pt_search_space import raytune_num_samples, search_space
+    from mlpf.raytune.search_space import raytune_num_samples, search_space
     from mlpf.raytune.utils import get_raytune_schedule, get_raytune_search_alg
 
     if args.raytune_num_samples:
@@ -173,8 +173,8 @@ def run_hpo(config, args):
     expdir.mkdir(parents=True, exist_ok=True)
     dirname = Path(config["raytune"]["local_dir"]) / name
     shutil.copy(
-        "mlpf/raytune/pt_search_space.py",
-        str(dirname / "pt_search_space.py"),
+        "mlpf/raytune/search_space.py",
+        str(dirname / "search_space.py"),
     )  # Copy the search space definition file to the train dir for later reference
     # Save config for later reference. Note that saving happens after parameters are overwritten by cmd line args.
     with open((dirname / "config.yaml"), "w") as file:
@@ -315,7 +315,7 @@ def train_ray_trial(config, args, outdir=None):
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/model/mlpf.py"))
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/model/utils.py"))
         comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/pipeline.py"))
-        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/raytune/pt_search_space.py"))
+        comet_experiment.log_code(str(Path(outdir).parent.parent / "mlpf/raytune/search_space.py"))
         # save overridden config then log to comet
         config_filename = "overridden_config.yaml"
         with open((Path(outdir) / config_filename), "w") as file:
