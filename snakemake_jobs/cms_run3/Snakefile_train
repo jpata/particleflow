@@ -1,0 +1,34 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        "snakemake_jobs/cms_run3/train/train_pyg-cms-v1_cms_run3.done"
+
+rule train_pyg_cms_v1:
+    input:
+        "snakemake_jobs/cms_run3/tfds/all.done"
+    output:
+        "snakemake_jobs/cms_run3/train/train_pyg-cms-v1_cms_run3.done"
+    threads: 16
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, mem_per_gpu=80000, slurm_partition="gpu", runtime=2880, slurm_account="hepusers", gres="gpu:a100:1", cpus_per_task=16, threads=16
+    container:
+        "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
+    shell:
+        "snakemake_jobs/cms_run3/train/train_pyg-cms-v1_cms_run3.sh && touch {output}"

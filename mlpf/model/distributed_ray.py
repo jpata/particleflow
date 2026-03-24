@@ -46,7 +46,6 @@ def _init_ray(args):
         ray.init(address="auto")
     _logger.info("Ray initialized.")
 
-
 def _get_scaling_config(args):
     from ray import train
 
@@ -160,7 +159,7 @@ def run_hpo_trial(sampled_config, base_config, args):
     trainer.fit()
 
 
-def run_hpo(config, args):
+def run_hpo(config, args, loglevel=logging.INFO):
     import ray
     from ray import tune
 

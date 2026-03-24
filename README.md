@@ -1,7 +1,8 @@
 ## **TLDR; I just want to run the code**
 This runs the data preparation and training on a very small sample, so you can see how to run the code:
 ```
-apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_torch.sh
+apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cld.sh
+apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cms.sh
 ```
 
 ### **Summary**
@@ -55,25 +56,19 @@ Below is the development timeline of MLPF by our team, ranging from initial proo
 
 ### **Datasets**
 
-#### **Software & Dataset Compatibility**
-
-Please ensure you use the correct version of the `jpata/particleflow` software with the corresponding dataset version.
-
-| Code Version | CMS Dataset | CLIC Dataset | CLD Dataset |
-| --- | --- | --- | --- |
-| [1.9.0](https://github.com/jpata/particleflow/releases/v1.9.0) | 2.4.0 | 2.2.0 | NA |
-| [2.0.0](https://github.com/jpata/particleflow/releases/v2.0.0) | 2.4.0 | 2.3.0 | NA |
-| [2.1.0](https://github.com/jpata/particleflow/releases/v2.1.0) | 2.5.0 | 2.5.0 | NA |
-| [2.2.0](https://github.com/jpata/particleflow/releases/v2.2.0) | 2.5.0 | 2.5.0 | 2.5.0 |
-| [2.3.0](https://github.com/jpata/particleflow/releases/v2.3.0) | 2.5.0 | 2.5.0 | 2.5.0 |
-| [2.4.0](https://github.com/jpata/particleflow/releases/v2.4.0) | 2.6.0 | 2.5.0 | 2.5.0 |
-| [3.0.0](https://github.com/jpata/particleflow/releases/v3.0.0) | 3.0.0 | 3.0.0 | 3.0.0 |
-
----
+If you wish to train on pre-made datasets, you can download them from the [Hugging Face Hub](https://huggingface.co/datasets/jpata/particleflow).
+To download a specific dataset and split (e.g., CLD ttbar PF split 1):
+```bash
+hf download jpata/particleflow \
+  --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/*" \
+  --local-dir data/tfds \
+  --repo-type dataset
+```
+This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_ttbar_pf/1/`.
 
 ## **Getting Started with Pixi & Snakemake**
 
-The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment management and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration.
+The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment management and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration. We provide site-specific configurations for Tallinn, LXPlus, and local execution.
 
 ### **1. Install Pixi**
 ```bash
@@ -81,35 +76,44 @@ curl -fsSL https://pixi.sh/install.sh | bash
 # Restart your shell or source your .bashrc
 ```
 
-### **2. Initialize Your Site**
+### **2. Select Your Site**
+Pick the site that you are using. Supported sites are Tallinn, lxplus, or local.
+
+```bash
+ln -s configs/{local,tallinn,lxplus}/pixi.toml pixi.toml
+```
+
+### **3. Initialize Your Site**
 Configure the environment for your specific cluster. This sets up the necessary Snakemake profiles and site defaults.
-
-*   **Tallinn (Slurm):**
 ```bash
-pixi run -e tallinn init
-```
-*   **lxplus (HTCondor):**
-```bash
-pixi run -e lxplus init
+pixi run init
 ```
 
-### **3. Generate the Workflow**
-Generate the `Snakefile` for a production campaign corresponding to your site.
+### **4. Generate the Workflow**
+Generate the `Snakefile` for a production campaign.
 ```bash
-PROD=cms_run3 STEPS=gen,post,tfds,train pixi run -e lxplus generate
+PROD=cms_run3 STEPS=gen,post,tfds,train pixi run snakefile
 ```
 You can inspect `snakemake_jobs/cms_run3/Snakefile` and the related scripts to understand the workflow.
 
-### **4. Execute the Workflow**
-Launch the workflow on the batch system. It is recommended to run this inside a `tmux` or `screen` session.
+### **5. Execute the Workflow**
+Launch the workflow on the batch system. You can run the steps individually.
 ```bash
-PROD=cms_run3 STEPS=gen,post,tfds,train pixi run -e lxplus run
+PROD=cms_run3 pixi run gen
+PROD=cms_run3 pixi run post
+PROD=cms_run3 pixi run tfds
+PROD=cms_run3 pixi run train
 ```
+On clusters like Tallinn, you can run the `gen` and `post` steps in batches using the `BATCH` environment variable:
+```bash
+PROD=cms_run3 BATCH=1/10 pixi run gen
+```
+It is recommended to run this inside a `tmux` or `screen` session.
 
-### **5. Validation & Plots**
+### **6. Validation & Plots**
 To run the validation plotting workflow:
 ```bash
-PROD=cms_run3 pixi run -e lxplus validation
+PROD=cms_run3 pixi run validation
 ```
 
 ---

@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+export GOTO_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+export TMPDIR=/scratch/local/joosep/tmp
+export TEMPDIR=/scratch/local/joosep/tmp
+export TEMP=/scratch/local/joosep/tmp
+export TMP=/scratch/local/joosep/tmp
+mkdir -p $TMPDIR
+cd /home/joosep/particleflow
+
+start_seed=$1
+for (( i=0; i<1; i++ )); do
+    seed=$((start_seed + i))
+    if [ ! -f /local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75_val/QCDForPF_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root ]; then
+        echo "Generating /local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75_val/QCDForPF_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root"
+        export OUTDIR=/local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75_val/ && export CONFIG_DIR=/home/joosep/particleflow && export CMSSWDIR=/scratch/persistent/joosep/CMSSW_15_0_5 && export WORKDIR=/scratch/local/joosep/QCDForPF_13p6TeV_TuneCUETP8M1_cfi_$seed && export NEV=100
+        bash mlpf/data/cms/genjob_pu.sh QCDForPF_13p6TeV_TuneCUETP8M1_cfi $seed pu55to75 True
+        echo "Validating /local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75_val/QCDForPF_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root"
+        python3 -c "import uproot; uproot.open('/local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75_val/QCDForPF_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root')"
+    else
+        echo "Skipping /local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75_val/QCDForPF_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root, already exists"
+    fi
+done

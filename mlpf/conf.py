@@ -444,7 +444,7 @@ class MLPFConfig(BaseModel):
     train: bool = False
     test: bool = False
     compile: bool = False
-    make_plots: bool = False
+    make_plots: bool = True
     sort_data: bool = False
     load: Optional[str] = None
     relaxed_load: bool = True
@@ -659,7 +659,7 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical": {
                                 "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.0.0"}},
+                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.0"}},
                             }
                         }
                 if "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
@@ -671,7 +671,7 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical": {
                                 "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.0.0"}},
+                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.0"}},
                             }
                         }
                 if "clic_edm_ttbar_pf" in config_dict["test_dataset"]:

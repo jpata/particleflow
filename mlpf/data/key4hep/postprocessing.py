@@ -334,9 +334,9 @@ def get_hit_matrix_and_genadj(
     return (
         hit_feature_matrix,
         (
-            np.array(genparticle_to_hit_matrix_coo0),
-            np.array(genparticle_to_hit_matrix_coo1),
-            np.array(genparticle_to_hit_matrix_w),
+            np.array(genparticle_to_hit_matrix_coo0, dtype=np.int32),
+            np.array(genparticle_to_hit_matrix_coo1, dtype=np.int32),
+            np.array(genparticle_to_hit_matrix_w, dtype=np.float32),
         ),
         hit_idx_local_to_global,
     )
@@ -699,6 +699,18 @@ def get_genparticles_and_adjacencies(
     n_track = awkward.count(track_features["type"])
     n_hit = awkward.count(hit_features["type"])
     n_cluster = awkward.count(cluster_features["type"])
+    n_hit_tracker = np.sum(hit_features["subdetector"] == 3)
+    n_hit_calo = np.sum(hit_features["subdetector"] != 3)
+    print(
+        f"debug_counts: iev={iev} n_gp={n_gp} n_track={n_track} n_hit={n_hit} "
+        f"n_hit_tracker={n_hit_tracker} n_hit_calo={n_hit_calo} n_cluster={n_cluster} "
+        f"n_gp_to_hit={len(genparticle_to_hit[1])}"
+    )
+
+    mask_status1 = gen_features["generatorStatus"] == 1
+    print(f"debug_status1: iev={iev} n_st1={np.sum(mask_status1)}")
+    for idx in np.where(mask_status1)[0]:
+        print(f"  st1_particle: pdg={gen_features['PDG'][idx]} pt={gen_features['pt'][idx]:.4f} energy={gen_features['energy'][idx]:.4f}")
 
     if len(genparticle_to_trk[0]) > 0:
         gp_to_track = coo_matrix((genparticle_to_trk[2], (genparticle_to_trk[0], genparticle_to_trk[1])), shape=(n_gp, n_track)).max(axis=1).todense()
@@ -707,9 +719,21 @@ def get_genparticles_and_adjacencies(
 
     gp_to_hit = coo_matrix((genparticle_to_hit[2], (genparticle_to_hit[0], genparticle_to_hit[1])), shape=(n_gp, n_hit))
     # check that gp_to_hit contains both tracker hits (subdetector 3) and calorimeter hits (subdetector 0, 1, or 2)
-    # this confirms that it indeed contains all hits
-    assert np.any(hit_features["subdetector"][genparticle_to_hit[1]] == 3)
-    assert np.any(hit_features["subdetector"][genparticle_to_hit[1]] != 3)
+    # if they are present in the event. This confirms that it indeed contains all hits.
+    # Some low-multiplicity events may not have any tracker or calorimeter hits.
+    if len(genparticle_to_hit[1]) > 0:
+        if np.any(hit_features["subdetector"] == 3):
+            if not np.any(hit_features["subdetector"][genparticle_to_hit[1]] == 3):
+                print(
+                    f"WARNING: No tracker hits linked to genparticles in event {iev}. All hit subdetectors: {hit_features['subdetector']}, linked hit subdetectors: {hit_features['subdetector'][genparticle_to_hit[1]]}"
+                )
+            # assert np.any(hit_features["subdetector"][genparticle_to_hit[1]] == 3)
+        if np.any(hit_features["subdetector"] != 3):
+            if not np.any(hit_features["subdetector"][genparticle_to_hit[1]] != 3):
+                print(
+                    f"WARNING: No calo hits linked to genparticles in event {iev}. All hit subdetectors: {hit_features['subdetector']}, linked hit subdetectors: {hit_features['subdetector'][genparticle_to_hit[1]]}"
+                )
+            # assert np.any(hit_features["subdetector"][genparticle_to_hit[1]] != 3)
 
     calohit_to_cluster = coo_matrix((hit_to_cluster[2], (hit_to_cluster[0], hit_to_cluster[1])), shape=(n_hit, n_cluster))
     gp_to_cluster = (gp_to_hit * calohit_to_cluster).sum(axis=1)
@@ -740,6 +764,9 @@ def get_genparticles_and_adjacencies(
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
 
     if np.array(mask_visible).sum() == 0:
+        print("st1={} hit={}".format(np.sum(mask_status1), np.sum(mask_visible_hit)))
+        for idx in np.where(mask_status1)[0]:
+            print("st1 particles", gen_features["PDG"][idx], gen_features["pt"][idx])
         raise ValueError(f"Event {iev} does not have even one 'visible' particle.")
 
     if len(np.array(mask_visible)) == 1:
@@ -845,9 +872,12 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         mask_gp_unmatched[igp_unmatched] = False
 
         # find closest cluster that this particle is matched to
-        idx_best_cluster = np.argmax(gp_to_cluster[igp_unmatched])
-        # get the first genparticle matched to that cluster
-        idx_gp_bestcluster = np.where(gp_to_obj[:, 1] == idx_best_cluster)[0]
+        if n_cluster > 0 and np.any(gp_to_cluster[igp_unmatched] > 0):
+            idx_best_cluster = np.argmax(gp_to_cluster[igp_unmatched])
+            # get the first genparticle matched to that cluster
+            idx_gp_bestcluster = np.where(gp_to_obj[:, 1] == idx_best_cluster)[0]
+        else:
+            idx_gp_bestcluster = []
 
         # if the genparticle is not matched to any cluster, then it left a few hits to some other track
         # this is rare, happens only for low-pT particles and we don't want to try to reconstruct it
@@ -998,7 +1028,7 @@ def get_particle_feature_matrix(pfelem_to_particle: np.ndarray, feature_dict: An
     for feat in features:
         feat_arr = feature_dict[feat]
         if len(feat_arr) == 0:
-            feat_arr_reordered = feat_arr
+            feat_arr_reordered = np.zeros(len(pfelem_to_particle))
         else:
             feat_arr_reordered = awkward.to_numpy(feat_arr[pfelem_to_particle])
             feat_arr_reordered[pfelem_to_particle == -1] = 0.0
@@ -1055,10 +1085,10 @@ def compute_jets(particles_p4: Any, min_pt: float = jet_ptcut, with_indices: boo
     return ret
 
 
-def process_one_file(fn: str, ofn: str) -> None:
+def process_one_file(fn: str, ofn: str, first_event: int = 0, num_events: int = -1) -> None:
 
     # output exists, do not recreate
-    if os.path.isfile(ofn):
+    if os.path.isfile(ofn) and num_events == -1 and first_event == 0:
         print("{} exists".format(ofn))
         return
 
@@ -1186,7 +1216,10 @@ def process_one_file(fn: str, ofn: str) -> None:
     genjets_st1 = compute_jets(mc_st1_p4)
 
     ret = []
-    for iev in tqdm.tqdm(range(arrs.num_entries), total=arrs.num_entries):
+    if num_events == -1:
+        num_events = arrs.num_entries - first_event
+
+    for iev in tqdm.tqdm(range(first_event, first_event + num_events), total=num_events):
 
         # get the reco particles
         reco_arr = get_reco_properties(prop_data, iev)
@@ -1213,17 +1246,21 @@ def process_one_file(fn: str, ofn: str) -> None:
         )
 
         # get the genparticles and the links between genparticles and tracks/clusters
-        gpdata = get_genparticles_and_adjacencies(
-            prop_data,
-            hit_data,
-            calohit_links,
-            sitrack_links,
-            tracker_links,
-            iev,
-            collectionIDs,
-            collectionIDs_reverse,
-            mcp_id,
-        )
+        try:
+            gpdata = get_genparticles_and_adjacencies(
+                prop_data,
+                hit_data,
+                calohit_links,
+                sitrack_links,
+                tracker_links,
+                iev,
+                collectionIDs,
+                collectionIDs_reverse,
+                mcp_id,
+            )
+        except ValueError as e:
+            print(f"Skipping event {iev} because it has no visible particles: {e}")
+            continue
 
         # find the reconstructable genparticles and associate them to the best track/cluster
         gpdata_cleaned, gp_to_obj, gp_to_hit_idx = assign_genparticles_to_obj_and_merge(gpdata)
@@ -1396,6 +1433,8 @@ def parse_args() -> Any:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
+    parser.add_argument("--first-event", type=int, default=0, help="first event to process")
+    parser.add_argument("--num-events", type=int, default=-1, help="number of events to process")
 
     args = parser.parse_args()
     return args
@@ -1409,11 +1448,11 @@ def process(args: Any) -> None:
         flist = glob.glob(args.input + "/*.root")
         for infile in flist:
             outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-            process_one_file(infile, outfile)
+            process_one_file(infile, outfile, args.first_event, args.num_events)
     else:
         infile = args.input
         outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-        process_one_file(infile, outfile)
+        process_one_file(infile, outfile, args.first_event, args.num_events)
 
 
 if __name__ == "__main__":

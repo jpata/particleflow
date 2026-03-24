@@ -1,0 +1,39 @@
+[workspace]
+name = "particleflow"
+version = "2.5.0"
+description = "Machine Learning for Particle Flow Reconstruction"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.10"
+snakemake = ">=8.0"
+snakemake-executor-plugin-cluster-generic = "*"
+pyyaml = "*"
+
+[pypi-dependencies]
+comet-ml = "*"
+
+[activation]
+env = { SITE = "local", PROFILE = ".profiles/local", APPTAINER_ARGS = "-B /tmp -B /mnt --nv" }
+
+[tasks]
+setup = { cmd = "sed -i '0,/^  <<: \\*.*$/s//  <<: \\*local/' particleflow_spec.yaml", description = "Set the profile in particleflow_spec.yaml" }
+init = { cmd = """
+mkdir -p .profiles/local \
+&& echo 'executor: "local"
+jobs: 1
+restart-times: 0
+local-cores: 1
+verbose: false' > .profiles/local/config.v8+.yaml
+""", description = "Create the local snakemake profile" }
+
+snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} \"$@\"' --", depends-on = ["setup"], description = "Generate the snakemake files" }
+all = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} all \"$@\"' --", depends-on = ["snakefile"], description = "Run the full production pipeline" }
+gen = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_gen --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} gen \"$@\"' --", depends-on = ["snakefile"], description = "Generate samples" }
+post = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_post --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} post \"$@\"' --", depends-on = ["snakefile"], description = "Post-process samples" }
+tfds = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds \"$@\"' --", depends-on = ["snakefile"], description = "Create TFDS datasets" }
+tfds_hit = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds_hit --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds_hit \"$@\"' --", depends-on = ["snakefile"], description = "Create TFDS datasets with hits" }
+train = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_train --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} \"$@\"' --", depends-on = ["snakefile"], description = "Train the model" }
+validation = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config ${VAL_CONFIG:-validation_cms.yaml} && snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/validation_${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1 \"$@\"' --", depends-on = ["setup"], description = "Run validation" }
+dry-run = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --dry-run \"$@\"' --", depends-on = ["snakefile"], description = "Dry-run the production pipeline" }

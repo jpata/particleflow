@@ -1,0 +1,94 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        "snakemake_jobs/cms_run3/post/post_ttbar_pu_all.done",
+        "snakemake_jobs/cms_run3/post/post_ztt_pu_all.done",
+        "snakemake_jobs/cms_run3/post/post_qcd_pu_all.done",
+        "snakemake_jobs/cms_run3/post/post_ttbar_nopu_all.done",
+        "snakemake_jobs/cms_run3/post/post_qcd_nopu_all.done",
+        "snakemake_jobs/cms_run3/post/post_ztt_nopu_all.done"
+
+rule post_ttbar_pu_all:
+    input:
+        expand("snakemake_jobs/cms_run3/post/post_ttbar_pu_{seed}.done", seed=range(100000, 110010, 1))
+    output:
+        "snakemake_jobs/cms_run3/post/post_ttbar_pu_all.done"
+    shell:
+        "touch {output}"
+
+rule post_ztt_pu_all:
+    input:
+        expand("snakemake_jobs/cms_run3/post/post_ztt_pu_{seed}.done", seed=range(200000, 210010, 1))
+    output:
+        "snakemake_jobs/cms_run3/post/post_ztt_pu_all.done"
+    shell:
+        "touch {output}"
+
+rule post_qcd_pu_all:
+    input:
+        expand("snakemake_jobs/cms_run3/post/post_qcd_pu_{seed}.done", seed=range(300000, 310010, 1))
+    output:
+        "snakemake_jobs/cms_run3/post/post_qcd_pu_all.done"
+    shell:
+        "touch {output}"
+
+rule post_ttbar_nopu_all:
+    input:
+        expand("snakemake_jobs/cms_run3/post/post_ttbar_nopu_{seed}.done", seed=range(800000, 810010, 1))
+    output:
+        "snakemake_jobs/cms_run3/post/post_ttbar_nopu_all.done"
+    shell:
+        "touch {output}"
+
+rule post_qcd_nopu_all:
+    input:
+        expand("snakemake_jobs/cms_run3/post/post_qcd_nopu_{seed}.done", seed=range(1000000, 1010010, 1))
+    output:
+        "snakemake_jobs/cms_run3/post/post_qcd_nopu_all.done"
+    shell:
+        "touch {output}"
+
+rule post_ztt_nopu_all:
+    input:
+        expand("snakemake_jobs/cms_run3/post/post_ztt_nopu_{seed}.done", seed=range(1100000, 1110010, 1))
+    output:
+        "snakemake_jobs/cms_run3/post/post_ztt_nopu_all.done"
+    shell:
+        "touch {output}"
+
+rule post:
+    input:
+        "snakemake_jobs/cms_run3/post/post_ttbar_pu_all.done", "snakemake_jobs/cms_run3/post/post_ztt_pu_all.done", "snakemake_jobs/cms_run3/post/post_qcd_pu_all.done", "snakemake_jobs/cms_run3/post/post_ttbar_nopu_all.done", "snakemake_jobs/cms_run3/post/post_qcd_nopu_all.done", "snakemake_jobs/cms_run3/post/post_ztt_nopu_all.done"
+    output:
+        "snakemake_jobs/cms_run3/post/all.done"
+    shell:
+        "touch {output}"
+
+rule post_task:
+    input:
+        "snakemake_jobs/cms_run3/gen/gen_{sample}_{seed}.done"
+    output:
+        "snakemake_jobs/cms_run3/post/post_{sample}_{seed}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=4000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
+    shell:
+        "snakemake_jobs/cms_run3/post/post_{wildcards.sample}.sh {wildcards.seed} && touch {output}"

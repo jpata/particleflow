@@ -52,21 +52,25 @@ def log_open_files_to_tensorboard(tensorboard_writer, step):
         tensorboard_writer: SummaryWriter instance
         step: Current training step
     """
-    if tensorboard_writer is None:
-        return
-
     try:
         metrics = monitor_open_files()
         if not metrics["error"]:
-            # Log all metrics to tensorboard
-            tensorboard_writer.add_scalar("system/process_open_files", metrics["process_open_files"], step)
-            tensorboard_writer.add_scalar("system/child_process_open_files", metrics["child_process_open_files"], step)
-            tensorboard_writer.add_scalar("system/total_open_files", metrics["total_open_files"], step)
-            tensorboard_writer.add_scalar("system/soft_limit", metrics["soft_limit"], step)
-            tensorboard_writer.add_scalar("system/hard_limit", metrics["hard_limit"], step)
+            _logger.debug(
+                f"Open files: total={metrics['total_open_files']} "
+                f"(process={metrics['process_open_files']}, child={metrics['child_process_open_files']}), "
+                f"soft_limit={metrics['soft_limit']}"
+            )
 
-            if "soft_limit_usage_percent" in metrics:
-                tensorboard_writer.add_scalar("system/soft_limit_usage_percent", metrics["soft_limit_usage_percent"], step)
+            if tensorboard_writer is not None:
+                # Log all metrics to tensorboard
+                tensorboard_writer.add_scalar("system/process_open_files", metrics["process_open_files"], step)
+                tensorboard_writer.add_scalar("system/child_process_open_files", metrics["child_process_open_files"], step)
+                tensorboard_writer.add_scalar("system/total_open_files", metrics["total_open_files"], step)
+                tensorboard_writer.add_scalar("system/soft_limit", metrics["soft_limit"], step)
+                tensorboard_writer.add_scalar("system/hard_limit", metrics["hard_limit"], step)
+
+                if "soft_limit_usage_percent" in metrics:
+                    tensorboard_writer.add_scalar("system/soft_limit_usage_percent", metrics["soft_limit_usage_percent"], step)
     except Exception:
         _logger.error("Error monitoring open files, this can happen in singularity on lxplus")
 
