@@ -11,6 +11,7 @@ Full list of authors: https://github.com/jpata/particleflow/graphs/contributors
 import argparse
 import logging
 import os
+import typing
 from pathlib import Path
 
 # comet needs to be imported before torch
@@ -27,6 +28,7 @@ from mlpf.model.distributed_ray import run_hpo, run_ray_training
 from mlpf.model.PFDataset import SHARING_STRATEGY
 from mlpf.utils import create_experiment_dir, load_spec
 from enum import Enum
+from pydantic_core import PydanticUndefined
 
 
 class Command(Enum):
@@ -36,9 +38,75 @@ class Command(Enum):
     RAY_HPO = "ray-hpo"
 
 
+_config_help = None
+
+
+def get_config_help():
+    global _config_help
+    if _config_help is not None:
+        return _config_help
+
+    from pydantic import BaseModel
+
+    lines = [
+        "\nConfiguration hierarchy:",
+        "1. mlpf/conf.py: Defines parameter types and basic defaults.",
+        "2. particleflow_spec.yaml: Defines scenario-dependent values (e.g. CMS, CLD or CLIC).",
+        "3. Command-line arguments: Allow overriding any parameter below.",
+        "\nOverrideable configuration parameters (via --key value or key=value):",
+    ]
+
+    def get_fields(model, prefix=""):
+        for name, field in model.model_fields.items():
+            full_name = f"{prefix}.{name}" if prefix else name
+
+            field_type = field.annotation
+
+            default = field.default
+            if default is PydanticUndefined and field.default_factory:
+                try:
+                    default = field.default_factory()
+                except Exception:
+                    default = "factory"
+
+            if default is PydanticUndefined:
+                default = "required"
+
+            # Get a nice type name
+            if hasattr(field_type, "__name__"):
+                type_name = field_type.__name__
+            elif hasattr(field_type, "__origin__"):
+                # Handle things like List[int], Dict[str, Any]
+                type_name = str(field_type).replace("typing.", "")
+            else:
+                type_name = str(field_type).replace("typing.", "")
+
+            # If it's an Enum, show possible values
+            if isinstance(field_type, type) and issubclass(field_type, Enum):
+                values = [e.value for e in field_type]
+                type_name = f"Enum{values}"
+
+            lines.append(f"  --{full_name:<40} {type_name:<30} (default: {default})")
+
+            # Recurse
+            target = field.annotation
+            if hasattr(target, "__origin__") and target.__origin__ is typing.Union:
+                args = target.__args__
+            else:
+                args = [target]
+            for arg in args:
+                if isinstance(arg, type) and issubclass(arg, BaseModel):
+                    get_fields(arg, full_name)
+
+    get_fields(MLPFConfig)
+    _config_help = "\n".join(lines)
+    return _config_help
+
+
 def get_parser():
     """Create and return the ArgumentParser object."""
-    parser = argparse.ArgumentParser()
+    config_help = get_config_help()
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, epilog=config_help)
 
     # --- Define top-level, global arguments ---
     parser.add_argument("--spec-file", type=str, required=True, help="Path to the yaml spec file (particleflow_spec.yaml)")
@@ -66,21 +134,37 @@ def get_parser():
     common_parser.add_argument("--make-plots", action="store_true", help="Generate plots")
 
     # --- 'train' command parser ---
-    parser_train = subparsers.add_parser("train", parents=[common_parser], help="Run standard training")
+    parser_train = subparsers.add_parser(
+        "train", parents=[common_parser], help="Run standard training", formatter_class=argparse.RawDescriptionHelpFormatter, epilog=config_help
+    )
     parser_train.add_argument("--num-steps", type=int, default=None, help="Number of training steps")
     parser_train.add_argument("--lr", type=float, default=None, help="Learning rate")
 
     # --- 'test' command parser ---
-    subparsers.add_parser("test", parents=[common_parser], help="Run evaluation")
+    subparsers.add_parser(
+        "test", parents=[common_parser], help="Run evaluation", formatter_class=argparse.RawDescriptionHelpFormatter, epilog=config_help
+    )
 
     # --- 'ray-train' command parser ---
-    parser_ray = subparsers.add_parser("ray-train", parents=[common_parser], help="Run distributed training with Ray Train")
+    parser_ray = subparsers.add_parser(
+        "ray-train",
+        parents=[common_parser],
+        help="Run distributed training with Ray Train",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=config_help,
+    )
     parser_ray.add_argument("--ray-gpus", type=int, default=0, help="GPUs per worker")
     parser_ray.add_argument("--ray-cpus", type=int, help="CPUs per worker")
     parser_ray.add_argument("--ray-local", action="store_true", help="Run Ray Train locally")
 
     # --- 'ray-hpo' command parser ---
-    parser_hpo = subparsers.add_parser("ray-hpo", parents=[common_parser], help="Run hyperparameter optimization")
+    parser_hpo = subparsers.add_parser(
+        "ray-hpo",
+        parents=[common_parser],
+        help="Run hyperparameter optimization",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=config_help,
+    )
     parser_hpo.add_argument("--name", type=str, required=True, help="HPO experiment name")
     parser_hpo.add_argument("--ray-gpus", type=int, default=0, help="GPUs per trial")
     parser_hpo.add_argument("--ray-cpus", type=int, help="CPUs per trial")
@@ -99,7 +183,8 @@ def main():
     parser = get_parser()
     args, extra_args = parser.parse_known_args()
 
-    logging.basicConfig(level=logging.INFO)
+    loglevel = logging.INFO
+    logging.basicConfig(level=loglevel)
 
     # --- Manually set action flags based on the command, for MLPFConfig.from_spec ---
     cmd = Command(args.command)
@@ -113,6 +198,8 @@ def main():
         args.test = True
         args.hpo = None
         args.ray_train = False
+        loglevel = logging.INFO
+        logging.getLogger().setLevel(loglevel)
     elif cmd == Command.RAY_TRAIN:
         args.train = True
         args.test = True
@@ -137,7 +224,7 @@ def main():
 
     # --- Main logic based on sub-command ---
     if cmd == Command.RAY_HPO:
-        run_hpo(config, args)
+        run_hpo(config, args, loglevel=loglevel)
     else:
         experiment_dir = args.experiment_dir
         if experiment_dir is None:
@@ -159,10 +246,10 @@ def main():
             yaml.dump(spec, file)
 
         if cmd == Command.RAY_TRAIN:
-            run_ray_training(config, args, experiment_dir)
+            run_ray_training(config, args, experiment_dir, loglevel=loglevel)
         elif cmd in [Command.TRAIN, Command.TEST]:
             world_size = config_obj.gpus if config_obj.gpus > 0 else 1
-            device_agnostic_run(config_obj, world_size, experiment_dir)
+            device_agnostic_run(config_obj, world_size, experiment_dir, loglevel=loglevel)
 
 
 if __name__ == "__main__":

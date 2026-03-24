@@ -1,4 +1,6 @@
 import sys
+import random
+import resource
 from types import SimpleNamespace
 
 import numpy as np
@@ -11,7 +13,19 @@ from mlpf.conf import MLPFConfig
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
-SHARING_STRATEGY = "file_descriptor"
+# file_system strategy can be better when hitting file descriptor limits
+SHARING_STRATEGY = "file_system"
+
+try:
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    _logger.info(f"Initial RLIMIT_NOFILE: soft={soft}, hard={hard}")
+    if soft < hard:
+        _logger.info(f"Attempting to set RLIMIT_NOFILE soft limit to hard limit: {hard}")
+        resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        _logger.info(f"New RLIMIT_NOFILE: soft={soft}, hard={hard}")
+except Exception as e:
+    _logger.warning(f"Could not set RLIMIT_NOFILE: {e}")
 
 
 class TFDSDataSource:
@@ -144,6 +158,8 @@ class PFDataset:
             )
             _logger.error(e)
             sys.exit(1)
+
+        _logger.debug(f"PFDataset opening dataset {name} in {builder.data_path} for split {split}")
         self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort, pad_to_multiple=pad_to_multiple)
 
         if num_samples and num_samples < len(self.ds):
@@ -189,12 +205,97 @@ class Collater:
 
         # per-particle quantities need to be padded across events of different size
         for key_to_get in self.per_particle_keys_to_get:
-            ret[key_to_get] = torch.nn.utils.rnn.pad_sequence([torch.tensor(inp[key_to_get]).to(torch.float32) for inp in inputs], batch_first=True)
+            ret[key_to_get] = torch.nn.utils.rnn.pad_sequence(
+                [torch.as_tensor(inp[key_to_get], dtype=torch.float32) for inp in inputs], batch_first=True
+            )
 
         # per-event quantities can be stacked across events
         for key_to_get in self.per_event_keys_to_get:
-            ret[key_to_get] = torch.stack([torch.tensor(inp[key_to_get]) for inp in inputs])
+            ret[key_to_get] = torch.stack([torch.as_tensor(inp[key_to_get]) for inp in inputs])
         return PFBatch(**ret)
+
+
+class ShardConsecutiveSampler(torch.utils.data.Sampler):
+    """
+    Samples elements consecutively from each sub-dataset in a ConcatDataset.
+    This helps to minimize the number of open file descriptors when each sub-dataset
+    is backed by a separate file and the file is opened lazily.
+    """
+
+    def __init__(self, concat_dataset, shuffle=True, seed=0):
+        self.concat_dataset = concat_dataset
+        self.shuffle = shuffle
+        self.seed = seed
+        self.epoch = 0
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+
+    def __iter__(self):
+        rng = random.Random(self.seed + self.epoch)
+
+        shard_indices_lists = []
+        start_idx = 0
+        for end_idx in self.concat_dataset.cumulative_sizes:
+            shard_indices_lists.append(list(range(start_idx, end_idx)))
+            start_idx = end_idx
+
+        if self.shuffle:
+            # Shuffle the order of shards
+            rng.shuffle(shard_indices_lists)
+            # Shuffle within each shard
+            for shard_list in shard_indices_lists:
+                rng.shuffle(shard_list)
+
+        indices = [idx for shard_list in shard_indices_lists for idx in shard_list]
+        return iter(indices)
+
+    def __len__(self):
+        return len(self.concat_dataset)
+
+
+class DistributedShardConsecutiveSampler(torch.utils.data.distributed.DistributedSampler):
+    """
+    A distributed version of ShardConsecutiveSampler.
+    Each rank handles a subset of shards, ensuring that each node only opens its subset of shards.
+    """
+
+    def __init__(self, dataset, world_size=None, rank=None, shuffle=True, seed=0, drop_last=False):
+        super().__init__(dataset, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last)
+
+    def __iter__(self):
+        rng = random.Random(self.seed + self.epoch)
+
+        # 1. Get all shard ranges
+        shard_ranges = []
+        start_idx = 0
+        for end_idx in self.dataset.cumulative_sizes:
+            shard_ranges.append((start_idx, end_idx))
+            start_idx = end_idx
+
+        # 2. Shuffle shard order (deterministically across nodes)
+        if self.shuffle:
+            rng.shuffle(shard_ranges)
+
+        # 3. Each rank handles its own subset of shards.
+        # This keeps each node working on a small number of shards.
+        my_shard_ranges = shard_ranges[self.rank :: self.num_replicas]
+
+        # 4. For each of my shards, yield samples (shuffled)
+        indices = []
+        for s_start, s_end in my_shard_ranges:
+            shard_indices = list(range(s_start, s_end))
+            if self.shuffle:
+                # Use a rank-specific seed for internal shard shuffling
+                shard_rng = random.Random(self.seed + self.epoch + self.rank)
+                shard_rng.shuffle(shard_indices)
+            indices.extend(shard_indices)
+
+        return iter(indices)
+
+    def __len__(self):
+        # Approximate length
+        return sum(len(d) for d in self.dataset.datasets) // self.num_replicas
 
 
 class ResumableSampler(torch.utils.data.Sampler):
@@ -368,6 +469,15 @@ class EndlessIterator(object):
 
 def set_worker_sharing_strategy(worker_id: int) -> None:
     torch.multiprocessing.set_sharing_strategy(SHARING_STRATEGY)
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft < hard:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+        if worker_id == 0:
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            _logger.info(f"Worker 0 RLIMIT_NOFILE: soft={soft}, hard={hard}")
+    except Exception:
+        pass
 
 
 def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, use_ray, shuffle_train=True):
@@ -414,12 +524,9 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             if shuffle_train:
                 shuffle = split == "train"
             if world_size > 1:
-                sampler = torch.utils.data.distributed.DistributedSampler(dataset, shuffle=shuffle)
+                sampler = DistributedShardConsecutiveSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle)
             else:
-                if shuffle:
-                    sampler = torch.utils.data.RandomSampler(dataset)
-                else:
-                    sampler = torch.utils.data.SequentialSampler(dataset)
+                sampler = ShardConsecutiveSampler(dataset, shuffle=shuffle)
 
             sampler = ResumableSampler(sampler)
             sampler.name = f"{type_}:{split}"

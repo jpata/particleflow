@@ -1,0 +1,44 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        expand('snakemake_jobs/cld/tfds/tfds_ttbar_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/cld/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/cld/tfds/tfds_zz_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/cld/tfds/tfds_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+rule tfds_task:
+    input:
+        "snakemake_jobs/cld/post/post_{sample}_all.done"
+    output:
+        "snakemake_jobs/cld/tfds/tfds_{sample}_tfds_{config}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, slurm_partition="main", runtime=240, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
+    shell:
+        "snakemake_jobs/cld/tfds/tfds_{wildcards.sample}.sh {wildcards.config} && touch {output}"
+
+rule tfds:
+    input:
+        expand('snakemake_jobs/cld/tfds/tfds_ttbar_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/cld/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/cld/tfds/tfds_zz_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/cld/tfds/tfds_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    output:
+        "snakemake_jobs/cld/tfds/all.done"
+    shell:
+        "touch {output}"

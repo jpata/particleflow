@@ -23,7 +23,7 @@ from mlpf.model.utils import (
 )
 
 
-def run_ray_training(config, args, outdir):
+def run_ray_training(config, args, outdir, loglevel=logging.INFO):
     import ray
     from ray import tune
     from ray.train.torch import TorchTrainer  # , TorchConfig
@@ -37,7 +37,7 @@ def run_ray_training(config, args, outdir):
         )
         _logger.info("Done.")
 
-    _configLogger("mlpf", filename=f"{outdir}/train.log")
+    _configLogger("mlpf", filename=f"{outdir}/train.log", loglevel=loglevel)
 
     use_gpu = args.gpus > 0
     num_workers = args.gpus if use_gpu else 1
@@ -124,7 +124,7 @@ def set_searchspace_and_run_trial(search_space, config, args):
             logging.warning("Done writing warnings to log.")
 
 
-def run_hpo(config, args):
+def run_hpo(config, args, loglevel=logging.INFO):
     import ray
     from ray import tune
     from ray.train.torch import TorchTrainer

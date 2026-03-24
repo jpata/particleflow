@@ -33,6 +33,7 @@ Key Functions:
 import os
 import os.path as osp
 import time
+import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import gc
@@ -64,7 +65,7 @@ from mlpf.model.utils import (
     count_parameters,
     load_lr_schedule,
 )
-from mlpf.model.monitoring import log_step_to_tensorboard, log_dataloader_to_tensorboard
+from mlpf.model.monitoring import log_step_to_tensorboard, log_dataloader_to_tensorboard, log_open_files_to_tensorboard
 from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
@@ -157,7 +158,7 @@ def train_step(
 
     # Log step metrics
     if tensorboard_writer is not None:
-        # log_open_files_to_tensorboard(tensorboard_writer, step)
+        log_open_files_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
         tensorboard_writer.flush()
@@ -719,9 +720,9 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         dist.barrier()  # block until all workers finished executing run_predictions()
 
 
-def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfile: str):
+def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfile: str, loglevel: int = logging.INFO):
     # per-rank log
-    _configLogger("mlpf", rank, filename=f"{logfile}.{rank}")
+    _configLogger("mlpf", rank, filename=f"{logfile}.{rank}", loglevel=loglevel)
 
     use_cuda = rank != "cpu"
 
@@ -879,17 +880,28 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
             valid_sampler=samplers["valid"],
         )
 
+    if not config.train and config.test:
+        _logger.info("Entering test step block (train=False, test=True)")
+        testdir_name = "_test"
+        for sample in config.enabled_test_datasets:
+            run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+
+        if (rank == 0) or (rank == "cpu"):
+            for sample in config.enabled_test_datasets:
+                make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
+
     if world_size > 1:
+        dist.barrier()
         dist.destroy_process_group()
 
 
 # Run either single GPU or single-node multi-GPU using pytorch DDP
-def device_agnostic_run(config: MLPFConfig, world_size, outdir):
+def device_agnostic_run(config: MLPFConfig, world_size, outdir, loglevel: int = logging.INFO):
     if config.train:
         logfile = f"{outdir}/train.log"
     else:
         logfile = f"{outdir}/test.log"
-    _configLogger("mlpf", 0, filename=logfile)
+    _configLogger("mlpf", 0, filename=logfile, loglevel=loglevel)
 
     if config.gpus:
         assert (
@@ -905,7 +917,7 @@ def device_agnostic_run(config: MLPFConfig, world_size, outdir):
             _logger.info("Spawning DDP processes")
             mp.spawn(
                 run,
-                args=(world_size, config, outdir, logfile),
+                args=(world_size, config, outdir, logfile, loglevel),
                 nprocs=world_size,
                 join=True,
             )
@@ -913,9 +925,9 @@ def device_agnostic_run(config: MLPFConfig, world_size, outdir):
             rank = 0
             _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
             _logger.info(f"Calling run(rank={rank}, world_size={world_size}, ...)")
-            run(rank, world_size, config, outdir, logfile)
+            run(rank, world_size, config, outdir, logfile, loglevel)
 
     else:
         rank = "cpu"
         _logger.info("Will use cpu", color="purple")
-        run(rank, world_size, config, outdir, logfile)
+        run(rank, world_size, config, outdir, logfile, loglevel)

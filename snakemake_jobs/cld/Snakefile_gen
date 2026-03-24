@@ -1,0 +1,48 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        expand('snakemake_jobs/cld/gen/gen_zz_{seed}.done', seed=range(100000, 105010, 1)),
+        expand('snakemake_jobs/cld/gen/gen_zz_tautau_365_{seed}.done', seed=range(100000, 100110, 1)),
+        expand('snakemake_jobs/cld/gen/gen_zz_tautau_240_{seed}.done', seed=range(100000, 100110, 1)),
+        expand('snakemake_jobs/cld/gen/gen_zh_tautau_365_{seed}.done', seed=range(200000, 200110, 1)),
+        expand('snakemake_jobs/cld/gen/gen_zh_tautau_240_{seed}.done', seed=range(200000, 200110, 1)),
+        expand('snakemake_jobs/cld/gen/gen_ttbar_{seed}.done', seed=range(300000, 310010, 1)),
+        expand('snakemake_jobs/cld/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 410010, 1)),
+        expand('snakemake_jobs/cld/gen/gen_qq_{seed}.done', seed=range(500000, 510010, 1)),
+        expand('snakemake_jobs/cld/gen/gen_z_qq_{seed}.done', seed=range(600000, 610010, 1)),
+        expand('snakemake_jobs/cld/gen/gen_z_tautau_{seed}.done', seed=range(700000, 710010, 1))
+
+rule gen:
+    input:
+        expand('snakemake_jobs/cld/gen/gen_zz_{seed}.done', seed=range(100000, 105010, 1)), expand('snakemake_jobs/cld/gen/gen_zz_tautau_365_{seed}.done', seed=range(100000, 100110, 1)), expand('snakemake_jobs/cld/gen/gen_zz_tautau_240_{seed}.done', seed=range(100000, 100110, 1)), expand('snakemake_jobs/cld/gen/gen_zh_tautau_365_{seed}.done', seed=range(200000, 200110, 1)), expand('snakemake_jobs/cld/gen/gen_zh_tautau_240_{seed}.done', seed=range(200000, 200110, 1)), expand('snakemake_jobs/cld/gen/gen_ttbar_{seed}.done', seed=range(300000, 310010, 1)), expand('snakemake_jobs/cld/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 410010, 1)), expand('snakemake_jobs/cld/gen/gen_qq_{seed}.done', seed=range(500000, 510010, 1)), expand('snakemake_jobs/cld/gen/gen_z_qq_{seed}.done', seed=range(600000, 610010, 1)), expand('snakemake_jobs/cld/gen/gen_z_tautau_{seed}.done', seed=range(700000, 710010, 1))
+    output:
+        "snakemake_jobs/cld/gen/all.done"
+    shell:
+        "touch {output}"
+
+rule gen_task:
+    output:
+        "snakemake_jobs/cld/gen/gen_{sample}_{seed}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=4000, slurm_partition="main", runtime=240, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    shell:
+        "snakemake_jobs/cld/gen/gen_{wildcards.sample}.sh {wildcards.seed} && touch {output}"

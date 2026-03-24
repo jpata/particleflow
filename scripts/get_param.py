@@ -59,7 +59,7 @@ def get_param(yaml_file, param_path, default=""):
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: PF_SITE=tallinn python3 get_param.py <yaml_file> <param_path> [default]")
+        print("Usage: PF_SITE={tallinn,lxplus,local} python3 get_param.py <yaml_file> <param_path> [default]")
         sys.exit(1)
 
     yaml_file = sys.argv[1]

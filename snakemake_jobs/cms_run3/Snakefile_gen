@@ -1,0 +1,45 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        expand('snakemake_jobs/cms_run3/gen/gen_ttbar_pu_{seed}.done', seed=range(100000, 110010, 1)),
+        expand('snakemake_jobs/cms_run3/gen/gen_ztt_pu_{seed}.done', seed=range(200000, 210010, 1)),
+        expand('snakemake_jobs/cms_run3/gen/gen_qcd_pu_{seed}.done', seed=range(300000, 310010, 1)),
+        expand('snakemake_jobs/cms_run3/gen/gen_qcd_val_{seed}.done', seed=range(400000, 401010, 1)),
+        expand('snakemake_jobs/cms_run3/gen/gen_ttbar_nopu_{seed}.done', seed=range(800000, 810010, 1)),
+        expand('snakemake_jobs/cms_run3/gen/gen_qcd_nopu_{seed}.done', seed=range(1000000, 1010010, 1)),
+        expand('snakemake_jobs/cms_run3/gen/gen_ztt_nopu_{seed}.done', seed=range(1100000, 1110010, 1))
+
+rule gen:
+    input:
+        expand('snakemake_jobs/cms_run3/gen/gen_ttbar_pu_{seed}.done', seed=range(100000, 110010, 1)), expand('snakemake_jobs/cms_run3/gen/gen_ztt_pu_{seed}.done', seed=range(200000, 210010, 1)), expand('snakemake_jobs/cms_run3/gen/gen_qcd_pu_{seed}.done', seed=range(300000, 310010, 1)), expand('snakemake_jobs/cms_run3/gen/gen_qcd_val_{seed}.done', seed=range(400000, 401010, 1)), expand('snakemake_jobs/cms_run3/gen/gen_ttbar_nopu_{seed}.done', seed=range(800000, 810010, 1)), expand('snakemake_jobs/cms_run3/gen/gen_qcd_nopu_{seed}.done', seed=range(1000000, 1010010, 1)), expand('snakemake_jobs/cms_run3/gen/gen_ztt_nopu_{seed}.done', seed=range(1100000, 1110010, 1))
+    output:
+        "snakemake_jobs/cms_run3/gen/all.done"
+    shell:
+        "touch {output}"
+
+rule gen_task:
+    output:
+        "snakemake_jobs/cms_run3/gen/gen_{sample}_{seed}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=6000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/cvmfs/singularity.opensciencegrid.org/cmssw/cms:rhel8-x86_64"
+    shell:
+        "snakemake_jobs/cms_run3/gen/gen_{wildcards.sample}.sh {wildcards.seed} && touch {output}"

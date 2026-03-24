@@ -1,0 +1,83 @@
+[workspace]
+name = "particleflow"
+version = "2.5.0"
+description = "Machine Learning for Particle Flow Reconstruction"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.10"
+snakemake = ">=8.0"
+snakemake-executor-plugin-cluster-generic = "*"
+snakemake-executor-plugin-slurm = "*"
+pyyaml = "*"
+huggingface_hub = "*"
+
+[pypi-dependencies]
+comet-ml = "*"
+
+[activation]
+env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/local/joosep/tmp:/tmp -B /scratch/persistent --nv --writable-tmpfs" }
+
+[tasks]
+setup = { cmd = "sed -i '0,/^  <<: \\*.*$/s//  <<: \\*tallinn/' particleflow_spec.yaml", description = "Set the profile in particleflow_spec.yaml" }
+init = { cmd = """
+mkdir -p .profiles/tallinn \
+&& echo '#!/bin/bash
+# properties = {properties}
+export PYTHONUNBUFFERED=1
+export GOTO_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+
+# Create a unique TMPDIR for this job to avoid collisions
+export TMPDIR=/scratch/local/joosep/tmp/job_${SLURM_JOB_ID:-manual}
+mkdir -p $TMPDIR
+export TEMPDIR=$TMPDIR
+export TEMP=$TMPDIR
+export TMP=$TMPDIR
+
+# Ensure Apptainer uses this unique directory for extractions/cache
+export APPTAINER_TMPDIR=$TMPDIR
+export APPTAINER_CACHEDIR=$TMPDIR
+export SINGULARITY_TMPDIR=$TMPDIR
+export SINGULARITY_CACHEDIR=$TMPDIR
+
+ulimit -n 1048576
+echo "Initial ulimit -n: $(ulimit -Sn) (soft), $(ulimit -Hn) (hard)"
+ulimit -n $(ulimit -Hn)
+echo "Final ulimit -n: $(ulimit -Sn) (soft), $(ulimit -Hn) (hard)"
+
+env
+sleep $((RANDOM % 60))
+
+# Run the job
+stdbuf -oL -eL {exec_job}
+
+# Cleanup
+rm -rf $TMPDIR' > .profiles/tallinn/jobscript.sh \
+&& echo 'executor: "slurm"
+jobscript: "jobscript.sh"
+jobs: unlimited
+restart-times: 0
+max-jobs-per-timespan: 20/1s
+max-status-checks-per-second: 2
+verbose: true
+use-conda: false
+default-resources:
+  - slurm_account="hepusers"' > .profiles/tallinn/config.v8+.yaml
+""", description = "Create the tallinn snakemake profile" }
+
+snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} \"$@\"' --", depends-on = ["setup"], description = "Generate the snakemake files" }
+all = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} all \"$@\"' --", depends-on = ["snakefile"], description = "Run the full production pipeline" }
+gen = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_gen --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} gen \"$@\"' --", depends-on = ["snakefile"], description = "Generate samples" }
+post = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_post --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} post \"$@\"' --", depends-on = ["snakefile"], description = "Post-process samples" }
+tfds = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds \"$@\"' --", depends-on = ["snakefile"], description = "Create TFDS datasets" }
+tfds_hit = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds_hit --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds_hit \"$@\"' --", depends-on = ["snakefile"], description = "Create TFDS datasets with hits" }
+train = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_train --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} \"$@\"' --", depends-on = ["snakefile"], description = "Train the model" }
+validation = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config ${VAL_CONFIG:-validation_cms.yaml} && snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/validation_${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1 \"$@\"' --", depends-on = ["setup"], description = "Run validation" }
+dry-run = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --dry-run \"$@\"' --", depends-on = ["snakefile"], description = "Dry-run the production pipeline" }
+upload_hf = { cmd = "python3 scripts/tallinn/upload_hf.py", description = "Upload TFDS datasets to HuggingFace" }
