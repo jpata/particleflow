@@ -98,5 +98,10 @@ def log_smi(rank):
             try:
                 result = subprocess.run([smi_command], capture_output=True, text=True, check=True)
                 _logger.info(result.stdout)
+                if "nvidia-smi" in smi_command:
+                    result = subprocess.run(
+                        [smi_command, "--query-gpu=memory.used", "--format=csv,noheader,nounits"], capture_output=True, text=True, check=True
+                    )
+                    _logger.info("vmem: {} MB".format(result.stdout.strip().replace("\n", " ")))
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 _logger.info("SMI error: {}".format(e))

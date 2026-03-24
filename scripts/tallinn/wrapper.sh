@@ -1,4 +1,5 @@
 #!/bin/bash
+set -o xtrace
 export PF_SITE=tallinn
 IMAGE=$(python3 scripts/get_param.py particleflow_spec.yaml project.container)
 BINDS=$(python3 scripts/get_param.py particleflow_spec.yaml project.bind_mounts)
