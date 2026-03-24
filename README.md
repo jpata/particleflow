@@ -1,7 +1,8 @@
 ## **TLDR; I just want to run the code**
 This runs the data preparation and training on a very small sample, so you can see how to run the code:
 ```
-apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_torch.sh
+apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cld.sh
+apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cms.sh
 ```
 
 ### **Summary**
@@ -55,21 +56,15 @@ Below is the development timeline of MLPF by our team, ranging from initial proo
 
 ### **Datasets**
 
-#### **Software & Dataset Compatibility**
-
-Please ensure you use the correct version of the `jpata/particleflow` software with the corresponding dataset version.
-
-| Code Version | CMS Dataset | CLIC Dataset | CLD Dataset |
-| --- | --- | --- | --- |
-| [1.9.0](https://github.com/jpata/particleflow/releases/v1.9.0) | 2.4.0 | 2.2.0 | NA |
-| [2.0.0](https://github.com/jpata/particleflow/releases/v2.0.0) | 2.4.0 | 2.3.0 | NA |
-| [2.1.0](https://github.com/jpata/particleflow/releases/v2.1.0) | 2.5.0 | 2.5.0 | NA |
-| [2.2.0](https://github.com/jpata/particleflow/releases/v2.2.0) | 2.5.0 | 2.5.0 | 2.5.0 |
-| [2.3.0](https://github.com/jpata/particleflow/releases/v2.3.0) | 2.5.0 | 2.5.0 | 2.5.0 |
-| [2.4.0](https://github.com/jpata/particleflow/releases/v2.4.0) | 2.6.0 | 2.5.0 | 2.5.0 |
-| [3.0.0](https://github.com/jpata/particleflow/releases/v3.0.0) | 3.0.0 | 3.0.0 | 3.0.0 |
-
----
+If you wish to train on pre-made datasets, you can download them from the [Hugging Face Hub](https://huggingface.co/datasets/jpata/particleflow).
+To download a specific dataset and split (e.g., CLD ttbar PF split 1):
+```bash
+hf download jpata/particleflow \
+  --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/*" \
+  --local-dir data/tfds \
+  --repo-type dataset
+```
+This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_ttbar_pf/1/`.
 
 ## **Getting Started with Pixi & Snakemake**
 
