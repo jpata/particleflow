@@ -191,6 +191,7 @@ def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None):
     plots_path = Path(f"{outpath}/plots{dir_name}/{sample}/")
     pred_path = Path(f"{outpath}/preds{dir_name}/{sample}/")
 
+    _logger.info(f"Loading data for plotting from {pred_path}")
     yvals, X, _ = load_eval_data(str(pred_path / "*.parquet"), num_test_events)
     _logger.info(f"Loaded data for plotting from {pred_path}")
 

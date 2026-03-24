@@ -261,27 +261,27 @@ productions:
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [300000, 310010]
+        seed_range: [300000, 305010]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [400000, 410010]
+        seed_range: [400000, 405010]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [500000, 510010]
+        seed_range: [500000, 505010]
         events_per_job: 100
       z_qq:
         process_name: "p8_ee_Z_qq_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [600000, 610010]
+        seed_range: [600000, 605010]
         events_per_job: 100
       z_tautau:
         process_name: "p8_ee_Z_tautau_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [700000, 710010]
+        seed_range: [700000, 705010]
         events_per_job: 100
 
     postprocessing:
@@ -402,7 +402,7 @@ models:
     ntest: 100 #do test on a small subset
     sort_data: false
     num_workers: 2
-    prefetch_factor: 1
+    prefetch_factor: 2
     patience: 10000
     checkpoint_freq: 10000
     val_freq: 10000

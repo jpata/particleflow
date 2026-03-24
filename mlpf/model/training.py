@@ -880,7 +880,18 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
             valid_sampler=samplers["valid"],
         )
 
+    if not config.train and config.test:
+        _logger.info("Entering test step block (train=False, test=True)")
+        testdir_name = "_test"
+        for sample in config.enabled_test_datasets:
+            run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+
+        if (rank == 0) or (rank == "cpu"):
+            for sample in config.enabled_test_datasets:
+                make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
+
     if world_size > 1:
+        dist.barrier()
         dist.destroy_process_group()
 
 

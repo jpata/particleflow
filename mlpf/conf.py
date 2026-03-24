@@ -444,7 +444,7 @@ class MLPFConfig(BaseModel):
     train: bool = False
     test: bool = False
     compile: bool = False
-    make_plots: bool = False
+    make_plots: bool = True
     sort_data: bool = False
     load: Optional[str] = None
     relaxed_load: bool = True
