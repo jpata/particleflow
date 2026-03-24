@@ -1,4 +1,5 @@
 #!/bin/bash
+set -o xtrace
 export PF_SITE=tallinn
 export KERAS_BACKEND=torch
 IMAGE=$(pixi run python3 scripts/get_param.py particleflow_spec.yaml project.container)
