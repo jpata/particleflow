@@ -55,7 +55,7 @@ def log_open_files_to_tensorboard(tensorboard_writer, step):
     try:
         metrics = monitor_open_files()
         if not metrics["error"]:
-            _logger.info(
+            _logger.debug(
                 f"Open files: total={metrics['total_open_files']} "
                 f"(process={metrics['process_open_files']}, child={metrics['child_process_open_files']}), "
                 f"soft_limit={metrics['soft_limit']}"
