@@ -305,7 +305,7 @@ def _log_and_checkpoint_step(
                 "valid_loader_state_dict": valid_loader.state_dict(),
             }
 
-            checkpoint_path = f"{checkpoint_dir}/checkpoint-{step:02d}.pth"
+            checkpoint_path = (Path(checkpoint_dir) / f"checkpoint-{step:02d}.pth").resolve()
             _logger.info("saving checkpoint {}".format(checkpoint_path))
             save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
@@ -454,6 +454,7 @@ def _run_validation_cycle(
             "loss": losses_train["Total"],
             "val_loss": losses_valid["Total"],
             "step": step,
+            "training_iteration": ((step - 1) // config.val_freq) + 1,
             **{f"train_{k}": v for k, v in losses_train.items()},
             **{f"valid_{k}": v for k, v in losses_valid.items()},
         }

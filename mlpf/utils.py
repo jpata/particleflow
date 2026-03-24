@@ -28,7 +28,9 @@ def set_nested_dict(d, key_path, value):
     """Set a value in a nested dictionary using a dot-separated path."""
     keys = key_path.split(".")
     for key in keys[:-1]:
-        d = d.setdefault(key, {})
+        if key not in d or d[key] is None:
+            d[key] = {}
+        d = d[key]
 
     # Try to parse string values as yaml to get correct types (int, float, bool, etc.)
     if isinstance(value, str):
@@ -73,6 +75,17 @@ def resolve_path(path, spec):
         prev_path = path
         path = re.sub(r"\$\{(.+?)\}", replace, path)
     return path
+
+
+def _resolve_paths_recursive(obj, spec):
+    """Recursively resolve ${...} path references in nested dicts/lists."""
+    if isinstance(obj, dict):
+        return {k: _resolve_paths_recursive(v, spec) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_resolve_paths_recursive(item, spec) for item in obj]
+    elif isinstance(obj, str) and "${" in obj:
+        return resolve_path(obj, spec)
+    return obj
 
 
 def parse_extra_args(extra_args):
