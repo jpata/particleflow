@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional, Dict, Any
 import os
 from enum import Enum
-from mlpf.utils import resolve_path, load_spec, set_nested_dict
+from mlpf.utils import resolve_path, load_spec, set_nested_dict, _resolve_paths_recursive
 
 
 class Dataset(Enum):
@@ -684,5 +684,8 @@ class MLPFConfig(BaseModel):
         if args and hasattr(args, "test_datasets") and args.test_datasets:
             config_dict["enabled_test_datasets"] = args.test_datasets
 
-        # 9. Validate with Pydantic
+        # 9. Resolve any remaining ${...} path references in nested structures
+        config_dict = _resolve_paths_recursive(config_dict, spec)
+
+        # 10. Validate with Pydantic
         return MLPFConfig.model_validate(config_dict)
