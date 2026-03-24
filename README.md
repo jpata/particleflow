@@ -20,14 +20,34 @@ We build on existing, open-source simulation software by the experimental collab
 ### **Datasets**
 
 If you wish to train on pre-made datasets, you can download them from the [Hugging Face Hub](https://huggingface.co/datasets/jpata/particleflow).
-To download a specific dataset and split (e.g., CLD ttbar PF split 1):
+To download a specific dataset and split (e.g., CLD, PF setup, configuration split 1):
 ```bash
 hf download jpata/particleflow \
-  --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/*" \
+  --include "tensorflow_datasets/cld/cld_edm_*_pf/1/*" \
   --local-dir data/tfds \
   --repo-type dataset
 ```
-This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_ttbar_pf/1/`.
+This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_*_pf/1/`.
+
+### **Training**
+
+Run the training on the downloaded data configuration split
+```
+apptainer exec \
+    --env PYTHONPATH=`pwd` \
+    --env KERAS_BACKEND=torch \
+    --nv \
+    https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif \
+    python mlpf/pipeline.py \
+    --spec-file particleflow_spec.yaml \
+    --production cld \
+    --model-name pyg-cld-v1 \
+    --data-dir data/tfds/tensorflow_datasets/cld \
+    train \
+    --data_config 1 \
+    --gpu_batch_multiplier 4 \
+    --gpus 1
+```
 
 ## **Producing datasets from scratch**
 

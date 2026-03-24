@@ -467,6 +467,7 @@ class MLPFConfig(BaseModel):
     ntrain: Optional[int] = None  # number of training events
     nvalid: Optional[int] = None  # number of validation events, ran at periodic intervals during training
     ntest: Optional[int] = None  # number of testing events, ran at the end of the training
+    data_config: Optional[List[str]] = None  # used to limit the data loading to the specified configurations (e.g. config split 1 only)
 
     # Multi-GPU
     gpus: int = 0
@@ -548,45 +549,13 @@ class MLPFConfig(BaseModel):
         config_dict["num_classes"] = len(CLASS_LABELS[ds_name])
         config_dict["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[ds_name]
 
-        # Helper for datasets
-        def build_dataset_config_dict(dataset_input):
-            ds_config = {}
-            ds_config[ds_name] = {}
-            for phys_key, phys_val in dataset_input.items():
-                ds_config[ds_name][phys_key] = {
-                    "batch_size": phys_val.get("batch_size", config_dict.get("batch_size", 1)),
-                    "samples": {},
-                }
-                target_dict = ds_config[ds_name][phys_key]["samples"]
-                for ds_item in phys_val["samples"]:
-                    name = ds_item["name"]
-                    entry = {"version": ds_item.get("version"), "splits": ds_item.get("splits")}
-                    if "batch_size" in ds_item:
-                        entry["batch_size"] = ds_item["batch_size"]
-                    target_dict[name] = entry
-            return ds_config
-
-        if "train_datasets" in model_config_raw:
-            config_dict["train_dataset"] = build_dataset_config_dict(model_config_raw["train_datasets"])
-        if "validation_datasets" in model_config_raw:
-            config_dict["valid_dataset"] = build_dataset_config_dict(model_config_raw["validation_datasets"])
-        if "test_datasets" in model_config_raw:
-            config_dict["test_dataset"] = {}
-            for ds_item in model_config_raw.get("test_datasets", []):
-                name = ds_item["name"]
-                config_dict["test_dataset"][name] = {
-                    "version": ds_item.get("version"),
-                    "splits": ds_item.get("splits", ["test"]),
-                    "batch_size": ds_item.get("batch_size", 1),
-                }
-
         # 5. Apply Argparse overrides
         if args:
             for arg in vars(args):
                 val = getattr(args, arg)
                 if val is not None:
-                    # Direct override if key exists in config_dict
-                    if arg in config_dict:
+                    # Direct override if key exists in config_dict or is a valid field in MLPFConfig
+                    if arg in config_dict or arg in MLPFConfig.model_fields:
                         config_dict[arg] = val
 
             # Action flags
@@ -625,6 +594,55 @@ class MLPFConfig(BaseModel):
                 else:
                     raise ValueError(f"Could not parse extra argument: {arg}")
 
+        # Normalize data_config if present
+        if "data_config" in config_dict and config_dict["data_config"] is not None:
+            dc = config_dict["data_config"]
+            if isinstance(dc, str):
+                dc = dc.split(",")
+            elif not isinstance(dc, list):
+                dc = [dc]
+            config_dict["data_config"] = [str(s).strip() for s in dc]
+
+        # 9. Build dataset configuration
+        def build_dataset_config_dict(dataset_input):
+            ds_config = {}
+            ds_config[ds_name] = {}
+            data_config = config_dict.get("data_config")
+            for phys_key, phys_val in dataset_input.items():
+                ds_config[ds_name][phys_key] = {
+                    "batch_size": phys_val.get("batch_size", config_dict.get("batch_size", 1)),
+                    "samples": {},
+                }
+                target_dict = ds_config[ds_name][phys_key]["samples"]
+                for ds_item in phys_val["samples"]:
+                    name = ds_item["name"]
+                    splits = ds_item.get("splits")
+                    if data_config:
+                        splits = [s for s in splits if s in data_config]
+                    entry = {"version": ds_item.get("version"), "splits": splits}
+                    if "batch_size" in ds_item:
+                        entry["batch_size"] = ds_item["batch_size"]
+                    target_dict[name] = entry
+            return ds_config
+
+        if "train_datasets" in model_config_raw:
+            config_dict["train_dataset"] = build_dataset_config_dict(model_config_raw["train_datasets"])
+        if "validation_datasets" in model_config_raw:
+            config_dict["valid_dataset"] = build_dataset_config_dict(model_config_raw["validation_datasets"])
+        if "test_datasets" in model_config_raw:
+            config_dict["test_dataset"] = {}
+            data_config = config_dict.get("data_config")
+            for ds_item in model_config_raw.get("test_datasets", []):
+                name = ds_item["name"]
+                splits = ds_item.get("splits", ["test"])
+                if data_config:
+                    splits = [s for s in splits if s in data_config]
+                config_dict["test_dataset"][name] = {
+                    "version": ds_item.get("version"),
+                    "splits": splits,
+                    "batch_size": ds_item.get("batch_size", 1),
+                }
+
         # 7. Pipeline Overrides
         if args and hasattr(args, "pipeline") and args.pipeline:
             # Replicate pipeline-specific overrides
@@ -649,7 +667,7 @@ class MLPFConfig(BaseModel):
                                 "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "3.0.0"}},
                             }
                         }
-                if "cms_pf_ttbar" in config_dict["test_dataset"]:
+                if "test_dataset" in config_dict and "cms_pf_ttbar" in config_dict["test_dataset"]:
                     config_dict["test_dataset"] = {"cms_pf_ttbar": config_dict["test_dataset"]["cms_pf_ttbar"]}
                     config_dict["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
             elif ds_name == "cld":
@@ -662,7 +680,7 @@ class MLPFConfig(BaseModel):
                                 "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.0"}},
                             }
                         }
-                if "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
+                if "test_dataset" in config_dict and "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
                     config_dict["test_dataset"] = {"cld_edm_ttbar_pf": config_dict["test_dataset"]["cld_edm_ttbar_pf"]}
                     config_dict["test_dataset"]["cld_edm_ttbar_pf"]["splits"] = ["10"]
             elif ds_name == "clic":
@@ -674,15 +692,15 @@ class MLPFConfig(BaseModel):
                                 "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.0"}},
                             }
                         }
-                if "clic_edm_ttbar_pf" in config_dict["test_dataset"]:
+                if "test_dataset" in config_dict and "clic_edm_ttbar_pf" in config_dict["test_dataset"]:
                     config_dict["test_dataset"] = {"clic_edm_ttbar_pf": config_dict["test_dataset"]["clic_edm_ttbar_pf"]}
                     config_dict["test_dataset"]["clic_edm_ttbar_pf"]["splits"] = ["10"]
 
-        # 8. Post-override adjustments
+        # Post-dataset adjustments
         if "test_dataset" in config_dict:
             config_dict["enabled_test_datasets"] = list(config_dict["test_dataset"].keys())
         if args and hasattr(args, "test_datasets") and args.test_datasets:
             config_dict["enabled_test_datasets"] = args.test_datasets
 
-        # 9. Validate with Pydantic
+        # 10. Validate with Pydantic
         return MLPFConfig.model_validate(config_dict)
