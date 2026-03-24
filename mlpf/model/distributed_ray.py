@@ -46,6 +46,7 @@ def _init_ray(args):
         ray.init(address="auto")
     _logger.info("Ray initialized.")
 
+
 def _get_scaling_config(args):
     from ray import train
 
@@ -81,14 +82,14 @@ def _log_skipped_hpo_configuration(expdir, sampled_config):
     logging.warning("Done writing warnings to log.")
 
 
-def run_ray_training(config, args, outdir):
+def run_ray_training(config, args, outdir, loglevel=logging.INFO):
     import ray
     from ray import tune
     from ray.train.torch import TorchTrainer  # , TorchConfig
 
     _init_ray(args)
 
-    _configLogger("mlpf", filename=f"{outdir}/train.log")
+    _configLogger("mlpf", filename=f"{outdir}/train.log", loglevel=loglevel)
 
     scaling_config = _get_scaling_config(args)
     storage_path = Path(args.experiments_dir if args.experiments_dir else "experiments").resolve()
