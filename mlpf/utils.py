@@ -96,7 +96,11 @@ def parse_extra_args(extra_args):
         arg = extra_args[i]
         if arg.startswith("--"):
             key = arg[2:]
-            if i + 1 < len(extra_args) and not extra_args[i + 1].startswith("--") and "=" not in extra_args[i + 1]:
+            if "=" in key:
+                key, val = key.split("=", 1)
+                overrides[key] = val
+                i += 1
+            elif i + 1 < len(extra_args) and not extra_args[i + 1].startswith("--") and "=" not in extra_args[i + 1]:
                 overrides[key] = extra_args[i + 1]
                 i += 2
             else:
