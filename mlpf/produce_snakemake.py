@@ -728,7 +728,6 @@ rule train_{rule_model_name}:{train_rule_input}
             write_snakefile(f"{jobs_dir}/Snakefile_{step}", data["targets"], data["rules"], tmpdir=tmpdir)
 
     print(f"Generated Snakemake workflow in {jobs_dir}")
-    print(f'Run with: snakemake --snakefile {jobs_dir}/Snakefile_STEP --cores 1 --use-apptainer --apptainer-args "{bind_args} --nv"')
 
 
 if __name__ == "__main__":

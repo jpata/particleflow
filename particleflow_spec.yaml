@@ -24,7 +24,7 @@ project:
         storage_root: "/local/joosep/mlpf"
         scratch_root: "/scratch/local/joosep"
         tmpdir: "/scratch/local/joosep/tmp"
-        project_root: "/home/joosep/particleflow"
+        project_root: "/home/joosep/particleflow2"
       cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5"
       gpu_partition: "gpu"
       cpu_partition: "main"
@@ -365,15 +365,15 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/ttbar"
-        version: "3.0.0"
+        version: "3.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/ww_fullhad"
-        version: "3.0.0"
+        version: "3.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/qq"
-        version: "3.0.0"
+        version: "3.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 # -----------------------------------------------------------------------------
@@ -648,13 +648,13 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -662,22 +662,22 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "clic_edm_ttbar_pf"
-        version: "3.0.0"
+        version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_ww_fullhad_pf"
-        version: "3.0.0"
+        version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_qq_pf"
-        version: "3.0.0"
+        version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]

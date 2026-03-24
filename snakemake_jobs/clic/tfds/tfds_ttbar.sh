@@ -11,7 +11,7 @@ export TEMPDIR=/scratch/local/joosep/tmp
 export TEMP=/scratch/local/joosep/tmp
 export TMP=/scratch/local/joosep/tmp
 mkdir -p $TMPDIR
-cd /home/joosep/particleflow
+cd /home/joosep/particleflow2
 
 config_id=$1
 tfds_id=ttbar_tfds_$config_id
@@ -20,7 +20,7 @@ job_scratch_dir=/scratch/local/joosep/tfds_tmp/$tfds_id
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export KERAS_BACKEND=torch
 hostname
-export TFDS_VERSION=3.0.0
+export TFDS_VERSION=3.1.0
 env
 
 echo "Building TFDS for mlpf/heptfds/clic_pf_edm4hep/ttbar config $config_id"
