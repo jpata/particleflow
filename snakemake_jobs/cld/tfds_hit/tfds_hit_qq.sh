@@ -11,7 +11,7 @@ export TEMPDIR=/scratch/local/joosep/tmp
 export TEMP=/scratch/local/joosep/tmp
 export TMP=/scratch/local/joosep/tmp
 mkdir -p $TMPDIR
-cd /home/joosep/particleflow
+cd /home/joosep/particleflow2
 
 config_id=$1
 tfds_id=qq_tfds_hit_$config_id

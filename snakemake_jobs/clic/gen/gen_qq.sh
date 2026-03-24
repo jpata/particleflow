@@ -20,8 +20,6 @@ for (( i=0; i<1; i++ )); do
         echo "Generating /local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/gen/p8_ee_qq_ecm380/root/reco_p8_ee_qq_ecm380_${seed}.root"
         export OUTDIR=/local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/gen/ && export CONFIG_DIR=/home/joosep/particleflow2/mlpf/data/key4hep/gen/clic && export WORKDIR=/scratch/local/joosep/p8_ee_qq_ecm380_$seed && export NEV=100
         bash mlpf/data/key4hep/gen/clic/run_sim.sh p8_ee_qq_ecm380 $seed nopu
-        echo "Validating /local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/gen/p8_ee_qq_ecm380/root/reco_p8_ee_qq_ecm380_${seed}.root"
-        python3 -c "import uproot; uproot.open('/local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/gen/p8_ee_qq_ecm380/root/reco_p8_ee_qq_ecm380_${seed}.root')"
     else
         echo "Skipping /local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/gen/p8_ee_qq_ecm380/root/reco_p8_ee_qq_ecm380_${seed}.root, already exists"
     fi

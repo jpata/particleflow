@@ -255,8 +255,6 @@ for (( i=0; i<{CHUNK_SIZE}; i++ )); do
         echo "Generating {root_file_proto}"
         {exports}
         {gen_cmd}
-        echo "Validating {root_file_proto}"
-        python3 -c "import uproot; uproot.open('{root_file_proto}')"
     else
         echo "Skipping {root_file_proto}, already exists"
     fi

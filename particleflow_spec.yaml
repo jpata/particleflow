@@ -335,11 +335,11 @@ productions:
 
     memory:
       gen: 4000
-      post: 1000
+      post: 2000
       tfds: 16000
 
     slurm_partition: "main"
-    slurm_runtime: "120m"
+    slurm_runtime: "240m"
 
     samples:
       ttbar:
