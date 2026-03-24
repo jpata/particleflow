@@ -411,41 +411,39 @@ def _run_validation_cycle(
             f"Train Loss={losses_train['Total']:.4f} | "
             f"Valid Loss={losses_valid['Total']:.4f} | "
             f"Stale={stale_steps} | "
-            f"Avg time/step={time_per_step:.2f}s | "
             f"ETA={eta:.1f}m"
         )
 
         tensorboard_writer_valid.flush()
 
     # Run inference and plotting on test datasets for this step
-    if config.test:
-        testdir_name = f"_step_{step}"
-        log_memory("run_test_start", rank, tensorboard_writer_valid, step)
-        for sample in config.enabled_test_datasets:
-            run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
-        log_memory("run_test_end", rank, tensorboard_writer_valid, step)
+    testdir_name = f"_step_{step}"
+    log_memory("run_test_start", rank, tensorboard_writer_valid, step)
+    for sample in config.enabled_test_datasets:
+        run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
+    log_memory("run_test_end", rank, tensorboard_writer_valid, step)
 
-        plot_metrics_sample = {}
-        if config.make_plots and ((rank == 0) or (rank == "cpu")):
-            log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
-            for sample in config.enabled_test_datasets:
-                plot_metrics = make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
-                plot_metrics_sample[sample] = plot_metrics
-                # Log key jet metrics to TensorBoard and CometML
-                for k in ["med", "iqr", "match_frac"]:
-                    metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{k}"
-                    metric_value = plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k]
-                    tensorboard_writer_valid.add_scalar(metric_name, metric_value, step)
-                    if comet_experiment:
-                        comet_experiment.log_metric(metric_name, metric_value, step=step)
-                    # Add jet metrics to the JSON log file
-                    with open(f"{history_path}/step_{step}.json", "r+") as f:
-                        data = json.load(f)
-                        data.update({metric_name: metric_value})
-                        f.seek(0)
-                        json.dump(data, f)
-                        f.truncate()
-            log_memory("make_plots_end", rank, tensorboard_writer_valid, step)
+    plot_metrics_sample = {}
+    if (rank == 0) or (rank == "cpu"):
+        log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
+        for sample in config.enabled_test_datasets:
+            plot_metrics = make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
+            plot_metrics_sample[sample] = plot_metrics
+            # Log key jet metrics to TensorBoard and CometML
+            for k in ["med", "iqr", "match_frac"]:
+                metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{k}"
+                metric_value = plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k]
+                tensorboard_writer_valid.add_scalar(metric_name, metric_value, step)
+                if comet_experiment:
+                    comet_experiment.log_metric(metric_name, metric_value, step=step)
+                # Add jet metrics to the JSON log file
+                with open(f"{history_path}/step_{step}.json", "r+") as f:
+                    data = json.load(f)
+                    data.update({metric_name: metric_value})
+                    f.seek(0)
+                    json.dump(data, f)
+                    f.truncate()
+        log_memory("make_plots_end", rank, tensorboard_writer_valid, step)
 
     # Ray-specific reporting and checkpointing
     if use_ray:
@@ -532,7 +530,6 @@ def train_all_steps(
     # Early stopping setup
     stale_steps = 0
     best_val_loss = float("inf")
-    total_training_time = 0.0
 
     scaler = torch.amp.GradScaler()
     _logger.info("Creating train_iterator")
@@ -575,7 +572,6 @@ def train_all_steps(
         )
         log_memory("train_step_end", rank, tensorboard_writer_train, step)
         train_time = time.time() - step_start_time
-        total_training_time += train_time
 
         # Log a brief training status every 100 steps on the main process
         if step % 100 == 0:
@@ -649,32 +645,6 @@ def train_all_steps(
 
     # Clean up TensorBoard writers
     if (rank == 0) or (rank == "cpu"):
-        total_seconds = time.time() - t0_initial
-
-        # Get peak VRAM
-        if device_type == "cuda":
-            peak_vram_mb = torch.cuda.max_memory_allocated() / 1024 / 1024
-        else:
-            peak_vram_mb = 0.0
-
-        # Get number of parameters
-        trainable_params, nontrainable_params, _ = count_parameters(model)
-        num_params_M = (trainable_params + nontrainable_params) / 1e6
-
-        # Get depth
-        if config.model.attention:
-            depth = config.model.attention.num_convs
-        else:
-            depth = config.model.gnn_lsh.num_convs
-
-        print(f"val_loss:         {best_val_loss:.6f}")
-        print(f"training_seconds: {total_training_time:.1f}")
-        print(f"total_seconds:    {total_seconds:.1f}")
-        print(f"peak_vram_mb:     {peak_vram_mb:.1f}")
-        print(f"num_steps:        {step}")
-        print(f"num_params_M:     {num_params_M:.1f}")
-        print(f"depth:            {depth}")
-
         tensorboard_writer_train.close()
         tensorboard_writer_valid.close()
 
@@ -882,7 +852,7 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
                 valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
 
         for split in loaders.keys():
-            _logger.info("loader split={} rank={} len={}".format(split, rank, len(loaders[split])))
+            _logger.info("loader {} rank={} len={}".format(split, rank, len(loaders[split])))
 
         train_all_steps(
             rank,

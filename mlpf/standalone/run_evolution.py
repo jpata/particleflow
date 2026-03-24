@@ -442,6 +442,7 @@ def main():
                     term_runtime = 1.0 / (1.0 + runtime_cpu / 1000.0)
 
                     # Total fitness
+                    print(f"fitness matching={term_matching:.2f} iqr={term_iqr:.2f} loss={term_loss:.2f} runtime={term_runtime:.2f}")
                     fitness = term_matching * term_iqr * term_loss * term_runtime
 
                     cfg = parse_dsl(dsl)
