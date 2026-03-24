@@ -16,6 +16,45 @@ We build on existing, open-source simulation software by the experimental collab
 
 ---
 
+
+### **Datasets**
+
+If you wish to train on pre-made datasets, you can download them from the [Hugging Face Hub](https://huggingface.co/datasets/jpata/particleflow).
+To download a specific dataset and split (e.g., CLD ttbar PF split 1):
+```bash
+hf download jpata/particleflow \
+  --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/*" \
+  --local-dir data/tfds \
+  --repo-type dataset
+```
+This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_ttbar_pf/1/`.
+
+## **Producing datasets from scratch**
+
+The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment management and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration.
+
+```bash
+# install pixi, restart your shell or source your .bashrc after this. only do once.
+curl -fsSL https://pixi.sh/install.sh | bash
+
+# copy the configuration for your site. only do once.
+ln -s configs/{local,tallinn,lxplus}/pixi.toml pixi.toml
+
+# initalize the orhcestrator python environment. only do once.
+pixi run init
+
+# generate the snakefile (will overwrite the defaults)
+PROD={cms_run3,clic,cld} pixi run snakefile
+
+# run the steps (this will take many days), so run inside screen or tmux
+pixi run gen
+pixi run post
+pixi run tfds
+pixi run train
+```
+
+---
+
 ### **Publications**
 
 Below is the development timeline of MLPF by our team, ranging from initial proofs of concept to full detector simulations and fine-tuning studies.
@@ -51,70 +90,6 @@ Below is the development timeline of MLPF by our team, ranging from initial proo
 * **Focus:** Improve jet performance over baseline, first validation on real data.
 * **Paper:** [CMS Run 3 paper](https://arxiv.org/abs/2601.17554) (submitted to EPJC)
 * **Code:** [v2.4.0](https://zenodo.org/records/15573658)
-
----
-
-### **Datasets**
-
-If you wish to train on pre-made datasets, you can download them from the [Hugging Face Hub](https://huggingface.co/datasets/jpata/particleflow).
-To download a specific dataset and split (e.g., CLD ttbar PF split 1):
-```bash
-hf download jpata/particleflow \
-  --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/*" \
-  --local-dir data/tfds \
-  --repo-type dataset
-```
-This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_ttbar_pf/1/`.
-
-## **Getting Started with Pixi & Snakemake**
-
-The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment management and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration. We provide site-specific configurations for Tallinn, LXPlus, and local execution.
-
-### **1. Install Pixi**
-```bash
-curl -fsSL https://pixi.sh/install.sh | bash
-# Restart your shell or source your .bashrc
-```
-
-### **2. Select Your Site**
-Pick the site that you are using. Supported sites are Tallinn, lxplus, or local.
-
-```bash
-ln -s configs/{local,tallinn,lxplus}/pixi.toml pixi.toml
-```
-
-### **3. Initialize Your Site**
-Configure the environment for your specific cluster. This sets up the necessary Snakemake profiles and site defaults.
-```bash
-pixi run init
-```
-
-### **4. Generate the Workflow**
-Generate the `Snakefile` for a production campaign.
-```bash
-PROD=cms_run3 STEPS=gen,post,tfds,train pixi run snakefile
-```
-You can inspect `snakemake_jobs/cms_run3/Snakefile` and the related scripts to understand the workflow.
-
-### **5. Execute the Workflow**
-Launch the workflow on the batch system. You can run the steps individually.
-```bash
-PROD=cms_run3 pixi run gen
-PROD=cms_run3 pixi run post
-PROD=cms_run3 pixi run tfds
-PROD=cms_run3 pixi run train
-```
-On clusters like Tallinn, you can run the `gen` and `post` steps in batches using the `BATCH` environment variable:
-```bash
-PROD=cms_run3 BATCH=1/10 pixi run gen
-```
-It is recommended to run this inside a `tmux` or `screen` session.
-
-### **6. Validation & Plots**
-To run the validation plotting workflow:
-```bash
-PROD=cms_run3 pixi run validation
-```
 
 ---
 
