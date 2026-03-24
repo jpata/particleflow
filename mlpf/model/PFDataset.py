@@ -260,6 +260,9 @@ class DistributedShardConsecutiveSampler(torch.utils.data.distributed.Distribute
     Each rank handles a subset of shards, ensuring that each node only opens its subset of shards.
     """
 
+    def __init__(self, dataset, world_size=None, rank=None, shuffle=True, seed=0, drop_last=False):
+        super().__init__(dataset, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last)
+
     def __iter__(self):
         rng = random.Random(self.seed + self.epoch)
 
