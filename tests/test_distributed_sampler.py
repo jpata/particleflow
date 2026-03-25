@@ -1,17 +1,7 @@
 import pytest
-from torch.utils.data import Dataset, ConcatDataset
+from torch.utils.data import ConcatDataset
+from tests.mock_data import MockDataset
 from mlpf.model.PFDataset import ShardConsecutiveSampler, DistributedShardConsecutiveSampler
-
-
-class MockDataset(Dataset):
-    def __init__(self, size):
-        self.size = size
-
-    def __len__(self):
-        return self.size
-
-    def __getitem__(self, idx):
-        return idx
 
 
 @pytest.mark.parametrize("world_size", [1, 2, 4, 8])

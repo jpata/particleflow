@@ -6,25 +6,12 @@ from unittest.mock import patch
 
 import torch
 import torch.optim as optim
-from torch.utils.data import Dataset
+from tests.mock_data import MockDictDataset
 
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.model.utils import save_checkpoint, load_checkpoint
 from mlpf.model.mlpf import MLPF
 from mlpf.conf import MLPFConfig
-
-
-class MockTorchDataset(Dataset):
-    """A mock torch dataset that returns dictionaries."""
-
-    def __init__(self, size=100):
-        self.size = size
-
-    def __len__(self):
-        return self.size
-
-    def __getitem__(self, idx):
-        return {"X": torch.tensor([[float(idx), 1.0]]), "ytarget": torch.tensor([[float(idx), 1.0]]), "genmet": 0.0}
 
 
 class TestDataloaderRestoration(unittest.TestCase):
@@ -39,7 +26,7 @@ class TestDataloaderRestoration(unittest.TestCase):
         """Ensures that the dataloader state is correctly saved and restored."""
         # Configure the mock PFDataset to return our mock torch dataset
         mock_pf_instance = MockPFDataset.return_value
-        mock_pf_instance.ds = MockTorchDataset()
+        mock_pf_instance.ds = MockDictDataset(size=100, keys=("X", "ytarget", "genmet"), shapes=((1, 2), (1, 2), (1,)))
 
         # Set seed once for reproducibility
         torch.manual_seed(0)
@@ -142,7 +129,7 @@ class TestDataloaderRestoration(unittest.TestCase):
         fully exhausted, and that it correctly transitions to the next epoch.
         """
         mock_pf_instance = MockPFDataset.return_value
-        mock_pf_instance.ds = MockTorchDataset(size=21)  # 10 batches per epoch
+        mock_pf_instance.ds = MockDictDataset(size=21, keys=("X", "ytarget", "genmet"), shapes=((1, 2), (1, 2), (1,)))
 
         torch.manual_seed(0)
         config_dict = {
