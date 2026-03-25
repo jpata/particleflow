@@ -4,6 +4,54 @@ from tests.mock_data import MockDataset
 from mlpf.model.PFDataset import ShardConsecutiveSampler, DistributedShardConsecutiveSampler
 
 
+def test_distributed_shard_consecutive_sampler_init():
+    shard_sizes = [10, 10]
+    datasets = [MockDataset(s) for s in shard_sizes]
+    concat_ds = ConcatDataset(datasets)
+    # Check that it initializes correctly with world_size and rank
+    sampler = DistributedShardConsecutiveSampler(concat_ds, world_size=2, rank=0, shuffle=False)
+    assert sampler.num_replicas == 2
+    assert sampler.rank == 0
+
+
+def test_distributed_sharding_within_shards():
+    # 4 shards, 2 ranks, shuffle=True
+    shard_sizes = [10, 10, 10, 10]
+    datasets = [MockDataset(s) for s in shard_sizes]
+    concat_ds = ConcatDataset(datasets)
+
+    # Use same seed to ensure shard order is same for both ranks
+    seed = 42
+    sampler0 = DistributedShardConsecutiveSampler(concat_ds, world_size=2, rank=0, shuffle=True, seed=seed)
+    sampler1 = DistributedShardConsecutiveSampler(concat_ds, world_size=2, rank=1, shuffle=True, seed=seed)
+
+    indices0 = list(iter(sampler0))
+    indices1 = list(iter(sampler1))
+
+    assert len(indices0) == 20
+    assert len(indices1) == 20
+
+    # Combined should still be all indices
+    assert set(indices0) | set(indices1) == set(range(40))
+    # No overlap
+    assert set(indices0).isdisjoint(set(indices1))
+
+    # Check that it stayed within shards (each block of 10 should be one shard)
+    # Since we use MockDataset which returns the index, and each shard is size 10,
+    # shard_id = index // 10
+    def get_shard_id(val):
+        return val // 10
+
+    shard_ids0 = [get_shard_id(x) for x in indices0]
+    shard_ids1 = [get_shard_id(x) for x in indices1]
+
+    # Each block of 10 should have same shard id
+    assert len(set(shard_ids0[:10])) == 1
+    assert len(set(shard_ids0[10:])) == 1
+    assert len(set(shard_ids1[:10])) == 1
+    assert len(set(shard_ids1[10:])) == 1
+
+
 @pytest.mark.parametrize("world_size", [1, 2, 4, 8])
 @pytest.mark.parametrize("drop_last", [True, False])
 @pytest.mark.parametrize("shuffle", [True, False])
