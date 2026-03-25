@@ -11,7 +11,7 @@ apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif
 We build on existing, open-source simulation software by the experimental collaborations.
 
 <p float="left">
-  <img src="images/schematic.png" alt="High-level overview" width="600"/>
+  <img src="images/diagram.svg" alt="High-level overview" width="800"/>
 </p>
 
 ---
@@ -49,9 +49,9 @@ apptainer exec \
     --gpus 1
 ```
 
-## **Producing datasets from scratch**
+## **End-to-end workflow: generated datasets to trained model**
 
-The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment management and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration.
+The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration. Apptainer images are used to provide the software for the steps for different detetors.
 
 ```bash
 # install pixi, restart your shell or source your .bashrc after this. only do once.
@@ -66,11 +66,11 @@ pixi run init
 # generate the snakefile (will overwrite the defaults)
 PROD={cms_run3,clic,cld} pixi run snakefile
 
-# run the steps (this will take many days), so run inside screen or tmux
-pixi run gen
-pixi run post
-pixi run tfds
-pixi run train
+# run the steps (this will take many days and thousands of jobs), so run inside screen or tmux
+PROD={cms_run3,clic,cld} pixi run gen
+PROD={cms_run3,clic,cld} pixi run post
+PROD={cms_run3,clic,cld} pixi run tfds
+PROD={cms_run3,clic,cld} pixi run train
 ```
 
 ---
