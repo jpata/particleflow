@@ -19,4 +19,6 @@ python mlpf/pipeline.py \
   --num_workers 2 \
   --prefetch_factor 2 \
   --gpu_batch_multiplier 16 \
-  --compile
+  --compile \
+  --lr 0.001 \
+  --optimizer lamb
