@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", "notebooks*", "images*", "docs*", "scripts*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml"]
