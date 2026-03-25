@@ -277,25 +277,38 @@ class DistributedShardConsecutiveSampler(torch.utils.data.distributed.Distribute
         if self.shuffle:
             rng.shuffle(shard_ranges)
 
-        # 3. Each rank handles its own subset of shards.
-        # This keeps each node working on a small number of shards.
-        my_shard_ranges = shard_ranges[self.rank :: self.num_replicas]
-
-        # 4. For each of my shards, yield samples (shuffled)
-        indices = []
-        for s_start, s_end in my_shard_ranges:
+        # 3. Build the full list of indices
+        all_indices = []
+        for s_start, s_end in shard_ranges:
             shard_indices = list(range(s_start, s_end))
             if self.shuffle:
-                # Use a rank-specific seed for internal shard shuffling
-                shard_rng = random.Random(self.seed + self.epoch + self.rank)
+                # Use a deterministic seed for internal shard shuffling that is the same across all ranks
+                # so that all_indices is identical on all ranks.
+                # We use s_start as part of the seed to ensure different shards have different internal shuffles.
+                shard_rng = random.Random(self.seed + self.epoch + s_start)
                 shard_rng.shuffle(shard_indices)
-            indices.extend(shard_indices)
+            all_indices.extend(shard_indices)
+
+        # 4. Pad or truncate to match total_size from DistributedSampler
+        if not self.drop_last:
+            padding_size = self.total_size - len(all_indices)
+            if padding_size <= len(all_indices):
+                all_indices += all_indices[:padding_size]
+            else:
+                import math
+
+                all_indices += (all_indices * math.ceil(padding_size / len(all_indices)))[:padding_size]
+        else:
+            all_indices = all_indices[: self.total_size]
+
+        assert len(all_indices) == self.total_size
+
+        # 5. Each rank handles its own subset of indices consecutively.
+        # This keeps each node working on a small number of shards.
+        indices = all_indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
+        assert len(indices) == self.num_samples
 
         return iter(indices)
-
-    def __len__(self):
-        # Approximate length
-        return sum(len(d) for d in self.dataset.datasets) // self.num_replicas
 
 
 class ResumableSampler(torch.utils.data.Sampler):
