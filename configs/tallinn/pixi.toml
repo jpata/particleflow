@@ -68,7 +68,8 @@ max-status-checks-per-second: 2
 verbose: true
 use-conda: false
 default-resources:
-  - slurm_account="hepusers"' > .profiles/tallinn/config.v8+.yaml
+  - slurm_account="hepusers"
+  - slurm_extra="'--exclude=comp-e-002,comp-e-045,comp-f-004,comp-f-021'"' > .profiles/tallinn/config.v8+.yaml
 """, description = "Create the tallinn snakemake profile" }
 
 snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} \"$@\"' --", depends-on = ["setup"], description = "Generate the snakemake files" }
