@@ -291,6 +291,8 @@ done
             post_file_inter_proto = post_file_final_proto
 
         args_str = f"--input {root_file_proto} --outpath {sample_post_dir}"
+        if prod_type == "key4hep":
+            args_str += f" --detector {prod_key}"
         for k, v in postproc_extra_args.items():
             if isinstance(v, bool):
                 if v:

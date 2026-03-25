@@ -21,7 +21,7 @@ for (( i=0; i<1; i++ )); do
     if [ ! -f /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/post/p8_ee_ZH_Htautau_ecm240/reco_p8_ee_ZH_Htautau_ecm240_${seed}.parquet ]; then
         if [ -f /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/gen/p8_ee_ZH_Htautau_ecm240/root/reco_p8_ee_ZH_Htautau_ecm240_${seed}.root ]; then
             echo "Postprocessing /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/gen/p8_ee_ZH_Htautau_ecm240/root/reco_p8_ee_ZH_Htautau_ecm240_${seed}.root"
-            python3 mlpf/data/key4hep/postprocessing.py --input /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/gen/p8_ee_ZH_Htautau_ecm240/root/reco_p8_ee_ZH_Htautau_ecm240_${seed}.root --outpath /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/post/p8_ee_ZH_Htautau_ecm240
+            python3 mlpf/data/key4hep/postprocessing.py --input /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/gen/p8_ee_ZH_Htautau_ecm240/root/reco_p8_ee_ZH_Htautau_ecm240_${seed}.root --outpath /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/post/p8_ee_ZH_Htautau_ecm240 --detector cld
             if [ -f /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/post/p8_ee_ZH_Htautau_ecm240/reco_p8_ee_ZH_Htautau_ecm240_${seed}.parquet ]; then
                 python3 -c "import awkward as ak; ak.from_parquet('/local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/post/p8_ee_ZH_Htautau_ecm240/reco_p8_ee_ZH_Htautau_ecm240_${seed}.parquet')"
             else
