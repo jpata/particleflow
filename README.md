@@ -11,7 +11,7 @@ apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif
 We build on existing, open-source simulation software by the experimental collaborations.
 
 <p float="left">
-  <img src="images/schematic.png" alt="High-level overview" width="600"/>
+  <img src="images/diagram.svg" alt="High-level overview" width="800"/>
 </p>
 
 ---
