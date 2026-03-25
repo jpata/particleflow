@@ -56,6 +56,7 @@ def get_raytune_search_alg(raytune_cfg, seeds=False):
 
 def get_raytune_schedule(raytune_cfg):
     if raytune_cfg["sched"] == "asha":
+        print("INFO: Using AsyncHyperBandScheduler")
         return AsyncHyperBandScheduler(
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
@@ -66,6 +67,7 @@ def get_raytune_schedule(raytune_cfg):
             brackets=raytune_cfg["asha"]["brackets"],
         )
     elif raytune_cfg["sched"] == "hyperband":
+        print("INFO: Using HyperBandScheduler")
         return HyperBandScheduler(
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
@@ -75,6 +77,7 @@ def get_raytune_schedule(raytune_cfg):
         )
     # requires pip install hpbandster ConfigSpace
     elif (raytune_cfg["sched"] == "bohb") or (raytune_cfg["sched"] == "BOHB"):
+        print("INFO: Using HyperBandForBOHB")
         return HyperBandForBOHB(
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
@@ -83,6 +86,7 @@ def get_raytune_schedule(raytune_cfg):
             reduction_factor=raytune_cfg["hyperband"]["reduction_factor"],
         )
     elif (raytune_cfg["sched"] == "pbt") or (raytune_cfg["sched"] == "PBT"):
+        print("INFO: Using PopulationBasedTraining")
         return PopulationBasedTraining(
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],
@@ -93,6 +97,7 @@ def get_raytune_schedule(raytune_cfg):
         )
     # requires pip install GPy sklearn
     elif (raytune_cfg["sched"] == "pb2") or (raytune_cfg["sched"] == "PB2"):
+        print("INFO: Using PB2")
         return PB2(
             metric=raytune_cfg["default_metric"],
             mode=raytune_cfg["default_mode"],

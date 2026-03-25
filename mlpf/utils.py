@@ -28,7 +28,9 @@ def set_nested_dict(d, key_path, value):
     """Set a value in a nested dictionary using a dot-separated path."""
     keys = key_path.split(".")
     for key in keys[:-1]:
-        d = d.setdefault(key, {})
+        if key not in d or d[key] is None:
+            d[key] = {}
+        d = d[key]
 
     # Try to parse string values as yaml to get correct types (int, float, bool, etc.)
     if isinstance(value, str):
@@ -75,6 +77,17 @@ def resolve_path(path, spec):
     return path
 
 
+def _resolve_paths_recursive(obj, spec):
+    """Recursively resolve ${...} path references in nested dicts/lists."""
+    if isinstance(obj, dict):
+        return {k: _resolve_paths_recursive(v, spec) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_resolve_paths_recursive(item, spec) for item in obj]
+    elif isinstance(obj, str) and "${" in obj:
+        return resolve_path(obj, spec)
+    return obj
+
+
 def parse_extra_args(extra_args):
     """Parse unrecognized arguments from argparse.parse_known_args()."""
     overrides = {}
@@ -83,7 +96,11 @@ def parse_extra_args(extra_args):
         arg = extra_args[i]
         if arg.startswith("--"):
             key = arg[2:]
-            if i + 1 < len(extra_args) and not extra_args[i + 1].startswith("--") and "=" not in extra_args[i + 1]:
+            if "=" in key:
+                key, val = key.split("=", 1)
+                overrides[key] = val
+                i += 1
+            elif i + 1 < len(extra_args) and not extra_args[i + 1].startswith("--") and "=" not in extra_args[i + 1]:
                 overrides[key] = extra_args[i + 1]
                 i += 2
             else:
