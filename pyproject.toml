@@ -49,7 +49,10 @@ dependencies = [
     "plotly",
     "pre-commit",
     "protobuf~=5.28.3",
-    "pyarrow~=18.1.0",
+    #needed for apache_beam compatibility
+    "pyarrow~=18.1.0; sys_platform == 'linux'",
+    #needed to prevent mutex lock error on OSX
+    "pyarrow~=22.0.0; sys_platform == 'darwin'",
     "pydantic",
     "pytest",
     "ray[tune]",
@@ -70,7 +73,8 @@ dependencies = [
     "vector",
     "zenodo_get",
     "huggingface_hub",
-    "apache_beam~=2.71.0"
+    #required for dataset preparation, only on linux
+    "apache_beam~=2.71.0; sys_platform == 'linux'"
 ]
 
 [project.scripts]
