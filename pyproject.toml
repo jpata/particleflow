@@ -13,7 +13,7 @@ authors = [
 ]
 description = "Machine Learning for Particle Flow Reconstruction"
 readme = "README.md"
-requires-python = "==3.12.*"
+requires-python = "==3.11.*"
 license = { text = "Apache Software License" }
 classifiers = [
     "Programming Language :: Python :: 3",
