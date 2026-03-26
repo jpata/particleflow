@@ -2,6 +2,81 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "particleflow"
+version = "3.0.0"
+authors = [
+  { name = "Joosep Pata", email = "joosep.pata@cern.ch" },
+  { name = "Farouk Mokhtar" },
+  { name = "Eric Wulff" },
+  { name = "Javier Duarte" }
+]
+description = "Machine Learning for Particle Flow Reconstruction"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache Software License" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "apache-beam",
+    "array-record",
+    "autopep8",
+    "awkward",
+    "boost_histogram",
+    "click",
+    "comet-ml",
+    "fastjet",
+    "fsspec",
+    "jupyter",
+    "jupyter-book",
+    "keras",
+    "keras-tuner",
+    "matplotlib",
+    "mlcroissant",
+    "mplhep",
+    "networkx",
+    "notebook",
+    "numba",
+    "numpy",
+    "onnx",
+    "onnxruntime",
+    "onnxscript",
+    "pandas",
+    "papermill",
+    "plotly",
+    "pre-commit",
+    "protobuf",
+    "pyarrow",
+    "pydantic",
+    "pytest",
+    "ray[tune]",
+    "scikit-learn",
+    "scikit-optimize",
+    "scipy",
+    "seaborn",
+    "setGPU",
+    "snakemake",
+    "tensorboard",
+    "tensorflow; sys_platform != 'darwin'",
+    "tensorflow-macos; sys_platform == 'darwin'",
+    "tensorflow-datasets",
+    "torch",
+    "torch_runstats",
+    "torchaudio",
+    "torchvision",
+    "tqdm",
+    "uproot",
+    "vector",
+    "zenodo_get"
+]
+
+[project.scripts]
+mlpf = "mlpf.pipeline:main"
+
 [tool.setuptools]
 include-package-data = true
 
