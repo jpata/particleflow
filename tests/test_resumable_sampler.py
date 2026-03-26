@@ -19,7 +19,7 @@ class TestResumableSampler(unittest.TestCase):
 
         # Advance the sampler
         resumable_sampler.load_state_dict({"start_index": 5})
-        self.assertEqual(len(resumable_sampler), 10)  # Should report full length
+        self.assertEqual(len(resumable_sampler), 5)  # Should report remaining length
         self.assertEqual(list(resumable_sampler), list(range(5, 10)))
 
     def test_distributed_sampler_compatibility(self):

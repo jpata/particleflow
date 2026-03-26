@@ -325,7 +325,7 @@ class ResumableSampler(torch.utils.data.Sampler):
         return iter(indices[self.start_index :])
 
     def __len__(self):
-        return len(self.sampler)
+        return len(self.sampler) - self.start_index
 
     def load_state_dict(self, state_dict):
         self.start_index = state_dict["start_index"]
