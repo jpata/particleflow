@@ -1,8 +1,15 @@
 ## **TLDR; I just want to run the code**
-This runs the data preparation and training on a very small sample, so you can see how to run the code:
+This runs the data preparation and training on a very small sample using a prepared container, and should work out of the box:
 ```
 apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cld.sh
 apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cms.sh
+```
+
+Alternatively, you can use `uv` to set up the packages yourself and test that everything works:
+```
+uv sync
+uv run ./scripts/local_test_cld.sh
+uv run ./scripts/local_test_cms.sh
 ```
 
 ### **Summary**
@@ -22,7 +29,7 @@ We build on existing, open-source simulation software by the experimental collab
 If you wish to train on pre-made datasets, you can download them from the [Hugging Face Hub](https://huggingface.co/datasets/jpata/particleflow).
 To download a specific dataset and split (e.g., CLD, PF setup, configuration split 1):
 ```bash
-hf download jpata/particleflow \
+uv run hf download jpata/particleflow \
   --include "tensorflow_datasets/cld/cld_edm_*_pf/1/*" \
   --local-dir data/tfds \
   --repo-type dataset
@@ -33,11 +40,7 @@ This will download the requested files into `data/tfds/tensorflow_datasets/cld/c
 
 Run the training on the downloaded data configuration split
 ```
-apptainer exec \
-    --env PYTHONPATH=`pwd` \
-    --env KERAS_BACKEND=torch \
-    --nv \
-    https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif \
+uv run \
     python mlpf/pipeline.py \
     --spec-file particleflow_spec.yaml \
     --production cld \
@@ -49,7 +52,7 @@ apptainer exec \
     --gpus 1
 ```
 
-## **End-to-end workflow: generated datasets to trained model**
+## **End-to-end workflow: dataset generation and model training **
 
 The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration. Apptainer images are used to provide the software for the steps for different detetors.
 
@@ -60,7 +63,7 @@ curl -fsSL https://pixi.sh/install.sh | bash
 # copy the configuration for your site. only do once.
 ln -s configs/{local,tallinn,lxplus}/pixi.toml pixi.toml
 
-# initalize the orhcestrator python environment. only do once.
+# initalize the orhcestrator python environment. only do this once.
 pixi run init
 
 # generate the snakefile (will overwrite the defaults)

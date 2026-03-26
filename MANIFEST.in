@@ -1,4 +1,3 @@
 include particleflow_spec.yaml
 include validation_cms.yaml
-include requirements.txt
 recursive-include mlpf *.py

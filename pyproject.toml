@@ -13,7 +13,7 @@ authors = [
 ]
 description = "Machine Learning for Particle Flow Reconstruction"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = "==3.12.*"
 license = { text = "Apache Software License" }
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -22,8 +22,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "apache-beam",
-    "array-record",
+    "array-record~=0.8.3",
     "autopep8",
     "awkward",
     "boost_histogram",
@@ -49,8 +48,8 @@ dependencies = [
     "papermill",
     "plotly",
     "pre-commit",
-    "protobuf",
-    "pyarrow",
+    "protobuf~=5.28.3",
+    "pyarrow~=18.1.0",
     "pydantic",
     "pytest",
     "ray[tune]",
@@ -61,21 +60,41 @@ dependencies = [
     "setGPU",
     "snakemake",
     "tensorboard",
-    "tensorflow; sys_platform != 'darwin'",
-    "tensorflow-macos; sys_platform == 'darwin'",
-    "tensorflow-datasets",
+    "tensorflow~=2.20.0",
+    "tensorflow-datasets~=4.9.9",
+    "tensorflow-metadata~=1.17.3",
     "torch",
     "torch_runstats",
-    "torchaudio",
-    "torchvision",
     "tqdm",
     "uproot",
     "vector",
-    "zenodo_get"
+    "zenodo_get",
+    "huggingface_hub",
+    "apache_beam~=2.71.0"
 ]
 
 [project.scripts]
 mlpf = "mlpf.pipeline:main"
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+  { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [tool.setuptools]
 include-package-data = true
