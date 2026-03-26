@@ -1,4 +1,4 @@
-## **TLDR; I just want to run the code**
+### **TLDR; I just want to run the code**
 This runs the data preparation and training on a very small sample using a prepared container, and should work out of the box:
 ```
 apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cld.sh
@@ -52,7 +52,7 @@ uv run \
     --gpus 1
 ```
 
-## **End-to-end workflow: dataset generation and model training **
+## **End-to-end workflow: dataset generation and model training**
 
 The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration. Apptainer images are used to provide the software for the steps for different detetors.
 
@@ -116,7 +116,7 @@ Below is the development timeline of MLPF by our team, ranging from initial proo
 
 ---
 
-# **Citations and Reuse**
+### **Citations and Reuse**
 
 You are welcome to reuse the code in accordance with the [LICENSE](https://github.com/jpata/particleflow/blob/main/LICENSE).
 
