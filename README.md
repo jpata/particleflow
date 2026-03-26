@@ -1,15 +1,16 @@
 ### **TLDR; I just want to run the code**
-This runs the data preparation and training on a very small sample using a prepared container, and should work out of the box:
+You can use `uv` to set up the repo and test that everything works:
 ```
-apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cld.sh
-apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cms.sh
-```
-
-Alternatively, you can use `uv` to set up the packages yourself and test that everything works:
-```
+git clone https://github.com/jpata/particleflow.git
 uv sync
 uv run ./scripts/local_test_cld.sh
 uv run ./scripts/local_test_cms.sh
+```
+
+Alternatively, you can use a prepared container:
+```
+apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cld.sh
+apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cms.sh
 ```
 
 ### **Summary**
