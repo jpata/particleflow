@@ -70,9 +70,11 @@ class CldEdmZzHits(tfds.core.GeneratorBasedBuilder):
             ),
         )
 
+    # Abstract method needs to be specified
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
         return split_sample(Path(path / "p8_ee_ZZ_ecm365"), self.builder_config, num_splits=NUM_SPLITS, dataset=Dataset.CLD_HITS)
 
+    # Abstract method needs to be specified
     def _generate_examples(self, files):
         return generate_examples(files, Dataset.CLD_HITS)

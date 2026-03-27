@@ -82,9 +82,11 @@ class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
             ),
         )
 
+    # Abstract method needs to be specified
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
         return split_sample(Path(path / "p8_ee_qq_ecm380/"), self.builder_config, num_splits=NUM_SPLITS)
 
+    # Abstract method needs to be specified
     def _generate_examples(self, files):
         return generate_examples(files)
