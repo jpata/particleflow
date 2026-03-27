@@ -429,7 +429,7 @@ class HEPTAttentionLayer(nn.Module):
     def forward(self, x, mask, X, return_attn=False):
         # x: [B, N, D]
         # mask: [B, N]
-        # X: [B, N, 25] or [B, N, 55] (original features)
+        # X: [B, N, 25] or [B, N, 73] (original features)
         if self.pos_embed:
             x = self.pos_embed(x, X)
 
@@ -864,7 +864,7 @@ class RegressionOutput(nn.Module):
         return f"mode={self.mode}, embed_dim={self.embed_dim}, width={self.width}, dropout={self.dropout_p}"
 
     def forward(self, X, x, orig_value):
-        # X: [B, N, 25] or [B, N, 55] (original features)
+        # X: [B, N, 25] or [B, N, 73] (original features)
         # x: [B, N, D] (latent representation)
         # orig_value: [B, N, 1] (the feature to regress from)
 
@@ -899,7 +899,7 @@ class MLPF(nn.Module):
             # Backward compatibility or manual construction
             from mlpf.standalone.dsl import i, h, g, o, ModelConfig
 
-            input_dim = kwargs.get("input_dim", 55)
+            input_dim = kwargs.get("input_dim", 73)
             embedding_dim = kwargs.get("embedding_dim", 128)
             width = kwargs.get("width", 128)
             num_convs = kwargs.get("num_convs", 6)
@@ -967,11 +967,13 @@ class MLPF(nn.Module):
             self.pid_backbone = None
             self.reg_backbone = None
             self.binary_backbone = None
+            self.PU_backbone = None
         else:
             self.shared_backbone = build_layers(config.backbone.get("shared", []))
             self.pid_backbone = build_layers(config.backbone.get("pid", []))
             self.reg_backbone = build_layers(config.backbone.get("reg", []))
             self.binary_backbone = build_layers(config.backbone.get("binary", []))
+            self.PU_backbone = build_layers(config.backbone.get("PU", []))
 
         # 3. Output heads
         self.nn_binary_particle = ffn(
@@ -983,6 +985,12 @@ class MLPF(nn.Module):
         self.nn_pid = ffn(
             config.output.embedding_dim if config.output.embedding_dim is not None else config.input.embedding_dim,
             config.output.num_classes,
+            config.output.width,
+            dropout=config.output.dropout,
+        )
+        self.nn_PU = ffn(
+            config.output.embedding_dim if config.output.embedding_dim is not None else config.input.embedding_dim,
+            2,
             config.output.width,
             dropout=config.output.dropout,
         )
@@ -1036,6 +1044,12 @@ class MLPF(nn.Module):
             for layer in self.binary_backbone:
                 emb_binary = layer(emb_binary, mask, X)
 
+        # Neutral PU branch
+        emb_PU = emb_shared
+        if self.PU_backbone is not None:
+            for layer in self.PU_backbone:
+                emb_PU = layer(emb_PU, mask, X)
+
         # Regression branch
         emb_reg = emb_shared
         if self.reg_backbone is not None:
@@ -1044,6 +1058,7 @@ class MLPF(nn.Module):
 
         # Outputs
         logits_binary = self.nn_binary_particle(emb_binary)
+        logits_PU = self.nn_PU(emb_PU)
         logits_pid = self.nn_pid(emb_pid)
 
         preds_pt = self.nn_pt(X, emb_reg, X[..., 1:2])
@@ -1055,12 +1070,13 @@ class MLPF(nn.Module):
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], dim=-1)
 
         logits_binary = torch.nan_to_num(logits_binary, nan=0.0, posinf=0.0, neginf=0.0)
+        logits_PU = torch.nan_to_num(logits_PU, nan=0.0, posinf=0.0, neginf=0.0)
         logits_pid = torch.nan_to_num(logits_pid, nan=0.0, posinf=0.0, neginf=0.0)
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
 
         if return_attn:
-            return logits_binary, logits_pid, preds_momentum, all_attns
-        return logits_binary, logits_pid, preds_momentum
+            return logits_binary, logits_pid, logits_PU, preds_momentum, all_attns
+        return logits_binary, logits_pid, logits_PU, preds_momentum
 
 
 # --- Loss Function ---
@@ -1086,19 +1102,23 @@ class FocalLoss(nn.Module):
 
 def mlpf_loss(y, ypred, mask, X):
     """
-    y: dict with "cls_id", "pt", "eta", "sin_phi", "cos_phi", "energy"
-    ypred: (logits_binary, logits_pid, preds_momentum)
+    y: dict with "cls_id", "pt", "eta", "sin_phi", "cos_phi", "energy", "ispu"
+    ypred: (logits_binary, logits_pid, logits_ispu, preds_momentum)
     mask: [B, N]
     X: [B, N, 25]
     """
-    logits_binary, logits_pid, preds_momentum = ypred
+    logits_binary, logits_pid, logits_ispu, preds_momentum = ypred
 
     # y["cls_id"] is [B, N]
     npart = torch.sum(y["cls_id"] != 0)
+    npart_neutral = torch.sum((y["cls_id"] == 4) | (y["cls_id"] == 5))
     nelem = torch.sum(mask)
 
     # Binary loss
     loss_binary = F.cross_entropy(logits_binary.permute(0, 2, 1), (y["cls_id"] != 0).long(), reduction="none")
+
+    # PU loss
+    loss_PU = F.cross_entropy(logits_ispu.permute(0, 2, 1), y["ispu"].long(), reduction="none")
 
     # PID loss
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
@@ -1130,6 +1150,8 @@ def mlpf_loss(y, ypred, mask, X):
 
     loss_binary[mask == 0] *= 0
     loss_pid[mask == 0] *= 0
+    
+    loss_PU[(mask == 0) | ~((y["cls_id"]==4) | (y["cls_id"]==5))] *= 0
 
     tot_loss = (
         loss_binary.sum() / nelem
@@ -1139,9 +1161,10 @@ def mlpf_loss(y, ypred, mask, X):
         + loss_sin_phi.sum() / npart
         + loss_cos_phi.sum() / npart
         + loss_energy.sum() / npart
+        + loss_PU.sum() / npart_neutral
     )
 
-    return tot_loss
+    return tot_loss, loss_binary.sum() / nelem, loss_pid.sum() / nelem, loss_pt.sum() / npart + loss_eta.sum() / npart + loss_sin_phi.sum() / npart + loss_cos_phi.sum() / npart + loss_energy.sum() / npart, loss_PU.sum() / npart_neutral
 
 
 # --- Training Loop ---
@@ -1152,6 +1175,7 @@ def train(model, train_loader, optimizer, device, duration_seconds=120):
     start_time = time.time()
     num_steps = 0
     total_loss = 0
+    total_loss_binary, total_loss_pid, total_loss_kinematics, total_loss_PU = 0, 0, 0, 0
 
     print(f"Starting training for {duration_seconds} seconds...")
 
@@ -1162,7 +1186,6 @@ def train(model, train_loader, optimizer, device, duration_seconds=120):
 
             X = batch.X.to(device)
             mask = batch.mask.to(device)
-
             # Prepare targets
             y = {
                 "cls_id": batch.ytarget[:, :, 0].to(device),
@@ -1171,29 +1194,38 @@ def train(model, train_loader, optimizer, device, duration_seconds=120):
                 "sin_phi": batch.ytarget[:, :, 4].to(device),
                 "cos_phi": batch.ytarget[:, :, 5].to(device),
                 "energy": batch.ytarget[:, :, 6].to(device),
+                "ispu": batch.ytarget[:, :, 7].to(device),
             }
 
             optimizer.zero_grad()
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
                 ypred = model(X, mask)
-                loss = mlpf_loss(y, ypred, mask, X)
+                loss, loss_binary, loss_pid, loss_kinematics, loss_PU = mlpf_loss(y, ypred, mask, X)
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
+            total_loss_binary += loss_binary.item()
+            total_loss_pid += loss_pid.item()
+            total_loss_kinematics += loss_kinematics.item()
+            total_loss_PU += loss_PU.item()
             num_steps += 1
 
             if num_steps % 10 == 0:
                 elapsed = time.time() - start_time
                 print(f"Step {num_steps}, Loss: {loss.item():.4f}, Elapsed: {elapsed:.1f}s")
 
-    return total_loss / num_steps if num_steps > 0 else 0, num_steps
+    if num_steps > 0:
+        return total_loss / num_steps, total_loss_binary / num_steps, total_loss_pid / num_steps, total_loss_kinematics / num_steps, total_loss_PU / num_steps, num_steps
+
+    return 0, num_steps
 
 
 @torch.no_grad()
 def validate(model, loader, device):
     model.eval()
     total_loss = 0
+    total_loss_binary, total_loss_pid, total_loss_kinematics, total_loss_PU = 0, 0, 0, 0
     num_steps = 0
 
     for batch in loader:
@@ -1208,15 +1240,23 @@ def validate(model, loader, device):
             "sin_phi": batch.ytarget[:, :, 4].to(device),
             "cos_phi": batch.ytarget[:, :, 5].to(device),
             "energy": batch.ytarget[:, :, 6].to(device),
+            "ispu": batch.ytarget[:, :, 7].to(device),
         }
 
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
             ypred = model(X, mask)
-            loss = mlpf_loss(y, ypred, mask, X)
+            loss, loss_binary, loss_pid, loss_kinematics, loss_PU = mlpf_loss(y, ypred, mask, X)
 
         total_loss += loss.item()
+        total_loss_binary += loss_binary.item()
+        total_loss_pid += loss_pid.item()
+        total_loss_kinematics += loss_kinematics.item()
+        total_loss_PU += loss_PU.item()
         num_steps += 1
         if num_steps > 10:  # Limit validation for speed
             break
 
-    return total_loss / num_steps if num_steps > 0 else 0
+    if num_steps > 0:
+        return total_loss / num_steps, total_loss_binary / num_steps, total_loss_pid / num_steps, total_loss_kinematics / num_steps, total_loss_PU / num_steps
+
+    return 0, num_steps

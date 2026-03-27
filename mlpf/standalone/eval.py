@@ -78,7 +78,7 @@ def evaluate(model, loader, device):
             mask = batch.mask.to(device)
 
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
-                logits_binary, logits_pid, preds_momentum = model(X, mask)
+                logits_binary, logits_pid, logits_pu, preds_momentum = model(X, mask)
 
             # Predicted
             pred_id = torch.argmax(logits_pid, dim=-1)
@@ -187,7 +187,7 @@ def save_attention_visualization(model, batch, device, output_dir="plots"):
 
     with torch.no_grad():
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
-            _, _, _, attns = model(X, mask, return_attn=True)
+            _, _, _, _, attns = model(X, mask, return_attn=True)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -271,8 +271,8 @@ if __name__ == "__main__":
     print(f"Data directory: {data_dir}")
 
     # Load dataset
-    ds_train = PFDataset(data_dir, "cms_pf_ttbar/1:3.0.0", "train", num_samples=1000).ds
-    ds_valid = PFDataset(data_dir, "cms_pf_ttbar/1:3.0.0", "test", num_samples=200).ds
+    ds_train = PFDataset(data_dir, "cms_pf_qcd/1:3.0.0", "train", num_samples=1000).ds
+    ds_valid = PFDataset(data_dir, "cms_pf_qcd/1:3.0.0", "test", num_samples=200).ds
 
     collater = Collater(["X", "ytarget"], ["genmet"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -280,7 +280,7 @@ if __name__ == "__main__":
     all_results = []
 
     # Run training 3 times
-    for i in range(3):
+    for i in range(1):
         print(f"\n--- Run {i+1}/3 ---")
 
         if args.dsl:
@@ -288,13 +288,13 @@ if __name__ == "__main__":
             config = parse_dsl(args.dsl)
             model = MLPF(config=config).to(device)
         else:
-            # 55 features for CMS, re-initialize model for each run
+            # 73 features for CMS, re-initialize model for each run
             model = MLPF(
-                input_dim=55,
+                input_dim=73,
                 num_classes=8,
                 embedding_dim=128,
                 width=128,
-                num_convs=6,
+                num_convs=3,
                 num_heads=16,
                 attention_type=args.attention_type,
             ).to(device)
@@ -314,7 +314,7 @@ if __name__ == "__main__":
         start_total = time.time()
 
         # Train for a fixed time
-        train_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=300)
+        train_loss, train_loss_binary, train_loss_pid, train_loss_kinematics, train_loss_pu, num_steps = train(model, train_loader, optimizer, device, duration_seconds=30)
 
         training_seconds = time.time() - start_total
 
@@ -326,7 +326,7 @@ if __name__ == "__main__":
 
         # Validation loss
         print("Computing validation loss...")
-        val_loss = validate(model, valid_loader, device)
+        val_loss, val_loss_binary, val_loss_pid, val_loss_kinematics, val_loss_pu = validate(model, valid_loader, device)
 
         # Evaluate jet metrics
         print("Evaluating jet metrics...")
@@ -343,7 +343,7 @@ if __name__ == "__main__":
 
         # Benchmarking
         model.eval()
-        sample_input = torch.randn(1, 4096, 55)
+        sample_input = torch.randn(1, 4096, 73)
         sample_mask = torch.ones(1, 4096).bool()
 
         # CPU runtime
@@ -389,7 +389,15 @@ if __name__ == "__main__":
         all_results.append(
             {
                 "train_loss": train_loss,
+                "train_loss_binary": train_loss_binary,
+                "train_loss_pid": train_loss_pid,
+                "train_loss_kinematics": train_loss_kinematics,
+                "train_loss_pu": train_loss_pu,
                 "val_loss": val_loss,
+                "val_loss_binary": val_loss_binary,
+                "val_loss_pid": val_loss_pid,
+                "val_loss_kinematics": val_loss_kinematics,
+                "val_loss_pu": val_loss_pu,
                 "val_jet_iqr": val_jet_iqr,
                 "val_jet_matched_frac": val_jet_matched_frac,
                 "training_seconds": training_seconds,

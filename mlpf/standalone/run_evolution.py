@@ -83,7 +83,7 @@ def generate_random_config():
 
     # 1. Input
     i_type = random.choice(["default", "projection_only"])
-    input_str = f"i(55,{emb_dim},{emb_dim*2},{i_type},dropout={dropout})"
+    input_str = f"i(73,{emb_dim},{emb_dim*2},{i_type},dropout={dropout})"
 
     # 2. Layers helpers
     def get_layer_expr(ltype=None, n=None):
