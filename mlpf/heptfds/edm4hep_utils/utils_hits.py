@@ -17,11 +17,6 @@ NUM_SPLITS = 10
 X_FEATURES = EDM4HEP.HitFeatures.get_names()
 Y_FEATURES = ParticleFeatures.get_names()
 
-labels = CLASS_LABELS[Dataset.CLD_HITS.value]
-
-N_X_FEATURES = len(X_FEATURES)
-N_Y_FEATURES = len(Y_FEATURES)
-
 
 def split_list(lst, x):
     # Calculate the size of each sublist (except potentially the last)
@@ -36,7 +31,7 @@ def split_list(lst, x):
     return result
 
 
-def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
+def split_sample(path, builder_config, dataset: Dataset, num_splits=NUM_SPLITS, test_frac=0.9):
     files = sorted(list(path.glob("*.parquet")))
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
@@ -53,12 +48,12 @@ def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     assert len(files_test_split[split_index]) > 0
 
     return {
-        "train": generate_examples(files_train_split[split_index]),
-        "test": generate_examples(files_test_split[split_index]),
+        "train": generate_examples(files_train_split[split_index], dataset=dataset),
+        "test": generate_examples(files_test_split[split_index], dataset=dataset),
     }
 
 
-def prepare_data_hits(fn):
+def prepare_data_hits(fn, dataset: Dataset):
     ret = ak.from_parquet(fn)
     # X_hit_tracker is named X_track to match the structure of the track/cluster-based dataset
     X_track = ret["X_hit_tracker"]
@@ -82,9 +77,9 @@ def prepare_data_hits(fn):
             continue
 
         if len(X1) == 0:
-            X1 = np.zeros((0, N_X_FEATURES))
+            X1 = np.zeros((0, len(X_FEATURES)))
         if len(X2) == 0:
-            X2 = np.zeros((0, N_X_FEATURES))
+            X2 = np.zeros((0, len(X_FEATURES)))
 
         # concatenate tracker hits and calorimeter hits
         X = np.concatenate([X1, X2])
@@ -95,9 +90,9 @@ def prepare_data_hits(fn):
         ytarget_cluster = ak.to_numpy(ret["ytarget_hit_calo"][iev])
 
         if len(ytarget_track) == 0:
-            ytarget_track = np.zeros((0, N_Y_FEATURES))
+            ytarget_track = np.zeros((0, len(Y_FEATURES)))
         if len(ytarget_cluster) == 0:
-            ytarget_cluster = np.zeros((0, N_Y_FEATURES))
+            ytarget_cluster = np.zeros((0, len(Y_FEATURES)))
 
         # concatenate tracker hit targets and calorimeter hit targets
         ytarget = np.concatenate([ytarget_track, ytarget_cluster])
@@ -118,6 +113,7 @@ def prepare_data_hits(fn):
             targetjet = np.zeros((0, 4), dtype=np.float32)
 
         # replace PID with index in labels array
+        labels = CLASS_LABELS[dataset.value]
         arr = np.array([labels.index(p) for p in ytarget[:, 0]])
         ytarget[:, 0][:] = arr[:]
 
@@ -130,9 +126,9 @@ def prepare_data_hits(fn):
     return Xs, ytargets, ycands, genmets, genjets, targetjets
 
 
-def generate_examples(files):
+def generate_examples(files, dataset: Dataset):
     for fi in files:
-        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_hits(fi)
+        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_data_hits(fi, dataset)
         print(fi, [len(x) for x in Xs])
         for iev in range(len(Xs)):
             gm = genmets[iev][0]

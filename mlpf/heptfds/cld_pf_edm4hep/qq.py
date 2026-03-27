@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 import numpy as np
 import tensorflow_datasets as tfds
-from mlpf.heptfds.edm4hep_utils import (
+from mlpf.heptfds.edm4hep_utils.utils_pf import (
     NUM_SPLITS,
     X_FEATURES_CL,
     X_FEATURES_TRK,

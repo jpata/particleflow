@@ -3,7 +3,8 @@ from pathlib import Path
 import os
 import numpy as np
 import tensorflow_datasets as tfds
-from .utils_hits import (
+from mlpf.conf import Dataset
+from mlpf.heptfds.edm4hep_utils.utils_hits import (
     NUM_SPLITS,
     X_FEATURES,
     Y_FEATURES,
@@ -71,7 +72,7 @@ class CldEdmTtbarHits(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_ttbar_ecm365"), self.builder_config, num_splits=NUM_SPLITS)
+        return split_sample(Path(path / "p8_ee_ttbar_ecm365"), self.builder_config, num_splits=NUM_SPLITS, dataset=Dataset.CLD_HITS)
 
     def _generate_examples(self, files):
-        return generate_examples(files)
+        return generate_examples(files, Dataset.CLD_HITS)
