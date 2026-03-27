@@ -1,0 +1,33 @@
+#from https://github.com/fastmachinelearning/hls4ml/blob/main/.github/workflows/pypi-publish.yml
+#Apache License 2.0, Fast Machine Learning Collective
+name: 📦 Packaging release to PyPI
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  release:
+    name: Upload new release to PyPI
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v6
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Build SDist and Wheel
+      run: pipx run build --sdist --wheel
+
+    - uses: actions/upload-artifact@v7
+      with:
+        path: dist/*.*
+
+    - name: Publish 📦 to PyPI
+      if: startsWith(github.ref, 'refs/tags')
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_PASSWORD }}
