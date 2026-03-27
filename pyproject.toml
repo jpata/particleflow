@@ -1,0 +1,110 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "particleflow"
+version = "3.0.0"
+authors = [
+  { name = "Joosep Pata", email = "joosep.pata@cern.ch" },
+  { name = "Farouk Mokhtar" },
+  { name = "Eric Wulff" },
+  { name = "Javier Duarte" }
+]
+description = "Machine Learning for Particle Flow Reconstruction"
+readme = "README.md"
+requires-python = "==3.11.*"
+license = { text = "Apache Software License" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "array-record~=0.8.3",
+    "autopep8",
+    "awkward",
+    "boost_histogram",
+    "click",
+    "comet-ml",
+    "fastjet",
+    "fsspec",
+    "jupyter",
+    "jupyter-book",
+    "keras",
+    "keras-tuner",
+    "matplotlib",
+    "mlcroissant",
+    "mplhep",
+    "networkx",
+    "notebook",
+    "numba",
+    "numpy",
+    "onnx",
+    "onnxruntime",
+    "onnxscript",
+    "pandas",
+    "papermill",
+    "plotly",
+    "pre-commit",
+    "protobuf~=5.28.3",
+    #needed for apache_beam compatibility
+    "pyarrow~=18.1.0; sys_platform == 'linux'",
+    #needed to prevent mutex lock error on OSX
+    "pyarrow~=22.0.0; sys_platform == 'darwin'",
+    "pydantic",
+    "pytest",
+    "ray[tune]",
+    "scikit-learn",
+    "scikit-optimize",
+    "scipy",
+    "seaborn",
+    "setGPU",
+    "snakemake",
+    "tensorboard",
+    "tensorflow~=2.20.0",
+    "tensorflow-datasets~=4.9.9",
+    "tensorflow-metadata~=1.17.3",
+    "torch",
+    "torch_runstats",
+    "tqdm",
+    "uproot",
+    "vector",
+    "zenodo_get",
+    "huggingface_hub",
+    #required for dataset preparation, only on linux
+    "apache_beam~=2.71.0; sys_platform == 'linux'"
+]
+
+[project.scripts]
+mlpf = "mlpf.pipeline:main"
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+  { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", "notebooks*", "images*", "docs*", "scripts*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml"]
