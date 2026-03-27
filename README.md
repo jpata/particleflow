@@ -1,7 +1,7 @@
 ### **TLDR; I just want to run the code**
 You can use `uv` to set up the repo and test that everything works:
 ```
-git clone https://github.com/jpata/particleflow.git
+git clone --recurse-submodules https://github.com/jpata/particleflow.git
 uv sync
 uv run ./scripts/local_test_cld.sh
 uv run ./scripts/local_test_cms.sh
