@@ -20,5 +20,7 @@ python mlpf/pipeline.py \
   --prefetch_factor 2 \
   --gpu_batch_multiplier 16 \
   --compile \
-  --lr 0.001 \
-  --optimizer lamb
+  --lr 0.0002 \
+  --optimizer lamb \
+  --model.attention.use_pre_layernorm True \
+  --model.attention.num_convs 6
