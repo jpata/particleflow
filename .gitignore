@@ -37,3 +37,9 @@ logs
 env
 
 *.done
+
+.snakemake
+.profiles
+
+pixi.lock
+uv.lock
