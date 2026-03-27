@@ -1,3 +1,14 @@
+### **Summary**
+
+**ML-based particle flow (MLPF)** focuses on developing full event reconstruction for particle detectors using computationally scalable and flexible machine learning models. The project aims to improve particle flow reconstruction across various detector environments, including CMS, as well as future detectors via Key4HEP.
+We build on existing, open-source simulation software by the experimental collaborations.
+
+<p float="left">
+  <img src="images/diagram.svg" alt="High-level overview" width="800"/>
+</p>
+
+---
+
 ### **TLDR; I just want to run the code**
 You can use `uv` to set up the repo and test that everything works:
 ```
@@ -13,16 +24,6 @@ apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif
 apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cms.sh
 ```
 
-### **Summary**
-
-**ML-based particle flow (MLPF)** focuses on developing full event reconstruction for particle detectors using computationally scalable and flexible machine learning models. The project aims to improve particle flow reconstruction across various detector environments, including CMS, as well as future detectors via Key4HEP.
-We build on existing, open-source simulation software by the experimental collaborations.
-
-<p float="left">
-  <img src="images/diagram.svg" alt="High-level overview" width="800"/>
-</p>
-
----
 
 
 ### **Datasets**
