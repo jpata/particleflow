@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 import numpy as np
-from utils_edm import X_FEATURES_CL, X_FEATURES_TRK, Y_FEATURES, generate_examples, split_sample, NUM_SPLITS
+from mlpf.heptfds.edm4hep_utils import X_FEATURES_CL, X_FEATURES_TRK, Y_FEATURES, generate_examples, split_sample, NUM_SPLITS
 
 import tensorflow_datasets as tfds
 
