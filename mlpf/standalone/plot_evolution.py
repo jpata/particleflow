@@ -5,6 +5,7 @@ import glob
 import re
 import seaborn as sns
 from matplotlib.animation import FuncAnimation
+from mlpf.standalone.run_evolution import calculate_fitness
 
 # Set modern visual style: white background, no grid
 sns.set_theme(style="white", context="talk", font="sans-serif")
@@ -25,20 +26,13 @@ def load_metrics(file_path, gen_num):
     models = []
     for k, v in data.items():
         if "val_jet_iqr" in v and v["val_jet_iqr"] > 0:
-            iqr = v["val_jet_iqr"]
+            val_loss = v.get("val_loss", 10.0)
             matched_frac = v.get("val_jet_matched_frac", 0)
             runtime_cpu = v.get("runtime_cpu_ms", 1000.0)
-            val_loss = v.get("val_loss", 10.0)
             peak_vram = v.get("peak_vram_mb", 0)
 
-            # Individual terms for fitness
-            term_matching = matched_frac
-            term_iqr = 1.0 / max(iqr, 0.01)
-            term_loss = 1.0 / (1.0 + val_loss)
-            term_runtime = 1.0 / (1.0 + runtime_cpu / 1000.0)
-
             # Total fitness
-            fitness = term_matching * term_iqr * term_loss * term_runtime
+            fitness, _ = calculate_fitness(v)
 
             models.append(
                 {
