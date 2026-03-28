@@ -22,7 +22,8 @@ cd ../../../..
 for file in local_test_data/cld/p8_ee_ttbar_ecm365/root/*.root; do
   python3 mlpf/data/key4hep/postprocessing.py \
     --input $file \
-    --outpath local_test_data/cld/p8_ee_ttbar_ecm365
+    --outpath local_test_data/cld/p8_ee_ttbar_ecm365 \
+    --detector cld
 done
 
 # 4. TFDS Build

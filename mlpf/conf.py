@@ -186,6 +186,7 @@ ELEM_TYPES = {
     Dataset.CMS.value: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
     Dataset.CLIC.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.CLD.value: [0, 1, 2],  # 1 - track, 2 - cluster
+    Dataset.CLIC_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
     Dataset.CLD_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
 }
 
@@ -194,6 +195,7 @@ ELEM_TYPES_NONZERO = {
     Dataset.CMS.value: [1, 4, 5, 6, 8, 9, 10, 11],
     Dataset.CLIC.value: [1, 2],
     Dataset.CLD.value: [1, 2],
+    Dataset.CLIC_HITS.value: [1, 2],
     Dataset.CLD_HITS.value: [1, 2],
 }
 
@@ -287,6 +289,7 @@ X_FEATURES = {
     ],
     Dataset.CLIC.value: get_edm4hep_x_features(),
     Dataset.CLD.value: get_edm4hep_x_features(),
+    Dataset.CLIC_HITS.value: EDM4HEP.HitFeatures.get_names(),
     Dataset.CLD_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
@@ -305,6 +308,13 @@ JET_CONFIG = {
         "match_dr": 0.1,
     },
     Dataset.CLD.value: {
+        "algo": "ee_genkt_algorithm",
+        "r": 0.4,
+        "p": -1.0,
+        "ptcut": 5.0,
+        "match_dr": 0.1,
+    },
+    Dataset.CLIC_HITS.value: {
         "algo": "ee_genkt_algorithm",
         "r": 0.4,
         "p": -1.0,

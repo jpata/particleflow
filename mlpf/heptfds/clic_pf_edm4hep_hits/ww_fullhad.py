@@ -1,43 +1,36 @@
-import os
 from pathlib import Path
 
+import os
 import numpy as np
-from mlpf.heptfds.edm4hep_utils.utils_pf import X_FEATURES_CL, X_FEATURES_TRK, Y_FEATURES, generate_examples, split_sample, NUM_SPLITS
-
 import tensorflow_datasets as tfds
+from mlpf.conf import Dataset
+from mlpf.heptfds.edm4hep_utils.utils_hits import (
+    NUM_SPLITS,
+    X_FEATURES,
+    Y_FEATURES,
+    generate_examples,
+    split_sample,
+)
 
 _DESCRIPTION = """
-CLIC EDM4HEP dataset with ee -> WW -> fully hadronic at 380 GeV.
-  - X: reconstructed tracks and clusters, variable number N per event
-  - ygen: stable generator particles, zero-padded to N per event
-  - ycand: baseline particle flow particles, zero-padded to N per event
+CLIC EDM4HEP dataset with ee -> WW at 380 GeV, using hit-level information.
+  - X: reconstructed hits, variable number N per event
+  - ytarget: stable generator particles, zero-padded to N per event
+  - ycand: empty/zeros for hit-level
 """
 
 _CITATION = """
-Pata, Joosep, Wulff, Eric, Duarte, Javier, Mokhtar, Farouk, Zhang, Mengke, Girone, Maria, & Southwick, David. (2023).
-Simulated datasets for detector and particle flow reconstruction: CLIC detector (1.1) [Data set].
-Zenodo. https://doi.org/10.5281/zenodo.8260741
+FIXME
 """
 
 
-class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
+class ClicEdmWwFullhadHits(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.1.0"))
     RELEASE_NOTES = {
-        "1.3.0": "Update stats to ~1M events",
-        "1.4.0": "Fix ycand matching",
-        "1.5.0": "Regenerate with ARRAY_RECORD",
-        "2.1.0": "Add ispu, genjets, genmet; disable genjet_idx; truth def not based on gp.status==1",
-        "2.2.0": "New target definition, fix truth jets, add targetjets and jet idx",
-        "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",
-        "2.5.0": "Use 10 splits, skip 2.4.0 to unify with CMS datasets",
-        "3.0.0": "New generation with v1.2.4_key4hep_2025-05-29_CLIC_819e4e",
-        "3.1.0": "New generation with v1.2.5_key4hep_2025-05-29 500k events",
+        "3.1.0": "Hit-level version with separated tracker and calorimeter hits",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
-
-    The processed tensorflow_dataset can also be downloaded from:
-    rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/clic_edm4hep/ ./
     """
 
     # create configs 1 ... NUM_SPLITS + 1 that allow to parallelize the dataset building
@@ -45,7 +38,7 @@ class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(ClicEdmWwFullhadPf, self).__init__(*args, **kwargs)
+        super(ClicEdmWwFullhadHits, self).__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
@@ -57,7 +50,7 @@ class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
                     "X": tfds.features.Tensor(
                         shape=(
                             None,
-                            max(len(X_FEATURES_TRK), len(X_FEATURES_CL)),
+                            len(X_FEATURES),
                         ),
                         dtype=np.float32,
                     ),
@@ -68,11 +61,11 @@ class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
                     "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
                 }
             ),
+            supervised_keys=None,
             homepage="https://github.com/jpata/particleflow",
             citation=_CITATION,
             metadata=tfds.core.MetadataDict(
-                x_features_track=X_FEATURES_TRK,
-                x_features_cluster=X_FEATURES_CL,
+                x_features=X_FEATURES,
                 y_features=Y_FEATURES,
             ),
         )
@@ -80,8 +73,8 @@ class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
     # Abstract method needs to be specified
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_WW_fullhad_ecm380/"), self.builder_config, num_splits=NUM_SPLITS)
+        return split_sample(Path(path / "p8_ee_WW_fullhad_ecm380"), self.builder_config, num_splits=NUM_SPLITS, dataset=Dataset.CLIC_HITS)
 
     # Abstract method needs to be specified
     def _generate_examples(self, files):
-        return generate_examples(files)
+        return generate_examples(files, Dataset.CLIC_HITS)

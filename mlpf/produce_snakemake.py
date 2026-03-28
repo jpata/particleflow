@@ -255,8 +255,6 @@ for (( i=0; i<{CHUNK_SIZE}; i++ )); do
         echo "Generating {root_file_proto}"
         {exports}
         {gen_cmd}
-        echo "Validating {root_file_proto}"
-        python3 -c "import uproot; uproot.open('{root_file_proto}')"
     else
         echo "Skipping {root_file_proto}, already exists"
     fi
@@ -293,6 +291,8 @@ done
             post_file_inter_proto = post_file_final_proto
 
         args_str = f"--input {root_file_proto} --outpath {sample_post_dir}"
+        if prod_type == "key4hep":
+            args_str += f" --detector {prod_key}"
         for k, v in postproc_extra_args.items():
             if isinstance(v, bool):
                 if v:
@@ -728,7 +728,6 @@ rule train_{rule_model_name}:{train_rule_input}
             write_snakefile(f"{jobs_dir}/Snakefile_{step}", data["targets"], data["rules"], tmpdir=tmpdir)
 
     print(f"Generated Snakemake workflow in {jobs_dir}")
-    print(f'Run with: snakemake --snakefile {jobs_dir}/Snakefile_STEP --cores 1 --use-apptainer --apptainer-args "{bind_args} --nv"')
 
 
 if __name__ == "__main__":

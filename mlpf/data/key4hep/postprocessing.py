@@ -1085,7 +1085,7 @@ def compute_jets(particles_p4: Any, min_pt: float = jet_ptcut, with_indices: boo
     return ret
 
 
-def process_one_file(fn: str, ofn: str, first_event: int = 0, num_events: int = -1) -> None:
+def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
 
     # output exists, do not recreate
     if os.path.isfile(ofn) and num_events == -1 and first_event == 0:
@@ -1175,23 +1175,41 @@ def process_one_file(fn: str, ofn: str, first_event: int = 0, num_events: int = 
     idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
-    hit_collections = [
-        "ECALBarrel",
-        "ECALEndcap",
-        # ECALOther is missing in CLD, but there in CLIC. Need to check and make this configurable later.
-        # "ECALOther",
-        "HCALBarrel",
-        "HCALEndcap",
-        "HCALOther",
-        "MUON",
-        "LumiCalHits",
-        "ITrackerHits",
-        "ITrackerEndcapHits",
-        "OTrackerHits",
-        "OTrackerEndcapHits",
-        "VXDTrackerHits",
-        "VXDEndcapTrackerHits",
-    ]
+    if detector == "clic":
+        hit_collections = [
+            "ECALBarrel",
+            "ECALEndcap",
+            "ECALOther",
+            "HCALBarrel",
+            "HCALEndcap",
+            "HCALOther",
+            "MUON",
+            "LumiCal_Hits",
+            "ITrackerHits",
+            "ITrackerEndcapHits",
+            "OTrackerHits",
+            "OTrackerEndcapHits",
+            "VXDTrackerHits",
+            "VXDEndcapTrackerHits",
+        ]
+    elif detector == "cld":
+        hit_collections = [
+            "ECALBarrel",
+            "ECALEndcap",
+            "HCALBarrel",
+            "HCALEndcap",
+            "HCALOther",
+            "MUON",
+            "ITrackerHits",
+            "ITrackerEndcapHits",
+            "OTrackerHits",
+            "OTrackerEndcapHits",
+            "VXDTrackerHits",
+            "VXDEndcapTrackerHits",
+        ]
+    else:
+        raise ValueError(f"Unknown detector type: {detector}")
+
     hit_data = {}
     for k in hit_collections:
         if k in arrs:
@@ -1433,6 +1451,7 @@ def parse_args() -> Any:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
+    parser.add_argument("--detector", type=str, default="clic", help="detector type (clic, cld)")
     parser.add_argument("--first-event", type=int, default=0, help="first event to process")
     parser.add_argument("--num-events", type=int, default=-1, help="number of events to process")
 
@@ -1448,11 +1467,11 @@ def process(args: Any) -> None:
         flist = glob.glob(args.input + "/*.root")
         for infile in flist:
             outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-            process_one_file(infile, outfile, args.first_event, args.num_events)
+            process_one_file(infile, outfile, args.detector, args.first_event, args.num_events)
     else:
         infile = args.input
         outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-        process_one_file(infile, outfile, args.first_event, args.num_events)
+        process_one_file(infile, outfile, args.detector, args.first_event, args.num_events)
 
 
 if __name__ == "__main__":

@@ -335,11 +335,11 @@ productions:
 
     memory:
       gen: 4000
-      post: 1000
+      post: 2000
       tfds: 16000
 
     slurm_partition: "main"
-    slurm_runtime: "120m"
+    slurm_runtime: "240m"
 
     samples:
       ttbar:
@@ -365,15 +365,29 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/ttbar"
-        version: "3.0.0"
+        version: "3.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/ww_fullhad"
-        version: "3.0.0"
+        version: "3.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/qq"
-        version: "3.0.0"
+        version: "3.1.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    tfds_hit_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/ttbar"
+        version: "3.1.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ww_fullhad:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/ww_fullhad"
+        version: "3.1.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qq:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/qq"
+        version: "3.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 # -----------------------------------------------------------------------------
@@ -648,13 +662,13 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -662,22 +676,79 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.0.0"
+            version: "3.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "clic_edm_ttbar_pf"
-        version: "3.0.0"
+        version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_ww_fullhad_pf"
-        version: "3.0.0"
+        version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_qq_pf"
-        version: "3.0.0"
+        version: "3.1.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  pyg-clic-hits-v1:
+    <<: *defaults
+    dataset: clic_hits
+    gpu_batch_multiplier: 16
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0001
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 3
+        head_dim: 16
+        num_heads: 16
+
+    # Dataset Selection
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_hits"
+            version: "3.1.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "clic_edm_ttbar_hits"
+        version: "3.1.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_ww_fullhad_hits"
+        version: "3.1.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_qq_hits"
+        version: "3.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]

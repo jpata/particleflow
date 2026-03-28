@@ -58,6 +58,9 @@ uv run \
 The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration. Apptainer images are used to provide the software for the steps for different detetors.
 
 ```bash
+#ensure all gen configs are downloaded
+git submodule update --init --recursive
+
 # install pixi, restart your shell or source your .bashrc after this. only do once.
 curl -fsSL https://pixi.sh/install.sh | bash
 
