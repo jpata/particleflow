@@ -6,7 +6,8 @@ export PYTHONPATH=`pwd`
 export KERAS_BACKEND=torch
 
 # Quick unit tests
-python -m pytest tests
+rm -Rf .pytest_cache
+python -m pytest --cache-clear tests
 
 #create data directories
 rm -Rf local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi

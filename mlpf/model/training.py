@@ -748,6 +748,12 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     model = MLPF(config)
     _logger.info("Instantiated model")
 
+    _logger.info("Moving model to device rank={}".format(rank))
+    model = model.to(torch.device(rank))
+    _logger.info("Moved model to device rank={}".format(rank))
+
+    configure_model_trainable(model, config.model.trainable, True)
+
     optimizer = get_optimizer(model, config)
     lr_schedule = get_lr_schedule(config, optimizer, config.num_steps)
 
@@ -781,15 +787,9 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
         load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
-    _logger.info("Moving model to device rank={}".format(rank))
-    model = model.to(torch.device(rank))
-    _logger.info("Moved model to device rank={}".format(rank))
-
     if config.compile:
         _logger.info("Compiling model")
         model = torch.compile(model)
-
-    configure_model_trainable(model, config.model.trainable, True)
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
