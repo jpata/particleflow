@@ -86,29 +86,33 @@ def generate_random_config():
     input_str = f"i(55,{emb_dim},{emb_dim*2},{i_type},dropout={dropout})"
 
     # 2. Layers helpers
-    def get_layer_expr(ltype=None, n=None):
-        t = ltype or random.choice(["h", "g", "s", "f"])
-        num = n or random.randint(1, 4)
-        p = random.choice(["T", "F"])
-        d = random.choice([0.0, 0.1, 0.2])
+    def get_layer_expr(ltype=None, n_blocks=None):
+        num_blocks = n_blocks or random.randint(1, 3)
+        parts = []
+        for _ in range(num_blocks):
+            t = ltype or random.choice(["h", "g", "s", "f"])
+            num = random.randint(1, 4)
+            p = random.choice(["T", "F"])
+            d = random.choice([0.0, 0.1, 0.2])
 
-        extra_params = ""
-        if t == "h" and random.random() < 0.4:
-            if random.random() < 0.5:
-                extra_params += f",block_size={random.choice([50, 100, 200, 400])}"
-            if random.random() < 0.5:
-                extra_params += f",n_hashes={random.choice([2, 3, 4, 5])}"
+            extra_params = ""
+            if t == "h" and random.random() < 0.4:
+                if random.random() < 0.5:
+                    extra_params += f",block_size={random.choice([50, 100, 200, 400])}"
+                if random.random() < 0.5:
+                    extra_params += f",n_hashes={random.choice([2, 3, 4, 5])}"
 
-        return f"{t}({n_heads},{emb_dim},{width},pos={p},dropout={d}{extra_params})*{num}"
+            parts.append(f"{t}({n_heads},{emb_dim},{width},pos={p},dropout={d}{extra_params})*{num}")
+        return "+".join(parts)
 
     # 3. Backbone structure
     b_type = random.choice(["joint", "split", "hybrid"])
     if b_type == "joint":
-        backbone_str = get_layer_expr(n=random.randint(2, 8))
+        backbone_str = get_layer_expr(n_blocks=random.randint(1, 4))
     elif b_type == "split":
         backbone_str = "{" + f"pid:{get_layer_expr()},reg:{get_layer_expr()}" + "}"
     else:  # hybrid
-        backbone_str = f"{get_layer_expr(n=random.randint(1, 3))}+" + "{" + f"pid:{get_layer_expr()},reg:{get_layer_expr()}" + "}"
+        backbone_str = f"{get_layer_expr(n_blocks=random.randint(1, 2))}+" + "{" + f"pid:{get_layer_expr()},reg:{get_layer_expr()}" + "}"
 
     # 4. Output
     rg = random.choice(["direct", "additive", "linear", "{pt:linear,eta:additive}"])
@@ -119,7 +123,7 @@ def generate_random_config():
 
 
 def mutate_layer(layer: LayerConfig) -> LayerConfig:
-    # Randomly mutate layer parameters
+    # Randomly mutate layer parameters or type
     params = {
         "num_heads": layer.num_heads,
         "embedding_dim": layer.embedding_dim,
@@ -128,18 +132,37 @@ def mutate_layer(layer: LayerConfig) -> LayerConfig:
         "dropout": layer.dropout,
     }
 
-    hept_fields = []
+    # HEPT specific fields
     if isinstance(layer, HEPTConfig):
-        hept_fields = ["block_size", "n_hashes", "num_regions", "num_w_per_dist"]
-        for field in hept_fields:
+        for field in ["block_size", "n_hashes", "num_regions", "num_w_per_dist"]:
             params[field] = getattr(layer, field)
+    else:
+        # Defaults for potential conversion TO HEPT
+        params["block_size"] = 100
+        params["n_hashes"] = 3
+        params["num_regions"] = 140
+        params["num_w_per_dist"] = 10
 
-    # Mutate one parameter
-    p = random.choice(list(params.keys()))
+    # Decide what to mutate
+    choices = [k for k in params.keys() if k != "embedding_dim"] + ["type"]
+    p = random.choice(choices)
+
+    if p == "type":
+        new_type = random.choice(["h", "g", "s", "f"])
+        if new_type == "h":
+            return HEPTConfig(**params)
+        else:
+            # Filter for base parameters
+            base_params = {k: params[k] for k in ["num_heads", "embedding_dim", "width", "pos", "dropout"]}
+            if new_type == "g":
+                return GlobalConfig(**base_params)
+            elif new_type == "s":
+                return StandardConfig(**base_params)
+            elif new_type == "f":
+                return FastformerConfig(**base_params)
+
     if p == "num_heads":
         params[p] = random.choice([8, 16, 32])
-    elif p == "embedding_dim":
-        params[p] = random.choice([128, 256])
     elif p == "width":
         params[p] = params["embedding_dim"] * random.choice([2, 4, 8])
     elif p == "pos":
@@ -160,10 +183,9 @@ def mutate_layer(layer: LayerConfig) -> LayerConfig:
         params["num_heads"] = 16 if params["embedding_dim"] == 128 else 32
 
     # Re-create the appropriate layer type
-    if isinstance(layer, HEPTConfig):
+    if isinstance(layer, HEPTConfig) and p != "type":
         return HEPTConfig(**params)
 
-    # Filter only base parameters for non-HEPT layers
     base_params = {k: params[k] for k in ["num_heads", "embedding_dim", "width", "pos", "dropout"]}
     if isinstance(layer, GlobalConfig):
         return GlobalConfig(**base_params)
@@ -202,8 +224,35 @@ def mutate_config(config: ModelConfig) -> ModelConfig:
                 new_layer = random.choice(new_backbone[branch])
             else:
                 rand_cfg = parse_dsl(generate_random_config())
-                all_layers = [layer for branch_layers in rand_cfg.backbone.values() for layer in branch_layers]
+                all_layers = [layer for branch_layers in rand_cfg.backbone.values() if branch_layers for layer in branch_layers]
                 new_layer = random.choice(all_layers)
+
+            # Ensure compatibility with current model's embedding_dim
+            if new_layer.embedding_dim != config.input.embedding_dim:
+                emb_dim = config.input.embedding_dim
+                params = {
+                    "num_heads": new_layer.num_heads,
+                    "embedding_dim": emb_dim,
+                    "width": emb_dim * 4,
+                    "pos": new_layer.pos,
+                    "dropout": new_layer.dropout,
+                }
+                if params["embedding_dim"] % params["num_heads"] != 0:
+                    params["num_heads"] = 16 if params["embedding_dim"] == 128 else 32
+
+                if isinstance(new_layer, HEPTConfig):
+                    for field in ["block_size", "n_hashes", "num_regions", "num_w_per_dist"]:
+                        params[field] = getattr(new_layer, field)
+                    new_layer = HEPTConfig(**params)
+                elif isinstance(new_layer, GlobalConfig):
+                    new_layer = GlobalConfig(**params)
+                elif isinstance(new_layer, StandardConfig):
+                    new_layer = StandardConfig(**params)
+                elif isinstance(new_layer, FastformerConfig):
+                    new_layer = FastformerConfig(**params)
+                else:
+                    new_layer = LayerConfig(type=new_layer.type, **params)
+
             new_backbone[branch].append(new_layer)
         elif len(new_backbone[branch]) > 1:
             # Remove layer
@@ -281,6 +330,28 @@ def evolve(population_with_fitness, pop_size=100, mutation_rate=0.2):
             continue
 
     return new_population
+
+
+def calculate_fitness(metrics):
+    iqr = metrics.get("val_jet_iqr", 2.0)
+    matched_frac = metrics.get("val_jet_matched_frac", 0.5)
+    runtime_cpu = metrics.get("runtime_cpu_ms", 1000.0)
+    val_loss = metrics.get("val_loss", 10.0)
+
+    # Individual terms for fitness
+    term_matching = matched_frac
+    term_iqr = 1.0 / max(iqr, 0.01)
+    term_loss = 1.0 / (1.0 + val_loss)
+    term_runtime = 1.0 / (1.0 + runtime_cpu / 1000.0)
+
+    # Total fitness: prioritize loss, others have slight impact
+    fitness = term_loss * (term_matching * term_iqr * term_runtime) ** 0.1
+    return fitness, {
+        "term_matching": term_matching,
+        "term_iqr": term_iqr,
+        "term_loss": term_loss,
+        "term_runtime": term_runtime,
+    }
 
 
 def parse_log(file_path):
@@ -430,20 +501,12 @@ def main():
                 if dsl and metrics:
                     gen_metrics[dsl] = metrics
 
-                    iqr = metrics.get("val_jet_iqr", 2.0)
-                    matched_frac = metrics.get("val_jet_matched_frac", 0.5)
-                    runtime_cpu = metrics.get("runtime_cpu_ms", 1000.0)
-                    val_loss = metrics.get("val_loss", 10.0)
+                    fitness, terms = calculate_fitness(metrics)
 
-                    # Individual terms for fitness
-                    term_matching = matched_frac
-                    term_iqr = 1.0 / max(iqr, 0.01)
-                    term_loss = 1.0 / (1.0 + val_loss)
-                    term_runtime = 1.0 / (1.0 + runtime_cpu / 1000.0)
-
-                    # Total fitness
-                    print(f"fitness matching={term_matching:.2f} iqr={term_iqr:.2f} loss={term_loss:.2f} runtime={term_runtime:.2f}")
-                    fitness = term_matching * term_iqr * term_loss * term_runtime
+                    # Total fitness: prioritize loss, others have slight impact
+                    print(
+                        f"fitness matching={terms['term_matching']:.2f} iqr={terms['term_iqr']:.2f} loss={terms['term_loss']:.2f} runtime={terms['term_runtime']:.2f}"
+                    )
 
                     cfg = parse_dsl(dsl)
                     pop_with_fitness.append((cfg, fitness))

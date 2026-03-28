@@ -897,7 +897,7 @@ class MLPF(nn.Module):
 
         if config is None:
             # Backward compatibility or manual construction
-            from mlpf.standalone.dsl import i, h, g, o, ModelConfig
+            from mlpf.standalone.dsl import i, h, g, s, f, o, ModelConfig
 
             input_dim = kwargs.get("input_dim", 55)
             embedding_dim = kwargs.get("embedding_dim", 128)
@@ -909,18 +909,16 @@ class MLPF(nn.Module):
             if attention_type == "hept":
                 layer = h(num_heads, embedding_dim, width * 4)
             elif attention_type == "standard":
-                from mlpf.standalone.dsl import s
-
                 layer = s(num_heads, embedding_dim, width * 4)
             elif attention_type == "fastformer":
-                from mlpf.standalone.dsl import f
-
-                layer = f(embedding_dim, width * 4)
+                layer = f(num_heads, embedding_dim, width * 4)
             else:
                 layer = g(num_heads, embedding_dim, width * 4)
 
             config = ModelConfig(
-                input=i(input_dim, embedding_dim, width * 2), backbone=layer * num_convs, output=o(kwargs.get("num_classes", 8), width * 2)
+                input=i(input_dim, embedding_dim, width * 2),
+                backbone={"shared": layer * num_convs},
+                output=o(kwargs.get("num_classes", 8), width * 2),
             )
 
         self.config = config
