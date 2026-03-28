@@ -298,6 +298,7 @@ EXPERIMENT_LABELS = {
     "cld": cld_label,
     "clic_hits": clic_label,
     "cld_hits": cld_label,
+    "clic_hits": clic_label,
 }
 
 
