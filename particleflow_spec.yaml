@@ -24,7 +24,7 @@ project:
         storage_root: "/local/joosep/mlpf"
         scratch_root: "/scratch/local/joosep"
         tmpdir: "/scratch/local/joosep/tmp"
-        project_root: "/home/joosep/particleflow2"
+        project_root: "/home/joosep/particleflow"
       cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5"
       gpu_partition: "gpu"
       cpu_partition: "main"
