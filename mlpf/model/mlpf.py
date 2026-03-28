@@ -159,9 +159,7 @@ class LinearAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
 
-        self.q_proj = nn.Linear(embed_dim, embed_dim)
-        self.k_proj = nn.Linear(embed_dim, embed_dim)
-        self.v_proj = nn.Linear(embed_dim, embed_dim)
+        self.in_proj = nn.Linear(embed_dim, 3 * embed_dim)
         self.out_proj = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
 
@@ -170,14 +168,29 @@ class LinearAttention(nn.Module):
         bs, n_q, d = q.size()
         n_kv = k.size(1)
 
-        # Projections and reshape to (bs, num_heads, n, head_dim)
-        q = self.q_proj(q).reshape(bs, n_q, self.num_heads, self.head_dim).transpose(1, 2)
-        k = self.k_proj(k).reshape(bs, n_kv, self.num_heads, self.head_dim).transpose(1, 2)
-        v = self.v_proj(v).reshape(bs, n_kv, self.num_heads, self.head_dim).transpose(1, 2)
+        if q is k and k is v:
+            qkv = self.in_proj(q)
+            q, k, v = torch.split(qkv, [self.embed_dim, self.embed_dim, self.embed_dim], dim=-1)
+        else:
+            w_q, w_k, w_v = torch.split(self.in_proj.weight, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
+            b_q, b_k, b_v = torch.split(self.in_proj.bias, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
+            q = torch.nn.functional.linear(q, w_q, b_q)
+            k = torch.nn.functional.linear(k, w_k, b_k)
+            v = torch.nn.functional.linear(v, w_v, b_v)
+
+        # Reshape to (bs, num_heads, n, head_dim)
+        q = q.reshape(bs, n_q, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.reshape(bs, n_kv, self.num_heads, self.head_dim).transpose(1, 2)
+        v = v.reshape(bs, n_kv, self.num_heads, self.head_dim).transpose(1, 2)
 
         # Apply non-negative feature map (elu(x) + 1)
         q = torch.nn.functional.elu(q) + 1
         k = torch.nn.functional.elu(k) + 1
+
+        # Focused Linear Attention: Sharpen the attention by applying a power function (p=2)
+        # This improves local focus and reduces the "smearing" effect of standard linear attention.
+        q = q**2
+        k = k**2
 
         # Clamp to avoid overflows in FP16
         q = torch.clamp(q, max=10.0)
@@ -191,22 +204,15 @@ class LinearAttention(nn.Module):
 
         # Linear Attention: (Q @ (K.T @ V)) / (Q @ K.sum)
         # kv: (bs, heads, head_dim, head_dim)
-        # perform in FP32 to avoid overflow in FP16
-        with torch.autocast(enabled=False, device_type="cuda"):
-            q_32 = q.float()
-            k_32 = k.float()
-            v_32 = v.float()
-            kv = torch.matmul(k_32.transpose(-1, -2), v_32)
+        kv = torch.matmul(k.transpose(-1, -2), v)
 
-            # num: (bs, heads, n_q, head_dim)
-            num = torch.matmul(q_32, kv)
+        # num: (bs, heads, n_q, head_dim)
+        num = torch.matmul(q, kv)
 
-            # den: (bs, heads, n_q, 1)
-            den = torch.matmul(q_32, k_32.transpose(-1, -2).sum(dim=-1, keepdim=True))
+        # den: (bs, heads, n_q, 1)
+        den = torch.matmul(q, k.transpose(-1, -2).sum(dim=-1, keepdim=True))
 
-            attn_output = num / (den + 1e-4)
-
-        attn_output = attn_output.to(q.dtype)
+        attn_output = num / (den + 1e-4)
 
         # Reshape and project out
         attn_output = attn_output.transpose(1, 2).reshape(bs, n_q, d)
@@ -666,6 +672,14 @@ class MLPF(nn.Module):
             embedding_id = torch.sum(all_id * elemtype_mask.unsqueeze(-1), axis=2)
             embedding_reg = torch.sum(all_reg * elemtype_mask.unsqueeze(-1), axis=2)
         if self.num_convs != 0:
+            if self.interleave_linear:
+                pooled_embedding_id, pooled_mask, _ = pool_seq(embedding_id, self.reduction_factor, mask)
+                pooled_embedding_reg, _, _ = pool_seq(embedding_reg, self.reduction_factor)
+            else:
+                pooled_embedding_id = None
+                pooled_embedding_reg = None
+                pooled_mask = None
+
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
 
@@ -677,8 +691,8 @@ class MLPF(nn.Module):
                 if do_reduction:
                     _logger.debug(f"conv_id {num}: conv_input.shape={conv_input.shape}")
                     # 1. Initial coarse pooling (seed for Perceiver latents)
-                    pooled_input, pooled_mask, _ = pool_seq(conv_input, self.reduction_factor, mask)
-                    pooled_init, _, _ = pool_seq(embedding_id, self.reduction_factor)
+                    pooled_input, _, _ = pool_seq(conv_input, self.reduction_factor)
+                    pooled_init = pooled_embedding_id
                     _logger.debug(f"conv_id {num}: pooled_input.shape={pooled_input.shape}")
 
                     # 2. Perceiver-style Learned Pooling (Cross-Attention) with residual
@@ -704,8 +718,8 @@ class MLPF(nn.Module):
                 if do_reduction:
                     _logger.debug(f"conv_reg {num}: conv_input.shape={conv_input.shape}")
                     # 1. Initial coarse pooling (seed for Perceiver latents)
-                    pooled_input, pooled_mask, _ = pool_seq(conv_input, self.reduction_factor, mask)
-                    pooled_init, _, _ = pool_seq(embedding_reg, self.reduction_factor)
+                    pooled_input, _, _ = pool_seq(conv_input, self.reduction_factor)
+                    pooled_init = pooled_embedding_reg
                     _logger.debug(f"conv_reg {num}: pooled_input.shape={pooled_input.shape}")
 
                     # 2. Perceiver-style Learned Pooling (Cross-Attention) with residual
