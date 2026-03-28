@@ -355,7 +355,7 @@ class AttentionConfig(BaseModel):
     conv_type: ModelType = ModelType.ATTENTION
     embedding_dim: int = 128
     width: int = 128
-    num_convs: int = 2
+    num_convs: int = 3
     dropout_ff: float = 0.0
     activation: Activation = Activation.ELU
     layernorm: bool = True
@@ -366,7 +366,7 @@ class AttentionConfig(BaseModel):
     dropout_conv_reg_ff: float = 0.0
     dropout_conv_id_mha: float = 0.0
     dropout_conv_id_ff: float = 0.0
-    use_pre_layernorm: bool = False
+    use_pre_layernorm: bool = True
     use_simplified_attention: bool = False
     export_onnx_fused: bool = False
     save_attention: bool = False

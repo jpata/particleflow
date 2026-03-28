@@ -403,7 +403,7 @@ models:
     gpu_type: l40
     mem_per_gpu_mb: 80000
     slurm_partition: "${project.gpu_partition}"
-    slurm_runtime: "48h"
+    slurm_runtime: "168h"
     optimizer: adamw
     lr_schedule: cosinedecay
     dtype: bfloat16
