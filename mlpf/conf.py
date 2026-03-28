@@ -355,7 +355,7 @@ class AttentionConfig(BaseModel):
     conv_type: ModelType = ModelType.ATTENTION
     embedding_dim: int = 128
     width: int = 128
-    num_convs: int = 2
+    num_convs: int = 3
     dropout_ff: float = 0.0
     activation: Activation = Activation.ELU
     layernorm: bool = True
@@ -370,6 +370,8 @@ class AttentionConfig(BaseModel):
     use_simplified_attention: bool = False
     export_onnx_fused: bool = False
     save_attention: bool = False
+    interleave_linear: bool = True
+    reduction_factor: int = 32
 
 
 class ModelArchitectureConfig(BaseModel):
@@ -448,7 +450,7 @@ class MLPFConfig(BaseModel):
     optimizer: OptimizerType = OptimizerType.ADAMW
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
-    pad_to_multiple_elements: Optional[int] = None
+    pad_to_multiple_elements: Optional[int] = 256
 
     # Flags
     train: bool = False
