@@ -9,6 +9,15 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
+
+import sys
+import os
+
+litept_path = os.path.join(os.getcwd(), "LitePT")
+if litept_path not in sys.path:
+    sys.path.append(litept_path)
+from litept.model import LitePT
+
 from mlpf.conf import (
     MLPFConfig,
     Activation,
@@ -222,6 +231,67 @@ class LinearAttention(nn.Module):
         return attn_output, None
 
 
+class LitePTLayer(nn.Module):
+    def __init__(self, name, litept_config, embedding_dim):
+        super(LitePTLayer, self).__init__()
+        self.name = name
+        if LitePT is None:
+            raise ImportError("LitePT is not available")
+
+        # We need to remove MLPF-specific keys from litept_config before passing to LitePT
+        config = litept_config.copy()
+        self.coord_indices = config.pop("coord_indices", [2, 3, 4])
+        self.grid_size = config.pop("grid_size", 0.01)
+
+        # Remove keys that LitePT constructor doesn't expect
+        for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff"]:
+            if key in config:
+                config.pop(key)
+
+        self.litept = LitePT(in_channels=embedding_dim, **config)
+
+        # Check output dimension and add projection if necessary
+        litept_out_dim = config["enc_channels"][-1] if config.get("enc_mode") else config["dec_channels"][0]
+        if litept_out_dim != embedding_dim:
+            self.output_proj = nn.Linear(litept_out_dim, embedding_dim)
+        else:
+            self.output_proj = nn.Identity()
+
+    def forward(self, x, mask, X_features):
+        B, S, D = x.shape
+        mask_flat = mask.view(-1).bool()
+
+        # Flatten and filter
+        x_flat = x.view(-1, D)[mask_flat]
+        coords_flat = X_features[..., self.coord_indices].reshape(-1, len(self.coord_indices))[mask_flat]
+        batch = torch.arange(B, device=x.device).repeat_interleave(S)[mask_flat]
+
+        _logger.debug(
+            f"LitePTLayer {self.name} forward: B={B}, S={S}, D={D}, "
+            f"n_valid={x_flat.shape[0]}, "
+            f"coords_min={coords_flat.min(0)[0].tolist()}, "
+            f"coords_max={coords_flat.max(0)[0].tolist()}"
+        )
+
+        data = {
+            "feat": x_flat,
+            "coord": coords_flat,
+            "batch": batch,
+            "grid_size": self.grid_size,
+        }
+
+        out = self.litept(data)
+        feat = self.output_proj(out.feat)
+
+        _logger.debug(f"LitePTLayer {self.name} output: feat_shape={feat.shape}")
+
+        # out.feat shape is [N_valid, D_out]
+        D_out = feat.shape[-1]
+        res = torch.zeros(B, S, D_out, device=x.device, dtype=feat.dtype)
+        res.view(-1, D_out)[mask_flat] = feat
+        return res
+
+
 class PreLnSelfAttentionLayer(nn.Module):
     def __init__(
         self,
@@ -409,6 +479,18 @@ class MLPF(nn.Module):
         self.conv_type = ModelType(self.config.type)
         sub_config = getattr(self.config, self.conv_type.value)
 
+        # Ensure sub_config is initialized if it's None (can happen if not in spec or args)
+        if sub_config is None:
+            from mlpf.conf import AttentionConfig, GNNLSHConfig, LitePTConfig
+
+            if self.conv_type == ModelType.ATTENTION:
+                sub_config = AttentionConfig()
+            elif self.conv_type == ModelType.GNN_LSH:
+                sub_config = GNNLSHConfig()
+            elif self.conv_type == ModelType.LITEPT:
+                sub_config = LitePTConfig()
+            setattr(self.config, self.conv_type.value, sub_config)
+
         # Extract parameters from the sub-config
         self.num_convs = sub_config.num_convs
         activation = Activation(sub_config.activation)
@@ -452,6 +534,8 @@ class MLPF(nn.Module):
             num_node_messages = sub_config.num_node_messages
             ffn_dist_hidden_dim = sub_config.ffn_dist_hidden_dim
             ffn_dist_num_layers = sub_config.ffn_dist_num_layers
+            self.use_pre_layernorm = False
+        elif self.conv_type == ModelType.LITEPT:
             self.use_pre_layernorm = False
 
         _logger.info(f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} input_encoding={self.input_encoding}")
@@ -549,6 +633,15 @@ class MLPF(nn.Module):
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
+            elif self.conv_type == ModelType.LITEPT:
+                _logger.info("Initializing LitePT convolution layers")
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList()
+                litept_conf = self.config.litept.model_dump()
+                for i in range(self.num_convs):
+                    _logger.info(f"Initializing LitePT layer {i}")
+                    self.conv_id.append(LitePTLayer(name=f"litept_id_{i}", litept_config=litept_conf, embedding_dim=embedding_dim))
+                    self.conv_reg.append(LitePTLayer(name=f"litept_reg_{i}", litept_config=litept_conf, embedding_dim=embedding_dim))
             _logger.info("Convolution layers initialization took {:.2f}s".format(time.time() - t0))
             _logger.info("conv_id parameters: {}".format(count_parameters(self.conv_id)))
             _logger.info("conv_reg parameters: {}".format(count_parameters(self.conv_reg)))
@@ -624,12 +717,18 @@ class MLPF(nn.Module):
         if self.num_convs != 0:
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
-                out_padded = conv(conv_input, mask, embedding_id)
+                if self.conv_type == ModelType.LITEPT:
+                    out_padded = conv(conv_input, mask, X_features)
+                else:
+                    out_padded = conv(conv_input, mask, embedding_id)
                 embeddings_id.append(out_padded)
 
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-                out_padded = conv(conv_input, mask, embedding_reg)
+                if self.conv_type == ModelType.LITEPT:
+                    out_padded = conv(conv_input, mask, X_features)
+                else:
+                    out_padded = conv(conv_input, mask, embedding_reg)
                 embeddings_reg.append(out_padded)
         else:
             embeddings_id.append(embedding_id)

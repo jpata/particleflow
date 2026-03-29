@@ -18,6 +18,7 @@ class Dataset(Enum):
 class ModelType(Enum):
     ATTENTION = "attention"
     GNN_LSH = "gnn_lsh"
+    LITEPT = "litept"
 
 
 class InputEncoding(Enum):
@@ -372,6 +373,43 @@ class AttentionConfig(BaseModel):
     save_attention: bool = False
 
 
+class LitePTConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    conv_type: ModelType = ModelType.LITEPT
+    embedding_dim: int = 144
+    width: int = 144
+    num_convs: int = 1
+    activation: Activation = Activation.GELU
+    dropout_ff: float = 0.0
+    order: List[str] = ["z", "z-trans", "hilbert", "hilbert-trans"]
+    stride: List[int] = [2, 2, 2, 2]
+    enc_depths: List[int] = [2, 2, 2, 6, 2]
+    enc_channels: List[int] = [144, 144, 144, 144, 144]
+    enc_num_head: List[int] = [8, 8, 8, 8, 8]
+    enc_patch_size: List[int] = [1024, 1024, 1024, 1024, 1024]
+    enc_conv: List[bool] = [True, True, True, False, False]
+    enc_attn: List[bool] = [False, False, False, True, True]
+    enc_rope_freq: List[float] = [100.0, 100.0, 100.0, 100.0, 100.0]
+    dec_depths: List[int] = [0, 0, 0, 0]
+    dec_channels: List[int] = [144, 144, 144, 144]
+    dec_num_head: List[int] = [8, 8, 8, 8]
+    dec_patch_size: List[int] = [1024, 1024, 1024, 1024]
+    dec_conv: List[bool] = [False, False, False, False]
+    dec_attn: List[bool] = [False, False, False, False]
+    dec_rope_freq: List[float] = [100.0, 100.0, 100.0, 100.0]
+    mlp_ratio: int = 4
+    qkv_bias: bool = True
+    qk_scale: Optional[float] = None
+    attn_drop: float = 0.0
+    proj_drop: float = 0.0
+    drop_path: float = 0.3
+    pre_norm: bool = True
+    shuffle_orders: bool = True
+    enc_mode: bool = False
+    coord_indices: List[int] = [2, 3, 4]
+    grid_size: float = 0.01
+
+
 class ModelArchitectureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -388,6 +426,7 @@ class ModelArchitectureConfig(BaseModel):
     # Nested configs
     gnn_lsh: Optional[GNNLSHConfig] = None
     attention: Optional[AttentionConfig] = None
+    litept: Optional[LitePTConfig] = None
 
 
 class DatasetSample(BaseModel):
@@ -578,7 +617,7 @@ class MLPFConfig(BaseModel):
                 set_nested_dict(config_dict, "model.attention.attention_type", args.attention_type)
 
             if hasattr(args, "num_convs") and args.num_convs is not None:
-                for m in ["gnn_lsh", "attention"]:
+                for m in ["gnn_lsh", "attention", "litept"]:
                     if m in config_dict["model"]:
                         set_nested_dict(config_dict, f"model.{m}.num_convs", args.num_convs)
 
