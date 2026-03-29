@@ -81,13 +81,15 @@ dependencies = [
     "addict",
     "timm",
     "colorhash",
-    "flash-attn"
+    "flash-attn",
+#    "pointrope"
 ]
 
 [project.scripts]
 mlpf = "mlpf.pipeline:main"
 
 [tool.uv.sources]
+#pointrope = { path = "LitePT/libs/pointrope" }
 torch = [
   { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
   { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
@@ -112,6 +114,7 @@ explicit = true
 
 [tool.uv.extra-build-dependencies]
 torch-scatter = ["torch"]
+#pointrope = ["torch"]
 
 [tool.setuptools]
 include-package-data = true

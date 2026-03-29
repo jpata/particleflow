@@ -17,4 +17,4 @@ DATA_DIR=$(pixi run python3 scripts/get_param.py particleflow_spec.yaml producti
 #./scripts/tallinn/wrapper.sh python mlpf/pipeline.py --spec-file particleflow_spec.yaml --model-name pyg-cld-hits-v1 --production cld --data-dir $DATA_DIR train --gpus 1 --num_workers 4 --prefetch_factor 2 --model.type litept
 
 export KERAS_BACKEND=torch
-uv run python3 mlpf/pipeline.py --spec-file particleflow_spec.yaml --model-name pyg-cld-hits-v1 --production cld --data-dir $DATA_DIR train --gpus 1 --num_workers 4 --prefetch_factor 2 --model.type litept --gpu_batch_multiplier 32
+uv run python3 mlpf/pipeline.py --spec-file particleflow_spec.yaml --model-name pyg-cld-hits-v1 --production cld --data-dir $DATA_DIR train --gpus 1 --num_workers 4 --prefetch_factor 2 --model.type litept --gpu_batch_multiplier 64
