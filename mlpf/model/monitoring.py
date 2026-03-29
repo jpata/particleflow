@@ -1,7 +1,84 @@
 import psutil
 import resource
+import subprocess
+import shutil
+import threading
+import time
 from collections import defaultdict
 from mlpf.logger import _logger
+
+
+class GPUMonitor:
+    def __init__(self, interval=0.5):
+        self.interval = interval
+        self.max_utilization = 0.0
+        self.sum_utilization = 0.0
+        self.count_utilization = 0
+        self.stop_event = threading.Event()
+        self.smi_command = shutil.which("nvidia-smi") or shutil.which("rocm-smi")
+        self.thread = threading.Thread(target=self._monitor, daemon=True)
+        if self.smi_command:
+            self.thread.start()
+
+    def _monitor(self):
+        while not self.stop_event.is_set():
+            try:
+                current_util = None
+                if "nvidia-smi" in self.smi_command:
+                    res = subprocess.run(
+                        [self.smi_command, "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    )
+                    utils = [float(x) for x in res.stdout.strip().split("\n") if x.strip()]
+                    if utils:
+                        current_util = max(utils)
+                elif "rocm-smi" in self.smi_command:
+                    res = subprocess.run(
+                        [self.smi_command, "--showuse"],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    )
+                    for line in res.stdout.split("\n"):
+                        if "GPU use (%)" in line:
+                            val = line.split(":")[-1].strip()
+                            current_util = float(val)
+                            break
+                
+                if current_util is not None:
+                    self.max_utilization = max(self.max_utilization, current_util)
+                    self.sum_utilization += current_util
+                    self.count_utilization += 1
+            except Exception:
+                pass
+            time.sleep(self.interval)
+
+    def get_metrics_and_reset(self):
+        max_val = self.max_utilization
+        avg_val = self.sum_utilization / self.count_utilization if self.count_utilization > 0 else 0.0
+        
+        self.max_utilization = 0.0
+        self.sum_utilization = 0.0
+        self.count_utilization = 0
+        
+        return max_val, avg_val
+
+
+# Initialize a global monitor
+_gpu_monitor = None
+
+
+def log_gpu_utilization_to_tensorboard(tensorboard_writer, step):
+    global _gpu_monitor
+    if _gpu_monitor is None:
+        _gpu_monitor = GPUMonitor()
+
+    max_util, avg_util = _gpu_monitor.get_metrics_and_reset()
+    if tensorboard_writer:
+        tensorboard_writer.add_scalar("system/gpu_utilization_max", max_util, step)
+        tensorboard_writer.add_scalar("system/gpu_utilization_avg", avg_util, step)
 
 
 def monitor_open_files():
@@ -21,8 +98,17 @@ def monitor_open_files():
         metrics["process_open_files"] = len(open_files)
 
         # Get open files for child processes
-        children = current_process.children(recursive=True)
-        child_files = sum(len(child.open_files()) for child in children)
+        try:
+            children = current_process.children(recursive=True)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            children = []
+
+        child_files = 0
+        for child in children:
+            try:
+                child_files += len(child.open_files())
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
         metrics["child_process_open_files"] = child_files
 
         # Total open files

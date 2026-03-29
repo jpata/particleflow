@@ -370,8 +370,6 @@ class AttentionConfig(BaseModel):
     use_simplified_attention: bool = False
     export_onnx_fused: bool = False
     save_attention: bool = False
-    interleave_linear: bool = True
-    reduction_factor: int = 32
 
 
 class ModelArchitectureConfig(BaseModel):

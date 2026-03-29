@@ -222,32 +222,6 @@ class LinearAttention(nn.Module):
         return attn_output, None
 
 
-def pool_seq(x, factor, mask=None):
-    # x: (B, N, D)
-    B, N, D = x.shape
-    pad = (factor - (N % factor)) % factor
-    if pad > 0:
-        x = torch.nn.functional.pad(x, (0, 0, 0, pad))
-        if mask is not None:
-            mask = torch.nn.functional.pad(mask, (0, pad), value=0)
-
-    N_new = (N + pad) // factor
-    x = x.view(B, N_new, factor, D).mean(dim=2)
-    if mask is not None:
-        mask = mask.view(B, N_new, factor).any(dim=2).to(mask.dtype)
-    return x, mask, pad
-
-
-def unpool_seq(x, factor, original_N, pad):
-    # x: (B, N_new, D)
-    B, N_new, D = x.shape
-    x = x.unsqueeze(2).expand(B, N_new, factor, D)
-    x = x.reshape(B, N_new * factor, D)
-    if pad > 0:
-        x = x[:, :original_N, :]
-    return x
-
-
 class PreLnSelfAttentionLayer(nn.Module):
     def __init__(
         self,
@@ -466,8 +440,6 @@ class MLPF(nn.Module):
             use_simplified_attention = sub_config.use_simplified_attention
             export_onnx_fused = sub_config.export_onnx_fused
             save_attention = sub_config.save_attention
-            self.interleave_linear = sub_config.interleave_linear
-            self.reduction_factor = sub_config.reduction_factor
 
             # Recalculate dimensions for attention
             embedding_dim = num_heads * head_dim
@@ -481,8 +453,6 @@ class MLPF(nn.Module):
             ffn_dist_hidden_dim = sub_config.ffn_dist_hidden_dim
             ffn_dist_num_layers = sub_config.ffn_dist_num_layers
             self.use_pre_layernorm = False
-            self.interleave_linear = False
-            self.reduction_factor = 1
 
         _logger.info(f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} input_encoding={self.input_encoding}")
 
@@ -521,18 +491,10 @@ class MLPF(nn.Module):
                 _logger.info("Initializing attention convolution layers, num_convs={}".format(self.num_convs))
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
-                self.pool_id = nn.ModuleList()
-                self.unpool_id = nn.ModuleList()
-                self.pool_reg = nn.ModuleList()
-                self.unpool_reg = nn.ModuleList()
 
                 for i in range(self.num_convs):
                     _logger.info(f"Initializing attention layer {i}")
                     lastlayer = i == self.num_convs - 1
-
-                    att_type = attention_type
-                    if self.interleave_linear and i % 2 == 0:
-                        att_type = AttentionType.LINEAR
 
                     self.conv_id.append(
                         PreLnSelfAttentionLayer(
@@ -543,7 +505,7 @@ class MLPF(nn.Module):
                             width=width,
                             dropout_mha=dropout_conv_id_mha,
                             dropout_ff=dropout_conv_id_ff,
-                            attention_type=att_type,
+                            attention_type=attention_type,
                             elems_as_queries=lastlayer,
                             # learnable_queries=lastlayer,
                             use_simplified_attention=use_simplified_attention,
@@ -560,7 +522,7 @@ class MLPF(nn.Module):
                             width=width,
                             dropout_mha=dropout_conv_reg_mha,
                             dropout_ff=dropout_conv_reg_ff,
-                            attention_type=att_type,
+                            attention_type=attention_type,
                             elems_as_queries=lastlayer,
                             # learnable_queries=lastlayer,
                             use_simplified_attention=use_simplified_attention,
@@ -568,18 +530,6 @@ class MLPF(nn.Module):
                             save_attention=save_attention,
                         )
                     )
-
-                    if self.interleave_linear and i % 2 == 1:
-                        self.pool_id.append(LinearAttention(embedding_dim, num_heads))
-                        self.unpool_id.append(LinearAttention(embedding_dim, num_heads))
-                        self.pool_reg.append(LinearAttention(embedding_dim, num_heads))
-                        self.unpool_reg.append(LinearAttention(embedding_dim, num_heads))
-                    else:
-                        # Dummy modules to keep indices aligned
-                        self.pool_id.append(nn.Identity())
-                        self.unpool_id.append(nn.Identity())
-                        self.pool_reg.append(nn.Identity())
-                        self.unpool_reg.append(nn.Identity())
             elif self.conv_type == ModelType.GNN_LSH:
                 _logger.info("Initializing GNN-LSH convolution layers")
                 self.conv_id = nn.ModuleList()
@@ -672,70 +622,14 @@ class MLPF(nn.Module):
             embedding_id = torch.sum(all_id * elemtype_mask.unsqueeze(-1), axis=2)
             embedding_reg = torch.sum(all_reg * elemtype_mask.unsqueeze(-1), axis=2)
         if self.num_convs != 0:
-            if self.interleave_linear:
-                pooled_embedding_id, pooled_mask, _ = pool_seq(embedding_id, self.reduction_factor, mask)
-                pooled_embedding_reg, _, _ = pool_seq(embedding_reg, self.reduction_factor)
-            else:
-                pooled_embedding_id = None
-                pooled_embedding_reg = None
-                pooled_mask = None
-
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
-
-                do_reduction = self.conv_type == ModelType.ATTENTION and self.interleave_linear and num % 2 == 1
-                _logger.debug(
-                    f"conv_id {num}: conv_type={self.conv_type} interleave_linear={self.interleave_linear} num={num} do_reduction={do_reduction}"
-                )
-
-                if do_reduction:
-                    _logger.debug(f"conv_id {num}: conv_input.shape={conv_input.shape}")
-                    # 1. Initial coarse pooling (seed for Perceiver latents)
-                    pooled_input, _, _ = pool_seq(conv_input, self.reduction_factor)
-                    pooled_init = pooled_embedding_id
-                    _logger.debug(f"conv_id {num}: pooled_input.shape={pooled_input.shape}")
-
-                    # 2. Perceiver-style Learned Pooling (Cross-Attention) with residual
-                    pooled_input = pooled_input + self.pool_id[num](pooled_input, conv_input, conv_input, key_padding_mask=mask)[0]
-                    pooled_init = pooled_init + self.pool_id[num](pooled_init, embedding_id, embedding_id, key_padding_mask=mask)[0]
-
-                    # 3. Process Latents (Standard Attention)
-                    out_latent = conv(pooled_input, pooled_mask, pooled_init)
-                    _logger.debug(f"conv_id {num}: out_latent.shape={out_latent.shape}")
-
-                    # 4. Perceiver-style Learned Unpooling (Cross-Attention) with residual
-                    out_padded = conv_input + self.unpool_id[num](conv_input, out_latent, out_latent, key_padding_mask=pooled_mask)[0]
-                    _logger.debug(f"conv_id {num}: out_padded.shape={out_padded.shape}")
-                else:
-                    out_padded = conv(conv_input, mask, embedding_id)
-
+                out_padded = conv(conv_input, mask, embedding_id)
                 embeddings_id.append(out_padded)
+
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-
-                do_reduction = self.conv_type == ModelType.ATTENTION and self.interleave_linear and num % 2 == 1
-
-                if do_reduction:
-                    _logger.debug(f"conv_reg {num}: conv_input.shape={conv_input.shape}")
-                    # 1. Initial coarse pooling (seed for Perceiver latents)
-                    pooled_input, _, _ = pool_seq(conv_input, self.reduction_factor)
-                    pooled_init = pooled_embedding_reg
-                    _logger.debug(f"conv_reg {num}: pooled_input.shape={pooled_input.shape}")
-
-                    # 2. Perceiver-style Learned Pooling (Cross-Attention) with residual
-                    pooled_input = pooled_input + self.pool_reg[num](pooled_input, conv_input, conv_input, key_padding_mask=mask)[0]
-                    pooled_init = pooled_init + self.pool_reg[num](pooled_init, embedding_reg, embedding_reg, key_padding_mask=mask)[0]
-
-                    # 3. Process Latents (Standard Attention)
-                    out_latent = conv(pooled_input, pooled_mask, pooled_init)
-                    _logger.debug(f"conv_reg {num}: out_latent.shape={out_latent.shape}")
-
-                    # 4. Perceiver-style Learned Unpooling (Cross-Attention) with residual
-                    out_padded = conv_input + self.unpool_reg[num](conv_input, out_latent, out_latent, key_padding_mask=pooled_mask)[0]
-                    _logger.debug(f"conv_reg {num}: out_padded.shape={out_padded.shape}")
-                else:
-                    out_padded = conv(conv_input, mask, embedding_reg)
-
+                out_padded = conv(conv_input, mask, embedding_reg)
                 embeddings_reg.append(out_padded)
         else:
             embeddings_id.append(embedding_id)
