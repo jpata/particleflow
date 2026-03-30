@@ -267,12 +267,11 @@ class LitePTLayer(nn.Module):
         coords_flat = X_features[..., self.coord_indices].reshape(-1, len(self.coord_indices))[mask_flat]
         batch = torch.arange(B, device=x.device).repeat_interleave(S)[mask_flat]
 
-
         _logger.debug(
             f"LitePTLayer {self.name} forward: B={B}, S={S}, D={D}, "
-            f"n_valid={x_flat.shape[0]}, "
-            f"coords_min={coords_flat.min(0)[0].tolist() if x_flat.shape[0]>0 else 'N/A'}, "
-            f"coords_max={coords_flat.max(0)[0].tolist() if x_flat.shape[0]>0 else 'N/A'}"
+            + f"n_valid={x_flat.shape[0]}, "
+            + f"coords_min={coords_flat.min(0)[0].tolist() if x_flat.shape[0] > 0 else 'N/A'}, "
+            + f"coords_max={coords_flat.max(0)[0].tolist() if x_flat.shape[0] > 0 else 'N/A'}"
         )
 
         data = {
@@ -286,11 +285,10 @@ class LitePTLayer(nn.Module):
         # we force float32 for the LitePT part
         with torch.autocast(device_type=x.device.type, enabled=False):
             out = self.litept(data)
-        
+
         feat = self.output_proj(out.feat).to(x.dtype)
 
         _logger.debug(f"LitePTLayer {self.name} output: feat_shape={feat.shape}")
-
 
         # out.feat shape is [N_valid, D_out]
         D_out = feat.shape[-1]

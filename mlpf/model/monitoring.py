@@ -46,7 +46,7 @@ class GPUMonitor:
                             val = line.split(":")[-1].strip()
                             current_util = float(val)
                             break
-                
+
                 if current_util is not None:
                     self.max_utilization = max(self.max_utilization, current_util)
                     self.sum_utilization += current_util
@@ -58,11 +58,11 @@ class GPUMonitor:
     def get_metrics_and_reset(self):
         max_val = self.max_utilization
         avg_val = self.sum_utilization / self.count_utilization if self.count_utilization > 0 else 0.0
-        
+
         self.max_utilization = 0.0
         self.sum_utilization = 0.0
         self.count_utilization = 0
-        
+
         return max_val, avg_val
 
 

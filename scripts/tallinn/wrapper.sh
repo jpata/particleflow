@@ -2,8 +2,8 @@
 set -o xtrace
 export PF_SITE=tallinn
 export KERAS_BACKEND=torch
-#IMAGE=$(pixi run python3 scripts/get_param.py particleflow_spec.yaml project.container)
-IMAGE=/home/joosep/singularity/pytorch.sif
+IMAGE=$(pixi run python3 scripts/get_param.py particleflow_spec.yaml project.container)
+#IMAGE=/home/joosep/particleflow2/particleflow.sif
 BINDS=$(pixi run python3 scripts/get_param.py particleflow_spec.yaml project.bind_mounts)
 B_ARGS=""
 for b in $BINDS; do
