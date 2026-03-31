@@ -52,11 +52,15 @@ def parse_runtime(runtime_str):
         return runtime_str
 
 
-def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, slurm_account=None):
+def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0, slurm_account=None, tmpdir=None):
     res = {}
     runtime_m = parse_runtime(runtime)
+    if tmpdir:
+        res["tmpdir"] = f'"{tmpdir}"'
     if executor == "slurm":
         res["mem_mb"] = mem
+        if gpus > 0 and mem_per_gpu > 0:
+            res["mem_per_gpu"] = mem_per_gpu
         res["slurm_partition"] = f'"{partition}"'
         res["runtime"] = runtime_m
         if slurm_account:
@@ -67,6 +71,14 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
             else:
                 res["gpu"] = gpus
         res["cpus_per_task"] = threads
+        res["threads"] = threads
+    elif executor == "condor":
+        res["mem_mb"] = mem
+        res["job_flavour"] = f'"{partition}"'
+        res["runtime"] = runtime_m
+        res["getenv"] = True
+        if gpus > 0:
+            res["request_gpus"] = gpus
     else:
         res["mem_mb"] = mem
     return ", ".join([f"{k}={v}" for k, v in res.items()])
@@ -100,6 +112,15 @@ def main():
     container_img = resolve_path(scen["container"], spec)
     detector = scen["detector"]
 
+    # Get model-specific defaults if available
+    production_name = scen.get("production")
+    model_defaults = spec["models"].get("defaults", {})
+    model_spec = {}
+    if production_name and production_name in spec["productions"]:
+        model_name = spec["productions"][production_name].get("model")
+        if model_name and model_name in spec["models"]:
+            model_spec = spec["models"][model_name]
+
     # Resources
     res = scen.get("resources", {})
     mem_mb = res.get("mem_mb", 4000)
@@ -107,6 +128,12 @@ def main():
     partition = resolve_path(res.get("slurm_partition", "main"), spec)
     executor = spec["project"].get("executor", "slurm")
     slurm_account = spec["project"].get("slurm_account")
+
+    threads = res.get("threads", model_spec.get("threads", model_defaults.get("threads", 1)))
+    gpus = res.get("gpus", model_spec.get("gpus", model_defaults.get("gpus", 0)))
+    gpu_type = res.get("gpu_type", model_spec.get("gpu_type", model_defaults.get("gpu_type", None)))
+    mem_per_gpu = res.get("mem_per_gpu", model_spec.get("mem_per_gpu_mb", model_defaults.get("mem_per_gpu_mb", 0)))
+    tmpdir = resolve_path(spec["project"]["paths"].get("tmpdir", "/tmp"), spec)
 
     # Experiment name and num_files for directory organization
     exp_name = scen.get("exp_name") or os.path.basename(exp_dir)
@@ -127,17 +154,18 @@ def main():
     ensure_dir(f"{jobs_dir}/done")
 
     # 1. Evaluator Script
+    device = "cuda" if gpus > 0 else "cpu"
     eval_script_path = f"{jobs_dir}/scripts/evaluate.sh"
     eval_cmd = (
         f"python3 mlpf/standalone_eval/key4hep/evaluator.py --input $1 --checkpoint {checkpoint_abs} "
-        f"--config {config_path} --detector {detector} --outpath $2 --num-events -1"
+        f"--config {config_path} --detector {detector} --outpath $2 --num-events -1 --device {device}"
     )
-    write_bash_script(eval_script_path, f"export PYTHONPATH=$(pwd):$PYTHONPATH\n{eval_cmd}", project_root=project_root)
+    write_bash_script(eval_script_path, f"export PYTHONPATH=$(pwd):$PYTHONPATH\nnvidia-smi\n{eval_cmd}", project_root=project_root, tmpdir=tmpdir)
 
     # 2. Plotting Script
     plot_script_path = f"{jobs_dir}/scripts/plot.sh"
     plot_cmd = "python3 mlpf/standalone_eval/key4hep/plots.py --input $1 --outdir $2"
-    write_bash_script(plot_script_path, f"export PYTHONPATH=$(pwd):$PYTHONPATH\n{plot_cmd}", project_root=project_root)
+    write_bash_script(plot_script_path, f"export PYTHONPATH=$(pwd):$PYTHONPATH\n{plot_cmd}", project_root=project_root, tmpdir=tmpdir)
 
     # Generate Snakefile
     snakefile_path = f"{jobs_dir}/Snakefile"
@@ -179,8 +207,9 @@ rule eval_{sample_name}_{i}:
         root = "{root_file}"
     output:
         parquet = "{parquet_file}"
+    threads: {threads}
     resources:
-        {get_resource_str(executor, mem_mb, partition, runtime, slurm_account=slurm_account)}
+        {get_resource_str(executor, mem_mb, partition, runtime, threads=threads, gpus=gpus, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{container_img}"
     shell:
@@ -192,7 +221,7 @@ rule plot_{sample_name}_{i}:
     output:
         done = "{done_file}"
     resources:
-        {get_resource_str(executor, 2000, partition, runtime, slurm_account=slurm_account)}
+        {get_resource_str(executor, 2000, partition, runtime, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{container_img}"
     shell:

@@ -45,7 +45,16 @@ def parse_args():
 
 def main():
     args = parse_args()
-    device = torch.device(args.device)
+
+    if args.device == "cuda" and not torch.cuda.is_available():
+        print("CUDA requested but not available, falling back to CPU")
+        device = torch.device("cpu")
+    else:
+        device = torch.device(args.device)
+
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+        print(f"Using CUDA device: {torch.cuda.get_device_name(0)}")
 
     # Load config
     if args.config:

@@ -2,7 +2,7 @@
 # Defines scenarios for different detectors and input types
 
 # Global settings
-num_files: -1
+num_files: 10
 
 scenarios:
   cld:
@@ -11,14 +11,15 @@ scenarios:
     production: "cld"
     workspace_dir: "${productions.cld.workspace_dir}"
     container: "${project.container}"
-    detector: "cld_edm"
+    detector: "cld"
     mc_samples:
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
     resources:
       mem_mb: 4000
       runtime: "2h"
-      slurm_partition: "${project.cpu_partition}"
+      slurm_partition: "${project.gpu_partition}"
+      gpus: 1
 
   cld_hits:
     checkpoint: "experiments/pyg-cld-hits-v1_cld_20260328_101205_900871/checkpoints/checkpoint-100000.pth"
@@ -26,14 +27,15 @@ scenarios:
     production: "cld"
     workspace_dir: "${productions.cld.workspace_dir}"
     container: "${project.container}"
-    detector: "cld_edm_hits"
+    detector: "cld_hits"
     mc_samples:
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
     resources:
       mem_mb: 8000
       runtime: "4h"
-      slurm_partition: "${project.cpu_partition}"
+      slurm_partition: "${project.gpu_partition}"
+      gpus: 1
 
   clic:
     checkpoint: "experiments/pyg-clic-v1_clic_20260328_101206_529710/checkpoints/checkpoint-100000.pth"
@@ -41,14 +43,15 @@ scenarios:
     production: "clic"
     workspace_dir: "${productions.clic.workspace_dir}"
     container: "${project.container}"
-    detector: "clic_edm"
+    detector: "clic"
     mc_samples:
       ttbar:
         process_name: "p8_ee_ttbar_ecm380"
     resources:
       mem_mb: 4000
       runtime: "2h"
-      slurm_partition: "${project.cpu_partition}"
+      slurm_partition: "${project.gpu_partition}"
+      gpus: 1
 
   clic_hits:
     checkpoint: "experiments/pyg-clic-hits-v1_clic_20260328_144021_479374/checkpoints/checkpoint-90000.pth"
@@ -56,11 +59,12 @@ scenarios:
     production: "clic"
     workspace_dir: "${productions.clic.workspace_dir}"
     container: "${project.container}"
-    detector: "clic_edm_hits"
+    detector: "clic_hits"
     mc_samples:
       ttbar:
         process_name: "p8_ee_ttbar_ecm380"
     resources:
       mem_mb: 8000
       runtime: "4h"
-      slurm_partition: "${project.cpu_partition}"
+      slurm_partition: "${project.gpu_partition}"
+      gpus: 1
