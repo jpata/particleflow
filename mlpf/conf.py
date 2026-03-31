@@ -448,7 +448,7 @@ class MLPFConfig(BaseModel):
     optimizer: OptimizerType = OptimizerType.ADAMW
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
-    pad_to_multiple_elements: Optional[int] = None
+    pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
 
     # Flags
     train: bool = False
@@ -456,8 +456,8 @@ class MLPFConfig(BaseModel):
     compile: bool = False
     make_plots: bool = True
     sort_data: bool = False
-    load: Optional[str] = None
-    relaxed_load: bool = True
+    load: Optional[str] = None  # path to model and optimizer checkpoint to load
+    relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
 
     # Logging
     comet: bool = False
