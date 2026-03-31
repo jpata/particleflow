@@ -47,5 +47,3 @@ train = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snak
 validation_cms = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_cms_validation_snakemake.py --scenario ${PROD:-cms_run3} && snakemake --workflow-profile $PROFILE --snakefile $(cat .last_jobs_dir)/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1 \"$@\"' --", depends-on = ["setup"], description = "Run validation" }
 
 validation_key4hep = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --scenario ${PROD:-cld} && snakemake --workflow-profile $PROFILE --snakefile $(cat .last_jobs_dir)/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} \"$@\"' --", depends-on = ["setup"], description = "Run Key4Hep validation" }
-
-dry-run = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --dry-run \"$@\"' --", depends-on = ["snakefile"], description = "Dry-run the production pipeline" }
