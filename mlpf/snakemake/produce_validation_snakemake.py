@@ -129,14 +129,14 @@ def main():
     # 1. Evaluator Script
     eval_script_path = f"{jobs_dir}/scripts/evaluate.sh"
     eval_cmd = (
-        f"python3 mlpf/standalone_eval/evaluator.py --input $1 --checkpoint {checkpoint_abs} "
+        f"python3 mlpf/standalone_eval/key4hep/evaluator.py --input $1 --checkpoint {checkpoint_abs} "
         f"--config {config_path} --detector {detector} --outpath $2 --num-events -1"
     )
     write_bash_script(eval_script_path, f"export PYTHONPATH=$(pwd):$PYTHONPATH\n{eval_cmd}", project_root=project_root)
 
     # 2. Plotting Script
     plot_script_path = f"{jobs_dir}/scripts/plot.sh"
-    plot_cmd = "python3 mlpf/standalone_eval/plots.py --input $1 --outdir $2"
+    plot_cmd = "python3 mlpf/standalone_eval/key4hep/plots.py --input $1 --outdir $2"
     write_bash_script(plot_script_path, f"export PYTHONPATH=$(pwd):$PYTHONPATH\n{plot_cmd}", project_root=project_root)
 
     # Generate Snakefile
