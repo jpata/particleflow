@@ -7,7 +7,7 @@ import numpy as np
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, required=True, help="Input parquet file from evaluator")
+    parser.add_argument("--input", type=str, nargs="+", required=True, help="Input parquet file(s) from evaluator")
     parser.add_argument("--outdir", type=str, default="plots_eval", help="Output directory for plots")
     return parser.parse_args()
 
@@ -18,8 +18,14 @@ def main():
     if not os.path.exists(args.outdir):
         os.makedirs(args.outdir)
 
-    print(f"Loading results from {args.input}")
-    ds = ak.from_parquet(args.input)
+    print(f"Loading results from {len(args.input)} files")
+    datasets = []
+    for fpath in args.input:
+        print(f"Reading {fpath}")
+        datasets.append(ak.from_parquet(fpath))
+
+    ds = ak.concatenate(datasets)
+    print(f"Total events: {len(ds)}")
 
     # Particle types from mlpf/conf.py
     pdg_to_name = {211: "Charged Hadron", 130: "Neutral Hadron", 22: "Photon", 11: "Electron", 13: "Muon"}
@@ -91,6 +97,41 @@ def main():
     plt.savefig(out_path, bbox_inches="tight")
     plt.close()
     print(f"Created scatterplot: {out_path}")
+
+    # Plot sum-pt per event (true vs predicted)
+    sum_pt_true = ak.sum(ds.true_pt, axis=1).to_numpy()
+    sum_pt_pred = ak.sum(ds.pred_pt, axis=1).to_numpy()
+
+    plt.figure(figsize=(8, 8))
+    plt.scatter(sum_pt_true, sum_pt_pred, alpha=0.5)
+
+    max_val = max(np.max(sum_pt_true), np.max(sum_pt_pred))
+    plt.plot([0, max_val], [0, max_val], color="red", linestyle="--", label="y=x")
+
+    plt.xlabel("True $\sum p_T$ [GeV]")
+    plt.ylabel("Predicted $\sum p_T$ [GeV]")
+    plt.title("Sum $p_T$ per Event: True vs Predicted")
+    plt.legend()
+    plt.grid(True, alpha=0.2)
+
+    out_path = os.path.join(args.outdir, "sum_pt_scatter.png")
+    plt.savefig(out_path, bbox_inches="tight")
+    plt.close()
+    print(f"Created sum-pt scatterplot: {out_path}")
+
+    # Plot sum-pt response
+    valid_mask = sum_pt_true > 0
+    response = sum_pt_pred[valid_mask] / sum_pt_true[valid_mask]
+    plt.figure(figsize=(8, 6))
+    plt.hist(response, bins=np.linspace(0, 2, 101), histtype="step", lw=2)
+    plt.xlabel("$\sum p_T^{pred} / \sum p_T^{true}$")
+    plt.ylabel("Number of events")
+    plt.title("Sum $p_T$ Response")
+    plt.grid(True, alpha=0.2)
+    out_path = os.path.join(args.outdir, "sum_pt_response.png")
+    plt.savefig(out_path, bbox_inches="tight")
+    plt.close()
+    print(f"Created sum-pt response plot: {out_path}")
 
 
 if __name__ == "__main__":

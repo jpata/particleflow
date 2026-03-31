@@ -40,6 +40,7 @@ def parse_args():
     parser.add_argument("--detector", type=str, default="clic", choices=["clic", "cld", "clic_hits", "cld_hits"], help="Detector type")
     parser.add_argument("--num-events", type=int, default=-1, help="Number of events to process")
     parser.add_argument("--device", type=str, default="cpu", help="Device to run on (cpu or cuda)")
+    parser.add_argument("--dtype", type=str, default="float32", choices=["float32", "float16", "bfloat16"], help="Data type for inference")
     return parser.parse_args()
 
 
@@ -195,6 +196,8 @@ def main():
     det_key = "clic" if "clic" in args.detector else "cld"
     class_labels = np.array(CLASS_LABELS[det_key])
 
+    dtype = getattr(torch, args.dtype)
+
     for iev in tqdm.tqdm(range(num_entries)):
         # Get status 1 MC particles (excluding neutrinos)
         mc_pdg_vals = np.abs(prop_data[mc_coll + ".PDG"][iev])
@@ -238,7 +241,21 @@ def main():
         mask_torch = torch.ones(X_torch.shape[:2], dtype=torch.float32).to(device)
 
         with torch.no_grad():
-            preds = model(X_torch, mask_torch)
+            with torch.autocast(device_type=device.type, dtype=dtype, enabled=(device.type == "cuda")):
+                preds = model(X_torch, mask_torch)
+
+            # convert all outputs to float32 in case running in float16 or bfloat16
+            preds = tuple([y.to(torch.float32) for y in preds])
+
+            # transform log (pt/elempt) -> pt
+            pred_id = torch.argmax(preds[0], axis=-1)
+            preds[2][..., 0] = torch.exp(preds[2][..., 0]) * X_torch[..., 1]
+            preds[2][..., 0][pred_id == 0] = 0
+
+            # transform log (E/elemE) -> E
+            preds[2][..., 4] = torch.exp(preds[2][..., 4]) * X_torch[..., 5]
+            preds[2][..., 4][pred_id == 0] = 0
+
             preds_unpacked = unpack_predictions(preds)
 
         # Filter out null particles (ID=0)

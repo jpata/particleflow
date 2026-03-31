@@ -133,6 +133,7 @@ def main():
     gpus = res.get("gpus", model_spec.get("gpus", model_defaults.get("gpus", 0)))
     gpu_type = res.get("gpu_type", model_spec.get("gpu_type", model_defaults.get("gpu_type", None)))
     mem_per_gpu = res.get("mem_per_gpu", model_spec.get("mem_per_gpu_mb", model_defaults.get("mem_per_gpu_mb", 0)))
+    dtype = scen.get("dtype", model_spec.get("dtype", model_defaults.get("dtype", "float32")))
     tmpdir = resolve_path(spec["project"]["paths"].get("tmpdir", "/tmp"), spec)
 
     # Experiment name and num_files for directory organization
@@ -158,13 +159,13 @@ def main():
     eval_script_path = f"{jobs_dir}/scripts/evaluate.sh"
     eval_cmd = (
         f"python3 mlpf/standalone_eval/key4hep/evaluator.py --input $1 --checkpoint {checkpoint_abs} "
-        f"--config {config_path} --detector {detector} --outpath $2 --num-events -1 --device {device}"
+        f"--config {config_path} --detector {detector} --outpath $2 --num-events -1 --device {device} --dtype {dtype}"
     )
     write_bash_script(eval_script_path, f"export PYTHONPATH=$(pwd):$PYTHONPATH\nnvidia-smi\n{eval_cmd}", project_root=project_root, tmpdir=tmpdir)
 
     # 2. Plotting Script
     plot_script_path = f"{jobs_dir}/scripts/plot.sh"
-    plot_cmd = "python3 mlpf/standalone_eval/key4hep/plots.py --input $1 --outdir $2"
+    plot_cmd = "python3 mlpf/standalone_eval/key4hep/plots.py $@"
     write_bash_script(plot_script_path, f"export PYTHONPATH=$(pwd):$PYTHONPATH\n{plot_cmd}", project_root=project_root, tmpdir=tmpdir)
 
     # Generate Snakefile
@@ -193,13 +194,11 @@ def main():
         sample_out_dir = os.path.join(val_out_dir, sample_name)
         ensure_dir(sample_out_dir)
 
+        sample_parquets = []
         for i, root_file in enumerate(root_files):
             base = os.path.basename(root_file).replace(".root", "")
             parquet_file = os.path.join(sample_out_dir, f"{base}.parquet")
-            plot_dir = os.path.join(sample_out_dir, f"plots_{base}")
-            done_file = f"{jobs_dir}/done/{sample_name}_{base}.done"
-
-            targets.append(f'"{done_file}"')
+            sample_parquets.append(parquet_file)
 
             rules += f"""
 rule eval_{sample_name}_{i}:
@@ -214,10 +213,16 @@ rule eval_{sample_name}_{i}:
         "{container_img}"
     shell:
         "{eval_script_path} {{input.root}} {{output.parquet}}"
+"""
 
-rule plot_{sample_name}_{i}:
+        plot_dir = os.path.join(sample_out_dir, "plots")
+        done_file = f"{jobs_dir}/done/{sample_name}.done"
+        targets.append(f'"{done_file}"')
+
+        rules += f"""
+rule plot_{sample_name}:
     input:
-        parquet = "{parquet_file}"
+        parquets = {sample_parquets}
     output:
         done = "{done_file}"
     resources:
@@ -225,7 +230,7 @@ rule plot_{sample_name}_{i}:
     container:
         "{container_img}"
     shell:
-        "{plot_script_path} {{input.parquet}} {plot_dir} && touch {{output.done}}"
+        "{plot_script_path} --input {{input.parquets}} --outdir {plot_dir} && touch {{output.done}}"
 """
 
     with open(snakefile_path, "w") as f:
