@@ -74,12 +74,24 @@ default-resources:
 """, description = "Create the tallinn snakemake profile" }
 
 snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_snakemake.py --production ${PROD:-cms_run3} \"$@\"' --", depends-on = ["setup"], description = "Generate the snakemake files" }
+
 all = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} all \"$@\"' --", depends-on = ["snakefile"], description = "Run the full production pipeline" }
+
 gen = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_gen --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} gen \"$@\"' --", depends-on = ["snakefile"], description = "Generate samples" }
+
 post = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_post --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} post \"$@\"' --", depends-on = ["snakefile"], description = "Post-process samples" }
+
 tfds = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds \"$@\"' --", depends-on = ["snakefile"], description = "Create TFDS datasets" }
+
 tfds_hit = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds_hit --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds_hit \"$@\"' --", depends-on = ["snakefile"], description = "Create TFDS datasets with hits" }
+
 train = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_train --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} \"$@\"' --", depends-on = ["snakefile"], description = "Train the model" }
-validation = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --config ${VAL_CONFIG:-validation_cms.yaml} && snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/validation_${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1 \"$@\"' --", depends-on = ["setup"], description = "Run validation" }
+
+validation_cms = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_cms_validation_snakemake.py --scenario ${PROD:-cms_run3} && snakemake --workflow-profile $PROFILE --snakefile $(cat .last_jobs_dir)/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1 \"$@\"' --", depends-on = ["setup"], description = "Run validation" }
+
+validation_key4hep = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/produce_validation_snakemake.py --scenario ${PROD:-cld} && snakemake --workflow-profile $PROFILE --snakefile $(cat .last_jobs_dir)/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} \"$@\"' --", depends-on = ["setup"], description = "Run Key4Hep validation" }
+
+
 dry-run = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --dry-run \"$@\"' --", depends-on = ["snakefile"], description = "Dry-run the production pipeline" }
+
 upload_hf = { cmd = "python3 scripts/tallinn/upload_hf.py", description = "Upload TFDS datasets to HuggingFace" }

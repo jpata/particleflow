@@ -323,7 +323,7 @@ def particle_label(ax, pid):
 def load_eval_data(path, max_events=None):
     yvals = []
     filenames = []
-    print("path", path)
+    print("load_eval_data: path {}".format(path))
 
     filelist = sorted(list(glob.glob(path)))
     assert len(filelist) > 0
@@ -335,6 +335,8 @@ def load_eval_data(path, max_events=None):
 
     total_events = 0
     for fi in iterator:
+        if not is_interactive:
+            print("load_eval_data: loading {}".format(fi))
         dd = awkward.from_parquet(fi)
         num_in_file = len(dd)
         print(fi, num_in_file, total_events, max_events)
@@ -356,8 +358,10 @@ def load_eval_data(path, max_events=None):
 
     assert len(yvals) > 0
 
+    print("load_eval_data: concatenating yvals={}".format(len(yvals)))
     data = awkward.concatenate(yvals, axis=0)
     X = data["inputs"]
+    print("load_eval_data: concat done X={}".format(len(X)))
 
     yvals = {}
     for typ in ["target", "cand", "pred"]:

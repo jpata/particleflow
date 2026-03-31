@@ -40,6 +40,7 @@ env
 
 .snakemake
 .profiles
+.last_jobs_dir
 
 pixi.lock
 uv.lock

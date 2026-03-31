@@ -5,7 +5,7 @@ import argparse
 from mlpf.utils import load_spec, resolve_path
 
 # Configuration
-LOCAL_JOBS_DIR = "snakemake_jobs"
+LOCAL_JOBS_DIR = "snakemake_validation"
 SPEC_FILE = "particleflow_spec.yaml"
 VALIDATION_SPEC_FILE = "validation_cms.yaml"
 
@@ -57,14 +57,20 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default=VALIDATION_SPEC_FILE, help="Validation spec file (yaml)")
+    parser.add_argument("--scenario", type=str, default="cms_run3", help="Scenario name from config")
     args = parser.parse_args()
 
+    # Load main spec and validation config
+    spec = load_spec(SPEC_FILE)
     with open(args.config, "r") as f:
         vspec = yaml.safe_load(f)
 
-    spec = load_spec(SPEC_FILE)
+    if args.scenario not in vspec.get("scenarios", {}):
+        raise ValueError(f"Scenario {args.scenario} not found in {args.config}")
 
-    production = vspec["production"]
+    scen = vspec["scenarios"][args.scenario]
+
+    production = scen["production"]
     if production not in spec["productions"]:
         raise ValueError(f"Production {production} not found in {SPEC_FILE}")
 
@@ -72,32 +78,28 @@ def main():
     slurm_account = spec["project"].get("slurm_account")
     main_container_img = spec["project"].get("container")
 
-    # Use container from vspec if provided, else use project container
-    container_img = resolve_path(vspec.get("container", main_container_img), spec)
+    # Use container from scenario if provided, else use project container
+    container_img = resolve_path(scen.get("container", main_container_img), spec)
 
-    bind_mounts = spec["project"].get("bind_mounts", [])
-    bind_args = ""
-    for bm in bind_mounts:
-        bind_args += f" -B {bm}"
-
-    # Resolve paths using both spec and vspec (vspec may contain ${workspace_dir})
+    # Resolve paths using both spec and scenario (scenario may contain ${workspace_dir})
     # We first resolve workspace_dir as it's used in others
-    workspace_dir = resolve_path(vspec["workspace_dir"], spec)
+    workspace_dir = resolve_path(scen["workspace_dir"], spec)
     # Put it back into spec for further resolution
     spec["workspace_dir"] = workspace_dir
 
-    val_dir = resolve_path(vspec["val_dir"], spec)
-    val_data_dir = resolve_path(vspec["val_data_dir"], spec)
-    output_dir = resolve_path(vspec["output_dir"], spec)
+    val_dir = resolve_path(scen["val_dir"], spec)
+    val_data_dir = resolve_path(scen["val_data_dir"], spec)
+    output_dir = resolve_path(scen["output_dir"], spec)
     ensure_dir(output_dir)
 
     # Resource requirements
-    res = vspec.get("resources", {})
+    res = scen.get("resources", {})
     mem_mb = res.get("mem_mb", 8000)
     runtime = resolve_path(res.get("runtime", "2h"), spec)
     partition = resolve_path(res.get("slurm_partition", "main"), spec)
 
-    jobs_dir = f"{LOCAL_JOBS_DIR}/validation_{production}"
+    exp_name = f"validation_{args.scenario}"
+    jobs_dir = f"{LOCAL_JOBS_DIR}/{exp_name}"
     ensure_dir(jobs_dir)
     ensure_dir(f"{jobs_dir}/prep")
     ensure_dir(f"{jobs_dir}/corr")
@@ -107,16 +109,16 @@ def main():
     rules_content = ""
 
     all_samples = {}
-    if "mc_samples" in vspec:
-        for skey, sdata in vspec["mc_samples"].items():
+    if "mc_samples" in scen:
+        for skey, sdata in scen["mc_samples"].items():
             all_samples[skey] = {
                 "pf_dir": f"{val_dir}/pf/{sdata['output_subdir']}/{sdata['process_name']}",
                 "mlpf_dir": f"{val_dir}/mlpf/{sdata['output_subdir']}/{sdata['process_name']}",
                 "is_data": False,
             }
 
-    if "data_samples" in vspec:
-        for skey, sdata in vspec["data_samples"].items():
+    if "data_samples" in scen:
+        for skey, sdata in scen["data_samples"].items():
             all_samples[skey] = {
                 "pf_dir": f"{val_data_dir}/pf/{sdata['output_subdir']}/{sdata['process_name']}",
                 "mlpf_dir": f"{val_data_dir}/mlpf/{sdata['output_subdir']}/{sdata['process_name']}",
@@ -153,8 +155,8 @@ rule {prep_id}:
 """
 
     # 2. Jet Corrections (only for correction_sample)
-    corr_sample = vspec["correction_sample"]
-    for jet_type in vspec["jet_types"]:
+    corr_sample = scen["correction_sample"]
+    for jet_type in scen["jet_types"]:
         corr_id = f"corr_{corr_sample}_{jet_type}"
         corr_script_path = f"{jobs_dir}/corr/{corr_id}.sh"
         corr_sentinel = f"{jobs_dir}/corr/{corr_id}.done"
@@ -188,7 +190,7 @@ rule {corr_id}:
     # 3. Validation Plots
     for sample, paths in all_samples.items():
         if paths["is_data"]:
-            dv = vspec.get("data_validation", {})
+            dv = scen.get("data_validation", {})
             golden_json = resolve_path(dv.get("golden_json", ""), spec)
             lumi_csv = resolve_path(dv.get("lumi_csv", ""), spec)
 
@@ -233,7 +235,7 @@ rule {data_plot_id}:
                 "PYTHONPATH=. python3 mlpf/plotting/plot_met_validation.py "
                 + f"--input-pf-parquet {output_dir}/{sample}_pf.parquet "
                 + f"--input-mlpf-parquet {output_dir}/{sample}_mlpf.parquet "
-                + f"--output-dir {output_dir} --sample-name {sample} --tev {vspec['tev']}"
+                + f"--output-dir {output_dir} --sample-name {sample} --tev {scen['tev']}"
             )
             write_bash_script(met_script_path, cmd)
 
@@ -255,9 +257,9 @@ rule {met_id}:
 
             # Jet plots (only for MC samples or if desired for data - here we assume MC mostly)
             if not paths["is_data"]:
-                for jet_type in vspec["jet_types"]:
+                for jet_type in scen["jet_types"]:
                     jec_file = f"{output_dir}/jec_{jet_type}_{corr_sample}.npz"
-                    for fcut in vspec["fiducial_cuts"]:
+                    for fcut in scen["fiducial_cuts"]:
                         plot_id = f"jet_plots_{sample}_{jet_type}_{fcut}"
                         plot_script_path = f"{jobs_dir}/plots/{plot_id}.sh"
                         plot_sentinel = f"{jobs_dir}/plots/{plot_id}.done"
@@ -268,7 +270,7 @@ rule {met_id}:
                             + f"--input-mlpf-parquet {output_dir}/{sample}_mlpf.parquet "
                             + f"--corrections-file {jec_file} "
                             + f"--output-dir {output_dir} --jet-type {jet_type} "
-                            + f"--sample-name {sample} --fiducial-cuts {fcut} --tev {vspec['tev']}"
+                            + f"--sample-name {sample} --fiducial-cuts {fcut} --tev {scen['tev']}"
                         )
                         write_bash_script(plot_script_path, cmd)
 
@@ -310,6 +312,10 @@ rule {plot_id}:
 
     print(f"Generated Snakemake workflow in {snakefile_path}")
     print(f"Generated {len(final_targets)} target plots.")
+
+    # Write jobs_dir to a file for pixi consumption
+    with open(".last_jobs_dir", "w") as f:
+        f.write(jobs_dir)
 
 
 if __name__ == "__main__":

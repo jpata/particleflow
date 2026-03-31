@@ -1,0 +1,66 @@
+# Key4Hep Validation Configuration
+# Defines scenarios for different detectors and input types
+
+# Global settings
+num_files: -1
+
+scenarios:
+  cld:
+    checkpoint: "experiments/pyg-cld-v1_cld_20260328_101206_533260/checkpoints/checkpoint-100000.pth"
+    exp_name: "pyg-cld-v1_cld_20260328_101206_533260"
+    production: "cld"
+    workspace_dir: "${productions.cld.workspace_dir}"
+    container: "${project.container}"
+    detector: "cld_edm"
+    mc_samples:
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm365"
+    resources:
+      mem_mb: 4000
+      runtime: "2h"
+      slurm_partition: "${project.cpu_partition}"
+
+  cld_hits:
+    checkpoint: "experiments/pyg-cld-hits-v1_cld_20260328_101205_900871/checkpoints/checkpoint-100000.pth"
+    exp_name: "pyg-cld-hits-v1_cld_20260328_101205_900871"
+    production: "cld"
+    workspace_dir: "${productions.cld.workspace_dir}"
+    container: "${project.container}"
+    detector: "cld_edm_hits"
+    mc_samples:
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm365"
+    resources:
+      mem_mb: 8000
+      runtime: "4h"
+      slurm_partition: "${project.cpu_partition}"
+
+  clic:
+    checkpoint: "experiments/pyg-clic-v1_clic_20260328_101206_529710/checkpoints/checkpoint-100000.pth"
+    exp_name: "pyg-clic-v1_clic_20260328_101206_529710"
+    production: "clic"
+    workspace_dir: "${productions.clic.workspace_dir}"
+    container: "${project.container}"
+    detector: "clic_edm"
+    mc_samples:
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm380"
+    resources:
+      mem_mb: 4000
+      runtime: "2h"
+      slurm_partition: "${project.cpu_partition}"
+
+  clic_hits:
+    checkpoint: "experiments/pyg-clic-hits-v1_clic_20260328_144021_479374/checkpoints/checkpoint-90000.pth"
+    exp_name: "pyg-clic-hits-v1_clic_20260328_144021_479374"
+    production: "clic"
+    workspace_dir: "${productions.clic.workspace_dir}"
+    container: "${project.container}"
+    detector: "clic_edm_hits"
+    mc_samples:
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm380"
+    resources:
+      mem_mb: 8000
+      runtime: "4h"
+      slurm_partition: "${project.cpu_partition}"
