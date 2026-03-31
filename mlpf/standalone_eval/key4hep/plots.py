@@ -3,12 +3,17 @@ import argparse
 import awkward as ak
 import matplotlib.pyplot as plt
 import numpy as np
+import fastjet
+import vector
+from mlpf.jet_utils import match_two_jet_collections
+from mlpf.conf import JET_CONFIG, Dataset
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, nargs="+", required=True, help="Input parquet file(s) from evaluator")
     parser.add_argument("--outdir", type=str, default="plots_eval", help="Output directory for plots")
+    parser.add_argument("--detector", type=str, default="clic", choices=["clic", "cld", "clic_hits", "cld_hits"], help="Detector type")
     return parser.parse_args()
 
 
@@ -132,6 +137,92 @@ def main():
     plt.savefig(out_path, bbox_inches="tight")
     plt.close()
     print(f"Created sum-pt response plot: {out_path}")
+
+    # Jet clustering
+    print("Clustering jets...")
+    jet_config = JET_CONFIG[Dataset(args.detector).value]
+    algo = getattr(fastjet, jet_config["algo"])
+    if "p" in jet_config:
+        jetdef = fastjet.JetDefinition(algo, jet_config["r"], jet_config["p"])
+    else:
+        jetdef = fastjet.JetDefinition(algo, jet_config["r"])
+
+    jet_ptcut = jet_config["ptcut"]
+    jet_match_dr = jet_config["match_dr"]
+
+    # Prep vectors for clustering
+    true_p4 = vector.awk(ak.zip({"pt": ds.true_pt, "eta": ds.true_eta, "phi": ds.true_phi, "energy": ds.true_energy}))
+    pred_p4 = vector.awk(ak.zip({"pt": ds.pred_pt, "eta": ds.pred_eta, "phi": ds.pred_phi, "energy": ds.pred_energy}))
+
+    # Filter particles (must have pt > 0 for fastjet)
+    true_p4 = true_p4[true_p4.pt > 1e-3]
+    pred_p4 = pred_p4[pred_p4.pt > 1e-3]
+
+    # True jets
+    true_cluster = fastjet.ClusterSequence(true_p4.to_xyzt(), jetdef)
+    true_jets = true_cluster.inclusive_jets(min_pt=jet_ptcut)
+    true_jets_p4 = vector.awk(ak.zip({"px": true_jets.px, "py": true_jets.py, "pz": true_jets.pz, "E": true_jets.e}))
+
+    # Pred jets
+    pred_cluster = fastjet.ClusterSequence(pred_p4.to_xyzt(), jetdef)
+    pred_jets = pred_cluster.inclusive_jets(min_pt=jet_ptcut)
+    pred_jets_p4 = vector.awk(ak.zip({"px": pred_jets.px, "py": pred_jets.py, "pz": pred_jets.pz, "E": pred_jets.e}))
+
+    # Matching
+    jets_coll = {"gen": true_jets_p4, "pred": pred_jets_p4}
+    matched_jets = match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr)
+
+    # Plot jet pt
+    plt.figure(figsize=(8, 6))
+    bins = np.logspace(np.log10(jet_ptcut), np.log10(500), 50)
+    plt.hist(ak.flatten(true_jets_p4.pt), bins=bins, histtype="step", lw=2, label="True")
+    plt.hist(ak.flatten(pred_jets_p4.pt), bins=bins, histtype="step", lw=2, label="Pred")
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.xlabel("Jet $p_T$ [GeV]")
+    plt.ylabel("Number of jets")
+    plt.legend()
+    plt.savefig(os.path.join(args.outdir, "jet_pt.png"), bbox_inches="tight")
+    plt.close()
+    print(f"Created jet pT plot: {os.path.join(args.outdir, 'jet_pt.png')}")
+
+    # Plot jet eta
+    plt.figure(figsize=(8, 6))
+    bins = np.linspace(-5, 5, 50)
+    plt.hist(ak.flatten(true_jets_p4.eta), bins=bins, histtype="step", lw=2, label="True")
+    plt.hist(ak.flatten(pred_jets_p4.eta), bins=bins, histtype="step", lw=2, label="Pred")
+    plt.xlabel("Jet $\eta$")
+    plt.ylabel("Number of jets")
+    plt.legend()
+    plt.savefig(os.path.join(args.outdir, "jet_eta.png"), bbox_inches="tight")
+    plt.close()
+    print(f"Created jet eta plot: {os.path.join(args.outdir, 'jet_eta.png')}")
+
+    # Plot jet response
+    matched_true_pt = ak.flatten(true_jets_p4.pt[matched_jets.gen])
+    matched_pred_pt = ak.flatten(pred_jets_p4.pt[matched_jets.pred])
+
+    if len(matched_true_pt) > 0:
+        response = matched_pred_pt / matched_true_pt
+        plt.figure(figsize=(8, 6))
+        bins = np.linspace(0, 2, 101)
+
+        # Calculate median and IQR for the label
+        p25 = np.percentile(response, 25)
+        p50 = np.percentile(response, 50)
+        p75 = np.percentile(response, 75)
+        iqr = p75 - p25
+
+        plt.hist(response, bins=bins, histtype="step", lw=2, label="MLPF, median={:.2f}, IQR={:.2f}".format(p50, iqr))
+        plt.axvline(1.0, color="black", linestyle="--", alpha=0.5)
+        plt.xlabel("Jet $p_T^{pred} / p_T^{true}$")
+        plt.ylabel("Number of matched jets")
+        plt.legend()
+        plt.savefig(os.path.join(args.outdir, "jet_response.png"), bbox_inches="tight")
+        plt.close()
+        print(f"Created jet response plot: {os.path.join(args.outdir, 'jet_response.png')}")
+    else:
+        print("No matched jets found, skipping response plot.")
 
 
 if __name__ == "__main__":

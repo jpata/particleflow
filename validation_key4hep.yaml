@@ -54,7 +54,7 @@ scenarios:
       gpus: 1
 
   clic_hits:
-    checkpoint: "experiments/pyg-clic-hits-v1_clic_20260328_144021_479374/checkpoints/checkpoint-90000.pth"
+    checkpoint: "experiments/pyg-clic-hits-v1_clic_20260328_144021_479374/checkpoints/checkpoint-100000.pth"
     exp_name: "pyg-clic-hits-v1_clic_20260328_144021_479374"
     production: "clic"
     workspace_dir: "${productions.clic.workspace_dir}"

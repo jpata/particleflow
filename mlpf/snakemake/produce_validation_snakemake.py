@@ -230,7 +230,7 @@ rule plot_{sample_name}:
     container:
         "{container_img}"
     shell:
-        "{plot_script_path} --input {{input.parquets}} --outdir {plot_dir} && touch {{output.done}}"
+        "{plot_script_path} --input {{input.parquets}} --outdir {plot_dir} --detector {detector} && touch {{output.done}}"
 """
 
     with open(snakefile_path, "w") as f:
