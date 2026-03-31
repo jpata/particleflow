@@ -310,7 +310,6 @@ rule {plot_id}:
 
     print(f"Generated Snakemake workflow in {snakefile_path}")
     print(f"Generated {len(final_targets)} target plots.")
-    print(f'Run with: snakemake --snakefile {snakefile_path} --cores 1 --use-apptainer --apptainer-args "{bind_args} --nv"')
 
 
 if __name__ == "__main__":
