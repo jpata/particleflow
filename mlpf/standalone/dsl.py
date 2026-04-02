@@ -93,7 +93,7 @@ class ModelConfig:
 
         shared_dim = check_backbone(self.backbone.get("shared", []), self.input.embedding_dim)
 
-        for k in ["pid", "reg", "binary"]:
+        for k in ["pid", "reg", "binary", "pu"]:
             if self.backbone.get(k):
                 check_backbone(self.backbone[k], shared_dim)
 

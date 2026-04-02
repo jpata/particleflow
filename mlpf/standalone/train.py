@@ -8,6 +8,7 @@ import random
 import math
 import einops
 from einops import rearrange
+import numpy as np
 
 # Ensure unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
@@ -1044,12 +1045,6 @@ class MLPF(nn.Module):
             for layer in self.binary_backbone:
                 emb_binary = layer(emb_binary, mask, X)
 
-        # Neutral PU branch
-        emb_PU = emb_shared
-        if self.PU_backbone is not None:
-            for layer in self.PU_backbone:
-                emb_PU = layer(emb_PU, mask, X)
-
         # Regression branch
         emb_reg = emb_shared
         if self.reg_backbone is not None:
@@ -1058,7 +1053,8 @@ class MLPF(nn.Module):
 
         # Outputs
         logits_binary = self.nn_binary_particle(emb_binary)
-        logits_PU = self.nn_PU(emb_PU)
+
+
         logits_pid = self.nn_pid(emb_pid)
 
         preds_pt = self.nn_pt(X, emb_reg, X[..., 1:2])
@@ -1070,9 +1066,22 @@ class MLPF(nn.Module):
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], dim=-1)
 
         logits_binary = torch.nan_to_num(logits_binary, nan=0.0, posinf=0.0, neginf=0.0)
-        logits_PU = torch.nan_to_num(logits_PU, nan=0.0, posinf=0.0, neginf=0.0)
         logits_pid = torch.nan_to_num(logits_pid, nan=0.0, posinf=0.0, neginf=0.0)
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Neutral PU branch
+        emb_PU = emb_shared
+#       modification
+#        real_parts = (torch.argmax(logits_pid, dim=-1) != 0) & (torch.argmax(logits_binary, dim=-1) == 1)
+#        for layer in self.shared_backbone:
+#            emb_PU = layer(emb_PU, mask & real_parts, X)
+#       end
+        if self.PU_backbone is not None:
+            for layer in self.PU_backbone:
+                emb_PU = layer(emb_PU, mask, X)
+
+        logits_PU = self.nn_PU(emb_PU)
+        logits_PU = torch.nan_to_num(logits_PU, nan=0.0, posinf=0.0, neginf=0.0)
 
         if return_attn:
             return logits_binary, logits_pid, logits_PU, preds_momentum, all_attns
@@ -1170,7 +1179,7 @@ def mlpf_loss(y, ypred, mask, X):
 # --- Training Loop ---
 
 
-def train(model, train_loader, optimizer, device, duration_seconds=120):
+def train(model, train_loader, optimizer, device, duration_seconds=120, experiment=None):
     model.train()
     start_time = time.time()
     num_steps = 0
@@ -1183,7 +1192,6 @@ def train(model, train_loader, optimizer, device, duration_seconds=120):
         for batch in train_loader:
             if (time.time() - start_time) >= duration_seconds:
                 break
-
             X = batch.X.to(device)
             mask = batch.mask.to(device)
             # Prepare targets
@@ -1203,6 +1211,13 @@ def train(model, train_loader, optimizer, device, duration_seconds=120):
                 loss, loss_binary, loss_pid, loss_kinematics, loss_PU = mlpf_loss(y, ypred, mask, X)
             loss.backward()
             optimizer.step()
+
+            if experiment:
+                experiment.log_metric("train_loss", loss.item(), step=num_steps)
+                experiment.log_metric("train_loss_binary", loss_binary.item(), step=num_steps)
+                experiment.log_metric("train_loss_pid", loss_pid.item(), step=num_steps)
+                experiment.log_metric("train_loss_kinematics", loss_kinematics.item(), step=num_steps)
+                experiment.log_metric("train_loss_PU", loss_PU.item(), step=num_steps)
 
             total_loss += loss.item()
             total_loss_binary += loss_binary.item()
@@ -1253,8 +1268,8 @@ def validate(model, loader, device):
         total_loss_kinematics += loss_kinematics.item()
         total_loss_PU += loss_PU.item()
         num_steps += 1
-        if num_steps > 10:  # Limit validation for speed
-            break
+        #if num_steps > 10:  # Limit validation for speed
+        #    break
 
     if num_steps > 0:
         return total_loss / num_steps, total_loss_binary / num_steps, total_loss_pid / num_steps, total_loss_kinematics / num_steps, total_loss_PU / num_steps
