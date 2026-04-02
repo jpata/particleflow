@@ -1,7 +1,7 @@
 import numpy as np
 import math
-import torch
 from scipy.special import erf
+
 
 def deltaR_matrix(eta, cosphi, sinphi):
     """
@@ -13,6 +13,7 @@ def deltaR_matrix(eta, cosphi, sinphi):
     d_phi = (d_phi + np.pi) % (2 * np.pi) - np.pi
     return np.sqrt(d_eta**2 + d_phi**2)
 
+
 def compute_alpha_central(pt, eta, cosphi, sinphi, is_charged_pv, R0=0.4):
     """
     alpha computed ONLY using charged prompt particles.
@@ -20,14 +21,15 @@ def compute_alpha_central(pt, eta, cosphi, sinphi, is_charged_pv, R0=0.4):
     dr = deltaR_matrix(eta, cosphi, sinphi)
 
     # mask for neighbors: charged PV and within 0 < R < R0 only
-    pu_mask = is_charged_pv[None, :]  
-    mask = ((dr > 0) & (dr < R0) & pu_mask)
+    pu_mask = is_charged_pv[None, :]
+    mask = (dr > 0) & (dr < R0) & pu_mask
 
-    activity = np.sum((np.nan_to_num(pt[None, :] / dr) **2) * mask, axis=1)
+    activity = np.sum((np.nan_to_num(pt[None, :] / dr) ** 2) * mask, axis=1)
 
     alpha = np.nan_to_num(np.log(activity), neginf=0)
 
     return alpha
+
 
 def compute_puppi_weights(pt, eta, cosphi, sinphi, is_charged, is_from_PV, R0=0.4, med_rms_min_pt=0.1):
     """
@@ -50,7 +52,7 @@ def compute_puppi_weights(pt, eta, cosphi, sinphi, is_charged, is_from_PV, R0=0.
 
     # Step 2: reference distribution from charged PU
     # Notice we apply a med_rms_min_pt cut on the pt and remove alpha==0 elements
-    alpha_ref = alpha[is_charged_pu & pass_med_rms_min_pt & (alpha!=0)]
+    alpha_ref = alpha[is_charged_pu & pass_med_rms_min_pt & (alpha != 0)]
 
     median = np.median(alpha_ref)
     rms = np.sqrt(np.mean(np.square(alpha_ref)))
@@ -62,11 +64,10 @@ def compute_puppi_weights(pt, eta, cosphi, sinphi, is_charged, is_from_PV, R0=0.
     weights = np.ones_like(pt)
     mask = s < 0
     s[mask] = 0
-    weights = erf(s/math.sqrt(2))
+    weights = erf(s / math.sqrt(2))
 
     # Step 5: set weights to be 1 or 0 for charged particles
     weights[is_charged_pv] = 1.0
     weights[is_charged_pu] = 0.0
 
     return weights, s, alpha
-

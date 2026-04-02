@@ -8,7 +8,6 @@ import random
 import math
 import einops
 from einops import rearrange
-import numpy as np
 
 # Ensure unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
@@ -1054,7 +1053,6 @@ class MLPF(nn.Module):
         # Outputs
         logits_binary = self.nn_binary_particle(emb_binary)
 
-
         logits_pid = self.nn_pid(emb_pid)
 
         preds_pt = self.nn_pt(X, emb_reg, X[..., 1:2])
@@ -1071,11 +1069,11 @@ class MLPF(nn.Module):
 
         # Neutral PU branch
         emb_PU = emb_shared
-#       modification
-#        real_parts = (torch.argmax(logits_pid, dim=-1) != 0) & (torch.argmax(logits_binary, dim=-1) == 1)
-#        for layer in self.shared_backbone:
-#            emb_PU = layer(emb_PU, mask & real_parts, X)
-#       end
+        #       modification
+        #        real_parts = (torch.argmax(logits_pid, dim=-1) != 0) & (torch.argmax(logits_binary, dim=-1) == 1)
+        #        for layer in self.shared_backbone:
+        #            emb_PU = layer(emb_PU, mask & real_parts, X)
+        #       end
         if self.PU_backbone is not None:
             for layer in self.PU_backbone:
                 emb_PU = layer(emb_PU, mask, X)
@@ -1159,8 +1157,8 @@ def mlpf_loss(y, ypred, mask, X):
 
     loss_binary[mask == 0] *= 0
     loss_pid[mask == 0] *= 0
-    
-    loss_PU[(mask == 0) | ~((y["cls_id"]==4) | (y["cls_id"]==5))] *= 0
+
+    loss_PU[(mask == 0) | ~((y["cls_id"] == 4) | (y["cls_id"] == 5))] *= 0
 
     tot_loss = (
         loss_binary.sum() / nelem
@@ -1173,7 +1171,13 @@ def mlpf_loss(y, ypred, mask, X):
         + loss_PU.sum() / npart_neutral
     )
 
-    return tot_loss, loss_binary.sum() / nelem, loss_pid.sum() / nelem, loss_pt.sum() / npart + loss_eta.sum() / npart + loss_sin_phi.sum() / npart + loss_cos_phi.sum() / npart + loss_energy.sum() / npart, loss_PU.sum() / npart_neutral
+    return (
+        tot_loss,
+        loss_binary.sum() / nelem,
+        loss_pid.sum() / nelem,
+        loss_pt.sum() / npart + loss_eta.sum() / npart + loss_sin_phi.sum() / npart + loss_cos_phi.sum() / npart + loss_energy.sum() / npart,
+        loss_PU.sum() / npart_neutral,
+    )
 
 
 # --- Training Loop ---
@@ -1231,7 +1235,14 @@ def train(model, train_loader, optimizer, device, duration_seconds=120, experime
                 print(f"Step {num_steps}, Loss: {loss.item():.4f}, Elapsed: {elapsed:.1f}s")
 
     if num_steps > 0:
-        return total_loss / num_steps, total_loss_binary / num_steps, total_loss_pid / num_steps, total_loss_kinematics / num_steps, total_loss_PU / num_steps, num_steps
+        return (
+            total_loss / num_steps,
+            total_loss_binary / num_steps,
+            total_loss_pid / num_steps,
+            total_loss_kinematics / num_steps,
+            total_loss_PU / num_steps,
+            num_steps,
+        )
 
     return 0, num_steps
 
@@ -1268,10 +1279,16 @@ def validate(model, loader, device):
         total_loss_kinematics += loss_kinematics.item()
         total_loss_PU += loss_PU.item()
         num_steps += 1
-        #if num_steps > 10:  # Limit validation for speed
+        # if num_steps > 10:  # Limit validation for speed
         #    break
 
     if num_steps > 0:
-        return total_loss / num_steps, total_loss_binary / num_steps, total_loss_pid / num_steps, total_loss_kinematics / num_steps, total_loss_PU / num_steps
+        return (
+            total_loss / num_steps,
+            total_loss_binary / num_steps,
+            total_loss_pid / num_steps,
+            total_loss_kinematics / num_steps,
+            total_loss_PU / num_steps,
+        )
 
     return 0, num_steps
