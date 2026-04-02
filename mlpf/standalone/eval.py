@@ -69,7 +69,7 @@ def med_iqr(arr):
     return p50, iqr
 
 
-def evaluate(model, loader, device):
+def evaluate(model, loader, device, output_dir="parquet"):
     model.eval()
     all_pred_particles = []
     all_target_particles = []
@@ -156,9 +156,9 @@ def evaluate(model, loader, device):
                 else:
                     all_target_particles.append(None)
 
-    #    if not os.path.exists(output_dir):
-    #        os.makedirs(output_dir)
-    ak.to_parquet(ak.concatenate(awk_to_save), "puppi2.parquet")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    ak.to_parquet(ak.concatenate(awk_to_save), f"{output_dir}/puppi_info.parquet")
 
     # Compute response by clustering event-by-event
     responses = []
@@ -441,7 +441,7 @@ if __name__ == "__main__":
 
         # Validation loss
         print("Computing validation loss...")
-        val_loss, val_loss_binary, val_loss_pid, val_loss_kinematics, val_loss_pu = validate(model, valid_loader, device)
+        val_loss, val_loss_binary, val_loss_pid, val_loss_kinematics, val_loss_pu = validate(model, valid_loader, device, output_dir=out_dir)
 
         # Evaluate jet metrics
         print("Evaluating jet metrics...")
