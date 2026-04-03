@@ -58,9 +58,10 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
     if tmpdir:
         res["tmpdir"] = f'"{tmpdir}"'
     if executor == "slurm":
-        res["mem_mb"] = mem
         if gpus > 0 and mem_per_gpu > 0:
             res["mem_per_gpu"] = mem_per_gpu
+        else:
+            res["mem_mb"] = mem
         res["slurm_partition"] = f'"{partition}"'
         res["runtime"] = runtime_m
         if slurm_account:
@@ -146,7 +147,7 @@ def main():
         config_path = os.path.join(exp_dir, "hyperparameters.json")
 
     # Output directory for validation results
-    val_out_dir = os.path.join(project_root, "experiments", exp_name, f"validation_{args.scenario}")
+    val_out_dir = os.path.join(project_root, "experiments", exp_name, "validation")
     ensure_dir(val_out_dir)
 
     # Job scripts directory
@@ -168,10 +169,48 @@ def main():
     plot_cmd = "python3 mlpf/standalone_eval/key4hep/plots.py $@"
     write_bash_script(plot_script_path, f"export PYTHONPATH=$(pwd):$PYTHONPATH\n{plot_cmd}", project_root=project_root, tmpdir=tmpdir)
 
+    # 3. ONNX Validation Script
+    onnx_out_dir = os.path.join(val_out_dir, "onnx")
+    onnx_script_path = f"{jobs_dir}/scripts/onnx_val.sh"
+
+    # Map detector to a TFDS dataset name for ONNX validation
+    dataset_map = {
+        "cms": "cms_pf_ttbar",
+        "cld": "cld_edm_ttbar_pf",
+        "clic": "clic_edm_ttbar_pf",
+        "cld_hits": "cld_edm_ttbar_hits",
+        "clic_hits": "clic_edm_ttbar_hits",
+    }
+    onnx_dataset = dataset_map.get(detector, "cms_pf_ttbar")
+    tfds_dir = os.path.join(workspace_dir, "tfds")
+
+    onnx_cmd = (
+        f"python3 scripts/cms-validate-onnx.py --checkpoint {checkpoint_abs} --model-kwargs {config_path} "
+        f"--dataset {onnx_dataset} --data-dir {tfds_dir} --outdir {onnx_out_dir} "
+        f"--num-events 100 --device {device} --num-threads 1"
+    )
+    write_bash_script(onnx_script_path, f"export PYTHONPATH=$(pwd):$PYTHONPATH\n{onnx_cmd}", project_root=project_root, tmpdir=tmpdir)
+
     # Generate Snakefile
     snakefile_path = f"{jobs_dir}/Snakefile"
     targets = []
     rules = ""
+
+    onnx_summary = os.path.join(onnx_out_dir, "summary.json")
+    targets.append(f'"{onnx_summary}"')
+
+    rules += f"""
+rule onnx_val:
+    output:
+        summary = "{onnx_summary}"
+    threads: 1
+    resources:
+        {get_resource_str(executor, 16000, partition, runtime, threads=1, gpus=gpus, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu, slurm_account=slurm_account, tmpdir=tmpdir)}
+    container:
+        "{container_img}"
+    shell:
+        "{onnx_script_path}"
+"""
 
     for sample_name, sample_data in scen.get("mc_samples", {}).items():
         process_name = sample_data["process_name"]
@@ -216,6 +255,7 @@ rule eval_{sample_name}_{i}:
 """
 
         plot_dir = os.path.join(sample_out_dir, "plots")
+        metrics_json = os.path.join(plot_dir, "metrics.json")
         done_file = f"{jobs_dir}/done/{sample_name}.done"
         targets.append(f'"{done_file}"')
 
@@ -224,6 +264,7 @@ rule plot_{sample_name}:
     input:
         parquets = {sample_parquets}
     output:
+        metrics = "{metrics_json}",
         done = "{done_file}"
     resources:
         {get_resource_str(executor, 2000, partition, runtime, slurm_account=slurm_account, tmpdir=tmpdir)}

@@ -1,5 +1,6 @@
 import os
 import argparse
+import json
 import awkward as ak
 import matplotlib.pyplot as plt
 import numpy as np
@@ -127,6 +128,16 @@ def main():
     # Plot sum-pt response
     valid_mask = sum_pt_true > 0
     response = sum_pt_pred[valid_mask] / sum_pt_true[valid_mask]
+
+    if len(response) > 0:
+        sum_pt_response_median = float(np.median(response))
+        sum_pt_response_p25 = np.percentile(response, 25)
+        sum_pt_response_p75 = np.percentile(response, 75)
+        sum_pt_response_iqr = float(sum_pt_response_p75 - sum_pt_response_p25)
+    else:
+        sum_pt_response_median = None
+        sum_pt_response_iqr = None
+
     plt.figure(figsize=(8, 6))
     plt.hist(response, bins=np.linspace(0, 2, 101), histtype="step", lw=2)
     plt.xlabel("$\sum p_T^{pred} / \sum p_T^{true}$")
@@ -202,6 +213,13 @@ def main():
     matched_true_pt = ak.flatten(true_jets_p4.pt[matched_jets.gen])
     matched_pred_pt = ak.flatten(pred_jets_p4.pt[matched_jets.pred])
 
+    n_true_jets = len(ak.flatten(true_jets_p4.pt))
+    n_matched_jets = len(matched_true_pt)
+    matching_fraction = float(n_matched_jets / n_true_jets if n_true_jets > 0 else 0)
+
+    jet_response_median = None
+    jet_response_iqr = None
+
     if len(matched_true_pt) > 0:
         response = matched_pred_pt / matched_true_pt
         plt.figure(figsize=(8, 6))
@@ -213,6 +231,9 @@ def main():
         p75 = np.percentile(response, 75)
         iqr = p75 - p25
 
+        jet_response_median = float(p50)
+        jet_response_iqr = float(iqr)
+
         plt.hist(response, bins=bins, histtype="step", lw=2, label="MLPF, median={:.2f}, IQR={:.2f}".format(p50, iqr))
         plt.axvline(1.0, color="black", linestyle="--", alpha=0.5)
         plt.xlabel("Jet $p_T^{pred} / p_T^{true}$")
@@ -223,6 +244,18 @@ def main():
         print(f"Created jet response plot: {os.path.join(args.outdir, 'jet_response.png')}")
     else:
         print("No matched jets found, skipping response plot.")
+
+    # Save metrics to JSON
+    metrics = {
+        "matching_fraction": matching_fraction,
+        "jet_response_median": jet_response_median,
+        "jet_response_iqr": jet_response_iqr,
+        "sum_pt_response_median": sum_pt_response_median,
+        "sum_pt_response_iqr": sum_pt_response_iqr,
+    }
+    with open(os.path.join(args.outdir, "metrics.json"), "w") as f:
+        json.dump(metrics, f, indent=4)
+    print(f"Saved metrics to {os.path.join(args.outdir, 'metrics.json')}")
 
 
 if __name__ == "__main__":

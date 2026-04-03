@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition gpu
-#SBATCH --gres gpu:l40:1
+#SBATCH --gres gpu:l40:2
 #SBATCH --mem-per-gpu 80G
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%j-%N.out
@@ -22,6 +22,10 @@ DATA_DIR=$(pixi run python3 scripts/get_param.py particleflow_spec.yaml producti
     --production cld \
     --data-dir $DATA_DIR \
     train \
-    --gpus 1 \
+    --gpus 2 \
+    --lr 0.0005 \
+    --lr_schedule onecycle \
     --num_workers 4 \
-    --prefetch_factor 2
+    --prefetch_factor 2 \
+    --model.attention.num_convs 3 \
+    --model.attention.head_dim 24
