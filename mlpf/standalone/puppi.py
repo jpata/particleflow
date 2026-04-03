@@ -24,14 +24,14 @@ def compute_alpha_central(pt, eta, cosphi, sinphi, is_charged_pv, R0=0.4):
     pu_mask = is_charged_pv[None, :]
     mask = (dr > 0) & (dr < R0) & pu_mask
 
-    activity = np.sum((np.nan_to_num(pt[None, :] / dr) ** 2) * mask, axis=1)
+    activity = np.sum((np.nan_to_num(pt[None, :] / dr, posinf=0) ** 2) * mask, axis=1)
 
     alpha = np.nan_to_num(np.log(activity), neginf=0)
 
     return alpha
 
 
-def compute_puppi_weights(pt, eta, cosphi, sinphi, is_charged, is_from_PV, R0=0.4, med_rms_min_pt=0.1):
+def compute_puppi_weights(pt, eta, cosphi, sinphi, is_charged, is_from_PV, R0=0.4, med_rms_min_pt=0.1, rms_left_only=False):
     """
     Central-region PUPPI (tracker available and no extrapolation done)
     Inputs:
@@ -55,7 +55,12 @@ def compute_puppi_weights(pt, eta, cosphi, sinphi, is_charged, is_from_PV, R0=0.
     alpha_ref = alpha[is_charged_pu & pass_med_rms_min_pt & (alpha != 0)]
 
     median = np.median(alpha_ref)
-    rms = np.sqrt(np.mean(np.square(alpha_ref)))
+
+    # For RMS, we only consider values below or equal to the median
+    if rms_left_only:
+        alpha_ref = alpha_ref[alpha_ref <= median]
+
+    rms = np.sqrt(np.mean(np.square(alpha_ref - median)))
 
     # Step 3: s is the sqrt of χ²
     s = (alpha - median) / rms
