@@ -38,6 +38,13 @@ uv run hf download jpata/particleflow \
 ```
 This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_*_pf/1/`.
 
+### **Dataset Upload**
+
+To upload a generated dataset to the Hugging Face Hub:
+```bash
+uv run python3 scripts/upload_hf.py --repo jpata/particleflow --spec particleflow_spec.yaml clic 1
+```
+
 ### **Training**
 
 Run the training on the downloaded data configuration split
@@ -52,6 +59,13 @@ uv run \
     --data_config 1 \
     --gpu_batch_multiplier 4 \
     --gpus 1
+```
+
+### **Model Upload**
+
+To upload a trained model to the Hugging Face Hub:
+```bash
+uv run python3 scripts/upload_model_hf.py experiments/pyg-clic-hits-v1_clic_20260328_144021_479374 --version v3.1.0
 ```
 
 ## **End-to-end workflow: dataset generation and model training**

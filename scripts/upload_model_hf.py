@@ -176,18 +176,13 @@ def main():
 
     # Handle plots and preds for the chosen step
     plots_dir = exp_path / f"plots_step_{step_num}"
-    preds_dir = exp_path / f"preds_step_{step_num}"
 
-    # Fallback to plots_test/preds_test if step-specific ones don't exist
+    # Fallback to plots_test if step-specific ones don't exist
     if not plots_dir.exists():
         plots_dir = exp_path / "plots_test"
-    if not preds_dir.exists():
-        preds_dir = exp_path / "preds_test"
 
     if plots_dir.exists():
         dirs_to_upload.append((plots_dir.name, "plots_best_weights"))
-    if preds_dir.exists():
-        dirs_to_upload.append((preds_dir.name, "preds_best_weights"))
 
     total_size = 0
 
