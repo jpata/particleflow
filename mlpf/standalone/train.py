@@ -143,7 +143,6 @@ def pad_to_multiple(tensor, multiple, dims=-1, value=0):
         return tensor
     return F.pad(tensor, tuple(padding), value=value)
 
-
 def quantile_partition(sorted_indices, num_regions):
     total_elements = sorted_indices.shape[-1]
     region_size = torch.ceil(torch.tensor(total_elements, device=sorted_indices.device) / torch.as_tensor(num_regions, device=sorted_indices.device))
@@ -153,6 +152,8 @@ def quantile_partition(sorted_indices, num_regions):
     reassigned_regions = region_indices.gather(-1, inverse_indices.expand(region_indices.shape[0], -1))
     return reassigned_regions
 
+def get_shifts(n_hashes, n_heads):
+    return uniform(0, 2*math.pi, (n_hashes*n_heads))[:, None]
 
 def get_regions(num_regions, num_or_hashes, num_heads, num_and_hashes=2):
     lb = 2
@@ -173,10 +174,10 @@ def get_regions(num_regions, num_or_hashes, num_heads, num_and_hashes=2):
 @torch.no_grad()
 def get_geo_shift(regions_h, hash_shift, region_indices, num_or_hashes):
     region_indices_eta, region_indices_phi = region_indices
-    q_hash_shift_eta = region_indices_eta * hash_shift
-    k_hash_shift_eta = region_indices_eta * hash_shift
-    q_hash_shift_phi = region_indices_phi * hash_shift * (torch.ceil(regions_h[0][:, None]) + 1)
-    k_hash_shift_phi = region_indices_phi * hash_shift * (torch.ceil(regions_h[0][:, None]) + 1)
+    q_hash_shift_phi = region_indices_phi * hash_shift
+    k_hash_shift_phi = region_indices_phi * hash_shift
+    q_hash_shift_eta = region_indices_eta * hash_shift * (torch.ceil(regions_h[1][:, None]) + 1)
+    k_hash_shift_eta = region_indices_eta * hash_shift * (torch.ceil(regions_h[1][:, None]) + 1)
     res = torch.stack([q_hash_shift_phi + q_hash_shift_eta, k_hash_shift_phi + k_hash_shift_eta], dim=0)
     return rearrange(res, "a (c h) n -> a c h n", c=num_or_hashes)
 
@@ -413,6 +414,11 @@ class HEPTAttentionLayer(nn.Module):
             requires_grad=False,
         )
 
+        self.rand_phi_shifts = nn.Parameter(
+                get_shifts(self.n_hashes, self.num_heads),
+                requires_grad=False
+        )
+
         self.norm0 = nn.LayerNorm(embedding_dim)
         self.norm1 = nn.LayerNorm(embedding_dim)
         self.seq = nn.Sequential(nn.Linear(embedding_dim, width), nn.ELU(), nn.Linear(width, embedding_dim), nn.ELU())
@@ -470,11 +476,15 @@ class HEPTAttentionLayer(nn.Module):
                 mask_flat_padded = torch.ones_like(coords_flat_padded[..., 0])
                 mask_flat_padded[raw_size:] = 0.0
 
+
+            phi_for_sort_shifted = (coords_for_sort[..., 1] + math.pi + self.rand_phi_shifts) % (2*math.pi)
+
             sorted_eta_idx = torch.argsort(coords_for_sort[..., 0], dim=-1)
-            sorted_phi_idx = torch.argsort(coords_for_sort[..., 1], dim=-1)
+            sorted_phi_idx = torch.argsort(phi_for_sort_shifted, dim=-1)
             regions_h = rearrange(self.regions, "c a h -> a (c h)")
             region_indices_eta = quantile_partition(sorted_eta_idx, regions_h[0][:, None])
             region_indices_phi = quantile_partition(sorted_phi_idx, regions_h[1][:, None])
+
             region_indices = [region_indices_eta, region_indices_phi]
 
             coords_flat_padded[mask_flat_padded == 0] = 0.0
