@@ -411,6 +411,7 @@ models:
     num_steps: 100000
     comet: false
     comet_step_freq: 10000
+    tensorboard_step_freq: 100
     ntrain: null #use full train dataset for training
     nvalid: null #use full valid dataset for validation
     ntest: 100 #do test on a small subset

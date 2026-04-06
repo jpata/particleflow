@@ -464,6 +464,7 @@ class MLPFConfig(BaseModel):
     comet_offline: bool = False
     comet_name: str = "particleflow"
     comet_step_freq: int = 10000
+    tensorboard_step_freq: int = 100
 
     raytune: Dict[str, Any] = Field(default_factory=dict)
 

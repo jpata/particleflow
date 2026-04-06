@@ -87,3 +87,32 @@ def log_step_to_tensorboard(batch, loss_accum, lr_schedule, tensorboard_writer, 
 def log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step):
     for k in ["cur_index"]:
         tensorboard_writer.add_scalar("step/{}".format(k), loader_state_dict[k], step)
+
+
+def log_gradients_to_tensorboard(model, tensorboard_writer, step):
+    """
+    Logs the gradient norms to tensorboard.
+    """
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            tensorboard_writer.add_scalar(f"gradients/{name}", param.grad.norm(), step)
+
+
+def log_residuals_to_tensorboard(model, tensorboard_writer, step):
+    """
+    Logs the residual norms of the attention layers to tensorboard.
+    """
+    for name, module in model.named_modules():
+        if hasattr(module, "input_norm") and module.input_norm is not None:
+            tensorboard_writer.add_scalar(f"stats/{name}_input_norm", module.input_norm, step)
+            tensorboard_writer.add_scalar(f"stats/{name}_seq_len", module.seq_len, step)
+
+        if hasattr(module, "mha_res_norm") and module.mha_res_norm is not None:
+            tensorboard_writer.add_scalar(f"residuals/{name}_mha", module.mha_res_norm, step)
+            if hasattr(module, "input_norm"):
+                tensorboard_writer.add_scalar(f"residuals_ratio/{name}_mha", module.mha_res_norm / module.input_norm, step)
+
+        if hasattr(module, "ffn_res_norm") and module.ffn_res_norm is not None:
+            tensorboard_writer.add_scalar(f"residuals/{name}_ffn", module.ffn_res_norm, step)
+            if hasattr(module, "input_norm"):
+                tensorboard_writer.add_scalar(f"residuals_ratio/{name}_ffn", module.ffn_res_norm / module.input_norm, step)
