@@ -37,11 +37,21 @@ def resolve_variables(value, data):
     return value
 
 
-def get_dir_size(path):
+def get_dir_size(path, ignore_patterns=None):
     """Calculate the total size of a directory in bytes."""
+    from fnmatch import fnmatch
+
     total = 0
     for p in Path(path).rglob("*"):
         if p.is_file():
+            if ignore_patterns:
+                skip = False
+                for pattern in ignore_patterns:
+                    if fnmatch(p.name, pattern) or fnmatch(str(p.relative_to(path)), pattern):
+                        skip = True
+                        break
+                if skip:
+                    continue
             total += p.stat().st_size
     return total
 
@@ -161,6 +171,7 @@ def main():
     dirs_to_upload = [
         ("history", "history"),
         ("runs", "runs"),
+        ("validation", "validation", ["*.parquet"]),
     ]
 
     # Handle plots and preds for the chosen step
@@ -210,13 +221,19 @@ def main():
             total_size += local_path.stat().st_size
 
     # Upload folders
-    for local_dir_name, remote_dir_name in dirs_to_upload:
+    for item in dirs_to_upload:
+        local_dir_name = item[0]
+        remote_dir_name = item[1]
+        ignore_patterns = item[2] if len(item) > 2 else None
+
         local_dir_path = exp_path / local_dir_name
         if local_dir_path.exists():
-            size = get_dir_size(local_dir_path)
+            size = get_dir_size(local_dir_path, ignore_patterns=ignore_patterns)
             total_size += size
             if args.dry_run:
                 print(f"[DRY-RUN] Would upload folder {local_dir_path} ({format_size(size)}) to {remote_path}/{remote_dir_name}")
+                if ignore_patterns:
+                    print(f"  Ignoring: {ignore_patterns}")
             else:
                 print(f"Uploading folder {local_dir_path} ({format_size(size)}) to {remote_path}/{remote_dir_name}...")
                 api.upload_folder(
@@ -224,6 +241,7 @@ def main():
                     path_in_repo=f"{remote_path}/{remote_dir_name}",
                     repo_id=args.repo,
                     repo_type=args.repo_type,
+                    ignore_patterns=ignore_patterns,
                 )
 
     print(f"Total size processed: {format_size(total_size)}")

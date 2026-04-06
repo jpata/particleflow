@@ -19,6 +19,7 @@ def write_bash_script(path, content, project_root=None, tmpdir=None):
     with open(path, "w") as f:
         f.write("#!/bin/bash\n")
         f.write("set -e\n")
+        f.write("set -x\n")
         f.write("export GOTO_NUM_THREADS=1\n")
         f.write("export MKL_NUM_THREADS=1\n")
         f.write("export NUMEXPR_NUM_THREADS=1\n")
@@ -52,16 +53,13 @@ def parse_runtime(runtime_str):
         return runtime_str
 
 
-def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, mem_per_gpu=0, slurm_account=None, tmpdir=None):
+def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_type=None, slurm_account=None, tmpdir=None):
     res = {}
     runtime_m = parse_runtime(runtime)
     if tmpdir:
         res["tmpdir"] = f'"{tmpdir}"'
+    res["mem_mb"] = mem
     if executor == "slurm":
-        if gpus > 0 and mem_per_gpu > 0:
-            res["mem_per_gpu"] = mem_per_gpu
-        else:
-            res["mem_mb"] = mem
         res["slurm_partition"] = f'"{partition}"'
         res["runtime"] = runtime_m
         if slurm_account:
@@ -74,14 +72,11 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
         res["cpus_per_task"] = threads
         res["threads"] = threads
     elif executor == "condor":
-        res["mem_mb"] = mem
         res["job_flavour"] = f'"{partition}"'
         res["runtime"] = runtime_m
         res["getenv"] = True
         if gpus > 0:
             res["request_gpus"] = gpus
-    else:
-        res["mem_mb"] = mem
     return ", ".join([f"{k}={v}" for k, v in res.items()])
 
 
@@ -124,7 +119,7 @@ def main():
 
     # Resources
     res = scen.get("resources", {})
-    mem_mb = res.get("mem_mb", 4000)
+    eval_mem_mb = res.get("eval_mem_mb", 4000)
     runtime = resolve_path(res.get("runtime", "2h"), spec)
     partition = resolve_path(res.get("slurm_partition", "main"), spec)
     executor = spec["project"].get("executor", "slurm")
@@ -134,6 +129,10 @@ def main():
     gpus = res.get("gpus", model_spec.get("gpus", model_defaults.get("gpus", 0)))
     gpu_type = res.get("gpu_type", model_spec.get("gpu_type", model_defaults.get("gpu_type", None)))
     mem_per_gpu = res.get("mem_per_gpu", model_spec.get("mem_per_gpu_mb", model_defaults.get("mem_per_gpu_mb", 0)))
+
+    if gpus > 0 and mem_per_gpu > 0:
+        eval_mem_mb = max(eval_mem_mb, mem_per_gpu * gpus)
+
     dtype = scen.get("dtype", model_spec.get("dtype", model_defaults.get("dtype", "float32")))
     tmpdir = resolve_path(spec["project"]["paths"].get("tmpdir", "/tmp"), spec)
 
@@ -199,13 +198,17 @@ def main():
     onnx_summary = os.path.join(onnx_out_dir, "summary.json")
     targets.append(f'"{onnx_summary}"')
 
+    onnx_mem_mb = res.get("onnx_mem_mb", 16000)
+    if gpus > 0 and mem_per_gpu > 0:
+        onnx_mem_mb = max(onnx_mem_mb, mem_per_gpu * gpus)
+
     rules += f"""
 rule onnx_val:
     output:
         summary = "{onnx_summary}"
     threads: 1
     resources:
-        {get_resource_str(executor, 16000, partition, runtime, threads=1, gpus=gpus, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu, slurm_account=slurm_account, tmpdir=tmpdir)}
+        {get_resource_str(executor, onnx_mem_mb, partition, runtime, threads=1, gpus=gpus, gpu_type=gpu_type, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{container_img}"
     shell:
@@ -247,7 +250,7 @@ rule eval_{sample_name}_{i}:
         parquet = "{parquet_file}"
     threads: {threads}
     resources:
-        {get_resource_str(executor, mem_mb, partition, runtime, threads=threads, gpus=gpus, gpu_type=gpu_type, mem_per_gpu=mem_per_gpu, slurm_account=slurm_account, tmpdir=tmpdir)}
+        {get_resource_str(executor, eval_mem_mb, partition, runtime, threads=threads, gpus=gpus, gpu_type=gpu_type, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{container_img}"
     shell:

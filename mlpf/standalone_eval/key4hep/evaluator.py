@@ -51,6 +51,7 @@ def main():
         print("CUDA requested but not available, falling back to CPU")
         device = torch.device("cpu")
     else:
+        print(f"Initializing device={args.device}")
         device = torch.device(args.device)
 
     if device.type == "cuda":
@@ -59,6 +60,7 @@ def main():
 
     # Load config
     if args.config:
+        print(f"Loading {args.config}")
         if args.config.endswith(".yaml"):
             with open(args.config, "r") as f:
                 config_dict = yaml.safe_load(f)
@@ -70,6 +72,7 @@ def main():
         # Try to find config near checkpoint
         config_path = os.path.join(os.path.dirname(args.checkpoint), "model_kwargs.pkl")
         if os.path.exists(config_path):
+            print(f"Loading {config_path}")
             with open(config_path, "rb") as f:
                 config = pkl.load(f)
         else:
@@ -77,6 +80,7 @@ def main():
 
     # Initialize model
     model = MLPF(config)
+    print(f"Loading {args.checkpoint}")
     checkpoint = torch.load(args.checkpoint, map_location="cpu")
     load_checkpoint(checkpoint, model, None, strict=False)
     model.to(device)
@@ -199,6 +203,7 @@ def main():
     dtype = getattr(torch, args.dtype)
 
     for iev in tqdm.tqdm(range(num_entries)):
+        print(f"processing event {iev}")
         # Get status 1 MC particles (excluding neutrinos)
         mc_pdg_vals = np.abs(prop_data[mc_coll + ".PDG"][iev])
         mc_st1_mask = (prop_data[mc_coll + ".generatorStatus"][iev] == 1) & (mc_pdg_vals != 12) & (mc_pdg_vals != 14) & (mc_pdg_vals != 16)
@@ -280,9 +285,14 @@ def main():
             }
         )
 
+    outdir = os.path.dirname(args.outpath)
+    if outdir != "":
+        os.makedirs(outdir, exist_ok=True)
+
     print(f"Saving results to {args.outpath}")
     ak.to_parquet(ak.Array(results), args.outpath)
 
 
 if __name__ == "__main__":
+    print("running mlpf/standalone_eval/key4hep/evaluator.py")
     main()

@@ -16,7 +16,8 @@ scenarios:
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
     resources:
-      mem_mb: 4000
+      eval_mem_mb: 4000
+      onnx_mem_mb: 16000
       runtime: "2h"
       slurm_partition: "${project.gpu_partition}"
       gpus: 1
@@ -32,7 +33,8 @@ scenarios:
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
     resources:
-      mem_mb: 8000
+      eval_mem_mb: 8000
+      onnx_mem_mb: 16000
       runtime: "4h"
       slurm_partition: "${project.gpu_partition}"
       gpus: 1
@@ -48,7 +50,8 @@ scenarios:
       ttbar:
         process_name: "p8_ee_ttbar_ecm380"
     resources:
-      mem_mb: 4000
+      eval_mem_mb: 4000
+      onnx_mem_mb: 16000
       runtime: "2h"
       slurm_partition: "${project.gpu_partition}"
       gpus: 1
@@ -64,7 +67,8 @@ scenarios:
       ttbar:
         process_name: "p8_ee_ttbar_ecm380"
     resources:
-      mem_mb: 8000
+      eval_mem_mb: 8000
+      onnx_mem_mb: 16000
       runtime: "4h"
       slurm_partition: "${project.gpu_partition}"
       gpus: 1

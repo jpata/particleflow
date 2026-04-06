@@ -14,7 +14,7 @@ project:
       site_name: "tallinn"
       executor: "slurm"
       slurm_account: "hepusers"
-      container: "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
+      container: "/scratch/persistent/joosep/singularity/particleflow-20260330-cd2f54.sif"
       bind_mounts:
         - "/local"
         - "/cvmfs"
@@ -401,7 +401,7 @@ models:
     gpus: 1
     threads: 16
     gpu_type: l40
-    mem_per_gpu_mb: 80000
+    mem_per_gpu_mb: 40000
     slurm_partition: "${project.gpu_partition}"
     slurm_runtime: "168h"
     optimizer: adamw
