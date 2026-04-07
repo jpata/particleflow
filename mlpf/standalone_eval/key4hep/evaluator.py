@@ -70,7 +70,7 @@ def main():
                 config = pkl.load(f)
     else:
         # Try to find config near checkpoint
-        config_path = os.path.join(os.path.dirname(args.checkpoint), "model_kwargs.pkl")
+        config_path = os.path.join(os.path.dirname(os.path.dirname(args.checkpoint)), "model_kwargs.pkl")
         if os.path.exists(config_path):
             print(f"Loading {config_path}")
             with open(config_path, "rb") as f:
