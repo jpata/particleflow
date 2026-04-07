@@ -44,6 +44,8 @@ from mlpf.conf import MLPFConfig, ModelType, AttentionType
 from mlpf.model.utils import unpack_predictions
 from mlpf.plotting.plot_utils import ELEM_NAMES_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CLIC
 
+print("Imports finished.")
+
 
 def get_labels(dataset):
     if "cms" in dataset:
@@ -194,6 +196,7 @@ def get_gpu_info():
 
 
 def main():
+    print("Starting MLPF ONNX validation script...")
     args = parse_args()
     torch.set_num_threads(args.num_threads)
     os.makedirs(args.outdir, exist_ok=True)
@@ -202,6 +205,7 @@ def main():
     elem_names, class_names, typs, exp_name = get_labels(args.dataset)
 
     # Load model configuration
+    print(f"Loading model configuration from {args.model_kwargs}...")
     with open(args.model_kwargs, "rb") as f:
         model_kwargs_raw = pkl.load(f)
         if isinstance(model_kwargs_raw, dict):
@@ -214,9 +218,11 @@ def main():
     print(model_kwargs)
 
     # Load model weights
+    print(f"Loading model weights from {args.checkpoint}...")
     model_state = torch.load(args.checkpoint, map_location=torch.device("cpu"), weights_only=True)
 
     # Load step losses if available
+    print("Attempting to load step losses...")
     train_loss = None
     valid_loss = None
     try:
@@ -230,6 +236,8 @@ def main():
                 train_loss = history_data.get("train", {}).get("Total")
                 valid_loss = history_data.get("valid", {}).get("Total")
                 print(f"Loaded losses from {history_path}: train={train_loss}, valid={valid_loss}")
+        else:
+            print(f"No history file found at {history_path}")
     except Exception as e:
         print(f"Could not load step losses: {e}")
 
@@ -251,6 +259,7 @@ def main():
 
     # Math attention model (for math exports)
     if any(cfg in configs for cfg in ["ONNX_MATH_FP32", "ONNX_MATH_FP16"]):
+        print("Initializing Math attention model for export...")
         model_math = MLPF(
             config=make_mlpf_config(model_kwargs_export, use_simplified_attention=True, export_onnx_fused=False),
         )
@@ -260,6 +269,7 @@ def main():
 
     # Fused attention model (for fused export)
     if any(cfg in configs for cfg in ["ONNX_FLASH_FP32_FP16", "ONNX_FLASH_FP16"]):
+        print("Initializing Fused attention model for export...")
         model_fused = MLPF(
             config=make_mlpf_config(model_kwargs_export, use_simplified_attention=True, export_onnx_fused=True),
         )
@@ -274,6 +284,7 @@ def main():
     # 1. Export ONNX Math FP32
     if "ONNX_MATH_FP32" in configs:
         path_math_fp32 = os.path.join(args.outdir, "model_math_fp32.onnx")
+        print(f"Exporting ONNX Math FP32 to {path_math_fp32}...")
         torch.onnx.export(
             model_math,
             (dummy_features, dummy_mask),
@@ -289,6 +300,7 @@ def main():
     # 2. Export ONNX Math FP16
     if "ONNX_MATH_FP16" in configs:
         path_math_fp16 = os.path.join(args.outdir, "model_math_fp16.onnx")
+        print(f"Exporting ONNX Math FP16 to {path_math_fp16}...")
         # Cast to half for export
         model_math_half = copy.deepcopy(model_math).half()
         torch.onnx.export(
@@ -306,6 +318,7 @@ def main():
 
     # 3. Export ONNX Fused Flash Mixed/FP16
     if any(cfg in configs for cfg in ["ONNX_FLASH_FP32_FP16", "ONNX_FLASH_FP16"]):
+        print("Registering custom SDPA op for ONNX export...")
         custom_opset = onnxscript.values.Opset(domain="onnx-script", version=1)
         msft_op = onnxscript.values.Opset("com.microsoft", 1)
 
@@ -329,6 +342,7 @@ def main():
         # 3a. Export ONNX Fused Flash Mixed (FP32 model, FP16 attention)
         if "ONNX_FLASH_FP32_FP16" in configs:
             path_fused_fp32_fp16 = os.path.join(args.outdir, "model_fused_fp32_fp16.onnx")
+            print(f"Exporting ONNX Fused Flash Mixed (FP32/FP16) to {path_fused_fp32_fp16}...")
             torch.onnx.export(
                 model_fused,
                 (dummy_features, dummy_mask),
@@ -344,6 +358,7 @@ def main():
         # 3b. Export ONNX Fused Flash FP16 (Full FP16)
         if "ONNX_FLASH_FP16" in configs:
             path_fused_fp16 = os.path.join(args.outdir, "model_fused_fp16.onnx")
+            print(f"Exporting ONNX Fused Flash FP16 to {path_fused_fp16}...")
             model_fused_half = copy.deepcopy(model_fused).half()
             torch.onnx.export(
                 model_fused_half,
@@ -359,22 +374,28 @@ def main():
             del model_fused_half
 
     # Initialize ONNX sessions
+    print("Initializing ONNX sessions...")
     sess_options = rt.SessionOptions()
     sess_options.intra_op_num_threads = args.num_threads
     sess_options.inter_op_num_threads = args.num_threads
     execution_provider = "CPUExecutionProvider" if args.device == "cpu" else "CUDAExecutionProvider"
 
     if "ONNX_MATH_FP32" in configs:
+        print(f"Creating ONNX session for Math FP32 using {execution_provider}...")
         sess_math_fp32 = rt.InferenceSession(path_math_fp32, sess_options, providers=[execution_provider])
     if "ONNX_MATH_FP16" in configs:
+        print(f"Creating ONNX session for Math FP16 using {execution_provider}...")
         sess_math_fp16 = rt.InferenceSession(path_math_fp16, sess_options, providers=[execution_provider])
     if "ONNX_FLASH_FP32_FP16" in configs:
+        print(f"Creating ONNX session for Fused Mixed using {execution_provider}...")
         sess_fused_fp32_fp16 = rt.InferenceSession(path_fused_fp32_fp16, sess_options, providers=[execution_provider])
     if "ONNX_FLASH_FP16" in configs:
+        print(f"Creating ONNX session for Fused FP16 using {execution_provider}...")
         sess_fused_fp16 = rt.InferenceSession(path_fused_fp16, sess_options, providers=[execution_provider])
 
     # PyTorch Math Model
     if any(cfg in configs for cfg in ["PT_MATH_FP32", "PT_MATH_FP16"]):
+        print("Initializing PyTorch Math model...")
         model_kwargs_math = model_kwargs.model_copy(deep=True)
 
         model_pt_math = MLPF(
@@ -388,6 +409,7 @@ def main():
 
     # PyTorch Flash Model
     if "PT_FLASH_FP16" in configs:
+        print("Initializing PyTorch Flash model...")
         model_kwargs_flash = model_kwargs.model_copy(deep=True)
 
         model_pt_flash = MLPF(
@@ -404,6 +426,7 @@ def main():
         model_pt_flash = model_pt_flash.to(device=args.device)
 
     # Validation
+    print(f"Loading dataset {args.dataset} from {args.data_dir}...")
     builder = tfds.builder(args.dataset, data_dir=args.data_dir)
     ds = builder.as_data_source(split="train")
 
@@ -442,6 +465,7 @@ def main():
             _ = sess_fused_fp16.run(None, {"Xfeat_normed": X_warmup_np_fp16, "mask": mask_f_warmup_fp16})
     if args.device == "cuda":
         torch.cuda.synchronize()
+    print("Warmup complete. Starting validation scenarios.")
 
     results = {
         cfg: {
@@ -572,6 +596,7 @@ def main():
         if args.device == "cuda":
             torch.cuda.empty_cache()
         gc.collect()
+        print(f"Finished validation for {cfg}.")
 
     # Plotting
     print("Generating comparison plots...")

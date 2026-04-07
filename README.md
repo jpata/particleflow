@@ -38,6 +38,13 @@ uv run hf download jpata/particleflow \
 ```
 This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_*_pf/1/`.
 
+### **Dataset Upload**
+
+To upload a generated dataset to the Hugging Face Hub:
+```bash
+uv run python3 scripts/upload_hf.py --repo jpata/particleflow --spec particleflow_spec.yaml clic 1
+```
+
 ### **Training**
 
 Run the training on the downloaded data configuration split
@@ -53,6 +60,41 @@ uv run \
     --gpu_batch_multiplier 4 \
     --gpus 1
 ```
+
+### **Model Upload**
+
+To upload a trained model to the Hugging Face Hub:
+```bash
+uv run python3 scripts/upload_model_hf.py experiments/pyg-clic-hits-v1_clic_20260328_144021_479374 --version v3.1.0
+```
+
+### **Model Download & Evaluation**
+
+To download a specific model (e.g., CLD, cluster-based, version v3.1.0) and run evaluation on a sample ROOT file:
+
+1. Download the model files from the Hugging Face Hub:
+```bash
+uv run hf download jpata/particleflow \
+  --include "cld/clusters/v3.1.0/pyg-cld-v1_cld_20260328_101206_533260/*" \
+  --local-dir models \
+  --repo-type model
+```
+
+2. Run the evaluation script:
+```bash
+
+mkdir -p local_test_data/cld/p8_ee_ttbar_ecm365/root
+cd local_test_data/cld/p8_ee_ttbar_ecm365/root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9/gen/root/reco_p8_ee_ttbar_ecm365_300000.root
+cd ../../..
+
+uv run python3 mlpf/standalone_eval/key4hep/evaluator.py \
+  --input local_test_data/cld/p8_ee_ttbar_ecm365/root/reco_p8_ee_ttbar_ecm365_300000.root \
+  --checkpoint models/cld/clusters/v3.1.0/pyg-cld-v1_cld_20260328_101206_533260/checkpoints/best_weights.pth \
+  --detector cld \
+  --outpath eval_results.parquet
+```
+The input ROOT file should be in the [EDM4hep format](https://github.com/key4hep/EDM4hep).
 
 ## **End-to-end workflow: dataset generation and model training**
 

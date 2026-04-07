@@ -134,11 +134,9 @@ def get_parser():
     common_parser.add_argument("--make-plots", action="store_true", help="Generate plots")
 
     # --- 'train' command parser ---
-    parser_train = subparsers.add_parser(
+    subparsers.add_parser(
         "train", parents=[common_parser], help="Run standard training", formatter_class=argparse.RawDescriptionHelpFormatter, epilog=config_help
     )
-    parser_train.add_argument("--num-steps", type=int, default=None, help="Number of training steps")
-    parser_train.add_argument("--lr", type=float, default=None, help="Learning rate")
 
     # --- 'test' command parser ---
     subparsers.add_parser(

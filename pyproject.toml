@@ -70,6 +70,7 @@ dependencies = [
     "torch_runstats",
     "tqdm",
     "uproot",
+    "umap-learn",
     "vector",
     "zenodo_get",
     "huggingface_hub",

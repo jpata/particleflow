@@ -39,7 +39,7 @@ python3 mlpf/pipeline.py \
   --prefix MLPF_cld_test_ \
   --pipeline \
   train \
-  --num-steps 2 \
+  --num_steps 2 \
   --checkpoint_freq 1 \
   --gpus 0 \
   --dtype float32 \

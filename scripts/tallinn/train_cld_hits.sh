@@ -4,6 +4,8 @@
 #SBATCH --mem-per-gpu 80G
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%j-%N.out
+#SBATCH --job-name=train-cld-hits
+
 set -e
 export PF_SITE=tallinn
 

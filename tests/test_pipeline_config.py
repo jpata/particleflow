@@ -68,7 +68,7 @@ class TestPipelineConfig(unittest.TestCase):
 
     def test_train_command_parsing(self):
         parser = get_parser()
-        # Simulate: python mlpf/pipeline.py --spec-file spec.yaml --model-name test_model_gnn --production-name test_prod train --num-steps 500 --lr 0.005
+        # Simulate: python mlpf/pipeline.py --spec-file spec.yaml --model-name test_model_gnn --production-name test_prod train --num_steps 500 --lr 0.005
         cmd_args = [
             "--spec-file",
             self.temp_spec_path,
@@ -77,7 +77,7 @@ class TestPipelineConfig(unittest.TestCase):
             "--production-name",
             "test_prod",
             "train",
-            "--num-steps",
+            "--num_steps",
             "500",
             "--lr",
             "0.005",
