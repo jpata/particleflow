@@ -71,7 +71,7 @@ python mlpf/pipeline.py \
   --prefix MLPF_test_ \
   --pipeline \
   train \
-  --num-steps 4 \
+  --num_steps 4 \
   --checkpoint_freq 1 \
   --gpus 0 \
   --make-plots \
@@ -108,7 +108,7 @@ python scripts/cms-validate-onnx.py \
 #  --prefix MLPF_test_ \
 #  --pipeline \
 #  ray-train \
-#  --num-steps 4 \
+#  --num_steps 4 \
 #  --ray-cpus 2 \
 #  --ray-local \
 #  --conv-type attention \

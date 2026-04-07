@@ -70,6 +70,8 @@ from mlpf.model.monitoring import (
     log_dataloader_to_tensorboard,
     log_open_files_to_tensorboard,
     log_gpu_utilization_to_tensorboard,
+    log_gradients_to_tensorboard,
+    log_residuals_to_tensorboard,
 )
 from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.mlpf import MLPF, configure_model_trainable
@@ -116,6 +118,7 @@ def train_step(
     tensorboard_writer=None,
     comet_experiment=None,
     comet_step_freq=None,
+    tensorboard_step_freq=100,
     checkpoint_dir="",
     device_type="cuda",
     dtype=torch.float32,
@@ -135,6 +138,7 @@ def train_step(
         tensorboard_writer: TensorBoard writer object
         comet_experiment: Comet.ml experiment object
         comet_step_freq: How often to log to comet
+        tensorboard_step_freq: How often to log to TensorBoard
         checkpoint_dir: Directory to save checkpoints
         device_type: 'cuda' or 'cpu'
         dtype: Torch dtype for computations
@@ -167,6 +171,9 @@ def train_step(
         log_gpu_utilization_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
+        if step % tensorboard_step_freq == 0:
+            log_gradients_to_tensorboard(model, tensorboard_writer, step)
+            log_residuals_to_tensorboard(model, tensorboard_writer, step)
         tensorboard_writer.flush()
 
     if comet_experiment is not None and (step % comet_step_freq == 0):
@@ -572,6 +579,7 @@ def train_all_steps(
             tensorboard_writer=tensorboard_writer_train,
             comet_experiment=comet_experiment,
             comet_step_freq=comet_step_freq,
+            tensorboard_step_freq=config.tensorboard_step_freq,
             checkpoint_dir=checkpoint_dir,
             device_type=device_type,
             dtype=dtype,
@@ -581,8 +589,8 @@ def train_all_steps(
         log_memory("train_step_end", rank, tensorboard_writer_train, step)
         train_time = time.time() - step_start_time
 
-        # Log a brief training status every 100 steps on the main process
-        if step % 100 == 0:
+        # Log a brief training status periodically on the main process
+        if step % config.tensorboard_step_freq == 0:
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
             _logger.info(f"Step {step}/{num_steps} rank{rank} | " f"Train Loss: {losses_train['Total']:.4f} | " f"LR: {current_lr:.2e}")

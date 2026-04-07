@@ -401,9 +401,9 @@ models:
     gpus: 1
     threads: 16
     gpu_type: l40
-    mem_per_gpu_mb: 80000
+    mem_per_gpu_mb: 40000
     slurm_partition: "${project.gpu_partition}"
-    slurm_runtime: "48h"
+    slurm_runtime: "168h"
     optimizer: adamw
     lr_schedule: cosinedecay
     dtype: bfloat16
@@ -411,6 +411,7 @@ models:
     num_steps: 100000
     comet: false
     comet_step_freq: 10000
+    tensorboard_step_freq: 100
     ntrain: null #use full train dataset for training
     nvalid: null #use full valid dataset for validation
     ntest: 100 #do test on a small subset

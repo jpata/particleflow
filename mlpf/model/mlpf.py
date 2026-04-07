@@ -356,7 +356,15 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.att_mat_idx = 0
         self.outdir = "."
 
+        self.mha_res_norm = None
+        self.ffn_res_norm = None
+        self.input_norm = None
+        self.seq_len = 0
+
     def forward(self, x, mask, initial_embedding):
+        self.input_norm = x.norm().detach()
+        self.seq_len = x.shape[1]
+
         if mask is not None:
             mask_ = mask.unsqueeze(-1)
 
@@ -384,11 +392,16 @@ class PreLnSelfAttentionLayer(nn.Module):
                     att_mat = self.mha(q, x_norm, x_norm, need_weights=True)[1]
                     att_mat = att_mat.detach().cpu().numpy()
 
+        self.mha_res_norm = mha_out.norm().detach()
+
         x = residual + mha_out
         residual = x
         x_norm = self.norm1(x)
         ffn_out = self.seq(x_norm)
         ffn_out = self.dropout(ffn_out)
+
+        self.ffn_res_norm = ffn_out.norm().detach()
+
         x = residual + ffn_out
         if mask is not None:
             x = x * mask_
