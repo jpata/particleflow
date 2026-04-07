@@ -438,7 +438,7 @@ if __name__ == "__main__":
 
             # Train for a fixed time
             train_loss, train_loss_binary, train_loss_pid, train_loss_kinematics, train_loss_pu, num_steps = train(
-                model, train_loader, optimizer, device, duration_seconds=30*60, experiment=experiment
+                model, train_loader, optimizer, device, duration_seconds=30 * 60, experiment=experiment
             )
 
             training_seconds = time.time() - start_total
