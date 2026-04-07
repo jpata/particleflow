@@ -51,7 +51,7 @@ class FastformerConfig(LayerConfig):
 
 @dataclass(frozen=True)
 class InputConfig:
-    input_dim: int = 73
+    input_dim: int = 55
     embedding_dim: int = 128
     width: int = 256
     type: str = "default"  # "default" or "projection_only" or "advanced"
@@ -100,7 +100,7 @@ class ModelConfig:
         print("ModelConfig validated successfully.")
 
 
-def i(input_dim=73, embedding_dim=128, width=256, type="default", dropout=0.1):
+def i(input_dim=55, embedding_dim=128, width=256, type="default", dropout=0.1):
     return InputConfig(input_dim, embedding_dim, width, str(type), float(dropout))
 
 
@@ -127,7 +127,7 @@ def o(num_classes=8, width=256, type="default", rg="direct", dropout=0.1, embedd
 def parse_dsl(dsl_str: str) -> ModelConfig:
     """
     Parses a DSL string without spaces or quotes.
-    Example: 'i(73,128,256,default)|h(16,128,512,pos=T)*6|o(8,256,default,rg=linear)'
+    Example: 'i(55,128,256,default)|h(16,128,512,pos=T)*6|o(8,256,default,rg=linear)'
     """
     dsl_str = dsl_str.replace(" ", "")
     parts = dsl_str.split("|")

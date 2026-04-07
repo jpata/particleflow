@@ -256,7 +256,13 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
     }
 
     print("Computing dR")
-    dR_mat = deltaR_matrix(X[0, :, 2].cpu().numpy(), X[0, :, 4].cpu().numpy(), X[0, :, 3].cpu().numpy())
+
+    eta = X[0, :, 2].cpu().numpy()
+    cosphi = X[0, :, 4].cpu().numpy()
+    sinphi = X[0, :, 3].cpu().numpy()
+    phi = np.arctan2(sinphi, cosphi)
+
+    dR_mat = deltaR_matrix(eta, cosphi, sinphi)
     print("Done")
 
     with torch.no_grad():
@@ -293,16 +299,21 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
             plt.colorbar()
             plt.title("Standard Attention Matrix (Mean over heads)")
 
+            np.savez(output_dir + f"attention_map_{run_num}_{layer}.npz", mat=mat, dR_mat=dR_mat, mask=mask)
+
         elif isinstance(attn, tuple) and len(attn) == 3:
+
+            coords_in_buckets = []
+
             # HEPT: (qk, q_positions, k_positions)
             # qk: [hashes, heads, nbuckets, bsz, bsz]
             qk, q_pos, k_pos = attn
             n = X.shape[1]
             hashes, heads, nbuckets, bsz, _ = qk.shape
-
             # 1. Natural Order reconstruction
             full_matrix = torch.zeros((n, n), device=qk.device)
             for i in range(hashes):
+                coords_in_buckets.append([])
                 for j in range(heads):
                     for b in range(nbuckets):
                         q_idx = q_pos[i, j, b * bsz : (b + 1) * bsz]
@@ -317,6 +328,11 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
                         if len(valid_q_idx) > 0 and len(valid_k_idx) > 0:
                             for row_local, row_global in enumerate(valid_q_idx):
                                 full_matrix[row_global, valid_k_idx] += valid_qk[row_local]
+                        if j == 0:
+                            idx_in_bucket = torch.unique(torch.cat((valid_q_idx, valid_k_idx))).cpu().numpy()
+                            coords_in_buckets[-1].append(np.concatenate((eta[idx_in_bucket][:, None], phi[idx_in_bucket][:, None]), axis=-1))
+
+            ak.to_parquet(ak.Array(coords_in_buckets), f"{output_dir}/hashing_{run_num}_{layer}.parquet")
 
             full_matrix /= hashes * heads
             full_matrix = full_matrix.cpu().numpy()
@@ -346,7 +362,7 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
             fig.colorbar(im2, ax=ax2)
             ax2.set_title("HEPT LSH-Sorted Order\n(Block-diagonal structure)")
 
-            np.savez(output_dir + f"attention_map_{run_num}_{layer}.npz", mat=full_matrix, sorted_matrix=sorted_matrix, dR_mat=dR_mat)
+            np.savez(output_dir + f"attention_map_{run_num}_{layer}.npz", mat=full_matrix, sorted_matrix=sorted_matrix, dR_mat=dR_mat, mask=mask)
 
         elif isinstance(attn, tuple) and len(attn) == 2:
             plt.figure(figsize=(10, 8))
@@ -395,9 +411,9 @@ if __name__ == "__main__":
             config = parse_dsl(args.dsl)
             model = MLPF(config=config).to(device)
         else:
-            # 73 features for CMS, re-initialize model for each run
+            # 55 features for CMS, re-initialize model for each run
             model = MLPF(
-                input_dim=73,
+                input_dim=55,
                 num_classes=8,
                 embedding_dim=128,
                 width=128,
@@ -422,7 +438,7 @@ if __name__ == "__main__":
 
             # Train for a fixed time
             train_loss, train_loss_binary, train_loss_pid, train_loss_kinematics, train_loss_pu, num_steps = train(
-                model, train_loader, optimizer, device, duration_seconds=60 * 60, experiment=experiment
+                model, train_loader, optimizer, device, duration_seconds=30*60, experiment=experiment
             )
 
             training_seconds = time.time() - start_total
@@ -431,7 +447,7 @@ if __name__ == "__main__":
         else:
             model.load_state_dict(torch.load(args.eval + f"run{i}.pth", weights_only=True))
 
-        valid_loader = DataLoader(ds_valid, batch_size=1, collate_fn=collater, num_workers=1, persistent_workers=True)
+        valid_loader = DataLoader(ds_valid, batch_size=8, collate_fn=collater, num_workers=1, persistent_workers=True)
 
         # Save attention visualization for one event
         if args.show_attention:
@@ -458,7 +474,7 @@ if __name__ == "__main__":
 
         # Benchmarking
         model.eval()
-        sample_input = torch.randn(1, 4096, 73)
+        sample_input = torch.randn(1, 4096, 55)
         sample_mask = torch.ones(1, 4096).bool()
 
         # CPU runtime

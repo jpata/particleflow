@@ -435,7 +435,7 @@ class HEPTAttentionLayer(nn.Module):
     def forward(self, x, mask, X, return_attn=False):
         # x: [B, N, D]
         # mask: [B, N]
-        # X: [B, N, 25] or [B, N, 73] (original features)
+        # X: [B, N, 25] or [B, N, 55] (original features)
         if self.pos_embed:
             x = self.pos_embed(x, X)
 
@@ -476,8 +476,11 @@ class HEPTAttentionLayer(nn.Module):
                 mask_flat_padded = torch.ones_like(coords_flat_padded[..., 0])
                 mask_flat_padded[raw_size:] = 0.0
 
+            offsets = offsets.expand(-1, N, -1).reshape(-1)
+            offsets = pad_to_multiple(offsets, self.block_size, dims=0)
 
-            phi_for_sort_shifted = (coords_for_sort[..., 1] + math.pi + self.rand_phi_shifts) % (2*math.pi)
+            phi_for_sort_shifted = coords_for_sort[..., 1] - offsets
+            phi_for_sort_shifted = (phi_for_sort_shifted + math.pi + self.rand_phi_shifts) % (2*math.pi) + offsets[None, :]
 
             sorted_eta_idx = torch.argsort(coords_for_sort[..., 0], dim=-1)
             sorted_phi_idx = torch.argsort(phi_for_sort_shifted, dim=-1)
@@ -874,7 +877,7 @@ class RegressionOutput(nn.Module):
         return f"mode={self.mode}, embed_dim={self.embed_dim}, width={self.width}, dropout={self.dropout_p}"
 
     def forward(self, X, x, orig_value):
-        # X: [B, N, 25] or [B, N, 73] (original features)
+        # X: [B, N, 25] or [B, N, 55] (original features)
         # x: [B, N, D] (latent representation)
         # orig_value: [B, N, 1] (the feature to regress from)
 
@@ -909,7 +912,7 @@ class MLPF(nn.Module):
             # Backward compatibility or manual construction
             from mlpf.standalone.dsl import i, h, g, o, ModelConfig
 
-            input_dim = kwargs.get("input_dim", 73)
+            input_dim = kwargs.get("input_dim", 55)
             embedding_dim = kwargs.get("embedding_dim", 128)
             width = kwargs.get("width", 128)
             num_convs = kwargs.get("num_convs", 6)
