@@ -9,6 +9,15 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
+
+import sys
+import os
+
+litept_path = os.path.join(os.getcwd(), "LitePT")
+if litept_path not in sys.path:
+    sys.path.append(litept_path)
+from litept.model import LitePT
+
 from mlpf.conf import (
     MLPFConfig,
     Activation,
@@ -159,60 +168,133 @@ class LinearAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
 
-        self.q_proj = nn.Linear(embed_dim, embed_dim)
-        self.k_proj = nn.Linear(embed_dim, embed_dim)
-        self.v_proj = nn.Linear(embed_dim, embed_dim)
+        self.in_proj = nn.Linear(embed_dim, 3 * embed_dim)
         self.out_proj = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, need_weights=False, key_padding_mask: torch.Tensor = None) -> torch.Tensor:
-        # q, k, v: (bs, n, d)
-        bs, n, d = q.size()
+        # q: (bs, n_q, d), k, v: (bs, n_kv, d)
+        bs, n_q, d = q.size()
+        n_kv = k.size(1)
 
-        # Projections and reshape to (bs, num_heads, n, head_dim)
-        q = self.q_proj(q).reshape(bs, n, self.num_heads, self.head_dim).transpose(1, 2)
-        k = self.k_proj(k).reshape(bs, n, self.num_heads, self.head_dim).transpose(1, 2)
-        v = self.v_proj(v).reshape(bs, n, self.num_heads, self.head_dim).transpose(1, 2)
+        if q is k and k is v:
+            qkv = self.in_proj(q)
+            q, k, v = torch.split(qkv, [self.embed_dim, self.embed_dim, self.embed_dim], dim=-1)
+        else:
+            w_q, w_k, w_v = torch.split(self.in_proj.weight, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
+            b_q, b_k, b_v = torch.split(self.in_proj.bias, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
+            q = torch.nn.functional.linear(q, w_q, b_q)
+            k = torch.nn.functional.linear(k, w_k, b_k)
+            v = torch.nn.functional.linear(v, w_v, b_v)
+
+        # Reshape to (bs, num_heads, n, head_dim)
+        q = q.reshape(bs, n_q, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.reshape(bs, n_kv, self.num_heads, self.head_dim).transpose(1, 2)
+        v = v.reshape(bs, n_kv, self.num_heads, self.head_dim).transpose(1, 2)
 
         # Apply non-negative feature map (elu(x) + 1)
         q = torch.nn.functional.elu(q) + 1
         k = torch.nn.functional.elu(k) + 1
+
+        # Focused Linear Attention: Sharpen the attention by applying a power function (p=2)
+        # This improves local focus and reduces the "smearing" effect of standard linear attention.
+        q = q**2
+        k = k**2
 
         # Clamp to avoid overflows in FP16
         q = torch.clamp(q, max=10.0)
         k = torch.clamp(k, max=10.0)
 
         if key_padding_mask is not None:
-            # key_padding_mask: (bs, n), 1 for real, 0 for padded
-            mask = key_padding_mask.unsqueeze(1).unsqueeze(-1)  # (bs, 1, n, 1)
+            # key_padding_mask: (bs, n_kv), 1 for real, 0 for padded
+            mask = key_padding_mask.unsqueeze(1).unsqueeze(-1)  # (bs, 1, n_kv, 1)
             k = k * mask
             v = v * mask
 
         # Linear Attention: (Q @ (K.T @ V)) / (Q @ K.sum)
         # kv: (bs, heads, head_dim, head_dim)
-        # perform in FP32 to avoid overflow in FP16
-        with torch.autocast(enabled=False, device_type="cuda"):
-            q_32 = q.float()
-            k_32 = k.float()
-            v_32 = v.float()
-            kv = torch.matmul(k_32.transpose(-1, -2), v_32)
+        kv = torch.matmul(k.transpose(-1, -2), v)
 
-            # num: (bs, heads, n, head_dim)
-            num = torch.matmul(q_32, kv)
+        # num: (bs, heads, n_q, head_dim)
+        num = torch.matmul(q, kv)
 
-            # den: (bs, heads, n, 1)
-            den = torch.matmul(q_32, k_32.transpose(-1, -2).sum(dim=-1, keepdim=True))
+        # den: (bs, heads, n_q, 1)
+        den = torch.matmul(q, k.transpose(-1, -2).sum(dim=-1, keepdim=True))
 
-            attn_output = num / (den + 1e-4)
-
-        attn_output = attn_output.to(q.dtype)
+        attn_output = num / (den + 1e-4)
 
         # Reshape and project out
-        attn_output = attn_output.transpose(1, 2).reshape(bs, n, d)
+        attn_output = attn_output.transpose(1, 2).reshape(bs, n_q, d)
         attn_output = self.out_proj(attn_output)
         attn_output = self.dropout(attn_output)
 
         return attn_output, None
+
+
+class LitePTLayer(nn.Module):
+    def __init__(self, name, litept_config, embedding_dim):
+        super(LitePTLayer, self).__init__()
+        self.name = name
+        self.embedding_dim = embedding_dim
+        if LitePT is None:
+            raise ImportError("LitePT is not available")
+
+        # We need to remove MLPF-specific keys from litept_config before passing to LitePT
+        config = litept_config.copy()
+        self.coord_indices = config.pop("coord_indices", [2, 3, 4])
+        self.grid_size = config.pop("grid_size", 0.01)
+
+        # Remove keys that LitePT constructor doesn't expect
+        for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff"]:
+            if key in config:
+                config.pop(key)
+
+        self.litept = LitePT(in_channels=embedding_dim, **config)
+
+        # Check output dimension and add projection if necessary
+        litept_out_dim = config["enc_channels"][-1] if config.get("enc_mode") else config["dec_channels"][0]
+        if litept_out_dim != embedding_dim:
+            self.output_proj = nn.Linear(litept_out_dim, embedding_dim)
+        else:
+            self.output_proj = nn.Identity()
+
+    def forward(self, x, mask, X_features):
+        B, S, D = x.shape
+        mask_flat = mask.view(-1).bool()
+
+        # Flatten and filter
+        x_flat = x.view(-1, D)[mask_flat]
+        coords_flat = X_features[..., self.coord_indices].reshape(-1, len(self.coord_indices))[mask_flat]
+        batch = torch.arange(B, device=x.device).repeat_interleave(S)[mask_flat]
+
+        _logger.debug(
+            f"LitePTLayer {self.name} forward: B={B}, S={S}, D={D}, "
+            + f"n_valid={x_flat.shape[0]}, "
+            + f"coords_min={coords_flat.min(0)[0].tolist() if x_flat.shape[0] > 0 else 'N/A'}, "
+            + f"coords_max={coords_flat.max(0)[0].tolist() if x_flat.shape[0] > 0 else 'N/A'}"
+        )
+
+        data = {
+            "feat": x_flat.to(torch.float32),
+            "coord": coords_flat.to(torch.float32),
+            "batch": batch,
+            "grid_size": self.grid_size,
+        }
+
+        # spconv can fail with bfloat16 during evaluation (tuner issue)
+        # we force float32 for the LitePT part
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            out = self.litept(data)
+
+        feat = self.output_proj(out.feat).to(x.dtype)
+
+        _logger.debug(f"LitePTLayer {self.name} output: feat_shape={feat.shape}")
+
+        # out.feat shape is [N_valid, D_out]
+        D_out = feat.shape[-1]
+        res = torch.zeros(B, S, D_out, device=x.device, dtype=feat.dtype)
+        res.view(-1, D_out)[mask_flat] = feat
+        return res
 
 
 class PreLnSelfAttentionLayer(nn.Module):
@@ -415,6 +497,18 @@ class MLPF(nn.Module):
         self.conv_type = ModelType(self.config.type)
         sub_config = getattr(self.config, self.conv_type.value)
 
+        # Ensure sub_config is initialized if it's None (can happen if not in spec or args)
+        if sub_config is None:
+            from mlpf.conf import AttentionConfig, GNNLSHConfig, LitePTConfig
+
+            if self.conv_type == ModelType.ATTENTION:
+                sub_config = AttentionConfig()
+            elif self.conv_type == ModelType.GNN_LSH:
+                sub_config = GNNLSHConfig()
+            elif self.conv_type == ModelType.LITEPT:
+                sub_config = LitePTConfig()
+            setattr(self.config, self.conv_type.value, sub_config)
+
         # Extract parameters from the sub-config
         self.num_convs = sub_config.num_convs
         activation = Activation(sub_config.activation)
@@ -459,6 +553,8 @@ class MLPF(nn.Module):
             ffn_dist_hidden_dim = sub_config.ffn_dist_hidden_dim
             ffn_dist_num_layers = sub_config.ffn_dist_num_layers
             self.use_pre_layernorm = False
+        elif self.conv_type == ModelType.LITEPT:
+            self.use_pre_layernorm = False
 
         _logger.info(f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} input_encoding={self.input_encoding}")
 
@@ -501,6 +597,7 @@ class MLPF(nn.Module):
                 for i in range(self.num_convs):
                     _logger.info(f"Initializing attention layer {i}")
                     lastlayer = i == self.num_convs - 1
+
                     self.conv_id.append(
                         PreLnSelfAttentionLayer(
                             name="conv_id_{}".format(i),
@@ -554,6 +651,15 @@ class MLPF(nn.Module):
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
+            elif self.conv_type == ModelType.LITEPT:
+                _logger.info("Initializing LitePT convolution layers")
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList()
+                litept_conf = self.config.litept.model_dump()
+                for i in range(self.num_convs):
+                    _logger.info(f"Initializing LitePT layer {i}")
+                    self.conv_id.append(LitePTLayer(name=f"litept_id_{i}", litept_config=litept_conf, embedding_dim=embedding_dim))
+                    self.conv_reg.append(LitePTLayer(name=f"litept_reg_{i}", litept_config=litept_conf, embedding_dim=embedding_dim))
             _logger.info("Convolution layers initialization took {:.2f}s".format(time.time() - t0))
             _logger.info("conv_id parameters: {}".format(count_parameters(self.conv_id)))
             _logger.info("conv_reg parameters: {}".format(count_parameters(self.conv_reg)))
@@ -629,11 +735,18 @@ class MLPF(nn.Module):
         if self.num_convs != 0:
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
-                out_padded = conv(conv_input, mask, embedding_id)
+                if self.conv_type == ModelType.LITEPT:
+                    out_padded = conv(conv_input, mask, X_features)
+                else:
+                    out_padded = conv(conv_input, mask, embedding_id)
                 embeddings_id.append(out_padded)
+
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-                out_padded = conv(conv_input, mask, embedding_reg)
+                if self.conv_type == ModelType.LITEPT:
+                    out_padded = conv(conv_input, mask, X_features)
+                else:
+                    out_padded = conv(conv_input, mask, embedding_reg)
                 embeddings_reg.append(out_padded)
         else:
             embeddings_id.append(embedding_id)

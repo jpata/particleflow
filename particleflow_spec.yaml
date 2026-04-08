@@ -33,7 +33,7 @@ project:
     lxplus: &lxplus
       site_name: "lxplus"
       executor: "condor"
-      container: "/eos/user/j/jpata/www/pytorch-20260305-08d6950.sif"
+      container: "/eos/user/j/jpata/www/particleflow-20260330-cd2f54.sif"
       bind_mounts:
         - "/afs"
         - "/cvmfs"
@@ -54,7 +54,7 @@ project:
     local: &local
       site_name: "local"
       executor: "local"
-      container: "https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif"
+      container: "https://jpata.web.cern.ch/jpata/particleflow-20260330-cd2f54.sif"
       bind_mounts:
         - "/tmp"
         - "/mnt/work"

@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --partition gpu
-#SBATCH --gres gpu:l40:1
-#SBATCH --mem-per-gpu 80G
-#SBATCH --cpus-per-gpu 4
+#SBATCH --gres gpu:a100:1
+#SBATCH --mem 80G
+#SBATCH --cpus-per-task 8
 #SBATCH -o logs/slurm-%x-%j-%N.out
 set -e
 export PF_SITE=tallinn
@@ -22,4 +22,4 @@ DATA_DIR=$(pixi run python3 scripts/get_param.py particleflow_spec.yaml producti
     train \
     --gpus 1 \
     --num_workers 4 \
-    --prefetch_factor 2
+    --prefetch_factor 2 --model.type litept --gpu_batch_multiplier 64

@@ -66,8 +66,10 @@ dependencies = [
     "tensorflow~=2.20.0",
     "tensorflow-datasets~=4.9.9",
     "tensorflow-metadata~=1.17.3",
-    "torch",
+    "torch==2.9.0",
+    "torchvision",
     "torch_runstats",
+    "torch-scatter",
     "tqdm",
     "uproot",
     "umap-learn",
@@ -75,7 +77,12 @@ dependencies = [
     "zenodo_get",
     "huggingface_hub",
     #required for dataset preparation, only on linux
-    "apache_beam~=2.71.0; sys_platform == 'linux'"
+    "apache_beam~=2.71.0; sys_platform == 'linux'",
+    "spconv-cu124",
+    "addict",
+    "timm",
+    "colorhash",
+    "flash-attn",
 ]
 
 [project.scripts]
@@ -90,6 +97,8 @@ torchvision = [
   { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
   { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
 ]
+flash-attn = { url = "https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.0/flash_attn-2.8.3+cu128torch2.9-cp311-cp311-linux_x86_64.whl" }
+torch-scatter = { url = "https://data.pyg.org/whl/torch-2.9.0%2Bcu128/torch_scatter-2.1.2%2Bpt29cu128-cp311-cp311-linux_x86_64.whl" }
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
@@ -100,6 +109,11 @@ explicit = true
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
+
+
+[tool.uv.extra-build-dependencies]
+torch-scatter = ["torch"]
+#pointrope = ["torch"]
 
 [tool.setuptools]
 include-package-data = true

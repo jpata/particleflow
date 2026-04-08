@@ -69,6 +69,7 @@ from mlpf.model.monitoring import (
     log_step_to_tensorboard,
     log_dataloader_to_tensorboard,
     log_open_files_to_tensorboard,
+    log_gpu_utilization_to_tensorboard,
     log_gradients_to_tensorboard,
     log_residuals_to_tensorboard,
 )
@@ -167,6 +168,7 @@ def train_step(
     # Log step metrics
     if tensorboard_writer is not None:
         log_open_files_to_tensorboard(tensorboard_writer, step)
+        log_gpu_utilization_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
         if step % tensorboard_step_freq == 0:
