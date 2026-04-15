@@ -1,7 +1,7 @@
 import torch
 import pytest
 import time
-from mlpf.model.mlpf import LinearAttention, SimpleMultiheadAttention
+from mlpf.model.mlpf import SimpleMultiheadAttention
 from mlpf.model.gnnlsh import CombinedGraphLayer
 
 
@@ -46,39 +46,6 @@ def benchmark_module(module, inputs, num_iters=10, autocast=False, device_type="
         elapsed_time = (time.time() - start_time) * 1000.0 / num_iters  # in ms
 
     return elapsed_time
-
-
-@pytest.mark.parametrize("seq_len", [1024, 4096])
-def test_linear_attention_stability(device, seq_len):
-    embed_dim = 256
-    num_heads = 16
-    batch_size = 1
-
-    module = LinearAttention(embed_dim, num_heads).to(device)
-    module.eval()
-
-    # Large inputs to test stability
-    q = torch.randn(batch_size, seq_len, embed_dim, device=device) * 10.0
-    k = torch.randn(batch_size, seq_len, embed_dim, device=device) * 10.0
-    v = torch.randn(batch_size, seq_len, embed_dim, device=device) * 10.0
-
-    # Test FP32
-    with torch.no_grad():
-        out_32, _ = module(q, k, v)
-        assert torch.isfinite(out_32).all(), "LinearAttention FP32 output is not finite"
-
-        # Test FP16 Autocast
-        if device.type == "cuda":
-            with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
-                out_16, _ = module(q, k, v)
-            assert torch.isfinite(out_16).all(), "LinearAttention FP16 autocast output is not finite"
-
-            # Check proximity (LinearAttention is now stabilized)
-            mae = (out_32 - out_16.float()).abs().mean().item()
-            assert mae < 1e-1, f"LinearAttention FP16 discrepancy too large: {mae}"
-
-    t_ms = benchmark_module(module, (q, k, v), device_type=device.type)
-    print(f"\nLinearAttention (seq_len={seq_len}) runtime: {t_ms:.2f} ms")
 
 
 @pytest.mark.parametrize("seq_len", [1024, 4096])
@@ -149,6 +116,5 @@ if __name__ == "__main__":
     # This allows running the file directly with python and seeing prints
     d = get_device()
     for sl in [1024, 4096]:
-        test_linear_attention_stability(d, sl)
         test_simple_mha_stability(d, sl)
         test_gnnlsh_stability(d, sl)

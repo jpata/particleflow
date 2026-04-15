@@ -65,10 +65,8 @@ class LRSchedule(Enum):
 
 class AttentionType(Enum):
     STANDARD = "standard"
-    MATH = "math"
-    EFFICIENT = "efficient"
     FLASH = "flash"
-    LINEAR = "linear"
+    SIMPLE = "simple"
 
 
 from dataclasses import dataclass, fields
@@ -354,8 +352,6 @@ class GNNLSHConfig(BaseModel):
 
 class AttentionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    embedding_dim: int = 128
-    width: int = 128
     num_convs: int = 3
     dropout_ff: float = 0.0
     activation: Activation = Activation.ELU

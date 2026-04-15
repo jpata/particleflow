@@ -57,7 +57,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         device=None,
         dtype=None,
         export_onnx_fused=False,
-        attention_type: AttentionType = AttentionType.MATH,
+        attention_type: AttentionType = AttentionType.SIMPLE,
     ) -> None:
         factory_kwargs = {"device": device, "dtype": dtype}
         bias = True
@@ -68,8 +68,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         self.export_onnx_fused = export_onnx_fused
         self.attention_type = AttentionType(attention_type)
         self.attn_params = {
-            AttentionType.MATH: [SDPBackend.MATH],
-            AttentionType.EFFICIENT: [SDPBackend.EFFICIENT_ATTENTION],
+            AttentionType.SIMPLE: [SDPBackend.MATH, SDPBackend.EFFICIENT_ATTENTION],
             AttentionType.FLASH: [SDPBackend.FLASH_ATTENTION],
         }
 
@@ -111,76 +110,6 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         return attn_output, None
 
 
-class LinearAttention(nn.Module):
-    def __init__(self, embed_dim: int, num_heads: int, dropout: float = 0.0) -> None:
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
-
-        self.in_proj = nn.Linear(embed_dim, 3 * embed_dim)
-        self.out_proj = nn.Linear(embed_dim, embed_dim)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, need_weights=False, key_padding_mask: torch.Tensor = None) -> torch.Tensor:
-        # q: (bs, n_q, d), k, v: (bs, n_kv, d)
-        bs, n_q, d = q.size()
-        n_kv = k.size(1)
-
-        if q is k and k is v:
-            qkv = self.in_proj(q)
-            q, k, v = torch.split(qkv, [self.embed_dim, self.embed_dim, self.embed_dim], dim=-1)
-        else:
-            w_q, w_k, w_v = torch.split(self.in_proj.weight, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
-            b_q, b_k, b_v = torch.split(self.in_proj.bias, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
-            q = torch.nn.functional.linear(q, w_q, b_q)
-            k = torch.nn.functional.linear(k, w_k, b_k)
-            v = torch.nn.functional.linear(v, w_v, b_v)
-
-        # Reshape to (bs, num_heads, n, head_dim)
-        q = q.reshape(bs, n_q, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.reshape(bs, n_kv, self.num_heads, self.head_dim).transpose(1, 2)
-        v = v.reshape(bs, n_kv, self.num_heads, self.head_dim).transpose(1, 2)
-
-        # Apply non-negative feature map (elu(x) + 1)
-        q = torch.nn.functional.elu(q) + 1
-        k = torch.nn.functional.elu(k) + 1
-
-        # Focused Linear Attention: Sharpen the attention by applying a power function (p=2)
-        # This improves local focus and reduces the "smearing" effect of standard linear attention.
-        q = q**2
-        k = k**2
-
-        # Clamp to avoid overflows in FP16
-        q = torch.clamp(q, max=10.0)
-        k = torch.clamp(k, max=10.0)
-
-        if key_padding_mask is not None:
-            # key_padding_mask: (bs, n_kv), 1 for real, 0 for padded
-            mask = key_padding_mask.unsqueeze(1).unsqueeze(-1)  # (bs, 1, n_kv, 1)
-            k = k * mask
-            v = v * mask
-
-        # Linear Attention: (Q @ (K.T @ V)) / (Q @ K.sum)
-        # kv: (bs, heads, head_dim, head_dim)
-        kv = torch.matmul(k.transpose(-1, -2), v)
-
-        # num: (bs, heads, n_q, head_dim)
-        num = torch.matmul(q, kv)
-
-        # den: (bs, heads, n_q, 1)
-        den = torch.matmul(q, k.transpose(-1, -2).sum(dim=-1, keepdim=True))
-
-        attn_output = num / (den + 1e-4)
-
-        # Reshape and project out
-        attn_output = attn_output.transpose(1, 2).reshape(bs, n_q, d)
-        attn_output = self.out_proj(attn_output)
-        attn_output = self.dropout(attn_output)
-
-        return attn_output, None
-
-
 class PreLnSelfAttentionLayer(nn.Module):
     def __init__(
         self,
@@ -191,7 +120,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         width=128,
         dropout_mha=0.1,
         dropout_ff=0.1,
-        attention_type: AttentionType = AttentionType.EFFICIENT,
+        attention_type: AttentionType = AttentionType.SIMPLE,
         learnable_queries=False,
         elems_as_queries=False,
         export_onnx_fused=False,
@@ -203,10 +132,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.attention_type = AttentionType(attention_type)
         self.act = get_activation(activation)
 
-        if self.attention_type == AttentionType.LINEAR:
-            _logger.info("layer {} using attention_type=linear".format(self.name))
-            self.mha = LinearAttention(embedding_dim, num_heads, dropout=dropout_mha)
-        elif self.attention_type == AttentionType.STANDARD:
+        if self.attention_type == AttentionType.STANDARD:
             _logger.info("layer {} using attention_type=standard".format(self.name))
             self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
         else:
@@ -219,13 +145,6 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
-
-        if self.attention_type == AttentionType.STANDARD:
-            self.attn_params = {
-                AttentionType.MATH: [SDPBackend.MATH],
-                AttentionType.EFFICIENT: [SDPBackend.EFFICIENT_ATTENTION],
-                AttentionType.FLASH: [SDPBackend.FLASH_ATTENTION],
-            }
 
         self.learnable_queries = learnable_queries
         self.elems_as_queries = elems_as_queries
@@ -262,9 +181,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         if mask is not None:
             q = q * mask_
 
-        if self.attention_type == AttentionType.LINEAR:
-            mha_out = self.mha(q, x_norm, x_norm, key_padding_mask=mask)[0]
-        elif self.attention_type == AttentionType.STANDARD:
+        if self.attention_type == AttentionType.STANDARD:
             mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
 
             if self.save_attention:
@@ -392,13 +309,6 @@ class MLPF(nn.Module):
                 sub_config = HEPTConfig()
             setattr(self.config, self.conv_type.value, sub_config)
 
-        # Extract parameters from the sub-config
-        self.num_convs = sub_config.num_convs
-        activation = Activation(sub_config.activation)
-        embedding_dim = sub_config.embedding_dim
-        width = sub_config.width
-        dropout_ff = sub_config.dropout_ff
-
         # Extract architecture-level parameters
         self.input_encoding = InputEncoding(self.config.input_encoding)
         self.learned_representation_mode = LearnedRepresentationMode(self.config.learned_representation_mode)
@@ -408,9 +318,12 @@ class MLPF(nn.Module):
         cos_phi_mode = RegressionMode(self.config.cos_phi_mode)
         energy_mode = RegressionMode(self.config.energy_mode)
 
+        # Extract parameters from the sub-config per model type
+        self.num_convs = sub_config.num_convs
+        activation = Activation(sub_config.activation)
         self.act = get_activation(activation)
+        dropout_ff = sub_config.dropout_ff
 
-        # Defaults/extract specific parameters
         if self.conv_type == ModelType.ATTENTION:
             num_heads = sub_config.num_heads
             head_dim = sub_config.head_dim
@@ -423,10 +336,11 @@ class MLPF(nn.Module):
             export_onnx_fused = sub_config.export_onnx_fused
             save_attention = sub_config.save_attention
 
-            # Recalculate dimensions for attention
             embedding_dim = num_heads * head_dim
             width = num_heads * head_dim
         elif self.conv_type == ModelType.GNNLSH:
+            embedding_dim = sub_config.embedding_dim
+            width = sub_config.width
             self.bin_size = sub_config.bin_size
             max_num_bins = sub_config.max_num_bins
             distance_dim = sub_config.distance_dim
@@ -436,11 +350,15 @@ class MLPF(nn.Module):
             ffn_dist_num_layers = sub_config.ffn_dist_num_layers
             self.use_pre_layernorm = False
         elif self.conv_type == ModelType.LITEPT:
+            embedding_dim = sub_config.embedding_dim
+            width = sub_config.width
             self.use_pre_layernorm = False
         elif self.conv_type == ModelType.HEPT:
-            self.use_pre_layernorm = False
+            embedding_dim = sub_config.embedding_dim
+            width = sub_config.width
             num_heads = sub_config.num_heads
             pos = sub_config.pos
+            self.use_pre_layernorm = False
 
         _logger.info(f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} input_encoding={self.input_encoding}")
 
@@ -452,19 +370,6 @@ class MLPF(nn.Module):
             self.nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
         elif self.input_encoding == InputEncoding.SPLIT:
             _logger.info("Initializing split input encoding, elemtypes_nonzero={}".format(self.elemtypes_nonzero))
-            # self.nn0_id = nn.ModuleList()
-            # for ielem in range(len(self.elemtypes_nonzero)):
-            #     t00 = time.time()
-            #     self.nn0_id.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
-            #     t01 = time.time()
-            #     _logger.info("Initializing nn0_id ielem={} took {:.2f}s".format(ielem, t01 - t00))
-            # self.nn0_reg = nn.ModuleList()
-            # for ielem in range(len(self.elemtypes_nonzero)):
-            #     t00 = time.time()
-            #     self.nn0_reg.append(ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff))
-            #     t01 = time.time()
-            #     _logger.info("Initializing nn0_reg ielem={} took {:.2f}s".format(ielem, t01 - t00))
-
             # Wide MLP approach: one large Linear layer to produce all embeddings at once
             num_types = len(self.elemtypes_nonzero)
             self.nn0_id = ffn(self.input_dim, num_types * embedding_dim, width, self.act, dropout_ff)
@@ -516,6 +421,7 @@ class MLPF(nn.Module):
                             save_attention=save_attention,
                         )
                     )
+
             elif self.conv_type == ModelType.GNNLSH:
                 _logger.info("Initializing GNNLSH convolution layers")
                 self.conv_id = nn.ModuleList()

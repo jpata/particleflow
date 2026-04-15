@@ -10,7 +10,7 @@ def test_mlpf_attention():
         "data_dir": "/tmp",
         "model": {
             "type": "attention",
-            "attention": {"num_convs": 1, "num_heads": 2, "head_dim": 8, "attention_type": "math"},
+            "attention": {"num_convs": 1, "num_heads": 2, "head_dim": 8, "attention_type": "simple"},
         },
         "conv_type": "attention",
     }
@@ -177,7 +177,7 @@ def test_mlpf_datasets(dataset):
                 "num_convs": 1,
                 "num_heads": 2,
                 "head_dim": 8,
-                "attention_type": "math",
+                "attention_type": "simple",
             },
         },
         "conv_type": "attention",
