@@ -28,7 +28,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 
 ## 4. Machine Learning Core (`mlpf/model/`)
 - **`mlpf.py`**: Implementation of the MLPF model, featuring multi-head attention and configurable sub-networks. Supports fused attention and simplified math attention for ONNX export.
-- **`gnn_lsh.py`**: GNN layers with Locality-Sensitive Hashing (LSH) for scalable graph processing.
+- **`gnnlsh.py`**: GNN layers with Locality-Sensitive Hashing (LSH) for scalable graph processing.
 - **`PFDataset.py`**: Advanced data loading logic, including dataset interleaving and multi-file handling.
 - **`training.py`**: Core training loop implementation, supporting DDP and Ray-based distributed training.
 - **`losses.py`**: Specialized loss functions for particle classification and energy regression.

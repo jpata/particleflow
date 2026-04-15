@@ -10,7 +10,7 @@ def test_mlpf_attention():
         "data_dir": "/tmp",
         "model": {
             "type": "attention",
-            "attention": {"num_convs": 1, "num_heads": 2, "head_dim": 8, "attention_type": "math", "use_simplified_attention": True},
+            "attention": {"num_convs": 1, "num_heads": 2, "head_dim": 8, "attention_type": "math"},
         },
         "conv_type": "attention",
     }
@@ -79,20 +79,20 @@ def test_mlpf_hept():
     assert preds_pu.shape == (batch_size, seq_len, 2)
 
 
-def test_mlpf_gnn_lsh():
+def test_mlpf_gnnlsh():
     config_dict = {
         "dataset": "cms",
         "data_dir": "/tmp",
         "model": {
-            "type": "gnn_lsh",
-            "gnn_lsh": {
+            "type": "gnnlsh",
+            "gnnlsh": {
                 "num_convs": 1,
                 "bin_size": 16,
                 "max_num_bins": 10,
                 "distance_dim": 16,
             },
         },
-        "conv_type": "gnn_lsh",
+        "conv_type": "gnnlsh",
     }
     config = MLPFConfig.model_validate(config_dict)
     model = MLPF(config)

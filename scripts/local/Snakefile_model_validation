@@ -9,7 +9,7 @@ sys.path.append(os.getcwd())
 from mlpf.conf import MLPFConfig, ModelType
 
 # Configuration
-CONFIGS = ["standard", "linear", "gnn-lsh-bin32", "gnn-lsh-bin128"]
+CONFIGS = ["standard", "linear", "gnnlsh-bin32", "gnnlsh-bin128"]
 DEVICES = ["cuda", "cpu"]
 #DEVICES = ["cuda"]
 MODEL_NAME = "pyg-cms-v1"
@@ -23,7 +23,7 @@ ONNX_DIR = "onnx_validation"
 
 def get_onnx_validate_extra_args(wildcards):
     extra_args = ""
-    if wildcards.config.startswith("gnn-lsh"):
+    if wildcards.config.startswith("gnnlsh"):
         model_kwargs_path = os.path.join(EXPERIMENTS_DIR, f"training_{wildcards.config}", "model_kwargs.pkl")
         if os.path.exists(model_kwargs_path):
             with open(model_kwargs_path, "rb") as f:
@@ -33,8 +33,8 @@ def get_onnx_validate_extra_args(wildcards):
                 else:
                     config = MLPFConfig.model_validate(config_raw.model_dump())
 
-                if config.model.type == ModelType.GNN_LSH:
-                    extra_args += f" --pad-bin-size {config.model.gnn_lsh.bin_size}"
+                if config.model.type == ModelType.GNNLSH:
+                    extra_args += f" --pad-bin-size {config.model.gnnlsh.bin_size}"
     return extra_args
 
 # Helper to retrieve DATA_DIR from the spec file
@@ -62,8 +62,8 @@ rule train:
         extra_args = lambda wildcards: {
             "standard": "--model.attention.attention_type flash",
             "linear": "--model.attention.attention_type linear",
-            "gnn-lsh-bin32": "--model.type gnn_lsh --model.gnn_lsh.num_convs 3 --model.gnn_lsh.bin_size 32 --pad_to_multiple_elements 32",
-            "gnn-lsh-bin128": "--model.type gnn_lsh --model.gnn_lsh.num_convs 3 --model.gnn_lsh.bin_size 128 --pad_to_multiple_elements 128"
+            "gnnlsh-bin32": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32",
+            "gnnlsh-bin128": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 128 --pad_to_multiple_elements 128"
         }[wildcards.config]
     shell:
         """
@@ -89,7 +89,7 @@ rule onnx_validate:
         onnx_model = os.path.join(ONNX_DIR, "{device}", "{config}", "model_math_fp32.onnx"),
         summary = os.path.join(ONNX_DIR, "{device}", "{config}", "summary.json")
     params:
-        configs_args = lambda wildcards: "--configs PT_MATH_FP32 PT_MATH_FP16 ONNX_MATH_FP32 ONNX_MATH_FP16" if (wildcards.config == "linear" or wildcards.config.startswith("gnn-lsh")) else "",
+        configs_args = lambda wildcards: "--configs PT_MATH_FP32 PT_MATH_FP16 ONNX_MATH_FP32 ONNX_MATH_FP16" if (wildcards.config == "linear" or wildcards.config.startswith("gnnlsh")) else "",
         extra_args = get_onnx_validate_extra_args,
         num_events = lambda wildcards: 100 if wildcards.device == "cuda" else 10
     shell:

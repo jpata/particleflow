@@ -11,6 +11,8 @@ Full list of authors: https://github.com/jpata/particleflow/graphs/contributors
 import argparse
 import logging
 import os
+
+os.environ["KERAS_BACKEND"] = "torch"
 import typing
 from pathlib import Path
 

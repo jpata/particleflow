@@ -2,7 +2,7 @@ import torch
 import pytest
 import time
 from mlpf.model.mlpf import LinearAttention, SimpleMultiheadAttention
-from mlpf.model.gnn_lsh import CombinedGraphLayer
+from mlpf.model.gnnlsh import CombinedGraphLayer
 
 
 def get_device():
@@ -108,7 +108,7 @@ def test_simple_mha_stability(device, seq_len):
 
 
 @pytest.mark.parametrize("seq_len", [1024, 4096])
-def test_gnn_lsh_stability(device, seq_len):
+def test_gnnlsh_stability(device, seq_len):
     bin_size = 128
     # Ensure seq_len is divisible by bin_size
     if seq_len % bin_size != 0:
@@ -151,4 +151,4 @@ if __name__ == "__main__":
     for sl in [1024, 4096]:
         test_linear_attention_stability(d, sl)
         test_simple_mha_stability(d, sl)
-        test_gnn_lsh_stability(d, sl)
+        test_gnnlsh_stability(d, sl)

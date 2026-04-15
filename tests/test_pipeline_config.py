@@ -23,8 +23,8 @@ class TestPipelineConfig(unittest.TestCase):
                 "test_model_gnn": {
                     "dataset": "cms",
                     "architecture": {
-                        "type": "gnn_lsh",
-                        "gnn_lsh": {
+                        "type": "gnnlsh",
+                        "gnnlsh": {
                             "num_convs": 2,
                             "width": 64,
                         },
@@ -187,18 +187,18 @@ class TestPipelineConfig(unittest.TestCase):
             "--production-name",
             "test_prod",
             "train",
-            "--model.gnn_lsh.width=128",
+            "--model.gnnlsh.width=128",
             "--optimizer=sgd",
         ]
         args, extra_args = parser.parse_known_args(cmd_args)
 
-        # In actual pipeline.py, extra_args would contain things like ['--model.gnn_lsh.width=128', '--optimizer=sgd']
+        # In actual pipeline.py, extra_args would contain things like ['--model.gnnlsh.width=128', '--optimizer=sgd']
         # if they are not defined in the parser.
         # But get_parser() might not catch them if they are not in the known args.
 
         config_obj = MLPFConfig.from_spec(args.spec_file, args.model_name, args.production_name, args, extra_args)
 
-        self.assertEqual(config_obj.model.gnn_lsh.width, 128)
+        self.assertEqual(config_obj.model.gnnlsh.width, 128)
         self.assertEqual(config_obj.optimizer, OptimizerType.SGD)
 
     def test_pipeline_flag_ci_cd(self):

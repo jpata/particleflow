@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.logger import _logger
-from mlpf.model.gnn_lsh import CombinedGraphLayer
+from mlpf.model.gnnlsh import CombinedGraphLayer
 
 try:
     from mlpf.model.litept import LitePTLayer
@@ -194,14 +194,11 @@ class PreLnSelfAttentionLayer(nn.Module):
         attention_type: AttentionType = AttentionType.EFFICIENT,
         learnable_queries=False,
         elems_as_queries=False,
-        use_simplified_attention=False,
         export_onnx_fused=False,
         save_attention=False,
     ):
         super(PreLnSelfAttentionLayer, self).__init__()
         self.name = name
-
-        self.use_simplified_attention = use_simplified_attention
 
         self.attention_type = AttentionType(attention_type)
         self.act = get_activation(activation)
@@ -209,20 +206,21 @@ class PreLnSelfAttentionLayer(nn.Module):
         if self.attention_type == AttentionType.LINEAR:
             _logger.info("layer {} using attention_type=linear".format(self.name))
             self.mha = LinearAttention(embedding_dim, num_heads, dropout=dropout_mha)
-        elif self.use_simplified_attention:
-            self.mha = SimpleMultiheadAttention(
-                embedding_dim, num_heads, dropout=dropout_mha, export_onnx_fused=export_onnx_fused, attention_type=attention_type
-            )
-        else:
+        elif self.attention_type == AttentionType.STANDARD:
+            _logger.info("layer {} using attention_type=standard".format(self.name))
             self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
+        else:
+            _logger.info("layer {} using attention_type={} (SimpleMultiheadAttention)".format(self.name, self.attention_type))
+            self.mha = SimpleMultiheadAttention(
+                embedding_dim, num_heads, dropout=dropout_mha, export_onnx_fused=export_onnx_fused, attention_type=self.attention_type
+            )
 
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
         self.seq = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
         self.dropout = torch.nn.Dropout(dropout_ff)
 
-        if not self.use_simplified_attention and self.attention_type != AttentionType.LINEAR:
-            _logger.info("layer {} using attention_type={}".format(self.name, attention_type))
+        if self.attention_type == AttentionType.STANDARD:
             self.attn_params = {
                 AttentionType.MATH: [SDPBackend.MATH],
                 AttentionType.EFFICIENT: [SDPBackend.EFFICIENT_ATTENTION],
@@ -266,15 +264,14 @@ class PreLnSelfAttentionLayer(nn.Module):
 
         if self.attention_type == AttentionType.LINEAR:
             mha_out = self.mha(q, x_norm, x_norm, key_padding_mask=mask)[0]
-        elif self.use_simplified_attention:
+        elif self.attention_type == AttentionType.STANDARD:
             mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
-        else:
-            with sdpa_kernel(self.attn_params[self.attention_type]):
-                mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
 
-                if self.save_attention:
-                    att_mat = self.mha(q, x_norm, x_norm, need_weights=True)[1]
-                    att_mat = att_mat.detach().cpu().numpy()
+            if self.save_attention:
+                att_mat = self.mha(q, x_norm, x_norm, need_weights=True)[1]
+                att_mat = att_mat.detach().cpu().numpy()
+        else:
+            mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
 
         self.mha_res_norm = mha_out.norm().detach()
 
@@ -289,7 +286,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         x = residual + ffn_out
         if mask is not None:
             x = x * mask_
-        if not self.use_simplified_attention and self.save_attention:
+        if self.attention_type == AttentionType.STANDARD and self.save_attention:
             np.savez(
                 open("{}/attn_{}_{}.npz".format(self.outdir, self.name, self.att_mat_idx), "wb"),
                 att=att_mat,
@@ -387,7 +384,7 @@ class MLPF(nn.Module):
 
             if self.conv_type == ModelType.ATTENTION:
                 sub_config = AttentionConfig()
-            elif self.conv_type == ModelType.GNN_LSH:
+            elif self.conv_type == ModelType.GNNLSH:
                 sub_config = GNNLSHConfig()
             elif self.conv_type == ModelType.LITEPT:
                 sub_config = LitePTConfig()
@@ -423,14 +420,13 @@ class MLPF(nn.Module):
             dropout_conv_id_mha = sub_config.dropout_conv_id_mha
             dropout_conv_id_ff = sub_config.dropout_conv_id_ff
             self.use_pre_layernorm = sub_config.use_pre_layernorm
-            use_simplified_attention = sub_config.use_simplified_attention
             export_onnx_fused = sub_config.export_onnx_fused
             save_attention = sub_config.save_attention
 
             # Recalculate dimensions for attention
             embedding_dim = num_heads * head_dim
             width = num_heads * head_dim
-        elif self.conv_type == ModelType.GNN_LSH:
+        elif self.conv_type == ModelType.GNNLSH:
             self.bin_size = sub_config.bin_size
             max_num_bins = sub_config.max_num_bins
             distance_dim = sub_config.distance_dim
@@ -500,7 +496,6 @@ class MLPF(nn.Module):
                             attention_type=attention_type,
                             elems_as_queries=lastlayer,
                             # learnable_queries=lastlayer,
-                            use_simplified_attention=use_simplified_attention,
                             export_onnx_fused=export_onnx_fused,
                             save_attention=save_attention,
                         )
@@ -517,13 +512,12 @@ class MLPF(nn.Module):
                             attention_type=attention_type,
                             elems_as_queries=lastlayer,
                             # learnable_queries=lastlayer,
-                            use_simplified_attention=use_simplified_attention,
                             export_onnx_fused=export_onnx_fused,
                             save_attention=save_attention,
                         )
                     )
-            elif self.conv_type == ModelType.GNN_LSH:
-                _logger.info("Initializing GNN-LSH convolution layers")
+            elif self.conv_type == ModelType.GNNLSH:
+                _logger.info("Initializing GNNLSH convolution layers")
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()
                 for i in range(self.num_convs):

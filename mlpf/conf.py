@@ -17,7 +17,7 @@ class Dataset(Enum):
 
 class ModelType(Enum):
     ATTENTION = "attention"
-    GNN_LSH = "gnn_lsh"
+    GNNLSH = "gnnlsh"
     LITEPT = "litept"
     HEPT = "hept"
 
@@ -64,6 +64,7 @@ class LRSchedule(Enum):
 
 
 class AttentionType(Enum):
+    STANDARD = "standard"
     MATH = "math"
     EFFICIENT = "efficient"
     FLASH = "flash"
@@ -337,7 +338,6 @@ Y_FEATURES = ParticleFeatures.get_names()
 
 class GNNLSHConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    conv_type: ModelType = ModelType.GNN_LSH
     embedding_dim: int = 128
     width: int = 128
     num_convs: int = 2
@@ -354,7 +354,6 @@ class GNNLSHConfig(BaseModel):
 
 class AttentionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    conv_type: ModelType = ModelType.ATTENTION
     embedding_dim: int = 128
     width: int = 128
     num_convs: int = 3
@@ -369,14 +368,12 @@ class AttentionConfig(BaseModel):
     dropout_conv_id_mha: float = 0.0
     dropout_conv_id_ff: float = 0.0
     use_pre_layernorm: bool = True
-    use_simplified_attention: bool = False
     export_onnx_fused: bool = False
     save_attention: bool = False
 
 
 class LitePTConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    conv_type: ModelType = ModelType.LITEPT
     embedding_dim: int = 144
     width: int = 144
     num_convs: int = 1
@@ -413,7 +410,6 @@ class LitePTConfig(BaseModel):
 
 class HEPTConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    conv_type: ModelType = ModelType.HEPT
     embedding_dim: int = 128
     width: int = 512
     num_convs: int = 6
@@ -441,7 +437,7 @@ class ModelArchitectureConfig(BaseModel):
     trainable: str = "all"
 
     # Nested configs
-    gnn_lsh: Optional[GNNLSHConfig] = None
+    gnnlsh: Optional[GNNLSHConfig] = None
     attention: Optional[AttentionConfig] = None
     litept: Optional[LitePTConfig] = None
     hept: Optional[HEPTConfig] = None
@@ -636,7 +632,7 @@ class MLPFConfig(BaseModel):
                 set_nested_dict(config_dict, "model.attention.attention_type", args.attention_type)
 
             if hasattr(args, "num_convs") and args.num_convs is not None:
-                for m in ["gnn_lsh", "attention", "litept", "hept"]:
+                for m in ["gnnlsh", "attention", "litept", "hept"]:
                     if m in config_dict["model"]:
                         set_nested_dict(config_dict, f"model.{m}.num_convs", args.num_convs)
 
@@ -714,11 +710,11 @@ class MLPFConfig(BaseModel):
         # 7. Pipeline Overrides
         if args and hasattr(args, "pipeline") and args.pipeline:
             # Replicate pipeline-specific overrides
-            if "gnn_lsh" not in config_dict["model"]:
-                config_dict["model"]["gnn_lsh"] = {}
-            config_dict["model"]["gnn_lsh"]["num_convs"] = 1
-            config_dict["model"]["gnn_lsh"]["width"] = 32
-            config_dict["model"]["gnn_lsh"]["embedding_dim"] = 32
+            if "gnnlsh" not in config_dict["model"]:
+                config_dict["model"]["gnnlsh"] = {}
+            config_dict["model"]["gnnlsh"]["num_convs"] = 1
+            config_dict["model"]["gnnlsh"]["width"] = 32
+            config_dict["model"]["gnnlsh"]["embedding_dim"] = 32
 
             if "attention" not in config_dict["model"]:
                 config_dict["model"]["attention"] = {}

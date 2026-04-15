@@ -19,8 +19,8 @@ class TestConfigOverrides(unittest.TestCase):
                 },
                 "test_model": {
                     "architecture": {
-                        "type": "gnn_lsh",
-                        "gnn_lsh": {
+                        "type": "gnnlsh",
+                        "gnnlsh": {
                             "num_convs": 2,
                             "width": 64,
                         },
@@ -54,8 +54,8 @@ class TestConfigOverrides(unittest.TestCase):
         self.assertEqual(config["batch_size"], 32)
         self.assertEqual(config["num_steps"], 100)
         self.assertEqual(config["lr"], 0.001)
-        self.assertEqual(config["conv_type"], ModelType.GNN_LSH)
-        self.assertEqual(config["model"]["gnn_lsh"]["num_convs"], 2)
+        self.assertEqual(config["conv_type"], ModelType.GNNLSH)
+        self.assertEqual(config["model"]["gnnlsh"]["num_convs"], 2)
         self.assertEqual(config["dataset"], Dataset.CMS)
         self.assertTrue("/tmp/particleflow/test_prod/tfds" in config["data_dir"])
 
@@ -82,12 +82,12 @@ class TestConfigOverrides(unittest.TestCase):
         args.train = True
         args.test_datasets = []
 
-        extra_args = ["--model.gnn_lsh.width", "128", "--num_steps", "200"]
+        extra_args = ["--model.gnnlsh.width", "128", "--num_steps", "200"]
 
         config_obj = MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args, extra_args=extra_args)
         config = config_obj.model_dump()
 
-        self.assertEqual(config["model"]["gnn_lsh"]["width"], 128)
+        self.assertEqual(config["model"]["gnnlsh"]["width"], 128)
         self.assertEqual(config["num_steps"], 200)
 
     def test_override_config_convenience_flags(self):
@@ -99,7 +99,7 @@ class TestConfigOverrides(unittest.TestCase):
         config_obj = MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args)
         config = config_obj.model_dump()
 
-        self.assertEqual(config["model"]["gnn_lsh"]["num_convs"], 5)
+        self.assertEqual(config["model"]["gnnlsh"]["num_convs"], 5)
 
     def test_pipeline_overrides(self):
         args = argparse.Namespace()
@@ -110,8 +110,8 @@ class TestConfigOverrides(unittest.TestCase):
         config_obj = MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args)
         config = config_obj.model_dump()
 
-        self.assertEqual(config["model"]["gnn_lsh"]["num_convs"], 1)
-        self.assertEqual(config["model"]["gnn_lsh"]["width"], 32)
+        self.assertEqual(config["model"]["gnnlsh"]["num_convs"], 1)
+        self.assertEqual(config["model"]["gnnlsh"]["width"], 32)
         self.assertEqual(config["train_dataset"]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]["splits"], ["10"])
         self.assertEqual(config["test_dataset"]["cms_pf_ttbar"]["splits"], ["10"])
 
