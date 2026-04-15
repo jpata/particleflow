@@ -20,7 +20,7 @@ job_scratch_dir=/scratch/local/joosep/tfds_tmp/$tfds_id
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export KERAS_BACKEND=torch
 hostname
-export TFDS_VERSION=3.1.0
+export TFDS_VERSION=3.1.1
 env
 
 echo "Building TFDS for mlpf/heptfds/cld_pf_edm4hep/zz config $config_id"

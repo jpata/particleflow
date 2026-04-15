@@ -25,9 +25,10 @@ FIXME
 
 
 class CldEdmTtbarHits(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.1.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.1.1"))
     RELEASE_NOTES = {
         "3.1.0": "Hit-level version with separated tracker and calorimeter hits",
+        "3.1.1": "New generation with v1.2.5_key4hep_2025-05-29, 1M events",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.

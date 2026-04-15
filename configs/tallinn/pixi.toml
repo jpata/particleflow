@@ -73,7 +73,7 @@ default-resources:
   - slurm_account="hepusers"' > .profiles/tallinn/config.v8+.yaml
 """, description = "Create the tallinn snakemake profile" }
 
-snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/snakemake/produce_snakemake.py --production ${PROD:-cms_run3} \"$@\"' --", depends-on = ["setup"], description = "Generate the snakemake files" }
+snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/snakemake/produce_snakemake.py --allow-partial --production ${PROD:-cms_run3} \"$@\"' --", depends-on = ["setup"], description = "Generate the snakemake files" }
 
 all = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} all \"$@\"' --", depends-on = ["snakefile"], description = "Run the full production pipeline" }
 

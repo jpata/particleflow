@@ -81,6 +81,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
     parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
+    parser.add_argument("--allow-partial", action="store_true", help="Allow partial production by only post-processing successful gen jobs")
     args = parser.parse_args()
 
     spec = load_spec(SPEC_FILE)
@@ -364,12 +365,24 @@ done
 
         if "post" in req_steps and (sample_key in tfds_mappings or sample_key in tfds_hit_mappings):
             step_data["post"]["targets"].append(f'"{jobs_dir}/post/post_{sample_key}_all.done"')
+
+            if args.allow_partial:
+                # Dynamically determine which chunks to post-process based on existing gen sentinels
+                post_input = (
+                    f'lambda wildcards: expand("{jobs_dir}/post/post_{sample_key}_{{seed}}.done", '
+                    + f'seed=glob_wildcards("{jobs_dir}/gen/gen_{sample_key}_{{seed}}.done").seed) '
+                    + f'if glob_wildcards("{jobs_dir}/gen/gen_{sample_key}_{{seed}}.done").seed '
+                    + f'else expand("{jobs_dir}/post/post_{sample_key}_{{seed}}.done", seed=range({seed_start}, {seed_end}, {CHUNK_SIZE}))'
+                )
+            else:
+                post_input = f'expand("{jobs_dir}/post/post_{sample_key}_{{seed}}.done", seed=range({seed_start}, {seed_end}, {CHUNK_SIZE}))'
+
             step_data["post"][
                 "rules"
             ] += f"""
 rule post_{sample_key}_all:
     input:
-        expand("{jobs_dir}/post/post_{sample_key}_{{seed}}.done", seed=range({seed_start}, {seed_end}, {CHUNK_SIZE}))
+        {post_input}
     output:
         "{jobs_dir}/post/post_{sample_key}_all.done"
     shell:

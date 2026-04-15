@@ -25,7 +25,7 @@ rule all:
 
 rule post_zz_all:
     input:
-        expand("snakemake_jobs/cld/post/post_zz_{seed}.done", seed=range(100000, 105010, 1))
+        lambda wildcards: expand("snakemake_jobs/cld/post/post_zz_{seed}.done", seed=glob_wildcards("snakemake_jobs/cld/gen/gen_zz_{seed}.done").seed) if glob_wildcards("snakemake_jobs/cld/gen/gen_zz_{seed}.done").seed else expand("snakemake_jobs/cld/post/post_zz_{seed}.done", seed=range(100000, 105010, 1))
     output:
         "snakemake_jobs/cld/post/post_zz_all.done"
     shell:
@@ -33,7 +33,7 @@ rule post_zz_all:
 
 rule post_ttbar_all:
     input:
-        expand("snakemake_jobs/cld/post/post_ttbar_{seed}.done", seed=range(300000, 305010, 1))
+        lambda wildcards: expand("snakemake_jobs/cld/post/post_ttbar_{seed}.done", seed=glob_wildcards("snakemake_jobs/cld/gen/gen_ttbar_{seed}.done").seed) if glob_wildcards("snakemake_jobs/cld/gen/gen_ttbar_{seed}.done").seed else expand("snakemake_jobs/cld/post/post_ttbar_{seed}.done", seed=range(300000, 310010, 1))
     output:
         "snakemake_jobs/cld/post/post_ttbar_all.done"
     shell:
@@ -41,7 +41,7 @@ rule post_ttbar_all:
 
 rule post_ww_fullhad_all:
     input:
-        expand("snakemake_jobs/cld/post/post_ww_fullhad_{seed}.done", seed=range(400000, 405010, 1))
+        lambda wildcards: expand("snakemake_jobs/cld/post/post_ww_fullhad_{seed}.done", seed=glob_wildcards("snakemake_jobs/cld/gen/gen_ww_fullhad_{seed}.done").seed) if glob_wildcards("snakemake_jobs/cld/gen/gen_ww_fullhad_{seed}.done").seed else expand("snakemake_jobs/cld/post/post_ww_fullhad_{seed}.done", seed=range(400000, 410010, 1))
     output:
         "snakemake_jobs/cld/post/post_ww_fullhad_all.done"
     shell:
@@ -49,7 +49,7 @@ rule post_ww_fullhad_all:
 
 rule post_qq_all:
     input:
-        expand("snakemake_jobs/cld/post/post_qq_{seed}.done", seed=range(500000, 505010, 1))
+        lambda wildcards: expand("snakemake_jobs/cld/post/post_qq_{seed}.done", seed=glob_wildcards("snakemake_jobs/cld/gen/gen_qq_{seed}.done").seed) if glob_wildcards("snakemake_jobs/cld/gen/gen_qq_{seed}.done").seed else expand("snakemake_jobs/cld/post/post_qq_{seed}.done", seed=range(500000, 510010, 1))
     output:
         "snakemake_jobs/cld/post/post_qq_all.done"
     shell:
@@ -69,8 +69,8 @@ rule post_task:
     output:
         "snakemake_jobs/cld/post/post_{sample}_{seed}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=2000, slurm_partition="main", runtime=240, slurm_account="hepusers", cpus_per_task=1, threads=1
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=2000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
-        "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
+        "/scratch/persistent/joosep/singularity/particleflow-20260330-cd2f54.sif"
     shell:
         "snakemake_jobs/cld/post/post_{wildcards.sample}.sh {wildcards.seed} && touch {output}"
