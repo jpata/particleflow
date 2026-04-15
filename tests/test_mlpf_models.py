@@ -133,28 +133,30 @@ def test_mlpf_litept():
             "type": "litept",
             "litept": {
                 "num_convs": 1,
-                "embedding_dim": 16,
-                "width": 16,
-                "enc_channels": [16, 16, 16, 16, 16],
-                "dec_channels": [16, 16, 16, 16],
+                "embedding_dim": 36,
+                "width": 36,
+                "enc_channels": [36, 36, 36, 36, 36],
+                "dec_channels": [36, 36, 36, 36],
+                "enc_num_head": [2, 2, 2, 2, 2],
+                "dec_num_head": [2, 2, 2, 2],
             },
         },
         "conv_type": "litept",
     }
     config = MLPFConfig.model_validate(config_dict)
-    model = MLPF(config)
+    model = MLPF(config).to("cuda")
 
     batch_size = 2
     seq_len = 16
     input_dim = config.input_dim
 
-    X = torch.randn(batch_size, seq_len, input_dim)
-    elem_types = torch.tensor(config.elemtypes_nonzero)
+    X = torch.randn(batch_size, seq_len, input_dim).to("cuda")
+    elem_types = torch.tensor(config.elemtypes_nonzero).to("cuda")
     X[..., 0] = elem_types[torch.randint(0, len(elem_types), (batch_size, seq_len))].to(X.dtype)
     X[..., 1] = torch.exp(X[..., 1])
     X[..., 5] = torch.exp(X[..., 5])
 
-    mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+    mask = torch.ones(batch_size, seq_len, dtype=torch.bool).to("cuda")
 
     preds_binary_particle, preds_pid, preds_momentum, preds_pu = model(X, mask)
 

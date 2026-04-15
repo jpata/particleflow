@@ -1,5 +1,5 @@
 import torch
-from mlpf.standalone.train import (
+from mlpf.model.hept import (
     quantile_partition,
     invert_permutation,
     batched_index_select,
