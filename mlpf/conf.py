@@ -688,7 +688,7 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical": {
                                 "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.0"}},
+                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.1"}},
                             }
                         }
                 if "test_dataset" in config_dict and "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
@@ -700,7 +700,7 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical": {
                                 "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.0"}},
+                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.1"}},
                             }
                         }
                 if "test_dataset" in config_dict and "clic_edm_ttbar_pf" in config_dict["test_dataset"]:
