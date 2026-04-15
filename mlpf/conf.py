@@ -19,6 +19,7 @@ class ModelType(Enum):
     ATTENTION = "attention"
     GNN_LSH = "gnn_lsh"
     LITEPT = "litept"
+    HEPT = "hept"
 
 
 class InputEncoding(Enum):
@@ -410,6 +411,22 @@ class LitePTConfig(BaseModel):
     grid_size: float = 0.01
 
 
+class HEPTConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    conv_type: ModelType = ModelType.HEPT
+    embedding_dim: int = 128
+    width: int = 512
+    num_convs: int = 6
+    num_heads: int = 16
+    dropout_ff: float = 0.1
+    activation: Activation = Activation.ELU
+    pos: bool = False
+    block_size: int = 100
+    n_hashes: int = 3
+    num_regions: int = 140
+    num_w_per_dist: int = 10
+
+
 class ModelArchitectureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -427,6 +444,7 @@ class ModelArchitectureConfig(BaseModel):
     gnn_lsh: Optional[GNNLSHConfig] = None
     attention: Optional[AttentionConfig] = None
     litept: Optional[LitePTConfig] = None
+    hept: Optional[HEPTConfig] = None
 
 
 class DatasetSample(BaseModel):
@@ -618,7 +636,7 @@ class MLPFConfig(BaseModel):
                 set_nested_dict(config_dict, "model.attention.attention_type", args.attention_type)
 
             if hasattr(args, "num_convs") and args.num_convs is not None:
-                for m in ["gnn_lsh", "attention", "litept"]:
+                for m in ["gnn_lsh", "attention", "litept", "hept"]:
                     if m in config_dict["model"]:
                         set_nested_dict(config_dict, f"model.{m}.num_convs", args.num_convs)
 
