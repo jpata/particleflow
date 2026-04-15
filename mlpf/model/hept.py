@@ -1,3 +1,31 @@
+# --- HEPT Utilities ---
+# Adapted from https://github.com/mova/HEPT
+# Paper: "HEPT: Hashed Efficient Particle Transformer", https://arxiv.org/abs/2405.21051
+# MIT License
+# Copyright (c) 2024 Graph-COM
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# Implementation Differences from Official HEPT (HEPT/example/hept.py & HEPT/hept.md):
+# 1. Batching & Precision: Supports batched inputs [B, N, D] via flattening. Coordinates
+#    and offsets are forced to float32. Note: Large batch sizes (>500) may cause "smearing"
+#    of hit coordinates due to float32 precision limits when adding large offsets.
+# 2. Query-Key Alignment (Sec 4.3): Implements coordinate-based AND LSH codes via
+#    quantile_partition() and get_geo_shift() specifically for HEP 2D eta-phi space.
+# 3. Output Projection: HEPTAttention projects to full embedding dim (num_heads * dim_per_head)
+#    instead of dim_per_head as seen in some official examples.
+# 4. Numerical Stability & Gradient Safety: Core RBF distance and weighted sums are performed
+#    in float32. Includes 1e-20 eps and crops outputs back to raw_size before projection
+#    to ensure stable training and finite gradients in highly sparse attention patterns.
+# 5. Backbone Integration: Uses ELU activations and integrated PositionalEncoding
+#    as used in the paper's Tracking experiments.
+
 import math
 import random
 import torch
