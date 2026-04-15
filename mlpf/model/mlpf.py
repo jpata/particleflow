@@ -8,7 +8,12 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.logger import _logger
 from mlpf.model.gnn_lsh import CombinedGraphLayer
-from mlpf.model.litept import LitePTLayer
+
+try:
+    from mlpf.model.litept import LitePTLayer
+except ImportError:
+    LitePTLayer = None
+
 from mlpf.model.hept import HEPTLayer, trunc_normal_
 
 from mlpf.conf import (
@@ -537,6 +542,8 @@ class MLPF(nn.Module):
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
             elif self.conv_type == ModelType.LITEPT:
+                if LitePTLayer is None:
+                    raise ImportError("LitePTLayer is not available. Please check the LitePT installation.")
                 _logger.info("Initializing LitePT convolution layers")
                 self.conv_id = nn.ModuleList()
                 self.conv_reg = nn.ModuleList()

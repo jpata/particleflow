@@ -78,11 +78,12 @@ dependencies = [
     "huggingface_hub",
     #required for dataset preparation, only on linux
     "apache_beam~=2.71.0; sys_platform == 'linux'",
-    "spconv-cu124",
+    #required for litept
+    "spconv-cu124; sys_platform == 'linux'",
     "addict",
     "timm",
     "colorhash",
-    "flash-attn",
+    "flash-attn; sys_platform == 'linux'",
 ]
 
 [project.scripts]
