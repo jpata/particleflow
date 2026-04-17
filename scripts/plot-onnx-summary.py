@@ -37,18 +37,74 @@ def load_data(indir):
                     # Combine model and scenario for a unique label
                     full_label = f"{subdir}: {scenario}"
                     if full_label not in all_data:
-                        all_data[full_label] = {"sizes": [], "runtimes": [], "ooms": [], "maes": [], "model": subdir, "scenario": scenario}
+                        all_data[full_label] = {
+                            "sizes": [],
+                            "runtimes": [],
+                            "ooms": [],
+                            "maes": [],
+                            "memory_maxs": [],
+                            "model": subdir,
+                            "scenario": scenario,
+                        }
 
                     for run in runs:
                         if run["runtime"] is not None:
                             all_data[full_label]["sizes"].append(run["size"])
                             all_data[full_label]["runtimes"].append(run["runtime"] * 1000.0)  # ms
+                        if run.get("memory_max") is not None:
+                            all_data[full_label]["memory_maxs"].append(run["memory_max"])
                         if run.get("mae") is not None:
                             all_data[full_label]["maes"].append(run["mae"])
                         if run["oom"]:
                             all_data[full_label]["ooms"].append(run["size"])
 
     return all_data, model_metadata, system_info
+
+
+def plot_memory_scaling(data, outdir, system_info):
+    plt.figure(figsize=(15, 10))
+    ax = plt.gca()
+
+    unique_models = sorted(list(set(v["model"] for v in data.values())))
+    markers = ["o", "s", "D", "v", "^", "<", ">", "p", "*", "h"]
+    model_to_marker = {model: markers[i % len(markers)] for i, model in enumerate(unique_models)}
+
+    unique_scenarios = sorted(list(set(v["scenario"] for v in data.values())))
+    colors = plt.cm.tab20(np.linspace(0, 1, len(unique_scenarios)))
+    scenario_to_color = {sc: colors[i % len(colors)] for i, sc in enumerate(unique_scenarios)}
+
+    for full_label, vals in sorted(data.items()):
+        sizes = np.array(vals["sizes"])
+        mems = np.array(vals["memory_maxs"])
+        color = scenario_to_color[vals["scenario"]]
+        marker = model_to_marker[vals["model"]]
+
+        if len(sizes) > 0 and len(mems) > 0:
+            idx = np.argsort(sizes)
+            plt.scatter(sizes[idx], mems[idx], label=full_label, color=color, marker=marker, alpha=0.6, s=30)
+
+    plt.xlabel("Event size (number of elements)")
+    plt.ylabel("Peak Memory [MiB]")
+    plt.title(f"Peak Memory Scaling vs. Event Size ({system_info.get('device', 'Unknown')})", y=1.05)
+
+    system_text = f"Device: {system_info.get('device', 'Unknown')}\nCPU: {system_info.get('cpu', 'Unknown')}\nGPU: {system_info.get('gpu', 'Unknown')}\nPyTorch: {system_info.get('pytorch_version', 'Unknown')}\nONNX Runtime: {system_info.get('onnxruntime_version', 'Unknown')}"
+    plt.text(
+        0.02,
+        0.98,
+        system_text,
+        transform=ax.transAxes,
+        verticalalignment="top",
+        fontsize=10,
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.5),
+    )
+
+    plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
+    plt.grid(True, which="both", ls="-", alpha=0.2)
+    plt.margins(0.1)
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+
+    plt.savefig(os.path.join(outdir, "memory_scaling_summary.pdf"))
+    plt.savefig(os.path.join(outdir, "memory_scaling_summary.png"))
 
 
 def plot_mae_vs_runtime(data, outdir, system_info):
@@ -565,6 +621,9 @@ def main():
 
     # Violin plot summary
     plot_violin_summary(data, args.outdir, system_info)
+
+    # Memory scaling plot
+    plot_memory_scaling(data, args.outdir, system_info)
 
     # Bar plot summary
     plot_bar_summary(data, args.outdir, system_info)

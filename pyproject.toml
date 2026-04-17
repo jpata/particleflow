@@ -49,6 +49,7 @@ dependencies = [
     "plotly",
     "pre-commit",
     "protobuf~=5.28.3",
+    "psutil",
     #needed for apache_beam compatibility
     "pyarrow~=18.1.0; sys_platform == 'linux'",
     #needed to prevent mutex lock error on OSX

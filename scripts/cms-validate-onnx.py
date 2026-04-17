@@ -13,6 +13,7 @@ import gc
 import json
 import platform
 import subprocess
+import psutil
 
 # Ensure mlpf is in the path
 sys.path.append(os.getcwd())
@@ -606,6 +607,7 @@ def main():
             "num_elems": 0,
             "num_invalid": 0,
             "runtime": [],
+            "memory_max": [],
             "event_size": [],
             "jets_pt": [],
             "runs": [],
@@ -618,6 +620,7 @@ def main():
         all_event_sizes.append(ds[i]["X"].shape[0])
 
     baseline_predictions = {}
+    process = psutil.Process()
 
     for cfg in configs:
         print(f"Running validation for {cfg}...")
@@ -648,6 +651,7 @@ def main():
             try:
                 if args.device == "cuda":
                     torch.cuda.synchronize()
+                    torch.cuda.reset_peak_memory_stats()
                 t0 = time.perf_counter()
 
                 if cfg == "PT_ATTN_MATH_FP32":
@@ -697,6 +701,11 @@ def main():
                     torch.cuda.synchronize()
                 t1 = time.perf_counter()
 
+                if args.device == "cuda":
+                    mem_max = torch.cuda.max_memory_allocated() / (1024**2)  # In MiB
+                else:
+                    mem_max = process.memory_info().rss / (1024**2)  # In MiB
+
                 if "PT" in cfg:
                     pred = tuple(p.cpu().float() for p in pred)
 
@@ -704,11 +713,14 @@ def main():
                     baseline_predictions[i] = (pred, m_cpu)
 
                 results[cfg]["runtime"].append(t1 - t0)
+                results[cfg]["memory_max"].append(mem_max)
                 results[cfg]["event_size"].append(num_elements)
-                results[cfg]["runs"].append({"event_idx": i, "size": num_elements, "runtime": t1 - t0, "oom": False})
+                results[cfg]["runs"].append(
+                    {"event_idx": i, "size": num_elements, "runtime": t1 - t0, "memory_max": mem_max, "oom": False}
+                )
             except (rt.capi.onnxruntime_pybind11_state.RuntimeException, torch.cuda.OutOfMemoryError) as e:
                 is_oom = "Out of memory" in str(e) or isinstance(e, torch.cuda.OutOfMemoryError)
-                results[cfg]["runs"].append({"event_idx": i, "size": num_elements, "runtime": None, "oom": is_oom})
+                results[cfg]["runs"].append({"event_idx": i, "size": num_elements, "runtime": None, "memory_max": None, "oom": is_oom})
                 print(f"Skipping event {i} for {cfg} due to error: {e}")
                 if args.device == "cuda":
                     torch.cuda.empty_cache()
@@ -831,6 +843,23 @@ def main():
         avg_rt = np.mean(results[cfg]["runtime"]) * 1000.0
         std_rt = np.std(results[cfg]["runtime"]) * 1000.0
         print(f"{cfg:20s}: {avg_rt:.2f} +/- {std_rt:.2f} ms")
+
+    print("\nMean Memory Summary:")
+    for cfg in configs:
+        if results[cfg]["memory_max"]:
+            avg_mem = np.mean(results[cfg]["memory_max"])
+            std_mem = np.std(results[cfg]["memory_max"])
+            print(f"{cfg:20s}: {avg_mem:.2f} +/- {std_mem:.2f} MiB")
+
+    plt.figure(figsize=(12, 8))
+    avg_mems = [np.mean(results[cfg]["memory_max"]) if results[cfg]["memory_max"] else 0 for cfg in configs]
+    plt.bar(configs, avg_mems, color=[colors[i % len(colors)] for i in range(len(configs))])
+    plt.ylabel("Mean Peak Memory [MiB]")
+    plt.title(f"Mean Peak Memory Usage ({'GPU' if args.device == 'cuda' else 'CPU'})", y=1.05)
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.savefig(os.path.join(args.outdir, "memory_usage.pdf"), bbox_inches="tight")
+    plt.close()
 
     plt.bar(sorted_configs, maes, color=[colors[configs.index(cfg)] for cfg in sorted_configs])
     plt.ylim(0, 1.5 * np.max(maes) if len(maes) > 0 and np.max(maes) > 0 else 1)
