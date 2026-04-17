@@ -397,19 +397,23 @@ class HEPTLayer(nn.Module):
         coords_flat = coords.view(B * S, 2)
 
         raw_size = B * S
-        x_flat_padded = pad_to_multiple(x_flat, self.block_size, dims=0)
-        coords_flat_padded = pad_to_multiple(coords_flat, self.block_size, dims=0, value=float("inf"))
+
+        # We assume the input is already padded to a multiple of block_size outside the model
+        # to avoid issues with ONNX export of dynamic padding.
+        # During tracing, we want to avoid Python-level control flow on tensor shapes.
+        x_flat_padded = x_flat
+        coords_flat_padded = coords_flat
 
         # Precompute regions and indices
         with torch.no_grad():
             coords_for_sort = coords_flat_padded.clone()
             if mask is not None:
                 mask_flat = mask.view(-1)
-                mask_flat_padded = pad_to_multiple(mask_flat, self.block_size, dims=0, value=0.0)
-                coords_for_sort[mask_flat_padded == 0] = float("inf")
+                mask_flat_padded = mask_flat
+                # Explicit broadcasting for ONNX Where compatibility
+                coords_for_sort = torch.where(mask_flat_padded.unsqueeze(-1) == 0, torch.tensor(float("inf"), device=device), coords_for_sort)
             else:
                 mask_flat_padded = torch.ones_like(coords_flat_padded[..., 0])
-                mask_flat_padded[raw_size:] = 0.0
 
             sorted_eta_idx = torch.argsort(coords_for_sort[..., 0], dim=-1)
             sorted_phi_idx = torch.argsort(coords_for_sort[..., 1], dim=-1)
@@ -418,7 +422,8 @@ class HEPTLayer(nn.Module):
             region_indices_phi = quantile_partition(sorted_phi_idx, regions_h[1][:, None])
             region_indices = [region_indices_eta, region_indices_phi]
 
-            coords_flat_padded[mask_flat_padded == 0] = 0.0
+            # Explicit broadcasting for ONNX Where compatibility
+            coords_flat_padded = torch.where(mask_flat_padded.unsqueeze(-1) == 0, torch.tensor(0.0, device=device), coords_flat_padded)
 
         # Run attention
         x_norm = self.norm0(x_flat_padded)

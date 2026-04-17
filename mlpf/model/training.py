@@ -679,7 +679,13 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         ntest = config.ntest // len(split_configs)
 
     for split_config in split_configs:
-        ds = PFDataset(config.data_dir, f"{sample}/{split_config}:{version}", "test", num_samples=ntest).ds
+        ds = PFDataset(
+            config.data_dir,
+            f"{sample}/{split_config}:{version}",
+            "test",
+            num_samples=ntest,
+            pad_to_multiple=config.pad_to_multiple_elements,
+        ).ds
         dataset.append(ds)
     ds = torch.utils.data.ConcatDataset(dataset)
 

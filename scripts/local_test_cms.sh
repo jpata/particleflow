@@ -50,7 +50,7 @@ python mlpf/pipeline.py \
   --make-plots \
   --conv_type attention \
   --dtype float32 \
-  --model.attention.attention_type standard \
+  --model.attention.attention_type math \
   --model.attention.num_convs 1 \
   --num_workers 1 --prefetch_factor 1
 
@@ -77,7 +77,7 @@ python mlpf/pipeline.py \
   --make-plots \
   --conv_type attention \
   --dtype float32 \
-  --model.attention.attention_type standard \
+  --model.attention.attention_type math \
   --model.attention.num_convs 1 \
   --load ${EXP_DIR_1}/checkpoints/checkpoint-02.pth \
   --num_workers 1 --prefetch_factor 1
@@ -113,5 +113,5 @@ python scripts/cms-validate-onnx.py \
 #  --ray-local \
 #  --conv-type attention \
 #  --dtype float32 \
-#  --attention-type standard \
+#  --attention-type math \
 #  --num-convs 1

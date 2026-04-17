@@ -22,7 +22,7 @@ def parse_args():
 def load_data(indir):
     all_data = {}
     model_metadata = {}
-    # Iterate over subdirectories (e.g., standard, linear, gnn-lsh)
+    # Iterate over subdirectories (e.g., math, linear, gnn-lsh)
     for subdir in sorted(os.listdir(indir)):
         summary_path = os.path.join(indir, subdir, "summary.json")
         if os.path.exists(summary_path):
@@ -153,9 +153,9 @@ def plot_mae_vs_runtime(data, outdir, system_info):
         bbox=dict(boxstyle="round", facecolor="white", alpha=0.5),
     )
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(outdir, "mae_vs_runtime.pdf"), bbox_inches="tight")
-    plt.savefig(os.path.join(outdir, "mae_vs_runtime.png"), bbox_inches="tight")
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+    plt.savefig(os.path.join(outdir, "mae_vs_runtime.pdf"))
+    plt.savefig(os.path.join(outdir, "mae_vs_runtime.png"))
 
 
 def plot_loss_vs_runtime(data, model_metadata, outdir, system_info):
@@ -264,9 +264,9 @@ def plot_loss_vs_runtime(data, model_metadata, outdir, system_info):
         bbox=dict(boxstyle="round", facecolor="white", alpha=0.5),
     )
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(outdir, "loss_vs_runtime.pdf"), bbox_inches="tight")
-    plt.savefig(os.path.join(outdir, "loss_vs_runtime.png"), bbox_inches="tight")
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+    plt.savefig(os.path.join(outdir, "loss_vs_runtime.pdf"))
+    plt.savefig(os.path.join(outdir, "loss_vs_runtime.png"))
 
 
 def plot_violin_summary(data, outdir, system_info):
@@ -336,15 +336,15 @@ def plot_violin_summary(data, outdir, system_info):
         bbox=dict(boxstyle="round", facecolor="white", alpha=0.5),
     )
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(outdir, "runtime_violin_comparison.pdf"), bbox_inches="tight")
-    plt.savefig(os.path.join(outdir, "runtime_violin_comparison.png"), bbox_inches="tight")
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+    plt.savefig(os.path.join(outdir, "runtime_violin_comparison.pdf"))
+    plt.savefig(os.path.join(outdir, "runtime_violin_comparison.png"))
 
     # Also log scale version
     plt.yscale("log")
     plt.title("Runtime Comparison: Baseline vs. Fastest Scenario (Log Scale)", y=1.05)
-    plt.savefig(os.path.join(outdir, "runtime_violin_comparison_log.pdf"), bbox_inches="tight")
-    plt.savefig(os.path.join(outdir, "runtime_violin_comparison_log.png"), bbox_inches="tight")
+    plt.savefig(os.path.join(outdir, "runtime_violin_comparison_log.pdf"))
+    plt.savefig(os.path.join(outdir, "runtime_violin_comparison_log.png"))
 
 
 def plot_bar_summary(data, outdir, system_info):
@@ -414,14 +414,14 @@ def plot_bar_summary(data, outdir, system_info):
         bbox=dict(boxstyle="round", facecolor="white", alpha=0.5),
     )
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(outdir, "runtime_bar_comparison.pdf"), bbox_inches="tight")
-    plt.savefig(os.path.join(outdir, "runtime_bar_comparison.png"), bbox_inches="tight")
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+    plt.savefig(os.path.join(outdir, "runtime_bar_comparison.pdf"))
+    plt.savefig(os.path.join(outdir, "runtime_bar_comparison.png"))
 
     plt.xscale("log")
     plt.title("Mean Runtime Comparison: Baseline vs. Fastest Scenario (Log Scale)", y=1.05)
-    plt.savefig(os.path.join(outdir, "runtime_bar_comparison_log.pdf"), bbox_inches="tight")
-    plt.savefig(os.path.join(outdir, "runtime_bar_comparison_log.png"), bbox_inches="tight")
+    plt.savefig(os.path.join(outdir, "runtime_bar_comparison_log.pdf"))
+    plt.savefig(os.path.join(outdir, "runtime_bar_comparison_log.png"))
 
 
 def save_text_summary(data, model_metadata, outdir):
@@ -549,19 +549,19 @@ def main():
     plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
     plt.grid(True, which="both", ls="-", alpha=0.2)
     plt.margins(0.1)
-    plt.tight_layout()
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
 
     plot_path = os.path.join(args.outdir, "runtime_scaling_summary.pdf")
-    plt.savefig(plot_path, bbox_inches="tight")
-    plt.savefig(plot_path.replace(".pdf", ".png"), bbox_inches="tight")
+    plt.savefig(plot_path)
+    plt.savefig(plot_path.replace(".pdf", ".png"))
 
     # Log-log plot
     plt.xscale("log")
     plt.yscale("log")
     plt.title("Runtime Scaling vs. Event Size (Log-Log)", y=1.05)
     log_plot_path = os.path.join(args.outdir, "runtime_scaling_summary_log.pdf")
-    plt.savefig(log_plot_path, bbox_inches="tight")
-    plt.savefig(log_plot_path.replace(".pdf", ".png"), bbox_inches="tight")
+    plt.savefig(log_plot_path)
+    plt.savefig(log_plot_path.replace(".pdf", ".png"))
 
     # Violin plot summary
     plot_violin_summary(data, args.outdir, system_info)

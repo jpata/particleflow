@@ -1,5 +1,4 @@
 import time
-import numpy as np
 from typing import Union, List
 
 import torch
@@ -69,6 +68,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         self.attention_type = AttentionType(attention_type)
         self.attn_params = {
             AttentionType.SIMPLE: [SDPBackend.MATH, SDPBackend.EFFICIENT_ATTENTION],
+            AttentionType.MATH: [SDPBackend.MATH],
             AttentionType.FLASH: [SDPBackend.FLASH_ATTENTION],
         }
 
@@ -132,14 +132,14 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.attention_type = AttentionType(attention_type)
         self.act = get_activation(activation)
 
-        if self.attention_type == AttentionType.STANDARD:
-            _logger.info("layer {} using attention_type=standard".format(self.name))
-            self.mha = torch.nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout_mha, batch_first=True)
-        else:
-            _logger.info("layer {} using attention_type={} (SimpleMultiheadAttention)".format(self.name, self.attention_type))
-            self.mha = SimpleMultiheadAttention(
-                embedding_dim, num_heads, dropout=dropout_mha, export_onnx_fused=export_onnx_fused, attention_type=self.attention_type
-            )
+        _logger.info("layer {} using attention_type={} (SimpleMultiheadAttention)".format(self.name, self.attention_type))
+        self.mha = SimpleMultiheadAttention(
+            embedding_dim,
+            num_heads,
+            dropout=dropout_mha,
+            export_onnx_fused=export_onnx_fused,
+            attention_type=self.attention_type,
+        )
 
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
         self.norm1 = torch.nn.LayerNorm(embedding_dim)
@@ -181,14 +181,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         if mask is not None:
             q = q * mask_
 
-        if self.attention_type == AttentionType.STANDARD:
-            mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
-
-            if self.save_attention:
-                att_mat = self.mha(q, x_norm, x_norm, need_weights=True)[1]
-                att_mat = att_mat.detach().cpu().numpy()
-        else:
-            mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
+        mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
 
         self.mha_res_norm = mha_out.norm().detach()
 
@@ -203,13 +196,6 @@ class PreLnSelfAttentionLayer(nn.Module):
         x = residual + ffn_out
         if mask is not None:
             x = x * mask_
-        if self.attention_type == AttentionType.STANDARD and self.save_attention:
-            np.savez(
-                open("{}/attn_{}_{}.npz".format(self.outdir, self.name, self.att_mat_idx), "wb"),
-                att=att_mat,
-                x=x.detach().cpu().numpy(),
-                in_proj_weight=self.mha.in_proj_weight.detach().cpu().numpy(),
-            )
         return x
 
 

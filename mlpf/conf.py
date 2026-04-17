@@ -64,7 +64,7 @@ class LRSchedule(Enum):
 
 
 class AttentionType(Enum):
-    STANDARD = "standard"
+    MATH = "math"
     FLASH = "flash"
     SIMPLE = "simple"
 
