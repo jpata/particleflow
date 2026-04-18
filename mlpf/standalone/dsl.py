@@ -1,26 +1,32 @@
 from dataclasses import dataclass
-from typing import List, Dict, Union, Optional
+from typing import List, Union, Dict, Optional
 
 
+@dataclass(frozen=True)
 class LayerConfig:
-    def __init__(self, type: str, **kwargs):
-        self.type = type
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+    type: str
+    num_heads: int = 16
+    embedding_dim: int = 128
+    width: int = 512
+    dropout: float = 0.1
+    pos: bool = False
 
-    def __eq__(self, other):
-        if not isinstance(other, LayerConfig):
-            return False
-        return self.__dict__ == other.__dict__
+    def __mul__(self, n: int):
+        return [self for _ in range(n)]
+
+    def __add__(self, other):
+        if isinstance(other, list):
+            return [self] + other
+        return [self, other]
+
+    def __radd__(self, other):
+        if isinstance(other, list):
+            return other + [self]
+        return [other, self]
 
 
 @dataclass(frozen=True)
 class HEPTConfig(LayerConfig):
-    num_heads: int = 16
-    embedding_dim: int = 128
-    width: int = 512
-    pos: bool = False
-    dropout: float = 0.1
     type: str = "hept"
     block_size: int = 100
     n_hashes: int = 3
@@ -152,41 +158,57 @@ def parse_dsl(dsl_str: str) -> ModelConfig:
         "additive": "additive",
         "multiplicative": "multiplicative",
         "linear": "linear",
+        "shared": "shared",
+        "pid": "pid",
+        "reg": "reg",
+        "binary": "binary",
+        "pt": "pt",
+        "eta": "eta",
+        "sin_phi": "sin_phi",
+        "cos_phi": "cos_phi",
+        "energy": "energy",
     }
 
-    def eval_part(p):
-        if "*" in p:
-            base, count = p.split("*")
-            return [eval(base, {"__builtins__": None}, ns)] * int(count)
+    # 1. Parse input
+    input_cfg = eval(parts[0], {"__builtins__": {}}, ns)
+
+    # 2. Parse backbone
+    backbone_str = parts[1].strip()
+    final_backbone = {"shared": [], "pid": [], "reg": [], "binary": []}
+
+    if "{" in backbone_str:
+        if backbone_str.count("{") == 1 and backbone_str.find("{") > 0:
+            idx = backbone_str.find("{")
+            joint_expr = backbone_str[:idx].strip()
+            if joint_expr.endswith("+"):
+                joint_expr = joint_expr[:-1]
+            if joint_expr:
+                joint_layers = eval(joint_expr, {"__builtins__": {}}, ns)
+                final_backbone["shared"] = joint_layers if isinstance(joint_layers, list) else [joint_layers]
+            dict_str = backbone_str[idx:]
         else:
-            return [eval(p, {"__builtins__": None}, ns)]
+            dict_str = backbone_str
 
-    try:
-        input_cfg = eval_part(parts[0])[0]
-        backbone_raw = parts[1].split("+")
-        backbone = {}
-
-        for b in backbone_raw:
-            if ":" in b:
-                key, layers_str = b.split(":")
-                backbone[key] = []
-                for _l in layers_str.split(","):
-                    backbone[key].extend(eval_part(_l))
+        dict_val = eval(dict_str, {"__builtins__": {}}, ns)
+        for k, v in dict_val.items():
+            layers = v if isinstance(v, list) else [v]
+            if k == "shared":
+                final_backbone["shared"].extend(layers)
             else:
-                if "shared" not in backbone:
-                    backbone["shared"] = []
-                backbone["shared"].extend(eval_part(b))
+                final_backbone[k] = layers
+    else:
+        layers = eval(backbone_str, {"__builtins__": {}}, ns)
+        final_backbone["shared"] = layers if isinstance(layers, list) else [layers]
 
-        output_cfg = eval_part(parts[2])[0]
+    # 3. Parse output
+    output_cfg = eval(parts[2], {"__builtins__": {}}, ns)
 
-        return ModelConfig(input=input_cfg, backbone=backbone, output=output_cfg)
-    except Exception as e:
-        raise ValueError(f"Failed to parse DSL: {e}")
+    config = ModelConfig(input_cfg, final_backbone, output_cfg)
+    config.validate()
+    return config
 
 
-def config_to_string(config: ModelConfig) -> str:
-    """Serializes a ModelConfig back to a DSL string."""
-
+def config_to_string(cfg: ModelConfig) -> str:
     def layers_to_str(layers):
         if not layers:
             return ""
@@ -198,46 +220,50 @@ def config_to_string(config: ModelConfig) -> str:
             count = 1
             while i + 1 < len(layers) and layers[i + 1] == curr:
                 count += 1
-            func = type_to_func.get(curr.type, curr.type)
-            params = f"{curr.num_heads},{curr.embedding_dim},{curr.width}"
-            if curr.pos:
-                params += ",pos=T"
-            if hasattr(curr, "dropout") and curr.dropout != 0.1:
-                params += f",dropout={curr.dropout}"
+                i += 1
+            p_str = ",pos=T" if curr.pos else ""
+            d_str = f",dropout={curr.dropout}" if curr.dropout != 0.1 else ""
+            params = f"{curr.num_heads},{curr.embedding_dim},{curr.width}{p_str}{d_str}"
+            if isinstance(curr, HEPTConfig):
+                if curr.block_size != 100:
+                    params += f",block_size={curr.block_size}"
+                if curr.n_hashes != 3:
+                    params += f",n_hashes={curr.n_hashes}"
+                if curr.num_regions != 140:
+                    params += f",num_regions={curr.num_regions}"
+                if curr.num_w_per_dist != 10:
+                    params += f",num_w_per_dist={curr.num_w_per_dist}"
 
-            # Extra params for HEPT
-            if curr.type == "hept":
-                for _field in ["block_size", "n_hashes", "num_regions", "num_w_per_dist"]:
-                    val = getattr(curr, _field)
-                    # only add if different from default
-                    if val != HEPTConfig.__dataclass_fields__[_field].default:
-                        params += f",{_field}={val}"
-
-            s = f"{func}({params})"
+            func = type_to_func.get(curr.type, curr.type[0])
+            layer_str = f"{func}({params})"
             if count > 1:
-                s += f"*{count}"
-            res.append(s)
-            i += count
-        return ",".join(res)
+                layer_str += f"*{count}"
+            res.append(layer_str)
+            i += 1
+        return "+".join(res)
 
-    input_str = f"i({config.input.input_dim},{config.input.embedding_dim},{config.input.width},{config.input.type},{config.input.dropout})"
+    d_str = f",dropout={cfg.input.dropout}" if cfg.input.dropout != 0.1 else ""
+    i_str = f"i({cfg.input.input_dim},{cfg.input.embedding_dim},{cfg.input.width},{cfg.input.type}{d_str})"
+    shared_str = layers_to_str(cfg.backbone.get("shared", []))
+    branches = {k: v for k, v in cfg.backbone.items() if k != "shared" and v}
 
-    backbone_parts = []
-    if "shared" in config.backbone:
-        backbone_parts.append(layers_to_str(config.backbone["shared"]))
+    if branches:
+        branch_str = "{" + ",".join([f"{k}:{layers_to_str(v)}" for k, v in branches.items()]) + "}"
+        b_str = f"{shared_str}+{branch_str}" if shared_str else branch_str
+    else:
+        b_str = shared_str
 
-    for k in ["pid", "reg", "binary"]:
-        if k in config.backbone and config.backbone[k]:
-            backbone_parts.append(f"{k}:{layers_to_str(config.backbone[k])}")
+    rg_val = cfg.output.rg_mode
+    if isinstance(rg_val, dict):
+        rg_str = "{" + ",".join([f"{k}:{v}" for k, v in rg_val.items()]) + "}"
+    else:
+        rg_str = str(rg_val)
 
-    backbone_str = "+".join(backbone_parts)
-
-    rg_str = config.output.rg_mode
-    if isinstance(rg_str, dict):
-        rg_str = "{" + ",".join([f"{k}={v}" for k, v in rg_str.items()]) + "}"
-
-    output_str = f"o({config.output.num_classes},{config.output.width},{config.output.type},{rg_str},{config.output.dropout})"
-    if config.output.embedding_dim:
-        output_str = output_str[:-1] + f",embedding_dim={config.output.embedding_dim})"
-
-    return f"{input_str}|{backbone_str}|{output_str}"
+    d_str = f",dropout={cfg.output.dropout}" if cfg.output.dropout != 0.1 else ""
+    e_str = f",embedding_dim={cfg.output.embedding_dim}" if cfg.output.embedding_dim is not None else ""
+    o_str = (
+        f"o({cfg.output.num_classes},{cfg.output.width},{cfg.output.type},rg={rg_str}{d_str}{e_str})"
+        if rg_val != "direct"
+        else f"o({cfg.output.num_classes},{cfg.output.width},{cfg.output.type}{d_str}{e_str})"
+    )
+    return f"{i_str}|{b_str}|{o_str}"

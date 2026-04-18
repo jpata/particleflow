@@ -390,10 +390,14 @@ def main():
             output, _, _ = msft_op.MultiHeadAttention(query, key, value, num_heads=NUM_HEADS)
             return output
 
-        def custom_scaled_dot_product_attention_fp16(g, query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, enable_gqa=False):
+        def custom_scaled_dot_product_attention_fp16(
+            g, query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, enable_gqa=False
+        ):
             return g.onnxscript_op(SDPA_FP16, query, key, value).setType(query.type())
 
-        def custom_scaled_dot_product_attention_fp32(g, query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, enable_gqa=False):
+        def custom_scaled_dot_product_attention_fp32(
+            g, query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, enable_gqa=False
+        ):
             return g.onnxscript_op(SDPA_FP32, query, key, value).setType(query.type())
 
         # 3a. Export ONNX Fused Flash FP32
@@ -715,9 +719,7 @@ def main():
                 results[cfg]["runtime"].append(t1 - t0)
                 results[cfg]["memory_max"].append(mem_max)
                 results[cfg]["event_size"].append(num_elements)
-                results[cfg]["runs"].append(
-                    {"event_idx": i, "size": num_elements, "runtime": t1 - t0, "memory_max": mem_max, "oom": False}
-                )
+                results[cfg]["runs"].append({"event_idx": i, "size": num_elements, "runtime": t1 - t0, "memory_max": mem_max, "oom": False})
             except (rt.capi.onnxruntime_pybind11_state.RuntimeException, torch.cuda.OutOfMemoryError) as e:
                 is_oom = "Out of memory" in str(e) or isinstance(e, torch.cuda.OutOfMemoryError)
                 results[cfg]["runs"].append({"event_idx": i, "size": num_elements, "runtime": None, "memory_max": None, "oom": is_oom})
