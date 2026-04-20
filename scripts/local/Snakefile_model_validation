@@ -9,8 +9,7 @@ sys.path.append(os.getcwd())
 from mlpf.conf import MLPFConfig, ModelType
 
 # Configuration
-#CONFIGS = ["attn", "hept", "litept", "gnnlsh-bin32", "gnnlsh-bin128"]
-CONFIGS = ["attn"]
+CONFIGS = ["attn", "hept", "litept", "gnnlsh-bin32", "gnnlsh-bin128"]
 DEVICES = ["cuda", "cpu"]
 #DEVICES = ["cuda"]
 MODEL_NAME = "pyg-cms-v1"
@@ -103,7 +102,7 @@ rule onnx_validate:
         }.get(wildcards.config, ""),
         extra_args = get_onnx_validate_extra_args,
         num_events = lambda wildcards: 100 if wildcards.device == "cuda" else 10,
-        uv_project = lambda wildcards: "envs/gpu" if wildcards.device == "cuda" else "envs/openvino"
+        uv_project = lambda wildcards: "envs/ort-gpu" if wildcards.device == "cuda" else "envs/ort-cpu"
     shell:
         """
         PF_SITE=tallinn uv run --project {params.uv_project} python3 scripts/cms-validate-onnx.py \
@@ -130,5 +129,5 @@ rule plot_onnx_summary:
         os.path.join(ONNX_DIR, "{device}", "plots", "memory_scaling_summary.png")
     shell:
         """
-        PF_SITE=tallinn uv run --project envs/openvino python3 scripts/plot-onnx-summary.py --indir {ONNX_DIR}/{wildcards.device} --outdir {ONNX_DIR}/{wildcards.device}/plots
+        PF_SITE=tallinn uv run --project envs/ort-cpu python3 scripts/plot-onnx-summary.py --indir {ONNX_DIR}/{wildcards.device} --outdir {ONNX_DIR}/{wildcards.device}/plots
         """
