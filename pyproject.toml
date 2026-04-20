@@ -42,7 +42,6 @@ dependencies = [
     "numba",
     "numpy",
     "onnx",
-    "onnxruntime",
     "onnxscript",
     "pandas",
     "papermill",

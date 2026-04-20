@@ -573,9 +573,10 @@ def main():
     for _ in tqdm(range(10)):
         with torch.no_grad():
             if any(cfg in configs for cfg in ["PT_ATTN_MATH_FP32", "PT_ATTN_MATH_FP16"]):
-                _ = model_pt_math(X_warmup, mask_warmup)
-                with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
+                with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
                     _ = model_pt_math(X_warmup, mask_warmup)
+                    with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
+                        _ = model_pt_math(X_warmup, mask_warmup)
             if "PT_ATTN_FLASH_FP32" in configs:
                 _ = model_pt_flash(X_warmup, mask_warmup)
             if "PT_ATTN_FLASH_FP16" in configs:
@@ -660,11 +661,13 @@ def main():
 
                 if cfg == "PT_ATTN_MATH_FP32":
                     with torch.no_grad():
-                        pred = model_pt_math(X_features_padded, mask)
+                        with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
+                            pred = model_pt_math(X_features_padded, mask)
                 elif cfg == "PT_ATTN_MATH_FP16":
                     with torch.no_grad():
                         with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
-                            pred = model_pt_math(X_features_padded, mask)
+                            with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
+                                pred = model_pt_math(X_features_padded, mask)
                 elif cfg == "PT_ATTN_FLASH_FP32":
                     with torch.no_grad():
                         pred = model_pt_flash(X_features_padded, mask)
@@ -760,7 +763,8 @@ def main():
 
     # Plotting
     print("Generating comparison plots...")
-    colors = ["black", "blue", "cyan", "red", "orange", "magenta", "green"]
+    cmap = plt.get_cmap("tab10")
+    colors = [cmap(i % cmap.N) for i in range(len(configs))]
 
     # Runtime vs Event Size Scatter Plot
     plt.figure(figsize=(12, 8))
