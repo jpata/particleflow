@@ -38,5 +38,8 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system .
 
+      - name: Sync ONNX environment
+        run: uv sync --project envs/ort-cpu
+
       - name: Run ${{ matrix.target }} test
         run: bash scripts/local_test_${{ matrix.target }}.sh

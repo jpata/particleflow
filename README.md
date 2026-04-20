@@ -13,7 +13,7 @@ We build on existing, open-source simulation software by the experimental collab
 You can use `uv` to set up the repo and test that everything works:
 ```
 git clone --recurse-submodules https://github.com/jpata/particleflow.git
-uv sync
+uv sync --project envs/ort-cuda
 uv run ./scripts/local_test_cld.sh
 uv run ./scripts/local_test_cms.sh
 ```

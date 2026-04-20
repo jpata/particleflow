@@ -90,7 +90,7 @@ export EXP_DIR_2=$(ls -d experiments/MLPF_test_*/ | tail -n 1)
 # --------------------------------------------------------------------------------------------
 # Test 3: ONNX export and validation
 # --------------------------------------------------------------------------------------------
-python scripts/cms-validate-onnx.py \
+uv run --project envs/ort-cpu python scripts/cms-validate-onnx.py \
   --checkpoint ${EXP_DIR_2}/checkpoints/checkpoint-04.pth \
   --model-kwargs ${EXP_DIR_2}/model_kwargs.pkl \
   --dataset cms_pf_ttbar/10 \
