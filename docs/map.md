@@ -1,6 +1,7 @@
 # Code and Functionality Map: ParticleFlow
 
 This document provides a high-level overview of the repository's structure and the functionality of its core components.
+To run the python dode in the right environment, use `uv run python3 ...`.
 
 ## 1. Configuration & Specification
 The project uses a hierarchical configuration system.
