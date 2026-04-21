@@ -334,6 +334,7 @@ class MLPF(nn.Module):
             num_node_messages = sub_config.num_node_messages
             ffn_dist_hidden_dim = sub_config.ffn_dist_hidden_dim
             ffn_dist_num_layers = sub_config.ffn_dist_num_layers
+            kernel_type = sub_config.kernel_type
             self.use_pre_layernorm = False
         elif self.conv_type == ModelType.LITEPT:
             embedding_dim = sub_config.embedding_dim
@@ -424,6 +425,7 @@ class MLPF(nn.Module):
                         "dropout": dropout_ff,
                         "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
                         "ffn_dist_num_layers": ffn_dist_num_layers,
+                        "kernel_type": kernel_type,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))

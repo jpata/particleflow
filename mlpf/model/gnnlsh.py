@@ -137,6 +137,9 @@ class GHConvDense(nn.Module):
         return self.activation(out.to(x.dtype)) * msk
 
 
+from mlpf.conf import KernelType
+
+
 class NodePairGaussianKernel(nn.Module):
     def __init__(self, **kwargs):
         self.clip_value_low = kwargs.pop("clip_value_low", 0.0)
@@ -161,6 +164,29 @@ class NodePairGaussianKernel(nn.Module):
         dm = torch.exp(-self.dist_mult * dm)
         dm = torch.clip(dm, self.clip_value_low, 1)
         return dm
+
+
+class AttentionKernel(nn.Module):
+    def __init__(self, distance_dim, **kwargs):
+        super(AttentionKernel, self).__init__(**kwargs)
+        self.distance_dim = distance_dim
+        self.W_q = nn.Linear(distance_dim, distance_dim)
+        self.W_k = nn.Linear(distance_dim, distance_dim)
+        self.scale = distance_dim**-0.5
+
+    def forward(self, x, msk, training=False):
+        q = self.W_q(x)
+        k = self.W_k(x)
+
+        scores = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+
+        mask = torch.matmul(msk.float(), msk.float().transpose(-1, -2))
+        scores = scores.masked_fill(mask == 0, float("-inf"))
+
+        attn = torch.softmax(scores, dim=-1)
+        attn = torch.nan_to_num(attn)
+
+        return torch.unsqueeze(attn, axis=-1)
 
 
 def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, n_bins, bin_size):
@@ -267,6 +293,7 @@ class CombinedGraphLayer(nn.Module):
         self.ffn_dist_hidden_dim = kwargs.pop("ffn_dist_hidden_dim")
         self.ffn_dist_num_layers = kwargs.pop("ffn_dist_num_layers", 2)
         self.dist_activation = getattr(torch.nn.functional, kwargs.pop("dist_activation", "elu"))
+        self.kernel_type = kwargs.pop("kernel_type", "gaussian")
         super(CombinedGraphLayer, self).__init__(**kwargs)
 
         if self.do_layernorm:
@@ -283,11 +310,16 @@ class CombinedGraphLayer(nn.Module):
             dropout=self.dropout,
         )
 
+        if self.kernel_type == KernelType.ATTENTION:
+            kernel = AttentionKernel(distance_dim=self.distance_dim)
+        else:
+            kernel = NodePairGaussianKernel()
+
         self.message_building_layer = MessageBuildingLayerLSH(
             distance_dim=self.distance_dim,
             max_num_bins=self.max_num_bins,
             bin_size=self.bin_size,
-            kernel=NodePairGaussianKernel(),
+            kernel=kernel,
         )
 
         self.message_passing_layers = nn.ModuleList()
