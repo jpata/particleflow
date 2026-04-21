@@ -24,4 +24,4 @@ DATA_DIR=$(pixi run python3 scripts/get_param.py particleflow_spec.yaml producti
     train \
     --gpus 1 \
     --num_workers 4 \
-    --prefetch_factor 2 --model.attention.head_dim 32 --gpu_batch_multiplier 8
+    --prefetch_factor 2
