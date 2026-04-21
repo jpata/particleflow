@@ -8,7 +8,8 @@ The project uses a hierarchical configuration system.
 - **`particleflow_spec.yaml`**: The single source of truth for the entire project. It defines machine-specific paths (sites), data production scenarios, and model architectures.
 - **`mlpf/conf.py`**: Defines the Pydantic models for the configuration, ensuring type safety and handling path resolution.
 - **`mlpf/pipeline.py`**: Implements hierarchical configuration resolution: base defaults in `mlpf/conf.py` are overridden by scenario-specific values in `particleflow_spec.yaml`, which can further be overridden via command-line arguments (e.g., `--model.num_convs 6`).
-- **`pixi.toml` / `uv.lock`**: Project environment and task management. Defines common tasks like `gen`, `post`, `train`, and `validation`.
+- **`pixi.toml` / `uv.lock` / `uv.singularity`**: Project environment, container definitions, and task management. Defines common tasks like `gen`, `post`, `train`, and `validation`.
+- **`envs/`**: Isolated virtual environment specifications (e.g., `ort-cpu`, `ort-gpu`) for specific runtimes like ONNX.
 - **`validation_cms.yaml` / `validation_key4hep.yaml`**: Specification files for validation scenarios.
 
 ## 2. Workflow Orchestration
@@ -29,6 +30,8 @@ Complex data production and training pipelines are managed using Snakemake or si
 ## 4. Machine Learning Core (`mlpf/model/`)
 - **`mlpf.py`**: Implementation of the MLPF model, featuring multi-head attention and configurable sub-networks. Supports fused attention and simplified math attention for ONNX export.
 - **`gnnlsh.py`**: GNN layers with Locality-Sensitive Hashing (LSH) for scalable graph processing.
+- **`hept.py`**: Implementation of the Hashing-based Efficient Particle Transformer (HEPT).
+- **`litept.py`**: Integration for the LitePT (Lightweight Point Transformer) architecture.
 - **`PFDataset.py`**: Advanced data loading logic, including dataset interleaving and multi-file handling.
 - **`training.py`**: Core training loop implementation, supporting DDP and Ray-based distributed training.
 - **`losses.py`**: Specialized loss functions for particle classification and energy regression.
