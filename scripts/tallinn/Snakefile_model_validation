@@ -9,7 +9,7 @@ sys.path.append(os.getcwd())
 from mlpf.conf import MLPFConfig, ModelType
 
 # Configuration
-CONFIGS = ["attn", "hept", "litept", "gnnlsh-bin32", "gnnlsh-bin128", "gnnlsh-bin32-attention"]
+CONFIGS = ["attn", "hept", "litept", "gnnlsh-bin32", "gnnlsh-bin128", "gnnlsh-bin32-attention", "gnnlsh-bin32-attention-interbin"]
 DEVICES = ["cuda", "cpu"]
 #DEVICES = ["cuda"]
 MODEL_NAME = "pyg-cms-v1"
@@ -68,7 +68,8 @@ rule train:
             "litept": "--model.type litept",
             "gnnlsh-bin32": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32",
             "gnnlsh-bin128": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 128 --pad_to_multiple_elements 128",
-            "gnnlsh-bin32-attention": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32 --model.gnnlsh.kernel_type attention"
+            "gnnlsh-bin32-attention": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32 --model.gnnlsh.kernel_type attention",
+            "gnnlsh-bin32-attention-interbin": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32 --model.gnnlsh.kernel_type attention --model.gnnlsh.use_interbin_attention True"
         }[wildcards.config]
     shell:
         """
@@ -100,7 +101,8 @@ rule onnx_validate:
             "litept": "--configs PT_LITEPT_FP32",
             "gnnlsh-bin32": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
             "gnnlsh-bin128": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
-            "gnnlsh-bin32-attention": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32"
+            "gnnlsh-bin32-attention": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
+            "gnnlsh-bin32-attention-interbin": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32"
         }.get(wildcards.config, ""),
         extra_args = get_onnx_validate_extra_args,
         num_events = lambda wildcards: 100 if wildcards.device == "cuda" else 10,

@@ -1,12 +1,5 @@
 import sys
 
-# Support for GPU executor: set onnxruntime path before imports
-if "--device" in sys.argv:
-    idx = sys.argv.index("--device")
-    if sys.argv[idx + 1] == "cuda":
-        print("device=cuda, using onnxruntime-gpu from /opt/onnxruntime-gpu/lib/python3.12/site-packages/")
-        sys.path.insert(0, "/opt/onnxruntime-gpu/lib/python3.12/site-packages/")
-
 import os
 import time
 import gc
@@ -16,7 +9,7 @@ import subprocess
 import psutil
 
 # Ensure mlpf is in the path
-sys.path.append(os.getcwd())
+sys.path.insert(0, os.getcwd())
 
 import copy
 import argparse
@@ -207,6 +200,11 @@ def get_gpu_info():
 def main():
     print("Starting MLPF ONNX validation script...")
     args = parse_args()
+
+    # Set seeds for reproducibility during model initialization and export
+    torch.manual_seed(42)
+    np.random.seed(42)
+
     torch.set_num_threads(args.num_threads)
     os.makedirs(args.outdir, exist_ok=True)
     mplhep.style.use("CMS")
@@ -340,6 +338,13 @@ def main():
 
         path_math_fp32 = os.path.join(args.outdir, "model_math_fp32.onnx")
         print(f"Exporting ONNX ATTN_MATH/HEPT/GNNLSH FP32 to {path_math_fp32}...")
+
+        # Use Dynamo-based exporter for better stability and dynamic axis support
+        dynamic_shapes = {
+            "X_features": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=1, max=40000)},
+            "mask": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=1, max=40000)},
+        }
+
         torch.onnx.export(
             model_export,
             (dummy_features, dummy_mask),
@@ -348,8 +353,8 @@ def main():
             verbose=False,
             input_names=["Xfeat_normed", "mask"],
             output_names=["bid", "id", "momentum", "pu"],
-            dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
-            dynamo=False,
+            dynamic_shapes=dynamic_shapes,
+            dynamo=True,
         )
 
     # 2. Export ONNX ATTN_MATH FP16
@@ -366,8 +371,8 @@ def main():
             verbose=False,
             input_names=["Xfeat_normed", "mask"],
             output_names=["bid", "id", "momentum", "pu"],
-            dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
-            dynamo=False,
+            dynamic_shapes=dynamic_shapes,
+            dynamo=True,
         )
         del model_export_half
 

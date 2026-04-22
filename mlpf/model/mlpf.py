@@ -23,6 +23,7 @@ from mlpf.conf import (
     InputEncoding,
     LearnedRepresentationMode,
     RegressionMode,
+    KernelType,
 )
 
 
@@ -335,6 +336,14 @@ class MLPF(nn.Module):
             ffn_dist_hidden_dim = sub_config.ffn_dist_hidden_dim
             ffn_dist_num_layers = sub_config.ffn_dist_num_layers
             kernel_type = sub_config.kernel_type
+            use_interbin_attention = sub_config.use_interbin_attention
+            num_interbin_heads = sub_config.num_interbin_heads
+            num_attention_heads = sub_config.num_attention_heads
+            attention_head_dim = sub_config.attention_head_dim
+            distance_dim = sub_config.distance_dim
+            if kernel_type == KernelType.ATTENTION:
+                if distance_dim % num_attention_heads != 0:
+                    raise ValueError(f"distance_dim ({distance_dim}) must be divisible by num_attention_heads ({num_attention_heads})")
             self.use_pre_layernorm = False
         elif self.conv_type == ModelType.LITEPT:
             embedding_dim = sub_config.embedding_dim
@@ -426,6 +435,9 @@ class MLPF(nn.Module):
                         "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
                         "ffn_dist_num_layers": ffn_dist_num_layers,
                         "kernel_type": kernel_type,
+                        "use_interbin_attention": use_interbin_attention,
+                        "num_interbin_heads": num_interbin_heads,
+                        "num_attention_heads": num_attention_heads,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))

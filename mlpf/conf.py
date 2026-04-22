@@ -354,6 +354,10 @@ class GNNLSHConfig(BaseModel):
     ffn_dist_hidden_dim: int = 128
     ffn_dist_num_layers: int = 2
     kernel_type: KernelType = KernelType.GAUSSIAN
+    use_interbin_attention: bool = False
+    num_interbin_heads: int = 4
+    num_attention_heads: int = 4
+    attention_head_dim: int = 32
 
 
 class AttentionConfig(BaseModel):
