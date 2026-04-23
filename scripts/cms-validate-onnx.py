@@ -340,22 +340,42 @@ def main():
         print(f"Exporting ONNX ATTN_MATH/HEPT/GNNLSH FP32 to {path_math_fp32}...")
 
         # Use Dynamo-based exporter for better stability and dynamic axis support
-        dynamic_shapes = {
-            "X_features": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=1, max=40000)},
-            "mask": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=1, max=40000)},
-        }
+        # EXCEPT for GNNLSH where it seems to cause issues on CUDA
+        is_gnnlsh = model_kwargs.model.type == ModelType.GNNLSH
+        
+        if not is_gnnlsh:
+            dynamic_shapes = {
+                "X_features": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=1, max=40000)},
+                "mask": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=1, max=40000)},
+            }
 
-        torch.onnx.export(
-            model_export,
-            (dummy_features, dummy_mask),
-            path_math_fp32,
-            opset_version=opset_version,
-            verbose=False,
-            input_names=["Xfeat_normed", "mask"],
-            output_names=["bid", "id", "momentum", "pu"],
-            dynamic_shapes=dynamic_shapes,
-            dynamo=True,
-        )
+            torch.onnx.export(
+                model_export,
+                (dummy_features, dummy_mask),
+                path_math_fp32,
+                opset_version=opset_version,
+                verbose=False,
+                input_names=["Xfeat_normed", "mask"],
+                output_names=["bid", "id", "momentum", "pu"],
+                dynamic_shapes=dynamic_shapes,
+                dynamo=True,
+            )
+        else:
+            # Traditional export for GNNLSH
+            torch.onnx.export(
+                model_export,
+                (dummy_features, dummy_mask),
+                path_math_fp32,
+                opset_version=opset_version,
+                verbose=False,
+                input_names=["Xfeat_normed", "mask"],
+                output_names=["bid", "id", "momentum", "pu"],
+                dynamic_axes={
+                    "Xfeat_normed": {0: "num_batch", 1: "num_elements"},
+                    "mask": {0: "num_batch", 1: "num_elements"}
+                },
+                dynamo=False,
+            )
 
     # 2. Export ONNX ATTN_MATH FP16
     if "ONNX_ATTN_MATH_FP16" in configs:
@@ -848,6 +868,9 @@ def main():
     for cfg in sorted_configs:
         invalid_str = f" (Invalid: {results[cfg]['num_invalid']})" if results[cfg]["num_invalid"] > 0 else ""
         print(f"{cfg:20s}: {results[cfg]['mae']:.6e}{invalid_str}")
+        # Print per-event MAE for the first few events to debug
+        event_maes = [run.get("mae") for run in results[cfg]["runs"][:10]]
+        print(f"  First 10 events MAE: {['{:.2e}'.format(m) if m is not None else 'None' for m in event_maes]}")
 
     print("\nMean Runtime Summary:")
     for cfg in configs:
