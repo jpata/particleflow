@@ -52,9 +52,8 @@ def split_indices_to_bins_batch(cmul, bin_size, msk, stable_sort=False):
     # Add a deterministic offset to stabilize the sort
     # In float32, we need a larger offset so it's representable when added to bin indices (up to 200)
     # The epsilon at 200 is approx 2.4e-5. We use an offset in range [0, 0.1]
-    n_points_active = bin_idx.shape[-1]
-    n_points_active_t = torch.tensor(n_points_active, device=bin_idx.device, dtype=torch.float32)
-    offset = torch.arange(n_points_active, device=bin_idx.device, dtype=torch.float32) * (0.1 / (n_points_active_t + 1.0))
+    n_points_active_t = torch.as_tensor(bin_idx.size(-1), device=bin_idx.device, dtype=torch.float32)
+    offset = torch.arange(bin_idx.size(-1), device=bin_idx.device, dtype=torch.float32) * (0.1 / (n_points_active_t + 1.0))
     bin_idx_stable = bin_idx.to(torch.float32) + offset
 
     # Use torch.sort
@@ -223,9 +222,25 @@ def reverse_lsh(bins_split, points_binned_enc):
 class InterBinAttentionLayer(nn.Module):
     def __init__(self, d_model, n_heads, dropout=0.0):
         super().__init__()
-        self.mha = nn.MultiheadAttention(d_model, n_heads, dropout=dropout, batch_first=True)
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.head_dim = d_model // n_heads
+
+        # We'll use the same parameter structure as nn.MultiheadAttention for compatibility
+        self.in_proj_weight = nn.Parameter(torch.empty((3 * d_model, d_model)))
+        self.in_proj_bias = nn.Parameter(torch.empty(3 * d_model))
+        self.out_proj = nn.Linear(d_model, d_model)
+
         self.layernorm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
+        self.mha_dropout_p = dropout
+        self.scale = self.head_dim**-0.5
+
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        nn.init.xavier_uniform_(self.in_proj_weight)
+        nn.init.constant_(self.in_proj_bias, 0.0)
 
     def forward(self, x, msk):
         x_32 = x.to(torch.float32)
@@ -235,8 +250,36 @@ class InterBinAttentionLayer(nn.Module):
         x_bin_count = torch.sum(msk_32, dim=2)
         x_bin_mean = x_bin_sum / (x_bin_count + 1e-6)
 
+        bs, seq_len, embed_dim = x_bin_mean.size()
+        head_dim = self.head_dim
+        num_heads = self.n_heads
+
+        # split stacked in_proj_weight, in_proj_bias to q, k, v matrices
+        # this matches nn.MultiheadAttention parameter layout
+        wq, wk, wv = torch.split(self.in_proj_weight, [embed_dim, embed_dim, embed_dim], dim=0)
+        bq, bk, bv = torch.split(self.in_proj_bias, [embed_dim, embed_dim, embed_dim], dim=0)
+
+        q = torch.matmul(x_bin_mean, wq.T) + bq
+        k = torch.matmul(x_bin_mean, wk.T) + bk
+        v = torch.matmul(x_bin_mean, wv.T) + bv
+
+        # Use reshape with symbolic seq_len from size()
+        q = q.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
+        k = k.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
+        v = v.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
+
         bin_mask = x_bin_count.squeeze(-1) < 1e-6
-        x_bin_attn, _ = self.mha(x_bin_mean, x_bin_mean, x_bin_mean, key_padding_mask=bin_mask)
+        # Prepare attention mask for F.scaled_dot_product_attention (True = keep, False = ignore)
+        attn_mask = ~bin_mask.view(bs, 1, 1, seq_len)
+
+        # F.scaled_dot_product_attention is more tracing-friendly than nn.MultiheadAttention
+        x_bin_attn = torch.nn.functional.scaled_dot_product_attention(
+            q, k, v, attn_mask=attn_mask, dropout_p=self.mha_dropout_p if self.training else 0.0
+        )
+
+        x_bin_attn = x_bin_attn.transpose(1, 2).reshape(bs, seq_len, embed_dim)
+        x_bin_attn = self.out_proj(x_bin_attn)
+
         x_bin_mean = self.layernorm(x_bin_mean + self.dropout(x_bin_attn))
         res = x_32 + x_bin_mean.unsqueeze(2) * msk_32
 
@@ -276,7 +319,7 @@ class MessageBuildingLayerLSH(nn.Module):
         rotation_idx = torch.arange(n_rotations, device=mul.device).unsqueeze(0).unsqueeze(0)
         
         # Calculate n_bins purely as a tensor
-        n_points_t = torch.tensor(n_points, device=x_msg.device)
+        n_points_t = torch.as_tensor(x_msg.size(1), device=x_msg.device)
         n_bins_t = torch.div(n_points_t, self.bin_size, rounding_mode="floor")
         codebook_slice_t = torch.div(n_bins_t, 2, rounding_mode="floor")
         

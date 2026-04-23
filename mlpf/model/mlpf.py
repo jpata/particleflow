@@ -96,11 +96,19 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         # this function will have different shape signatures in native pytorch sdpa and in ONNX com.microsoft.MultiHeadAttention
         # in pytorch: (bs, num_heads, seq_len, head_dim)
         # in ONNX: (bs, seq_len, num_heads*head_dim)
+        
+        # Prepare attention mask from key_padding_mask if provided
+        attn_mask = None
+        if key_padding_mask is not None:
+            # key_padding_mask: [bs, seq_len], True where elements are to be ignored
+            # scaled_dot_product_attention expects attn_mask: [bs, 1, 1, seq_len], False where elements are to be ignored
+            attn_mask = ~key_padding_mask.view(bs, 1, 1, seq_len)
+
         if self.export_onnx_fused:
-            attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout)
+            attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
         else:
             with sdpa_kernel(self.attn_params[self.attention_type]):
-                attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout)
+                attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
 
         # in case running with pytorch internal scaled dot product attention, reshape back to the original shape
         if not self.export_onnx_fused:
