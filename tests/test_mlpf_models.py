@@ -171,7 +171,6 @@ def test_mlpf_gnnlsh_attention_kernel():
                 "kernel_type": "attention",
                 "num_attention_heads": 2,
             },
-
         },
         "conv_type": "gnnlsh",
     }

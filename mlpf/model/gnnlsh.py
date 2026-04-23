@@ -42,10 +42,10 @@ def split_indices_to_bins_batch(cmul, bin_size, msk, stable_sort=False):
     shp = cmul.shape
     batch_size = shp[0]
     n_points = shp[1]
-    
+
     # Calculate nbins as a tensor
     nbins = torch.div(n_points, bin_size, rounding_mode="floor")
-    
+
     # Assign masked elements to the last bin
     bin_idx = torch.where(msk.to(torch.bool).reshape(batch_size, n_points), a, (nbins - 1))
 
@@ -58,7 +58,7 @@ def split_indices_to_bins_batch(cmul, bin_size, msk, stable_sort=False):
 
     # Use torch.sort
     _, bins_split = torch.sort(bin_idx_stable, dim=-1)
-    
+
     # Reshape using -1 for the bins dimension to avoid TopK K-input issues
     bins_split = bins_split.reshape(batch_size, -1, bin_size)
     return bins_split
@@ -73,7 +73,7 @@ def pairwise_l2_dist(A, B):
     nb = torch.sum(torch.square(B_32), -1, keepdim=True).transpose(-1, -2)
 
     dist_sq = na - 2 * torch.matmul(A_32, B_32.transpose(-1, -2)) + nb
-    
+
     dist_sq = torch.clamp(dist_sq, min=1e-6, max=1e6)
     D = torch.sqrt(dist_sq)
 
@@ -99,9 +99,9 @@ class GHConvDense(nn.Module):
         x_32 = x.to(torch.float32)
         adj_32 = adj.to(torch.float32).squeeze(-1)
         msk_32 = msk.to(torch.float32)
-        
+
         f_hom = F.linear(x_32 * msk_32, self.theta.to(torch.float32)) * msk_32
-        
+
         if self.normalize_degrees:
             in_degrees = torch.sum(torch.abs(adj_32), axis=-1, keepdim=True)
             norm_32 = torch.pow(in_degrees + 1e-6, -0.5) * msk_32
@@ -186,7 +186,7 @@ def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, bin_size):
     shp = x_msg.shape
     batch_size = shp[0]
     n_points = shp[1]
-    
+
     bins_split_flat = torch.reshape(bins_split, (batch_size, n_points))
 
     indices_msg = torch.unsqueeze(bins_split_flat, axis=-1).expand(batch_size, n_points, x_msg.shape[-1])
@@ -200,7 +200,7 @@ def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, bin_size):
     msk_flat = msk.reshape(batch_size, -1)
     msk_f_binned = torch.gather(msk_flat, 1, bins_split_flat)
     msk_f_binned = torch.reshape(msk_f_binned, (batch_size, -1, bin_size, 1))
-    
+
     return x_msg_binned, x_features_binned, msk_f_binned
 
 
@@ -303,10 +303,10 @@ class MessageBuildingLayerLSH(nn.Module):
         )
 
     def forward(self, x_msg, x_node, msk, training=False):
-        shp = x_msg.shape
-        batch_size = shp[0]
-        n_points = shp[1]
-        
+        # shp = x_msg.shape
+        # batch_size = shp[0]
+        # n_points = shp[1]
+
         # perform in FP32
         x_msg_32 = x_msg.to(torch.float32)
 
@@ -314,15 +314,15 @@ class MessageBuildingLayerLSH(nn.Module):
             x_msg_32,
             self.codebook_random_rotations.to(torch.float32),
         )
-        
+
         n_rotations = self.codebook_random_rotations.shape[1]
         rotation_idx = torch.arange(n_rotations, device=mul.device).unsqueeze(0).unsqueeze(0)
-        
+
         # Calculate n_bins purely as a tensor
         n_points_t = torch.as_tensor(x_msg.size(1), device=x_msg.device)
         n_bins_t = torch.div(n_points_t, self.bin_size, rounding_mode="floor")
         codebook_slice_t = torch.div(n_bins_t, 2, rounding_mode="floor")
-        
+
         # Mask out unused rotations
         mul = torch.where(rotation_idx < codebook_slice_t, mul, torch.full_like(mul, -1e9))
 

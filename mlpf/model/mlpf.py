@@ -96,7 +96,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         # this function will have different shape signatures in native pytorch sdpa and in ONNX com.microsoft.MultiHeadAttention
         # in pytorch: (bs, num_heads, seq_len, head_dim)
         # in ONNX: (bs, seq_len, num_heads*head_dim)
-        
+
         # Prepare attention mask from key_padding_mask if provided
         attn_mask = None
         if key_padding_mask is not None:
@@ -347,7 +347,7 @@ class MLPF(nn.Module):
             use_interbin_attention = sub_config.use_interbin_attention
             num_interbin_heads = sub_config.num_interbin_heads
             num_attention_heads = sub_config.num_attention_heads
-            attention_head_dim = sub_config.attention_head_dim
+            # attention_head_dim = sub_config.attention_head_dim
             distance_dim = sub_config.distance_dim
             if kernel_type == KernelType.ATTENTION:
                 if distance_dim % num_attention_heads != 0:

@@ -11,7 +11,6 @@ import psutil
 # Ensure mlpf is in the path
 sys.path.insert(0, os.getcwd())
 
-import copy
 import argparse
 import pickle as pkl
 import numpy as np
@@ -342,7 +341,7 @@ def main():
         # Use Dynamo-based exporter for better stability and dynamic axis support
         # EXCEPT for GNNLSH where it seems to cause issues on CUDA
         is_gnnlsh = model_kwargs.model.type == ModelType.GNNLSH
-        
+
         if not is_gnnlsh:
             dynamic_shapes = {
                 "X_features": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=2, max=40000)},
@@ -370,10 +369,7 @@ def main():
                 verbose=False,
                 input_names=["Xfeat_normed", "mask"],
                 output_names=["bid", "id", "momentum", "pu"],
-                dynamic_axes={
-                    "Xfeat_normed": {0: "num_batch", 1: "num_elements"},
-                    "mask": {0: "num_batch", 1: "num_elements"}
-                },
+                dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
                 dynamo=False,
             )
 
