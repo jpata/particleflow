@@ -345,8 +345,8 @@ def main():
         
         if not is_gnnlsh:
             dynamic_shapes = {
-                "X_features": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=1, max=40000)},
-                "mask": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=1, max=40000)},
+                "X_features": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=2, max=40000)},
+                "mask": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=2, max=40000)},
             }
 
             torch.onnx.export(
@@ -381,8 +381,13 @@ def main():
     if "ONNX_ATTN_MATH_FP16" in configs:
         path_math_fp16 = os.path.join(args.outdir, "model_math_fp16.onnx")
         print(f"Exporting ONNX ATTN_MATH FP16 to {path_math_fp16}...")
-        # Cast to half for export
-        model_export_half = copy.deepcopy(model_export).half()
+        # Re-instantiate model for FP16 export instead of using deepcopy
+        model_export_half = MLPF(
+            config=make_mlpf_config(model_kwargs_export, export_onnx_fused=False),
+        )
+        model_export_half.eval()
+        model_export_half.load_state_dict(model_state["model_state_dict"], strict=False)
+        model_export_half = model_export_half.to(device=args.device).half()
         torch.onnx.export(
             model_export_half,
             (dummy_features.half(), dummy_mask.half()),
@@ -476,7 +481,13 @@ def main():
             )
             path_fused_fp16 = os.path.join(args.outdir, "model_fused_fp16.onnx")
             print(f"Exporting ONNX Fused Flash FP16 to {path_fused_fp16}...")
-            model_fused_half = copy.deepcopy(model_fused).half()
+            # Re-instantiate model_fused for FP16 export instead of using deepcopy
+            model_fused_half = MLPF(
+                config=make_mlpf_config(model_kwargs_export, export_onnx_fused=True),
+            )
+            model_fused_half.eval()
+            model_fused_half.load_state_dict(model_state["model_state_dict"], strict=False)
+            model_fused_half = model_fused_half.to(device=args.device).half()
             torch.onnx.export(
                 model_fused_half,
                 (dummy_features.half(), dummy_mask.half()),

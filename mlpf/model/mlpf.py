@@ -624,8 +624,7 @@ class MLPF(nn.Module):
         e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
         if mask is not None:
             e_real = e_real * mask.unsqueeze(-1)
-        e_real[torch.isinf(e_real)] = 0
-        e_real[torch.isnan(e_real)] = 0
+        e_real = torch.nan_to_num(e_real, nan=0.0, posinf=0.0, neginf=0.0)
         preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
