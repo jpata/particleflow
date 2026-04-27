@@ -224,7 +224,13 @@ def test_mlpf_litept():
         "conv_type": "litept",
     }
     config = MLPFConfig.model_validate(config_dict)
-    model = MLPF(config).to("cuda")
+    try:
+        model = MLPF(config).to("cuda")
+    except ImportError as e:
+        if "LitePT is not available" in str(e):
+            pytest.skip("LitePT not available")
+        else:
+            raise e
 
     batch_size = 2
     seq_len = 16

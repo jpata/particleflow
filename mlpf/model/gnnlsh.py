@@ -88,10 +88,17 @@ class GHConvDense(nn.Module):
         self.hidden_dim = kwargs.pop("hidden_dim")
         super(GHConvDense, self).__init__(*args, **kwargs)
 
-        self.W_t = torch.nn.Parameter(torch.randn(self.output_dim, self.hidden_dim))
-        self.b_t = torch.nn.Parameter(torch.randn(self.output_dim))
-        self.W_h = torch.nn.Parameter(torch.randn(self.output_dim, self.hidden_dim))
-        self.theta = torch.nn.Parameter(torch.randn(self.output_dim, self.hidden_dim))
+        self.W_t = torch.nn.Parameter(torch.empty(self.output_dim, self.hidden_dim))
+        self.b_t = torch.nn.Parameter(torch.empty(self.output_dim))
+        self.W_h = torch.nn.Parameter(torch.empty(self.output_dim, self.hidden_dim))
+        self.theta = torch.nn.Parameter(torch.empty(self.output_dim, self.hidden_dim))
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        nn.init.xavier_uniform_(self.W_t)
+        nn.init.constant_(self.b_t, 0.0)
+        nn.init.xavier_uniform_(self.W_h)
+        nn.init.xavier_uniform_(self.theta)
 
     def forward(self, inputs):
         x, adj, msk = inputs
@@ -308,26 +315,27 @@ class MessageBuildingLayerLSH(nn.Module):
         # n_points = shp[1]
 
         # perform in FP32
-        x_msg_32 = x_msg.to(torch.float32)
+        with torch.autocast(device_type=x_msg.device.type, enabled=False):
+            x_msg_32 = x_msg.to(torch.float32)
 
-        mul = torch.matmul(
-            x_msg_32,
-            self.codebook_random_rotations.to(torch.float32),
-        )
+            mul = torch.matmul(
+                x_msg_32,
+                self.codebook_random_rotations.to(torch.float32),
+            )
 
-        n_rotations = self.codebook_random_rotations.shape[1]
-        rotation_idx = torch.arange(n_rotations, device=mul.device).unsqueeze(0).unsqueeze(0)
+            n_rotations = self.codebook_random_rotations.shape[1]
+            rotation_idx = torch.arange(n_rotations, device=mul.device).unsqueeze(0).unsqueeze(0)
 
-        # Calculate n_bins purely as a tensor
-        n_points_t = torch.as_tensor(x_msg.size(1), device=x_msg.device)
-        n_bins_t = torch.div(n_points_t, self.bin_size, rounding_mode="floor")
-        codebook_slice_t = torch.div(n_bins_t, 2, rounding_mode="floor")
+            # Calculate n_bins purely as a tensor
+            n_points_t = torch.as_tensor(x_msg.size(1), device=x_msg.device)
+            n_bins_t = torch.div(n_points_t, self.bin_size, rounding_mode="floor")
+            codebook_slice_t = torch.div(n_bins_t, 2, rounding_mode="floor")
 
-        # Mask out unused rotations
-        mul = torch.where(rotation_idx < codebook_slice_t, mul, torch.full_like(mul, -1e9))
+            # Mask out unused rotations
+            mul = torch.where(rotation_idx < codebook_slice_t, mul, torch.full_like(mul, -1e4))
 
-        cmul_32 = torch.concatenate([mul, -mul], axis=-1)
-        bins_split = split_indices_to_bins_batch(cmul_32, self.bin_size, msk, self.stable_sort)
+            cmul_32 = torch.concatenate([mul, -mul], axis=-1)
+            bins_split = split_indices_to_bins_batch(cmul_32, self.bin_size, msk, self.stable_sort)
 
         x_msg_binned, x_features_binned, msk_f_binned = split_msk_and_msg(bins_split, cmul_32, x_msg, x_node, msk, self.bin_size)
 

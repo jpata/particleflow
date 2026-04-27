@@ -102,7 +102,10 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         if key_padding_mask is not None:
             # key_padding_mask: [bs, seq_len], True where elements are to be ignored
             # scaled_dot_product_attention expects attn_mask: [bs, 1, 1, seq_len], False where elements are to be ignored
-            attn_mask = ~key_padding_mask.view(bs, 1, 1, seq_len)
+            if self.export_onnx_fused:
+                attn_mask = ~key_padding_mask.unsqueeze(1)
+            else:
+                attn_mask = ~key_padding_mask.view(bs, 1, 1, seq_len)
 
         if self.export_onnx_fused:
             attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
