@@ -1,12 +1,5 @@
 import sys
 
-# Support for GPU executor: set onnxruntime path before imports
-if "--device" in sys.argv:
-    idx = sys.argv.index("--device")
-    if sys.argv[idx + 1] == "cuda":
-        print("device=cuda, using onnxruntime-gpu from /opt/onnxruntime-gpu/lib/python3.12/site-packages/")
-        sys.path.insert(0, "/opt/onnxruntime-gpu/lib/python3.12/site-packages/")
-
 import os
 import time
 import gc
@@ -16,9 +9,8 @@ import subprocess
 import psutil
 
 # Ensure mlpf is in the path
-sys.path.append(os.getcwd())
+sys.path.insert(0, os.getcwd())
 
-import copy
 import argparse
 import pickle as pkl
 import numpy as np
@@ -207,6 +199,11 @@ def get_gpu_info():
 def main():
     print("Starting MLPF ONNX validation script...")
     args = parse_args()
+
+    # Set seeds for reproducibility during model initialization and export
+    torch.manual_seed(42)
+    np.random.seed(42)
+
     torch.set_num_threads(args.num_threads)
     os.makedirs(args.outdir, exist_ok=True)
     mplhep.style.use("CMS")
@@ -340,6 +337,7 @@ def main():
 
         path_math_fp32 = os.path.join(args.outdir, "model_math_fp32.onnx")
         print(f"Exporting ONNX ATTN_MATH/HEPT/GNNLSH FP32 to {path_math_fp32}...")
+
         torch.onnx.export(
             model_export,
             (dummy_features, dummy_mask),
@@ -356,8 +354,13 @@ def main():
     if "ONNX_ATTN_MATH_FP16" in configs:
         path_math_fp16 = os.path.join(args.outdir, "model_math_fp16.onnx")
         print(f"Exporting ONNX ATTN_MATH FP16 to {path_math_fp16}...")
-        # Cast to half for export
-        model_export_half = copy.deepcopy(model_export).half()
+        # Re-instantiate model for FP16 export instead of using deepcopy
+        model_export_half = MLPF(
+            config=make_mlpf_config(model_kwargs_export, export_onnx_fused=False),
+        )
+        model_export_half.eval()
+        model_export_half.load_state_dict(model_state["model_state_dict"], strict=False)
+        model_export_half = model_export_half.to(device=args.device).half()
         torch.onnx.export(
             model_export_half,
             (dummy_features.half(), dummy_mask.half()),
@@ -451,7 +454,13 @@ def main():
             )
             path_fused_fp16 = os.path.join(args.outdir, "model_fused_fp16.onnx")
             print(f"Exporting ONNX Fused Flash FP16 to {path_fused_fp16}...")
-            model_fused_half = copy.deepcopy(model_fused).half()
+            # Re-instantiate model_fused for FP16 export instead of using deepcopy
+            model_fused_half = MLPF(
+                config=make_mlpf_config(model_kwargs_export, export_onnx_fused=True),
+            )
+            model_fused_half.eval()
+            model_fused_half.load_state_dict(model_state["model_state_dict"], strict=False)
+            model_fused_half = model_fused_half.to(device=args.device).half()
             torch.onnx.export(
                 model_fused_half,
                 (dummy_features.half(), dummy_mask.half()),
@@ -843,6 +852,9 @@ def main():
     for cfg in sorted_configs:
         invalid_str = f" (Invalid: {results[cfg]['num_invalid']})" if results[cfg]["num_invalid"] > 0 else ""
         print(f"{cfg:20s}: {results[cfg]['mae']:.6e}{invalid_str}")
+        # Print per-event MAE for the first few events to debug
+        event_maes = [run.get("mae") for run in results[cfg]["runs"][:10]]
+        print(f"  First 10 events MAE: {['{:.2e}'.format(m) if m is not None else 'None' for m in event_maes]}")
 
     print("\nMean Runtime Summary:")
     for cfg in configs:

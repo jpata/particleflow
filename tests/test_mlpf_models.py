@@ -117,6 +117,86 @@ def test_mlpf_gnnlsh():
     assert preds_pu.shape == (batch_size, seq_len, 2)
 
 
+def test_mlpf_gnnlsh_interbin():
+    config_dict = {
+        "dataset": "cms",
+        "data_dir": "/tmp",
+        "model": {
+            "type": "gnnlsh",
+            "gnnlsh": {
+                "num_convs": 1,
+                "bin_size": 16,
+                "max_num_bins": 10,
+                "distance_dim": 16,
+                "use_interbin_attention": True,
+                "num_interbin_heads": 2,
+            },
+        },
+        "conv_type": "gnnlsh",
+    }
+    config = MLPFConfig.model_validate(config_dict)
+    model = MLPF(config)
+
+    batch_size = 2
+    seq_len = 32
+    input_dim = config.input_dim
+
+    X = torch.randn(batch_size, seq_len, input_dim)
+    elem_types = torch.tensor(config.elemtypes_nonzero)
+    X[..., 0] = elem_types[torch.randint(0, len(elem_types), (batch_size, seq_len))].to(X.dtype)
+    X[..., 1] = torch.exp(X[..., 1])
+    X[..., 5] = torch.exp(X[..., 5])
+
+    mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+    preds_binary_particle, preds_pid, preds_momentum, preds_pu = model(X, mask)
+
+    assert preds_binary_particle.shape == (batch_size, seq_len, 2)
+    assert preds_pid.shape == (batch_size, seq_len, config.num_classes)
+    assert preds_momentum.shape == (batch_size, seq_len, 5)
+    assert preds_pu.shape == (batch_size, seq_len, 2)
+
+
+def test_mlpf_gnnlsh_attention_kernel():
+    config_dict = {
+        "dataset": "cms",
+        "data_dir": "/tmp",
+        "model": {
+            "type": "gnnlsh",
+            "gnnlsh": {
+                "num_convs": 1,
+                "bin_size": 16,
+                "max_num_bins": 10,
+                "distance_dim": 16,
+                "kernel_type": "attention",
+                "num_attention_heads": 2,
+            },
+        },
+        "conv_type": "gnnlsh",
+    }
+    config = MLPFConfig.model_validate(config_dict)
+    model = MLPF(config)
+
+    batch_size = 2
+    seq_len = 32
+    input_dim = config.input_dim
+
+    X = torch.randn(batch_size, seq_len, input_dim)
+    elem_types = torch.tensor(config.elemtypes_nonzero)
+    X[..., 0] = elem_types[torch.randint(0, len(elem_types), (batch_size, seq_len))].to(X.dtype)
+    X[..., 1] = torch.exp(X[..., 1])
+    X[..., 5] = torch.exp(X[..., 5])
+
+    mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+    preds_binary_particle, preds_pid, preds_momentum, preds_pu = model(X, mask)
+
+    assert preds_binary_particle.shape == (batch_size, seq_len, 2)
+    assert preds_pid.shape == (batch_size, seq_len, config.num_classes)
+    assert preds_momentum.shape == (batch_size, seq_len, 5)
+    assert preds_pu.shape == (batch_size, seq_len, 2)
+
+
 def test_mlpf_litept():
     try:
         from mlpf.model.litept import LitePTLayer  # noqa: F401
@@ -144,7 +224,13 @@ def test_mlpf_litept():
         "conv_type": "litept",
     }
     config = MLPFConfig.model_validate(config_dict)
-    model = MLPF(config).to("cuda")
+    try:
+        model = MLPF(config).to("cuda")
+    except ImportError as e:
+        if "LitePT is not available" in str(e):
+            pytest.skip("LitePT not available")
+        else:
+            raise e
 
     batch_size = 2
     seq_len = 16

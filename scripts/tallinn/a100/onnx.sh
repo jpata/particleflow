@@ -15,4 +15,4 @@ export NCCL_IB_DISABLE=1
 
 nvidia-smi topo -m
 
-uv run snakemake --snakefile scripts/local/Snakefile_model_validation --cores 1
+uv run snakemake --snakefile scripts/tallinn/Snakefile_model_validation --cores 1

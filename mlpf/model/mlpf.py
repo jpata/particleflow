@@ -23,6 +23,7 @@ from mlpf.conf import (
     InputEncoding,
     LearnedRepresentationMode,
     RegressionMode,
+    KernelType,
 )
 
 
@@ -95,11 +96,22 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         # this function will have different shape signatures in native pytorch sdpa and in ONNX com.microsoft.MultiHeadAttention
         # in pytorch: (bs, num_heads, seq_len, head_dim)
         # in ONNX: (bs, seq_len, num_heads*head_dim)
+
+        # Prepare attention mask from key_padding_mask if provided
+        attn_mask = None
+        if key_padding_mask is not None:
+            # key_padding_mask: [bs, seq_len], True where elements are to be ignored
+            # scaled_dot_product_attention expects attn_mask: [bs, 1, 1, seq_len], False where elements are to be ignored
+            if self.export_onnx_fused:
+                attn_mask = ~key_padding_mask.unsqueeze(1)
+            else:
+                attn_mask = ~key_padding_mask.view(bs, 1, 1, seq_len)
+
         if self.export_onnx_fused:
-            attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout)
+            attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
         else:
             with sdpa_kernel(self.attn_params[self.attention_type]):
-                attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout)
+                attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
 
         # in case running with pytorch internal scaled dot product attention, reshape back to the original shape
         if not self.export_onnx_fused:
@@ -334,6 +346,15 @@ class MLPF(nn.Module):
             num_node_messages = sub_config.num_node_messages
             ffn_dist_hidden_dim = sub_config.ffn_dist_hidden_dim
             ffn_dist_num_layers = sub_config.ffn_dist_num_layers
+            kernel_type = sub_config.kernel_type
+            use_interbin_attention = sub_config.use_interbin_attention
+            num_interbin_heads = sub_config.num_interbin_heads
+            num_attention_heads = sub_config.num_attention_heads
+            # attention_head_dim = sub_config.attention_head_dim
+            distance_dim = sub_config.distance_dim
+            if kernel_type == KernelType.ATTENTION:
+                if distance_dim % num_attention_heads != 0:
+                    raise ValueError(f"distance_dim ({distance_dim}) must be divisible by num_attention_heads ({num_attention_heads})")
             self.use_pre_layernorm = False
         elif self.conv_type == ModelType.LITEPT:
             embedding_dim = sub_config.embedding_dim
@@ -424,6 +445,10 @@ class MLPF(nn.Module):
                         "dropout": dropout_ff,
                         "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
                         "ffn_dist_num_layers": ffn_dist_num_layers,
+                        "kernel_type": kernel_type,
+                        "use_interbin_attention": use_interbin_attention,
+                        "num_interbin_heads": num_interbin_heads,
+                        "num_attention_heads": num_attention_heads,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
@@ -602,8 +627,7 @@ class MLPF(nn.Module):
         e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
         if mask is not None:
             e_real = e_real * mask.unsqueeze(-1)
-        e_real[torch.isinf(e_real)] = 0
-        e_real[torch.isnan(e_real)] = 0
+        e_real = torch.nan_to_num(e_real, nan=0.0, posinf=0.0, neginf=0.0)
         preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
