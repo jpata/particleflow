@@ -332,7 +332,7 @@ def main():
     dummy_features = torch.randn(1, export_dummy_size, input_dim).float().to(args.device)
     dummy_mask = torch.ones(1, export_dummy_size).float().to(args.device)
 
-        # 1. Export ONNX ATTN_MATH/HEPT/GNNLSH FP32
+    # 1. Export ONNX ATTN_MATH/HEPT/GNNLSH FP32
     if any(cfg in configs for cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_GNNLSH_FP32"]):
 
         path_math_fp32 = os.path.join(args.outdir, "model_math_fp32.onnx")
