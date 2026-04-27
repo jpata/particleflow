@@ -332,46 +332,23 @@ def main():
     dummy_features = torch.randn(1, export_dummy_size, input_dim).float().to(args.device)
     dummy_mask = torch.ones(1, export_dummy_size).float().to(args.device)
 
-    # 1. Export ONNX ATTN_MATH/HEPT/GNNLSH FP32
+        # 1. Export ONNX ATTN_MATH/HEPT/GNNLSH FP32
     if any(cfg in configs for cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_GNNLSH_FP32"]):
 
         path_math_fp32 = os.path.join(args.outdir, "model_math_fp32.onnx")
         print(f"Exporting ONNX ATTN_MATH/HEPT/GNNLSH FP32 to {path_math_fp32}...")
 
-        # Use Dynamo-based exporter for better stability and dynamic axis support
-        # EXCEPT for GNNLSH where it seems to cause issues on CUDA
-        is_gnnlsh = model_kwargs.model.type == ModelType.GNNLSH
-
-        if not is_gnnlsh:
-            dynamic_shapes = {
-                "X_features": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=2, max=40000)},
-                "mask": {0: torch.export.Dim("num_batch", min=1, max=1024), 1: torch.export.Dim("num_elements", min=2, max=40000)},
-            }
-
-            torch.onnx.export(
-                model_export,
-                (dummy_features, dummy_mask),
-                path_math_fp32,
-                opset_version=opset_version,
-                verbose=False,
-                input_names=["Xfeat_normed", "mask"],
-                output_names=["bid", "id", "momentum", "pu"],
-                dynamic_shapes=dynamic_shapes,
-                dynamo=True,
-            )
-        else:
-            # Traditional export for GNNLSH
-            torch.onnx.export(
-                model_export,
-                (dummy_features, dummy_mask),
-                path_math_fp32,
-                opset_version=opset_version,
-                verbose=False,
-                input_names=["Xfeat_normed", "mask"],
-                output_names=["bid", "id", "momentum", "pu"],
-                dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
-                dynamo=False,
-            )
+        torch.onnx.export(
+            model_export,
+            (dummy_features, dummy_mask),
+            path_math_fp32,
+            opset_version=opset_version,
+            verbose=False,
+            input_names=["Xfeat_normed", "mask"],
+            output_names=["bid", "id", "momentum", "pu"],
+            dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
+            dynamo=False,
+        )
 
     # 2. Export ONNX ATTN_MATH FP16
     if "ONNX_ATTN_MATH_FP16" in configs:
@@ -392,8 +369,8 @@ def main():
             verbose=False,
             input_names=["Xfeat_normed", "mask"],
             output_names=["bid", "id", "momentum", "pu"],
-            dynamic_shapes=dynamic_shapes,
-            dynamo=True,
+            dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
+            dynamo=False,
         )
         del model_export_half
 
