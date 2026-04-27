@@ -16,7 +16,7 @@ export NCCL_IB_DISABLE=1
 nvidia-smi topo -m
 
 DATA_DIR=$(pixi run python3 scripts/get_param.py particleflow_spec.yaml productions.cld.workspace_dir)/tfds/
-./scripts/tallinn/wrapper.sh python mlpf/pipeline.py \
+uv run python3 mlpf/pipeline.py \
     --spec-file particleflow_spec.yaml \
     --model-name pyg-cld-hits-v1 \
     --production cld \
