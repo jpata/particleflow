@@ -916,6 +916,7 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         phi_arr[idx_gp_bestcluster] = vec.phi
         energy_arr[idx_gp_bestcluster] = vec.energy
 
+    idx_all_masked = np.where(mask_gp_unmatched)[0]
     gen_features_new = {
         "PDG": np.abs(gpdata.gen_features["PDG"][mask_gp_unmatched]),
         "charge": gpdata.gen_features["charge"][mask_gp_unmatched],
@@ -930,10 +931,10 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         "gp_to_track": gpdata.gen_features["gp_to_track"][mask_gp_unmatched],
         "gp_to_cluster": gpdata.gen_features["gp_to_cluster"][mask_gp_unmatched],
         "jet_idx": gpdata.gen_features["jet_idx"][mask_gp_unmatched],
+        "particle_number": np.arange(len(idx_all_masked), dtype=np.float32) + 1,
     }
     assert (np.sum(gen_features_new["energy"]) - np.sum(gpdata.gen_features["energy"])) < 1e-2
 
-    idx_all_masked = np.where(mask_gp_unmatched)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
     genparticle_to_hit = filter_adj(gpdata.genparticle_to_hit, genpart_idx_all_to_filtered)
     genparticle_to_track = filter_adj(gpdata.genparticle_to_track, genpart_idx_all_to_filtered)
@@ -1261,6 +1262,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
                 "gp_to_track": np.zeros(len(reco_type)),
                 "gp_to_cluster": np.zeros(len(reco_type)),
                 "jet_idx": np.zeros(len(reco_type)),
+                "particle_number": np.zeros(len(reco_type)),
             }
         )
 

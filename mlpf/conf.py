@@ -177,6 +177,7 @@ class ParticleFeatures:
     gp_to_track: Any
     gp_to_cluster: Any
     jet_idx: Any
+    particle_number: Any
 
     @classmethod
     def get_names(cls):

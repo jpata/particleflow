@@ -54,7 +54,7 @@ project:
     local: &local
       site_name: "local"
       executor: "local"
-      container: "https://jpata.web.cern.ch/jpata/particleflow-20260330-cd2f54.sif"
+      container: "https://jpata.web.cern.ch/jpata/particleflow-29042026-de861d.sif"
       bind_mounts:
         - "/tmp"
         - "/mnt/work"

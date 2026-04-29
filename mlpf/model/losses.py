@@ -1,10 +1,115 @@
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import torch
 from torch.nn import functional as F
 from torch import Tensor, nn
+from torch_scatter import scatter_max, scatter_add
 
 from mlpf.logger import _logger
+
+
+def scatter_count(input: torch.Tensor):
+    return scatter_add(torch.ones_like(input, dtype=torch.long), input.long())
+
+
+def scatter_counts_to_indices(input: torch.LongTensor) -> torch.LongTensor:
+    return torch.repeat_interleave(torch.arange(input.size(0), device=input.device), input).long()
+
+
+def batch_cluster_indices(cluster_id: torch.Tensor, batch: torch.Tensor) -> Tuple[torch.LongTensor, torch.LongTensor]:
+    device = cluster_id.device
+    assert cluster_id.device == batch.device
+    n_clusters_per_event = scatter_max(cluster_id, batch, dim=-1)[0] + 1
+    offset_values_nozero = n_clusters_per_event[:-1].cumsum(dim=-1)
+    offset_values = torch.cat((torch.zeros(1, device=device), offset_values_nozero))
+    offset = torch.gather(offset_values, 0, batch).long()
+    return offset + cluster_id, n_clusters_per_event
+
+
+def get_inter_event_norms_mask(batch: torch.LongTensor, nclusters_per_event: torch.LongTensor):
+    device = batch.device
+    batch_expanded_as_ones = (batch == torch.arange(batch.max() + 1, dtype=torch.long, device=device).unsqueeze(-1)).long()
+    return batch_expanded_as_ones.repeat_interleave(nclusters_per_event, dim=0).T
+
+
+def calc_LV_Lbeta(
+    beta: torch.Tensor,
+    cluster_space_coords: torch.Tensor,
+    cluster_index_per_event: torch.Tensor,
+    batch: torch.Tensor,
+    qmin: float = 0.1,
+    s_B: float = 1.0,
+    noise_cluster_index: int = 0,
+):
+    device = beta.device
+    beta = torch.nan_to_num(beta, nan=0.0)
+
+    cluster_index, n_clusters_per_event = batch_cluster_indices(cluster_index_per_event, batch)
+    n_clusters = n_clusters_per_event.sum()
+    n_hits, cluster_space_dim = cluster_space_coords.size()
+    batch_size = batch.max() + 1
+
+    batch_cluster = scatter_counts_to_indices(n_clusters_per_event)
+
+    is_noise = cluster_index_per_event == noise_cluster_index
+    is_sig = ~is_noise
+    n_hits_sig = is_sig.sum()
+
+    is_object = scatter_max(is_sig.long(), cluster_index)[0].bool()
+
+    object_index_per_event = cluster_index_per_event[is_sig] - 1
+    object_index, n_objects_per_event = batch_cluster_indices(object_index_per_event, batch[is_sig])
+    n_hits_per_object = scatter_count(object_index)
+    batch_object = batch_cluster[is_object]
+    n_objects = is_object.sum()
+
+    # L_V term
+    q = (beta.clip(0.0, 1 - 1e-4).arctanh() / 1.01) ** 2 + qmin
+    q_alpha, index_alpha = scatter_max(q[is_sig], object_index)
+
+    x_alpha = cluster_space_coords[is_sig][index_alpha]
+
+    M = torch.nn.functional.one_hot(cluster_index).long()
+    M_inv = get_inter_event_norms_mask(batch, n_clusters_per_event) - M
+
+    M = M[:, is_object]
+    M_inv = M_inv[:, is_object]
+
+    norms = torch.sum(
+        torch.square(cluster_space_coords.unsqueeze(1) - x_alpha.unsqueeze(0)),
+        dim=-1,
+    )
+    N_k = torch.sum(M, dim=0)
+    norms_att = norms[is_sig]
+    norms_att = torch.log(torch.exp(torch.Tensor([1]).to(norms_att.device)) * norms_att / 2 + 1)
+    norms_att *= M[is_sig]
+
+    V_attractive = (q[is_sig]).unsqueeze(-1) * q_alpha.unsqueeze(0) * norms_att
+    V_attractive = V_attractive.sum(dim=0)
+    V_attractive = V_attractive.view(-1) / (N_k.view(-1) + 1e-3)
+    L_V_attractive = torch.mean(V_attractive)
+
+    norms_rep = torch.relu(1.0 - torch.sqrt(norms + 1e-6)) * M_inv
+    V_repulsive = q.unsqueeze(1) * q_alpha.unsqueeze(0) * norms_rep
+
+    L_V_repulsive = V_repulsive.sum(dim=0)
+    number_of_repulsive_terms_per_object = torch.sum(M_inv, dim=0)
+    L_V_repulsive = L_V_repulsive.view(-1) / (number_of_repulsive_terms_per_object.view(-1) + 1e-3)
+    L_V_repulsive = torch.mean(L_V_repulsive)
+
+    L_V = L_V_attractive + L_V_repulsive
+
+    n_noise_hits_per_event = scatter_count(batch[is_noise])
+    n_noise_hits_per_event[n_noise_hits_per_event == 0] = 1
+    L_beta_noise = s_B * ((scatter_add(beta[is_noise], batch[is_noise])) / n_noise_hits_per_event).sum() / batch_size
+
+    beta_per_object_c = scatter_add(beta[is_sig], object_index)
+    beta_alpha = beta[is_sig][index_alpha]
+    L_beta_sig = torch.mean(1 - beta_alpha + 1 - torch.clip(beta_per_object_c, 0, 1))
+
+    L_beta = L_beta_noise + L_beta_sig
+
+    return L_V, L_beta
 
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
@@ -26,8 +131,8 @@ def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
 def mlpf_loss(y, ypred, batch):
     """
     Args
-        y [dict]: relevant keys are "cls_id, momentum, charge"
-        ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge"
+        y [dict]: relevant keys are "cls_id, momentum, charge, particle_number"
+        ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge, oc_beta, oc_coords"
         batch [PFBatch]: the MLPF inputs
     """
     loss = {}
@@ -49,6 +154,22 @@ def mlpf_loss(y, ypred, batch):
     # binary loss for particle / no-particle classification
     # loss_binary_classification = 10.0 * loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
     loss_binary_classification = 10.0 * torch.nn.functional.cross_entropy(ypred["cls_binary"], (y["cls_id"] != 0).long(), reduction="none")
+
+    # Object Condensation loss
+    # Flatten across batch and sequence length, but only for non-padded elements
+    mask_flat = batch.mask.view(-1).bool()
+    beta_flat = ypred["oc_beta"].view(-1)[mask_flat]
+    coords_flat = ypred["oc_coords"].view(-1, 3)[mask_flat]
+    particle_number_flat = y["particle_number"].view(-1)[mask_flat]
+
+    # Create batch index for flattened elements
+    batch_idx = (
+        torch.arange(batch.mask.shape[0], device=batch.mask.device).unsqueeze(1).repeat(1, batch.mask.shape[1]).view(-1)[mask_flat].long()
+    )
+
+    l_v, l_beta = calc_LV_Lbeta(beta_flat, coords_flat, particle_number_flat.long(), batch_idx)
+    loss["OC_V"] = l_v
+    loss["OC_beta"] = l_beta
 
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
@@ -127,6 +248,8 @@ def mlpf_loss(y, ypred, batch):
     loss["Total"] = (
         loss["Classification_binary"]
         + loss["Classification"]
+        + loss["OC_V"]
+        + loss["OC_beta"]
         # + loss["ispu"]
         + loss["Regression_pt"]
         + loss["Regression_eta"]
