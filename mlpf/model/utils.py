@@ -39,7 +39,7 @@ def unpack_target(y, model):
 # @torch.compile
 def unpack_predictions(preds):
     ret = {}
-    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret["ispu"] = preds
+    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret["ispu"], ret["oc_beta"], ret["oc_coords"] = preds
 
     # unpacking
     ret["pt"] = ret["momentum"][..., 0]
