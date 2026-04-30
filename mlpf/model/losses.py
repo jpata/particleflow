@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
 from torch.nn import functional as F
@@ -41,27 +41,27 @@ def calc_LV_Lbeta(
     s_B: float = 1.0,
     noise_cluster_index: int = 0,
 ):
-    device = beta.device
+    # device = beta.device
     beta = torch.nan_to_num(beta, nan=0.0)
 
     cluster_index, n_clusters_per_event = batch_cluster_indices(cluster_index_per_event, batch)
-    n_clusters = n_clusters_per_event.sum()
+    # n_clusters = n_clusters_per_event.sum()
     n_hits, cluster_space_dim = cluster_space_coords.size()
     batch_size = batch.max() + 1
 
-    batch_cluster = scatter_counts_to_indices(n_clusters_per_event)
+    # batch_cluster = scatter_counts_to_indices(n_clusters_per_event)
 
     is_noise = cluster_index_per_event == noise_cluster_index
     is_sig = ~is_noise
-    n_hits_sig = is_sig.sum()
+    # n_hits_sig = is_sig.sum()
 
     is_object = scatter_max(is_sig.long(), cluster_index)[0].bool()
 
     object_index_per_event = cluster_index_per_event[is_sig] - 1
     object_index, n_objects_per_event = batch_cluster_indices(object_index_per_event, batch[is_sig])
-    n_hits_per_object = scatter_count(object_index)
-    batch_object = batch_cluster[is_object]
-    n_objects = is_object.sum()
+    # n_hits_per_object = scatter_count(object_index)
+    # batch_object = batch_cluster[is_object]
+    # n_objects = is_object.sum()
 
     # L_V term
     q = (beta.clip(0.0, 1 - 1e-4).arctanh() / 1.01) ** 2 + qmin
@@ -163,13 +163,11 @@ def mlpf_loss(y, ypred, batch):
     particle_number_flat = y["particle_number"].view(-1)[mask_flat]
 
     # Create batch index for flattened elements
-    batch_idx = (
-        torch.arange(batch.mask.shape[0], device=batch.mask.device).unsqueeze(1).repeat(1, batch.mask.shape[1]).view(-1)[mask_flat].long()
-    )
+    batch_idx = torch.arange(batch.mask.shape[0], device=batch.mask.device).unsqueeze(1).repeat(1, batch.mask.shape[1]).view(-1)[mask_flat].long()
 
     l_v, l_beta = calc_LV_Lbeta(beta_flat, coords_flat, particle_number_flat.long(), batch_idx)
-    loss["OC_V"] = 1e-3*l_v
-    loss["OC_beta"] = 1e-3*l_beta
+    loss["OC_V"] = 1e-3 * l_v
+    loss["OC_beta"] = 1e-3 * l_beta
 
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)

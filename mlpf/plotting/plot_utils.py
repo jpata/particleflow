@@ -371,7 +371,9 @@ def load_eval_data(path, max_events=None):
 
             if (typ + "_px" in yvals) and (typ + "_pt" not in yvals):
                 # pred_oc is saved as px, py, pz, E
-                jetvec = vector.awk(awkward.zip({"px": yvals[typ + "_px"], "py": yvals[typ + "_py"], "pz": yvals[typ + "_pz"], "E": yvals[typ + "_E"]}))
+                jetvec = vector.awk(
+                    awkward.zip({"px": yvals[typ + "_px"], "py": yvals[typ + "_py"], "pz": yvals[typ + "_pz"], "E": yvals[typ + "_E"]})
+                )
                 jetvec = awkward.Array(jetvec, with_name="Momentum4D")
                 yvals[typ + "_pt"] = jetvec.pt
                 yvals[typ + "_eta"] = jetvec.eta

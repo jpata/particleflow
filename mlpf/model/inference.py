@@ -117,7 +117,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         coords = ypred["oc_coords"][event_idx][mask].cpu()
         clustering = get_clustering(beta, coords)
         oc_clusters_flat.append(clustering.cpu().numpy())
-    
+
     # now cluster jets
     # first, flatten events across batch dim with padding mask
     X = batch.X[batch.mask].cpu().contiguous().numpy()
@@ -127,7 +127,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         ycand[k] = v[batch.mask].detach().cpu().contiguous().numpy()
     for k, v in ypred.items():
         ypred[k] = v[batch.mask].detach().cpu().contiguous().numpy()
-    
+
     ypred["oc_cluster"] = np.concatenate(oc_clusters_flat)
 
     # second, create awkward arrays according to the counts of not padded elements
@@ -143,30 +143,30 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     for event_idx in range(len(counts)):
         event_preds = awkvals["pred"][event_idx]
         clusters = event_preds["oc_cluster"]
-        
+
         unique_clusters = np.unique(clusters)
         unique_clusters = unique_clusters[unique_clusters != -1]
-        
+
         event_particles = {"px": [], "py": [], "pz": [], "E": []}
         for cluster_id in unique_clusters:
-            cluster_mask = (clusters == cluster_id)
-            
+            cluster_mask = clusters == cluster_id
+
             pts = event_preds["pt"][cluster_mask]
             etas = event_preds["eta"][cluster_mask]
             sin_phis = event_preds["sin_phi"][cluster_mask]
             cos_phis = event_preds["cos_phi"][cluster_mask]
             energies = event_preds["energy"][cluster_mask]
-            
+
             px = pts * cos_phis
             py = pts * sin_phis
             pz = pts * np.sinh(etas)
             e = energies
-            
+
             event_particles["px"].append(np.sum(px))
             event_particles["py"].append(np.sum(py))
             event_particles["pz"].append(np.sum(pz))
             event_particles["E"].append(np.sum(e))
-        
+
         if len(event_particles["px"]) == 0:
             oc_particles_coll.append(awkward.zip({"px": [], "py": [], "pz": [], "E": []}))
         else:
@@ -175,7 +175,10 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     awkvals["pred_oc"] = awkward.Array(oc_particles_coll)
 
     # now cluster jets
-    for typ, ydata in zip(["cand", "target", "pred", "pred_nopu", "pred_oc"], [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"], awkvals.get("pred_oc")]):
+    for typ, ydata in zip(
+        ["cand", "target", "pred", "pred_nopu", "pred_oc"],
+        [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"], awkvals.get("pred_oc")],
+    ):
         if typ == "pred_oc":
             if ydata is None or len(ydata) == 0:
                 continue
@@ -186,12 +189,12 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
             if typ == "pred_nopu":
                 msk1 = ydata["ispu"] < 0.8
                 msk = msk & msk1
-            
+
             pt = ydata["pt"][msk]
             eta = ydata["eta"][msk]
             phi = ydata["phi"][msk]
             energy = ydata["energy"][msk]
-            
+
             vec = awkward.zip(
                 {
                     "px": pt * np.cos(phi),
@@ -200,7 +203,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
                     "E": energy,
                 }
             )
-            
+
         cluster = fastjet.ClusterSequence(vec, jetdef)
         jets = cluster.inclusive_jets(min_pt=jet_ptcut)
         jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.E}))
