@@ -124,30 +124,30 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     for event_idx in range(len(counts)):
         event_preds = awkvals["pred"][event_idx]
         clusters = event_preds["oc_cluster"]
-        
+
         unique_clusters = np.unique(clusters)
         unique_clusters = unique_clusters[unique_clusters != -1]
-        
+
         event_particles = {"px": [], "py": [], "pz": [], "E": []}
         for cluster_id in unique_clusters:
-            cluster_mask = (clusters == cluster_id)
-            
+            cluster_mask = clusters == cluster_id
+
             pts = event_preds["pt"][cluster_mask]
             etas = event_preds["eta"][cluster_mask]
             sin_phis = event_preds["sin_phi"][cluster_mask]
             cos_phis = event_preds["cos_phi"][cluster_mask]
             energies = event_preds["energy"][cluster_mask]
-            
+
             px = pts * cos_phis
             py = pts * sin_phis
             pz = pts * np.sinh(etas)
             e = energies
-            
+
             event_particles["px"].append(np.sum(px))
             event_particles["py"].append(np.sum(py))
             event_particles["pz"].append(np.sum(pz))
             event_particles["E"].append(np.sum(e))
-        
+
         if len(event_particles["px"]) == 0:
             oc_particles_coll.append(awkward.zip({"px": [], "py": [], "pz": [], "E": []}))
         else:

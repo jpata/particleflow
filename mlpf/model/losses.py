@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
 from torch.nn import functional as F
@@ -91,18 +91,8 @@ def event_loss(y, ypred, batch, regression_weights):
     The standard loss currently contains only independent particle terms.
     Event-level terms comparing particle collections can be added here.
     """
-<<<<<<< HEAD
     y, ypred = _mask_no_target_regression(y, ypred)
     valid = batch.mask.bool()
-=======
-    Args
-        y [dict]: relevant keys are "cls_id, momentum, charge, particle_number"
-        ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge, oc_beta, oc_coords"
-        batch [PFBatch]: the MLPF inputs
-    """
-    loss = {}
-    loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
->>>>>>> d27cb2de (add clustering ground truth)
 
     particle_targets = {
         "cls_id": y["cls_id"][valid],
@@ -122,114 +112,8 @@ def mlpf_loss(y, ypred, batch, regression_weights):
     """Compute the standard MLPF objective for a batch of events."""
     loss = event_loss(y, ypred, batch, regression_weights)
 
-<<<<<<< HEAD
     loss_opt = sum(loss.values())
     loss["Total"] = loss_opt
-=======
-    # Object Condensation loss
-    # Flatten across batch and sequence length, but only for non-padded elements
-    mask_flat = batch.mask.view(-1).bool()
-    beta_flat = ypred["oc_beta"].view(-1)[mask_flat]
-    coords_flat = ypred["oc_coords"].view(-1, 3)[mask_flat]
-    particle_number_flat = y["particle_number"].view(-1)[mask_flat]
-
-    # Create batch index for flattened elements
-    batch_idx = (
-        torch.arange(batch.mask.shape[0], device=batch.mask.device).unsqueeze(1).repeat(1, batch.mask.shape[1]).view(-1)[mask_flat].long()
-    )
-
-    l_v, l_beta = calc_LV_Lbeta(beta_flat, coords_flat, particle_number_flat.long(), batch_idx)
-    loss["OC_V"] = 1e-3*l_v
-    loss["OC_beta"] = 1e-3*l_beta
-
-    # compare the particle type, only for cases where there was a true particle
-    loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
-    loss_pid_classification[y["cls_id"] == 0] *= 0
-
-    # compare particle "PU-ness", only for cases where there was a true particle
-    # loss_pu = torch.nn.functional.cross_entropy(ypred["ispu"], y["ispu"].long(), reduction="none")
-    # loss_pu = loss_obj_id(ypred["ispu"], y["ispu"].long()).reshape(y["cls_id"].shape)
-    # loss_pu[y["cls_id"] == 0] *= 0
-
-    # do not compute PU loss if no PU samples in this batch
-    # if y["ispu"].long().sum() == 0:
-    #     loss_pu *= 0
-
-    # compare particle momentum, only for cases where there was a true particle
-    loss_regression_pt = torch.nn.functional.mse_loss(ypred["pt"], y["pt"], reduction="none")
-    loss_regression_eta = 1e-2 * torch.nn.functional.mse_loss(ypred["eta"], y["eta"], reduction="none")
-    loss_regression_sin_phi = 1e-2 * torch.nn.functional.mse_loss(ypred["sin_phi"], y["sin_phi"], reduction="none")
-    loss_regression_cos_phi = 1e-2 * torch.nn.functional.mse_loss(ypred["cos_phi"], y["cos_phi"], reduction="none")
-    loss_regression_energy = torch.nn.functional.mse_loss(ypred["energy"], y["energy"], reduction="none")
-
-    loss_regression_pt[y["cls_id"] == 0] *= 0
-    loss_regression_eta[y["cls_id"] == 0] *= 0
-    loss_regression_sin_phi[y["cls_id"] == 0] *= 0
-    loss_regression_cos_phi[y["cls_id"] == 0] *= 0
-    loss_regression_energy[y["cls_id"] == 0] *= 0
-
-    # set the loss to 0 on padded elements in the batch
-    loss_binary_classification[batch.mask == 0] *= 0
-    loss_pid_classification[batch.mask == 0] *= 0
-    # loss_pu[batch.mask == 0] *= 0
-    loss_regression_pt[batch.mask == 0] *= 0
-    loss_regression_eta[batch.mask == 0] *= 0
-    loss_regression_sin_phi[batch.mask == 0] *= 0
-    loss_regression_cos_phi[batch.mask == 0] *= 0
-    loss_regression_energy[batch.mask == 0] *= 0
-
-    # add weight based on target pt
-    sqrt_target_pt = torch.sqrt(torch.exp(y["pt"]) * batch.X[:, :, 1])
-    loss_regression_pt *= sqrt_target_pt
-    loss_regression_energy *= sqrt_target_pt
-
-    # average over all target particles
-    loss["Regression_pt"] = loss_regression_pt.sum() / npart
-    loss["Regression_eta"] = loss_regression_eta.sum() / npart
-    loss["Regression_sin_phi"] = loss_regression_sin_phi.sum() / npart
-    loss["Regression_cos_phi"] = loss_regression_cos_phi.sum() / npart
-    loss["Regression_energy"] = loss_regression_energy.sum() / npart
-
-    # average over all elements that were not padded
-    loss["Classification_binary"] = loss_binary_classification.sum() / nelem
-    loss["Classification"] = loss_pid_classification.sum() / nelem
-    # loss["ispu"] = loss_pu.sum() / nelem
-
-    # compute predicted pt from model output
-    # pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], dim=-1) * msk_pred_particle
-    # pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"].detach(), dim=-1) * msk_pred_particle
-    # pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"].detach(), dim=-1) * msk_pred_particle
-
-    # compute MET, sum across particle axis in event
-    # pred_met = torch.sqrt(torch.sum(pred_px, dim=-2) ** 2 + torch.sum(pred_py, dim=-2) ** 2).detach()
-    # loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
-
-    # was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), dim=-1), ypred["momentum"]], dim=-1) * batch.mask.unsqueeze(
-    #     dim=-1
-    # )
-    # was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], dim=-1) * batch.mask.unsqueeze(
-    #     dim=-1
-    # )
-
-    # standardize Wasserstein loss
-    # std = was_input_true[batch.mask].std(dim=0)
-    # loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
-
-    # this is the final loss to be optimized
-    loss["Total"] = (
-        loss["Classification_binary"]
-        + loss["Classification"]
-        + loss["OC_V"]
-        + loss["OC_beta"]
-        # + loss["ispu"]
-        + loss["Regression_pt"]
-        + loss["Regression_eta"]
-        + loss["Regression_sin_phi"]
-        + loss["Regression_cos_phi"]
-        + loss["Regression_energy"]
-    )
-    loss_opt = loss["Total"]
->>>>>>> d27cb2de (add clustering ground truth)
     if torch.isnan(loss_opt):
         _logger.error(ypred)
         _logger.error(loss)
