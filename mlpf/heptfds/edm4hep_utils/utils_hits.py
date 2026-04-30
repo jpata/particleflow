@@ -12,7 +12,7 @@ except Exception:
 
 from mlpf.conf import CLASS_LABELS, Dataset, EDM4HEP, ParticleFeatures
 
-NUM_SPLITS = 10
+NUM_SPLITS = 1
 
 X_FEATURES = EDM4HEP.HitFeatures.get_names()
 Y_FEATURES = ParticleFeatures.get_names()

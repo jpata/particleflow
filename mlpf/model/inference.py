@@ -104,12 +104,21 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
             }
         )
     )
-    genjets = vector.awk(awkward.zip({"px": genjets.px, "py": genjets.py, "pz": genjets.pz, "E": genjets.e}))
+    genjets = vector.awk(awkward.zip({"px": genjets.px, "py": genjets.py, "pz": genjets.pz, "E": genjets.E}))
 
     jets_coll = {}
     jets_coll["gen"] = genjets
 
-    # we need to turn 3d-padded arrays into awkward arrays
+    # Object Condensation clustering
+    oc_clusters_flat = []
+    for event_idx in range(batch.mask.size(0)):
+        mask = batch.mask[event_idx]
+        beta = ypred["oc_beta"][event_idx][mask].cpu()
+        coords = ypred["oc_coords"][event_idx][mask].cpu()
+        clustering = get_clustering(beta, coords)
+        oc_clusters_flat.append(clustering.cpu().numpy())
+    
+    # now cluster jets
     # first, flatten events across batch dim with padding mask
     X = batch.X[batch.mask].cpu().contiguous().numpy()
     for k, v in ytarget.items():
@@ -118,6 +127,8 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         ycand[k] = v[batch.mask].detach().cpu().contiguous().numpy()
     for k, v in ypred.items():
         ypred[k] = v[batch.mask].detach().cpu().contiguous().numpy()
+    
+    ypred["oc_cluster"] = np.concatenate(oc_clusters_flat)
 
     # second, create awkward arrays according to the counts of not padded elements
     counts = torch.sum(batch.mask, axis=1).cpu().numpy()
@@ -126,22 +137,6 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         awk_arr = awkward.Array({k: flat_arr[k] for k in flat_arr.keys()})
         awkvals[typ] = awkward.unflatten(awk_arr, counts)
     Xs = awkward.unflatten(awkward.from_numpy(X), counts)
-
-    # Object Condensation clustering
-    oc_clusters_list = []
-    for event_idx in range(len(counts)):
-        mask = batch.mask[event_idx]
-        beta = ypred["oc_beta"][event_idx][mask]
-        coords = ypred["oc_coords"][event_idx][mask]
-        clustering = get_clustering(beta, coords)
-        # Pad clustering to match original event length
-        full_clustering = torch.full((batch.mask.shape[1],), -1, dtype=torch.long)
-        full_clustering[mask] = clustering
-        oc_clusters_list.append(full_clustering.cpu().numpy())
-    
-    awkvals["pred"]["oc_cluster"] = awkward.unflatten(
-        awkward.from_numpy(np.stack(oc_clusters_list)), counts
-    )
 
     # Aggregate OC clusters into particles
     oc_particles_coll = []
@@ -152,64 +147,63 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         unique_clusters = np.unique(clusters)
         unique_clusters = unique_clusters[unique_clusters != -1]
         
-        event_particles = []
+        event_particles = {"px": [], "py": [], "pz": [], "E": []}
         for cluster_id in unique_clusters:
             cluster_mask = (clusters == cluster_id)
-            # Sum up p4
-            # Predicted momentum: [pt, eta, sin_phi, cos_phi, energy]
-            # We can use vector to sum them.
             
-            # Filter elements in this cluster
             pts = event_preds["pt"][cluster_mask]
             etas = event_preds["eta"][cluster_mask]
             sin_phis = event_preds["sin_phi"][cluster_mask]
             cos_phis = event_preds["cos_phi"][cluster_mask]
             energies = event_preds["energy"][cluster_mask]
             
-            # Create vectors and sum
-            # px = pt * cos_phi, py = pt * sin_phi
             px = pts * cos_phis
             py = pts * sin_phis
-            # pz = pt * sinh(eta)
             pz = pts * np.sinh(etas)
             e = energies
             
-            event_particles.append({
-                "px": np.sum(px),
-                "py": np.sum(py),
-                "pz": np.sum(pz),
-                "E": np.sum(e)
-            })
+            event_particles["px"].append(np.sum(px))
+            event_particles["py"].append(np.sum(py))
+            event_particles["pz"].append(np.sum(pz))
+            event_particles["E"].append(np.sum(e))
         
-        if not event_particles:
-            oc_particles_coll.append(awkward.Array([]))
+        if len(event_particles["px"]) == 0:
+            oc_particles_coll.append(awkward.zip({"px": [], "py": [], "pz": [], "E": []}))
         else:
-            oc_particles_coll.append(vector.awk(awkward.zip(event_particles)))
+            oc_particles_coll.append(awkward.zip(event_particles))
 
-    jets_coll["pred_oc"] = awkward.Array(oc_particles_coll)
-
-    # now cluster jets
+    awkvals["pred_oc"] = awkward.Array(oc_particles_coll)
 
     # now cluster jets
-    for typ, ydata in zip(["cand", "target", "pred", "pred_nopu"], [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]]):
-        msk = ydata["cls_id"] != 0
-        # placeholder cut on the PU frac prediction
-        if typ == "pred_nopu":
-            msk1 = ydata["ispu"] < 0.8
-            msk = msk & msk1
-        vec = vector.awk(
-            awkward.zip(
+    for typ, ydata in zip(["cand", "target", "pred", "pred_nopu", "pred_oc"], [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"], awkvals.get("pred_oc")]):
+        if typ == "pred_oc":
+            if ydata is None or len(ydata) == 0:
+                continue
+            vec = ydata
+        else:
+            msk = ydata["cls_id"] != 0
+            # placeholder cut on the PU frac prediction
+            if typ == "pred_nopu":
+                msk1 = ydata["ispu"] < 0.8
+                msk = msk & msk1
+            
+            pt = ydata["pt"][msk]
+            eta = ydata["eta"][msk]
+            phi = ydata["phi"][msk]
+            energy = ydata["energy"][msk]
+            
+            vec = awkward.zip(
                 {
-                    "pt": ydata["pt"][msk],
-                    "eta": ydata["eta"][msk],
-                    "phi": ydata["phi"][msk],
-                    "e": ydata["energy"][msk],
+                    "px": pt * np.cos(phi),
+                    "py": pt * np.sin(phi),
+                    "pz": pt * np.sinh(eta),
+                    "E": energy,
                 }
             )
-        )
-        cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+            
+        cluster = fastjet.ClusterSequence(vec, jetdef)
         jets = cluster.inclusive_jets(min_pt=jet_ptcut)
-        jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e}))
+        jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.E}))
 
     matched_jets = awkward.Array(
         {
