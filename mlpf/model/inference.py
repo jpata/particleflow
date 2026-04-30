@@ -119,22 +119,6 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         awkvals[typ] = awkward.unflatten(awk_arr, counts)
     Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
-    # Object Condensation clustering
-    oc_clusters_list = []
-    for event_idx in range(len(counts)):
-        mask = batch.mask[event_idx]
-        beta = ypred["oc_beta"][event_idx][mask]
-        coords = ypred["oc_coords"][event_idx][mask]
-        clustering = get_clustering(beta, coords)
-        # Pad clustering to match original event length
-        full_clustering = torch.full((batch.mask.shape[1],), -1, dtype=torch.long)
-        full_clustering[mask] = clustering
-        oc_clusters_list.append(full_clustering.cpu().numpy())
-    
-    awkvals["pred"]["oc_cluster"] = awkward.unflatten(
-        awkward.from_numpy(np.stack(oc_clusters_list)), counts
-    )
-
     # Aggregate OC clusters into particles
     oc_particles_coll = []
     for event_idx in range(len(counts)):
@@ -144,41 +128,32 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         unique_clusters = np.unique(clusters)
         unique_clusters = unique_clusters[unique_clusters != -1]
         
-        event_particles = []
+        event_particles = {"px": [], "py": [], "pz": [], "E": []}
         for cluster_id in unique_clusters:
             cluster_mask = (clusters == cluster_id)
-            # Sum up p4
-            # Predicted momentum: [pt, eta, sin_phi, cos_phi, energy]
-            # We can use vector to sum them.
             
-            # Filter elements in this cluster
             pts = event_preds["pt"][cluster_mask]
             etas = event_preds["eta"][cluster_mask]
             sin_phis = event_preds["sin_phi"][cluster_mask]
             cos_phis = event_preds["cos_phi"][cluster_mask]
             energies = event_preds["energy"][cluster_mask]
             
-            # Create vectors and sum
-            # px = pt * cos_phi, py = pt * sin_phi
             px = pts * cos_phis
             py = pts * sin_phis
-            # pz = pt * sinh(eta)
             pz = pts * np.sinh(etas)
             e = energies
             
-            event_particles.append({
-                "px": np.sum(px),
-                "py": np.sum(py),
-                "pz": np.sum(pz),
-                "E": np.sum(e)
-            })
+            event_particles["px"].append(np.sum(px))
+            event_particles["py"].append(np.sum(py))
+            event_particles["pz"].append(np.sum(pz))
+            event_particles["E"].append(np.sum(e))
         
-        if not event_particles:
-            oc_particles_coll.append(awkward.Array([]))
+        if len(event_particles["px"]) == 0:
+            oc_particles_coll.append(awkward.zip({"px": [], "py": [], "pz": [], "E": []}))
         else:
-            oc_particles_coll.append(vector.awk(awkward.zip(event_particles)))
+            oc_particles_coll.append(awkward.zip(event_particles))
 
-    jets_coll["pred_oc"] = awkward.Array(oc_particles_coll)
+    awkvals["pred_oc"] = awkward.Array(oc_particles_coll)
 
     # now cluster jets
 

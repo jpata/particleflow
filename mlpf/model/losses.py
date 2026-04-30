@@ -139,8 +139,8 @@ def mlpf_loss(y, ypred, batch, regression_weights):
     )
 
     l_v, l_beta = calc_LV_Lbeta(beta_flat, coords_flat, particle_number_flat.long(), batch_idx)
-    loss["OC_V"] = l_v
-    loss["OC_beta"] = l_beta
+    loss["OC_V"] = 1e-3*l_v
+    loss["OC_beta"] = 1e-3*l_beta
 
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
