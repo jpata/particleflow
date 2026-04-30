@@ -18,7 +18,7 @@ os.environ["SINGULARITY_CACHEDIR"]="/tmp/particleflow/tmp"
 
 rule all:
     input:
-        expand('snakemake_jobs/cld/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1])
+        expand('snakemake_jobs/cld/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
 rule tfds_hit_task:
     input:
@@ -34,7 +34,7 @@ rule tfds_hit_task:
 
 rule tfds_hit:
     input:
-        expand('snakemake_jobs/cld/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1])
+        expand('snakemake_jobs/cld/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     output:
         "snakemake_jobs/cld/tfds_hit/all.done"
     shell:
