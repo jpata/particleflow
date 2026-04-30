@@ -292,8 +292,7 @@ productions:
       ttbar:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
         version: "3.2.0"
-          #config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        config_ids: [1]
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
           #      ww_fullhad:
           #        builder_path: "mlpf/heptfds/cld_pf_edm4hep/ww_fullhad"
           #        version: "3.1.1"
@@ -311,8 +310,7 @@ productions:
       ttbar:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ttbar"
         version: "3.2.0"
-          #config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        config_ids: [1]
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
           #      ww_fullhad:
           #        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ww_fullhad"
           #        version: "3.1.1"
@@ -608,7 +606,7 @@ models:
         samples:
           - name: "cld_edm_ttbar_hits"
             version: "3.2.0"
-            splits: ["1"]
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
               #          - name: "cld_edm_ww_fullhad_hits"
               #            version: "3.1.1"
               #            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
@@ -622,7 +620,7 @@ models:
         samples:
           - name: "cld_edm_ttbar_hits"
             version: "3.2.0"
-            splits: ["1"]
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
               #          - name: "cld_edm_ww_fullhad_hits"
               #            version: "3.1.1"
               #            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
@@ -633,7 +631,7 @@ models:
     test_datasets:
       - name: "cld_edm_ttbar_hits"
         version: "3.2.0"
-        splits: ["1"]
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           #      - name: "cld_edm_ww_fullhad_hits"
           #        version: "3.1.1"
           #        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
