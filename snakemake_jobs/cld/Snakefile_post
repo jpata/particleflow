@@ -7,14 +7,14 @@ os.environ["OMP_NUM_THREADS"]="1"
 os.environ["OPENBLAS_NUM_THREADS"]="1"
 os.environ["VECLIB_MAXIMUM_THREADS"]="1"
 os.environ["PYTHONNOUSERSITE"]="1"
-os.environ["TMPDIR"]="/tmp/particleflow/tmp"
-os.environ["TEMPDIR"]="/tmp/particleflow/tmp"
-os.environ["TEMP"]="/tmp/particleflow/tmp"
-os.environ["TMP"]="/tmp/particleflow/tmp"
-os.environ["APPTAINER_TMPDIR"]="/tmp/particleflow/tmp"
-os.environ["APPTAINER_CACHEDIR"]="/tmp/particleflow/tmp"
-os.environ["SINGULARITY_TMPDIR"]="/tmp/particleflow/tmp"
-os.environ["SINGULARITY_CACHEDIR"]="/tmp/particleflow/tmp"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
 
 rule all:
     input:
@@ -22,7 +22,7 @@ rule all:
 
 rule post_ttbar_all:
     input:
-        expand("snakemake_jobs/cld/post/post_ttbar_{seed}.done", seed=range(300000, 310010, 1))
+        lambda wildcards: expand("snakemake_jobs/cld/post/post_ttbar_{seed}.done", seed=glob_wildcards("snakemake_jobs/cld/gen/gen_ttbar_{seed}.done").seed) if glob_wildcards("snakemake_jobs/cld/gen/gen_ttbar_{seed}.done").seed else expand("snakemake_jobs/cld/post/post_ttbar_{seed}.done", seed=range(300000, 310010, 1))
     output:
         "snakemake_jobs/cld/post/post_ttbar_all.done"
     shell:
@@ -42,8 +42,8 @@ rule post_task:
     output:
         "snakemake_jobs/cld/post/post_{sample}_{seed}.done"
     resources:
-        tmpdir="/tmp/particleflow/tmp", mem_mb=2000
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=2000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
-        "https://jpata.web.cern.ch/jpata/particleflow-29042026-de861d.sif"
+        "/scratch/persistent/joosep/singularity/particleflow-20260330-cd2f54.sif"
     shell:
         "snakemake_jobs/cld/post/post_{wildcards.sample}.sh {wildcards.seed} && touch {output}"

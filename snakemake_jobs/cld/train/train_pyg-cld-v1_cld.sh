@@ -6,15 +6,15 @@ export NUMEXPR_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export VECLIB_MAXIMUM_THREADS=1
-export TMPDIR=/tmp/particleflow/tmp
-export TEMPDIR=/tmp/particleflow/tmp
-export TEMP=/tmp/particleflow/tmp
-export TMP=/tmp/particleflow/tmp
+export TMPDIR=/scratch/local/joosep/tmp
+export TEMPDIR=/scratch/local/joosep/tmp
+export TEMP=/scratch/local/joosep/tmp
+export TMP=/scratch/local/joosep/tmp
 mkdir -p $TMPDIR
 cd /home/joosep/particleflow
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
-export TFDS_DATA_DIR=/mnt/work/mlpf//cld/v1.2.5_key4hep_2025-05-29/tfds
+export TFDS_DATA_DIR=/local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
 export KERAS_BACKEND=torch
 export TORCH_COMPILE_DISABLE=1
 env

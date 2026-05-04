@@ -41,8 +41,17 @@ def calc_LV_Lbeta(
     s_B: float = 1.0,
     noise_cluster_index: int = 0,
 ):
+    """
+    Calculates the L_V and L_beta object condensation losses.
+    Note: Compared to the HitPF reference implementation, this version:
+    1. Omits 'use_average_cc_pos' and 'frac_combinations' heuristics to focus on core OC math.
+    2. Omits the 'L_alpha_coordinates' term as detector-space coordinate regression is handled separately in MLPF.
+    3. Uses dynamic batch-size normalization for L_beta_noise instead of a hardcoded constant.
+    """
     # device = beta.device
     beta = torch.nan_to_num(beta, nan=0.0)
+    if torch.isnan(cluster_space_coords).any():
+        _logger.error(f"NaN in cluster_space_coords: {cluster_space_coords}")
 
     cluster_index, n_clusters_per_event = batch_cluster_indices(cluster_index_per_event, batch)
     # n_clusters = n_clusters_per_event.sum()
@@ -64,8 +73,21 @@ def calc_LV_Lbeta(
     # n_objects = is_object.sum()
 
     # L_V term
-    q = (beta.clip(0.0, 1 - 1e-4).arctanh() / 1.01) ** 2 + qmin
+    # Clip beta more aggressively to avoid large arctanh values, especially in bfloat16
+    # 1e-2 is safer for bfloat16 precision
+    q = (beta.clip(0.0, 1 - 1e-2).arctanh() / 1.01) ** 2 + qmin
+    if torch.isnan(q).any():
+        _logger.error(f"NaN in q detected!")
+    if torch.isinf(q).any():
+        _logger.error(f"Inf in q detected! max beta: {beta.max()}")
+        # Defensive clamp to avoid propagation of Inf
+        q = torch.clamp(q, max=1e6)
+
     q_alpha, index_alpha = scatter_max(q[is_sig], object_index)
+    if torch.isinf(q_alpha).any():
+        _logger.error(f"Inf in q_alpha detected!")
+    if torch.isnan(q_alpha).any():
+        _logger.error(f"NaN in q_alpha detected!")
 
     x_alpha = cluster_space_coords[is_sig][index_alpha]
 
@@ -75,32 +97,62 @@ def calc_LV_Lbeta(
     M = M[:, is_object]
     M_inv = M_inv[:, is_object]
 
+    # Check coords range
+    if torch.isnan(cluster_space_coords).any():
+        _logger.error("NaN in cluster_space_coords detected!")
+    coords_max = torch.max(torch.abs(cluster_space_coords))
+    if coords_max > 1e3:
+        _logger.warning(f"Large coords detected: {coords_max}")
+
     norms = torch.sum(
         torch.square(cluster_space_coords.unsqueeze(1) - x_alpha.unsqueeze(0)),
         dim=-1,
     )
+    if torch.isnan(norms).any():
+        _logger.error(f"NaN in norms detected!")
+    if torch.isinf(norms).any():
+        _logger.error(f"Inf in norms detected!")
+
     N_k = torch.sum(M, dim=0)
     norms_att = norms[is_sig]
-    norms_att = torch.log(torch.exp(torch.Tensor([1]).to(norms_att.device)) * norms_att / 2 + 1)
+    # Use a more stable log calculation
+    # log(exp(1) * x / 2 + 1)
+    norms_att = torch.log(torch.exp(torch.tensor([1.0], device=norms_att.device)) * norms_att / 2.0 + 1.0)
     norms_att *= M[is_sig]
+    if torch.isnan(norms_att).any():
+        _logger.error(f"NaN in norms_att detected!")
 
     V_attractive = (q[is_sig]).unsqueeze(-1) * q_alpha.unsqueeze(0) * norms_att
     V_attractive = V_attractive.sum(dim=0)
     V_attractive = V_attractive.view(-1) / (N_k.view(-1) + 1e-3)
     L_V_attractive = torch.mean(V_attractive)
+    if torch.isnan(L_V_attractive):
+        _logger.error(f"NaN in L_V_attractive!")
 
     norms_rep = torch.relu(1.0 - torch.sqrt(norms + 1e-6)) * M_inv
     V_repulsive = q.unsqueeze(1) * q_alpha.unsqueeze(0) * norms_rep
 
     L_V_repulsive = V_repulsive.sum(dim=0)
     number_of_repulsive_terms_per_object = torch.sum(M_inv, dim=0)
+    # Check if number_of_repulsive_terms_per_object is 0
+    if (number_of_repulsive_terms_per_object == 0).any():
+         _logger.warning(f"Some objects have 0 repulsive terms")
+
     L_V_repulsive = L_V_repulsive.view(-1) / (number_of_repulsive_terms_per_object.view(-1) + 1e-3)
     L_V_repulsive = torch.mean(L_V_repulsive)
+    if torch.isnan(L_V_repulsive):
+        _logger.error(f"NaN in L_V_repulsive!")
+        # If we still have NaN, it might be Inf * 0.0. Let's try to clamp V_repulsive
+        L_V_repulsive = torch.mean(torch.nan_to_num(V_repulsive, nan=0.0).sum(dim=0) / (number_of_repulsive_terms_per_object.view(-1) + 1e-3))
+        _logger.info(f"Corrected L_V_repulsive to {L_V_repulsive}")
 
     L_V = L_V_attractive + L_V_repulsive
 
+
+
     n_noise_hits_per_event = scatter_count(batch[is_noise])
     n_noise_hits_per_event[n_noise_hits_per_event == 0] = 1
+    # Note: L_beta_noise is normalized by batch_size here, whereas HitPF uses a hardcoded constant (4)
     L_beta_noise = s_B * ((scatter_add(beta[is_noise], batch[is_noise])) / n_noise_hits_per_event).sum() / batch_size
 
     beta_per_object_c = scatter_add(beta[is_sig], object_index)

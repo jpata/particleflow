@@ -68,7 +68,7 @@ project:
       cpu_partition: "local"
 
   # Selected site defaults (Merged into 'project'), choose 'tallinn' or 'lxplus'
-  <<: *local
+  <<: *tallinn
 
 # -----------------------------------------------------------------------------
 # Dataset Productions
@@ -585,7 +585,7 @@ models:
   pyg-cld-hits-v1:
     <<: *defaults
     dataset: cld_hits
-    gpu_batch_multiplier: 16
+    gpu_batch_multiplier: 12
 
     hyperparameters:
       batch_size: 1
