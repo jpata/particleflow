@@ -1,9 +1,8 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 from torch.nn import functional as F
 from torch import Tensor, nn
-from torch_scatter import scatter_max, scatter_add
 
 from mlpf.logger import _logger
 

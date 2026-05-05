@@ -43,6 +43,11 @@ class RegressionMode(Enum):
     LINEAR_ELEMTYPE = "linear-elemtype"
 
 
+class LossType(Enum):
+    STANDARD = "standard"
+    OBJECT_CONDENSATION = "object_condensation"
+
+
 class Activation(Enum):
     ELU = "elu"
     RELU = "relu"
@@ -439,6 +444,7 @@ class ModelArchitectureConfig(BaseModel):
     sin_phi_mode: RegressionMode = RegressionMode.LINEAR
     cos_phi_mode: RegressionMode = RegressionMode.LINEAR
     energy_mode: RegressionMode = RegressionMode.DIRECT_ELEMTYPE_SPLIT
+    loss_mode: LossType = LossType.STANDARD
     trainable: str = "all"
 
     # Nested configs

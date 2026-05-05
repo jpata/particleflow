@@ -410,8 +410,6 @@ def compute_jet_ratio(data, yvals):
     ret = {}
     # flatten across event dimension
     matches = [("gen", "pred"), ("gen", "pred_nopu"), ("gen", "cand"), ("gen", "target"), ("target", "pred"), ("target", "cand")]
-    if "gen_to_pred_oc" in data["matched_jets"].fields:
-        matches.append(("gen", "pred_oc"))
 
     for match1, match2 in matches:
         for val in ["pt", "eta"]:
@@ -540,16 +538,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         label="MLPF",
     )
 
-    if "jets_pred_oc_pt" in yvals:
-        pt = awkward.to_numpy(awkward.flatten(yvals["jets_pred_oc_pt"]))
-        plt.hist(
-            pt,
-            bins=b,
-            histtype="step",
-            lw=2,
-            label="MLPF OC",
-        )
-
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_gen_pt"]))
     plt.hist(
         pt,
@@ -608,16 +596,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         label="MLPF",
     )
 
-    if "jets_pred_oc_pt" in yvals:
-        pt = awkward.to_numpy(awkward.flatten(yvals["jets_pred_oc_pt"]))
-        plt.hist(
-            pt,
-            bins=b,
-            histtype="step",
-            lw=2,
-            label="MLPF OC",
-        )
-
     pt = awkward.to_numpy(awkward.flatten(yvals["jets_gen_pt"]))
     plt.hist(
         pt,
@@ -672,16 +650,6 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         lw=2,
         label="MLPF",
     )
-
-    if "jets_pred_oc_eta" in yvals:
-        eta = awkward.to_numpy(awkward.flatten(yvals["jets_pred_oc_eta"]))
-        plt.hist(
-            eta,
-            bins=b,
-            histtype="step",
-            lw=2,
-            label="MLPF OC",
-        )
 
     eta = awkward.to_numpy(awkward.flatten(yvals["jets_gen_eta"]))
     plt.hist(
@@ -784,21 +752,6 @@ def plot_jet_ratio(
         lw=2,
         label="MLPF, no PU $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
-
-    if "jet_ratio_gen_to_pred_oc_pt" in yvals:
-        p = med_iqr(yvals["jet_ratio_gen_to_pred_oc_pt"])
-        ret_dict["jet_ratio_gen_to_pred_oc_pt"] = {
-            "med": p[0],
-            "iqr": p[1],
-            "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_oc_pt"]) / awkward.count(yvals["jets_gen_pt"]),
-        }
-        plt.hist(
-            yvals["jet_ratio_gen_to_pred_oc_pt"],
-            bins=bins,
-            histtype="step",
-            lw=2,
-            label="MLPF OC $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
-        )
 
     plt.xlabel(labels["reco_gen_jet_ratio"])
     plt.ylabel("Matched jets / bin")

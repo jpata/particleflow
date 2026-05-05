@@ -512,10 +512,6 @@ class MLPF(nn.Module):
         self.nn_pid = ffn(decoding_dim, self.num_classes, width, self.act, dropout_ff)
         # self.nn_pu = ffn(decoding_dim, 2, width, self.act, dropout_ff)
 
-        # Object Condensation heads
-        self.oc_beta = ffn(decoding_dim, 1, width, self.act, dropout_ff)
-        self.oc_coords = ffn(decoding_dim, 3, width, self.act, dropout_ff)
-
         # elementwise DNN for node momentum regression
         embed_dim = decoding_dim
         self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
@@ -640,10 +636,7 @@ class MLPF(nn.Module):
         preds_pid = torch.nan_to_num(preds_pid, nan=0.0, posinf=0.0, neginf=0.0)
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
 
-        preds_oc_beta = torch.sigmoid(self.oc_beta(final_embedding_id))
-        preds_oc_coords = self.oc_coords(final_embedding_id)
-
-        return preds_binary_particle, preds_pid, preds_momentum, preds_pu, preds_oc_beta, preds_oc_coords
+        return preds_binary_particle, preds_pid, preds_momentum, preds_pu
 
     def predict_particles(self, X_features, mask):
         from mlpf.model.utils import unpack_predictions
