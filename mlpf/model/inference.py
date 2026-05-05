@@ -32,33 +32,7 @@ from mlpf.plotting.plot_utils import (
 )
 
 from mlpf.logger import _logger
-from mlpf.model.utils import unpack_predictions, unpack_target
-
-
-def get_clustering(betas: torch.Tensor, X: torch.Tensor, tbeta=0.1, td=1.0):
-    """
-    Returns a clustering of hits -> cluster_index, based on the GravNet model
-    output (predicted betas and cluster space coordinates) and the clustering
-    parameters tbeta and td.
-    Takes torch.Tensors as input.
-    """
-    n_points = betas.size(0)
-    select_condpoints = betas > tbeta
-    # Get indices passing the threshold
-    indices_condpoints = select_condpoints.nonzero()
-    # Order them by decreasing beta value
-    indices_condpoints = indices_condpoints[(-betas[select_condpoints]).argsort()]
-    # Assign points to condensation points
-    # Only assign previously unassigned points (no overwriting)
-    # Points unassigned at the end are bkg (-1)
-    unassigned = torch.arange(n_points)
-    clustering = -1 * torch.ones(n_points, dtype=torch.long).to(betas.device)
-    for index_condpoint in indices_condpoints:
-        d = torch.norm(X[unassigned] - X[index_condpoint][0], dim=-1)
-        assigned_to_this_condpoint = unassigned[d < td]
-        clustering[assigned_to_this_condpoint] = index_condpoint[0]
-        unassigned = unassigned[~(d < td)]
-    return clustering
+from mlpf.model.utils import unpack_target
 
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
@@ -70,27 +44,19 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     # run model on batch
     batch = batch.to(rank)
-    ypred = model(batch.X, batch.mask)
 
-    # convert all outputs to float32 in case running in float16 or bfloat16
-    ypred = tuple([y.to(torch.float32) for y in ypred])
+    if hasattr(model, "module"):
+        model_module = model.module
+    else:
+        model_module = model
 
-    # transform log (pt/elempt) -> pt
-    pred_cls = torch.argmax(ypred[0], axis=-1)
-    ypred[2][..., 0] = torch.exp(ypred[2][..., 0]) * batch.X[..., 1]
-    ypred[2][..., 0][pred_cls == 0] = 0
-
-    # transform log (E/elemE) -> E
-    ypred[2][..., 4] = torch.exp(ypred[2][..., 4]) * batch.X[..., 5]
-    ypred[2][..., 4][pred_cls == 0] = 0
+    ypred = model_module.predict_particles(batch.X, batch.mask)
 
     batch.ytarget[..., 2] = batch.ytarget_pt_orig
     batch.ytarget[..., 6] = batch.ytarget_e_orig
 
-    ytarget = unpack_target(batch.ytarget.to(torch.float32), model)
-    ycand = unpack_target(batch.ycand.to(torch.float32), model)
-    ypred = unpack_predictions(ypred)
-    ypred["ispu"] = torch.softmax(ypred["ispu"], axis=-1)[:, :, -1]
+    ytarget = unpack_target(batch.ytarget.to(torch.float32), model_module)
+    ycand = unpack_target(batch.ycand.to(torch.float32), model_module)
 
     genjets_msk = batch.genjets[:, :, 0].cpu() > jet_ptcut
     genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
@@ -109,15 +75,6 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     jets_coll = {}
     jets_coll["gen"] = genjets
 
-    # Object Condensation clustering
-    oc_clusters_flat = []
-    for event_idx in range(batch.mask.size(0)):
-        mask = batch.mask[event_idx]
-        beta = ypred["oc_beta"][event_idx][mask].cpu()
-        coords = ypred["oc_coords"][event_idx][mask].cpu()
-        clustering = get_clustering(beta, coords)
-        oc_clusters_flat.append(clustering.cpu().numpy())
-
     # now cluster jets
     # first, flatten events across batch dim with padding mask
     X = batch.X[batch.mask].cpu().contiguous().numpy()
@@ -128,8 +85,6 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     for k, v in ypred.items():
         ypred[k] = v[batch.mask].detach().cpu().contiguous().numpy()
 
-    ypred["oc_cluster"] = np.concatenate(oc_clusters_flat)
-
     # second, create awkward arrays according to the counts of not padded elements
     counts = torch.sum(batch.mask, axis=1).cpu().numpy()
     awkvals = {}
@@ -138,71 +93,30 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         awkvals[typ] = awkward.unflatten(awk_arr, counts)
     Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
-    # Aggregate OC clusters into particles
-    oc_particles_coll = []
-    for event_idx in range(len(counts)):
-        event_preds = awkvals["pred"][event_idx]
-        clusters = event_preds["oc_cluster"]
-
-        unique_clusters = np.unique(clusters)
-        unique_clusters = unique_clusters[unique_clusters != -1]
-
-        event_particles = {"px": [], "py": [], "pz": [], "E": []}
-        for cluster_id in unique_clusters:
-            cluster_mask = clusters == cluster_id
-
-            pts = event_preds["pt"][cluster_mask]
-            etas = event_preds["eta"][cluster_mask]
-            sin_phis = event_preds["sin_phi"][cluster_mask]
-            cos_phis = event_preds["cos_phi"][cluster_mask]
-            energies = event_preds["energy"][cluster_mask]
-
-            px = pts * cos_phis
-            py = pts * sin_phis
-            pz = pts * np.sinh(etas)
-            e = energies
-
-            event_particles["px"].append(np.sum(px))
-            event_particles["py"].append(np.sum(py))
-            event_particles["pz"].append(np.sum(pz))
-            event_particles["E"].append(np.sum(e))
-
-        if len(event_particles["px"]) == 0:
-            oc_particles_coll.append(awkward.zip({"px": [], "py": [], "pz": [], "E": []}))
-        else:
-            oc_particles_coll.append(awkward.zip(event_particles))
-
-    awkvals["pred_oc"] = awkward.Array(oc_particles_coll)
-
     # now cluster jets
     for typ, ydata in zip(
-        ["cand", "target", "pred", "pred_nopu", "pred_oc"],
-        [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"], awkvals.get("pred_oc")],
+        ["cand", "target", "pred", "pred_nopu"],
+        [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]],
     ):
-        if typ == "pred_oc":
-            if ydata is None or len(ydata) == 0:
-                continue
-            vec = ydata
-        else:
-            msk = ydata["cls_id"] != 0
-            # placeholder cut on the PU frac prediction
-            if typ == "pred_nopu":
-                msk1 = ydata["ispu"] < 0.8
-                msk = msk & msk1
+        msk = ydata["cls_id"] != 0
+        # placeholder cut on the PU frac prediction
+        if typ == "pred_nopu":
+            msk1 = ydata["ispu"] < 0.8
+            msk = msk & msk1
 
-            pt = ydata["pt"][msk]
-            eta = ydata["eta"][msk]
-            phi = ydata["phi"][msk]
-            energy = ydata["energy"][msk]
+        pt = ydata["pt"][msk]
+        eta = ydata["eta"][msk]
+        phi = ydata["phi"][msk]
+        energy = ydata["energy"][msk]
 
-            vec = awkward.zip(
-                {
-                    "px": pt * np.cos(phi),
-                    "py": pt * np.sin(phi),
-                    "pz": pt * np.sinh(eta),
-                    "E": energy,
-                }
-            )
+        vec = awkward.zip(
+            {
+                "px": pt * np.cos(phi),
+                "py": pt * np.sin(phi),
+                "pz": pt * np.sinh(eta),
+                "E": energy,
+            }
+        )
 
         cluster = fastjet.ClusterSequence(vec, jetdef)
         jets = cluster.inclusive_jets(min_pt=jet_ptcut)
@@ -216,7 +130,6 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
             "gen_to_target": match_two_jet_collections(jets_coll, "gen", "target", jet_match_dr),
             "target_to_cand": match_two_jet_collections(jets_coll, "target", "cand", jet_match_dr),
             "target_to_pred": match_two_jet_collections(jets_coll, "target", "pred", jet_match_dr),
-            "gen_to_pred_oc": match_two_jet_collections(jets_coll, "gen", "pred_oc", jet_match_dr),
         }
     )
 

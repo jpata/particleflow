@@ -87,7 +87,7 @@ def model_step(batch, model, loss_fn):
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
-    loss_opt, losses_detached = loss_fn(ytarget, ypred, batch)
+    loss_opt, losses_detached = loss_fn(ytarget, ypred, batch, model.config.loss_mode)
     return loss_opt, losses_detached, ypred_raw, ypred, ytarget
 
 

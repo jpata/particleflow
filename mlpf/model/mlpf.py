@@ -24,6 +24,7 @@ from mlpf.conf import (
     LearnedRepresentationMode,
     RegressionMode,
     KernelType,
+    LossType,
 )
 
 
@@ -644,6 +645,63 @@ class MLPF(nn.Module):
         preds_oc_coords = self.oc_coords(final_embedding_id)
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu, preds_oc_beta, preds_oc_coords
+
+    def predict_particles(self, X_features, mask):
+        from mlpf.model.utils import unpack_predictions, get_clustering
+
+        ypred_raw = self.forward(X_features, mask)
+        ypred_raw = tuple([y.to(torch.float32) for y in ypred_raw])
+
+        # transform log (pt/elempt) -> pt
+        ypred_raw[2][..., 0] = torch.exp(ypred_raw[2][..., 0]) * X_features[..., 1]
+        # transform log (E/elemE) -> E
+        ypred_raw[2][..., 4] = torch.exp(ypred_raw[2][..., 4]) * X_features[..., 5]
+
+        ypred = unpack_predictions(ypred_raw)
+        ypred["ispu"] = torch.softmax(ypred["ispu"], axis=-1)[:, :, -1]
+
+        # By default, use standard argmax
+        pred_cls = torch.argmax(ypred_raw[0], axis=-1)
+
+        loss_mode = self.config.loss_mode
+        if loss_mode == LossType.STANDARD:
+            # Zero out predictions for non-particles
+            ypred["cls_id"][pred_cls == 0] = 0
+            ypred["pt"][pred_cls == 0] = 0
+            ypred["energy"][pred_cls == 0] = 0
+        elif loss_mode == LossType.OBJECT_CONDENSATION:
+            # Re-initialize pred_cls to 0
+            pred_cls = torch.zeros_like(ypred["cls_id"])
+
+            for event_idx in range(mask.size(0)):
+                event_mask = mask[event_idx]
+                if event_mask.sum() == 0:
+                    continue
+
+                beta = ypred["oc_beta"][event_idx][event_mask]
+                coords = ypred["oc_coords"][event_idx][event_mask]
+
+                clustering = get_clustering(beta, coords)
+                unique_clusters = torch.unique(clustering)
+                unique_clusters = unique_clusters[unique_clusters != -1]
+
+                valid_indices = event_mask.nonzero(as_tuple=True)[0]
+
+                for cluster_id in unique_clusters:
+                    cluster_mask = clustering == cluster_id
+                    cluster_betas = beta[cluster_mask]
+                    cp_idx_local = torch.argmax(cluster_betas)
+
+                    cp_idx_valid = cluster_mask.nonzero(as_tuple=True)[0][cp_idx_local]
+                    cp_idx_seq = valid_indices[cp_idx_valid]
+
+                    pred_cls[event_idx, cp_idx_seq] = ypred["cls_id"][event_idx, cp_idx_seq]
+
+            ypred["cls_id"] = pred_cls
+            ypred["pt"][pred_cls == 0] = 0
+            ypred["energy"][pred_cls == 0] = 0
+
+        return ypred
 
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):

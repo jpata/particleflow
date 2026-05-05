@@ -6,6 +6,7 @@ from torch import Tensor, nn
 from torch_scatter import scatter_max, scatter_add
 
 from mlpf.logger import _logger
+from mlpf.conf import LossType
 
 
 def scatter_count(input: torch.Tensor):
@@ -50,6 +51,7 @@ def calc_LV_Lbeta(
     """
     # device = beta.device
     beta = torch.nan_to_num(beta, nan=0.0)
+    cluster_space_coords = torch.nan_to_num(cluster_space_coords, nan=0.0)
     if torch.isnan(cluster_space_coords).any():
         _logger.error(f"NaN in cluster_space_coords: {cluster_space_coords}")
 
@@ -77,17 +79,23 @@ def calc_LV_Lbeta(
     # 1e-2 is safer for bfloat16 precision
     q = (beta.clip(0.0, 1 - 1e-2).arctanh() / 1.01) ** 2 + qmin
     if torch.isnan(q).any():
-        _logger.error(f"NaN in q detected!")
+        _logger.error(f"NaN in q detected! num NaNs: {torch.isnan(q).sum()}")
     if torch.isinf(q).any():
         _logger.error(f"Inf in q detected! max beta: {beta.max()}")
         # Defensive clamp to avoid propagation of Inf
         q = torch.clamp(q, max=1e6)
 
     q_alpha, index_alpha = scatter_max(q[is_sig], object_index)
+    # Filter out empty groups (those that don't have any hits in is_sig)
+    # For empty groups, scatter_max returns argmax = input.size(0)
+    mask_valid = index_alpha < q[is_sig].size(0)
+    q_alpha = q_alpha[mask_valid]
+    index_alpha = index_alpha[mask_valid]
+
     if torch.isinf(q_alpha).any():
-        _logger.error(f"Inf in q_alpha detected!")
+        _logger.error(f"Inf in q_alpha detected! num infs: {torch.isinf(q_alpha).sum()}")
     if torch.isnan(q_alpha).any():
-        _logger.error(f"NaN in q_alpha detected!")
+        _logger.error(f"NaN in q_alpha detected! num NaNs: {torch.isnan(q_alpha).sum()}")
 
     x_alpha = cluster_space_coords[is_sig][index_alpha]
 
@@ -109,9 +117,9 @@ def calc_LV_Lbeta(
         dim=-1,
     )
     if torch.isnan(norms).any():
-        _logger.error(f"NaN in norms detected!")
+        _logger.error(f"NaN in norms detected! num NaNs: {torch.isnan(norms).sum()}")
     if torch.isinf(norms).any():
-        _logger.error(f"Inf in norms detected!")
+        _logger.error(f"Inf in norms detected! num infs: {torch.isinf(norms).sum()}")
 
     N_k = torch.sum(M, dim=0)
     norms_att = norms[is_sig]
@@ -120,14 +128,18 @@ def calc_LV_Lbeta(
     norms_att = torch.log(torch.exp(torch.tensor([1.0], device=norms_att.device)) * norms_att / 2.0 + 1.0)
     norms_att *= M[is_sig]
     if torch.isnan(norms_att).any():
-        _logger.error(f"NaN in norms_att detected!")
+        _logger.error(f"NaN in norms_att detected! num NaNs: {torch.isnan(norms_att).sum()}")
 
     V_attractive = (q[is_sig]).unsqueeze(-1) * q_alpha.unsqueeze(0) * norms_att
     V_attractive = V_attractive.sum(dim=0)
     V_attractive = V_attractive.view(-1) / (N_k.view(-1) + 1e-3)
-    L_V_attractive = torch.mean(V_attractive)
+    if V_attractive.numel() > 0:
+        L_V_attractive = torch.mean(V_attractive)
+    else:
+        L_V_attractive = torch.tensor(0.0, device=beta.device)
+
     if torch.isnan(L_V_attractive):
-        _logger.error(f"NaN in L_V_attractive!")
+        _logger.error("NaN in L_V_attractive!")
 
     norms_rep = torch.relu(1.0 - torch.sqrt(norms + 1e-6)) * M_inv
     V_repulsive = q.unsqueeze(1) * q_alpha.unsqueeze(0) * norms_rep
@@ -136,19 +148,21 @@ def calc_LV_Lbeta(
     number_of_repulsive_terms_per_object = torch.sum(M_inv, dim=0)
     # Check if number_of_repulsive_terms_per_object is 0
     if (number_of_repulsive_terms_per_object == 0).any():
-         _logger.warning(f"Some objects have 0 repulsive terms")
+        _logger.warning("Some objects have 0 repulsive terms")
 
     L_V_repulsive = L_V_repulsive.view(-1) / (number_of_repulsive_terms_per_object.view(-1) + 1e-3)
-    L_V_repulsive = torch.mean(L_V_repulsive)
+    if L_V_repulsive.numel() > 0:
+        L_V_repulsive = torch.mean(L_V_repulsive)
+    else:
+        L_V_repulsive = torch.tensor(0.0, device=beta.device)
+
     if torch.isnan(L_V_repulsive):
-        _logger.error(f"NaN in L_V_repulsive!")
+        _logger.error("NaN in L_V_repulsive!")
         # If we still have NaN, it might be Inf * 0.0. Let's try to clamp V_repulsive
         L_V_repulsive = torch.mean(torch.nan_to_num(V_repulsive, nan=0.0).sum(dim=0) / (number_of_repulsive_terms_per_object.view(-1) + 1e-3))
-        _logger.info(f"Corrected L_V_repulsive to {L_V_repulsive}")
+        _logger.info("Corrected L_V_repulsive to {L_V_repulsive}")
 
     L_V = L_V_attractive + L_V_repulsive
-
-
 
     n_noise_hits_per_event = scatter_count(batch[is_noise])
     n_noise_hits_per_event[n_noise_hits_per_event == 0] = 1
@@ -156,12 +170,18 @@ def calc_LV_Lbeta(
     L_beta_noise = s_B * ((scatter_add(beta[is_noise], batch[is_noise])) / n_noise_hits_per_event).sum() / batch_size
 
     beta_per_object_c = scatter_add(beta[is_sig], object_index)
-    beta_alpha = beta[is_sig][index_alpha]
-    L_beta_sig = torch.mean(1 - beta_alpha + 1 - torch.clip(beta_per_object_c, 0, 1))
+    if index_alpha.numel() > 0:
+        L_beta_sig = torch.mean(1 - beta[is_sig][index_alpha] + 1 - torch.clip(beta_per_object_c[mask_valid], 0, 1))
+    else:
+        L_beta_sig = torch.tensor(0.0, device=beta.device)
 
     L_beta = L_beta_noise + L_beta_sig
 
-    return L_V, L_beta
+    # Map index_alpha back to the indices of the input tensors
+    sig_indices = torch.nonzero(is_sig).view(-1)
+    absolute_index_alpha = sig_indices[index_alpha]
+
+    return L_V, L_beta, absolute_index_alpha
 
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
@@ -180,119 +200,196 @@ def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     return ret
 
 
-def mlpf_loss(y, ypred, batch):
+def mlpf_loss_standard(y, ypred, batch, mask_flat, npart, nelem, loss_obj_id):
+    loss = {}
+    # Predictions from model are (B, N, C)
+    ypred_cls_binary_flat = ypred["cls_binary"].reshape(-1, 2)
+    ypred_cls_id_flat = ypred["cls_id_onehot"].reshape(-1, ypred["cls_id_onehot"].shape[-1])
+    y_cls_id_flat = y["cls_id"].view(-1)
+
+    # binary loss for particle / no-particle classification
+    loss_binary_classification = 10.0 * torch.nn.functional.cross_entropy(ypred_cls_binary_flat, (y_cls_id_flat != 0).long(), reduction="none")
+    loss_binary_classification[~mask_flat] *= 0
+    loss["Classification_binary"] = loss_binary_classification.sum() / nelem
+
+    loss["OC_V"] = torch.tensor(0.0, device=batch.X.device)
+    loss["OC_beta"] = torch.tensor(0.0, device=batch.X.device)
+
+    # compare the particle type, only for cases where there was a true particle
+    loss_pid_classification = loss_obj_id(ypred_cls_id_flat, y_cls_id_flat)
+    loss_pid_classification[y_cls_id_flat == 0] *= 0
+    loss_pid_classification[~mask_flat] *= 0
+    loss["Classification"] = loss_pid_classification.sum() / nelem
+
+    # compare particle momentum, only for cases where there was a true particle
+    ypred_pt_flat = ypred["pt"].view(-1)
+    y_pt_flat = y["pt"].view(-1)
+    ypred_eta_flat = ypred["eta"].view(-1)
+    y_eta_flat = y["eta"].view(-1)
+    ypred_sin_phi_flat = ypred["sin_phi"].view(-1)
+    y_sin_phi_flat = y["sin_phi"].view(-1)
+    ypred_cos_phi_flat = ypred["cos_phi"].view(-1)
+    y_cos_phi_flat = y["cos_phi"].view(-1)
+    ypred_energy_flat = ypred["energy"].view(-1)
+    y_energy_flat = y["energy"].view(-1)
+
+    loss_regression_pt = torch.nn.functional.mse_loss(ypred_pt_flat, y_pt_flat, reduction="none")
+    loss_regression_eta = 1e-2 * torch.nn.functional.mse_loss(ypred_eta_flat, y_eta_flat, reduction="none")
+    loss_regression_sin_phi = 1e-2 * torch.nn.functional.mse_loss(ypred_sin_phi_flat, y_sin_phi_flat, reduction="none")
+    loss_regression_cos_phi = 1e-2 * torch.nn.functional.mse_loss(ypred_cos_phi_flat, y_cos_phi_flat, reduction="none")
+    loss_regression_energy = torch.nn.functional.mse_loss(ypred_energy_flat, y_energy_flat, reduction="none")
+
+    loss_regression_pt[y_cls_id_flat == 0] *= 0
+    loss_regression_eta[y_cls_id_flat == 0] *= 0
+    loss_regression_sin_phi[y_cls_id_flat == 0] *= 0
+    loss_regression_cos_phi[y_cls_id_flat == 0] *= 0
+    loss_regression_energy[y_cls_id_flat == 0] *= 0
+
+    loss_regression_pt[~mask_flat] *= 0
+    loss_regression_eta[~mask_flat] *= 0
+    loss_regression_sin_phi[~mask_flat] *= 0
+    loss_regression_cos_phi[~mask_flat] *= 0
+    loss_regression_energy[~mask_flat] *= 0
+
+    # add weight based on target pt
+    # ensure input to sqrt is positive
+    sqrt_target_pt = torch.sqrt(torch.clamp(torch.exp(y_pt_flat) * batch.X.view(-1, batch.X.shape[-1])[:, 1], min=1e-6))
+    loss_regression_pt *= sqrt_target_pt
+    loss_regression_energy *= sqrt_target_pt
+
+    if npart > 0:
+        loss["Regression_pt"] = loss_regression_pt.sum() / npart
+        loss["Regression_eta"] = loss_regression_eta.sum() / npart
+        loss["Regression_sin_phi"] = loss_regression_sin_phi.sum() / npart
+        loss["Regression_cos_phi"] = loss_regression_cos_phi.sum() / npart
+        loss["Regression_energy"] = loss_regression_energy.sum() / npart
+    else:
+        loss["Regression_pt"] = torch.tensor(0.0, device=batch.X.device)
+        loss["Regression_eta"] = torch.tensor(0.0, device=batch.X.device)
+        loss["Regression_sin_phi"] = torch.tensor(0.0, device=batch.X.device)
+        loss["Regression_cos_phi"] = torch.tensor(0.0, device=batch.X.device)
+        loss["Regression_energy"] = torch.tensor(0.0, device=batch.X.device)
+
+    return loss
+
+
+def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss_obj_id):
+    loss = {}
+    beta_flat = ypred["oc_beta"].view(-1)[mask_flat]
+    coords_flat = ypred["oc_coords"].view(-1, 3)[mask_flat]
+    particle_number_flat = y["particle_number"].view(-1)[mask_flat]
+    batch_idx = torch.arange(batch.mask.shape[0], device=batch.mask.device).unsqueeze(1).repeat(1, batch.mask.shape[1]).view(-1)[mask_flat].long()
+
+    l_v, l_beta, cp_indices = calc_LV_Lbeta(beta_flat, coords_flat, particle_number_flat.long(), batch_idx)
+    loss["OC_V"] = 1e-3 * l_v
+    loss["OC_beta"] = 1e-3 * l_beta
+
+    loss["Classification_binary"] = torch.tensor(0.0, device=batch.X.device)
+
+    # Predictions from model are (B, N, C)
+    ypred_cls_id_flat = ypred["cls_id_onehot"].reshape(-1, ypred["cls_id_onehot"].shape[-1])
+    y_cls_id_flat = y["cls_id"].view(-1)
+
+    # Select hits passing the mask for further regression
+    ypred_pid_cp_input = ypred_cls_id_flat[mask_flat]
+    y_pid_cp_input = y_cls_id_flat[mask_flat]
+
+    ypred_pt_cp_input = ypred["pt"].view(-1)[mask_flat]
+    y_pt_cp_input = y["pt"].view(-1)[mask_flat]
+
+    ypred_eta_cp_input = ypred["eta"].view(-1)[mask_flat]
+    y_eta_cp_input = y["eta"].view(-1)[mask_flat]
+
+    ypred_sin_phi_cp_input = ypred["sin_phi"].view(-1)[mask_flat]
+    y_sin_phi_cp_input = y["sin_phi"].view(-1)[mask_flat]
+
+    ypred_cos_phi_cp_input = ypred["cos_phi"].view(-1)[mask_flat]
+    y_cos_phi_cp_input = y["cos_phi"].view(-1)[mask_flat]
+
+    ypred_energy_cp_input = ypred["energy"].view(-1)[mask_flat]
+    y_energy_cp_input = y["energy"].view(-1)[mask_flat]
+
+    # Compute losses at CPs
+    if len(cp_indices) > 0:
+        # Select values at condensation points
+        ypred_pid_cp = ypred_pid_cp_input[cp_indices]
+        y_pid_cp = y_pid_cp_input[cp_indices]
+
+        ypred_pt_cp = ypred_pt_cp_input[cp_indices]
+        y_pt_cp = y_pt_cp_input[cp_indices]
+
+        ypred_eta_cp = ypred_eta_cp_input[cp_indices]
+        y_eta_cp = y_eta_cp_input[cp_indices]
+
+        ypred_sin_phi_cp = ypred_sin_phi_cp_input[cp_indices]
+        y_sin_phi_cp = y_sin_phi_cp_input[cp_indices]
+
+        ypred_cos_phi_cp = ypred_cos_phi_cp_input[cp_indices]
+        y_cos_phi_cp = y_cos_phi_cp_input[cp_indices]
+
+        ypred_energy_cp = ypred_energy_cp_input[cp_indices]
+        y_energy_cp = y_energy_cp_input[cp_indices]
+
+        loss_pid_classification = loss_obj_id(ypred_pid_cp, y_pid_cp)
+        loss["Classification"] = loss_pid_classification.mean()
+
+        # Regression losses at CPs
+        loss["Regression_pt"] = torch.nn.functional.mse_loss(ypred_pt_cp, y_pt_cp)
+        loss["Regression_eta"] = 1e-2 * torch.nn.functional.mse_loss(ypred_eta_cp, y_eta_cp)
+        loss["Regression_sin_phi"] = 1e-2 * torch.nn.functional.mse_loss(ypred_sin_phi_cp, y_sin_phi_cp)
+        loss["Regression_cos_phi"] = 1e-2 * torch.nn.functional.mse_loss(ypred_cos_phi_cp, y_cos_phi_cp)
+        loss["Regression_energy"] = torch.nn.functional.mse_loss(ypred_energy_cp, y_energy_cp)
+    else:
+        loss["Classification"] = torch.tensor(0.0, device=batch.X.device)
+        loss["Regression_pt"] = torch.tensor(0.0, device=batch.X.device)
+        loss["Regression_eta"] = torch.tensor(0.0, device=batch.X.device)
+        loss["Regression_sin_phi"] = torch.tensor(0.0, device=batch.X.device)
+        loss["Regression_cos_phi"] = torch.tensor(0.0, device=batch.X.device)
+        loss["Regression_energy"] = torch.tensor(0.0, device=batch.X.device)
+
+    return loss
+
+
+def mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD):
     """
     Args
         y [dict]: relevant keys are "cls_id, momentum, charge, particle_number"
         ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge, oc_beta, oc_coords"
         batch [PFBatch]: the MLPF inputs
+        loss_mode [LossType]: whether to use standard or object condensation loss
     """
-    loss = {}
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
-    # msk_pred_particle = torch.unsqueeze((ypred["cls_id"] != 0).to(dtype=torch.float32), dim=-1)
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), dim=-1)
-    nelem = torch.sum(batch.mask)
     npart = torch.sum(y["cls_id"] != 0)
 
-    ypred["momentum"] = ypred["momentum"] * msk_true_particle
-    y["momentum"] = y["momentum"] * msk_true_particle
-
-    # in case of the 3D-padded mode, pytorch expects (batch, num_classes, ...)
-    ypred["cls_binary"] = ypred["cls_binary"].permute((0, 2, 1))
-    ypred["cls_id_onehot"] = ypred["cls_id_onehot"].permute((0, 2, 1))
-    # ypred["ispu"] = ypred["ispu"].permute((0, 2, 1))
-
-    # binary loss for particle / no-particle classification
-    # loss_binary_classification = 10.0 * loss_obj_id(ypred["cls_binary"], (y["cls_id"] != 0).long()).reshape(y["cls_id"].shape)
-    loss_binary_classification = 10.0 * torch.nn.functional.cross_entropy(ypred["cls_binary"], (y["cls_id"] != 0).long(), reduction="none")
-
-    # Object Condensation loss
     # Flatten across batch and sequence length, but only for non-padded elements
     mask_flat = batch.mask.view(-1).bool()
-    beta_flat = ypred["oc_beta"].view(-1)[mask_flat]
-    coords_flat = ypred["oc_coords"].view(-1, 3)[mask_flat]
-    particle_number_flat = y["particle_number"].view(-1)[mask_flat]
+    nelem = torch.sum(mask_flat)
 
-    # Create batch index for flattened elements
-    batch_idx = torch.arange(batch.mask.shape[0], device=batch.mask.device).unsqueeze(1).repeat(1, batch.mask.shape[1]).view(-1)[mask_flat].long()
+    # Create local copies of momentum to avoid in-place modification of model outputs
+    momentum_pred = ypred["momentum"] * msk_true_particle
+    momentum_true = y["momentum"] * msk_true_particle
 
-    l_v, l_beta = calc_LV_Lbeta(beta_flat, coords_flat, particle_number_flat.long(), batch_idx)
-    loss["OC_V"] = 1e-3 * l_v
-    loss["OC_beta"] = 1e-3 * l_beta
+    # Also extract individual regression components
+    ypred_momentum_unpacked = {
+        "pt": torch.nan_to_num(ypred["pt"]),
+        "eta": torch.nan_to_num(ypred["eta"]),
+        "sin_phi": torch.nan_to_num(ypred["sin_phi"]),
+        "cos_phi": torch.nan_to_num(ypred["cos_phi"]),
+        "energy": torch.nan_to_num(ypred["energy"]),
+        "momentum": torch.nan_to_num(momentum_pred),
+    }
 
-    # compare the particle type, only for cases where there was a true particle
-    loss_pid_classification = loss_obj_id(ypred["cls_id_onehot"], y["cls_id"]).reshape(y["cls_id"].shape)
-    loss_pid_classification[y["cls_id"] == 0] *= 0
+    ypred_combined = {**ypred, **ypred_momentum_unpacked}
+    y_combined = {**y, "momentum": momentum_true}
 
-    # compare particle "PU-ness", only for cases where there was a true particle
-    # loss_pu = torch.nn.functional.cross_entropy(ypred["ispu"], y["ispu"].long(), reduction="none")
-    # loss_pu = loss_obj_id(ypred["ispu"], y["ispu"].long()).reshape(y["cls_id"].shape)
-    # loss_pu[y["cls_id"] == 0] *= 0
-
-    # do not compute PU loss if no PU samples in this batch
-    # if y["ispu"].long().sum() == 0:
-    #     loss_pu *= 0
-
-    # compare particle momentum, only for cases where there was a true particle
-    loss_regression_pt = torch.nn.functional.mse_loss(ypred["pt"], y["pt"], reduction="none")
-    loss_regression_eta = 1e-2 * torch.nn.functional.mse_loss(ypred["eta"], y["eta"], reduction="none")
-    loss_regression_sin_phi = 1e-2 * torch.nn.functional.mse_loss(ypred["sin_phi"], y["sin_phi"], reduction="none")
-    loss_regression_cos_phi = 1e-2 * torch.nn.functional.mse_loss(ypred["cos_phi"], y["cos_phi"], reduction="none")
-    loss_regression_energy = torch.nn.functional.mse_loss(ypred["energy"], y["energy"], reduction="none")
-
-    loss_regression_pt[y["cls_id"] == 0] *= 0
-    loss_regression_eta[y["cls_id"] == 0] *= 0
-    loss_regression_sin_phi[y["cls_id"] == 0] *= 0
-    loss_regression_cos_phi[y["cls_id"] == 0] *= 0
-    loss_regression_energy[y["cls_id"] == 0] *= 0
-
-    # set the loss to 0 on padded elements in the batch
-    loss_binary_classification[batch.mask == 0] *= 0
-    loss_pid_classification[batch.mask == 0] *= 0
-    # loss_pu[batch.mask == 0] *= 0
-    loss_regression_pt[batch.mask == 0] *= 0
-    loss_regression_eta[batch.mask == 0] *= 0
-    loss_regression_sin_phi[batch.mask == 0] *= 0
-    loss_regression_cos_phi[batch.mask == 0] *= 0
-    loss_regression_energy[batch.mask == 0] *= 0
-
-    # add weight based on target pt
-    sqrt_target_pt = torch.sqrt(torch.exp(y["pt"]) * batch.X[:, :, 1])
-    loss_regression_pt *= sqrt_target_pt
-    loss_regression_energy *= sqrt_target_pt
-
-    # average over all target particles
-    loss["Regression_pt"] = loss_regression_pt.sum() / npart
-    loss["Regression_eta"] = loss_regression_eta.sum() / npart
-    loss["Regression_sin_phi"] = loss_regression_sin_phi.sum() / npart
-    loss["Regression_cos_phi"] = loss_regression_cos_phi.sum() / npart
-    loss["Regression_energy"] = loss_regression_energy.sum() / npart
-
-    # average over all elements that were not padded
-    loss["Classification_binary"] = loss_binary_classification.sum() / nelem
-    loss["Classification"] = loss_pid_classification.sum() / nelem
-    # loss["ispu"] = loss_pu.sum() / nelem
-
-    # compute predicted pt from model output
-    # pred_pt = torch.unsqueeze(torch.exp(ypred["pt"]) * batch.X[..., 1], dim=-1) * msk_pred_particle
-    # pred_px = pred_pt * torch.unsqueeze(ypred["cos_phi"].detach(), dim=-1) * msk_pred_particle
-    # pred_py = pred_pt * torch.unsqueeze(ypred["sin_phi"].detach(), dim=-1) * msk_pred_particle
-
-    # compute MET, sum across particle axis in event
-    # pred_met = torch.sqrt(torch.sum(pred_px, dim=-2) ** 2 + torch.sum(pred_py, dim=-2) ** 2).detach()
-    # loss["MET"] = torch.nn.functional.huber_loss(pred_met.squeeze(dim=-1), batch.genmet).mean()
-
-    # was_input_pred = torch.concat([torch.softmax(ypred["cls_binary"].transpose(1, 2), dim=-1), ypred["momentum"]], dim=-1) * batch.mask.unsqueeze(
-    #     dim=-1
-    # )
-    # was_input_true = torch.concat([torch.nn.functional.one_hot((y["cls_id"] != 0).to(torch.long)), y["momentum"]], dim=-1) * batch.mask.unsqueeze(
-    #     dim=-1
-    # )
-
-    # standardize Wasserstein loss
-    # std = was_input_true[batch.mask].std(dim=0)
-    # loss["Sliced_Wasserstein_Loss"] = sliced_wasserstein_loss(was_input_pred / std, was_input_true / std).mean()
+    if loss_mode == LossType.STANDARD:
+        loss = mlpf_loss_standard(y_combined, ypred_combined, batch, mask_flat, npart, nelem, loss_obj_id)
+    elif loss_mode == LossType.OBJECT_CONDENSATION:
+        loss = mlpf_loss_object_condensation(y_combined, ypred_combined, batch, mask_flat, npart, nelem, loss_obj_id)
+    else:
+        raise ValueError(f"Unknown loss_mode {loss_mode}")
 
     # this is the final loss to be optimized
     loss["Total"] = (
@@ -300,7 +397,6 @@ def mlpf_loss(y, ypred, batch):
         + loss["Classification"]
         + loss["OC_V"]
         + loss["OC_beta"]
-        # + loss["ispu"]
         + loss["Regression_pt"]
         + loss["Regression_eta"]
         + loss["Regression_sin_phi"]
@@ -310,7 +406,6 @@ def mlpf_loss(y, ypred, batch):
     loss_opt = loss["Total"]
     if torch.isnan(loss_opt):
         _logger.error(ypred)
-        _logger.error(sqrt_target_pt)
         _logger.error(loss)
         raise Exception("Loss became NaN")
 
