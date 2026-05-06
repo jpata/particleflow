@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 import torch
 from torch.nn import functional as F
 from torch import Tensor, nn
-from torch_scatter import scatter_max, scatter_add
+from torch_scatter import scatter_max, scatter_add, scatter_mean
 
 from mlpf.logger import _logger
 from mlpf.conf import LossType
@@ -275,8 +275,8 @@ def mlpf_loss_standard(y, ypred, batch, mask_flat, npart, nelem, loss_obj_id):
 
 def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss_obj_id):
     loss = {}
-    beta_flat = ypred["oc_beta"].view(-1)[mask_flat]
-    coords_flat = ypred["oc_coords"].view(-1, 3)[mask_flat]
+    beta_flat = torch.nan_to_num(ypred["oc_beta"].view(-1)[mask_flat], nan=0.0)
+    coords_flat = torch.nan_to_num(ypred["oc_coords"].view(-1, 3)[mask_flat], nan=0.0)
     particle_number_flat = y["particle_number"].view(-1)[mask_flat]
     batch_idx = torch.arange(batch.mask.shape[0], device=batch.mask.device).unsqueeze(1).repeat(1, batch.mask.shape[1]).view(-1)[mask_flat].long()
 
@@ -286,66 +286,61 @@ def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss
 
     loss["Classification_binary"] = torch.tensor(0.0, device=batch.X.device)
 
-    # Predictions from model are (B, N, C)
-    ypred_cls_id_flat = ypred["cls_id_onehot"].reshape(-1, ypred["cls_id_onehot"].shape[-1])
-    y_cls_id_flat = y["cls_id"].view(-1)
+    # Use unique particle indices across the batch to aggregate hits belonging to the same particle
+    particle_index, _ = batch_cluster_indices(particle_number_flat.long(), batch_idx)
+    is_sig_hit = particle_number_flat > 0
+    # Map to signal-only particles (excluding noise cluster index 0)
+    is_particle = scatter_max(is_sig_hit.long(), particle_index)[0].bool()
 
-    # Select hits passing the mask for further regression
-    ypred_pid_cp_input = ypred_cls_id_flat[mask_flat]
-    y_pid_cp_input = y_cls_id_flat[mask_flat]
+    # Aggregate predictions across hits in each true particle, weighted by predicted beta
+    # This provides a denser gradient signal than single-hit (CP) regression
+    weights = beta_flat
 
-    ypred_pt_cp_input = ypred["pt"].view(-1)[mask_flat]
-    y_pt_cp_input = y["pt"].view(-1)[mask_flat]
+    def aggregate(values, indices, weights):
+        # Flatten values if they are multi-dimensional (e.g. PID one-hot)
+        if values.ndim > 1:
+            weights = weights.unsqueeze(-1)
+        num = scatter_add(values * weights, indices, dim=0)
+        den = scatter_add(weights, indices, dim=0) + 1e-6
+        return num / den
 
-    ypred_eta_cp_input = ypred["eta"].view(-1)[mask_flat]
-    y_eta_cp_input = y["eta"].view(-1)[mask_flat]
+    # Determine pT-based weights for regression, similar to the standard MLPF loss
+    X_hit_pt_flat = batch.X.view(-1, batch.X.shape[-1])[:, 1][mask_flat]
+    target_pt_flat = torch.exp(y["pt"].view(-1)[mask_flat]) * X_hit_pt_flat
 
-    ypred_sin_phi_cp_input = ypred["sin_phi"].view(-1)[mask_flat]
-    y_sin_phi_cp_input = y["sin_phi"].view(-1)[mask_flat]
+    if is_particle.any():
+        # Aggregate target pt per particle for weighting the loss
+        sqrt_target_pt_particle = torch.sqrt(torch.clamp(scatter_mean(target_pt_flat, particle_index), min=1e-6))[is_particle]
 
-    ypred_cos_phi_cp_input = ypred["cos_phi"].view(-1)[mask_flat]
-    y_cos_phi_cp_input = y["cos_phi"].view(-1)[mask_flat]
+        # Helper for calculating aggregated regression losses
+        def get_agg_regression_loss(key, weight=1.0, use_pt_weight=False):
+            ypred_agg = aggregate(ypred[key].view(-1)[mask_flat], particle_index, weights)[is_particle]
+            y_agg = scatter_mean(y[key].view(-1)[mask_flat], particle_index)[is_particle]
+            _l = weight * torch.nn.functional.mse_loss(ypred_agg, y_agg, reduction="none")
+            if use_pt_weight:
+                _l = _l * sqrt_target_pt_particle
+            return _l.mean()
 
-    ypred_energy_cp_input = ypred["energy"].view(-1)[mask_flat]
-    y_energy_cp_input = y["energy"].view(-1)[mask_flat]
+        # Regression losses
+        loss["Regression_pt"] = get_agg_regression_loss("pt", weight=1.0, use_pt_weight=True)
+        loss["Regression_eta"] = get_agg_regression_loss("eta", weight=1e-2)
+        loss["Regression_sin_phi"] = get_agg_regression_loss("sin_phi", weight=1e-2)
+        loss["Regression_cos_phi"] = get_agg_regression_loss("cos_phi", weight=1e-2)
+        loss["Regression_energy"] = get_agg_regression_loss("energy", weight=1.0, use_pt_weight=True)
 
-    # Compute losses at CPs
-    if len(cp_indices) > 0:
-        # Select values at condensation points
-        ypred_pid_cp = ypred_pid_cp_input[cp_indices]
-        y_pid_cp = y_pid_cp_input[cp_indices]
-
-        ypred_pt_cp = ypred_pt_cp_input[cp_indices]
-        y_pt_cp = y_pt_cp_input[cp_indices]
-
-        ypred_eta_cp = ypred_eta_cp_input[cp_indices]
-        y_eta_cp = y_eta_cp_input[cp_indices]
-
-        ypred_sin_phi_cp = ypred_sin_phi_cp_input[cp_indices]
-        y_sin_phi_cp = y_sin_phi_cp_input[cp_indices]
-
-        ypred_cos_phi_cp = ypred_cos_phi_cp_input[cp_indices]
-        y_cos_phi_cp = y_cos_phi_cp_input[cp_indices]
-
-        ypred_energy_cp = ypred_energy_cp_input[cp_indices]
-        y_energy_cp = y_energy_cp_input[cp_indices]
-
-        loss_pid_classification = loss_obj_id(ypred_pid_cp, y_pid_cp)
-        loss["Classification"] = loss_pid_classification.mean()
-
-        # Regression losses at CPs
-        loss["Regression_pt"] = torch.nn.functional.mse_loss(ypred_pt_cp, y_pt_cp)
-        loss["Regression_eta"] = 1e-2 * torch.nn.functional.mse_loss(ypred_eta_cp, y_eta_cp)
-        loss["Regression_sin_phi"] = 1e-2 * torch.nn.functional.mse_loss(ypred_sin_phi_cp, y_sin_phi_cp)
-        loss["Regression_cos_phi"] = 1e-2 * torch.nn.functional.mse_loss(ypred_cos_phi_cp, y_cos_phi_cp)
-        loss["Regression_energy"] = torch.nn.functional.mse_loss(ypred_energy_cp, y_energy_cp)
+        # Aggregated PID classification
+        ypred_cls_id_flat = ypred["cls_id_onehot"].reshape(-1, ypred["cls_id_onehot"].shape[-1])
+        ypred_pid_agg = aggregate(ypred_cls_id_flat[mask_flat], particle_index, weights)[is_particle]
+        # For truth PID, we take the max per-particle (they should all be identical)
+        y_pid_agg = scatter_max(y["cls_id"].view(-1)[mask_flat].long(), particle_index)[0][is_particle]
+        loss["Classification"] = loss_obj_id(ypred_pid_agg, y_pid_agg).mean()
     else:
-        loss["Classification"] = torch.tensor(0.0, device=batch.X.device)
         loss["Regression_pt"] = torch.tensor(0.0, device=batch.X.device)
         loss["Regression_eta"] = torch.tensor(0.0, device=batch.X.device)
         loss["Regression_sin_phi"] = torch.tensor(0.0, device=batch.X.device)
         loss["Regression_cos_phi"] = torch.tensor(0.0, device=batch.X.device)
         loss["Regression_energy"] = torch.tensor(0.0, device=batch.X.device)
+        loss["Classification"] = torch.tensor(0.0, device=batch.X.device)
 
     return loss
 
