@@ -181,7 +181,41 @@ def calc_LV_Lbeta(
     sig_indices = torch.nonzero(is_sig).view(-1)
     absolute_index_alpha = sig_indices[index_alpha]
 
-    return L_V, L_beta, absolute_index_alpha
+    # Calculate additional metrics
+    with torch.no_grad():
+        if index_alpha.numel() > 0:
+            beta_alpha = beta[is_sig][index_alpha]
+            # avg_dist_att: mean distance of hits to their true particle's centroid
+            avg_dist_att = torch.sqrt(norms[is_sig][M[is_sig].bool()] + 1e-6).mean()
+            # avg_dist_rep: mean distance of hits to other particles' centroids
+            avg_dist_rep = torch.sqrt(norms + 1e-6)[M_inv.bool()].mean()
+            metrics = {
+                "beta_alpha_mean": beta_alpha.mean(),
+                "frac_found_05": (beta_alpha > 0.5).float().mean(),
+                "frac_found_09": (beta_alpha > 0.9).float().mean(),
+                "avg_dist_att": avg_dist_att,
+                "avg_dist_rep": avg_dist_rep,
+                "oc_coords_mean": torch.abs(cluster_space_coords).mean(),
+                "oc_coords_std": cluster_space_coords.std(),
+                "oc_coords_max": torch.abs(cluster_space_coords).max(),
+                "beta_noise_mean": beta[is_noise].mean() if is_noise.any() else torch.tensor(0.0, device=beta.device),
+                "n_objects_true": torch.tensor(float(index_alpha.numel()), device=beta.device),
+            }
+        else:
+            metrics = {
+                "beta_alpha_mean": torch.tensor(0.0, device=beta.device),
+                "frac_found_05": torch.tensor(0.0, device=beta.device),
+                "frac_found_09": torch.tensor(0.0, device=beta.device),
+                "avg_dist_att": torch.tensor(0.0, device=beta.device),
+                "avg_dist_rep": torch.tensor(0.0, device=beta.device),
+                "oc_coords_mean": torch.abs(cluster_space_coords).mean(),
+                "oc_coords_std": cluster_space_coords.std(),
+                "oc_coords_max": torch.abs(cluster_space_coords).max(),
+                "beta_noise_mean": beta[is_noise].mean() if is_noise.any() else torch.tensor(0.0, device=beta.device),
+                "n_objects_true": torch.tensor(0.0, device=beta.device),
+            }
+
+    return L_V, L_beta, absolute_index_alpha, metrics
 
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
@@ -280,9 +314,11 @@ def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss
     particle_number_flat = y["particle_number"].view(-1)[mask_flat]
     batch_idx = torch.arange(batch.mask.shape[0], device=batch.mask.device).unsqueeze(1).repeat(1, batch.mask.shape[1]).view(-1)[mask_flat].long()
 
-    l_v, l_beta, cp_indices = calc_LV_Lbeta(beta_flat, coords_flat, particle_number_flat.long(), batch_idx)
+    l_v, l_beta, cp_indices, metrics = calc_LV_Lbeta(beta_flat, coords_flat, particle_number_flat.long(), batch_idx)
     loss["OC_V"] = 1e-3 * l_v
     loss["OC_beta"] = 1e-3 * l_beta
+    for k, v in metrics.items():
+        loss[f"OC_{k}"] = v
 
     loss["Classification_binary"] = torch.tensor(0.0, device=batch.X.device)
 
@@ -305,17 +341,20 @@ def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss
         return num / den
 
     # Determine pT-based weights for regression, similar to the standard MLPF loss
+    # For hits that are not the representative, y["pt"] is 0, so target_pt_flat will be the hit pt.
+    # scatter_max will pick the true particle pT from the representative.
     X_hit_pt_flat = batch.X.view(-1, batch.X.shape[-1])[:, 1][mask_flat]
     target_pt_flat = torch.exp(y["pt"].view(-1)[mask_flat]) * X_hit_pt_flat
 
     if is_particle.any():
         # Aggregate target pt per particle for weighting the loss
-        sqrt_target_pt_particle = torch.sqrt(torch.clamp(scatter_mean(target_pt_flat, particle_index), min=1e-6))[is_particle]
+        sqrt_target_pt_particle = torch.sqrt(torch.clamp(scatter_max(target_pt_flat, particle_index)[0], min=1e-6))[is_particle]
 
         # Helper for calculating aggregated regression losses
         def get_agg_regression_loss(key, weight=1.0, use_pt_weight=False):
             ypred_agg = aggregate(ypred[key].view(-1)[mask_flat], particle_index, weights)[is_particle]
-            y_agg = scatter_mean(y[key].view(-1)[mask_flat], particle_index)[is_particle]
+            # For truth values, we use scatter_max to get the canonical value from the representative
+            y_agg = scatter_max(y[key].view(-1)[mask_flat], particle_index)[0][is_particle]
             _l = weight * torch.nn.functional.mse_loss(ypred_agg, y_agg, reduction="none")
             if use_pt_weight:
                 _l = _l * sqrt_target_pt_particle

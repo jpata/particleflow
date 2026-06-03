@@ -300,7 +300,10 @@ def _log_and_checkpoint_step(
     if (rank == 0) or (rank == "cpu"):
         # Log training losses
         for loss, value in losses_train.items():
-            tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
+            if loss.startswith("OC_") and loss not in ["OC_V", "OC_beta"]:
+                tensorboard_writer_train.add_scalar(f"step/{loss}", value, step)
+            else:
+                tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
 
         tensorboard_writer_train.flush()
 
@@ -399,7 +402,10 @@ def _run_validation_cycle(
 
         # Log validation losses to TensorBoard
         for loss, value in losses_valid.items():
-            tensorboard_writer_valid.add_scalar(f"step/loss_{loss}", value, step)
+            if loss.startswith("OC_") and loss not in ["OC_V", "OC_beta"]:
+                tensorboard_writer_valid.add_scalar(f"step/{loss}", value, step)
+            else:
+                tensorboard_writer_valid.add_scalar(f"step/loss_{loss}", value, step)
 
         # Save step statistics to a JSON file
         history_path = Path(outdir) / "history"

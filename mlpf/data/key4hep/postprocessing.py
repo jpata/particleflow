@@ -791,14 +791,14 @@ def get_genparticles_and_adjacencies(
     )
 
 
-def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, np.ndarray, np.ndarray]:
+def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
     n_gp = awkward.count(gpdata.gen_features["PDG"])
     n_track = awkward.count(gpdata.track_features["type"])
     n_hit = awkward.count(gpdata.hit_features["type"])
     n_cluster = awkward.count(gpdata.cluster_features["type"])
 
-    gp_to_track = np.array(
+    gp_to_track_weights = np.array(
         coo_matrix(
             (gpdata.genparticle_to_track[2], (gpdata.genparticle_to_track[0], gpdata.genparticle_to_track[1])),
             shape=(n_gp, n_track),
@@ -808,7 +808,18 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
     gp_to_hit = coo_matrix((gpdata.genparticle_to_hit[2], (gpdata.genparticle_to_hit[0], gpdata.genparticle_to_hit[1])), shape=(n_gp, n_hit))
     calohit_to_cluster = coo_matrix((gpdata.hit_to_cluster[2], (gpdata.hit_to_cluster[0], gpdata.hit_to_cluster[1])), shape=(n_hit, n_cluster))
 
-    gp_to_cluster = np.array((gp_to_hit * calohit_to_cluster).todense())
+    gp_to_cluster_weights = np.array((gp_to_hit * calohit_to_cluster).todense())
+
+    # Inclusive mapping: for each track/cluster, find the genparticle that contributes the most weight
+    track_to_gp_inclusive = -1 * np.ones(n_track, dtype=np.int32)
+    if n_gp > 0 and n_track > 0:
+        track_to_gp_inclusive = np.argmax(gp_to_track_weights, axis=0)
+        track_to_gp_inclusive[np.max(gp_to_track_weights, axis=0) == 0] = -1
+
+    cluster_to_gp_inclusive = -1 * np.ones(n_cluster, dtype=np.int32)
+    if n_gp > 0 and n_cluster > 0:
+        cluster_to_gp_inclusive = np.argmax(gp_to_cluster_weights, axis=0)
+        cluster_to_gp_inclusive[np.max(gp_to_cluster_weights, axis=0) == 0] = -1
 
     # map each genparticle to a track or a cluster
     gp_to_obj = -1 * np.ones((n_gp, 2), dtype=np.int32)
@@ -819,7 +830,7 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
     for igp in gps_sorted_energy:
 
         # first check if we can match the genparticle to a track
-        matched_tracks = gp_to_track[igp]
+        matched_tracks = gp_to_track_weights[igp]
         trks = np.where(matched_tracks)[0]
         trks = sorted(trks, key=lambda x: matched_tracks[x], reverse=True)
         for trk in trks:
@@ -831,7 +842,7 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
 
         # if there was no matched track, try a cluster
         if gp_to_obj[igp, 0] == -1:
-            matched_clusters = gp_to_cluster[igp]
+            matched_clusters = gp_to_cluster_weights[igp]
             clusters = np.where(matched_clusters)[0]
             clusters = sorted(clusters, key=lambda x: matched_clusters[x], reverse=True)
             for cl in clusters:
@@ -873,8 +884,8 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         mask_gp_unmatched[igp_unmatched] = False
 
         # find closest cluster that this particle is matched to
-        if n_cluster > 0 and np.any(gp_to_cluster[igp_unmatched] > 0):
-            idx_best_cluster = np.argmax(gp_to_cluster[igp_unmatched])
+        if n_cluster > 0 and np.any(gp_to_cluster_weights[igp_unmatched] > 0):
+            idx_best_cluster = np.argmax(gp_to_cluster_weights[igp_unmatched])
             # get the first genparticle matched to that cluster
             idx_gp_bestcluster = np.where(gp_to_obj[:, 1] == idx_best_cluster)[0]
         else:
@@ -941,6 +952,19 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
     gp_to_obj = gp_to_obj[mask_gp_unmatched]
     gp_to_hit_idx = gp_to_hit_idx[mask_gp_unmatched]
 
+    # Map inclusive indices to filtered ones
+    track_to_gp_inclusive_filtered = -1 * np.ones(n_track, dtype=np.int32)
+    for itrk in range(n_track):
+        igp_all = track_to_gp_inclusive[itrk]
+        if igp_all in genpart_idx_all_to_filtered:
+            track_to_gp_inclusive_filtered[itrk] = genpart_idx_all_to_filtered[igp_all]
+
+    cluster_to_gp_inclusive_filtered = -1 * np.ones(n_cluster, dtype=np.int32)
+    for icl in range(n_cluster):
+        igp_all = cluster_to_gp_inclusive[icl]
+        if igp_all in genpart_idx_all_to_filtered:
+            cluster_to_gp_inclusive_filtered[icl] = genpart_idx_all_to_filtered[igp_all]
+
     return (
         EventData(
             gen_features_new,
@@ -954,6 +978,8 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         ),
         gp_to_obj,
         gp_to_hit_idx,
+        track_to_gp_inclusive_filtered,
+        cluster_to_gp_inclusive_filtered,
     )
 
 
@@ -1284,7 +1310,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             continue
 
         # find the reconstructable genparticles and associate them to the best track/cluster
-        gpdata_cleaned, gp_to_obj, gp_to_hit_idx = assign_genparticles_to_obj_and_merge(gpdata)
+        gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive = assign_genparticles_to_obj_and_merge(gpdata)
 
         n_tracks = len(gpdata_cleaned.track_features["type"])
         n_clusters = len(gpdata_cleaned.cluster_features["type"])
@@ -1298,18 +1324,18 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         # construct track/cluster -> recoparticle maps
         track_to_rp, cluster_to_rp = get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track[iev], idx_rp_to_cluster[iev])
 
-        # get the track/cluster/hit -> genparticle map
-        track_to_gp = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
-        cluster_to_gp = {icl: igp for igp, icl in enumerate(gp_to_obj[:, 1]) if icl != -1}
-        hit_to_gp = {ihit: igp for igp, ihit in enumerate(gp_to_hit_idx) if ihit != -1}
+        # get the track/cluster/hit -> genparticle map (exclusive)
+        track_to_gp_exclusive_map = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
+        cluster_to_gp_exclusive_map = {icl: igp for igp, icl in enumerate(gp_to_obj[:, 1]) if icl != -1}
+        hit_to_gp_exclusive_map = {ihit: igp for igp, ihit in enumerate(gp_to_hit_idx) if ihit != -1}
 
         used_gps = np.zeros(n_gps, dtype=np.int64)
-        track_to_gp_all = assign_to_recoobj(n_tracks, track_to_gp, used_gps)
-        cluster_to_gp_all = assign_to_recoobj(n_clusters, cluster_to_gp, used_gps)
+        track_to_gp_exclusive = assign_to_recoobj(n_tracks, track_to_gp_exclusive_map, used_gps)
+        cluster_to_gp_exclusive = assign_to_recoobj(n_clusters, cluster_to_gp_exclusive_map, used_gps)
 
         # assignment between the target particles and hits separately
         used_gps_hit = np.zeros(n_gps, dtype=np.int64)
-        hit_to_gp_all = assign_to_recoobj(n_hits, hit_to_gp, used_gps_hit)
+        hit_to_gp_exclusive = assign_to_recoobj(n_hits, hit_to_gp_exclusive_map, used_gps_hit)
 
         # all genparticles must be assigned to some track or cluster
         if not np.all(used_gps == 1):
@@ -1337,14 +1363,53 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         # all reco particles must be assigned to some PFElement
         assert np.all(used_rps == 1)
 
-        gps_track = get_particle_feature_matrix(track_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
-        gps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(gps_track[:, 0], gps_track[:, 1])])
-        gps_cluster = get_particle_feature_matrix(cluster_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
-        gps_cluster[:, 0] = np.array([map_charged_to_neutral(map_pdgid_to_candid(p, c)) for p, c in zip(gps_cluster[:, 0], gps_cluster[:, 1])])
-        gps_cluster[:, 1] = 0
+        # For Object Condensation, we need consistent truth properties across all detector elements
+        # that belong to the same particle_number.
+        # We derive the "standardized" truth properties once per genparticle, 
+        # respecting the forcing logic (tracks=charged, clusters=neutral) so that
+        # hits, tracks, and clusters all agree on the same identity for a given particle.
+        gps_canonical = get_feature_matrix(gpdata_cleaned.gen_features, particle_feature_order)
+        for igp in range(n_gps):
+            p = gps_canonical[igp, 0] # PDG
+            c = gps_canonical[igp, 1] # Charge
+            
+            # Determine the "forced" PID based on where this particle is represented
+            if gp_to_obj[igp, 0] != -1: # Represented by a track
+                pid_forced = map_neutral_to_charged(map_pdgid_to_candid(p, c))
+            elif gp_to_obj[igp, 1] != -1: # Represented by a cluster
+                pid_forced = map_charged_to_neutral(map_pdgid_to_candid(p, c))
+            else: # Hit-only or merged (should not happen for cleaned GPs but for safety)
+                pid_forced = map_pdgid_to_candid(p, c)
+                
+            gps_canonical[igp, 0] = pid_forced
 
-        gps_hit = get_particle_feature_matrix(hit_to_gp_all, gpdata_cleaned.gen_features, particle_feature_order)
-        gps_hit[:, 0] = np.array([map_pdgid_to_candid(p, c) for p, c in zip(gps_hit[:, 0], gps_hit[:, 1])])
+        PN_IDX = particle_feature_order.index("particle_number")
+
+        # 1. Fill Tracks
+        gps_track = np.zeros((n_tracks, gps_canonical.shape[1]), dtype=np.float32)
+        # Exclusive matching takes priority for both properties and PN
+        mask_track_exclusive = track_to_gp_exclusive != -1
+        gps_track[mask_track_exclusive] = gps_canonical[track_to_gp_exclusive[mask_track_exclusive]]
+        
+        # Inclusive matching only fills PN for elements that aren't already representatives
+        mask_track_inclusive_only = (track_to_gp_inclusive != -1) & (~mask_track_exclusive)
+        gps_track[mask_track_inclusive_only, PN_IDX] = gps_canonical[track_to_gp_inclusive[mask_track_inclusive_only], PN_IDX]
+
+        # 2. Fill Clusters
+        gps_cluster = np.zeros((n_clusters, gps_canonical.shape[1]), dtype=np.float32)
+        # Exclusive matching takes priority
+        mask_cluster_exclusive = cluster_to_gp_exclusive != -1
+        gps_cluster[mask_cluster_exclusive] = gps_canonical[cluster_to_gp_exclusive[mask_cluster_exclusive]]
+        gps_cluster[:, 1] = 0 # Ensure charge is 0 for clusters
+        
+        # Inclusive matching only fills PN for non-representatives
+        mask_cluster_inclusive_only = (cluster_to_gp_inclusive != -1) & (~mask_cluster_exclusive)
+        gps_cluster[mask_cluster_inclusive_only, PN_IDX] = gps_canonical[cluster_to_gp_inclusive[mask_cluster_inclusive_only], PN_IDX]
+
+        # 3. Fill Hits: Fully inclusive
+        gps_hit = np.zeros((n_hits, gps_canonical.shape[1]), dtype=np.float32)
+        mask_hit = hit_to_gp_exclusive != -1
+        gps_hit[mask_hit] = gps_canonical[hit_to_gp_exclusive[mask_hit]]
 
         rps_track = get_particle_feature_matrix(track_to_rp_all, reco_features, particle_feature_order)
         rps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])])
@@ -1353,6 +1418,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         rps_cluster[:, 1] = 0
 
         # all initial gen/reco particle energy must be reconstructable
+        # This check uses the EXCLUSIVE mappings for tracks/clusters to ensure no double counting
         assert abs(np.sum(gps_track[:, 6]) + np.sum(gps_cluster[:, 6]) - np.sum(gpdata_cleaned.gen_features["energy"])) < 1e-2
 
         assert abs(np.sum(rps_track[:, 6]) + np.sum(rps_cluster[:, 6]) - np.sum(reco_features["energy"])) < 1e-2
