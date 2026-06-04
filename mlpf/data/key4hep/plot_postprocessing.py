@@ -6,6 +6,32 @@ import os
 import vector
 import fastjet
 
+"""
+Summary of Ground Truth Assignment Strategies in MLPF:
+
+1. Standard MLPF (1:1 Bipartite Matching)
+   - Logic: Maximum Weight Bipartite Matching between generator particles and detector elements.
+   - Assignment: Injective (1-to-1). Each particle is matched to exactly one track or one cluster.
+   - Purpose: Prevents double-counting of energy in global sums. Unmatched elements are treated as noise (PID=0, E=0).
+   - Example: A pion split between a track and a cluster will have its full energy assigned to the track only.
+
+2. Object Condensation (N:1 Partitioning)
+   - Logic: Surjective mapping where all detector elements in a shower inherit the parent's identity.
+   - Assignment: Many-to-One. Every track, cluster, and hit in a shower shares the same truth payload.
+   - Purpose: Forces the entire physical object to "condense" to the same point in latent space for clustering.
+   - Example: A pion shower with 1 track and 10 clusters will have all 11 elements labeled with PID=h± and PN=1.
+
+3. Hybrid Strategy (Representative Star Topology) - [DEFAULT]
+   - Logic: A hierarchical star graph combining the benefits of both approaches.
+   - HUB (The Representative): One element per particle (usually the track) carries the full Standard Truth (PID, Energy).
+   - SPOKE (The Pointer): Other elements in the same shower have their standard truth zeroed but maintain the 'particle_number' pointer.
+   - Purpose: Allows Standard Loss (using HUBs) and OC Loss (using HUBs+SPOKES via broadcast) to train simultaneously.
+   - Example: 
+       Track 1: HUB (PID=211, E=10, PN=1)
+       Cluster 1: SPOKE (PID=0, E=0, PN=1)
+       Hit 1: SPOKE (PID=0, E=0, PN=1)
+"""
+
 # Feature indices from mlpf/data/key4hep/postprocessing.py
 # track_feature_order = ["elemtype", "pt", "eta", "sin_phi", "cos_phi", ...]
 # cluster_feature_order = ["elemtype", "et", "eta", "sin_phi", "cos_phi", ...]
