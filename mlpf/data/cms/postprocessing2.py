@@ -96,6 +96,7 @@ particle_feature_order = [
     "cp_to_track",
     "cp_to_cluster",
     "jet_idx",
+    "particle_number",
 ]
 
 
@@ -235,6 +236,7 @@ def split_caloparticles(g, elem_type):
                     cp_to_track=g.nodes[cp]["cp_to_track"] * (lv_frac.e / lv.e),
                     cp_to_cluster=g.nodes[cp]["cp_to_cluster"] * (lv_frac.e / lv.e),
                     jet_idx=-1,
+                    particle_number=g.nodes[cp]["particle_number"],
                 )
                 g.add_edge(("cp", new_cp_index), suc, weight=g.edges[cp, suc]["weight"])
                 new_cp_index += 1
@@ -397,7 +399,13 @@ def prepare_normalized_table(g, iev):
 
         if not (candidate is None):
             for j in range(len(particle_feature_order)):
-                ycand[particle_feature_order[j]][ielem] = g.nodes[candidate][particle_feature_order[j]]
+                feat = particle_feature_order[j]
+                if feat in g.nodes[candidate]:
+                    ycand[feat][ielem] = g.nodes[candidate][feat]
+                elif feat == "sin_phi":
+                    ycand[feat][ielem] = np.sin(g.nodes[candidate]["phi"])
+                elif feat == "cos_phi":
+                    ycand[feat][ielem] = np.cos(g.nodes[candidate]["phi"])
 
         lv = vector.obj(x=0, y=0, z=0, t=0)
 
@@ -439,10 +447,15 @@ def prepare_normalized_table(g, iev):
                 "generatorStatus": 0,
                 "simulatorStatus": 2,
                 "jet_idx": -1,
+                "particle_number": g.nodes[caloparticles[0]]["particle_number"],
             }
 
             for j in range(len(particle_feature_order)):
-                ytarget[particle_feature_order[j]][ielem] = cp[particle_feature_order[j]]
+                feat = particle_feature_order[j]
+                if feat in cp:
+                    ytarget[feat][ielem] = cp[feat]
+
+    ycand["particle_number"] = 0.0
 
     px = np.sum(ytarget["pt"] * ytarget["cos_phi"])
     py = np.sum(ytarget["pt"] * ytarget["sin_phi"])
@@ -676,6 +689,7 @@ def make_graph(ev, iev):
             cp_to_track=0,
             cp_to_cluster=0,
             jet_idx=-1,
+            particle_number=float(iobj + 1),
         )
         itp = caloparticle_idx_trackingparticle[iobj]
         if itp != -1:

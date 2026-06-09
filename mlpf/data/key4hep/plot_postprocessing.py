@@ -26,7 +26,7 @@ Summary of Ground Truth Assignment Strategies in MLPF:
    - HUB (The Representative): One element per particle (usually the track) carries the full Standard Truth (PID, Energy).
    - SPOKE (The Pointer): Other elements in the same shower have their standard truth zeroed but maintain the 'particle_number' pointer.
    - Purpose: Allows Standard Loss (using HUBs) and OC Loss (using HUBs+SPOKES via broadcast) to train simultaneously.
-   - Example: 
+   - Example:
        Track 1: HUB (PID=211, E=10, PN=1)
        Cluster 1: SPOKE (PID=0, E=0, PN=1)
        Hit 1: SPOKE (PID=0, E=0, PN=1)

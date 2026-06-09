@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 import torch
 from torch.nn import functional as F
 from torch import Tensor, nn
-from torch_scatter import scatter_max, scatter_add, scatter_mean
+from torch_scatter import scatter_max, scatter_add
 
 from mlpf.logger import _logger
 from mlpf.conf import LossType

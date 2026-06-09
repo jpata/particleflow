@@ -1365,22 +1365,22 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
 
         # For Object Condensation, we need consistent truth properties across all detector elements
         # that belong to the same particle_number.
-        # We derive the "standardized" truth properties once per genparticle, 
+        # We derive the "standardized" truth properties once per genparticle,
         # respecting the forcing logic (tracks=charged, clusters=neutral) so that
         # hits, tracks, and clusters all agree on the same identity for a given particle.
         gps_canonical = get_feature_matrix(gpdata_cleaned.gen_features, particle_feature_order)
         for igp in range(n_gps):
-            p = gps_canonical[igp, 0] # PDG
-            c = gps_canonical[igp, 1] # Charge
-            
+            p = gps_canonical[igp, 0]  # PDG
+            c = gps_canonical[igp, 1]  # Charge
+
             # Determine the "forced" PID based on where this particle is represented
-            if gp_to_obj[igp, 0] != -1: # Represented by a track
+            if gp_to_obj[igp, 0] != -1:  # Represented by a track
                 pid_forced = map_neutral_to_charged(map_pdgid_to_candid(p, c))
-            elif gp_to_obj[igp, 1] != -1: # Represented by a cluster
+            elif gp_to_obj[igp, 1] != -1:  # Represented by a cluster
                 pid_forced = map_charged_to_neutral(map_pdgid_to_candid(p, c))
-            else: # Hit-only or merged (should not happen for cleaned GPs but for safety)
+            else:  # Hit-only or merged (should not happen for cleaned GPs but for safety)
                 pid_forced = map_pdgid_to_candid(p, c)
-                
+
             gps_canonical[igp, 0] = pid_forced
 
         PN_IDX = particle_feature_order.index("particle_number")
@@ -1390,7 +1390,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         # Exclusive matching takes priority for both properties and PN
         mask_track_exclusive = track_to_gp_exclusive != -1
         gps_track[mask_track_exclusive] = gps_canonical[track_to_gp_exclusive[mask_track_exclusive]]
-        
+
         # Inclusive matching only fills PN for elements that aren't already representatives
         mask_track_inclusive_only = (track_to_gp_inclusive != -1) & (~mask_track_exclusive)
         gps_track[mask_track_inclusive_only, PN_IDX] = gps_canonical[track_to_gp_inclusive[mask_track_inclusive_only], PN_IDX]
@@ -1400,8 +1400,8 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         # Exclusive matching takes priority
         mask_cluster_exclusive = cluster_to_gp_exclusive != -1
         gps_cluster[mask_cluster_exclusive] = gps_canonical[cluster_to_gp_exclusive[mask_cluster_exclusive]]
-        gps_cluster[:, 1] = 0 # Ensure charge is 0 for clusters
-        
+        gps_cluster[:, 1] = 0  # Ensure charge is 0 for clusters
+
         # Inclusive matching only fills PN for non-representatives
         mask_cluster_inclusive_only = (cluster_to_gp_inclusive != -1) & (~mask_cluster_exclusive)
         gps_cluster[mask_cluster_inclusive_only, PN_IDX] = gps_canonical[cluster_to_gp_inclusive[mask_cluster_inclusive_only], PN_IDX]

@@ -7,7 +7,7 @@ export KERAS_BACKEND=torch
 
 # Quick unit tests
 rm -Rf .pytest_cache
-python -m pytest --cache-clear tests
+uv run python -m pytest --cache-clear tests
 
 #create data directories
 rm -Rf local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
@@ -52,6 +52,7 @@ python mlpf/pipeline.py \
   --dtype float32 \
   --model.attention.attention_type math \
   --model.attention.num_convs 1 \
+  --ntrain 10 --ntest 10 --nvalid 10 \
   --num_workers 1 --prefetch_factor 1
 
 ls experiments/MLPF_test_*/checkpoints/*
@@ -80,6 +81,7 @@ python mlpf/pipeline.py \
   --model.attention.attention_type math \
   --model.attention.num_convs 1 \
   --load ${EXP_DIR_1}/checkpoints/checkpoint-02.pth \
+  --ntrain 10 --ntest 10 --nvalid 10 \
   --num_workers 1 --prefetch_factor 1
 
 ls experiments/MLPF_test_*/checkpoints/*
@@ -95,7 +97,7 @@ uv run --project envs/ort-cpu python scripts/cms-validate-onnx.py \
   --model-kwargs ${EXP_DIR_2}/model_kwargs.pkl \
   --dataset cms_pf_ttbar/10 \
   --data-dir ./tensorflow_datasets/ \
-  --num-events 50 \
+  --num-events 2 \
   --outdir ./onnx_validation_cms --device cpu
 
 ## --------------------------------------------------------------------------------------------

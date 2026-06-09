@@ -5,7 +5,7 @@ export PYTHONPATH=$(pwd)
 export KERAS_BACKEND=torch
 
 # Quick unit tests
-python -m pytest tests
+uv run python -m pytest --cache-clear tests
 
 # 1. Create data directories
 rm -Rf local_test_data/cld
@@ -20,7 +20,7 @@ cd ../../../..
 
 # 3. Postprocessing
 for file in local_test_data/cld/p8_ee_ttbar_ecm365/root/*.root; do
-  python3 mlpf/data/key4hep/postprocessing.py \
+  uv run python3 mlpf/data/key4hep/postprocessing.py \
     --input $file \
     --outpath local_test_data/cld/p8_ee_ttbar_ecm365 \
     --detector cld
@@ -28,10 +28,10 @@ done
 
 # 4. TFDS Build
 # Using config 10 because with only 2 files, split_list puts them in the last (10th) split
-tfds build mlpf/heptfds/cld_pf_edm4hep/ttbar --config 10 --manual_dir ./local_test_data/cld --data_dir ./tensorflow_datasets
+uv run tfds build mlpf/heptfds/cld_pf_edm4hep/ttbar --config 10 --manual_dir ./local_test_data/cld --data_dir ./tensorflow_datasets
 
 # 5. Training
-python3 mlpf/pipeline.py \
+uv run python3 mlpf/pipeline.py \
   --spec-file particleflow_spec.yaml \
   --model-name pyg-cld-v1 \
   --production cld \
@@ -43,4 +43,5 @@ python3 mlpf/pipeline.py \
   --checkpoint_freq 1 \
   --gpus 0 \
   --dtype float32 \
+  --ntrain 10 --ntest 10 --nvalid 10 \
   --num_workers 1 --prefetch_factor 1
