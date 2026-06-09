@@ -22,7 +22,7 @@ _CITATION = """
 class CmsPfTtbar(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     """DatasetBuilder for cms_pf_ttbar dataset."""
 
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.0.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.0"))
     RELEASE_NOTES = {
         "1.0.0": "Initial release.",
         "1.1.0": "Add muon type, fix electron GSF association",
@@ -48,6 +48,7 @@ class CmsPfTtbar(tfds.core.GeneratorBasedBuilder, skip_registration=True):
         "2.7.1": "Use fixed split_caloparticle",
         "2.8.0": "Add Pythia",
         "3.0.0": "updated beamspot, 13.6 TeV",
+        "3.2.0": "add particle_number to Y_FEATURES",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar ~/tensorflow_datasets/

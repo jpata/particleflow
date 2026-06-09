@@ -192,27 +192,27 @@ productions:
     tfds_mapping:
       ttbar_pu:
         builder_path: "mlpf/heptfds/cms_pf/ttbar"
-        version: "3.0.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qcd_pu:
         builder_path: "mlpf/heptfds/cms_pf/qcd"
-        version: "3.0.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ztt_pu:
         builder_path: "mlpf/heptfds/cms_pf/ztt"
-        version: "3.0.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ttbar_nopu:
         builder_path: "mlpf/heptfds/cms_pf/ttbar_nopu"
-        version: "3.0.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qcd_nopu:
         builder_path: "mlpf/heptfds/cms_pf/qcd_nopu"
-        version: "3.0.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ztt_nopu:
         builder_path: "mlpf/heptfds/cms_pf/ztt_nopu"
-        version: "3.0.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # CLD Production
@@ -295,15 +295,15 @@ productions:
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
           #      ww_fullhad:
           #        builder_path: "mlpf/heptfds/cld_pf_edm4hep/ww_fullhad"
-          #        version: "3.1.1"
+          #        version: "3.2.0"
           #        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
           #      zz:
           #        builder_path: "mlpf/heptfds/cld_pf_edm4hep/zz"
-          #        version: "3.1.1"
+          #        version: "3.2.0"
           #        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
           #      qq:
           #        builder_path: "mlpf/heptfds/cld_pf_edm4hep/qq"
-          #        version: "3.1.1"
+          #        version: "3.2.0"
           #        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     tfds_hit_mapping:
@@ -313,15 +313,15 @@ productions:
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
           #      ww_fullhad:
           #        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ww_fullhad"
-          #        version: "3.1.1"
+          #        version: "3.2.0"
           #        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
           #      zz:
           #        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/zz"
-          #        version: "3.1.1"
+          #        version: "3.2.0"
           #        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
           #      qq:
           #        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/qq"
-          #        version: "3.1.1"
+          #        version: "3.2.0"
           #        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # CLIC Production
@@ -365,29 +365,29 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/ttbar"
-        version: "3.1.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/ww_fullhad"
-        version: "3.1.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/qq"
-        version: "3.1.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     tfds_hit_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/ttbar"
-        version: "3.1.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/ww_fullhad"
-        version: "3.1.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/qq"
-        version: "3.1.0"
+        version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 # -----------------------------------------------------------------------------
@@ -452,25 +452,25 @@ models:
         batch_size: 1
         samples:
           - name: "cms_pf_ttbar"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cms_pf_qcd"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cms_pf_ztt"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       physical_nopu:
         batch_size: 16
         samples:
           - name: "cms_pf_ttbar_nopu"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cms_pf_qcd_nopu"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cms_pf_ztt_nopu"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -478,36 +478,36 @@ models:
         batch_size: 1
         samples:
           - name: "cms_pf_ttbar"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cms_pf_qcd"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cms_pf_ztt"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       physical_nopu:
         batch_size: 16
         samples:
           - name: "cms_pf_ttbar_nopu"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cms_pf_qcd_nopu"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cms_pf_ztt_nopu"
-            version: "3.0.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "cms_pf_ttbar"
-        version: "3.0.0"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cms_pf_qcd"
-        version: "3.0.0"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cms_pf_ztt"
-        version: "3.0.0"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     # Hyperparameters
@@ -548,13 +548,13 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_pf"
-            version: "3.1.1"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_pf"
-            version: "3.1.1"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
-            version: "3.1.1"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -562,24 +562,24 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_pf"
-            version: "3.1.1"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_pf"
-            version: "3.1.1"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
-            version: "3.1.1"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "cld_edm_ttbar_pf"
-        version: "3.1.1"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_ww_fullhad_pf"
-        version: "3.1.1"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_qq_pf"
-        version: "3.1.1"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-cld-hits-v1:
@@ -608,10 +608,10 @@ models:
             version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
               #          - name: "cld_edm_ww_fullhad_hits"
-              #            version: "3.1.1"
+              #            version: "3.2.0"
               #            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
               #          - name: "cld_edm_qq_hits"
-              #            version: "3.1.1"
+              #            version: "3.2.0"
               #            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -622,10 +622,10 @@ models:
             version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
               #          - name: "cld_edm_ww_fullhad_hits"
-              #            version: "3.1.1"
+              #            version: "3.2.0"
               #            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
               #          - name: "cld_edm_qq_hits"
-              #            version: "3.1.1"
+              #            version: "3.2.0"
               #            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
@@ -633,10 +633,10 @@ models:
         version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           #      - name: "cld_edm_ww_fullhad_hits"
-          #        version: "3.1.1"
+          #        version: "3.2.0"
           #        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           #      - name: "cld_edm_qq_hits"
-          #        version: "3.1.1"
+          #        version: "3.2.0"
           #        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # CLIC Model
@@ -663,13 +663,13 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -677,24 +677,24 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "clic_edm_ttbar_pf"
-        version: "3.1.0"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_ww_fullhad_pf"
-        version: "3.1.0"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_qq_pf"
-        version: "3.1.0"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-clic-hits-v1:
@@ -720,13 +720,13 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_hits"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_hits"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_hits"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -734,22 +734,22 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_hits"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_hits"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_hits"
-            version: "3.1.0"
+            version: "3.2.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "clic_edm_ttbar_hits"
-        version: "3.1.0"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_ww_fullhad_hits"
-        version: "3.1.0"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_qq_hits"
-        version: "3.1.0"
+        version: "3.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
