@@ -18,7 +18,10 @@ os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
 
 rule all:
     input:
-        expand('snakemake_jobs/cld/tfds/tfds_ttbar_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        expand('snakemake_jobs/cld/tfds/tfds_ttbar_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/cld/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/cld/tfds/tfds_zz_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/cld/tfds/tfds_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
 rule tfds_task:
     input:
@@ -34,7 +37,7 @@ rule tfds_task:
 
 rule tfds:
     input:
-        expand('snakemake_jobs/cld/tfds/tfds_ttbar_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        expand('snakemake_jobs/cld/tfds/tfds_ttbar_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/cld/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/cld/tfds/tfds_zz_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/cld/tfds/tfds_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     output:
         "snakemake_jobs/cld/tfds/all.done"
     shell:
