@@ -1352,7 +1352,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
 
         # assignment between the target particles and hits separately
         used_gps_hit = np.zeros(n_gps, dtype=np.int64)
-        _ = assign_to_recoobj(n_hits, hit_to_gp_exclusive_map, used_gps_hit)
+        hit_to_gp_exclusive = assign_to_recoobj(n_hits, hit_to_gp_exclusive_map, used_gps_hit)
 
         # all genparticles must be assigned to some track or cluster
         if not np.all(used_gps == 1):
@@ -1423,10 +1423,15 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         mask_cluster_inclusive_only = (cluster_to_gp_inclusive != -1) & (~mask_cluster_exclusive)
         gps_cluster[mask_cluster_inclusive_only, PN_IDX] = gps_canonical[cluster_to_gp_inclusive[mask_cluster_inclusive_only], PN_IDX]
 
-        # 3. Fill Hits: Fully inclusive
+        # 3. Fill Hits
         gps_hit = np.zeros((n_hits, gps_canonical.shape[1]), dtype=np.float32)
-        mask_hit_inclusive = hit_to_gp_inclusive != -1
-        gps_hit[mask_hit_inclusive, PN_IDX] = gps_canonical[hit_to_gp_inclusive[mask_hit_inclusive], PN_IDX]
+        # Exclusive matching takes priority for both properties and PN
+        mask_hit_exclusive = hit_to_gp_exclusive != -1
+        gps_hit[mask_hit_exclusive] = gps_canonical[hit_to_gp_exclusive[mask_hit_exclusive]]
+
+        # Inclusive matching only fills PN for elements that aren't already representatives
+        mask_hit_inclusive_only = (hit_to_gp_inclusive != -1) & (~mask_hit_exclusive)
+        gps_hit[mask_hit_inclusive_only, PN_IDX] = gps_canonical[hit_to_gp_inclusive[mask_hit_inclusive_only], PN_IDX]
 
         rps_track = get_particle_feature_matrix(track_to_rp_all, reco_features, particle_feature_order)
         rps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])])
