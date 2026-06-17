@@ -125,10 +125,9 @@ def weighted_avg_and_std(values: np.ndarray, weights: np.ndarray) -> Tuple[float
     return (average, math.sqrt(variance))
 
 
-def track_pt(omega: np.ndarray) -> np.ndarray:
+def track_pt(omega: np.ndarray, b_field: float) -> np.ndarray:
     a = 3 * 10**-4
-    b = 4  # B-field in tesla
-    return a * np.abs(b / omega)
+    return a * np.abs(b_field / omega)
 
 
 def map_pdgid_to_candid(pdgid: int, charge: float) -> int:
@@ -514,7 +513,7 @@ def cluster_to_features(prop_data: Any, hit_features: awkward.Record, hit_to_clu
     return awkward.Record(ret)
 
 
-def track_to_features(prop_data: Any, iev: int) -> awkward.Record:
+def track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Record:
     track_arr = prop_data[track_coll][iev]
     # the following are needed since they are no longer defined under SiTracks_Refitted
     track_arr_dQdx = prop_data["SiTracks_Refitted_dQdx"][iev]
@@ -555,7 +554,7 @@ def track_to_features(prop_data: Any, iev: int) -> awkward.Record:
     for k in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
         ret[k] = awkward.to_numpy(prop_data["_SiTracks_Refitted_trackStates"]["_SiTracks_Refitted_trackStates." + k][iev][trackstate_idx])
 
-    ret["pt"] = awkward.to_numpy(track_pt(ret["omega"]))
+    ret["pt"] = awkward.to_numpy(track_pt(ret["omega"], b_field))
     ret["px"] = awkward.to_numpy(np.cos(ret["phi"])) * ret["pt"]
     ret["py"] = awkward.to_numpy(np.sin(ret["phi"])) * ret["pt"]
     ret["pz"] = awkward.to_numpy(ret["tanLambda"]) * ret["pt"]
@@ -683,6 +682,7 @@ def get_genparticles_and_adjacencies(
     collectionIDs: Dict[str, int],
     collectionIDs_reverse: Dict[int, str],
     mcp_id: int,
+    b_field: float,
 ) -> EventData:
     gen_features = gen_to_features(prop_data, iev)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_hit_matrix_and_genadj(
@@ -690,7 +690,7 @@ def get_genparticles_and_adjacencies(
     )
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
-    track_features = track_to_features(prop_data, iev)
+    track_features = track_to_features(prop_data, iev, b_field)
     genparticle_to_trk = genparticle_track_adj(sitrack_links, iev)
 
     # collect hits of st=1 direct daughters to the st=1 particles
@@ -1216,6 +1216,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
     if detector == "clic":
+        b_field = 4.0
         hit_collections = [
             "ECALBarrel",
             "ECALEndcap",
@@ -1233,6 +1234,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             "VXDEndcapTrackerHits",
         ]
     elif detector == "cld":
+        b_field = 2.0
         hit_collections = [
             "ECALBarrel",
             "ECALEndcap",
@@ -1316,6 +1318,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
                 collectionIDs,
                 collectionIDs_reverse,
                 mcp_id,
+                b_field,
             )
         except ValueError as e:
             print(f"Skipping event {iev} because it has no visible particles: {e}")
