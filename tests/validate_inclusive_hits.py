@@ -178,7 +178,7 @@ def validate_inclusive(file_path, b_field):
     print(f"Momentum Ratio Mean: {np.mean(ratio_pt):.3f}")
     print(f"Energy Ratio Mean: {np.mean(ratio_e):.3f}")
 
-    plt.suptitle(f"Unified Truth Consistency Validation\nFile: {os.path.basename(file_path)}")
+    plt.suptitle(f"Particle number target validation\nFile: {os.path.basename(file_path)}")
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     out_file = "unified_validation.png"
