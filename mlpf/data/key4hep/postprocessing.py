@@ -1352,7 +1352,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
 
         # assignment between the target particles and hits separately
         used_gps_hit = np.zeros(n_gps, dtype=np.int64)
-        _ = assign_to_recoobj(n_hits, hit_to_gp_exclusive_map, used_gps_hit)
+        hit_to_gp_exclusive = assign_to_recoobj(n_hits, hit_to_gp_exclusive_map, used_gps_hit)
 
         # all genparticles must be assigned to some track or cluster
         if not np.all(used_gps == 1):
