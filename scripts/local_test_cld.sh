@@ -26,6 +26,12 @@ for file in local_test_data/cld/p8_ee_ttbar_ecm365/root/*.root; do
     --detector cld
 done
 
+# Run Postprocessing validation
+# Find the first parquet file for validation
+SAMPLE_PARQUET=$(ls local_test_data/cld/p8_ee_ttbar_ecm365/*.parquet | head -n 1)
+uv run python3 tests/visualize_pn.py $SAMPLE_PARQUET 0
+uv run python3 tests/validate_inclusive_hits.py $SAMPLE_PARQUET --bfield 2.0
+
 # 4. TFDS Build
 # Using config 10 because with only 2 files, split_list puts them in the last (10th) split
 uv run tfds build mlpf/heptfds/cld_pf_edm4hep/ttbar --config 10 --manual_dir ./local_test_data/cld --data_dir ./tensorflow_datasets

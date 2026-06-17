@@ -58,7 +58,7 @@ def test_hybrid_assignment_logic():
 
     # 1. Run assignment
     # This calls the refactored logic in postprocessing.py
-    gp_cleaned, gp_to_obj, gp_to_hit_idx, trk_inclusive, cls_inclusive = assign_genparticles_to_obj_and_merge(event_data)
+    gp_cleaned, gp_to_obj, gp_to_hit_idx, trk_inclusive, cls_inclusive, hit_inclusive = assign_genparticles_to_obj_and_merge(event_data)
 
     # 2. Verify mappings
     # Gen 0 should be matched to Track 0 (exclusive)
