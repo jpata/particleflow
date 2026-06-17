@@ -1325,7 +1325,9 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             continue
 
         # find the reconstructable genparticles and associate them to the best track/cluster
-        gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = assign_genparticles_to_obj_and_merge(gpdata)
+        gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = (
+            assign_genparticles_to_obj_and_merge(gpdata)
+        )
 
         n_tracks = len(gpdata_cleaned.track_features["type"])
         n_clusters = len(gpdata_cleaned.cluster_features["type"])
@@ -1350,7 +1352,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
 
         # assignment between the target particles and hits separately
         used_gps_hit = np.zeros(n_gps, dtype=np.int64)
-        hit_to_gp_exclusive = assign_to_recoobj(n_hits, hit_to_gp_exclusive_map, used_gps_hit)
+        _ = assign_to_recoobj(n_hits, hit_to_gp_exclusive_map, used_gps_hit)
 
         # all genparticles must be assigned to some track or cluster
         if not np.all(used_gps == 1):
