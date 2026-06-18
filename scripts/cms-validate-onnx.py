@@ -113,7 +113,7 @@ def particles_to_jets(pred, mask):
     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
     ypred = unpack_predictions(pred)
     for k, v in ypred.items():
-        ypred[k] = v[mask].detach().cpu().contiguous().numpy()
+        ypred[k] = v[mask].detach().cpu().float().contiguous().numpy()
 
     counts = torch.sum(mask, axis=1).cpu().numpy()
     clsid = awkward.unflatten(ypred["cls_id"], counts)
@@ -575,7 +575,7 @@ def main():
     mask_warmup = torch.zeros(X_warmup.shape[:2], dtype=torch.bool, device=args.device)
     mask_warmup[:, :num_elements_warmup] = True
     mask_f_warmup = mask_warmup.float().cpu().numpy()
-    X_warmup_np = X_warmup.cpu().numpy()
+    X_warmup_np = X_warmup.cpu().float().numpy()
     X_warmup_np_fp16 = X_warmup_np.astype(np.float16)
     mask_f_warmup_fp16 = mask_f_warmup.astype(np.float16)
 
@@ -659,7 +659,7 @@ def main():
             m_cpu = mask.cpu()
 
             # Pre-convert to numpy for ONNX
-            X_features_np = X_features_padded.cpu().numpy()
+            X_features_np = X_features_padded.cpu().float().numpy()
             mask_f_np = mask_f.cpu().numpy()
 
             try:
@@ -749,7 +749,7 @@ def main():
                     event_total_err = 0.0
                     event_num_elems = 0
                     for name, idx in [("id", 1), ("momentum", 2), ("pu", 3)]:
-                        diff_orig = (pred_baseline[idx][m_cpu_baseline] - pred[idx][m_cpu]).abs().flatten().numpy()
+                        diff_orig = (pred_baseline[idx][m_cpu_baseline] - pred[idx][m_cpu]).abs().flatten().cpu().float().numpy()
                         is_invalid = ~np.isfinite(diff_orig)
                         results[cfg]["num_invalid"] += np.sum(is_invalid)
 

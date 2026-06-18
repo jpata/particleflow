@@ -98,7 +98,7 @@ def evaluate(model, loader, device, output_dir="parquet", run_num=0):
             energy = (torch.exp(preds_momentum[..., 4]) * X[..., 5]).detach().cpu().float().numpy()
 
             # Target
-            target_id = batch.ytarget[:, :, 0].detach().cpu().numpy()
+            target_id = batch.ytarget[:, :, 0].detach().cpu().float().numpy()
             target_pt_log = batch.ytarget[:, :, 2].detach().cpu().float().numpy()
             target_eta_val = batch.ytarget[:, :, 3].detach().cpu().float().numpy()
             target_sin_phi = batch.ytarget[:, :, 4].detach().cpu().float().numpy()
@@ -257,9 +257,9 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
 
     print("Computing dR")
 
-    eta = X[0, :, 2].cpu().numpy()
-    cosphi = X[0, :, 4].cpu().numpy()
-    sinphi = X[0, :, 3].cpu().numpy()
+    eta = X[0, :, 2].cpu().float().numpy()
+    cosphi = X[0, :, 4].cpu().float().numpy()
+    sinphi = X[0, :, 3].cpu().float().numpy()
     phi = np.arctan2(sinphi, cosphi)
 
     dR_mat = deltaR_matrix(eta, cosphi, sinphi)
@@ -284,7 +284,7 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
         if isinstance(attn, torch.Tensor):
             # Standard attention: [B=1, heads, N, N]
             # Average over heads
-            mat = attn[0].mean(dim=0).cpu().numpy()
+            mat = attn[0].mean(dim=0).cpu().float().numpy()
 
             mat_masked = mat[np.ix_(mask, mask)]
             dR_mat_masked = dR_mat[np.ix_(mask, mask)]
@@ -327,7 +327,7 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
 
                         if len(valid_q_idx) > 0 and len(valid_k_idx) > 0:
                             for row_local, row_global in enumerate(valid_q_idx):
-                                full_matrix[row_global, valid_k_idx] += valid_qk[row_local]
+                                full_matrix[row_global, valid_k_idx] += valid_qk[row_local].float()
                         if j == 0:
                             idx_in_bucket = torch.unique(torch.cat((valid_q_idx, valid_k_idx))).cpu().numpy()
                             coords_in_buckets[-1].append(np.concatenate((eta[idx_in_bucket][:, None], phi[idx_in_bucket][:, None]), axis=-1))
@@ -369,7 +369,7 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
             # Global or Fastformer: (alpha, beta)
             alpha, beta = attn
             # alpha: [B=1, N, heads]
-            mat = alpha[0].mean(dim=-1).cpu().numpy()
+            mat = alpha[0].mean(dim=-1).cpu().float().numpy()
             plt.plot(mat)
             plt.title("Global Attention Weights (alpha, mean over heads)")
 
