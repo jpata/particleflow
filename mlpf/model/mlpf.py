@@ -513,9 +513,11 @@ class MLPF(nn.Module):
         self.nn_pid = ffn(decoding_dim, self.num_classes, width, self.act, dropout_ff)
         # self.nn_pu = ffn(decoding_dim, 2, width, self.act, dropout_ff)
 
-        # Object Condensation heads
-        self.oc_beta = ffn(decoding_dim, 1, width, self.act, dropout_ff)
-        self.oc_coords = ffn(decoding_dim, 3, width, self.act, dropout_ff)
+        # Object Condensation heads (only created when OC loss is enabled)
+        self._use_oc = self.config.loss_mode == LossType.OBJECT_CONDENSATION
+        if self._use_oc:
+            self.oc_beta = ffn(decoding_dim, 1, width, self.act, dropout_ff)
+            self.oc_coords = ffn(decoding_dim, 3, width, self.act, dropout_ff)
 
         # elementwise DNN for node momentum regression
         embed_dim = decoding_dim
@@ -641,8 +643,12 @@ class MLPF(nn.Module):
         preds_pid = torch.nan_to_num(preds_pid, nan=0.0, posinf=0.0, neginf=0.0)
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
 
-        preds_oc_beta = torch.sigmoid(self.oc_beta(final_embedding_id))
-        preds_oc_coords = self.oc_coords(final_embedding_id)
+        if self._use_oc:
+            preds_oc_beta = torch.sigmoid(self.oc_beta(final_embedding_id))
+            preds_oc_coords = self.oc_coords(final_embedding_id)
+        else:
+            preds_oc_beta = torch.zeros(mask.shape[0], mask.shape[1], 1, device=mask.device, dtype=preds_momentum.dtype)
+            preds_oc_coords = torch.zeros(mask.shape[0], mask.shape[1], 3, device=mask.device, dtype=preds_momentum.dtype)
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu, preds_oc_beta, preds_oc_coords
 
