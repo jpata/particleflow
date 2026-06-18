@@ -1,6 +1,7 @@
 """
 Spec: Validates 'mlpf_loss' with 'LossType.OBJECT_CONDENSATION'. Tests stability across various event types: normal, zero-particle (noise-only), and single-particle. Assertions: Verifies loss values are finite and non-negative, checks 'OC_V' (attractive/repulsive) and 'OC_beta' components, and ensures no crashes when predictions contain NaNs or extreme values.
 """
+
 import torch
 from mlpf.model.losses import mlpf_loss
 from mlpf.conf import LossType

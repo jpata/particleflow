@@ -1,6 +1,7 @@
 """
 Spec: Validates the 'MLPFConfig' class and its 'from_spec' method. Tests configuration construction from YAML specs with recursive path resolution ('resolve_path'). Key scenarios: Argparse Namespace overrides, extra CLI flags using dot-notation (e.g., '--model.gnnlsh.width'), pipeline-specific overrides (like CI/CD splits), and error handling for invalid or forbidden field overrides.
 """
+
 import unittest
 import argparse
 import yaml

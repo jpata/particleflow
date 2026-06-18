@@ -74,6 +74,7 @@ from mlpf.model.monitoring import (
     log_residuals_to_tensorboard,
 )
 from mlpf.model.inference import make_plots, run_predictions
+from mlpf.model.plots import validation_plots
 from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss

@@ -1,6 +1,7 @@
 """
 Spec: Integration tests for 'MLPF' model class. Validates the forward pass and output shapes for all 'conv_type' options: 'attention', 'hept', 'gnnlsh', and 'litept'. Checks compatibility with 'CMS', 'CLIC', and 'CLD' dataset configurations. Assertions: Verifies output tensor dimensions for PID, momentum, PU, and Object Condensation (beta/coords) heads.
 """
+
 import torch
 import pytest
 from mlpf.model.mlpf import MLPF

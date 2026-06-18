@@ -1,6 +1,7 @@
 """
 Spec: Validation script for CMS ground truth consistency. Checks: Noise elements (PN=0) must have PID=0 and E=0, and all particles (PN>0) must have consistent PIDs. Requires an external '.pkl' file produced by 'mlpf/data/cms/postprocessing2.py' (see 'scripts/fetch_test_data_cms.sh' or 'scripts/local_test_cms.sh' for generation steps).
 """
+
 import pickle
 import numpy as np
 import argparse

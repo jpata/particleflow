@@ -1,6 +1,7 @@
 """
 Spec: Validates 'ShardConsecutiveSampler' for efficient I/O. Key tests: Ensures samples from the same 'ConcatDataset' shard are yielded consecutively to minimize file seek overhead. Verifies that shuffling permutes the order of shards while keeping shard-internal elements grouped (though potentially shuffled within the group).
 """
+
 import unittest
 from torch.utils.data import Dataset, ConcatDataset
 from mlpf.model.PFDataset import ShardConsecutiveSampler
