@@ -90,30 +90,30 @@ def evaluate(model, loader, device, output_dir="parquet", run_num=0):
             # Predicted
             pred_id = torch.argmax(logits_pid, dim=-1)
 
-            pt = (torch.exp(preds_momentum[..., 0]) * X[..., 1]).detach().cpu().numpy()
-            eta = preds_momentum[..., 1].detach().cpu().numpy()
-            sin_phi = preds_momentum[..., 2].detach().cpu().numpy()
-            cos_phi = preds_momentum[..., 3].detach().cpu().numpy()
+            pt = (torch.exp(preds_momentum[..., 0]) * X[..., 1]).detach().cpu().float().numpy()
+            eta = preds_momentum[..., 1].detach().cpu().float().numpy()
+            sin_phi = preds_momentum[..., 2].detach().cpu().float().numpy()
+            cos_phi = preds_momentum[..., 3].detach().cpu().float().numpy()
             phi = np.arctan2(sin_phi, cos_phi)
-            energy = (torch.exp(preds_momentum[..., 4]) * X[..., 5]).detach().cpu().numpy()
+            energy = (torch.exp(preds_momentum[..., 4]) * X[..., 5]).detach().cpu().float().numpy()
 
             # Target
             target_id = batch.ytarget[:, :, 0].detach().cpu().numpy()
-            target_pt_log = batch.ytarget[:, :, 2].detach().cpu().numpy()
-            target_eta_val = batch.ytarget[:, :, 3].detach().cpu().numpy()
-            target_sin_phi = batch.ytarget[:, :, 4].detach().cpu().numpy()
-            target_cos_phi = batch.ytarget[:, :, 5].detach().cpu().numpy()
-            target_energy_log = batch.ytarget[:, :, 6].detach().cpu().numpy()
-            target_ispu = batch.ytarget[:, :, 7].detach().cpu().numpy()
+            target_pt_log = batch.ytarget[:, :, 2].detach().cpu().float().numpy()
+            target_eta_val = batch.ytarget[:, :, 3].detach().cpu().float().numpy()
+            target_sin_phi = batch.ytarget[:, :, 4].detach().cpu().float().numpy()
+            target_cos_phi = batch.ytarget[:, :, 5].detach().cpu().float().numpy()
+            target_energy_log = batch.ytarget[:, :, 6].detach().cpu().float().numpy()
+            target_ispu = batch.ytarget[:, :, 7].detach().cpu().float().numpy()
 
-            X_pt = X[..., 1].detach().cpu().numpy()
-            X_e = X[..., 5].detach().cpu().numpy()
+            X_pt = X[..., 1].detach().cpu().float().numpy()
+            X_e = X[..., 5].detach().cpu().float().numpy()
             mask_np = mask.detach().cpu().numpy()
 
             pred_id_np = pred_id.detach().cpu().numpy()
             logits_binary = logits_binary.detach().cpu().float().numpy()
             puppi_weights, puppi_chi2, puppi_alpha = run_puppi(
-                X.detach().cpu().numpy(), target_ispu, pred_id_np, pt, eta, cos_phi, sin_phi, logits_binary, target_id
+                X.detach().cpu().float().numpy(), target_ispu, pred_id_np, pt, eta, cos_phi, sin_phi, logits_binary, target_id
             )
 
             awk_shape = ak.num(puppi_weights)

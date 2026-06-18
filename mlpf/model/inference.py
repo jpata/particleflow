@@ -77,13 +77,13 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     # now cluster jets
     # first, flatten events across batch dim with padding mask
-    X = batch.X[batch.mask].cpu().contiguous().numpy()
+    X = batch.X[batch.mask].cpu().float().contiguous().numpy()
     for k, v in ytarget.items():
-        ytarget[k] = v[batch.mask].detach().cpu().contiguous().numpy()
+        ytarget[k] = v[batch.mask].detach().cpu().float().contiguous().numpy()
     for k, v in ycand.items():
-        ycand[k] = v[batch.mask].detach().cpu().contiguous().numpy()
+        ycand[k] = v[batch.mask].detach().cpu().float().contiguous().numpy()
     for k, v in ypred.items():
-        ypred[k] = v[batch.mask].detach().cpu().contiguous().numpy()
+        ypred[k] = v[batch.mask].detach().cpu().float().contiguous().numpy()
 
     # second, create awkward arrays according to the counts of not padded elements
     counts = torch.sum(batch.mask, axis=1).cpu().numpy()
