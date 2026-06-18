@@ -25,6 +25,109 @@ def log_confusion_matrices(cm_X_target, cm_X_pred, cm_id, comet_experiment, epoc
         _logger.info("logged confusion matrix: Target to pred")
 
 
+def log_oc_visualizations_to_tensorboard(batch, ypred_raw, ytarget, tensorboard_writer, step, dataset):
+    from mlpf.model.utils import get_clustering
+
+    # Select first event in batch
+    event_idx = 0
+    mask = batch.mask[event_idx]
+    if mask.sum() == 0:
+        return
+
+    X = batch.X[event_idx][mask].cpu().numpy()
+    ytarget_pn = ytarget["particle_number"][event_idx][mask].cpu().numpy()
+
+    # Debug: Check if all PN are 0
+    num_nonzero = np.sum(ytarget_pn > 0)
+    _logger.info(f"OC visualization step {step}: event 0 has {mask.sum()} elements, {num_nonzero} non-zero PN in ground truth")
+
+    if len(ypred_raw) <= 5:
+        return
+
+    oc_beta = ypred_raw[4][event_idx][mask].detach().cpu()
+    oc_coords = ypred_raw[5][event_idx][mask].detach().cpu()
+
+    pred_pn = get_clustering(oc_beta, oc_coords).cpu().numpy()
+
+    # Clustering metrics comparing ground truth vs predicted cluster assignments
+    from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
+
+    gt_labels = ytarget_pn.astype(np.int64)
+    pred_labels = pred_pn.astype(np.int64)
+
+    ari = adjusted_rand_score(gt_labels, pred_labels)
+    nmi = normalized_mutual_info_score(gt_labels, pred_labels)
+
+    # Hit-level signal/noise classification: GT (PN>0) vs pred (cluster!=-1)
+    gt_signal = (gt_labels > 0).astype(np.int64)
+    pred_signal = (pred_labels != -1).astype(np.int64)
+    correct = (gt_signal == pred_signal).sum()
+    total = len(gt_signal)
+    signal_acc = correct / total
+
+    _logger.info(
+        f"OC metrics step {step}: ARI={ari:.4f} NMI={nmi:.4f} "
+        f"signal_acc={signal_acc:.4f} "
+        f"({num_nonzero} signal / {total} hits)"
+    )
+    tensorboard_writer.add_scalar("oc/ARI", ari, step)
+    tensorboard_writer.add_scalar("oc/NMI", nmi, step)
+    tensorboard_writer.add_scalar("oc/signal_accuracy", signal_acc, step)
+
+    cmap = plt.get_cmap("tab20")
+
+    elem_type = X[:, 0]
+    pos = np.zeros((X.shape[0], 3))
+
+    ds_name = dataset.value
+    if "hits" in ds_name:
+        pos = X[:, 6:9]
+    elif ds_name in ["cld", "clic"]:
+        # Clusters (type 2)
+        msk_cl = elem_type == 2
+        pos[msk_cl] = X[msk_cl, 6:9]
+        # Tracks (type 1)
+        msk_trk = elem_type == 1
+        r_trk = X[msk_trk, 10]
+        sphi_trk = X[msk_trk, 3]
+        cphi_trk = X[msk_trk, 4]
+        z0_trk = X[msk_trk, 14]
+        pos[msk_trk] = np.stack([r_trk * cphi_trk, r_trk * sphi_trk, z0_trk], axis=1)
+    elif ds_name == "cms":
+        pos = X[:, 17:20]
+    else:
+        if X.shape[1] > 8:
+            pos = X[:, 6:9]
+
+    fig = plt.figure(figsize=(20, 10))
+
+    for i, (pn, title) in enumerate([(ytarget_pn, "Ground Truth PN"), (pred_pn, "Predicted PN")]):
+        ax = fig.add_subplot(1, 2, i + 1, projection="3d")
+
+        # Map PN values to sequential indices so each unique value gets a distinct color
+        unique_pn = np.unique(pn)
+        pn_to_idx = {v: idx for idx, v in enumerate(unique_pn)}
+        color_idx = np.array([pn_to_idx[v] for v in pn])
+
+        for et in np.unique(elem_type):
+            msk = elem_type == et
+            marker = "s" if et == 2 else "o"
+            size = 15 if et == 2 else 5
+            alpha = 0.7 if et == 2 else 0.5
+            label = "Type {}".format(int(et))
+            ax.scatter(pos[msk, 0], pos[msk, 1], pos[msk, 2], c=color_idx[msk], cmap=cmap, vmin=0, vmax=max(len(unique_pn) - 1, 1), s=size, marker=marker, alpha=alpha, label=label)
+
+        ax.set_title(title)
+        ax.set_xlabel("X [mm]")
+        ax.set_ylabel("Y [mm]")
+        ax.set_zlabel("Z [mm]")
+        if len(np.unique(elem_type)) > 1:
+            ax.legend()
+
+    tensorboard_writer.add_figure("oc_pn_visualization", fig, global_step=step)
+    plt.close(fig)
+
+
 def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir):
     X = batch.X[batch.mask].cpu().float()
     ytarget_flat = batch.ytarget[batch.mask].cpu().float()

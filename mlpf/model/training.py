@@ -79,7 +79,7 @@ from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
-from mlpf.conf import MLPFConfig
+from mlpf.conf import MLPFConfig, LossType
 from mlpf.jet_utils import get_jet_config
 
 
