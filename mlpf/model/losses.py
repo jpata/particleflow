@@ -38,7 +38,7 @@ def calc_LV_Lbeta(
     cluster_space_coords: torch.Tensor,
     cluster_index_per_event: torch.Tensor,
     batch: torch.Tensor,
-    qmin: float = 0.1,
+    qmin: float = 1.0,
     s_B: float = 1.0,
     noise_cluster_index: int = 0,
 ):
@@ -75,9 +75,11 @@ def calc_LV_Lbeta(
     # n_objects = is_object.sum()
 
     # L_V term
-    # Clip beta more aggressively to avoid large arctanh values, especially in bfloat16
-    # 1e-2 is safer for bfloat16 precision
-    q = (beta.clip(0.0, 1 - 1e-2).arctanh() / 1.01) ** 2 + qmin
+    # Ensure beta is float32 to safely compute arctanh near 1.0 without overflowing bfloat16
+    beta_fp32 = beta.to(torch.float32)
+    # 1e-4 matches HitPF reference and provides higher q values
+    q = (beta_fp32.clip(0.0, 1 - 1e-4).arctanh() / 1.01) ** 2 + qmin
+    q = q.to(beta.dtype)
     if torch.isnan(q).any():
         _logger.error(f"NaN in q detected! num NaNs: {torch.isnan(q).sum()}")
     if torch.isinf(q).any():
@@ -315,8 +317,8 @@ def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss
     batch_idx = torch.arange(batch.mask.shape[0], device=batch.mask.device).unsqueeze(1).repeat(1, batch.mask.shape[1]).view(-1)[mask_flat].long()
 
     l_v, l_beta, cp_indices, metrics = calc_LV_Lbeta(beta_flat, coords_flat, particle_number_flat.long(), batch_idx)
-    loss["OC_V"] = 1e-3 * l_v
-    loss["OC_beta"] = 1e-3 * l_beta
+    loss["OC_V"] = 1.0 * l_v
+    loss["OC_beta"] = 1.0 * l_beta
     for k, v in metrics.items():
         loss[f"OC_{k}"] = v
 

@@ -78,7 +78,7 @@ from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
-from mlpf.conf import MLPFConfig
+from mlpf.conf import MLPFConfig, LossType
 from mlpf.jet_utils import get_jet_config
 
 
@@ -251,8 +251,12 @@ def evaluate(
                 _, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
 
         # Save validation plots for first batch
-        # if (rank == 0 or rank == "cpu") and ival == 0 and make_plots:
-        #     validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
+        if (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
+            validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
+            if config.model.loss_mode == LossType.OBJECT_CONDENSATION:
+                from mlpf.model.plots import log_oc_visualizations_to_tensorboard
+
+                log_oc_visualizations_to_tensorboard(batch, ypred_raw, ytarget, tensorboard_writer, step, config.dataset)
 
         # Accumulate losses
         for loss_name in loss:
