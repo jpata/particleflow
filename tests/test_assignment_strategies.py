@@ -1,3 +1,6 @@
+"""
+Spec: Validates the gen-particle to reconstruction object assignment logic in 'mlpf.data.key4hep.postprocessing'. It tests 'assign_genparticles_to_obj_and_merge' using 'EventData' records. Key checks: Ensures each gen-particle has exactly one 'HUB' (primary match) for feature regression and multiple 'SPOKE' matches for object condensation, verifies energy sum conservation, and checks 'PID' consistency through 'map_neutral_to_charged' and 'map_charged_to_neutral' logic.
+"""
 import pytest
 import numpy as np
 import awkward as ak
