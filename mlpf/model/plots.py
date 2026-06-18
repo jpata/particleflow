@@ -65,11 +65,7 @@ def log_oc_visualizations_to_tensorboard(batch, ypred_raw, ytarget, tensorboard_
     total = len(gt_signal)
     signal_acc = correct / total
 
-    _logger.info(
-        f"OC metrics step {step}: ARI={ari:.4f} NMI={nmi:.4f} "
-        f"signal_acc={signal_acc:.4f} "
-        f"({num_nonzero} signal / {total} hits)"
-    )
+    _logger.info(f"OC metrics step {step}: ARI={ari:.4f} NMI={nmi:.4f} " f"signal_acc={signal_acc:.4f} " f"({num_nonzero} signal / {total} hits)")
     tensorboard_writer.add_scalar("oc/ARI", ari, step)
     tensorboard_writer.add_scalar("oc/NMI", nmi, step)
     tensorboard_writer.add_scalar("oc/signal_accuracy", signal_acc, step)
@@ -115,7 +111,19 @@ def log_oc_visualizations_to_tensorboard(batch, ypred_raw, ytarget, tensorboard_
             size = 15 if et == 2 else 5
             alpha = 0.7 if et == 2 else 0.5
             label = "Type {}".format(int(et))
-            ax.scatter(pos[msk, 0], pos[msk, 1], pos[msk, 2], c=color_idx[msk], cmap=cmap, vmin=0, vmax=max(len(unique_pn) - 1, 1), s=size, marker=marker, alpha=alpha, label=label)
+            ax.scatter(
+                pos[msk, 0],
+                pos[msk, 1],
+                pos[msk, 2],
+                c=color_idx[msk],
+                cmap=cmap,
+                vmin=0,
+                vmax=max(len(unique_pn) - 1, 1),
+                s=size,
+                marker=marker,
+                alpha=alpha,
+                label=label,
+            )
 
         ax.set_title(title)
         ax.set_xlabel("X [mm]")
