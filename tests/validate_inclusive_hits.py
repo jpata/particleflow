@@ -1,3 +1,6 @@
+"""
+Spec: Validates hit labeling by comparing tracker-hit circle fits (pT estimation) and calo-hit energy sums against gen-particle truth. Requires an external '.parquet' file produced by 'mlpf/data/key4hep/postprocessing.py' (see 'scripts/fetch_test_data_cld.sh' or 'scripts/local_test_cld.sh' for generation steps). Uses matplotlib for visualization.
+"""
 import awkward as ak
 import numpy as np
 import matplotlib.pyplot as plt

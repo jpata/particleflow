@@ -9,24 +9,8 @@ export KERAS_BACKEND=torch
 rm -Rf .pytest_cache
 uv run python -m pytest --cache-clear tests
 
-#create data directories
-rm -Rf local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
-mkdir -p local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
-cd local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
-
-#Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
-
-cd ../../..
-
-#Create the ntuples using postprocessing2.py
-for file in `\ls -1 local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root/*.root`; do
-  uv run python mlpf/data/cms/postprocessing2.py \
-    --input $file \
-    --outpath local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
-done
-find local_test_data
+# 1. Fetch test data
+./scripts/fetch_test_data_cms.sh
 
 #create the tensorflow dataset for the last split config only
 uv run tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data

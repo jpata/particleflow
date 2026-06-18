@@ -1,3 +1,6 @@
+"""
+Spec: Tests the Domain Specific Language (DSL) for model backbone definitions in 'mlpf.standalone.dsl'. Validates 'parse_dsl' and 'config_to_string' for round-trip consistency. Tests 'generate_random_config' for producing interleaved layer types (HEPT/Global/Standard) and 'mutate_config' for preserving structural validity during evolutionary architecture search.
+"""
 import sys
 import os
 import unittest

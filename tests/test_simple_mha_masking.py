@@ -1,3 +1,6 @@
+"""
+Spec: Verifies 'SimpleMultiheadAttention' respects 'key_padding_mask'. Assertion: Changes the values of masked (padded) elements in 'K' and 'V' and verifies that the output for unmasked queries remains bit-identical. This ensures that padding noise does not leak into the attention results.
+"""
 import torch
 import pytest
 from mlpf.model.mlpf import SimpleMultiheadAttention

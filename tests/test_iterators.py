@@ -1,3 +1,6 @@
+"""
+Spec: Validates 'InterleavedIterator' and 'EndlessIterator' in 'mlpf.model.PFDataset'. Key tests: Interleaving order across multiple dataloaders, state-dict saving/loading for resumable iteration, and error handling for empty dataloaders. Ensures that 'EndlessIterator' correctly resets and shuffles underlying samplers across epoch boundaries.
+"""
 import unittest
 import torch
 from torch.utils.data import TensorDataset, DataLoader, SequentialSampler

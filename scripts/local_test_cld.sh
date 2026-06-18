@@ -7,24 +7,9 @@ export KERAS_BACKEND=torch
 # Quick unit tests
 uv run python -m pytest --cache-clear tests
 
-# 1. Create data directories
+# 1. Fetch test data
 rm -Rf local_test_data/cld
-mkdir -p local_test_data/cld/p8_ee_ttbar_ecm365/root
-cd local_test_data/cld/p8_ee_ttbar_ecm365/root
-
-# 2. Download CLD ROOT files
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9/gen/root/reco_p8_ee_ttbar_ecm365_300000.root
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9/gen/root/reco_p8_ee_ttbar_ecm365_300001.root
-
-cd ../../../..
-
-# 3. Postprocessing
-for file in local_test_data/cld/p8_ee_ttbar_ecm365/root/*.root; do
-  uv run python3 mlpf/data/key4hep/postprocessing.py \
-    --input $file \
-    --outpath local_test_data/cld/p8_ee_ttbar_ecm365 \
-    --detector cld
-done
+./scripts/fetch_test_data_cld.sh
 
 # Run Postprocessing validation
 # Find the first parquet file for validation

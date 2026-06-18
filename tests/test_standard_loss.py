@@ -1,3 +1,6 @@
+"""
+Spec: Validates 'mlpf_loss' with 'LossType.STANDARD'. Tests classification (PID) and regression (momentum/energy) heads. Assertions: Verifies loss components are correctly masked for noise elements, checks stability with extreme/NaN values, and confirms that 'Regression_pt' and other components are zero for perfectly matching predictions.
+"""
 import torch
 from mlpf.model.losses import mlpf_loss
 from mlpf.conf import LossType
