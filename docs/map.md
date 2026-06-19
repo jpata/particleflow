@@ -62,6 +62,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`mlpf/raytune/`**: Ray Tune integration for hyperparameter search (`search_space.py`, `utils.py`).
 - **`mlpf/jet_utils.py`**: Jet clustering and matching logic.
 - **`scripts/`**: Miscellaneous utility scripts.
+  - **`benchmark.py`**: Benchmarks the forward and backward pass timings and peak memory usage for various model architectures.
   - **`tallinn/`, `lxplus/`, `flatiron/`**: Site-specific orchestration scripts for training and evaluation on different clusters.
   - **`upload_model_hf.py` / `upload_hf.py`**: Utilities for uploading experiment results and model checkpoints to HuggingFace Hub.
   - **`visualize_hits.py`**: Tool for visualizing detector hits and model embeddings using UMAP and 3D plotting.

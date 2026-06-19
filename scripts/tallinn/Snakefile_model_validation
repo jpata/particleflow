@@ -8,12 +8,14 @@ sys.path.append(os.getcwd())
 
 from mlpf.conf import MLPFConfig, ModelType
 
-# Configuration
-CONFIGS = ["attn", "hept", "litept", "gnnlsh-bin32", "gnnlsh-bin128", "gnnlsh-bin32-attention", "gnnlsh-bin32-attention-interbin"]
+# Configuration overrides via --config model=... production=... dataset=...
+MODEL_NAME = config.get("model", "pyg-cld-hits-v1")
+PRODUCTION = config.get("production", "cld")
+DATASET = config.get("dataset", "cld_edm_ttbar_hits")
+
+CONFIGS = ["attn", "hept", "litept", "gnnlsh-bin32", "heptv2"]
 DEVICES = ["cuda", "cpu"]
 #DEVICES = ["cuda"]
-MODEL_NAME = "pyg-cms-v1"
-PRODUCTION = "cms_run3"
 NUM_STEPS = 2000
 CHECKPOINT_FREQ = 2000
 
@@ -38,16 +40,19 @@ def get_onnx_validate_extra_args(wildcards):
     return extra_args
 
 # Helper to retrieve DATA_DIR from the spec file
-def get_data_dir():
+def get_data_dir(production):
+    if "data_dir" in config:
+        return config["data_dir"]
     try:
-        cmd = "PF_SITE=tallinn uv run python3 scripts/get_param.py particleflow_spec.yaml productions.cms_run3.workspace_dir"
+        cmd = f"PF_SITE=local uv run python3 scripts/get_param.py particleflow_spec.yaml productions.{production}.workspace_dir"
         workspace_dir = subprocess.check_output(cmd, shell=True).decode().strip()
         return os.path.join(workspace_dir, "tfds/")
     except Exception as e:
         print(f"Error retrieving DATA_DIR: {e}")
-        return "data/cms/tfds/" # Fallback default
+        prod_prefix = "cld" if "cld" in production else "cms"
+        return f"data/{prod_prefix}/tfds/" # Fallback default
 
-DATA_DIR = get_data_dir()
+DATA_DIR = get_data_dir(PRODUCTION)
 
 rule all:
     input:
@@ -61,10 +66,11 @@ rule train:
         checkpoint = os.path.join(EXPERIMENTS_DIR, "training_{config}", "checkpoints", f"checkpoint-{NUM_STEPS}.pth"),
         model_kwargs = os.path.join(EXPERIMENTS_DIR, "training_{config}", "model_kwargs.pkl")
     params:
-        gpu_batch_multiplier = lambda wildcards: "1" if wildcards.config == "hept" else "6",
+        gpu_batch_multiplier = lambda wildcards: "1" if wildcards.config in ["hept", "heptv2"] else "6",
         extra_args = lambda wildcards: {
             "attn": "--model.attention.attention_type flash",
             "hept": "--model.type hept --pad_to_multiple_elements 100",
+            "heptv2": "--model.type heptv2 --pad_to_multiple_elements 100",
             "litept": "--model.type litept",
             "gnnlsh-bin32": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32",
             "gnnlsh-bin128": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 128 --pad_to_multiple_elements 128",
@@ -73,7 +79,7 @@ rule train:
         }[wildcards.config]
     shell:
         """
-        PF_SITE=tallinn uv run python3 mlpf/pipeline.py \
+        PF_SITE=local uv run python3 mlpf/pipeline.py \
             --spec-file particleflow_spec.yaml \
             --model-name {MODEL_NAME} \
             --production {PRODUCTION} \
@@ -98,6 +104,7 @@ rule onnx_validate:
         configs_args = lambda wildcards: {
             "attn": "--configs PT_ATTN_MATH_FP32 ONNX_ATTN_MATH_FP32 ONNX_ATTN_FLASH_FP32 PT_ATTN_MATH_FP16 ONNX_ATTN_MATH_FP16 ONNX_ATTN_FLASH_FP16",
             "hept": "--configs PT_HEPT_FP32 ONNX_HEPT_FP32",
+            "heptv2": "--configs PT_HEPT_FP32 ONNX_HEPT_FP32",
             "litept": "--configs PT_LITEPT_FP32",
             "gnnlsh-bin32": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
             "gnnlsh-bin128": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
@@ -109,10 +116,10 @@ rule onnx_validate:
         uv_project = lambda wildcards: "envs/ort-gpu" if wildcards.device == "cuda" else "envs/ort-cpu"
     shell:
         """
-        PF_SITE=tallinn uv run --project {params.uv_project} python3 scripts/cms-validate-onnx.py \
+        PF_SITE=local uv run --project {params.uv_project} python3 scripts/cms-validate-onnx.py \
             --checkpoint {input.checkpoint} \
             --model-kwargs {input.model_kwargs} \
-            --dataset cms_pf_ttbar \
+            --dataset {DATASET} \
             --data-dir {DATA_DIR} \
             --num-events {params.num_events} \
             --outdir {ONNX_DIR}/{wildcards.device}/{wildcards.config} \
@@ -133,5 +140,5 @@ rule plot_onnx_summary:
         os.path.join(ONNX_DIR, "{device}", "plots", "memory_scaling_summary.png")
     shell:
         """
-        PF_SITE=tallinn uv run --project envs/ort-cpu python3 scripts/plot-onnx-summary.py --indir {ONNX_DIR}/{wildcards.device} --outdir {ONNX_DIR}/{wildcards.device}/plots
+        PF_SITE=local uv run --project envs/ort-cpu python3 scripts/plot-onnx-summary.py --indir {ONNX_DIR}/{wildcards.device} --outdir {ONNX_DIR}/{wildcards.device}/plots
         """
