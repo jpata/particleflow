@@ -14,6 +14,7 @@ except ImportError:
     LitePTLayer = None
 
 from mlpf.model.hept import HEPTLayer, trunc_normal_
+from mlpf.model.heptv2 import HEPTv2Layer
 
 from mlpf.conf import (
     MLPFConfig,
@@ -296,7 +297,7 @@ class MLPF(nn.Module):
 
         # Ensure sub_config is initialized if it's None (can happen if not in spec or args)
         if sub_config is None:
-            from mlpf.conf import AttentionConfig, GNNLSHConfig, LitePTConfig, HEPTConfig
+            from mlpf.conf import AttentionConfig, GNNLSHConfig, LitePTConfig, HEPTConfig, HEPTv2Config
 
             if self.conv_type == ModelType.ATTENTION:
                 sub_config = AttentionConfig()
@@ -306,6 +307,8 @@ class MLPF(nn.Module):
                 sub_config = LitePTConfig()
             elif self.conv_type == ModelType.HEPT:
                 sub_config = HEPTConfig()
+            elif self.conv_type == ModelType.HEPTV2:
+                sub_config = HEPTv2Config()
             setattr(self.config, self.conv_type.value, sub_config)
 
         # Extract architecture-level parameters
@@ -366,6 +369,11 @@ class MLPF(nn.Module):
             width = sub_config.width
             num_heads = sub_config.num_heads
             pos = sub_config.pos
+            self.use_pre_layernorm = False
+        elif self.conv_type == ModelType.HEPTV2:
+            embedding_dim = sub_config.embedding_dim
+            width = sub_config.width
+            num_heads = sub_config.num_heads
             self.use_pre_layernorm = False
 
         _logger.info(f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} input_encoding={self.input_encoding}")
@@ -497,6 +505,36 @@ class MLPF(nn.Module):
                             **hept_conf,
                         )
                     )
+            elif self.conv_type == ModelType.HEPTV2:
+                _logger.info("Initializing HEPTv2 convolution layers")
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList()
+                heptv2_conf = self.config.heptv2.model_dump()
+                for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff", "num_heads"]:
+                    if key in heptv2_conf:
+                        heptv2_conf.pop(key)
+                for i in range(self.num_convs):
+                    _logger.info(f"Initializing HEPTv2 layer {i}")
+                    self.conv_id.append(
+                        HEPTv2Layer(
+                            name=f"heptv2_id_{i}",
+                            embedding_dim=embedding_dim,
+                            num_heads=num_heads,
+                            width=width,
+                            dropout=dropout_ff,
+                            **heptv2_conf,
+                        )
+                    )
+                    self.conv_reg.append(
+                        HEPTv2Layer(
+                            name=f"heptv2_reg_{i}",
+                            embedding_dim=embedding_dim,
+                            num_heads=num_heads,
+                            width=width,
+                            dropout=dropout_ff,
+                            **heptv2_conf,
+                        )
+                    )
             _logger.info("Convolution layers initialization took {:.2f}s".format(time.time() - t0))
             _logger.info("conv_id parameters: {}".format(count_parameters(self.conv_id)))
             _logger.info("conv_reg parameters: {}".format(count_parameters(self.conv_reg)))
@@ -578,7 +616,7 @@ class MLPF(nn.Module):
         if self.num_convs != 0:
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
-                if self.conv_type == ModelType.LITEPT or self.conv_type == ModelType.HEPT:
+                if self.conv_type in [ModelType.LITEPT, ModelType.HEPT, ModelType.HEPTV2]:
                     out_padded = conv(conv_input, mask, X_features)
                 else:
                     out_padded = conv(conv_input, mask, embedding_id)
@@ -586,7 +624,7 @@ class MLPF(nn.Module):
 
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-                if self.conv_type == ModelType.LITEPT or self.conv_type == ModelType.HEPT:
+                if self.conv_type in [ModelType.LITEPT, ModelType.HEPT, ModelType.HEPTV2]:
                     out_padded = conv(conv_input, mask, X_features)
                 else:
                     out_padded = conv(conv_input, mask, embedding_reg)

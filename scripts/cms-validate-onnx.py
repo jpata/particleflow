@@ -251,6 +251,8 @@ def main():
         NUM_HEADS = model_kwargs.model.attention.num_heads
     elif model_kwargs.model.type == ModelType.HEPT:
         NUM_HEADS = model_kwargs.model.hept.num_heads
+    elif model_kwargs.model.type == ModelType.HEPTV2:
+        NUM_HEADS = model_kwargs.model.heptv2.num_heads
     else:
         NUM_HEADS = 1
     input_dim = model_kwargs.input_dim
@@ -261,6 +263,8 @@ def main():
         pad_size = max(pad_size, model_kwargs.pad_to_multiple_elements)
     if model_kwargs.model.type == ModelType.HEPT:
         pad_size = max(pad_size, model_kwargs.model.hept.block_size)
+    elif model_kwargs.model.type == ModelType.HEPTV2:
+        pad_size = max(pad_size, model_kwargs.model.heptv2.block_size)
     elif model_kwargs.model.type == ModelType.GNNLSH:
         pad_size = max(pad_size, model_kwargs.model.gnnlsh.bin_size)
 
@@ -282,6 +286,8 @@ def main():
                 "ONNX_ATTN_FLASH_FP16",
             ]
         elif model_kwargs.model.type == ModelType.HEPT:
+            configs = ["PT_HEPT_FP32", "ONNX_HEPT_FP32"]
+        elif model_kwargs.model.type == ModelType.HEPTV2:
             configs = ["PT_HEPT_FP32", "ONNX_HEPT_FP32"]
         elif model_kwargs.model.type == ModelType.LITEPT:
             configs = ["PT_LITEPT_FP32"]

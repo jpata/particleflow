@@ -19,6 +19,8 @@ def unpack_target(y, model):
     ret["charge"] = torch.clamp((y[..., 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
 
     for i, feat in enumerate(Y_FEATURES):
+        if i >= y.shape[-1]:
+            break
         if i >= 2:  # skip the cls and charge as they are defined above
             ret[feat] = y[..., i].to(dtype=torch.float32)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])

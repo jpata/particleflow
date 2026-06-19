@@ -1,8 +1,10 @@
 #!/bin/bash
+
 export PF_SITE=local
 DATA_DIR=$(python3 scripts/get_param.py particleflow_spec.yaml productions.cld.workspace_dir)/tfds/
+uv run python3 mlpf/pipeline.py --spec-file particleflow_spec.yaml --model-name pyg-cld-hits-v1 --production cld --data-dir $DATA_DIR train --gpu_batch_multiplier 1 --val_freq 1000 --num_steps 2000 --num_workers 8 --prefetch_factor 4 --make_plots --model.type attention --pad_to_multiple_elements 100
 
-uv run python3 mlpf/pipeline.py --spec-file particleflow_spec.yaml --model-name pyg-cld-hits-v1 --production cld --data-dir $DATA_DIR train --gpu_batch_multiplier 6 --val_freq 100 --num_steps 2000 --num_workers 4 --prefetch_factor 4 --make_plots --model.loss_mode object_condensation
+#--model.loss_mode object_condensation
 
 # uv run python3 mlpf/pipeline.py --spec-file particleflow_spec.yaml --model-name pyg-cms-v1 --production cms_run3 --data-dir $DATA_DIR train --gpu_batch_multiplier 8 --val_freq 1000 --num_steps 1000 --model.type gnnlsh --model.gnnlsh.kernel_type gaussian --pad_to_multiple_elements 32
 

@@ -20,6 +20,7 @@ class ModelType(Enum):
     GNNLSH = "gnnlsh"
     LITEPT = "litept"
     HEPT = "hept"
+    HEPTV2 = "heptv2"
 
 
 class InputEncoding(Enum):
@@ -425,7 +426,7 @@ class HEPTConfig(BaseModel):
     embedding_dim: int = 128
     width: int = 512
     num_convs: int = 6
-    num_heads: int = 16
+    num_heads: int = 8
     dropout_ff: float = 0.1
     activation: Activation = Activation.ELU
     pos: bool = False
@@ -433,6 +434,22 @@ class HEPTConfig(BaseModel):
     n_hashes: int = 3
     num_regions: int = 140
     num_w_per_dist: int = 10
+
+
+class HEPTv2Config(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    embedding_dim: int = 128
+    width: int = 512
+    num_convs: int = 6
+    num_heads: int = 8
+    dropout_ff: float = 0.1
+    activation: Activation = Activation.ELU
+    pe_type: str = "learned"
+    block_size: int = 100
+    n_hashes: int = 3
+    num_regions: int = 140
+    num_w_per_dist: int = 10
+    mlp_ratio: float = 4.0
 
 
 class ModelArchitectureConfig(BaseModel):
@@ -454,6 +471,7 @@ class ModelArchitectureConfig(BaseModel):
     attention: Optional[AttentionConfig] = None
     litept: Optional[LitePTConfig] = None
     hept: Optional[HEPTConfig] = None
+    heptv2: Optional[HEPTv2Config] = None
 
 
 class DatasetSample(BaseModel):
