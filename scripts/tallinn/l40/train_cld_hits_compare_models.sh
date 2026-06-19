@@ -3,8 +3,8 @@
 #SBATCH --gres gpu:l40:1
 #SBATCH --mem-per-gpu 80G
 #SBATCH --cpus-per-gpu 4
-#SBATCH -o logs/slurm-%x-%j-%N.out
-#SBATCH --job-name=train-cld-hits-%a
+#SBATCH -o logs/slurm-%x-%a-%j-%N.out
+#SBATCH --job-name=train-cld-hits-compare
 #SBATCH --array=0-3
 
 set -e
@@ -24,10 +24,12 @@ uv run python3 mlpf/pipeline.py \
     --spec-file particleflow_spec.yaml \
     --model-name pyg-cld-hits-v1 \
     --production cld \
+    --prefix ${MODEL_TYPE}_ \
     --data-dir $DATA_DIR \
     train \
     --gpus 1 \
     --num_workers 4 \
     --prefetch_factor 2 \
     --model.type $MODEL_TYPE \
-    --gpu_batch_multiplier 2
+    --gpu_batch_multiplier 2 \
+    --pad_to_multiple_elements 100
