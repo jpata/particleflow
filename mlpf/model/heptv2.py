@@ -9,10 +9,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from typing import Tuple
+
 
 try:
     from torch.nn.attention.flex_attention import flex_attention as _raw_flex_attention
+
     # The eager flex_attention kernel prints a warning that it "may produce
     # incorrect results" — wrap with torch.compile to get the fused path.
     flex_attention = torch.compile(_raw_flex_attention, dynamic=False)
@@ -26,6 +27,7 @@ def _env_bool(name, default=False):
         return bool(default)
     return raw.lower() in {"1", "true", "yes", "on"}
 
+
 _HEPTV2_ENCODER_HASH_FP32 = _env_bool("HEPTV2_ENCODER_HASH_FP32")
 _HEPTV2_COMBINED_BUCKET_GATHER = _env_bool("HEPTV2_COMBINED_BUCKET_GATHER")
 _HEPTV2_COMBINED_UNSORT = _env_bool("HEPTV2_COMBINED_UNSORT")
@@ -33,6 +35,7 @@ _HEPTV2_MANUAL_HASH_SOFTMAX = _env_bool("HEPTV2_MANUAL_HASH_SOFTMAX")
 _HEPTV2_DIRECT_BUCKET_GATHER = _env_bool("HEPTV2_DIRECT_BUCKET_GATHER")
 _HEPTV2_E2LSH_COORDS_EINSUM = _env_bool("HEPTV2_E2LSH_COORDS_EINSUM")
 _HEPTV2_DEBUG_SHAPES = _env_bool("HEPTV2_DEBUG_SHAPES")
+
 
 def _debug_shape(name, tensor):
     if _HEPTV2_DEBUG_SHAPES:
@@ -109,7 +112,7 @@ def quantile_partition(sorted_indices, num_regions):
     inverse_indices = torch.argsort(sorted_indices, dim=-1)
     base = torch.arange(total_elements, device=sorted_indices.device)[None]
     region_indices = base // region_size + 1
-    
+
     if sorted_indices.dim() == 2:
         region_indices = region_indices.unsqueeze(1).expand(-1, sorted_indices.shape[0], -1)
         inverse_indices_expanded = inverse_indices.unsqueeze(0).expand(region_indices.shape[0], -1, -1)
@@ -147,9 +150,13 @@ def sort_to_buckets(x, perm, bucketsz):
         num_heads = int(perm.shape[1])
         seq_len = int(perm.shape[2])
         head_dim = int(x.shape[-1])
-        gathered = x.unsqueeze(0).expand(num_hashes, -1, -1, -1).gather(
-            2,
-            perm[..., None].expand(num_hashes, num_heads, seq_len, head_dim),
+        gathered = (
+            x.unsqueeze(0)
+            .expand(num_hashes, -1, -1, -1)
+            .gather(
+                2,
+                perm[..., None].expand(num_hashes, num_heads, seq_len, head_dim),
+            )
         )
         return gathered.reshape(num_hashes, num_heads, seq_len // bucketsz, bucketsz, head_dim)
     return rearrange(
@@ -240,7 +247,7 @@ class HEPTv2Attention(nn.Module):
         _debug_shape("HEPTv2Attention in query", query)
         _debug_shape("HEPTv2Attention in key", key)
         _debug_shape("HEPTv2Attention in value", value)
-        
+
         query = query.view(-1, self.num_heads, self.dim_per_head)
         key = key.view(-1, self.num_heads, self.dim_per_head)
         value = value.view(-1, self.num_heads, self.dim_per_head)
@@ -271,14 +278,14 @@ class HEPTv2Attention(nn.Module):
             self.n_hashes,
         )
         active_width = int(active_hashes) * int(self.num_heads)
-        
+
         # Hashing / projection
         if _HEPTV2_ENCODER_HASH_FP32:
             coords2_f = coords2_flat.float()
             hashed_flat = lsh_coords(self.e2lsh_new, coords2_f, self.num_heads)
         else:
             hashed_flat = lsh_coords(self.e2lsh_new, coords2_flat, self.num_heads)
-            
+
         if active_hashes < self.n_hashes:
             hashed_flat = hashed_flat[:active_hashes]
 
@@ -307,7 +314,7 @@ class HEPTv2Attention(nn.Module):
         regions_h = kwargs["regions_h"].float()[:, :active_width] if _HEPTV2_ENCODER_HASH_FP32 else kwargs["regions_h"][:, :active_width]
         region_indices = [idx[:active_width] for idx in kwargs["region_indices"]]
         shifts = get_geo_shift_single(regions_h, hash_shift, region_indices, active_hashes)
-        
+
         hashed = hashed + shifts
         positions = hashed.argsort(dim=-1)
 
@@ -321,7 +328,7 @@ class HEPTv2Attention(nn.Module):
 
         denom, so = qkv_res(s_query, s_key, s_value)
         q_rev_positions = invert_permutation(positions)
-        
+
         if _HEPTV2_COMBINED_UNSORT:
             combined = torch.cat([so, denom], dim=-1)
             combined = unsort_from_buckets(combined, q_rev_positions)
@@ -337,7 +344,7 @@ class HEPTv2Attention(nn.Module):
         else:
             probs = torch.softmax(logits, dim=0)
             out = torch.sum(o * probs, dim=0)
-            
+
         final_out = self.out_linear(rearrange(out, "h n d -> n (h d)"))
         _debug_shape("HEPTv2Attention final_out", final_out)
         return final_out
@@ -389,7 +396,7 @@ class HEPTv2Layer(nn.Module):
         self.w_v = nn.Linear(embedding_dim, embedding_dim, bias=False)
 
         self.w_rpe = nn.Linear(self.num_w_per_dist * (self.coords_dim - 1), self.num_heads * self.dim_per_head)
-        
+
         self.pe_func = PELearned(input_channel=self.coords_dim, h_dim=embedding_dim) if pe_type == "learned" else None
 
         self.regions = nn.Parameter(
@@ -401,10 +408,10 @@ class HEPTv2Layer(nn.Module):
         self.norm2 = Qwen3RMSNorm(embedding_dim)
         self.q_norm = Qwen3RMSNorm(self.dim_per_head)
         self.k_norm = Qwen3RMSNorm(self.dim_per_head)
-        
+
         mlp_hidden_dim = max(1, int(embedding_dim * self.mlp_ratio))
         self.ff = Qwen3MLP(embedding_dim, mlp_hidden_dim, act_fn=F.silu)
-        
+
         self.dropout = nn.Dropout(dropout)
 
     def extra_repr(self):
@@ -446,10 +453,9 @@ class HEPTv2Layer(nn.Module):
                     coords_for_sort,
                 )
                 valid_mask = mask
-                mask_flat = mask.view(-1)
+
             else:
                 valid_mask = torch.ones_like(coords[..., 0], dtype=torch.bool)
-                mask_flat = torch.ones_like(coords_flat[..., 0], dtype=torch.bool)
 
             sorted_eta_idx = torch.argsort(coords_for_sort[..., 0], dim=-1)
             sorted_phi_idx = torch.argsort(coords_for_sort[..., 1], dim=-1)

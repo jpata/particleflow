@@ -42,7 +42,7 @@ def split_indices_to_bins_batch(a, bin_size, msk, stable_sort=False):
     # Transpose to [B, num_or_hashes, n_points]
     a = a.permute(0, 2, 1)
 
-    bin_idx = torch.where(msk.to(torch.bool).view(batch_size, 1, n_points), a, float('inf'))
+    bin_idx = torch.where(msk.to(torch.bool).view(batch_size, 1, n_points), a, float("inf"))
 
     n_points_active_t = torch.as_tensor(n_points, device=a.device, dtype=torch.float32)
     offset = torch.arange(n_points, device=a.device, dtype=torch.float32) * (0.1 / (n_points_active_t + 1.0))
@@ -295,7 +295,7 @@ class MessageBuildingLayerLSH(nn.Module):
         self.bin_size = bin_size
         self.kernel = kernel
         self.stable_sort = False
-        
+
         self.register_buffer(
             "codebook_random_rotations",
             torch.randn(self.distance_dim, self.num_or_hashes * self.num_and_hashes * (self.max_num_bins // 2)),
@@ -322,17 +322,17 @@ class MessageBuildingLayerLSH(nn.Module):
             n_points_t = torch.as_tensor(x_msg.size(1), device=x_msg.device)
             n_bins_t = torch.div(n_points_t, self.bin_size, rounding_mode="floor")
             codebook_slice_t = torch.div(n_bins_t, 2, rounding_mode="floor")
-            
+
             mul = mul.view(x_msg.shape[0], x_msg.shape[1], self.num_or_hashes, self.num_and_hashes, -1)
 
             # Mask out unused rotations
             mul = torch.where(rotation_idx < codebook_slice_t, mul, torch.full_like(mul, -1e4))
 
             cmul_32 = torch.concatenate([mul, -mul], axis=-1)
-            
+
             # shape: [B, n_points, num_or_hashes, num_and_hashes]
             a_parts = torch.argmax(cmul_32, axis=-1).to(torch.float32)
-            
+
             a = torch.zeros(a_parts.shape[:-1], device=a_parts.device, dtype=torch.float32)
             base = 1.0
             for i in range(self.num_and_hashes):

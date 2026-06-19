@@ -772,10 +772,10 @@ def train_all_steps(
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
             _logger.info(
-                f"Step {step}/{num_steps} rank{rank} | " 
-                f"Train Loss: {losses_train['Total']:.4f} | " 
-                f"LR: {current_lr:.2e} | " 
-                f"DataLoad Time: {data_load_time:.4f}s | " 
+                f"Step {step}/{num_steps} rank{rank} | "
+                f"Train Loss: {losses_train['Total']:.4f} | "
+                f"LR: {current_lr:.2e} | "
+                f"DataLoad Time: {data_load_time:.4f}s | "
                 f"Model Forward Time: {model_forward_time:.4f}s"
             )
 
