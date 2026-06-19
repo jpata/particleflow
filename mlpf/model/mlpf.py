@@ -676,8 +676,9 @@ class MLPF(nn.Module):
             ypred["pt"][pred_cls == 0] = 0
             ypred["energy"][pred_cls == 0] = 0
         elif loss_mode == LossType.OBJECT_CONDENSATION:
+            ypred_cls_id = torch.argmax(ypred["cls_id_onehot"], dim=-1)
             # Re-initialize pred_cls to 0
-            pred_cls = torch.zeros_like(ypred["cls_id"])
+            pred_cls = torch.zeros_like(ypred_cls_id)
 
             for event_idx in range(mask.size(0)):
                 event_mask = mask[event_idx]
@@ -701,7 +702,7 @@ class MLPF(nn.Module):
                     cp_idx_valid = cluster_mask.nonzero(as_tuple=True)[0][cp_idx_local]
                     cp_idx_seq = valid_indices[cp_idx_valid]
 
-                    pred_cls[event_idx, cp_idx_seq] = ypred["cls_id"][event_idx, cp_idx_seq]
+                    pred_cls[event_idx, cp_idx_seq] = ypred_cls_id[event_idx, cp_idx_seq]
 
             ypred["cls_id"] = pred_cls
             ypred["pt"][pred_cls == 0] = 0
