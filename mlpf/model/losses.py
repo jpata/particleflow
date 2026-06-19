@@ -332,7 +332,8 @@ def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss
 
     # Aggregate predictions across hits in each true particle, weighted by predicted beta
     # This provides a denser gradient signal than single-hit (CP) regression
-    weights = beta_flat
+    # Detach weights to prevent regression gradients from causing beta collapse.
+    weights = beta_flat.detach()
 
     def aggregate(values, indices, weights):
         # Flatten values if they are multi-dimensional (e.g. PID one-hot)
