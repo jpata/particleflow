@@ -355,6 +355,8 @@ class MLPF(nn.Module):
             num_attention_heads = sub_config.num_attention_heads
             # attention_head_dim = sub_config.attention_head_dim
             distance_dim = sub_config.distance_dim
+            num_or_hashes = sub_config.num_or_hashes
+            num_and_hashes = sub_config.num_and_hashes
             if kernel_type == KernelType.ATTENTION:
                 if distance_dim % num_attention_heads != 0:
                     raise ValueError(f"distance_dim ({distance_dim}) must be divisible by num_attention_heads ({num_attention_heads})")
@@ -457,6 +459,8 @@ class MLPF(nn.Module):
                         "use_interbin_attention": use_interbin_attention,
                         "num_interbin_heads": num_interbin_heads,
                         "num_attention_heads": num_attention_heads,
+                        "num_or_hashes": num_or_hashes,
+                        "num_and_hashes": num_and_hashes,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))

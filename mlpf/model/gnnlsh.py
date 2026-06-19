@@ -34,33 +34,23 @@ def point_wise_feed_forward_network(
     return nn.Sequential(*layers)
 
 
-def split_indices_to_bins_batch(cmul, bin_size, msk, stable_sort=False):
-    # Use float32 for binning logic
-    cmul_32 = cmul.to(torch.float32)
-    a = torch.argmax(cmul_32, axis=-1)
+def split_indices_to_bins_batch(a, bin_size, msk, stable_sort=False):
+    # a has shape [B, n_points, num_or_hashes]
+    batch_size, n_points, num_or_hashes = a.shape
 
-    shp = cmul.shape
-    batch_size = shp[0]
-    n_points = shp[1]
+    # We want to independently sort for each OR hash.
+    # Transpose to [B, num_or_hashes, n_points]
+    a = a.permute(0, 2, 1)
 
-    # Calculate nbins as a tensor
-    nbins = torch.div(n_points, bin_size, rounding_mode="floor")
+    bin_idx = torch.where(msk.to(torch.bool).view(batch_size, 1, n_points), a, float('inf'))
 
-    # Assign masked elements to the last bin
-    bin_idx = torch.where(msk.to(torch.bool).reshape(batch_size, n_points), a, (nbins - 1))
+    n_points_active_t = torch.as_tensor(n_points, device=a.device, dtype=torch.float32)
+    offset = torch.arange(n_points, device=a.device, dtype=torch.float32) * (0.1 / (n_points_active_t + 1.0))
+    bin_idx_stable = bin_idx + offset.view(1, 1, -1)
 
-    # Add a deterministic offset to stabilize the sort
-    # In float32, we need a larger offset so it's representable when added to bin indices (up to 200)
-    # The epsilon at 200 is approx 2.4e-5. We use an offset in range [0, 0.1]
-    n_points_active_t = torch.as_tensor(bin_idx.size(-1), device=bin_idx.device, dtype=torch.float32)
-    offset = torch.arange(bin_idx.size(-1), device=bin_idx.device, dtype=torch.float32) * (0.1 / (n_points_active_t + 1.0))
-    bin_idx_stable = bin_idx.to(torch.float32) + offset
-
-    # Use torch.sort
     _, bins_split = torch.sort(bin_idx_stable, dim=-1)
 
-    # Reshape using -1 for the bins dimension to avoid TopK K-input issues
-    bins_split = bins_split.reshape(batch_size, -1, bin_size)
+    bins_split = bins_split.reshape(batch_size, num_or_hashes * (n_points // bin_size), bin_size)
     return bins_split
 
 
@@ -211,18 +201,19 @@ def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, bin_size):
     return x_msg_binned, x_features_binned, msk_f_binned
 
 
-def reverse_lsh(bins_split, points_binned_enc):
+def reverse_lsh(bins_split, points_binned_enc, num_or_hashes=1):
     shp = points_binned_enc.shape
     batch_dim = shp[0]
-    n_points = bins_split.numel() // batch_dim
+    total_points = bins_split.numel() // batch_dim
+    n_points = total_points // num_or_hashes
     n_features = shp[-1]
 
-    bins_split_flat = torch.reshape(bins_split, (batch_dim, n_points))
-    points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, n_points, n_features))
+    bins_split_flat = torch.reshape(bins_split, (batch_dim, total_points))
+    points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, total_points, n_features))
 
     indices = bins_split_flat.unsqueeze(-1).expand(-1, -1, n_features)
     ret = torch.zeros(batch_dim, n_points, n_features, device=points_binned_enc.device, dtype=points_binned_enc.dtype)
-    ret.scatter_(1, indices, points_binned_enc_flat)
+    ret.scatter_add_(1, indices, points_binned_enc_flat)
     return ret
 
 
@@ -295,7 +286,8 @@ class InterBinAttentionLayer(nn.Module):
 
 class MessageBuildingLayerLSH(nn.Module):
     def __init__(self, distance_dim=128, max_num_bins=200, bin_size=128, kernel=NodePairGaussianKernel(), **kwargs):
-        self.initializer = kwargs.pop("initializer", "random_normal")
+        self.num_or_hashes = kwargs.pop("num_or_hashes", 1)
+        self.num_and_hashes = kwargs.pop("num_and_hashes", 1)
         super(MessageBuildingLayerLSH, self).__init__(**kwargs)
 
         self.distance_dim = distance_dim
@@ -303,10 +295,10 @@ class MessageBuildingLayerLSH(nn.Module):
         self.bin_size = bin_size
         self.kernel = kernel
         self.stable_sort = False
-
+        
         self.register_buffer(
             "codebook_random_rotations",
-            torch.randn(self.distance_dim, self.max_num_bins // 2),
+            torch.randn(self.distance_dim, self.num_or_hashes * self.num_and_hashes * (self.max_num_bins // 2)),
         )
 
     def forward(self, x_msg, x_node, msk, training=False):
@@ -323,19 +315,31 @@ class MessageBuildingLayerLSH(nn.Module):
                 self.codebook_random_rotations.to(torch.float32),
             )
 
-            n_rotations = self.codebook_random_rotations.shape[1]
-            rotation_idx = torch.arange(n_rotations, device=mul.device).unsqueeze(0).unsqueeze(0)
+            n_rotations = self.codebook_random_rotations.shape[1] // (self.num_or_hashes * self.num_and_hashes)
+            rotation_idx = torch.arange(n_rotations, device=mul.device).view(1, 1, 1, 1, -1)
 
             # Calculate n_bins purely as a tensor
             n_points_t = torch.as_tensor(x_msg.size(1), device=x_msg.device)
             n_bins_t = torch.div(n_points_t, self.bin_size, rounding_mode="floor")
             codebook_slice_t = torch.div(n_bins_t, 2, rounding_mode="floor")
+            
+            mul = mul.view(x_msg.shape[0], x_msg.shape[1], self.num_or_hashes, self.num_and_hashes, -1)
 
             # Mask out unused rotations
             mul = torch.where(rotation_idx < codebook_slice_t, mul, torch.full_like(mul, -1e4))
 
             cmul_32 = torch.concatenate([mul, -mul], axis=-1)
-            bins_split = split_indices_to_bins_batch(cmul_32, self.bin_size, msk, self.stable_sort)
+            
+            # shape: [B, n_points, num_or_hashes, num_and_hashes]
+            a_parts = torch.argmax(cmul_32, axis=-1).to(torch.float32)
+            
+            a = torch.zeros(a_parts.shape[:-1], device=a_parts.device, dtype=torch.float32)
+            base = 1.0
+            for i in range(self.num_and_hashes):
+                a += a_parts[..., i] * base
+                base *= float(self.max_num_bins)
+
+            bins_split = split_indices_to_bins_batch(a, self.bin_size, msk, self.stable_sort)
 
         x_msg_binned, x_features_binned, msk_f_binned = split_msk_and_msg(bins_split, cmul_32, x_msg, x_node, msk, self.bin_size)
 
@@ -365,6 +369,8 @@ class CombinedGraphLayer(nn.Module):
         self.use_interbin_attention = kwargs.pop("use_interbin_attention", False)
         self.num_interbin_heads = kwargs.pop("num_interbin_heads", 4)
         self.num_attention_heads = kwargs.pop("num_attention_heads", 4)
+        self.num_or_hashes = kwargs.pop("num_or_hashes", 1)
+        self.num_and_hashes = kwargs.pop("num_and_hashes", 1)
         super(CombinedGraphLayer, self).__init__(**kwargs)
 
         if self.do_layernorm:
@@ -391,6 +397,8 @@ class CombinedGraphLayer(nn.Module):
             max_num_bins=self.max_num_bins,
             bin_size=self.bin_size,
             kernel=kernel,
+            num_or_hashes=self.num_or_hashes,
+            num_and_hashes=self.num_and_hashes,
         )
 
         self.message_passing_layers = nn.ModuleList()
@@ -421,6 +429,6 @@ class CombinedGraphLayer(nn.Module):
         if self.use_interbin_attention:
             x = self.interbin_attention(x, msk_f)
 
-        x = reverse_lsh(bins_split, x)
+        x = reverse_lsh(bins_split, x, num_or_hashes=self.message_building_layer.num_or_hashes)
 
         return x

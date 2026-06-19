@@ -352,10 +352,12 @@ class GNNLSHConfig(BaseModel):
     dropout_ff: float = 0.0
     activation: Activation = Activation.ELU
     layernorm: bool = True
-    bin_size: int = 32
+    bin_size: int = 100
     max_num_bins: int = 200
     distance_dim: int = 128
     num_node_messages: int = 2
+    num_or_hashes: int = 1
+    num_and_hashes: int = 1
     ffn_dist_hidden_dim: int = 128
     ffn_dist_num_layers: int = 2
     kernel_type: KernelType = KernelType.GAUSSIAN
