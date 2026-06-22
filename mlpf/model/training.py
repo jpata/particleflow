@@ -88,6 +88,23 @@ def model_step(batch, model, loss_fn):
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
+
+    is_no_target = (ytarget["cls_id"] == 0)
+    for d in [ypred, ytarget]:
+        for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
+            if key in d:
+                d[key] = torch.where(is_no_target, torch.zeros_like(d[key]), d[key])
+        if "p4" in d:
+            p4 = d["p4"].clone()
+            for i in range(4):
+                p4[..., i] = torch.where(is_no_target, torch.zeros_like(p4[..., i]), p4[..., i])
+            d["p4"] = p4
+        if "momentum" in d:
+            momentum = d["momentum"].clone()
+            for i in range(5):
+                momentum[..., i] = torch.where(is_no_target, torch.zeros_like(momentum[..., i]), momentum[..., i])
+            d["momentum"] = momentum
+
     loss_opt, losses_detached = loss_fn(ytarget, ypred, batch, model.config.loss_mode)
     return loss_opt, losses_detached, ypred_raw, ypred, ytarget
 
@@ -199,6 +216,154 @@ def train_step(
     return step_loss
 
 
+def compute_particle_quality_metrics(batch, ypred_particles, ytarget):
+    sum_pt_true_list = []
+    sum_pt_pred_list = []
+    sum_e_true_list = []
+    sum_e_pred_list = []
+    n_true_list = []
+    n_pred_list = []
+
+    for ev_idx in range(batch.X.shape[0]):
+        mask_ev = batch.mask[ev_idx].bool()
+        if not mask_ev.any():
+            continue
+
+        # True particles in this event (cls_id > 0)
+        cls_id_true = ytarget["cls_id"][ev_idx][mask_ev]
+        is_true_part = cls_id_true > 0
+        if is_true_part.any():
+            pt_true = (torch.exp(ytarget["pt"][ev_idx][mask_ev]) * batch.X[ev_idx, mask_ev, 1])[is_true_part]
+            e_true = (torch.exp(ytarget["energy"][ev_idx][mask_ev]) * batch.X[ev_idx, mask_ev, 5])[is_true_part]
+            sum_pt_true = pt_true.sum().item()
+            sum_e_true = e_true.sum().item()
+            n_true = is_true_part.sum().item()
+        else:
+            sum_pt_true = 0.0
+            sum_e_true = 0.0
+            n_true = 0
+
+        # Predicted particles in this event (cls_id > 0)
+        cls_id_pred = ypred_particles["cls_id"][ev_idx][mask_ev]
+        is_pred_part = cls_id_pred > 0
+        if is_pred_part.any():
+            pt_pred = ypred_particles["pt"][ev_idx][mask_ev][is_pred_part]
+            e_pred = ypred_particles["energy"][ev_idx][mask_ev][is_pred_part]
+            sum_pt_pred = pt_pred.sum().item()
+            sum_e_pred = e_pred.sum().item()
+            n_pred = is_pred_part.sum().item()
+        else:
+            sum_pt_pred = 0.0
+            sum_e_pred = 0.0
+            n_pred = 0
+
+        sum_pt_true_list.append(sum_pt_true)
+        sum_pt_pred_list.append(sum_pt_pred)
+        sum_e_true_list.append(sum_e_true)
+        sum_e_pred_list.append(sum_e_pred)
+        n_true_list.append(n_true)
+        n_pred_list.append(n_pred)
+
+    metrics = {
+        "sum_pt_true": float(np.mean(sum_pt_true_list)),
+        "sum_pt_pred": float(np.mean(sum_pt_pred_list)),
+        "sum_e_true": float(np.mean(sum_e_true_list)),
+        "sum_e_pred": float(np.mean(sum_e_pred_list)),
+        "n_true": float(np.mean(n_true_list)),
+        "n_pred": float(np.mean(n_pred_list)),
+    }
+
+    metrics["ratio_sum_pt"] = metrics["sum_pt_pred"] / (metrics["sum_pt_true"] + 1e-6)
+    metrics["ratio_sum_e"] = metrics["sum_e_pred"] / (metrics["sum_e_true"] + 1e-6)
+
+    return metrics
+
+
+def print_event_table(batch, ytarget, ypred_particles, config):
+    import pandas as pd
+    from tabulate import tabulate
+    from mlpf.conf import CLASS_LABELS
+    import numpy as np
+
+    # We only print the first event in the batch (index 0)
+    mask = batch.mask[0].bool().cpu()
+    valid_indices = torch.nonzero(mask).squeeze(1).numpy()
+    
+    X = batch.X[0].cpu().numpy()
+    
+    # Target values
+    tgt_cls = ytarget["cls_id"][0].cpu().numpy()
+    tgt_pt_raw = ytarget["pt"][0].cpu().numpy()
+    tgt_eta = ytarget["eta"][0].cpu().numpy()
+    tgt_sin_phi = ytarget["sin_phi"][0].cpu().numpy()
+    tgt_cos_phi = ytarget["cos_phi"][0].cpu().numpy()
+    tgt_energy_raw = ytarget["energy"][0].cpu().numpy()
+    
+    # Prediction values
+    pred_cls = ypred_particles["cls_id"][0].cpu().numpy()
+    pred_pt = ypred_particles["pt"][0].cpu().numpy()
+    pred_eta = ypred_particles["eta"][0].cpu().numpy()
+    pred_phi = ypred_particles["phi"][0].cpu().numpy() if "phi" in ypred_particles else np.zeros_like(pred_pt)
+    pred_energy = ypred_particles["energy"][0].cpu().numpy()
+    pred_beta = ypred_particles["oc_beta"][0, :, 0].cpu().numpy() if "oc_beta" in ypred_particles else np.zeros_like(pred_pt)
+
+    # Class names mapping
+    dataset_name = config.dataset.value if hasattr(config.dataset, "value") else config.dataset
+    class_names = CLASS_LABELS.get(dataset_name, ["none", "chhad", "nhad", "gamma", "ele", "mu"])
+    
+    rows = []
+    for idx in valid_indices:
+        hit_type = X[idx, 0]
+        hit_pt = X[idx, 1]
+        hit_eta = X[idx, 2]
+        hit_phi = np.arctan2(X[idx, 3], X[idx, 4])
+        hit_energy = X[idx, 5]
+        
+        t_cls = int(tgt_cls[idx])
+        t_cls_name = class_names[t_cls] if t_cls < len(class_names) else str(t_cls)
+        
+        # calculate physical target values
+        t_pt = np.exp(tgt_pt_raw[idx]) * hit_pt if t_cls > 0 else 0.0
+        t_eta = tgt_eta[idx] if t_cls > 0 else 0.0
+        t_phi = np.arctan2(tgt_sin_phi[idx], tgt_cos_phi[idx]) if t_cls > 0 else 0.0
+        t_energy = np.exp(tgt_energy_raw[idx]) * hit_energy if t_cls > 0 else 0.0
+        
+        p_cls = int(pred_cls[idx])
+        p_cls_name = class_names[p_cls] if p_cls < len(class_names) else str(p_cls)
+        
+        p_pt = pred_pt[idx]
+        p_eta = pred_eta[idx]
+        p_phi = pred_phi[idx]
+        p_energy = pred_energy[idx]
+        p_beta = pred_beta[idx]
+        
+        rows.append({
+            "idx": idx,
+            "hit_type": int(hit_type),
+            "hit_pt": hit_pt,
+            "hit_eta": hit_eta,
+            "hit_phi": hit_phi,
+            "hit_energy": hit_energy,
+            "tgt_cls": t_cls_name,
+            "tgt_pt": t_pt,
+            "tgt_eta": t_eta,
+            "tgt_phi": t_phi,
+            "tgt_energy": t_energy,
+            "pred_cls": p_cls_name,
+            "pred_pt": p_pt,
+            "pred_eta": p_eta,
+            "pred_phi": p_phi,
+            "pred_energy": p_energy,
+            "pred_beta": p_beta
+        })
+        
+    df = pd.DataFrame(rows)
+    table_str = tabulate(df, headers="keys", tablefmt="pipe", showindex=False)
+    print("\n=== EVENT HITS / TARGET / PREDICTION TABLE ===")
+    print(table_str)
+    print("==============================================\n")
+
+
 def evaluate(
     rank: Union[int, str],
     world_size: int,
@@ -250,6 +415,33 @@ def evaluate(
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
                 _, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
+
+                model_module = model.module if hasattr(model, "module") else model
+                ypred_particles = model_module.predict_particles(batch.X, batch.mask)
+                is_no_target = (ytarget["cls_id"] == 0)
+                for d in [ypred_particles]:
+                    for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
+                        if key in d:
+                            d[key] = torch.where(is_no_target, torch.zeros_like(d[key]), d[key])
+                    if "p4" in d:
+                        p4 = d["p4"].clone()
+                        for i in range(4):
+                            p4[..., i] = torch.where(is_no_target, torch.zeros_like(p4[..., i]), p4[..., i])
+                        d["p4"] = p4
+                    if "momentum" in d:
+                        momentum = d["momentum"].clone()
+                        for i in range(5):
+                            momentum[..., i] = torch.where(is_no_target, torch.zeros_like(momentum[..., i]), momentum[..., i])
+                        d["momentum"] = momentum
+
+                if ival == 0 and (rank == 0 or rank == "cpu"):
+                    print_event_table(batch, ytarget, ypred_particles, config)
+                batch_metrics = compute_particle_quality_metrics(batch, ypred_particles, ytarget)
+                for k, v in batch_metrics.items():
+                    metric_name = f"OC_val_{k}"
+                    if metric_name not in eval_loss:
+                        eval_loss[metric_name] = torch.tensor(0.0, device=rank)
+                    eval_loss[metric_name] += torch.tensor(v, device=rank)
 
         # Save validation plots for first batch
         if (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
@@ -437,6 +629,18 @@ def _run_validation_cycle(
             f"Valid Loss={losses_valid['Total']:.4f} | "
             f"Stale={stale_steps} | "
             f"ETA={eta:.1f}m"
+        )
+
+        _logger.info(
+            f"EVENT METRICS | "
+            f"True pT Sum={losses_valid.get('OC_val_sum_pt_true', 0.0):.2f} | "
+            f"Pred pT Sum={losses_valid.get('OC_val_sum_pt_pred', 0.0):.2f} | "
+            f"Ratio pT Sum={losses_valid.get('OC_val_ratio_sum_pt', 0.0):.3f} | "
+            f"True E Sum={losses_valid.get('OC_val_sum_e_true', 0.0):.2f} | "
+            f"Pred E Sum={losses_valid.get('OC_val_sum_e_pred', 0.0):.2f} | "
+            f"Ratio E Sum={losses_valid.get('OC_val_ratio_sum_e', 0.0):.3f} | "
+            f"N_true={losses_valid.get('OC_val_n_true', 0.0):.1f} | "
+            f"N_pred={losses_valid.get('OC_val_n_pred', 0.0):.1f}"
         )
 
         tensorboard_writer_valid.flush()
@@ -686,10 +890,13 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     dataset = []
 
     ntest = None
+    split_configs_to_use = list(split_configs)
     if config.ntest is not None:
-        ntest = config.ntest // len(split_configs)
+        if config.ntest < len(split_configs_to_use):
+            split_configs_to_use = split_configs_to_use[:config.ntest]
+        ntest = max(1, config.ntest // len(split_configs_to_use))
 
-    for split_config in split_configs:
+    for split_config in split_configs_to_use:
         ds = PFDataset(
             config.data_dir,
             f"{sample}/{split_config}:{version}",

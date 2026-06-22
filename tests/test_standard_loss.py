@@ -142,6 +142,21 @@ def test_mlpf_loss_standard_stability():
         print(f"Standard loss stability test failed as expected: {e}")
 
 
+def test_mlpf_loss_standard_zero_eta_phi_when_no_target():
+    batch, y, ypred = get_mock_data()
+    y["cls_id"][:, 2:] = 0
+
+    loss_opt, losses = mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD)
+
+    is_no_target = (y["cls_id"] == 0)
+    for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
+        if key in ypred:
+            assert torch.all(ypred[key][is_no_target] == 0.0)
+        if key in y:
+            assert torch.all(y[key][is_no_target] == 0.0)
+    print("Zero regression components when no target particle test passed")
+
+
 if __name__ == "__main__":
     test_mlpf_loss_standard()
     test_mlpf_loss_standard_no_particles()
@@ -149,3 +164,4 @@ if __name__ == "__main__":
     test_mlpf_loss_standard_large_batch()
     test_mlpf_loss_standard_perfect_prediction()
     test_mlpf_loss_standard_stability()
+    test_mlpf_loss_standard_zero_eta_phi_when_no_target()

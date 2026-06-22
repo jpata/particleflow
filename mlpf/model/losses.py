@@ -354,56 +354,67 @@ def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss
     ypred_e_flat = torch.exp(ypred["energy"].view(-1)[mask_flat]) * X_hit_e_flat
 
     if is_particle.any():
-        # Aggregate true physical properties (mean across the identical values)
-        num_target_pt = scatter_add(target_pt_flat, particle_index, dim=0)
-        den_target_pt = scatter_add(torch.ones_like(target_pt_flat), particle_index, dim=0) + 1e-6
-        target_pt_phys_agg = (num_target_pt / den_target_pt)[is_particle]
+        # Find the representative elements (elements with cls_id > 0)
+        is_representative = (y["cls_id"].view(-1)[mask_flat] > 0) & is_sig_hit
 
-        num_target_e = scatter_add(target_e_flat, particle_index, dim=0)
-        den_target_e = scatter_add(torch.ones_like(target_e_flat), particle_index, dim=0) + 1e-6
-        target_e_phys_agg = (num_target_e / den_target_e)[is_particle]
+        # Get the total number of unique particle indices
+        num_particles_total = particle_index.max().item() + 1
 
-        # Aggregate predicted physical properties
-        ypred_pt_phys_agg = aggregate(ypred_pt_flat, particle_index, weights)[is_particle]
-        ypred_e_phys_agg = aggregate(ypred_e_flat, particle_index, weights)[is_particle]
+        # Helper to get the canonical target value from the representative element of each particle, mapped to all hits
+        def get_canonical_target_all_hits(flat_values):
+            y_agg = torch.zeros(num_particles_total, dtype=flat_values.dtype, device=flat_values.device)
+            y_agg[particle_index[is_representative]] = flat_values[is_representative]
+            return y_agg[particle_index]
 
-        # Compute regression losses in log scale to match standard MLPF relative scaling
-        loss["Regression_pt"] = torch.nn.functional.mse_loss(
-            torch.log(ypred_pt_phys_agg + 1e-6), torch.log(target_pt_phys_agg + 1e-6), reduction="none"
-        )
-        loss["Regression_energy"] = torch.nn.functional.mse_loss(
-            torch.log(ypred_e_phys_agg + 1e-6), torch.log(target_e_phys_agg + 1e-6), reduction="none"
-        )
+        # Target physical properties mapped to every hit (broadcasting from representative elements)
+        target_pt_phys_all = get_canonical_target_all_hits(target_pt_flat)
+        target_e_phys_all = get_canonical_target_all_hits(target_e_flat)
 
-        sqrt_target_pt_particle = torch.sqrt(torch.clamp(target_pt_phys_agg, min=1e-6))
-        loss["Regression_pt"] = (loss["Regression_pt"] * sqrt_target_pt_particle).mean()
-        loss["Regression_energy"] = (loss["Regression_energy"] * sqrt_target_pt_particle).mean()
+        # Correct log-scale targets relative to the individual hit baseline
+        target_pt_log_all = torch.log(torch.clamp(target_pt_phys_all, min=1e-6) / (X_hit_pt_flat + 1e-6))
+        target_e_log_all = torch.log(torch.clamp(target_e_phys_all, min=1e-6) / (X_hit_e_flat + 1e-6))
 
-        # Helper for calculating aggregated regression losses for absolute target quantities (eta, sin_phi, cos_phi)
-        def get_agg_regression_loss(key, weight=1.0):
-            ypred_agg = aggregate(ypred[key].view(-1)[mask_flat], particle_index, weights)[is_particle]
-            # Use scatter_mean custom logic to avoid negative clipping with scatter_max
-            y_flat = y[key].view(-1)[mask_flat]
-            num = scatter_add(y_flat, particle_index, dim=0)
-            den = scatter_add(torch.ones_like(y_flat), particle_index, dim=0) + 1e-6
-            y_agg = (num / den)[is_particle]
-            _l = weight * torch.nn.functional.mse_loss(ypred_agg, y_agg, reduction="none")
-            return _l.mean()
+        target_eta_all = get_canonical_target_all_hits(y["eta"].view(-1)[mask_flat])
+        target_sin_phi_all = get_canonical_target_all_hits(y["sin_phi"].view(-1)[mask_flat])
+        target_cos_phi_all = get_canonical_target_all_hits(y["cos_phi"].view(-1)[mask_flat])
 
-        # Regression losses for absolute values
-        loss["Regression_eta"] = get_agg_regression_loss("eta", weight=1e-2)
-        loss["Regression_sin_phi"] = get_agg_regression_loss("sin_phi", weight=1e-2)
-        loss["Regression_cos_phi"] = get_agg_regression_loss("cos_phi", weight=1e-2)
+        # Compute regression losses at hit level for all signal hits
+        loss_pt = torch.nn.functional.mse_loss(ypred["pt"].view(-1)[mask_flat], target_pt_log_all, reduction="none")
+        loss_energy = torch.nn.functional.mse_loss(ypred["energy"].view(-1)[mask_flat], target_e_log_all, reduction="none")
+        loss_eta = 1e-2 * torch.nn.functional.mse_loss(ypred["eta"].view(-1)[mask_flat], target_eta_all, reduction="none")
+        loss_sin_phi = 1e-2 * torch.nn.functional.mse_loss(ypred["sin_phi"].view(-1)[mask_flat], target_sin_phi_all, reduction="none")
+        loss_cos_phi = 1e-2 * torch.nn.functional.mse_loss(ypred["cos_phi"].view(-1)[mask_flat], target_cos_phi_all, reduction="none")
 
-        # Aggregated PID classification
+        # Zero out losses for noise hits
+        loss_pt[~is_sig_hit] = 0.0
+        loss_energy[~is_sig_hit] = 0.0
+        loss_eta[~is_sig_hit] = 0.0
+        loss_sin_phi[~is_sig_hit] = 0.0
+        loss_cos_phi[~is_sig_hit] = 0.0
+
+        # Scale pt and energy losses by sqrt of target physical pt
+        sqrt_target_pt_all = torch.sqrt(torch.clamp(target_pt_phys_all, min=1e-6))
+        loss_pt = loss_pt * sqrt_target_pt_all
+        loss_energy = loss_energy * sqrt_target_pt_all
+
+        nsig = is_sig_hit.sum()
+        if nsig > 0:
+            loss["Regression_pt"] = loss_pt.sum() / nsig
+            loss["Regression_energy"] = loss_energy.sum() / nsig
+            loss["Regression_eta"] = loss_eta.sum() / nsig
+            loss["Regression_sin_phi"] = loss_sin_phi.sum() / nsig
+            loss["Regression_cos_phi"] = loss_cos_phi.sum() / nsig
+        else:
+            loss["Regression_pt"] = torch.tensor(0.0, device=batch.X.device)
+            loss["Regression_energy"] = torch.tensor(0.0, device=batch.X.device)
+            loss["Regression_eta"] = torch.tensor(0.0, device=batch.X.device)
+            loss["Regression_sin_phi"] = torch.tensor(0.0, device=batch.X.device)
+            loss["Regression_cos_phi"] = torch.tensor(0.0, device=batch.X.device)
+
+        # Hit-level classification for all hits
         ypred_cls_id_flat = ypred["cls_id_onehot"].reshape(-1, ypred["cls_id_onehot"].shape[-1])
-        ypred_pid_agg = aggregate(ypred_cls_id_flat[mask_flat], particle_index, weights)[is_particle]
-        # For truth PID, we take the mean or max (since they are identical, mean avoids any indexing issue)
-        y_pid_flat = y["cls_id"].view(-1)[mask_flat].float()
-        num_pid = scatter_add(y_pid_flat, particle_index, dim=0)
-        den_pid = scatter_add(torch.ones_like(y_pid_flat), particle_index, dim=0) + 1e-6
-        y_pid_agg = (num_pid / den_pid)[is_particle].long()
-        loss["Classification"] = loss_obj_id(ypred_pid_agg, y_pid_agg).mean()
+        target_cls_id_all = get_canonical_target_all_hits(y["cls_id"].view(-1)[mask_flat])
+        loss["Classification"] = loss_obj_id(ypred_cls_id_flat[mask_flat], target_cls_id_all.long()).mean()
     else:
         loss["Regression_pt"] = torch.tensor(0.0, device=batch.X.device)
         loss["Regression_eta"] = torch.tensor(0.0, device=batch.X.device)
@@ -424,6 +435,22 @@ def mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD):
         loss_mode [LossType]: whether to use standard or object condensation loss
     """
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
+
+    is_no_target = (y["cls_id"] == 0)
+    for d in [ypred, y]:
+        for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
+            if key in d:
+                d[key] = torch.where(is_no_target, torch.zeros_like(d[key]), d[key])
+        if "p4" in d:
+            p4 = d["p4"].clone()
+            for i in range(4):
+                p4[..., i] = torch.where(is_no_target, torch.zeros_like(p4[..., i]), p4[..., i])
+            d["p4"] = p4
+        if "momentum" in d:
+            momentum = d["momentum"].clone()
+            for i in range(5):
+                momentum[..., i] = torch.where(is_no_target, torch.zeros_like(momentum[..., i]), momentum[..., i])
+            d["momentum"] = momentum
 
     msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), dim=-1)
     npart = torch.sum(y["cls_id"] != 0)

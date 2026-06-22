@@ -711,7 +711,7 @@ class MLPF(nn.Module):
                     cls_onehot_cluster = ypred["cls_id_onehot"][event_idx][event_mask][cluster_mask]
 
                     # Compute beta-weighted average for cluster-level predictions
-                    w = cluster_betas / (cluster_betas.sum() + 1e-6)
+                    w = (cluster_betas / (cluster_betas.sum() + 1e-6)).squeeze(-1)
                     pt_agg = torch.sum(pt_cluster * w)
                     energy_agg = torch.sum(energy_cluster * w)
                     eta_agg = torch.sum(eta_cluster * w)
@@ -740,6 +740,19 @@ class MLPF(nn.Module):
             ypred["cls_id"] = pred_cls
             ypred["pt"][pred_cls == 0] = 0
             ypred["energy"][pred_cls == 0] = 0
+            ypred["eta"][pred_cls == 0] = 0
+            ypred["sin_phi"][pred_cls == 0] = 0
+            ypred["cos_phi"][pred_cls == 0] = 0
+            ypred["phi"][pred_cls == 0] = 0
+
+            # Rebuild p4 tensor using final zeroed/modified values
+            p4_tensor_list = [
+                ypred["pt"].unsqueeze(dim=-1),
+                ypred["eta"].unsqueeze(dim=-1),
+                ypred["phi"].unsqueeze(dim=-1),
+                ypred["energy"].unsqueeze(dim=-1),
+            ]
+            ypred["p4"] = torch.cat(p4_tensor_list, dim=-1)
 
         return ypred
 

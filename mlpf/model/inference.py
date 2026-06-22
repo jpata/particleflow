@@ -58,6 +58,22 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     ytarget = unpack_target(batch.ytarget.to(torch.float32), model_module)
     ycand = unpack_target(batch.ycand.to(torch.float32), model_module)
 
+    is_no_target = (ytarget["cls_id"] == 0)
+    for d in [ypred, ytarget, ycand]:
+        for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
+            if key in d:
+                d[key] = torch.where(is_no_target, torch.zeros_like(d[key]), d[key])
+        if "p4" in d:
+            p4 = d["p4"].clone()
+            for i in range(4):
+                p4[..., i] = torch.where(is_no_target, torch.zeros_like(p4[..., i]), p4[..., i])
+            d["p4"] = p4
+        if "momentum" in d:
+            momentum = d["momentum"].clone()
+            for i in range(5):
+                momentum[..., i] = torch.where(is_no_target, torch.zeros_like(momentum[..., i]), momentum[..., i])
+            d["momentum"] = momentum
+
     genjets_msk = batch.genjets[:, :, 0].cpu() > jet_ptcut
     genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
     genjets = vector.awk(

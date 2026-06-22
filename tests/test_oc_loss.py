@@ -141,6 +141,21 @@ def test_mlpf_loss_oc_stability():
     print("OC loss stability test passed")
 
 
+def test_mlpf_loss_oc_zero_eta_phi_when_no_target():
+    batch, y, ypred = get_mock_data()
+    y["cls_id"][:, 2:] = 0
+
+    loss_opt, losses = mlpf_loss(y, ypred, batch, loss_mode=LossType.OBJECT_CONDENSATION)
+
+    is_no_target = (y["cls_id"] == 0)
+    for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
+        if key in ypred:
+            assert torch.all(ypred[key][is_no_target] == 0.0)
+        if key in y:
+            assert torch.all(y[key][is_no_target] == 0.0)
+    print("Zero regression components when no target particle test passed for OC loss")
+
+
 if __name__ == "__main__":
     test_mlpf_loss_oc()
     test_mlpf_loss_oc_no_particles()
@@ -148,3 +163,4 @@ if __name__ == "__main__":
     test_mlpf_loss_oc_large_batch()
     test_mlpf_loss_oc_perfect_prediction()
     test_mlpf_loss_oc_stability()
+    test_mlpf_loss_oc_zero_eta_phi_when_no_target()
