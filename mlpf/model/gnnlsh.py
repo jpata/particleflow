@@ -120,17 +120,35 @@ class GHConvDense(nn.Module):
         x, adj, msk = inputs
         # Force FP32 for consistency
         x_32 = x.to(torch.float32)
-        adj_32 = adj.to(torch.float32).squeeze(-1)
+        adj_32 = adj.to(torch.float32)
         msk_32 = msk.to(torch.float32)
+
+        if adj_32.dim() == 5 and adj_32.shape[-1] == 1:
+            adj_32 = adj_32.squeeze(-1)
+
+        if adj_32.dim() == 4:
+            adj_32 = adj_32.unsqueeze(2)
+
+        B, n_bins, S, D = x_32.shape
+        num_heads = adj_32.shape[2]
+        head_dim = D // num_heads
 
         f_hom = F.linear(x_32 * msk_32, self.theta.to(torch.float32)) * msk_32
 
+        # Split and transpose f_hom to align with heads:
+        # [B, n_bins, S, D] -> [B, n_bins, S, num_heads, head_dim] -> [B, n_bins, num_heads, S, head_dim]
+        f_hom = f_hom.view(B, n_bins, S, num_heads, head_dim).permute(0, 1, 3, 2, 4)
+
         if self.normalize_degrees:
-            in_degrees = torch.sum(torch.abs(adj_32), axis=-1, keepdim=True)
-            norm_32 = torch.pow(in_degrees + 1e-6, -0.5) * msk_32
+            in_degrees = torch.sum(torch.abs(adj_32), dim=-1, keepdim=True)
+            norm_32 = torch.pow(in_degrees + 1e-6, -0.5) * msk_32.unsqueeze(2)
             f_hom = torch.matmul(adj_32, f_hom * norm_32) * norm_32
         else:
             f_hom = torch.matmul(adj_32, f_hom)
+
+        # Transpose and reshape back:
+        # [B, n_bins, num_heads, S, head_dim] -> [B, n_bins, S, num_heads, head_dim] -> [B, n_bins, S, D]
+        f_hom = f_hom.permute(0, 1, 3, 2, 4).reshape(B, n_bins, S, D) * msk_32
 
         f_het = F.linear(x_32 * msk_32, self.W_h.to(torch.float32))
         gate = torch.sigmoid(F.linear(x_32, self.W_t.to(torch.float32), self.b_t.to(torch.float32)))
@@ -162,7 +180,7 @@ class NodePairGaussianKernel(nn.Module):
         dm = torch.exp(-self.dist_mult * dm)
         dm = torch.clamp(dm, min=self.clip_value_low, max=1.0)
 
-        return dm.to(x_msg_binned.dtype)
+        return dm.squeeze(-1).unsqueeze(2).to(x_msg_binned.dtype)
 
 
 class AttentionKernel(nn.Module):
@@ -205,12 +223,7 @@ class AttentionKernel(nn.Module):
         attn = torch.softmax(scores, dim=-1)
         attn = torch.nan_to_num(attn)
 
-        if self.num_heads > 1:
-            attn = torch.mean(attn, dim=2)
-        else:
-            attn = attn.squeeze(2)
-
-        return torch.unsqueeze(attn, axis=-1).to(x.dtype)
+        return attn.to(x.dtype)
 
 
 def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, bin_size):
@@ -340,10 +353,12 @@ class MessageBuildingLayerLSH(nn.Module):
         self.kernel = kernel
         self.stable_sort = False
 
-        self.register_buffer(
-            "codebook_random_rotations",
-            torch.randn(self.distance_dim, self.num_or_hashes * self.num_and_hashes * (self.max_num_bins // 2)),
+        self.lsh_proj = nn.Linear(
+            self.distance_dim,
+            self.num_or_hashes * self.num_and_hashes * (self.max_num_bins // 2),
+            bias=False,
         )
+        nn.init.normal_(self.lsh_proj.weight, std=1.0)
 
     def forward(self, x_msg, x_node, msk, training=False):
         # shp = x_msg.shape
@@ -354,12 +369,9 @@ class MessageBuildingLayerLSH(nn.Module):
         with torch.autocast(device_type=x_msg.device.type, enabled=False):
             x_msg_32 = x_msg.to(torch.float32)
 
-            mul = torch.matmul(
-                x_msg_32,
-                self.codebook_random_rotations.to(torch.float32),
-            )
+            mul = self.lsh_proj(x_msg_32)
 
-            n_rotations = self.codebook_random_rotations.shape[1] // (self.num_or_hashes * self.num_and_hashes)
+            n_rotations = self.lsh_proj.out_features // (self.num_or_hashes * self.num_and_hashes)
             rotation_idx = torch.arange(n_rotations, device=mul.device).view(1, 1, 1, 1, -1)
 
             # Calculate n_bins purely as a tensor
@@ -390,8 +402,8 @@ class MessageBuildingLayerLSH(nn.Module):
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
 
         shp_dm = dm.shape
-        msk_row = msk_f_binned.reshape(shp_dm[0], shp_dm[1], shp_dm[2], 1, 1).to(dm.dtype)
-        msk_col = msk_f_binned.reshape(shp_dm[0], shp_dm[1], 1, shp_dm[3], 1).to(dm.dtype)
+        msk_row = msk_f_binned.reshape(shp_dm[0], shp_dm[1], 1, shp_dm[3], 1).to(dm.dtype)
+        msk_col = msk_f_binned.reshape(shp_dm[0], shp_dm[1], 1, 1, shp_dm[4]).to(dm.dtype)
         dm = dm * msk_row * msk_col
 
         return bins_split, x_features_binned, dm, msk_f_binned
