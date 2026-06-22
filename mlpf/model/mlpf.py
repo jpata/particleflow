@@ -702,7 +702,40 @@ class MLPF(nn.Module):
                     cp_idx_valid = cluster_mask.nonzero(as_tuple=True)[0][cp_idx_local]
                     cp_idx_seq = valid_indices[cp_idx_valid]
 
-                    pred_cls[event_idx, cp_idx_seq] = ypred_cls_id[event_idx, cp_idx_seq]
+                    # Extract hit-level predictions for this cluster
+                    pt_cluster = ypred["pt"][event_idx][event_mask][cluster_mask]
+                    energy_cluster = ypred["energy"][event_idx][event_mask][cluster_mask]
+                    eta_cluster = ypred["eta"][event_idx][event_mask][cluster_mask]
+                    sin_phi_cluster = ypred["sin_phi"][event_idx][event_mask][cluster_mask]
+                    cos_phi_cluster = ypred["cos_phi"][event_idx][event_mask][cluster_mask]
+                    cls_onehot_cluster = ypred["cls_id_onehot"][event_idx][event_mask][cluster_mask]
+
+                    # Compute beta-weighted average for cluster-level predictions
+                    w = cluster_betas / (cluster_betas.sum() + 1e-6)
+                    pt_agg = torch.sum(pt_cluster * w)
+                    energy_agg = torch.sum(energy_cluster * w)
+                    eta_agg = torch.sum(eta_cluster * w)
+                    sin_phi_agg = torch.sum(sin_phi_cluster * w)
+                    cos_phi_agg = torch.sum(cos_phi_cluster * w)
+
+                    # For classification, average the probabilities (after softmax)
+                    cls_probs_cluster = torch.softmax(cls_onehot_cluster, dim=-1)
+                    cls_probs_agg = torch.sum(cls_probs_cluster * w.unsqueeze(-1), dim=0)
+                    cls_id_agg = torch.argmax(cls_probs_agg)
+
+                    pred_cls[event_idx, cp_idx_seq] = cls_id_agg
+                    ypred["pt"][event_idx, cp_idx_seq] = pt_agg
+                    ypred["energy"][event_idx, cp_idx_seq] = energy_agg
+                    ypred["eta"][event_idx, cp_idx_seq] = eta_agg
+                    ypred["sin_phi"][event_idx, cp_idx_seq] = sin_phi_agg
+                    ypred["cos_phi"][event_idx, cp_idx_seq] = cos_phi_agg
+
+                    phi_agg = torch.atan2(sin_phi_agg, cos_phi_agg)
+                    ypred["phi"][event_idx, cp_idx_seq] = phi_agg
+                    ypred["p4"][event_idx, cp_idx_seq, 0] = pt_agg
+                    ypred["p4"][event_idx, cp_idx_seq, 1] = eta_agg
+                    ypred["p4"][event_idx, cp_idx_seq, 2] = phi_agg
+                    ypred["p4"][event_idx, cp_idx_seq, 3] = energy_agg
 
             ypred["cls_id"] = pred_cls
             ypred["pt"][pred_cls == 0] = 0

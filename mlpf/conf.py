@@ -524,6 +524,7 @@ class MLPFConfig(BaseModel):
     sort_data: bool = False
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
     relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
+    sampler_from_scratch: bool = False  # start the sampler from scratch (without resuming the sampler state)
 
     # Logging
     comet: bool = False

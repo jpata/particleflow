@@ -343,38 +343,70 @@ def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss
         den = scatter_add(weights, indices, dim=0) + 1e-6
         return num / den
 
-    # Determine pT-based weights for regression, similar to the standard MLPF loss
-    # For hits that are not the representative, y["pt"] is 0, so target_pt_flat will be the hit pt.
-    # scatter_max will pick the true particle pT from the representative.
+    # Determine true physical quantities for the hits
     X_hit_pt_flat = batch.X.view(-1, batch.X.shape[-1])[:, 1][mask_flat]
+    X_hit_e_flat = batch.X.view(-1, batch.X.shape[-1])[:, 5][mask_flat]
+
     target_pt_flat = torch.exp(y["pt"].view(-1)[mask_flat]) * X_hit_pt_flat
+    target_e_flat = torch.exp(y["energy"].view(-1)[mask_flat]) * X_hit_e_flat
+
+    ypred_pt_flat = torch.exp(ypred["pt"].view(-1)[mask_flat]) * X_hit_pt_flat
+    ypred_e_flat = torch.exp(ypred["energy"].view(-1)[mask_flat]) * X_hit_e_flat
 
     if is_particle.any():
-        # Aggregate target pt per particle for weighting the loss
-        sqrt_target_pt_particle = torch.sqrt(torch.clamp(scatter_max(target_pt_flat, particle_index)[0], min=1e-6))[is_particle]
+        # Aggregate true physical properties (mean across the identical values)
+        num_target_pt = scatter_add(target_pt_flat, particle_index, dim=0)
+        den_target_pt = scatter_add(torch.ones_like(target_pt_flat), particle_index, dim=0) + 1e-6
+        target_pt_phys_agg = (num_target_pt / den_target_pt)[is_particle]
 
-        # Helper for calculating aggregated regression losses
-        def get_agg_regression_loss(key, weight=1.0, use_pt_weight=False):
+        num_target_e = scatter_add(target_e_flat, particle_index, dim=0)
+        den_target_e = scatter_add(torch.ones_like(target_e_flat), particle_index, dim=0) + 1e-6
+        target_e_phys_agg = (num_target_e / den_target_e)[is_particle]
+
+        # Aggregate predicted physical properties
+        ypred_pt_phys_agg = aggregate(ypred_pt_flat, particle_index, weights)[is_particle]
+        ypred_e_phys_agg = aggregate(ypred_e_flat, particle_index, weights)[is_particle]
+
+        # Compute regression losses in log scale to match standard MLPF relative scaling
+        loss["Regression_pt"] = torch.nn.functional.mse_loss(
+            torch.log(ypred_pt_phys_agg + 1e-6),
+            torch.log(target_pt_phys_agg + 1e-6),
+            reduction="none"
+        )
+        loss["Regression_energy"] = torch.nn.functional.mse_loss(
+            torch.log(ypred_e_phys_agg + 1e-6),
+            torch.log(target_e_phys_agg + 1e-6),
+            reduction="none"
+        )
+
+        sqrt_target_pt_particle = torch.sqrt(torch.clamp(target_pt_phys_agg, min=1e-6))
+        loss["Regression_pt"] = (loss["Regression_pt"] * sqrt_target_pt_particle).mean()
+        loss["Regression_energy"] = (loss["Regression_energy"] * sqrt_target_pt_particle).mean()
+
+        # Helper for calculating aggregated regression losses for absolute target quantities (eta, sin_phi, cos_phi)
+        def get_agg_regression_loss(key, weight=1.0):
             ypred_agg = aggregate(ypred[key].view(-1)[mask_flat], particle_index, weights)[is_particle]
-            # For truth values, we use scatter_max to get the canonical value from the representative
-            y_agg = scatter_max(y[key].view(-1)[mask_flat], particle_index)[0][is_particle]
+            # Use scatter_mean custom logic to avoid negative clipping with scatter_max
+            y_flat = y[key].view(-1)[mask_flat]
+            num = scatter_add(y_flat, particle_index, dim=0)
+            den = scatter_add(torch.ones_like(y_flat), particle_index, dim=0) + 1e-6
+            y_agg = (num / den)[is_particle]
             _l = weight * torch.nn.functional.mse_loss(ypred_agg, y_agg, reduction="none")
-            if use_pt_weight:
-                _l = _l * sqrt_target_pt_particle
             return _l.mean()
 
-        # Regression losses
-        loss["Regression_pt"] = get_agg_regression_loss("pt", weight=1.0, use_pt_weight=True)
+        # Regression losses for absolute values
         loss["Regression_eta"] = get_agg_regression_loss("eta", weight=1e-2)
         loss["Regression_sin_phi"] = get_agg_regression_loss("sin_phi", weight=1e-2)
         loss["Regression_cos_phi"] = get_agg_regression_loss("cos_phi", weight=1e-2)
-        loss["Regression_energy"] = get_agg_regression_loss("energy", weight=1.0, use_pt_weight=True)
 
         # Aggregated PID classification
         ypred_cls_id_flat = ypred["cls_id_onehot"].reshape(-1, ypred["cls_id_onehot"].shape[-1])
         ypred_pid_agg = aggregate(ypred_cls_id_flat[mask_flat], particle_index, weights)[is_particle]
-        # For truth PID, we take the max per-particle (they should all be identical)
-        y_pid_agg = scatter_max(y["cls_id"].view(-1)[mask_flat].long(), particle_index)[0][is_particle]
+        # For truth PID, we take the mean or max (since they are identical, mean avoids any indexing issue)
+        y_pid_flat = y["cls_id"].view(-1)[mask_flat].float()
+        num_pid = scatter_add(y_pid_flat, particle_index, dim=0)
+        den_pid = scatter_add(torch.ones_like(y_pid_flat), particle_index, dim=0) + 1e-6
+        y_pid_agg = (num_pid / den_pid)[is_particle].long()
         loss["Classification"] = loss_obj_id(ypred_pid_agg, y_pid_agg).mean()
     else:
         loss["Regression_pt"] = torch.tensor(0.0, device=batch.X.device)

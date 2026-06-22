@@ -879,10 +879,11 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
         if config.load and checkpoint:
             train_loader = loaders["train"]
             valid_loader = loaders["valid"]
-            if "train_loader_state_dict" in checkpoint["extra_state"]:
-                train_loader.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
-            if "valid_loader_state_dict" in checkpoint["extra_state"]:
-                valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
+            if not config.sampler_from_scratch:
+                if "train_loader_state_dict" in checkpoint["extra_state"]:
+                    train_loader.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
+                if "valid_loader_state_dict" in checkpoint["extra_state"]:
+                    valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
 
         for split in loaders.keys():
             _logger.info("loader split={} rank={} len={}".format(split, rank, len(loaders[split])))
