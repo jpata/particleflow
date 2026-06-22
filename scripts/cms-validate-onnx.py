@@ -602,8 +602,11 @@ def main():
             sess = rt.InferenceSession(path_fused_fp16, sess_options, providers=[execution_provider])
 
         if model is not None:
-            print("Compiling PyTorch model...")
-            model = torch.compile(model)
+            if model_kwargs.model.type == ModelType.LITEPT:
+                print("Skipping PyTorch compilation for LitePT model...")
+            else:
+                print("Compiling PyTorch model...")
+                model = torch.compile(model)
 
         # 2. Warm up this specific model/session using a small sequence length to save CPU time and memory
         print(f"Performing warmup for {cfg}...")
