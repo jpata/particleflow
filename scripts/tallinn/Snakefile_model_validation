@@ -16,8 +16,8 @@ DATASET = config.get("dataset", "cld_edm_ttbar_hits")
 CONFIGS = ["attn", "hept", "litept", "gnnlsh-bin32", "heptv2"]
 DEVICES = ["cuda", "cpu"]
 #DEVICES = ["cuda"]
-NUM_STEPS = 2000
-CHECKPOINT_FREQ = 2000
+NUM_STEPS = 5000
+CHECKPOINT_FREQ = 5000
 
 # Directory paths
 EXPERIMENTS_DIR = "experiments"
