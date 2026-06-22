@@ -641,7 +641,14 @@ def main():
                     else:
                         _ = model(X_warmup, mask_warmup)
             elif sess is not None:
-                if cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32", "ONNX_ATTN_FLASH_FP32", "ONNX_ATTN_FLASH_FP32_FP16"]:
+                if cfg in [
+                    "ONNX_ATTN_MATH_FP32",
+                    "ONNX_HEPT_FP32",
+                    "ONNX_HEPTV2_FP32",
+                    "ONNX_GNNLSH_FP32",
+                    "ONNX_ATTN_FLASH_FP32",
+                    "ONNX_ATTN_FLASH_FP32_FP16",
+                ]:
                     _ = sess.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup})
                 elif cfg in ["ONNX_ATTN_MATH_FP16", "ONNX_ATTN_FLASH_FP16"]:
                     _ = sess.run(None, {"Xfeat_normed": X_warmup_np_fp16, "mask": mask_f_warmup_fp16})
