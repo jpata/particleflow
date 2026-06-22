@@ -5,7 +5,7 @@ from mlpf.model.mlpf import MLPF
 
 
 def main():
-    B, S, D = 1, 8000, 41
+    B, S, D = 1, 10000, 41
     X = torch.randn(B, S, D, device="cuda", dtype=torch.bfloat16)
     mask = torch.ones(B, S, device="cuda", dtype=torch.bool)
 
@@ -27,6 +27,12 @@ def main():
             "conv_type": conv,
             "model": {
                 "type": conv,
+                "hept": {
+                    "block_size": 100,
+                },
+                "heptv2": {
+                    "block_size": 100,
+                },
             },
         }
 
@@ -38,6 +44,7 @@ def main():
             config.elemtypes_nonzero = [1, 2, 3, 4, 5, 6, 7]
 
             mdl = MLPF(config).cuda().bfloat16()
+            mdl = torch.compile(mdl)
             mdl.train()
         except Exception as e:
             print(f"Failed to instantiate model {conv}: {e}")
@@ -46,7 +53,7 @@ def main():
         # Warmup
         try:
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                for _ in range(2):
+                for _ in range(10):
                     out = mdl(X, mask)  # noqa: F821
                     loss = get_loss(out)
                     loss.backward()

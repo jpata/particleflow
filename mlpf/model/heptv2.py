@@ -16,7 +16,7 @@ try:
 
     # The eager flex_attention kernel prints a warning that it "may produce
     # incorrect results" — wrap with torch.compile to get the fused path.
-    flex_attention = torch.compile(_raw_flex_attention, dynamic=True)
+    flex_attention = torch.compile(_raw_flex_attention, dynamic=False)
 except ImportError:
     flex_attention = None
 
@@ -134,8 +134,13 @@ def get_regions(num_regions, num_or_hashes, num_heads, num_and_hashes=2):
 
 
 def invert_permutation(perm: torch.Tensor) -> torch.Tensor:
-    arange = torch.arange(perm.shape[-1], device=perm.device, dtype=perm.dtype).expand_as(perm)
-    return torch.empty_like(perm).scatter_(-1, perm, arange)
+    if os.environ.get("HEPTV2_SCATTER_INVERT_PERM", "0").lower() in {"1", "true", "yes", "on"}:
+        arange = torch.arange(perm.shape[-1], device=perm.device, dtype=perm.dtype).expand_as(perm)
+        return torch.zeros_like(perm).scatter(-1, perm, arange)
+    if os.environ.get("HEPTV2_FAST_INVERT_PERM", "0").lower() in {"1", "true", "yes", "on"}:
+        arange = torch.arange(perm.shape[-1], device=perm.device, dtype=perm.dtype).expand_as(perm)
+        return torch.empty_like(perm).scatter_(-1, perm, arange)
+    return torch.argsort(perm, dim=-1)
 
 
 def batched_index_select(values: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
@@ -281,42 +286,61 @@ class HEPTv2Attention(nn.Module):
 
         # Hashing / projection
         if _HEPTV2_ENCODER_HASH_FP32:
-            coords2_f = coords2_flat.float()
-            hashed_flat = lsh_coords(self.e2lsh_new, coords2_f, self.num_heads)
+            with torch.amp.autocast(device_type="cuda", enabled=False):
+                coords2_f = coords2_flat.float()
+                hashed_flat = lsh_coords(self.e2lsh_new, coords2_f, self.num_heads)
+                if active_hashes < self.n_hashes:
+                    hashed_flat = hashed_flat[:active_hashes]
+
+                if is_batched:
+                    hashed = hashed_flat.view(active_hashes, self.num_heads, B, S)
+                    max_v = hashed.max(-1, keepdim=True).values
+                    min_v = hashed.min(-1, keepdim=True).values
+                    hash_shift = max_v - min_v
+                    hash_shift = rearrange(hash_shift, "c h b d -> (c h) b d")
+                    invalid_expanded = invalid.view(1, 1, B, S).expand(active_hashes, self.num_heads, -1, -1)
+                    hashed[invalid_expanded] = float("inf")
+                else:
+                    hashed = hashed_flat
+                    max_v = hashed.max(-1, keepdim=True).values
+                    min_v = hashed.min(-1, keepdim=True).values
+                    hash_shift = max_v - min_v
+                    hash_shift = rearrange(hash_shift, "c h d -> (c h) d")
+                    hashed[..., invalid] = float("inf")
+
+                regions_h = kwargs["regions_h"].float()[:, :active_width]
+                region_indices = [idx[:active_width] for idx in kwargs["region_indices"]]
+                shifts = get_geo_shift_single(regions_h, hash_shift, region_indices, active_hashes)
+
+                hashed = hashed + shifts
+                positions = hashed.argsort(dim=-1)
         else:
             hashed_flat = lsh_coords(self.e2lsh_new, coords2_flat, self.num_heads)
+            if active_hashes < self.n_hashes:
+                hashed_flat = hashed_flat[:active_hashes]
 
-        if active_hashes < self.n_hashes:
-            hashed_flat = hashed_flat[:active_hashes]
+            if is_batched:
+                hashed = hashed_flat.view(active_hashes, self.num_heads, B, S)
+                max_v = hashed.max(-1, keepdim=True).values
+                min_v = hashed.min(-1, keepdim=True).values
+                hash_shift = max_v - min_v
+                hash_shift = rearrange(hash_shift, "c h b d -> (c h) b d")
+                invalid_expanded = invalid.view(1, 1, B, S).expand(active_hashes, self.num_heads, -1, -1)
+                hashed[invalid_expanded] = float("inf")
+            else:
+                hashed = hashed_flat
+                max_v = hashed.max(-1, keepdim=True).values
+                min_v = hashed.min(-1, keepdim=True).values
+                hash_shift = max_v - min_v
+                hash_shift = rearrange(hash_shift, "c h d -> (c h) d")
+                hashed[..., invalid] = float("inf")
 
-        if is_batched:
-            hashed = hashed_flat.view(active_hashes, self.num_heads, B, S)
-            hashed_for_max = hashed.clone()
-            invalid_expanded = invalid.view(1, 1, B, S).expand(active_hashes, self.num_heads, -1, -1)
-            hashed_for_max[invalid_expanded] = -float("inf")
-            max_v = hashed_for_max.max(-1, keepdim=True).values
-            hashed[invalid_expanded] = float("inf")
-            min_v = hashed.min(-1, keepdim=True).values
-            max_v = torch.where(max_v == -float("inf"), torch.zeros_like(max_v), max_v)
-            min_v = torch.where(min_v == float("inf"), torch.zeros_like(min_v), min_v)
-            hash_shift = max_v - min_v
-            hash_shift = rearrange(hash_shift, "c h b d -> (c h) b d")
-        else:
-            hashed = hashed_flat
-            hashed[..., invalid] = float("inf")
-            max_v = hashed.max(-1, keepdim=True).values
-            min_v = hashed.min(-1, keepdim=True).values
-            max_v = torch.where(max_v == -float("inf"), torch.zeros_like(max_v), max_v)
-            min_v = torch.where(min_v == float("inf"), torch.zeros_like(min_v), min_v)
-            hash_shift = max_v - min_v
-            hash_shift = rearrange(hash_shift, "c h d -> (c h) d")
+            regions_h = kwargs["regions_h"][:, :active_width]
+            region_indices = [idx[:active_width] for idx in kwargs["region_indices"]]
+            shifts = get_geo_shift_single(regions_h, hash_shift, region_indices, active_hashes)
 
-        regions_h = kwargs["regions_h"].float()[:, :active_width] if _HEPTV2_ENCODER_HASH_FP32 else kwargs["regions_h"][:, :active_width]
-        region_indices = [idx[:active_width] for idx in kwargs["region_indices"]]
-        shifts = get_geo_shift_single(regions_h, hash_shift, region_indices, active_hashes)
-
-        hashed = hashed + shifts
-        positions = hashed.argsort(dim=-1)
+            hashed = hashed + shifts
+            positions = hashed.argsort(dim=-1)
 
         if is_batched:
             batch_offsets = torch.arange(B, device=positions.device).view(1, 1, B, 1) * S

@@ -79,6 +79,9 @@ SUPPORTED_CONFIGS = [
     # HEPT model
     "PT_HEPT_FP32",
     "ONNX_HEPT_FP32",
+    # HEPTv2 model
+    "PT_HEPTV2_FP32",
+    "ONNX_HEPTV2_FP32",
     # LitePT model
     "PT_LITEPT_FP32",
     # GNN-LSH model
@@ -294,7 +297,7 @@ def main():
         elif model_kwargs.model.type == ModelType.HEPT:
             configs = ["PT_HEPT_FP32", "ONNX_HEPT_FP32"]
         elif model_kwargs.model.type == ModelType.HEPTV2:
-            configs = ["PT_HEPT_FP32", "ONNX_HEPT_FP32"]
+            configs = ["PT_HEPTV2_FP32", "ONNX_HEPTV2_FP32"]
         elif model_kwargs.model.type == ModelType.LITEPT:
             configs = ["PT_LITEPT_FP32"]
         elif model_kwargs.model.type == ModelType.GNNLSH:
@@ -316,7 +319,7 @@ def main():
         model_kwargs_export.model.attention.attention_type = AttentionType.SIMPLE
 
     # model_export is used for non-fused exports (ATTN_MATH, HEPT, GNNLSH)
-    if any(cfg in configs for cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_ATTN_MATH_FP16", "ONNX_HEPT_FP32", "ONNX_GNNLSH_FP32"]):
+    if any(cfg in configs for cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_ATTN_MATH_FP16", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]):
         print("Initializing model for export...")
         model_export = MLPF(
             config=make_mlpf_config(model_kwargs_export, export_onnx_fused=False),
@@ -345,7 +348,7 @@ def main():
     dummy_mask = torch.ones(1, export_dummy_size).float().to(args.device)
 
     # 1. Export ONNX ATTN_MATH/HEPT/GNNLSH FP32
-    if any(cfg in configs for cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_GNNLSH_FP32"]):
+    if any(cfg in configs for cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]):
 
         path_math_fp32 = os.path.join(args.outdir, "model_math_fp32.onnx")
         print(f"Exporting ONNX ATTN_MATH/HEPT/GNNLSH FP32 to {path_math_fp32}...")
@@ -557,8 +560,8 @@ def main():
             model.load_state_dict(model_state["model_state_dict"], strict=False)
             model = model.to(device=args.device)
 
-        elif cfg == "PT_HEPT_FP32":
-            print("Initializing PyTorch HEPT model...")
+        elif cfg in ["PT_HEPT_FP32", "PT_HEPTV2_FP32"]:
+            print(f"Initializing PyTorch {cfg.split('_')[1]} model...")
             model = MLPF(config=model_kwargs)
             model.eval()
             model.load_state_dict(model_state["model_state_dict"], strict=False)
@@ -578,8 +581,8 @@ def main():
             model.load_state_dict(model_state["model_state_dict"], strict=False)
             model = model.to(device=args.device)
 
-        elif cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_GNNLSH_FP32"]:
-            print(f"Creating ONNX session for ATTN_MATH/HEPT/GNNLSH FP32 using {execution_provider}...")
+        elif cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]:
+            print(f"Creating ONNX session for ATTN_MATH/HEPT/HEPTV2/GNNLSH FP32 using {execution_provider}...")
             sess = rt.InferenceSession(path_math_fp32, sess_options, providers=[execution_provider])
 
         elif cfg == "ONNX_ATTN_FLASH_FP32":
@@ -597,6 +600,10 @@ def main():
         elif cfg == "ONNX_ATTN_FLASH_FP16":
             print(f"Creating ONNX session for Fused FP16 using {execution_provider}...")
             sess = rt.InferenceSession(path_fused_fp16, sess_options, providers=[execution_provider])
+
+        if model is not None:
+            print("Compiling PyTorch model...")
+            model = torch.compile(model)
 
         # 2. Warm up this specific model/session using a small sequence length to save CPU time and memory
         print(f"Performing warmup for {cfg}...")
@@ -631,7 +638,7 @@ def main():
                     else:
                         _ = model(X_warmup, mask_warmup)
             elif sess is not None:
-                if cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_GNNLSH_FP32", "ONNX_ATTN_FLASH_FP32", "ONNX_ATTN_FLASH_FP32_FP16"]:
+                if cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32", "ONNX_ATTN_FLASH_FP32", "ONNX_ATTN_FLASH_FP32_FP16"]:
                     _ = sess.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup})
                 elif cfg in ["ONNX_ATTN_MATH_FP16", "ONNX_ATTN_FLASH_FP16"]:
                     _ = sess.run(None, {"Xfeat_normed": X_warmup_np_fp16, "mask": mask_f_warmup_fp16})
@@ -684,10 +691,10 @@ def main():
                     with torch.no_grad():
                         with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
                             pred = model(X_features_padded, mask)
-                elif cfg in ["PT_HEPT_FP32", "PT_LITEPT_FP32", "PT_GNNLSH_FP32"]:
+                elif cfg in ["PT_HEPT_FP32", "PT_HEPTV2_FP32", "PT_LITEPT_FP32", "PT_GNNLSH_FP32"]:
                     with torch.no_grad():
                         pred = model(X_features_padded, mask)
-                elif cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_GNNLSH_FP32"]:
+                elif cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]:
                     pred = sess.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
                     pred = tuple(torch.tensor(p) for p in pred)
                 elif cfg == "ONNX_ATTN_FLASH_FP32":
