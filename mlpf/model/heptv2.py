@@ -16,7 +16,7 @@ try:
 
     # The eager flex_attention kernel prints a warning that it "may produce
     # incorrect results" — wrap with torch.compile to get the fused path.
-    flex_attention = torch.compile(_raw_flex_attention, dynamic=False)
+    flex_attention = torch.compile(_raw_flex_attention, dynamic=True)
 except ImportError:
     flex_attention = None
 
