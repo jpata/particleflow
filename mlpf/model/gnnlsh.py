@@ -34,6 +34,32 @@ def point_wise_feed_forward_network(
     return nn.Sequential(*layers)
 
 
+class Qwen3RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight.to(input_dtype) * hidden_states.to(input_dtype)
+
+
+class SwiGLUFFN(nn.Module):
+    def __init__(self, d_in, d_hidden, d_out, dropout=0.0):
+        super().__init__()
+        self.gate_proj = nn.Linear(d_in, d_hidden, bias=False)
+        self.up_proj = nn.Linear(d_in, d_hidden, bias=False)
+        self.down_proj = nn.Linear(d_hidden, d_out, bias=False)
+        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
+
+    def forward(self, x):
+        return self.dropout(self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x)))
+
+
 def split_indices_to_bins_batch(a, bin_size, msk, stable_sort=False):
     # a has shape [B, n_points, num_or_hashes]
     batch_size, n_points, num_or_hashes = a.shape
@@ -152,6 +178,10 @@ class AttentionKernel(nn.Module):
         self.W_k = nn.Linear(distance_dim, distance_dim)
         self.scale = self.head_dim**-0.5
 
+        # QK-Norm
+        self.q_norm = Qwen3RMSNorm(self.head_dim)
+        self.k_norm = Qwen3RMSNorm(self.head_dim)
+
     def forward(self, x, msk, training=False):
         B, n_bins, bin_size, D = x.shape
         x_32 = x.to(torch.float32)
@@ -159,6 +189,10 @@ class AttentionKernel(nn.Module):
 
         q = self.W_q(x_32).view(B, n_bins, bin_size, self.num_heads, self.head_dim)
         k = self.W_k(x_32).view(B, n_bins, bin_size, self.num_heads, self.head_dim)
+
+        # Apply QK-Norm
+        q = self.q_norm(q)
+        k = self.k_norm(k)
 
         q = q.permute(0, 1, 3, 2, 4)
         k = k.permute(0, 1, 3, 2, 4)
@@ -229,7 +263,12 @@ class InterBinAttentionLayer(nn.Module):
         self.in_proj_bias = nn.Parameter(torch.empty(3 * d_model))
         self.out_proj = nn.Linear(d_model, d_model)
 
-        self.layernorm = nn.LayerNorm(d_model)
+        self.layernorm = Qwen3RMSNorm(d_model)
+
+        # QK-Norm
+        self.q_norm = Qwen3RMSNorm(self.head_dim)
+        self.k_norm = Qwen3RMSNorm(self.head_dim)
+
         self.dropout = nn.Dropout(dropout)
         self.mha_dropout_p = dropout
         self.scale = self.head_dim**-0.5
@@ -262,9 +301,14 @@ class InterBinAttentionLayer(nn.Module):
         v = torch.matmul(x_bin_mean, wv.T) + bv
 
         # Use reshape with symbolic seq_len from size()
-        q = q.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
-        k = k.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
-        v = v.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
+        q = q.reshape(bs, seq_len, num_heads, head_dim)
+        k = k.reshape(bs, seq_len, num_heads, head_dim)
+        v = v.reshape(bs, seq_len, num_heads, head_dim)
+
+        # Apply QK-Norm
+        q = self.q_norm(q).transpose(1, 2)
+        k = self.k_norm(k).transpose(1, 2)
+        v = v.transpose(1, 2)
 
         bin_mask = x_bin_count.squeeze(-1) < 1e-6
         # Prepare attention mask for F.scaled_dot_product_attention (True = keep, False = ignore)
@@ -374,16 +418,16 @@ class CombinedGraphLayer(nn.Module):
         super(CombinedGraphLayer, self).__init__(**kwargs)
 
         if self.do_layernorm:
-            self.layernorm1 = torch.nn.LayerNorm(
+            self.layernorm1 = Qwen3RMSNorm(
                 self.inout_dim,
                 eps=1e-6,
             )
 
-        self.ffn_dist = point_wise_feed_forward_network(
+        # SwiGLU FFN instead of standard MLP
+        self.ffn_dist = SwiGLUFFN(
             self.inout_dim,
             self.ffn_dist_hidden_dim,
             self.distance_dim,
-            num_layers=self.ffn_dist_num_layers,
             dropout=self.dropout,
         )
 
@@ -416,7 +460,7 @@ class CombinedGraphLayer(nn.Module):
         if self.do_layernorm:
             x = self.layernorm1(x)
 
-        x_dist = self.dist_activation(self.ffn_dist(x))
+        x_dist = self.ffn_dist(x)
 
         bins_split, x, dm, msk_f = self.message_building_layer(x_dist, x, msk)
 
