@@ -369,14 +369,10 @@ def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss
 
         # Compute regression losses in log scale to match standard MLPF relative scaling
         loss["Regression_pt"] = torch.nn.functional.mse_loss(
-            torch.log(ypred_pt_phys_agg + 1e-6),
-            torch.log(target_pt_phys_agg + 1e-6),
-            reduction="none"
+            torch.log(ypred_pt_phys_agg + 1e-6), torch.log(target_pt_phys_agg + 1e-6), reduction="none"
         )
         loss["Regression_energy"] = torch.nn.functional.mse_loss(
-            torch.log(ypred_e_phys_agg + 1e-6),
-            torch.log(target_e_phys_agg + 1e-6),
-            reduction="none"
+            torch.log(ypred_e_phys_agg + 1e-6), torch.log(target_e_phys_agg + 1e-6), reduction="none"
         )
 
         sqrt_target_pt_particle = torch.sqrt(torch.clamp(target_pt_phys_agg, min=1e-6))

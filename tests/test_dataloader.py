@@ -285,11 +285,7 @@ class TestDataloaderRestoration(unittest.TestCase):
             run1_data.append(batch.X.clone())
 
         # Mock saving a checkpoint with loader state
-        checkpoint = {
-            "extra_state": {
-                "train_loader_state_dict": train_loader1.state_dict()
-            }
-        }
+        checkpoint = {"extra_state": {"train_loader_state_dict": train_loader1.state_dict()}}
 
         # --- Restored Run with sampler_from_scratch = True ---
         loaders2, _ = get_interleaved_dataloaders(world_size, rank, config, use_cuda=False, use_ray=False, shuffle_train=False)
