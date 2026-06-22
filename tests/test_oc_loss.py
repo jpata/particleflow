@@ -10,6 +10,8 @@ from mlpf.model.PFDataset import PFBatch
 
 def get_mock_data(batch_size=2, seq_len=10, num_classes=6):
     X = torch.randn(batch_size, seq_len, 20)
+    X[:, :, 1] = X[:, :, 1].abs()
+    X[:, :, 5] = X[:, :, 5].abs()
     # Mask some elements to 0 to simulate padding
     if batch_size > 0:
         X[0, seq_len // 2 :, 0] = 0
