@@ -58,7 +58,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     ytarget = unpack_target(batch.ytarget.to(torch.float32), model_module)
     ycand = unpack_target(batch.ycand.to(torch.float32), model_module)
 
-    is_no_target = (ytarget["cls_id"] == 0)
+    is_no_target = ytarget["cls_id"] == 0
     for d in [ypred, ytarget, ycand]:
         for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
             if key in d:

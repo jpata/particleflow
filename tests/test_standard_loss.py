@@ -145,7 +145,7 @@ def test_mlpf_loss_standard_zero_eta_phi_when_no_target():
 
     loss_opt, losses = mlpf_loss(y, ypred, batch)
 
-    is_no_target = (y["cls_id"] == 0)
+    is_no_target = y["cls_id"] == 0
     for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
         if key in ypred:
             assert torch.all(ypred[key][is_no_target] == 0.0)

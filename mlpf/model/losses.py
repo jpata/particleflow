@@ -1,13 +1,10 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import torch
 from torch.nn import functional as F
 from torch import Tensor, nn
-from torch_scatter import scatter_max, scatter_add
 
 from mlpf.logger import _logger
-
-
 
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
@@ -96,9 +93,6 @@ def mlpf_loss_standard(y, ypred, batch, mask_flat, npart, nelem, loss_obj_id):
     return loss
 
 
-
-
-
 def mlpf_loss(y, ypred, batch):
     """
     Args
@@ -108,7 +102,7 @@ def mlpf_loss(y, ypred, batch):
     """
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
-    is_no_target = (y["cls_id"] == 0)
+    is_no_target = y["cls_id"] == 0
     for d in [ypred, y]:
         for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
             if key in d:

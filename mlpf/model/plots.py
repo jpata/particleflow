@@ -25,7 +25,6 @@ def log_confusion_matrices(cm_X_target, cm_X_pred, cm_id, comet_experiment, epoc
         _logger.info("logged confusion matrix: Target to pred")
 
 
-
 def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir):
     X = batch.X[batch.mask].cpu().float()
     ytarget_flat = batch.ytarget[batch.mask].cpu().float()

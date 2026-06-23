@@ -89,7 +89,7 @@ def model_step(batch, model, loss_fn):
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
 
-    is_no_target = (ytarget["cls_id"] == 0)
+    is_no_target = ytarget["cls_id"] == 0
     for d in [ypred, ytarget]:
         for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
             if key in d:
@@ -288,9 +288,9 @@ def print_event_table(batch, ytarget, ypred_particles, config):
     # We only print the first event in the batch (index 0)
     mask = batch.mask[0].bool().cpu()
     valid_indices = torch.nonzero(mask).squeeze(1).numpy()
-    
+
     X = batch.X[0].cpu().numpy()
-    
+
     # Target values
     tgt_cls = ytarget["cls_id"][0].cpu().numpy()
     tgt_pt_raw = ytarget["pt"][0].cpu().numpy()
@@ -298,7 +298,7 @@ def print_event_table(batch, ytarget, ypred_particles, config):
     tgt_sin_phi = ytarget["sin_phi"][0].cpu().numpy()
     tgt_cos_phi = ytarget["cos_phi"][0].cpu().numpy()
     tgt_energy_raw = ytarget["energy"][0].cpu().numpy()
-    
+
     # Prediction values
     pred_cls = ypred_particles["cls_id"][0].cpu().numpy()
     pred_pt = ypred_particles["pt"][0].cpu().numpy()
@@ -310,7 +310,7 @@ def print_event_table(batch, ytarget, ypred_particles, config):
     # Class names mapping
     dataset_name = config.dataset.value if hasattr(config.dataset, "value") else config.dataset
     class_names = CLASS_LABELS.get(dataset_name, ["none", "chhad", "nhad", "gamma", "ele", "mu"])
-    
+
     rows = []
     for idx in valid_indices:
         hit_type = X[idx, 0]
@@ -318,45 +318,47 @@ def print_event_table(batch, ytarget, ypred_particles, config):
         hit_eta = X[idx, 2]
         hit_phi = np.arctan2(X[idx, 3], X[idx, 4])
         hit_energy = X[idx, 5]
-        
+
         t_cls = int(tgt_cls[idx])
         t_cls_name = class_names[t_cls] if t_cls < len(class_names) else str(t_cls)
-        
+
         # calculate physical target values
         t_pt = np.exp(tgt_pt_raw[idx]) * hit_pt if t_cls > 0 else 0.0
         t_eta = tgt_eta[idx] if t_cls > 0 else 0.0
         t_phi = np.arctan2(tgt_sin_phi[idx], tgt_cos_phi[idx]) if t_cls > 0 else 0.0
         t_energy = np.exp(tgt_energy_raw[idx]) * hit_energy if t_cls > 0 else 0.0
-        
+
         p_cls = int(pred_cls[idx])
         p_cls_name = class_names[p_cls] if p_cls < len(class_names) else str(p_cls)
-        
+
         p_pt = pred_pt[idx]
         p_eta = pred_eta[idx]
         p_phi = pred_phi[idx]
         p_energy = pred_energy[idx]
         p_beta = pred_beta[idx]
-        
-        rows.append({
-            "idx": idx,
-            "hit_type": int(hit_type),
-            "hit_pt": hit_pt,
-            "hit_eta": hit_eta,
-            "hit_phi": hit_phi,
-            "hit_energy": hit_energy,
-            "tgt_cls": t_cls_name,
-            "tgt_pt": t_pt,
-            "tgt_eta": t_eta,
-            "tgt_phi": t_phi,
-            "tgt_energy": t_energy,
-            "pred_cls": p_cls_name,
-            "pred_pt": p_pt,
-            "pred_eta": p_eta,
-            "pred_phi": p_phi,
-            "pred_energy": p_energy,
-            "pred_beta": p_beta
-        })
-        
+
+        rows.append(
+            {
+                "idx": idx,
+                "hit_type": int(hit_type),
+                "hit_pt": hit_pt,
+                "hit_eta": hit_eta,
+                "hit_phi": hit_phi,
+                "hit_energy": hit_energy,
+                "tgt_cls": t_cls_name,
+                "tgt_pt": t_pt,
+                "tgt_eta": t_eta,
+                "tgt_phi": t_phi,
+                "tgt_energy": t_energy,
+                "pred_cls": p_cls_name,
+                "pred_pt": p_pt,
+                "pred_eta": p_eta,
+                "pred_phi": p_phi,
+                "pred_energy": p_energy,
+                "pred_beta": p_beta,
+            }
+        )
+
     df = pd.DataFrame(rows)
     table_str = tabulate(df, headers="keys", tablefmt="pipe", showindex=False)
     print("\n=== EVENT HITS / TARGET / PREDICTION TABLE ===")
@@ -418,7 +420,7 @@ def evaluate(
 
                 model_module = model.module if hasattr(model, "module") else model
                 ypred_particles = model_module.predict_particles(batch.X, batch.mask)
-                is_no_target = (ytarget["cls_id"] == 0)
+                is_no_target = ytarget["cls_id"] == 0
                 for d in [ypred_particles]:
                     for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
                         if key in d:
@@ -446,7 +448,6 @@ def evaluate(
         # Save validation plots for first batch
         if (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
             validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
-
 
         # Accumulate losses
         for loss_name in loss:
@@ -890,7 +891,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     split_configs_to_use = list(split_configs)
     if config.ntest is not None:
         if config.ntest < len(split_configs_to_use):
-            split_configs_to_use = split_configs_to_use[:config.ntest]
+            split_configs_to_use = split_configs_to_use[: config.ntest]
         ntest = max(1, config.ntest // len(split_configs_to_use))
 
     for split_config in split_configs_to_use:
