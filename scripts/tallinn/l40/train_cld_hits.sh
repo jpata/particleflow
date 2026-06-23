@@ -24,4 +24,4 @@ uv run python3 mlpf/pipeline.py \
     train \
     --gpus 1 \
     --num_workers 4 \
-    --prefetch_factor 2 #--model.loss_mode object_condensation
+    --prefetch_factor 2 --make_plots
