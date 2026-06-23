@@ -6,218 +6,8 @@ from torch import Tensor, nn
 from torch_scatter import scatter_max, scatter_add
 
 from mlpf.logger import _logger
-from mlpf.conf import LossType
 
 
-def scatter_count(input: torch.Tensor):
-    return scatter_add(torch.ones_like(input, dtype=torch.long), input.long())
-
-
-def scatter_counts_to_indices(input: torch.LongTensor) -> torch.LongTensor:
-    return torch.repeat_interleave(torch.arange(input.size(0), device=input.device), input).long()
-
-
-def batch_cluster_indices(cluster_id: torch.Tensor, batch: torch.Tensor) -> Tuple[torch.LongTensor, torch.LongTensor]:
-    device = cluster_id.device
-    assert cluster_id.device == batch.device
-    n_clusters_per_event = scatter_max(cluster_id, batch, dim=-1)[0] + 1
-    offset_values_nozero = n_clusters_per_event[:-1].cumsum(dim=-1)
-    offset_values = torch.cat((torch.zeros(1, device=device), offset_values_nozero))
-    offset = torch.gather(offset_values, 0, batch).long()
-    return offset + cluster_id, n_clusters_per_event
-
-
-def get_inter_event_norms_mask(batch: torch.LongTensor, nclusters_per_event: torch.LongTensor):
-    device = batch.device
-    batch_expanded_as_ones = (batch == torch.arange(batch.max() + 1, dtype=torch.long, device=device).unsqueeze(-1)).long()
-    return batch_expanded_as_ones.repeat_interleave(nclusters_per_event, dim=0).T
-
-
-def calc_LV_Lbeta(
-    beta: torch.Tensor,
-    cluster_space_coords: torch.Tensor,
-    cluster_index_per_event: torch.Tensor,
-    batch: torch.Tensor,
-    qmin: float = 1.0,
-    s_B: float = 1.0,
-    noise_cluster_index: int = 0,
-):
-    """
-    Calculates the L_V and L_beta object condensation losses.
-    Note: Compared to the HitPF reference implementation, this version:
-    1. Omits 'use_average_cc_pos' and 'frac_combinations' heuristics to focus on core OC math.
-    2. Omits the 'L_alpha_coordinates' term as detector-space coordinate regression is handled separately in MLPF.
-    3. Uses dynamic batch-size normalization for L_beta_noise instead of a hardcoded constant.
-    """
-    # device = beta.device
-    beta = torch.nan_to_num(beta, nan=0.0)
-    cluster_space_coords = torch.nan_to_num(cluster_space_coords, nan=0.0)
-    if torch.isnan(cluster_space_coords).any():
-        _logger.error(f"NaN in cluster_space_coords: {cluster_space_coords}")
-
-    cluster_index, n_clusters_per_event = batch_cluster_indices(cluster_index_per_event, batch)
-    # n_clusters = n_clusters_per_event.sum()
-    n_hits, cluster_space_dim = cluster_space_coords.size()
-    batch_size = batch.max() + 1
-
-    # batch_cluster = scatter_counts_to_indices(n_clusters_per_event)
-
-    is_noise = cluster_index_per_event == noise_cluster_index
-    is_sig = ~is_noise
-    # n_hits_sig = is_sig.sum()
-
-    is_object = scatter_max(is_sig.long(), cluster_index)[0].bool()
-
-    object_index_per_event = cluster_index_per_event[is_sig] - 1
-    object_index, n_objects_per_event = batch_cluster_indices(object_index_per_event, batch[is_sig])
-    # n_hits_per_object = scatter_count(object_index)
-    # batch_object = batch_cluster[is_object]
-    # n_objects = is_object.sum()
-
-    # L_V term
-    # Ensure beta is float32 to safely compute arctanh near 1.0 without overflowing bfloat16
-    beta_fp32 = beta.to(torch.float32)
-    # 1e-4 matches HitPF reference and provides higher q values
-    q = (beta_fp32.clip(0.0, 1 - 1e-4).arctanh() / 1.01) ** 2 + qmin
-    q = q.to(beta.dtype)
-    if torch.isnan(q).any():
-        _logger.error(f"NaN in q detected! num NaNs: {torch.isnan(q).sum()}")
-    if torch.isinf(q).any():
-        _logger.error(f"Inf in q detected! max beta: {beta.max()}")
-        # Defensive clamp to avoid propagation of Inf
-        q = torch.clamp(q, max=1e6)
-
-    q_alpha, index_alpha = scatter_max(q[is_sig], object_index)
-    # Filter out empty groups (those that don't have any hits in is_sig)
-    # For empty groups, scatter_max returns argmax = input.size(0)
-    mask_valid = index_alpha < q[is_sig].size(0)
-    q_alpha = q_alpha[mask_valid]
-    index_alpha = index_alpha[mask_valid]
-
-    if torch.isinf(q_alpha).any():
-        _logger.error(f"Inf in q_alpha detected! num infs: {torch.isinf(q_alpha).sum()}")
-    if torch.isnan(q_alpha).any():
-        _logger.error(f"NaN in q_alpha detected! num NaNs: {torch.isnan(q_alpha).sum()}")
-
-    x_alpha = cluster_space_coords[is_sig][index_alpha]
-
-    M = torch.nn.functional.one_hot(cluster_index).long()
-    M_inv = get_inter_event_norms_mask(batch, n_clusters_per_event) - M
-
-    M = M[:, is_object]
-    M_inv = M_inv[:, is_object]
-
-    # Check coords range
-    if torch.isnan(cluster_space_coords).any():
-        _logger.error("NaN in cluster_space_coords detected!")
-    coords_max = torch.max(torch.abs(cluster_space_coords))
-    if coords_max > 1e3:
-        _logger.warning(f"Large coords detected: {coords_max}")
-
-    norms = torch.sum(
-        torch.square(cluster_space_coords.unsqueeze(1) - x_alpha.unsqueeze(0)),
-        dim=-1,
-    )
-    if torch.isnan(norms).any():
-        _logger.error(f"NaN in norms detected! num NaNs: {torch.isnan(norms).sum()}")
-    if torch.isinf(norms).any():
-        _logger.error(f"Inf in norms detected! num infs: {torch.isinf(norms).sum()}")
-
-    N_k = torch.sum(M, dim=0)
-    norms_att = norms[is_sig]
-    # Use a more stable log calculation
-    # log(exp(1) * x / 2 + 1)
-    norms_att = torch.log(torch.exp(torch.tensor([1.0], device=norms_att.device)) * norms_att / 2.0 + 1.0)
-    norms_att *= M[is_sig]
-    if torch.isnan(norms_att).any():
-        _logger.error(f"NaN in norms_att detected! num NaNs: {torch.isnan(norms_att).sum()}")
-
-    V_attractive = (q[is_sig]).unsqueeze(-1) * q_alpha.unsqueeze(0) * norms_att
-    V_attractive = V_attractive.sum(dim=0)
-    V_attractive = V_attractive.view(-1) / (N_k.view(-1) + 1e-3)
-    if V_attractive.numel() > 0:
-        L_V_attractive = torch.mean(V_attractive)
-    else:
-        L_V_attractive = torch.tensor(0.0, device=beta.device)
-
-    if torch.isnan(L_V_attractive):
-        _logger.error("NaN in L_V_attractive!")
-
-    norms_rep = torch.relu(1.0 - torch.sqrt(norms + 1e-6)) * M_inv
-    V_repulsive = q.unsqueeze(1) * q_alpha.unsqueeze(0) * norms_rep
-
-    L_V_repulsive = V_repulsive.sum(dim=0)
-    number_of_repulsive_terms_per_object = torch.sum(M_inv, dim=0)
-    # Check if number_of_repulsive_terms_per_object is 0
-    if (number_of_repulsive_terms_per_object == 0).any():
-        _logger.warning("Some objects have 0 repulsive terms")
-
-    L_V_repulsive = L_V_repulsive.view(-1) / (number_of_repulsive_terms_per_object.view(-1) + 1e-3)
-    if L_V_repulsive.numel() > 0:
-        L_V_repulsive = torch.mean(L_V_repulsive)
-    else:
-        L_V_repulsive = torch.tensor(0.0, device=beta.device)
-
-    if torch.isnan(L_V_repulsive):
-        _logger.error("NaN in L_V_repulsive!")
-        # If we still have NaN, it might be Inf * 0.0. Let's try to clamp V_repulsive
-        L_V_repulsive = torch.mean(torch.nan_to_num(V_repulsive, nan=0.0).sum(dim=0) / (number_of_repulsive_terms_per_object.view(-1) + 1e-3))
-        _logger.info("Corrected L_V_repulsive to {L_V_repulsive}")
-
-    L_V = L_V_attractive + L_V_repulsive
-
-    n_noise_hits_per_event = scatter_count(batch[is_noise])
-    n_noise_hits_per_event[n_noise_hits_per_event == 0] = 1
-    # Note: L_beta_noise is normalized by batch_size here, whereas HitPF uses a hardcoded constant (4)
-    L_beta_noise = s_B * ((scatter_add(beta[is_noise], batch[is_noise])) / n_noise_hits_per_event).sum() / batch_size
-
-    beta_per_object_c = scatter_add(beta[is_sig], object_index)
-    if index_alpha.numel() > 0:
-        L_beta_sig = torch.mean(1 - beta[is_sig][index_alpha] + 1 - torch.clip(beta_per_object_c[mask_valid], 0, 1))
-    else:
-        L_beta_sig = torch.tensor(0.0, device=beta.device)
-
-    L_beta = L_beta_noise + L_beta_sig
-
-    # Map index_alpha back to the indices of the input tensors
-    sig_indices = torch.nonzero(is_sig).view(-1)
-    absolute_index_alpha = sig_indices[index_alpha]
-
-    # Calculate additional metrics
-    with torch.no_grad():
-        if index_alpha.numel() > 0:
-            beta_alpha = beta[is_sig][index_alpha]
-            # avg_dist_att: mean distance of hits to their true particle's centroid
-            avg_dist_att = torch.sqrt(norms[is_sig][M[is_sig].bool()] + 1e-6).mean()
-            # avg_dist_rep: mean distance of hits to other particles' centroids
-            avg_dist_rep = torch.sqrt(norms + 1e-6)[M_inv.bool()].mean()
-            metrics = {
-                "beta_alpha_mean": beta_alpha.mean(),
-                "frac_found_05": (beta_alpha > 0.5).float().mean(),
-                "frac_found_09": (beta_alpha > 0.9).float().mean(),
-                "avg_dist_att": avg_dist_att,
-                "avg_dist_rep": avg_dist_rep,
-                "oc_coords_mean": torch.abs(cluster_space_coords).mean(),
-                "oc_coords_std": cluster_space_coords.std(),
-                "oc_coords_max": torch.abs(cluster_space_coords).max(),
-                "beta_noise_mean": beta[is_noise].mean() if is_noise.any() else torch.tensor(0.0, device=beta.device),
-                "n_objects_true": torch.tensor(float(index_alpha.numel()), device=beta.device),
-            }
-        else:
-            metrics = {
-                "beta_alpha_mean": torch.tensor(0.0, device=beta.device),
-                "frac_found_05": torch.tensor(0.0, device=beta.device),
-                "frac_found_09": torch.tensor(0.0, device=beta.device),
-                "avg_dist_att": torch.tensor(0.0, device=beta.device),
-                "avg_dist_rep": torch.tensor(0.0, device=beta.device),
-                "oc_coords_mean": torch.abs(cluster_space_coords).mean(),
-                "oc_coords_std": cluster_space_coords.std(),
-                "oc_coords_max": torch.abs(cluster_space_coords).max(),
-                "beta_noise_mean": beta[is_noise].mean() if is_noise.any() else torch.tensor(0.0, device=beta.device),
-                "n_objects_true": torch.tensor(0.0, device=beta.device),
-            }
-
-    return L_V, L_beta, absolute_index_alpha, metrics
 
 
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
@@ -247,9 +37,6 @@ def mlpf_loss_standard(y, ypred, batch, mask_flat, npart, nelem, loss_obj_id):
     loss_binary_classification = 10.0 * torch.nn.functional.cross_entropy(ypred_cls_binary_flat, (y_cls_id_flat != 0).long(), reduction="none")
     loss_binary_classification[~mask_flat] *= 0
     loss["Classification_binary"] = loss_binary_classification.sum() / nelem
-
-    loss["OC_V"] = torch.tensor(0.0, device=batch.X.device)
-    loss["OC_beta"] = torch.tensor(0.0, device=batch.X.device)
 
     # compare the particle type, only for cases where there was a true particle
     loss_pid_classification = loss_obj_id(ypred_cls_id_flat, y_cls_id_flat)
@@ -309,130 +96,15 @@ def mlpf_loss_standard(y, ypred, batch, mask_flat, npart, nelem, loss_obj_id):
     return loss
 
 
-def mlpf_loss_object_condensation(y, ypred, batch, mask_flat, npart, nelem, loss_obj_id):
-    loss = {}
-    beta_flat = torch.nan_to_num(ypred["oc_beta"].view(-1)[mask_flat], nan=0.0)
-    coords_flat = torch.nan_to_num(ypred["oc_coords"].view(-1, 3)[mask_flat], nan=0.0)
-    particle_number_flat = y["particle_number"].view(-1)[mask_flat]
-    batch_idx = torch.arange(batch.mask.shape[0], device=batch.mask.device).unsqueeze(1).repeat(1, batch.mask.shape[1]).view(-1)[mask_flat].long()
-
-    l_v, l_beta, cp_indices, metrics = calc_LV_Lbeta(beta_flat, coords_flat, particle_number_flat.long(), batch_idx)
-    loss["OC_V"] = 1.0 * l_v
-    loss["OC_beta"] = 1.0 * l_beta
-    for k, v in metrics.items():
-        loss[f"OC_{k}"] = v
-
-    loss["Classification_binary"] = torch.tensor(0.0, device=batch.X.device)
-
-    # Use unique particle indices across the batch to aggregate hits belonging to the same particle
-    particle_index, _ = batch_cluster_indices(particle_number_flat.long(), batch_idx)
-    is_sig_hit = particle_number_flat > 0
-    # Map to signal-only particles (excluding noise cluster index 0)
-    is_particle = scatter_max(is_sig_hit.long(), particle_index)[0].bool()
-
-    # Aggregate predictions across hits in each true particle, weighted by predicted beta
-    # This provides a denser gradient signal than single-hit (CP) regression
-    # Detach weights to prevent regression gradients from causing beta collapse.
-    weights = beta_flat.detach()
-
-    def aggregate(values, indices, weights):
-        # Flatten values if they are multi-dimensional (e.g. PID one-hot)
-        if values.ndim > 1:
-            weights = weights.unsqueeze(-1)
-        num = scatter_add(values * weights, indices, dim=0)
-        den = scatter_add(weights, indices, dim=0) + 1e-6
-        return num / den
-
-    # Determine true physical quantities for the hits
-    X_hit_pt_flat = batch.X.view(-1, batch.X.shape[-1])[:, 1][mask_flat]
-    X_hit_e_flat = batch.X.view(-1, batch.X.shape[-1])[:, 5][mask_flat]
-
-    target_pt_flat = torch.exp(y["pt"].view(-1)[mask_flat]) * X_hit_pt_flat
-    target_e_flat = torch.exp(y["energy"].view(-1)[mask_flat]) * X_hit_e_flat
-
-    ypred_pt_flat = torch.exp(ypred["pt"].view(-1)[mask_flat]) * X_hit_pt_flat
-    ypred_e_flat = torch.exp(ypred["energy"].view(-1)[mask_flat]) * X_hit_e_flat
-
-    if is_particle.any():
-        # Find the representative elements (elements with cls_id > 0)
-        is_representative = (y["cls_id"].view(-1)[mask_flat] > 0) & is_sig_hit
-
-        # Get the total number of unique particle indices
-        num_particles_total = particle_index.max().item() + 1
-
-        # Helper to get the canonical target value from the representative element of each particle, mapped to all hits
-        def get_canonical_target_all_hits(flat_values):
-            y_agg = torch.zeros(num_particles_total, dtype=flat_values.dtype, device=flat_values.device)
-            y_agg[particle_index[is_representative]] = flat_values[is_representative]
-            return y_agg[particle_index]
-
-        # Target physical properties mapped to every hit (broadcasting from representative elements)
-        target_pt_phys_all = get_canonical_target_all_hits(target_pt_flat)
-        target_e_phys_all = get_canonical_target_all_hits(target_e_flat)
-
-        # Correct log-scale targets relative to the individual hit baseline
-        target_pt_log_all = torch.log(torch.clamp(target_pt_phys_all, min=1e-6) / (X_hit_pt_flat + 1e-6))
-        target_e_log_all = torch.log(torch.clamp(target_e_phys_all, min=1e-6) / (X_hit_e_flat + 1e-6))
-
-        target_eta_all = get_canonical_target_all_hits(y["eta"].view(-1)[mask_flat])
-        target_sin_phi_all = get_canonical_target_all_hits(y["sin_phi"].view(-1)[mask_flat])
-        target_cos_phi_all = get_canonical_target_all_hits(y["cos_phi"].view(-1)[mask_flat])
-
-        # Compute regression losses at hit level for all signal hits
-        loss_pt = torch.nn.functional.mse_loss(ypred["pt"].view(-1)[mask_flat], target_pt_log_all, reduction="none")
-        loss_energy = torch.nn.functional.mse_loss(ypred["energy"].view(-1)[mask_flat], target_e_log_all, reduction="none")
-        loss_eta = 1e-2 * torch.nn.functional.mse_loss(ypred["eta"].view(-1)[mask_flat], target_eta_all, reduction="none")
-        loss_sin_phi = 1e-2 * torch.nn.functional.mse_loss(ypred["sin_phi"].view(-1)[mask_flat], target_sin_phi_all, reduction="none")
-        loss_cos_phi = 1e-2 * torch.nn.functional.mse_loss(ypred["cos_phi"].view(-1)[mask_flat], target_cos_phi_all, reduction="none")
-
-        # Zero out losses for noise hits
-        loss_pt[~is_sig_hit] = 0.0
-        loss_energy[~is_sig_hit] = 0.0
-        loss_eta[~is_sig_hit] = 0.0
-        loss_sin_phi[~is_sig_hit] = 0.0
-        loss_cos_phi[~is_sig_hit] = 0.0
-
-        # Scale pt and energy losses by sqrt of target physical pt
-        sqrt_target_pt_all = torch.sqrt(torch.clamp(target_pt_phys_all, min=1e-6))
-        loss_pt = loss_pt * sqrt_target_pt_all
-        loss_energy = loss_energy * sqrt_target_pt_all
-
-        nsig = is_sig_hit.sum()
-        if nsig > 0:
-            loss["Regression_pt"] = loss_pt.sum() / nsig
-            loss["Regression_energy"] = loss_energy.sum() / nsig
-            loss["Regression_eta"] = loss_eta.sum() / nsig
-            loss["Regression_sin_phi"] = loss_sin_phi.sum() / nsig
-            loss["Regression_cos_phi"] = loss_cos_phi.sum() / nsig
-        else:
-            loss["Regression_pt"] = torch.tensor(0.0, device=batch.X.device)
-            loss["Regression_energy"] = torch.tensor(0.0, device=batch.X.device)
-            loss["Regression_eta"] = torch.tensor(0.0, device=batch.X.device)
-            loss["Regression_sin_phi"] = torch.tensor(0.0, device=batch.X.device)
-            loss["Regression_cos_phi"] = torch.tensor(0.0, device=batch.X.device)
-
-        # Hit-level classification for all hits
-        ypred_cls_id_flat = ypred["cls_id_onehot"].reshape(-1, ypred["cls_id_onehot"].shape[-1])
-        target_cls_id_all = get_canonical_target_all_hits(y["cls_id"].view(-1)[mask_flat])
-        loss["Classification"] = loss_obj_id(ypred_cls_id_flat[mask_flat], target_cls_id_all.long()).mean()
-    else:
-        loss["Regression_pt"] = torch.tensor(0.0, device=batch.X.device)
-        loss["Regression_eta"] = torch.tensor(0.0, device=batch.X.device)
-        loss["Regression_sin_phi"] = torch.tensor(0.0, device=batch.X.device)
-        loss["Regression_cos_phi"] = torch.tensor(0.0, device=batch.X.device)
-        loss["Regression_energy"] = torch.tensor(0.0, device=batch.X.device)
-        loss["Classification"] = torch.tensor(0.0, device=batch.X.device)
-
-    return loss
 
 
-def mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD):
+
+def mlpf_loss(y, ypred, batch):
     """
     Args
         y [dict]: relevant keys are "cls_id, momentum, charge, particle_number"
         ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge, oc_beta, oc_coords"
         batch [PFBatch]: the MLPF inputs
-        loss_mode [LossType]: whether to use standard or object condensation loss
     """
     loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
 
@@ -476,19 +148,12 @@ def mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD):
     ypred_combined = {**ypred, **ypred_momentum_unpacked}
     y_combined = {**y, "momentum": momentum_true}
 
-    if loss_mode == LossType.STANDARD:
-        loss = mlpf_loss_standard(y_combined, ypred_combined, batch, mask_flat, npart, nelem, loss_obj_id)
-    elif loss_mode == LossType.OBJECT_CONDENSATION:
-        loss = mlpf_loss_object_condensation(y_combined, ypred_combined, batch, mask_flat, npart, nelem, loss_obj_id)
-    else:
-        raise ValueError(f"Unknown loss_mode {loss_mode}")
+    loss = mlpf_loss_standard(y_combined, ypred_combined, batch, mask_flat, npart, nelem, loss_obj_id)
 
     # this is the final loss to be optimized
     loss["Total"] = (
         loss["Classification_binary"]
         + loss["Classification"]
-        + loss["OC_V"]
-        + loss["OC_beta"]
         + loss["Regression_pt"]
         + loss["Regression_eta"]
         + loss["Regression_sin_phi"]

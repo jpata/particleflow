@@ -24,7 +24,6 @@ from mlpf.conf import (
     LearnedRepresentationMode,
     RegressionMode,
     KernelType,
-    LossType,
 )
 
 
@@ -513,12 +512,6 @@ class MLPF(nn.Module):
         self.nn_pid = ffn(decoding_dim, self.num_classes, width, self.act, dropout_ff)
         # self.nn_pu = ffn(decoding_dim, 2, width, self.act, dropout_ff)
 
-        # Object Condensation heads (only created when OC loss is enabled)
-        self._use_oc = self.config.loss_mode == LossType.OBJECT_CONDENSATION
-        if self._use_oc:
-            self.oc_beta = ffn(decoding_dim, 1, width, self.act, dropout_ff)
-            self.oc_coords = ffn(decoding_dim, 3, width, self.act, dropout_ff)
-
         # elementwise DNN for node momentum regression
         embed_dim = decoding_dim
         self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
@@ -643,17 +636,10 @@ class MLPF(nn.Module):
         preds_pid = torch.nan_to_num(preds_pid, nan=0.0, posinf=0.0, neginf=0.0)
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
 
-        if self._use_oc:
-            preds_oc_beta = torch.sigmoid(self.oc_beta(final_embedding_id))
-            preds_oc_coords = self.oc_coords(final_embedding_id)
-        else:
-            preds_oc_beta = torch.zeros(mask.shape[0], mask.shape[1], 1, device=mask.device, dtype=preds_momentum.dtype)
-            preds_oc_coords = torch.zeros(mask.shape[0], mask.shape[1], 3, device=mask.device, dtype=preds_momentum.dtype)
-
-        return preds_binary_particle, preds_pid, preds_momentum, preds_pu, preds_oc_beta, preds_oc_coords
+        return preds_binary_particle, preds_pid, preds_momentum, preds_pu
 
     def predict_particles(self, X_features, mask):
-        from mlpf.model.utils import unpack_predictions, get_clustering
+        from mlpf.model.utils import unpack_predictions
 
         ypred_raw = self.forward(X_features, mask)
         ypred_raw = tuple([y.to(torch.float32) for y in ypred_raw])
@@ -669,90 +655,10 @@ class MLPF(nn.Module):
         # By default, use standard argmax
         pred_cls = torch.argmax(ypred_raw[0], axis=-1)
 
-        loss_mode = self.config.loss_mode
-        if loss_mode == LossType.STANDARD:
-            # Zero out predictions for non-particles
-            ypred["cls_id"][pred_cls == 0] = 0
-            ypred["pt"][pred_cls == 0] = 0
-            ypred["energy"][pred_cls == 0] = 0
-        elif loss_mode == LossType.OBJECT_CONDENSATION:
-            ypred_cls_id = torch.argmax(ypred["cls_id_onehot"], dim=-1)
-            # Re-initialize pred_cls to 0
-            pred_cls = torch.zeros_like(ypred_cls_id)
-
-            for event_idx in range(mask.size(0)):
-                event_mask = mask[event_idx]
-                if event_mask.sum() == 0:
-                    continue
-
-                beta = ypred["oc_beta"][event_idx][event_mask]
-                coords = ypred["oc_coords"][event_idx][event_mask]
-
-                clustering = get_clustering(beta, coords)
-                unique_clusters = torch.unique(clustering)
-                unique_clusters = unique_clusters[unique_clusters != -1]
-
-                valid_indices = event_mask.nonzero(as_tuple=True)[0]
-
-                for cluster_id in unique_clusters:
-                    cluster_mask = clustering == cluster_id
-                    cluster_betas = beta[cluster_mask]
-                    cp_idx_local = torch.argmax(cluster_betas)
-
-                    cp_idx_valid = cluster_mask.nonzero(as_tuple=True)[0][cp_idx_local]
-                    cp_idx_seq = valid_indices[cp_idx_valid]
-
-                    # Extract hit-level predictions for this cluster
-                    pt_cluster = ypred["pt"][event_idx][event_mask][cluster_mask]
-                    energy_cluster = ypred["energy"][event_idx][event_mask][cluster_mask]
-                    eta_cluster = ypred["eta"][event_idx][event_mask][cluster_mask]
-                    sin_phi_cluster = ypred["sin_phi"][event_idx][event_mask][cluster_mask]
-                    cos_phi_cluster = ypred["cos_phi"][event_idx][event_mask][cluster_mask]
-                    cls_onehot_cluster = ypred["cls_id_onehot"][event_idx][event_mask][cluster_mask]
-
-                    # Compute beta-weighted average for cluster-level predictions
-                    w = (cluster_betas / (cluster_betas.sum() + 1e-6)).squeeze(-1)
-                    pt_agg = torch.sum(pt_cluster * w)
-                    energy_agg = torch.sum(energy_cluster * w)
-                    eta_agg = torch.sum(eta_cluster * w)
-                    sin_phi_agg = torch.sum(sin_phi_cluster * w)
-                    cos_phi_agg = torch.sum(cos_phi_cluster * w)
-
-                    # For classification, average the probabilities (after softmax)
-                    cls_probs_cluster = torch.softmax(cls_onehot_cluster, dim=-1)
-                    cls_probs_agg = torch.sum(cls_probs_cluster * w.unsqueeze(-1), dim=0)
-                    cls_id_agg = torch.argmax(cls_probs_agg)
-
-                    pred_cls[event_idx, cp_idx_seq] = cls_id_agg
-                    ypred["pt"][event_idx, cp_idx_seq] = pt_agg
-                    ypred["energy"][event_idx, cp_idx_seq] = energy_agg
-                    ypred["eta"][event_idx, cp_idx_seq] = eta_agg
-                    ypred["sin_phi"][event_idx, cp_idx_seq] = sin_phi_agg
-                    ypred["cos_phi"][event_idx, cp_idx_seq] = cos_phi_agg
-
-                    phi_agg = torch.atan2(sin_phi_agg, cos_phi_agg)
-                    ypred["phi"][event_idx, cp_idx_seq] = phi_agg
-                    ypred["p4"][event_idx, cp_idx_seq, 0] = pt_agg
-                    ypred["p4"][event_idx, cp_idx_seq, 1] = eta_agg
-                    ypred["p4"][event_idx, cp_idx_seq, 2] = phi_agg
-                    ypred["p4"][event_idx, cp_idx_seq, 3] = energy_agg
-
-            ypred["cls_id"] = pred_cls
-            ypred["pt"][pred_cls == 0] = 0
-            ypred["energy"][pred_cls == 0] = 0
-            ypred["eta"][pred_cls == 0] = 0
-            ypred["sin_phi"][pred_cls == 0] = 0
-            ypred["cos_phi"][pred_cls == 0] = 0
-            ypred["phi"][pred_cls == 0] = 0
-
-            # Rebuild p4 tensor using final zeroed/modified values
-            p4_tensor_list = [
-                ypred["pt"].unsqueeze(dim=-1),
-                ypred["eta"].unsqueeze(dim=-1),
-                ypred["phi"].unsqueeze(dim=-1),
-                ypred["energy"].unsqueeze(dim=-1),
-            ]
-            ypred["p4"] = torch.cat(p4_tensor_list, dim=-1)
+        # Zero out predictions for non-particles
+        ypred["cls_id"][pred_cls == 0] = 0
+        ypred["pt"][pred_cls == 0] = 0
+        ypred["energy"][pred_cls == 0] = 0
 
         return ypred
 

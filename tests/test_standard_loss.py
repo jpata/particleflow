@@ -4,7 +4,6 @@ Spec: Validates 'mlpf_loss' with 'LossType.STANDARD'. Tests classification (PID)
 
 import torch
 from mlpf.model.losses import mlpf_loss
-from mlpf.conf import LossType
 from mlpf.model.PFDataset import PFBatch
 
 
@@ -46,11 +45,9 @@ def get_mock_data(batch_size=2, seq_len=10, num_classes=6):
 
 def test_mlpf_loss_standard():
     batch, y, ypred = get_mock_data()
-    loss_opt, losses = mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD)
+    loss_opt, losses = mlpf_loss(y, ypred, batch)
 
     assert "Total" in losses
-    assert losses["OC_V"] == 0
-    assert losses["OC_beta"] == 0
     assert not torch.isnan(loss_opt)
     print("Standard loss basic test passed")
 
@@ -59,7 +56,7 @@ def test_mlpf_loss_standard_no_particles():
     batch, y, ypred = get_mock_data()
     y["cls_id"][:] = 0
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD)
+    loss_opt, losses = mlpf_loss(y, ypred, batch)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -72,7 +69,7 @@ def test_mlpf_loss_standard_single_particle():
     y["cls_id"][:] = 0
     y["cls_id"][0, 0] = 1
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD)
+    loss_opt, losses = mlpf_loss(y, ypred, batch)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -82,7 +79,7 @@ def test_mlpf_loss_standard_single_particle():
 
 def test_mlpf_loss_standard_large_batch():
     batch, y, ypred = get_mock_data(batch_size=8, seq_len=50)
-    loss_opt, losses = mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD)
+    loss_opt, losses = mlpf_loss(y, ypred, batch)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -106,7 +103,7 @@ def test_mlpf_loss_standard_perfect_prediction():
     for k in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
         ypred[k][0, 0] = y[k][0, 0]
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD)
+    loss_opt, losses = mlpf_loss(y, ypred, batch)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -122,7 +119,7 @@ def test_mlpf_loss_standard_stability():
     ypred["pt"][0, 0] = 1e5
     ypred["energy"][1, 1] = torch.nan
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD)
+    loss_opt, losses = mlpf_loss(y, ypred, batch)
 
     # mlpf_loss uses torch.nan_to_num implicitly via torch.sqrt(torch.clamp(...)) for weight
     # but not for ypred itself in mlpf_loss_standard.
@@ -135,7 +132,7 @@ def test_mlpf_loss_standard_stability():
     # but it's good to know.
 
     try:
-        loss_opt, losses = mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD)
+        loss_opt, losses = mlpf_loss(y, ypred, batch)
         assert not torch.isnan(loss_opt)
         print("Standard loss stability test passed")
     except Exception as e:
@@ -146,7 +143,7 @@ def test_mlpf_loss_standard_zero_eta_phi_when_no_target():
     batch, y, ypred = get_mock_data()
     y["cls_id"][:, 2:] = 0
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch, loss_mode=LossType.STANDARD)
+    loss_opt, losses = mlpf_loss(y, ypred, batch)
 
     is_no_target = (y["cls_id"] == 0)
     for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:

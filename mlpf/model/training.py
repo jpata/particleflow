@@ -79,7 +79,7 @@ from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import mlpf_loss
 from mlpf.utils import create_comet_experiment
-from mlpf.conf import MLPFConfig, LossType
+from mlpf.conf import MLPFConfig
 from mlpf.jet_utils import get_jet_config
 
 
@@ -105,7 +105,7 @@ def model_step(batch, model, loss_fn):
                 momentum[..., i] = torch.where(is_no_target, torch.zeros_like(momentum[..., i]), momentum[..., i])
             d["momentum"] = momentum
 
-    loss_opt, losses_detached = loss_fn(ytarget, ypred, batch, model.config.loss_mode)
+    loss_opt, losses_detached = loss_fn(ytarget, ypred, batch)
     return loss_opt, losses_detached, ypred_raw, ypred, ytarget
 
 
@@ -446,10 +446,7 @@ def evaluate(
         # Save validation plots for first batch
         if (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
             validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
-            if config.model.loss_mode == LossType.OBJECT_CONDENSATION:
-                from mlpf.model.plots import log_oc_visualizations_to_tensorboard
 
-                log_oc_visualizations_to_tensorboard(batch, ypred_raw, ytarget, tensorboard_writer, step, config.dataset)
 
         # Accumulate losses
         for loss_name in loss:
@@ -497,7 +494,7 @@ def _log_and_checkpoint_step(
     if (rank == 0) or (rank == "cpu"):
         # Log training losses
         for loss, value in losses_train.items():
-            if loss.startswith("OC_") and loss not in ["OC_V", "OC_beta"]:
+            if loss.startswith("OC_"):
                 tensorboard_writer_train.add_scalar(f"step/{loss}", value, step)
             else:
                 tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
@@ -599,7 +596,7 @@ def _run_validation_cycle(
 
         # Log validation losses to TensorBoard
         for loss, value in losses_valid.items():
-            if loss.startswith("OC_") and loss not in ["OC_V", "OC_beta"]:
+            if loss.startswith("OC_"):
                 tensorboard_writer_valid.add_scalar(f"step/{loss}", value, step)
             else:
                 tensorboard_writer_valid.add_scalar(f"step/loss_{loss}", value, step)

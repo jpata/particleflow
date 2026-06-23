@@ -35,37 +35,10 @@ def unpack_target(y, model):
 
     return ret
 
-
-def get_clustering(betas: torch.Tensor, X: torch.Tensor, tbeta=0.1, td=1.0):
-    """
-    Returns a clustering of hits -> cluster_index, based on the GravNet model
-    output (predicted betas and cluster space coordinates) and the clustering
-    parameters tbeta and td.
-    Takes torch.Tensors as input.
-    """
-    n_points = betas.size(0)
-    select_condpoints = betas > tbeta
-    # Get indices passing the threshold
-    indices_condpoints = select_condpoints.nonzero()
-    # Order them by decreasing beta value
-    indices_condpoints = indices_condpoints[(-betas[select_condpoints]).argsort()]
-    # Assign points to condensation points
-    # Only assign previously unassigned points (no overwriting)
-    # Points unassigned at the end are bkg (-1)
-    unassigned = torch.arange(n_points).to(betas.device)
-    clustering = -1 * torch.ones(n_points, dtype=torch.long).to(betas.device)
-    for index_condpoint in indices_condpoints:
-        d = torch.norm(X[unassigned] - X[index_condpoint][0], dim=-1)
-        assigned_to_this_condpoint = unassigned[d < td]
-        clustering[assigned_to_this_condpoint] = index_condpoint[0]
-        unassigned = unassigned[~(d < td)]
-    return clustering
-
-
 # @torch.compile
 def unpack_predictions(preds):
     ret = {}
-    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret["ispu"], ret["oc_beta"], ret["oc_coords"] = preds
+    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret["ispu"] = preds
 
     # unpacking
     ret["pt"] = ret["momentum"][..., 0]
