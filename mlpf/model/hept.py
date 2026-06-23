@@ -144,7 +144,8 @@ def qkv_res(s_query, s_key, s_value, s_mask_q=None, s_mask_k=None, return_attn=F
     clustered_dists = clustered_dists.clamp(max=0.0).exp()
     if s_mask_q is not None:
         clustered_dists = clustered_dists * s_mask_q.float()
-    denom = clustered_dists.sum(dim=-1, keepdim=True) + (1e-20)
+    # Epsilon increased to 1e-5 to prevent division overflow to inf in backward pass under float16 autocast
+    denom = clustered_dists.sum(dim=-1, keepdim=True) + (1e-5)
     qk = clustered_dists
     so = torch.einsum("...ij,...jd->...id", qk, s_value)
     if return_attn:
@@ -306,7 +307,8 @@ class HEPTAttention(nn.Module):
         o = o[:, :, :raw_size]
         logits = logits[:, :, :raw_size]
 
-        out = o.sum(dim=0) / (logits.sum(dim=0) + 1e-20)
+        # Epsilon increased to 1e-5 to prevent division overflow to inf in backward pass under float16 autocast
+        out = o.sum(dim=0) / (logits.sum(dim=0) + 1e-5)
         out = self.out_linear(rearrange(out, "h n d -> n (h d)"))
         if return_attn:
             return out, (qk, q_positions, k_positions)
