@@ -438,12 +438,6 @@ def evaluate(
 
                 if ival == 0 and (rank == 0 or rank == "cpu"):
                     print_event_table(batch, ytarget, ypred_particles, config)
-                batch_metrics = compute_particle_quality_metrics(batch, ypred_particles, ytarget)
-                for k, v in batch_metrics.items():
-                    metric_name = f"OC_val_{k}"
-                    if metric_name not in eval_loss:
-                        eval_loss[metric_name] = torch.tensor(0.0, device=rank)
-                    eval_loss[metric_name] += torch.tensor(v, device=rank)
 
         # Save validation plots for first batch
         if (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
@@ -495,10 +489,7 @@ def _log_and_checkpoint_step(
     if (rank == 0) or (rank == "cpu"):
         # Log training losses
         for loss, value in losses_train.items():
-            if loss.startswith("OC_"):
-                tensorboard_writer_train.add_scalar(f"step/{loss}", value, step)
-            else:
-                tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
+            tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
 
         tensorboard_writer_train.flush()
 
@@ -597,10 +588,7 @@ def _run_validation_cycle(
 
         # Log validation losses to TensorBoard
         for loss, value in losses_valid.items():
-            if loss.startswith("OC_"):
-                tensorboard_writer_valid.add_scalar(f"step/{loss}", value, step)
-            else:
-                tensorboard_writer_valid.add_scalar(f"step/loss_{loss}", value, step)
+            tensorboard_writer_valid.add_scalar(f"step/loss_{loss}", value, step)
 
         # Save step statistics to a JSON file
         history_path = Path(outdir) / "history"
@@ -627,18 +615,6 @@ def _run_validation_cycle(
             f"Valid Loss={losses_valid['Total']:.4f} | "
             f"Stale={stale_steps} | "
             f"ETA={eta:.1f}m"
-        )
-
-        _logger.info(
-            f"EVENT METRICS | "
-            f"True pT Sum={losses_valid.get('OC_val_sum_pt_true', 0.0):.2f} | "
-            f"Pred pT Sum={losses_valid.get('OC_val_sum_pt_pred', 0.0):.2f} | "
-            f"Ratio pT Sum={losses_valid.get('OC_val_ratio_sum_pt', 0.0):.3f} | "
-            f"True E Sum={losses_valid.get('OC_val_sum_e_true', 0.0):.2f} | "
-            f"Pred E Sum={losses_valid.get('OC_val_sum_e_pred', 0.0):.2f} | "
-            f"Ratio E Sum={losses_valid.get('OC_val_ratio_sum_e', 0.0):.3f} | "
-            f"N_true={losses_valid.get('OC_val_n_true', 0.0):.1f} | "
-            f"N_pred={losses_valid.get('OC_val_n_pred', 0.0):.1f}"
         )
 
         tensorboard_writer_valid.flush()

@@ -34,11 +34,6 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
     ypred_p4 = ypred_raw[2][batch.mask].detach().cpu().float()
 
     to_concat = [X, ytarget_flat, ypred_binary, ypred_cls, ypred_p4]
-    if len(ypred_raw) > 4:
-        ypred_oc_beta = ypred_raw[4][batch.mask].detach().cpu().float()
-        ypred_oc_coords = ypred_raw[5][batch.mask].detach().cpu().float()
-        to_concat.append(ypred_oc_beta)
-        to_concat.append(ypred_oc_coords)
 
     arr = torch.concatenate(
         to_concat,
@@ -49,15 +44,6 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
     _logger.info(f"saved batch0_epoch{epoch}.parquet")
 
     if tensorboard_writer:
-        if len(ypred_raw) > 4:
-            fig = plt.figure()
-            b = np.linspace(0, 1, 100)
-            plt.hist(ypred_oc_beta.numpy(), bins=b, histtype="step")
-            plt.xlabel("oc_beta")
-            plt.yscale("log")
-            tensorboard_writer.add_figure("oc_beta", fig, global_step=epoch)
-            _logger.info("plotted oc_beta")
-
         sig_prob = torch.softmax(ypred_binary, axis=-1)[:, 1].to(torch.float32)
         for xcls in np.unique(X[:, 0]):
             fig = plt.figure()
