@@ -659,6 +659,9 @@ class MLPF(nn.Module):
         ypred["cls_id"][pred_cls == 0] = 0
         ypred["pt"][pred_cls == 0] = 0
         ypred["energy"][pred_cls == 0] = 0
+        ypred["eta"][pred_cls == 0] = 0
+        ypred["sin_phi"][pred_cls == 0] = 0
+        ypred["cos_phi"][pred_cls == 0] = 0
 
         return ypred
 
