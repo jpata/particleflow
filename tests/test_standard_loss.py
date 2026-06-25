@@ -3,8 +3,12 @@ Spec: Validates 'mlpf_loss' with 'LossType.STANDARD'. Tests classification (PID)
 """
 
 import torch
-from mlpf.model.losses import mlpf_loss
+from mlpf.conf import RegressionLossWeights
+from mlpf.model.losses import REGRESSION_FEATURES, event_loss, mlpf_loss, particle_loss
 from mlpf.model.PFDataset import PFBatch
+
+
+REGRESSION_WEIGHTS = RegressionLossWeights().model_dump()
 
 
 def get_mock_data(batch_size=2, seq_len=10, num_classes=6):
@@ -45,7 +49,7 @@ def get_mock_data(batch_size=2, seq_len=10, num_classes=6):
 
 def test_mlpf_loss_standard():
     batch, y, ypred = get_mock_data()
-    loss_opt, losses = mlpf_loss(y, ypred, batch)
+    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -56,7 +60,7 @@ def test_mlpf_loss_standard_no_particles():
     batch, y, ypred = get_mock_data()
     y["cls_id"][:] = 0
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch)
+    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -69,7 +73,7 @@ def test_mlpf_loss_standard_single_particle():
     y["cls_id"][:] = 0
     y["cls_id"][0, 0] = 1
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch)
+    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -79,7 +83,7 @@ def test_mlpf_loss_standard_single_particle():
 
 def test_mlpf_loss_standard_large_batch():
     batch, y, ypred = get_mock_data(batch_size=8, seq_len=50)
-    loss_opt, losses = mlpf_loss(y, ypred, batch)
+    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -103,7 +107,7 @@ def test_mlpf_loss_standard_perfect_prediction():
     for k in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
         ypred[k][0, 0] = y[k][0, 0]
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch)
+    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -115,43 +119,68 @@ def test_mlpf_loss_standard_perfect_prediction():
 def test_mlpf_loss_standard_stability():
     batch, y, ypred = get_mock_data(batch_size=2, seq_len=10)
 
-    # Test with extreme values
     ypred["pt"][0, 0] = 1e5
     ypred["energy"][1, 1] = torch.nan
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch)
+    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
-    # mlpf_loss uses torch.nan_to_num implicitly via torch.sqrt(torch.clamp(...)) for weight
-    # but not for ypred itself in mlpf_loss_standard.
-    # Actually mlpf_loss has a final check:
-    # if torch.isnan(loss_opt): raise Exception("Loss became NaN")
-
-    # If ypred contains NaN, MSE loss will be NaN.
-    # Let's see if it crashes or if I should add nan_to_num in standard loss too.
-    # The requirement didn't explicitly ask for fixing standard loss NaNs,
-    # but it's good to know.
-
-    try:
-        loss_opt, losses = mlpf_loss(y, ypred, batch)
-        assert not torch.isnan(loss_opt)
-        print("Standard loss stability test passed")
-    except Exception as e:
-        print(f"Standard loss stability test failed as expected: {e}")
+    assert not torch.isnan(loss_opt)
+    assert not torch.isnan(losses["Regression_energy"])
+    print("Standard loss stability test passed")
 
 
-def test_mlpf_loss_standard_zero_eta_phi_when_no_target():
+def test_mlpf_loss_standard_masks_no_target_without_mutating_inputs():
     batch, y, ypred = get_mock_data()
-    y["cls_id"][:, 2:] = 0
-
-    loss_opt, losses = mlpf_loss(y, ypred, batch)
+    y["cls_id"][:] = 0
+    y["cls_id"][0, 0] = 1
 
     is_no_target = y["cls_id"] == 0
-    for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
-        if key in ypred:
-            assert torch.all(ypred[key][is_no_target] == 0.0)
-        if key in y:
-            assert torch.all(y[key][is_no_target] == 0.0)
-    print("Zero regression components when no target particle test passed")
+    y["pt"][is_no_target] = torch.nan
+    ypred["eta"][is_no_target] = torch.nan
+    y_pt_before = y["pt"].clone()
+    ypred_eta_before = ypred["eta"].clone()
+
+    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+
+    assert not torch.isnan(loss_opt)
+    torch.testing.assert_close(y["pt"], y_pt_before, equal_nan=True)
+    torch.testing.assert_close(ypred["eta"], ypred_eta_before, equal_nan=True)
+    print("No-target regression masking test passed")
+
+
+def test_event_loss_decomposes_into_particle_loss():
+    batch, y, ypred = get_mock_data()
+    valid = batch.mask.bool()
+    is_no_target = y["cls_id"] == 0
+
+    particle_targets = {"cls_id": y["cls_id"][valid]}
+    particle_predictions = {
+        "cls_binary": ypred["cls_binary"][valid],
+        "cls_id_onehot": ypred["cls_id_onehot"][valid],
+    }
+    for feature in REGRESSION_FEATURES:
+        target = torch.where(is_no_target, torch.zeros_like(y[feature]), y[feature])
+        prediction = torch.where(is_no_target, torch.zeros_like(ypred[feature]), ypred[feature])
+        particle_targets[feature] = target[valid]
+        particle_predictions[feature] = prediction[valid]
+
+    expected = particle_loss(particle_targets, particle_predictions, batch.X[..., 1][valid], REGRESSION_WEIGHTS)
+    actual = event_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+
+    assert actual.keys() == expected.keys()
+    for key in actual:
+        torch.testing.assert_close(actual[key], expected[key])
+
+
+def test_regression_loss_weights_are_applied():
+    batch, y, ypred = get_mock_data()
+    baseline = event_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+    doubled_eta_weights = {**REGRESSION_WEIGHTS, "eta": 2 * REGRESSION_WEIGHTS["eta"]}
+    reweighted = event_loss(y, ypred, batch, doubled_eta_weights)
+
+    torch.testing.assert_close(reweighted["Regression_eta"], 2 * baseline["Regression_eta"])
+    for feature in set(REGRESSION_FEATURES) - {"eta"}:
+        torch.testing.assert_close(reweighted[f"Regression_{feature}"], baseline[f"Regression_{feature}"])
 
 
 if __name__ == "__main__":
@@ -161,4 +190,6 @@ if __name__ == "__main__":
     test_mlpf_loss_standard_large_batch()
     test_mlpf_loss_standard_perfect_prediction()
     test_mlpf_loss_standard_stability()
-    test_mlpf_loss_standard_zero_eta_phi_when_no_target()
+    test_mlpf_loss_standard_masks_no_target_without_mutating_inputs()
+    test_event_loss_decomposes_into_particle_loss()
+    test_regression_loss_weights_are_applied()

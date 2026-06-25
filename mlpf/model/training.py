@@ -83,29 +83,13 @@ from mlpf.conf import MLPFConfig
 from mlpf.jet_utils import get_jet_config
 
 
-def model_step(batch, model, loss_fn):
+def model_step(batch, model, loss_fn, regression_weights):
     _logger.debug(f"model_step X={batch.X.shape}")
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
 
-    is_no_target = ytarget["cls_id"] == 0
-    for d in [ypred, ytarget]:
-        for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
-            if key in d:
-                d[key] = torch.where(is_no_target, torch.zeros_like(d[key]), d[key])
-        if "p4" in d:
-            p4 = d["p4"].clone()
-            for i in range(4):
-                p4[..., i] = torch.where(is_no_target, torch.zeros_like(p4[..., i]), p4[..., i])
-            d["p4"] = p4
-        if "momentum" in d:
-            momentum = d["momentum"].clone()
-            for i in range(5):
-                momentum[..., i] = torch.where(is_no_target, torch.zeros_like(momentum[..., i]), momentum[..., i])
-            d["momentum"] = momentum
-
-    loss_opt, losses_detached = loss_fn(ytarget, ypred, batch)
+    loss_opt, losses_detached = loss_fn(ytarget, ypred, batch, regression_weights)
     return loss_opt, losses_detached, ypred_raw, ypred, ytarget
 
 
@@ -133,6 +117,7 @@ def train_step(
     batch,
     lr_schedule,
     step: int,
+    regression_weights,
     tensorboard_writer=None,
     comet_experiment=None,
     comet_step_freq=None,
@@ -173,7 +158,7 @@ def train_step(
     batch = batch.to(rank, non_blocking=True)
 
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-        loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss)
+        loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss, regression_weights)
 
     optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
 
@@ -416,25 +401,15 @@ def evaluate(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
-                _, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
+                _, loss, ypred_raw, ypred, ytarget = model_step(
+                    batch,
+                    model,
+                    mlpf_loss,
+                    config.regression_loss_weights.model_dump(),
+                )
 
                 model_module = model.module if hasattr(model, "module") else model
                 ypred_particles = model_module.predict_particles(batch.X, batch.mask)
-                is_no_target = ytarget["cls_id"] == 0
-                for d in [ypred_particles]:
-                    for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
-                        if key in d:
-                            d[key] = torch.where(is_no_target, torch.zeros_like(d[key]), d[key])
-                    if "p4" in d:
-                        p4 = d["p4"].clone()
-                        for i in range(4):
-                            p4[..., i] = torch.where(is_no_target, torch.zeros_like(p4[..., i]), p4[..., i])
-                        d["p4"] = p4
-                    if "momentum" in d:
-                        momentum = d["momentum"].clone()
-                        for i in range(5):
-                            momentum[..., i] = torch.where(is_no_target, torch.zeros_like(momentum[..., i]), momentum[..., i])
-                        d["momentum"] = momentum
 
                 if ival == 0 and (rank == 0 or rank == "cpu"):
                     print_event_table(batch, ytarget, ypred_particles, config)
@@ -774,6 +749,7 @@ def train_all_steps(
             dtype=dtype,
             scaler=scaler,
             loader_state_dict=train_loader.state_dict()["loader_state_dict"],
+            regression_weights=config.regression_loss_weights.model_dump(),
         )
         log_memory("train_step_end", rank, tensorboard_writer_train, step)
         train_time = time.time() - step_start_time

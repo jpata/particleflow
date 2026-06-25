@@ -7,6 +7,23 @@ from torch import Tensor, nn
 from mlpf.logger import _logger
 
 
+REGRESSION_FEATURES = ("pt", "eta", "sin_phi", "cos_phi", "energy")
+
+
+def _mask_no_target_regression(y, ypred):
+    """Return copies with regression values zeroed where no target particle exists."""
+    is_no_target = y["cls_id"] == 0
+
+    def mask_values(values):
+        masked = dict(values)
+        for key in REGRESSION_FEATURES:
+            if key in masked:
+                masked[key] = torch.where(is_no_target, torch.zeros_like(masked[key]), masked[key])
+        return masked
+
+    return mask_values(y), mask_values(ypred)
+
+
 def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     # create normalized random basis vectors
     theta = torch.randn(num_projections, y_true.shape[-1]).to(device=y_true.device)
@@ -23,138 +40,79 @@ def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     return ret
 
 
-def mlpf_loss_standard(y, ypred, batch, mask_flat, npart, nelem, loss_obj_id):
-    loss = {}
-    # Predictions from model are (B, N, C)
-    ypred_cls_binary_flat = ypred["cls_binary"].reshape(-1, 2)
-    ypred_cls_id_flat = ypred["cls_id_onehot"].reshape(-1, ypred["cls_id_onehot"].shape[-1])
-    y_cls_id_flat = y["cls_id"].view(-1)
+def classification_loss(y, ypred):
+    """Compute per-element particle-presence and particle-ID losses."""
+    cls_id = y["cls_id"]
+    num_elements = cls_id.numel()
+    is_particle = cls_id != 0
 
-    # binary loss for particle / no-particle classification
-    loss_binary_classification = 10.0 * torch.nn.functional.cross_entropy(ypred_cls_binary_flat, (y_cls_id_flat != 0).long(), reduction="none")
-    loss_binary_classification[~mask_flat] *= 0
-    loss["Classification_binary"] = loss_binary_classification.sum() / nelem
+    binary = 10.0 * F.cross_entropy(ypred["cls_binary"], is_particle.long())
 
-    # compare the particle type, only for cases where there was a true particle
-    loss_pid_classification = loss_obj_id(ypred_cls_id_flat, y_cls_id_flat)
-    loss_pid_classification[y_cls_id_flat == 0] *= 0
-    loss_pid_classification[~mask_flat] *= 0
-    loss["Classification"] = loss_pid_classification.sum() / nelem
+    pid_per_element = FocalLoss(gamma=2.0, reduction="none")(ypred["cls_id_onehot"], cls_id)
+    pid_per_element = torch.where(is_particle, pid_per_element, torch.zeros_like(pid_per_element))
+    pid = pid_per_element.sum() / num_elements
 
-    # compare particle momentum, only for cases where there was a true particle
-    ypred_pt_flat = ypred["pt"].view(-1)
-    y_pt_flat = y["pt"].view(-1)
-    ypred_eta_flat = ypred["eta"].view(-1)
-    y_eta_flat = y["eta"].view(-1)
-    ypred_sin_phi_flat = ypred["sin_phi"].view(-1)
-    y_sin_phi_flat = y["sin_phi"].view(-1)
-    ypred_cos_phi_flat = ypred["cos_phi"].view(-1)
-    y_cos_phi_flat = y["cos_phi"].view(-1)
-    ypred_energy_flat = ypred["energy"].view(-1)
-    y_energy_flat = y["energy"].view(-1)
-
-    loss_regression_pt = torch.nn.functional.mse_loss(ypred_pt_flat, y_pt_flat, reduction="none")
-    loss_regression_eta = 1e-2 * torch.nn.functional.mse_loss(ypred_eta_flat, y_eta_flat, reduction="none")
-    loss_regression_sin_phi = 1e-2 * torch.nn.functional.mse_loss(ypred_sin_phi_flat, y_sin_phi_flat, reduction="none")
-    loss_regression_cos_phi = 1e-2 * torch.nn.functional.mse_loss(ypred_cos_phi_flat, y_cos_phi_flat, reduction="none")
-    loss_regression_energy = torch.nn.functional.mse_loss(ypred_energy_flat, y_energy_flat, reduction="none")
-
-    loss_regression_pt[y_cls_id_flat == 0] *= 0
-    loss_regression_eta[y_cls_id_flat == 0] *= 0
-    loss_regression_sin_phi[y_cls_id_flat == 0] *= 0
-    loss_regression_cos_phi[y_cls_id_flat == 0] *= 0
-    loss_regression_energy[y_cls_id_flat == 0] *= 0
-
-    loss_regression_pt[~mask_flat] *= 0
-    loss_regression_eta[~mask_flat] *= 0
-    loss_regression_sin_phi[~mask_flat] *= 0
-    loss_regression_cos_phi[~mask_flat] *= 0
-    loss_regression_energy[~mask_flat] *= 0
-
-    # add weight based on target pt
-    # ensure input to sqrt is positive
-    sqrt_target_pt = torch.sqrt(torch.clamp(torch.exp(y_pt_flat) * batch.X.view(-1, batch.X.shape[-1])[:, 1], min=1e-6))
-    loss_regression_pt *= sqrt_target_pt
-    loss_regression_energy *= sqrt_target_pt
-
-    if npart > 0:
-        loss["Regression_pt"] = loss_regression_pt.sum() / npart
-        loss["Regression_eta"] = loss_regression_eta.sum() / npart
-        loss["Regression_sin_phi"] = loss_regression_sin_phi.sum() / npart
-        loss["Regression_cos_phi"] = loss_regression_cos_phi.sum() / npart
-        loss["Regression_energy"] = loss_regression_energy.sum() / npart
-    else:
-        loss["Regression_pt"] = torch.tensor(0.0, device=batch.X.device)
-        loss["Regression_eta"] = torch.tensor(0.0, device=batch.X.device)
-        loss["Regression_sin_phi"] = torch.tensor(0.0, device=batch.X.device)
-        loss["Regression_cos_phi"] = torch.tensor(0.0, device=batch.X.device)
-        loss["Regression_energy"] = torch.tensor(0.0, device=batch.X.device)
-
-    return loss
-
-
-def mlpf_loss(y, ypred, batch):
-    """
-    Args
-        y [dict]: relevant keys are "cls_id, momentum, charge, particle_number"
-        ypred [dict]: relevant keys are "cls_id_onehot, momentum, charge, oc_beta, oc_coords"
-        batch [PFBatch]: the MLPF inputs
-    """
-    loss_obj_id = FocalLoss(gamma=2.0, reduction="none")
-
-    is_no_target = y["cls_id"] == 0
-    for d in [ypred, y]:
-        for key in ["pt", "eta", "sin_phi", "cos_phi", "energy", "phi"]:
-            if key in d:
-                d[key] = torch.where(is_no_target, torch.zeros_like(d[key]), d[key])
-        if "p4" in d:
-            p4 = d["p4"].clone()
-            for i in range(4):
-                p4[..., i] = torch.where(is_no_target, torch.zeros_like(p4[..., i]), p4[..., i])
-            d["p4"] = p4
-        if "momentum" in d:
-            momentum = d["momentum"].clone()
-            for i in range(5):
-                momentum[..., i] = torch.where(is_no_target, torch.zeros_like(momentum[..., i]), momentum[..., i])
-            d["momentum"] = momentum
-
-    msk_true_particle = torch.unsqueeze((y["cls_id"] != 0).to(dtype=torch.float32), dim=-1)
-    npart = torch.sum(y["cls_id"] != 0)
-
-    # Flatten across batch and sequence length, but only for non-padded elements
-    mask_flat = batch.mask.view(-1).bool()
-    nelem = torch.sum(mask_flat)
-
-    # Create local copies of momentum to avoid in-place modification of model outputs
-    momentum_pred = ypred["momentum"] * msk_true_particle
-    momentum_true = y["momentum"] * msk_true_particle
-
-    # Also extract individual regression components
-    ypred_momentum_unpacked = {
-        "pt": torch.nan_to_num(ypred["pt"]),
-        "eta": torch.nan_to_num(ypred["eta"]),
-        "sin_phi": torch.nan_to_num(ypred["sin_phi"]),
-        "cos_phi": torch.nan_to_num(ypred["cos_phi"]),
-        "energy": torch.nan_to_num(ypred["energy"]),
-        "momentum": torch.nan_to_num(momentum_pred),
+    return {
+        "Classification_binary": binary,
+        "Classification": pid,
     }
 
-    ypred_combined = {**ypred, **ypred_momentum_unpacked}
-    y_combined = {**y, "momentum": momentum_true}
 
-    loss = mlpf_loss_standard(y_combined, ypred_combined, batch, mask_flat, npart, nelem, loss_obj_id)
+def regression_loss(y, ypred, input_pt, regression_weights):
+    """Compute per-particle kinematic losses for flattened event elements."""
+    is_particle = y["cls_id"] != 0
+    num_particles = is_particle.sum().clamp_min(1)
+    sqrt_target_pt = torch.sqrt(torch.clamp(torch.exp(y["pt"]) * input_pt, min=1e-6))
 
-    # this is the final loss to be optimized
-    loss["Total"] = (
-        loss["Classification_binary"]
-        + loss["Classification"]
-        + loss["Regression_pt"]
-        + loss["Regression_eta"]
-        + loss["Regression_sin_phi"]
-        + loss["Regression_cos_phi"]
-        + loss["Regression_energy"]
-    )
-    loss_opt = loss["Total"]
+    losses = {}
+    for feature in REGRESSION_FEATURES:
+        weight = regression_weights[feature]
+        prediction = torch.nan_to_num(ypred[feature])
+        per_element = weight * F.mse_loss(prediction, y[feature], reduction="none")
+        per_element = torch.where(is_particle, per_element, torch.zeros_like(per_element))
+        if feature in {"pt", "energy"}:
+            per_element = per_element * sqrt_target_pt
+        losses[f"Regression_{feature}"] = per_element.sum() / num_particles
+
+    return losses
+
+
+def particle_loss(y, ypred, input_pt, regression_weights):
+    """Compute classification and regression losses over flattened particles."""
+    losses = classification_loss(y, ypred)
+    losses.update(regression_loss(y, ypred, input_pt, regression_weights))
+    return losses
+
+
+def event_loss(y, ypred, batch, regression_weights):
+    """Compute losses for complete padded event batches.
+
+    The standard loss currently contains only independent particle terms.
+    Event-level terms comparing particle collections can be added here.
+    """
+    y, ypred = _mask_no_target_regression(y, ypred)
+    valid = batch.mask.bool()
+
+    particle_targets = {
+        "cls_id": y["cls_id"][valid],
+        **{feature: y[feature][valid] for feature in REGRESSION_FEATURES},
+    }
+    particle_predictions = {
+        "cls_binary": ypred["cls_binary"][valid],
+        "cls_id_onehot": ypred["cls_id_onehot"][valid],
+        **{feature: ypred[feature][valid] for feature in REGRESSION_FEATURES},
+    }
+    input_pt = batch.X[..., 1][valid]
+
+    return particle_loss(particle_targets, particle_predictions, input_pt, regression_weights)
+
+
+def mlpf_loss(y, ypred, batch, regression_weights):
+    """Compute the standard MLPF objective for a batch of events."""
+    loss = event_loss(y, ypred, batch, regression_weights)
+
+    loss_opt = sum(loss.values())
+    loss["Total"] = loss_opt
     if torch.isnan(loss_opt):
         _logger.error(ypred)
         _logger.error(loss)

@@ -421,6 +421,12 @@ models:
     patience: 10000
     checkpoint_freq: 10000
     val_freq: 10000
+    regression_loss_weights:
+      pt: 1.0
+      eta: 0.01
+      sin_phi: 0.01
+      cos_phi: 0.01
+      energy: 1.0
 
     raytune:
       local_dir:  # absolute path to store raytune results, e.g. "/scratch/local/user/raytune_results"
