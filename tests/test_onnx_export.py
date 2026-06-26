@@ -75,7 +75,7 @@ def _export_and_validate(model, config, seq_len, tmpdir):
         opset_version=20,
         verbose=False,
         input_names=["Xfeat_normed", "mask"],
-        output_names=["bid", "id", "momentum", "pu", "oc_beta", "oc_coords"],
+        output_names=["bid", "id", "momentum", "pu"],
         dynamic_axes={
             "Xfeat_normed": {0: "batch", 1: "seq"},
             "mask": {0: "batch", 1: "seq"},

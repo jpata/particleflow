@@ -114,14 +114,12 @@ def test_mlpf_heptv2():
 
     mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
-    preds_binary_particle, preds_pid, preds_momentum, preds_pu, preds_oc_beta, preds_oc_coords = model(X, mask)
+    preds_binary_particle, preds_pid, preds_momentum, preds_pu = model(X, mask)
 
     assert preds_binary_particle.shape == (batch_size, seq_len, 2)
     assert preds_pid.shape == (batch_size, seq_len, config.num_classes)
     assert preds_momentum.shape == (batch_size, seq_len, 5)
     assert preds_pu.shape == (batch_size, seq_len, 2)
-    assert preds_oc_beta.shape == (batch_size, seq_len, 1)
-    assert preds_oc_coords.shape == (batch_size, seq_len, 3)
 
 
 def test_mlpf_gnnlsh():

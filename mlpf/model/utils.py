@@ -67,7 +67,7 @@ def get_clustering(betas: torch.Tensor, X: torch.Tensor, tbeta=0.1, td=1.0):
 # @torch.compile
 def unpack_predictions(preds):
     ret = {}
-    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret["ispu"], ret["oc_beta"], ret["oc_coords"] = preds
+    ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret["ispu"] = preds
 
     # unpacking
     ret["pt"] = ret["momentum"][..., 0]
