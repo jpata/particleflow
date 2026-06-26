@@ -225,7 +225,7 @@ def unsort_from_buckets(s_x, perm_inverse):
 
 
 def qkv_res(s_query, s_key, s_value):
-    if flex_attention is not None and s_query.is_cuda:
+    if flex_attention is not None and s_query.is_cuda and s_query.shape[-1] >= 16 and s_value.shape[-1] >= 16:
         try:
             t_query = rearrange(s_query, "c h nbuckets b d -> (c h) nbuckets b d").contiguous()
             t_key = rearrange(s_key, "c h nbuckets b d -> (c h) nbuckets b d").contiguous()

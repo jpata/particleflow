@@ -10,6 +10,7 @@ import sys
 import os
 import matplotlib
 import datetime
+import math
 from puppi import compute_puppi_weights, deltaR_matrix
 import tqdm
 
@@ -63,13 +64,31 @@ Examples:
 """
 
 
+def bucket_padding_multiple(config, attention_type):
+    bucket_sizes = []
+    if config is None:
+        if attention_type in {"hept", "gnnlsh"}:
+            bucket_sizes.append(100)
+        return math.lcm(*bucket_sizes) if bucket_sizes else None
+
+    for layers in config.backbone.values():
+        for layer in layers:
+            if layer.type == "hept":
+                bucket_sizes.append(layer.block_size)
+            elif layer.type == "gnnlsh":
+                bucket_sizes.append(getattr(layer, "bin_size", getattr(layer, "bucket_size", 100)))
+
+    bucket_sizes = [int(size) for size in bucket_sizes if int(size) > 0]
+    return math.lcm(*bucket_sizes) if bucket_sizes else None
+
+
 def get_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, epilog=DSL_DESCRIPTION)
     parser.add_argument("--data-dir", type=str, default=None, help="Path to tfds directory")
     parser.add_argument(
         "--attention-type",
         type=str,
-        default="global",
+        default="standard",
         choices=["hept", "global", "standard", "fastformer"],
         help="Attention type (ignored if --dsl is used)",
     )
@@ -116,7 +135,7 @@ def evaluate(model, loader, device, output_dir="parquet", run_num=0, enable_pupp
             mask = batch.mask.to(device)
 
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
-                logits_binary, logits_pid, logits_pu, preds_momentum, attnss = model(X, mask, return_attn=True)
+                logits_binary, logits_pid, logits_pu, preds_momentum = model(X, mask, return_attn=False)
 
             # Predicted
             pred_id = torch.argmax(logits_pid, dim=-1)
@@ -433,9 +452,16 @@ if __name__ == "__main__":
         out_dir = f"experiments/standalone/{args.attention_type}/{timestamp}/"
         os.makedirs(out_dir, exist_ok=True)
 
+    config = None
+    if args.dsl:
+        print(f"Using DSL: {args.dsl}")
+        config = parse_dsl(args.dsl)
+
+    pad_to_multiple = bucket_padding_multiple(config, args.attention_type)
+
     # Load dataset
-    ds_train = PFDataset(data_dir, "cms_pf_qcd:3.0.0", "train", num_samples=5000).ds
-    ds_valid = PFDataset(data_dir, "cms_pf_qcd:3.0.0", "test", num_samples=500).ds
+    ds_train = PFDataset(data_dir, "cms_pf_qcd:3.0.0", "train", num_samples=5000, pad_to_multiple=pad_to_multiple).ds
+    ds_valid = PFDataset(data_dir, "cms_pf_qcd:3.0.0", "test", num_samples=500, pad_to_multiple=pad_to_multiple).ds
 
     collater = Collater(["X", "ytarget"], ["genmet"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -449,8 +475,6 @@ if __name__ == "__main__":
         print(f"\n--- Run {i+1}/3 ---")
 
         if args.dsl:
-            print(f"Using DSL: {args.dsl}")
-            config = parse_dsl(args.dsl)
             model = MLPF(config=config).to(device)
         else:
             # 55 features for CMS, re-initialize model for each run
@@ -471,6 +495,10 @@ if __name__ == "__main__":
         start_total = time.time()
 
         if args.eval is None:
+            #Since compilation is redone for each event size, we need to make sure to pad the dataset when compilation is used.
+            #This might not be worth it for quick trainings due to the initial startup time.
+            #model.compile()
+
             model.train()
 
             # Fresh loaders for each run (especially for shuffling)
