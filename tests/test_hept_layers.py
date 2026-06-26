@@ -3,7 +3,13 @@ import math
 import pytest
 import torch
 
-from mlpf.model.hept import HEPTLayer, qkv_res as hept_qkv_res, sort_to_buckets as hept_sort_to_buckets, unsort_from_buckets as hept_unsort_from_buckets, invert_permutation as hept_invert_permutation
+from mlpf.model.hept import (
+    HEPTLayer,
+    qkv_res as hept_qkv_res,
+    sort_to_buckets as hept_sort_to_buckets,
+    unsort_from_buckets as hept_unsort_from_buckets,
+    invert_permutation as hept_invert_permutation,
+)
 from mlpf.model.heptv2 import HEPTv2Layer, qkv_res as heptv2_qkv_res
 
 

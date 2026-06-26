@@ -466,7 +466,7 @@ if __name__ == "__main__":
 
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
-            # Train for a fixed time
+            # Train for a fixed time, e.g. 30 minutes
             train_loss, train_loss_binary, train_loss_pid, train_loss_kinematics, train_loss_pu, num_steps = train(
                 model, train_loader, optimizer, device, duration_seconds=30 * 60, experiment=experiment
             )
