@@ -44,7 +44,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`distributed_ray.py`**: Integration with Ray for distributed training and HPO.
 
 ## 5. Validation, Plotting & Monitoring
-- **`mlpf/standalone_eval/key4hep/`**: Standalone tools for evaluating model checkpoints and generating performance plots for Key4Hep detectors.
+- **`mlpf/standalone_eval/key4hep/`**: Standalone tools for evaluating model checkpoints and generating performance plots on ROOT files for Key4Hep detectors.
 - **`mlpf/plotting/`**: Comprehensive suite of plotting tools.
   - **`plot_validation.py` / `plot_met_validation.py`**: Standard validation plots for jets and MET.
   - **`corrections.py`**: Derivation of jet energy corrections.
@@ -59,7 +59,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`mlpf/customizations.py`**: Config customization helpers for fast CI/test pipelines.
 - **`mlpf/timing.py`**: Performance timing utilities.
 - **`mlpf/optimizers/`**: Custom optimizers like LAMB (`lamb.py`).
-- **`mlpf/standalone/`**: Standalone training and evaluation scripts (`train.py`, `eval.py`, `dsl.py`, `puppi.py`, `plot_evolution.py`, `run_evolution.py`). The standalone trainer uses a HEPTv2-backed HEPT attention layer, and the evaluator documents the architecture DSL for shared and branch-specific backbones.
+- **`mlpf/standalone/`**: Standalone, hackable MLPF training and architecture search (`train.py`, `eval.py`, `dsl.py`, `puppi.py`, `plot_evolution.py`, `run_evolution.py`).
 - **`mlpf/raytune/`**: Ray Tune integration for hyperparameter search (`search_space.py`, `utils.py`).
 - **`mlpf/jet_utils.py`**: Jet clustering and matching logic.
 - **`scripts/`**: Miscellaneous utility scripts.
