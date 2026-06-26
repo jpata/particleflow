@@ -138,7 +138,7 @@ class E2LSH(nn.Module):
         self.beta.requires_grad = False
 
     def forward(self, vecs):
-        projection = torch.bmm(vecs, self.alpha)
+        projection = torch.bmm(vecs, self.alpha.to(vecs.dtype))
         return projection.permute(2, 0, 1)
 
 
@@ -253,7 +253,7 @@ def qkv_res(s_query, s_key, s_value):
 
 def lsh_coords(e2lsh, coords2, num_heads):
     if _HEPTV2_E2LSH_COORDS_EINSUM:
-        return torch.einsum("nd,hdc->chn", coords2, e2lsh.alpha)
+        return torch.einsum("nd,hdc->chn", coords2, e2lsh.alpha.to(coords2.dtype))
     pos = coords2.repeat(num_heads, 1, 1)
     return e2lsh(pos)
 

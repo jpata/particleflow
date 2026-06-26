@@ -309,9 +309,9 @@ class InterBinAttentionLayer(nn.Module):
         wq, wk, wv = torch.split(self.in_proj_weight, [embed_dim, embed_dim, embed_dim], dim=0)
         bq, bk, bv = torch.split(self.in_proj_bias, [embed_dim, embed_dim, embed_dim], dim=0)
 
-        q = torch.matmul(x_bin_mean, wq.T) + bq
-        k = torch.matmul(x_bin_mean, wk.T) + bk
-        v = torch.matmul(x_bin_mean, wv.T) + bv
+        q = torch.matmul(x_bin_mean, wq.to(torch.float32).T) + bq.to(torch.float32)
+        k = torch.matmul(x_bin_mean, wk.to(torch.float32).T) + bk.to(torch.float32)
+        v = torch.matmul(x_bin_mean, wv.to(torch.float32).T) + bv.to(torch.float32)
 
         # Use reshape with symbolic seq_len from size()
         q = q.reshape(bs, seq_len, num_heads, head_dim)
@@ -369,7 +369,7 @@ class MessageBuildingLayerLSH(nn.Module):
         with torch.autocast(device_type=x_msg.device.type, enabled=False):
             x_msg_32 = x_msg.to(torch.float32)
 
-            mul = self.lsh_proj(x_msg_32)
+            mul = F.linear(x_msg_32, self.lsh_proj.weight.to(torch.float32), self.lsh_proj.bias)
 
             n_rotations = self.lsh_proj.out_features // (self.num_or_hashes * self.num_and_hashes)
             rotation_idx = torch.arange(n_rotations, device=mul.device).view(1, 1, 1, 1, -1)
