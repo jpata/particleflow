@@ -76,6 +76,7 @@ def get_args():
     parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string; see examples below")
     parser.add_argument("--show-attention", action="store_true", help="Save attention visualization")
     parser.add_argument("--comet", action="store_true", help="Track loss using comet")
+    parser.add_argument("--puppi", action="store_true", help="Compute and save PUPPI weights during evaluation")
     parser.add_argument("--eval", action=None, help="Run eval only, pass the path to the pth file stored")
     return parser.parse_args()
 
@@ -98,11 +99,12 @@ def med_iqr(arr):
     return p50, iqr
 
 
-def evaluate(model, loader, device, output_dir="parquet", run_num=0):
+def evaluate(model, loader, device, output_dir="parquet", run_num=0, enable_puppi=False):
     model.eval()
     all_pred_particles = []
     all_target_particles = []
     awk_to_save = []
+    print("running predictions")
     with torch.no_grad():
         for i, batch in tqdm.tqdm(enumerate(loader)):
             #        if i % 10 == 0:
@@ -141,26 +143,35 @@ def evaluate(model, loader, device, output_dir="parquet", run_num=0):
 
             pred_id_np = pred_id.detach().cpu().numpy()
             logits_binary = logits_binary.detach().cpu().float().numpy()
-            puppi_weights, puppi_chi2, puppi_alpha = run_puppi(
-                X.detach().cpu().float().numpy(), target_ispu, pred_id_np, pt, eta, cos_phi, sin_phi, logits_binary, target_id
-            )
-
-            awk_shape = ak.num(puppi_weights)
-            real_parts = (pred_id_np != 0) & (np.argmax(logits_binary, axis=-1) == 1) & (target_id != 0)
-
-            awk_to_save.append(
-                ak.Array(
-                    {
-                        "puppi_weight": puppi_weights,
-                        "puppi_chi2": puppi_chi2,
-                        "puppi_alpha": puppi_alpha,
-                        "pid": ak.unflatten(pred_id_np[real_parts], awk_shape),
-                        "pt": ak.unflatten(pt[real_parts], awk_shape),
-                        "eta": ak.unflatten(eta[real_parts], awk_shape),
-                        "ispu": ak.unflatten(target_ispu[real_parts], awk_shape),
-                    }
+            if enable_puppi:
+                puppi_weights, puppi_chi2, puppi_alpha = run_puppi(
+                    X.detach().cpu().float().numpy(),
+                    target_ispu,
+                    pred_id_np,
+                    pt,
+                    eta,
+                    cos_phi,
+                    sin_phi,
+                    logits_binary,
+                    target_id,
                 )
-            )
+
+                awk_shape = ak.num(puppi_weights)
+                real_parts = (pred_id_np != 0) & (np.argmax(logits_binary, axis=-1) == 1) & (target_id != 0)
+
+                awk_to_save.append(
+                    ak.Array(
+                        {
+                            "puppi_weight": puppi_weights,
+                            "puppi_chi2": puppi_chi2,
+                            "puppi_alpha": puppi_alpha,
+                            "pid": ak.unflatten(pred_id_np[real_parts], awk_shape),
+                            "pt": ak.unflatten(pt[real_parts], awk_shape),
+                            "eta": ak.unflatten(eta[real_parts], awk_shape),
+                            "ispu": ak.unflatten(target_ispu[real_parts], awk_shape),
+                        }
+                    )
+                )
 
             # Collect particles for jet clustering
             for b in range(X.shape[0]):
@@ -184,12 +195,13 @@ def evaluate(model, loader, device, output_dir="parquet", run_num=0):
                     all_target_particles.append(vector.awk(ak.from_iter(p_target)))
                 else:
                     all_target_particles.append(None)
-
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    ak.to_parquet(ak.concatenate(awk_to_save), f"{output_dir}/puppi_info_{run_num}.parquet")
+    if enable_puppi and len(awk_to_save) > 0:
+        ak.to_parquet(ak.concatenate(awk_to_save), f"{output_dir}/puppi_info_{run_num}.parquet")
 
     # Compute response by clustering event-by-event
+    print("computing jet metrics")
     responses = []
     jet_match_dr = 0.4
     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
@@ -466,9 +478,9 @@ if __name__ == "__main__":
 
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
-            # Train for a fixed time, e.g. 30 minutes
+            # Train for a fixed time, e.g. 1 minute
             train_loss, train_loss_binary, train_loss_pid, train_loss_kinematics, train_loss_pu, num_steps = train(
-                model, train_loader, optimizer, device, duration_seconds=30 * 60, experiment=experiment
+                model, train_loader, optimizer, device, duration_seconds=1 * 60, experiment=experiment
             )
 
             training_seconds = time.time() - start_total
@@ -491,7 +503,14 @@ if __name__ == "__main__":
 
         # Evaluate jet metrics
         print("Evaluating jet metrics...")
-        val_jet_iqr, val_jet_matched_frac = evaluate(model, valid_loader, device, output_dir=out_dir, run_num=i)
+        val_jet_iqr, val_jet_matched_frac = evaluate(
+            model,
+            valid_loader,
+            device,
+            output_dir=out_dir,
+            run_num=i,
+            enable_puppi=args.puppi,
+        )
 
         total_seconds = time.time() - start_total
 
