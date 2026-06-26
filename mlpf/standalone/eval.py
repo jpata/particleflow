@@ -34,8 +34,37 @@ from mlpf.jet_utils import match_jets
 from mlpf.standalone.dsl import parse_dsl
 
 
+DSL_DESCRIPTION = """\
+Model DSL:
+  The --dsl option describes the model as input|backbone|output.
+
+  Input:
+    i(input_dim,embedding_dim,width,type)
+
+  Backbone layers:
+    h(...) = HEPT, g(...) = global, s(...) = standard, f(...) = fastformer
+    Layer args are num_heads,embedding_dim,width, with optional pos=T and
+    dropout=... . HEPT also accepts block_size, n_hashes, num_regions, and
+    num_w_per_dist.
+
+  Backbone composition:
+    Use + to chain different layers and *N to repeat one layer. A plain
+    backbone is shared by all heads. Add a branch dictionary to give one or
+    more heads their own layers after the shared part.
+
+  Output:
+    o(num_classes,width,type) or o(num_classes,width,type,rg=linear)
+
+Examples:
+  --dsl 'i(55,128,256,default)|g(16,128,512)*3|o(8,256,default)'
+  --dsl 'i(55,128,256,default)|h(16,128,512,pos=T)*6|o(8,256,default,rg=linear)'
+  --dsl 'i(55,128,256,default)|h(16,128,512)*2+g(16,128,512)+s(16,128,512)|o(8,256,default)'
+  --dsl 'i(55,128,256,default)|h(16,128,512)*2+{pid:g(16,128,512),reg:s(16,128,512),binary:f(16,128,512)}|o(8,256,default)'
+"""
+
+
 def get_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, epilog=DSL_DESCRIPTION)
     parser.add_argument("--data-dir", type=str, default=None, help="Path to tfds directory")
     parser.add_argument(
         "--attention-type",
@@ -44,7 +73,7 @@ def get_args():
         choices=["hept", "global", "standard", "fastformer"],
         help="Attention type (ignored if --dsl is used)",
     )
-    parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string")
+    parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string; see examples below")
     parser.add_argument("--show-attention", action="store_true", help="Save attention visualization")
     parser.add_argument("--comet", action="store_true", help="Track loss using comet")
     parser.add_argument("--eval", action=None, help="Run eval only, pass the path to the pth file stored")
@@ -385,10 +414,11 @@ if __name__ == "__main__":
     print(f"Data directory: {data_dir}")
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
     if args.eval:
         out_dir = args.eval
     else:
-        out_dir = f"/oscar/home/kho29/particleflow/mlpf/standalone/experiments/{args.attention_type}/{timestamp}/"
+        out_dir = f"experiments/standalone/{args.attention_type}/{timestamp}/"
         os.makedirs(out_dir, exist_ok=True)
 
     # Load dataset
