@@ -495,9 +495,9 @@ if __name__ == "__main__":
         start_total = time.time()
 
         if args.eval is None:
-            #Since compilation is redone for each event size, we need to make sure to pad the dataset when compilation is used.
-            #This might not be worth it for quick trainings due to the initial startup time.
-            #model.compile()
+            # Since compilation is redone for each event size, we need to make sure to pad the dataset when compilation is used.
+            # This might not be worth it for quick trainings due to the initial startup time.
+            # model.compile()
 
             model.train()
 
