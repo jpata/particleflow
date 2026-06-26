@@ -575,6 +575,7 @@ class MLPFConfig(BaseModel):
 
     @model_validator(mode="after")
     def populate_defaults(self) -> "MLPFConfig":
+        self.conv_type = ModelType(self.model.type)
         if self.dataset.value in X_FEATURES:
             if self.input_dim is None:
                 self.input_dim = len(X_FEATURES[self.dataset.value])
