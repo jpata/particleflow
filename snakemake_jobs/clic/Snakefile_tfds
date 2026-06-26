@@ -30,7 +30,7 @@ rule tfds_task:
     resources:
         tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
-        "/scratch/persistent/joosep/singularity/particleflow-20260330-cd2f54.sif"
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:
         "snakemake_jobs/clic/tfds/tfds_{wildcards.sample}.sh {wildcards.config} && touch {output}"
 

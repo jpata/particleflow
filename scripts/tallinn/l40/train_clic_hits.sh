@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition gpu
-#SBATCH --gres gpu:l40:1
+#SBATCH --gres gpu:l40:2
 #SBATCH --mem-per-gpu 80G
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%j-%N.out
@@ -22,6 +22,6 @@ uv run python3 mlpf/pipeline.py \
     --production clic \
     --data-dir $DATA_DIR \
     train \
-    --gpus 1 \
+    --gpus 2 \
     --num_workers 4 \
     --prefetch_factor 2

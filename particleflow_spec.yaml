@@ -14,7 +14,7 @@ project:
       site_name: "tallinn"
       executor: "slurm"
       slurm_account: "hepusers"
-      container: "/scratch/persistent/joosep/singularity/particleflow-20260330-cd2f54.sif"
+      container: "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
       bind_mounts:
         - "/local"
         - "/cvmfs"
