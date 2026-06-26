@@ -28,6 +28,8 @@ PREFERRED_ORDER = [
     "ort_mha_fp32_masked",
     "ort_mha_fp16_unmasked",
     "ort_mha_fp16_masked",
+    "onnx_sdpa_static_int8_unmasked",
+    "onnx_sdpa_static_int8_masked",
 ]
 
 LABELS = {
@@ -38,36 +40,52 @@ LABELS = {
     "pt_flash_fp16_unmasked": "PyTorch flash FP16",
     "pt_efficient_fp32_unmasked": "PyTorch efficient FP32",
     "pt_efficient_fp32_masked": "PyTorch efficient FP32 masked",
-    "onnx_sdpa_export_fp32_unmasked": "ONNX export FP32",
-    "onnx_sdpa_export_fp32_masked": "ONNX export FP32 masked",
-    "onnx_sdpa_export_fp16_unmasked": "ONNX export FP16",
-    "onnx_sdpa_export_fp16_masked": "ONNX export FP16 masked",
-    "ort_mha_fp32_unmasked": "ORT MHA FP32",
-    "ort_mha_fp32_masked": "ORT MHA FP32 masked",
-    "ort_mha_fp16_unmasked": "ORT MHA FP16",
-    "ort_mha_fp16_masked": "ORT MHA FP16 masked",
+    "onnx_sdpa_export_fp32_unmasked": "ORT decomposed SDPA FP32",
+    "onnx_sdpa_export_fp32_masked": "ORT decomposed SDPA FP32 masked",
+    "onnx_sdpa_export_fp16_unmasked": "ORT decomposed SDPA FP16",
+    "onnx_sdpa_export_fp16_masked": "ORT decomposed SDPA FP16 masked",
+    "ort_mha_fp32_unmasked": "ORT fused MHA FP32",
+    "ort_mha_fp32_masked": "ORT fused MHA FP32 masked",
+    "ort_mha_fp16_unmasked": "ORT fused MHA FP16",
+    "ort_mha_fp16_masked": "ORT fused MHA FP16 masked",
+    "onnx_sdpa_static_int8_unmasked": "ORT quantized SDPA INT8",
+    "onnx_sdpa_static_int8_masked": "ORT quantized SDPA INT8 masked",
 }
 
-FAMILY_COLORS = {
-    "pt_math": "#1f77b4",
-    "pt_flash": "#ff7f0e",
-    "pt_efficient": "#2ca02c",
-    "onnx_sdpa_export": "#9467bd",
-    "ort_mha": "#d62728",
-    "other": "#7f7f7f",
+VARIANT_COLORS = {
+    "pt_math_fp32_unmasked": "#1f77b4",
+    "pt_math_fp32_masked": "#aec7e8",
+    "pt_math_fp16_unmasked": "#17becf",
+    "pt_math_fp16_masked": "#9edae5",
+    "pt_flash_fp16_unmasked": "#ff7f0e",
+    "pt_efficient_fp32_unmasked": "#2ca02c",
+    "pt_efficient_fp32_masked": "#98df8a",
+    "onnx_sdpa_export_fp32_unmasked": "#9467bd",
+    "onnx_sdpa_export_fp32_masked": "#c5b0d5",
+    "onnx_sdpa_export_fp16_unmasked": "#8c564b",
+    "onnx_sdpa_export_fp16_masked": "#c49c94",
+    "ort_mha_fp32_unmasked": "#d62728",
+    "ort_mha_fp32_masked": "#ff9896",
+    "ort_mha_fp16_unmasked": "#7f7f7f",
+    "ort_mha_fp16_masked": "#c7c7c7",
+    "onnx_sdpa_static_int8_unmasked": "#bcbd22",
+    "onnx_sdpa_static_int8_masked": "#dbdb8d",
+    "other": "#111111",
 }
 
-DTYPE_MARKERS = {
-    "fp32": "o",
-    "fp16": "s",
-    "bf16": "D",
-    "int8": "X",
+VARIANT_MARKERS = {
+    "pt_math": "o",
+    "pt_flash": "P",
+    "pt_efficient": "h",
+    "onnx_sdpa_export": "D",
+    "onnx_sdpa_static": "X",
+    "ort_mha": "s",
     "other": "^",
 }
 
 MASK_LINESTYLES = {
     "unmasked": "-",
-    "masked": "--",
+    "masked": (0, (4, 2)),
 }
 
 
@@ -122,6 +140,8 @@ def variant_family(variant):
         return "pt_efficient"
     if variant.startswith("onnx_sdpa_export"):
         return "onnx_sdpa_export"
+    if variant.startswith("onnx_sdpa_static"):
+        return "onnx_sdpa_static"
     if variant.startswith("ort_mha"):
         return "ort_mha"
     return "other"
@@ -139,10 +159,13 @@ def variant_mask_state(variant):
 
 
 def variant_style(variant):
+    masked = variant_mask_state(variant) == "masked"
+    color = VARIANT_COLORS.get(variant, VARIANT_COLORS["other"])
     return {
-        "color": FAMILY_COLORS[variant_family(variant)],
-        "marker": DTYPE_MARKERS[variant_dtype(variant)],
+        "color": color,
+        "marker": VARIANT_MARKERS[variant_family(variant)],
         "linestyle": MASK_LINESTYLES[variant_mask_state(variant)],
+        "markerfacecolor": "white" if masked else color,
     }
 
 
@@ -164,9 +187,10 @@ def plot_panel(ax, rows, metric, title, ylabel):
             color=style["color"],
             marker=style["marker"],
             linestyle=style["linestyle"],
-            linewidth=1.8,
-            markersize=5,
-            markeredgewidth=0.8,
+            linewidth=2.2,
+            markersize=6,
+            markerfacecolor=style["markerfacecolor"],
+            markeredgewidth=1.0,
             markeredgecolor="black",
             label=LABELS.get(variant, variant),
         )
@@ -199,7 +223,10 @@ def main():
             if label not in labels:
                 handles.append(handle)
                 labels.append(label)
-    fig.legend(handles, labels, loc="outside lower center", ncol=3, fontsize=9)
+    legend = fig.legend(handles, labels, loc="outside lower center", ncol=3, fontsize=9, handlelength=3.2)
+    for text in legend.get_texts():
+        if text.get_text() == "ORT fused MHA FP16":
+            text.set_fontweight("bold")
     fig.suptitle("SDPA ONNX Benchmark Summary", fontsize=16)
 
     png_path = args.outdir / "sdpa_onnx_summary.png"

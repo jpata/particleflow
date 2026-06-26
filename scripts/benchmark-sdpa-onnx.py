@@ -28,6 +28,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from onnx import TensorProto, helper
+from onnxruntime.quantization import CalibrationDataReader, QuantFormat, QuantType, quantize_static
+from onnxruntime.quantization.calibrate import CalibrationMethod, TensorsData, create_calibrator
+from onnxruntime.quantization.onnx_quantizer import ONNXQuantizer
+from onnxruntime.quantization.quant_utils import QuantizationMode, load_model_with_shape_infer
 
 try:
     import psutil
@@ -69,6 +73,18 @@ class Variant:
     use_tf32: bool | None = None
 
 
+class SingleBatchCalibrationDataReader(CalibrationDataReader):
+    def __init__(self, feeds: dict[str, np.ndarray]):
+        self.feeds = feeds
+        self.enum_data = iter([feeds])
+
+    def get_next(self):
+        return next(self.enum_data, None)
+
+    def rewind(self):
+        self.enum_data = iter([self.feeds])
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Benchmark PyTorch SDPA and ONNX Runtime attention variants.")
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
@@ -106,8 +122,6 @@ def dtype_from_name(name: str):
         return torch.float16, np.float16, TensorProto.FLOAT16
     if name == "bf16":
         return torch.bfloat16, None, TensorProto.BFLOAT16
-    if name == "int8":
-        return torch.int8, np.int8, TensorProto.INT8
     return torch.float32, np.float32, TensorProto.FLOAT
 
 
@@ -123,9 +137,7 @@ def make_variants(device: str, modes: list[str], selected: set[str] | None, prov
                 Variant("pt_math_fp16", "pytorch", "fp16", "math"),
                 Variant("onnx_sdpa_export_fp16", "onnx_export", "fp16"),
                 Variant("ort_mha_fp16", "ort_mha", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
-                Variant("pt_math_int8", "pytorch", "int8", "math"),
-                Variant("onnx_sdpa_export_int8", "onnx_export", "int8"),
-                Variant("ort_mha_int8", "ort_mha", "int8", provider_option_sdpa_kernel=provider_sdpa_kernel),
+                Variant("onnx_sdpa_static_int8", "onnx_static_quant", "int8"),
             ]
         )
     if device == "cuda":
@@ -134,6 +146,7 @@ def make_variants(device: str, modes: list[str], selected: set[str] | None, prov
                 Variant("pt_flash_fp16", "pytorch", "fp16", "flash"),
                 Variant("pt_efficient_fp32", "pytorch", "fp32", "efficient"),
                 Variant("ort_mha_fp16", "ort_mha", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
+                Variant("onnx_sdpa_static_int8", "onnx_static_quant", "int8"),
             ]
         )
 
@@ -161,14 +174,9 @@ def provider_options_from_args(args):
 def make_inputs(batch, seq_len, hidden, dtype, device, masked, mask_fraction, seed):
     gen = torch.Generator(device="cpu")
     gen.manual_seed(seed + seq_len)
-    if dtype == torch.int8:
-        query = torch.randint(-8, 8, (batch, seq_len, hidden), generator=gen, dtype=torch.int8).to(device=device)
-        key = torch.randint(-8, 8, (batch, seq_len, hidden), generator=gen, dtype=torch.int8).to(device=device)
-        value = torch.randint(-8, 8, (batch, seq_len, hidden), generator=gen, dtype=torch.int8).to(device=device)
-    else:
-        query = torch.randn(batch, seq_len, hidden, generator=gen, dtype=torch.float32).to(device=device, dtype=dtype)
-        key = torch.randn(batch, seq_len, hidden, generator=gen, dtype=torch.float32).to(device=device, dtype=dtype)
-        value = torch.randn(batch, seq_len, hidden, generator=gen, dtype=torch.float32).to(device=device, dtype=dtype)
+    query = torch.randn(batch, seq_len, hidden, generator=gen, dtype=torch.float32).to(device=device, dtype=dtype)
+    key = torch.randn(batch, seq_len, hidden, generator=gen, dtype=torch.float32).to(device=device, dtype=dtype)
+    value = torch.randn(batch, seq_len, hidden, generator=gen, dtype=torch.float32).to(device=device, dtype=dtype)
     mask = None
     if masked:
         mask = torch.ones(batch, seq_len, dtype=torch.int32, device=device)
@@ -246,6 +254,58 @@ def make_mha_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked)
     )
     model.ir_version = min(model.ir_version, 10)
     onnx.save(model, path)
+
+
+def quantize_sdpa_model(fp32_path, int8_path, feeds):
+    quantize_static(
+        fp32_path,
+        int8_path,
+        SingleBatchCalibrationDataReader(feeds),
+        quant_format=QuantFormat.QDQ,
+        activation_type=QuantType.QInt8,
+        weight_type=QuantType.QInt8,
+        op_types_to_quantize=["MatMul"],
+        extra_options={
+            "ActivationSymmetric": True,
+            "MatMulConstBOnly": False,
+        },
+        calibration_providers=["CPUExecutionProvider"],
+    )
+
+
+def quantize_sdpa_model_integer_ops(fp32_path, int8_path, feeds):
+    data_reader = SingleBatchCalibrationDataReader(feeds)
+    calibrator = create_calibrator(
+        fp32_path,
+        ["MatMul"],
+        calibrate_method=CalibrationMethod.MinMax,
+        providers=["CPUExecutionProvider"],
+    )
+    calibrator.collect_data(data_reader)
+    tensors_range = calibrator.compute_data()
+    if not isinstance(tensors_range, TensorsData):
+        raise TypeError(f"Unexpected calibration data type: {type(tensors_range)}")
+
+    model = load_model_with_shape_infer(fp32_path)
+    quantizer = ONNXQuantizer(
+        model,
+        per_channel=False,
+        reduce_range=False,
+        mode=QuantizationMode.IntegerOps,
+        static=True,
+        weight_qType=QuantType.QInt8,
+        activation_qType=QuantType.QInt8,
+        tensors_range=tensors_range,
+        nodes_to_quantize=[],
+        nodes_to_exclude=[],
+        op_types_to_quantize=["MatMul"],
+        extra_options={
+            "ActivationSymmetric": True,
+            "MatMulConstBOnly": False,
+        },
+    )
+    quantizer.quantize_model()
+    quantizer.model.save_model_to_file(int8_path)
 
 
 def graph_stats(path):
@@ -369,7 +429,8 @@ def summarize_memory(runs):
 
 
 def benchmark_variant(args, variant, seq_len, hidden, model_dir):
-    torch_dtype, _, onnx_dtype = dtype_from_name(variant.dtype)
+    input_dtype_name = "fp32" if variant.engine == "onnx_static_quant" else variant.dtype
+    torch_dtype, _, onnx_dtype = dtype_from_name(input_dtype_name)
     device = torch.device(args.device)
     query, key, value, mask = make_inputs(
         args.batch_size,
@@ -436,6 +497,24 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
                 export_sdpa_model(model_path, query, key, value, mask, args.num_heads, args.head_dim, variant.masked)
             elif variant.engine == "ort_mha":
                 make_mha_model(model_path, args.batch_size, seq_len, hidden, onnx_dtype, args.num_heads, variant.masked)
+            elif variant.engine == "onnx_static_quant":
+                fp32_model_path = model_dir / f"{variant.name}_s{seq_len}.fp32.onnx"
+                export_sdpa_model(
+                    fp32_model_path,
+                    query,
+                    key,
+                    value,
+                    mask,
+                    args.num_heads,
+                    args.head_dim,
+                    variant.masked,
+                )
+                feeds = to_numpy_inputs(query, key, value, mask, variant)
+                result["source_graph_nodes"] = graph_stats(fp32_model_path)
+                if args.device == "cuda":
+                    quantize_sdpa_model_integer_ops(fp32_model_path, model_path, feeds)
+                else:
+                    quantize_sdpa_model(fp32_model_path, model_path, feeds)
             else:
                 raise ValueError(f"Unknown engine {variant.engine}")
 
@@ -472,6 +551,11 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
                     model_path.unlink()
                 except OSError:
                     pass
+                if variant.engine == "onnx_static_quant":
+                    try:
+                        fp32_model_path.unlink()
+                    except OSError:
+                        pass
 
         result.update(summarize_times(times))
         result.update(summarize_memory(result["runs"]))

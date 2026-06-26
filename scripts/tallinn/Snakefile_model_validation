@@ -54,7 +54,9 @@ rule all:
         [os.path.join(ONNX_DIR, device, config, "model_math_fp32.onnx") for device in DEVICES for config in CONFIGS if not (device == "cpu" and config == "litept") and config != "litept"],
         [os.path.join(ONNX_DIR, device, "litept", "summary.json") for device in DEVICES if device != "cpu"],
         expand(os.path.join(ONNX_DIR, "{device}", "plots", "runtime_scaling_summary.png"), device=DEVICES),
-        expand(os.path.join(ONNX_DIR, "{device}", "plots", "memory_scaling_summary.png"), device=DEVICES)
+        expand(os.path.join(ONNX_DIR, "{device}", "plots", "memory_scaling_summary.png"), device=DEVICES),
+        expand(os.path.join(ONNX_DIR, "{device}", "plots", "runtime_vs_memory.png"), device=DEVICES),
+        expand(os.path.join(ONNX_DIR, "{device}", "plots", "loss_vs_memory.png"), device=DEVICES)
 
 rule train:
     output:
@@ -130,7 +132,9 @@ rule plot_onnx_summary:
         lambda wildcards: expand(os.path.join(ONNX_DIR, wildcards.device, "{config}", "summary.json"), config=[c for c in CONFIGS if not (wildcards.device == "cpu" and c == "litept")])
     output:
         os.path.join(ONNX_DIR, "{device}", "plots", "runtime_scaling_summary.png"),
-        os.path.join(ONNX_DIR, "{device}", "plots", "memory_scaling_summary.png")
+        os.path.join(ONNX_DIR, "{device}", "plots", "memory_scaling_summary.png"),
+        os.path.join(ONNX_DIR, "{device}", "plots", "runtime_vs_memory.png"),
+        os.path.join(ONNX_DIR, "{device}", "plots", "loss_vs_memory.png")
     shell:
         """
         PF_SITE=tallinn uv run --project envs/ort-cpu python3 scripts/plot-onnx-summary.py --indir {ONNX_DIR}/{wildcards.device} --outdir {ONNX_DIR}/{wildcards.device}/plots
