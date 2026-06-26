@@ -18,13 +18,13 @@ copies or substantial portions of the Software.
 
 Local modifications in this repository:
 - Batched `[B, S, D]` handling in `HEPTv2Layer.forward`, including mask-aware
-  hashing and batch-offset sorting.
-- Optional fp32 hashing, direct bucket gather, combined bucket gather/unsort,
-  and manual hash-softmax paths controlled by `HEPTV2_*` environment flags.
-- Integration with the MLPF stack via `Qwen3RMSNorm`, `Qwen3MLP`,
-  `PELearned`, and the repo-specific feature layout.
-- Extra shape/debug logging and other inference/training switches that are not
-  part of the upstream HEPTv2 implementation.
+  per-event hashing and flattened batch-offset gather indices.
+- CPU fallback for bucket attention when `flex_attention` is unavailable or not
+  used, plus optional shape/debug logging.
+- Integration with the MLPF stack through the repo-specific feature layout
+  (`eta`, `sin_phi`, `cos_phi` -> eta-phi coordinates).
+- Several `HEPTV2_*` environment switches are preserved from the upstream
+  inference code; this file also supports those switches in the batched path.
 """
 
 import math
@@ -52,13 +52,25 @@ def _env_bool(name, default=False):
     return raw.lower() in {"1", "true", "yes", "on"}
 
 
-_HEPTV2_ENCODER_HASH_FP32 = _env_bool("HEPTV2_ENCODER_HASH_FP32")
-_HEPTV2_COMBINED_BUCKET_GATHER = _env_bool("HEPTV2_COMBINED_BUCKET_GATHER")
-_HEPTV2_COMBINED_UNSORT = _env_bool("HEPTV2_COMBINED_UNSORT")
-_HEPTV2_MANUAL_HASH_SOFTMAX = _env_bool("HEPTV2_MANUAL_HASH_SOFTMAX")
-_HEPTV2_DIRECT_BUCKET_GATHER = _env_bool("HEPTV2_DIRECT_BUCKET_GATHER")
-_HEPTV2_E2LSH_COORDS_EINSUM = _env_bool("HEPTV2_E2LSH_COORDS_EINSUM")
-_HEPTV2_DEBUG_SHAPES = _env_bool("HEPTV2_DEBUG_SHAPES")
+# Defaults favor stable hashing and equivalent lower-overhead tensor paths.
+# Each switch can still be overridden with HEPTV2_*={0,1,true,false,...}.
+_HEPTV2_DEFAULTS = {
+    "HEPTV2_ENCODER_HASH_FP32": True,
+    "HEPTV2_COMBINED_BUCKET_GATHER": True,
+    "HEPTV2_COMBINED_UNSORT": True,
+    "HEPTV2_MANUAL_HASH_SOFTMAX": False,
+    "HEPTV2_DIRECT_BUCKET_GATHER": True,
+    "HEPTV2_E2LSH_COORDS_EINSUM": True,
+    "HEPTV2_DEBUG_SHAPES": False,
+}
+
+_HEPTV2_ENCODER_HASH_FP32 = _env_bool("HEPTV2_ENCODER_HASH_FP32", _HEPTV2_DEFAULTS["HEPTV2_ENCODER_HASH_FP32"])
+_HEPTV2_COMBINED_BUCKET_GATHER = _env_bool("HEPTV2_COMBINED_BUCKET_GATHER", _HEPTV2_DEFAULTS["HEPTV2_COMBINED_BUCKET_GATHER"])
+_HEPTV2_COMBINED_UNSORT = _env_bool("HEPTV2_COMBINED_UNSORT", _HEPTV2_DEFAULTS["HEPTV2_COMBINED_UNSORT"])
+_HEPTV2_MANUAL_HASH_SOFTMAX = _env_bool("HEPTV2_MANUAL_HASH_SOFTMAX", _HEPTV2_DEFAULTS["HEPTV2_MANUAL_HASH_SOFTMAX"])
+_HEPTV2_DIRECT_BUCKET_GATHER = _env_bool("HEPTV2_DIRECT_BUCKET_GATHER", _HEPTV2_DEFAULTS["HEPTV2_DIRECT_BUCKET_GATHER"])
+_HEPTV2_E2LSH_COORDS_EINSUM = _env_bool("HEPTV2_E2LSH_COORDS_EINSUM", _HEPTV2_DEFAULTS["HEPTV2_E2LSH_COORDS_EINSUM"])
+_HEPTV2_DEBUG_SHAPES = _env_bool("HEPTV2_DEBUG_SHAPES", _HEPTV2_DEFAULTS["HEPTV2_DEBUG_SHAPES"])
 
 
 def _debug_shape(name, tensor):

@@ -12,19 +12,22 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-# Implementation Differences from Official HEPT (HEPT/example/hept.py & HEPT/hept.md):
-# 1. Batching & Precision: Supports batched inputs [B, N, D] via flattening. Coordinates
-#    and offsets are forced to float32. Note: Large batch sizes (>500) may cause "smearing"
-#    of hit coordinates due to float32 precision limits when adding large offsets.
-# 2. Query-Key Alignment (Sec 4.3): Implements coordinate-based AND LSH codes via
-#    quantile_partition() and get_geo_shift() specifically for HEP 2D eta-phi space.
+# Implementation Differences from Official HEPT (HEPT/example/hept.py and
+# HEPT/src/models/attention/hept.py):
+# 1. Batching & Precision: Supports batched inputs [B, N, D] via flattening and
+#    coordinate offsets. Coordinates and offsets are forced to float32. This is
+#    a heuristic isolation mechanism; very large batches can suffer float32
+#    precision loss when adding large offsets.
+# 2. Query-Key Alignment: Uses the coordinate-based AND-LSH region shifts from
+#    the official HEPT source implementation via quantile_partition() and
+#    get_geo_shift() for 2D eta-phi coordinates.
 # 3. Output Projection: HEPTAttention projects to full embedding dim (num_heads * dim_per_head)
 #    instead of dim_per_head as seen in some official examples.
 # 4. Numerical Stability & Gradient Safety: Core RBF distance and weighted sums are performed
-#    in float32. Includes 1e-20 eps and crops outputs back to raw_size before projection
+#    in float32. Uses 1e-5 eps and crops outputs back to raw_size before projection
 #    to ensure stable training and finite gradients in highly sparse attention patterns.
-# 5. Backbone Integration: Uses ELU activations and integrated PositionalEncoding
-#    as used in the paper's Tracking experiments.
+# 5. Backbone Integration: Wraps the HEPT attention in the local MLPF layer
+#    interface, including optional eta-phi positional encoding and an ELU FFN.
 
 import math
 import random
