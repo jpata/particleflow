@@ -1,6 +1,6 @@
 # --- HEPT Utilities ---
-# Adapted from https://github.com/mova/HEPT
-# Paper: "HEPT: Hashed Efficient Particle Transformer", https://arxiv.org/abs/2405.21051
+# Adapted from https://github.com/Graph-COM/HEPT
+# Paper: "HEPT: Hashed Efficient Particle Transformer", https://arxiv.org/abs/2510.07594
 # MIT License
 # Copyright (c) 2024 Graph-COM
 # Permission is hereby granted, free of charge, to any person obtaining a copy

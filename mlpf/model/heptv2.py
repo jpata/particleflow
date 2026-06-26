@@ -1,7 +1,31 @@
-# --- HEPTv2 Point Encoder Layer ---
-# Adapted from https://github.com/Graph-COM/HEPTv2
-# MIT License
-# Copyright (c) 2024 Graph-COM
+"""HEPTv2 point encoder layer.
+
+Upstream source:
+    https://github.com/Graph-COM/HEPTv2
+Paper: https://arxiv.org/abs/2606.20437
+
+Copyright (c) 2024 Graph-COM
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+Local modifications in this repository:
+- Batched `[B, S, D]` handling in `HEPTv2Layer.forward`, including mask-aware
+  hashing and batch-offset sorting.
+- Optional fp32 hashing, direct bucket gather, combined bucket gather/unsort,
+  and manual hash-softmax paths controlled by `HEPTV2_*` environment flags.
+- Integration with the MLPF stack via `Qwen3RMSNorm`, `Qwen3MLP`,
+  `PELearned`, and the repo-specific feature layout.
+- Extra shape/debug logging and other inference/training switches that are not
+  part of the upstream HEPTv2 implementation.
+"""
 
 import math
 import os
