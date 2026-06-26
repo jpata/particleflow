@@ -21,6 +21,7 @@ class ModelType(Enum):
     GNNLSH = "gnnlsh"
     LITEPT = "litept"
     HEPT = "hept"
+    HEPTV2 = "heptv2"
 
 
 class InputEncoding(Enum):
@@ -346,10 +347,12 @@ class GNNLSHConfig(BaseModel):
     dropout_ff: float = 0.0
     activation: Activation = Activation.ELU
     layernorm: bool = True
-    bin_size: int = 32
+    bin_size: int = 100
     max_num_bins: int = 200
     distance_dim: int = 128
     num_node_messages: int = 2
+    num_or_hashes: int = 1
+    num_and_hashes: int = 1
     ffn_dist_hidden_dim: int = 128
     ffn_dist_num_layers: int = 2
     kernel_type: KernelType = KernelType.GAUSSIAN
@@ -418,7 +421,7 @@ class HEPTConfig(BaseModel):
     embedding_dim: int = 128
     width: int = 512
     num_convs: int = 6
-    num_heads: int = 16
+    num_heads: int = 8
     dropout_ff: float = 0.1
     activation: Activation = Activation.ELU
     pos: bool = False
@@ -426,6 +429,22 @@ class HEPTConfig(BaseModel):
     n_hashes: int = 3
     num_regions: int = 140
     num_w_per_dist: int = 10
+
+
+class HEPTv2Config(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    embedding_dim: int = 128
+    width: int = 512
+    num_convs: int = 6
+    num_heads: int = 8
+    dropout_ff: float = 0.1
+    activation: Activation = Activation.ELU
+    pe_type: str = "learned"
+    block_size: int = 100
+    n_hashes: int = 3
+    num_regions: int = 140
+    num_w_per_dist: int = 10
+    mlp_ratio: float = 4.0
 
 
 class ModelArchitectureConfig(BaseModel):
@@ -446,6 +465,7 @@ class ModelArchitectureConfig(BaseModel):
     attention: Optional[AttentionConfig] = None
     litept: Optional[LitePTConfig] = None
     hept: Optional[HEPTConfig] = None
+    heptv2: Optional[HEPTv2Config] = None
 
 
 class RegressionLossWeights(BaseModel):

@@ -728,9 +728,11 @@ def train_all_steps(
         # Get next training batch
         _logger.debug(f"Getting batch for step {step}")
         batch = next(train_iterator)
+        data_load_time = time.time() - step_start_time
         _logger.debug(f"Got batch for step {step} rank={rank} batch={batch.X.shape}")
 
         # Run a single training step
+        model_forward_start = time.time()
         log_memory("train_step_start", rank, tensorboard_writer_train, step)
         losses_train = train_step(
             rank=rank,
@@ -752,13 +754,24 @@ def train_all_steps(
             regression_weights=config.regression_loss_weights.model_dump(),
         )
         log_memory("train_step_end", rank, tensorboard_writer_train, step)
+        model_forward_time = time.time() - model_forward_start
         train_time = time.time() - step_start_time
+
+        if tensorboard_writer_train is not None:
+            tensorboard_writer_train.add_scalar("step/time_data_load", data_load_time, step)
+            tensorboard_writer_train.add_scalar("step/time_model_forward", model_forward_time, step)
 
         # Log a brief training status periodically on the main process
         if step % config.tensorboard_step_freq == 0:
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
-            _logger.info(f"Step {step}/{num_steps} rank{rank} | " f"Train Loss: {losses_train['Total']:.4f} | " f"LR: {current_lr:.2e}")
+            _logger.info(
+                f"Step {step}/{num_steps} rank{rank} | "
+                f"Train Loss: {losses_train['Total']:.4f} | "
+                f"LR: {current_lr:.2e} | "
+                f"DataLoad Time: {data_load_time:.4f}s | "
+                f"Model Forward Time: {model_forward_time:.4f}s"
+            )
 
             # check smi status
             log_smi(rank)
