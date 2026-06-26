@@ -10,7 +10,7 @@ The project uses a hierarchical configuration system.
 - **`mlpf/conf.py`**: Defines the Pydantic models for the configuration, ensuring type safety and handling path resolution.
 - **`mlpf/pipeline.py`**: Implements hierarchical configuration resolution: base defaults in `mlpf/conf.py` are overridden by scenario-specific values in `particleflow_spec.yaml`, which can further be overridden via command-line arguments (e.g., `--model.num_convs 6`).
 - **`configs/`**: Site-specific Pixi environment configurations (`local/`, `lxplus/`, `tallinn/`). The root `pixi.toml` is a symlink into this directory.
-- **`pixi.toml` / `uv.lock` / `uv.singularity`**: Project environment, container definitions, and task management. Defines common tasks like `gen`, `post`, `train`, and `validation`.
+- **`pixi.toml` / `pixi.lock` / `uv.lock` / `uv.singularity`**: Project environment, container definitions, and task management. Defines common tasks like `gen`, `post`, `train`, and `validation`.
 - **`envs/`**: Isolated virtual environment specifications (e.g., `ort-cpu`, `ort-gpu`) for specific runtimes like ONNX.
 - **`validation_cms.yaml` / `validation_key4hep.yaml`**: Specification files for validation scenarios.
 
@@ -26,7 +26,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 ## 3. Data Production & Preprocessing
 - **`mlpf/data/`**: Simulator-specific code for generating and preprocessing data.
   - **`cms/`**: Scripts for CMSSW-based generation (`genjob_pu.sh`), postprocessing (`postprocessing2.py`), validation (`valjob.sh`, `valjob_data.sh`), and plotting (`plot_cms.py`).
-  - **`key4hep/`**: Scripts for Key4Hep-based generation (`gen/`), postprocessing (`postprocessing.py`), and plotting (`plot_postprocessing.py`).
+  - **`key4hep/`**: Scripts for Key4Hep-based generation (`gen/`) and postprocessing (`postprocessing.py`).
 - **`mlpf/heptfds/`**: TFDS (TensorFlow Datasets) builders for various datasets (CMS, CLD, CLIC), including support for both cluster-based and raw hits-based data (`cld_pf_edm4hep_hits`, `clic_pf_edm4hep_hits`). Shared EDM4Hep utilities in `edm4hep_utils/`.
 
 ## 4. Machine Learning Core (`mlpf/model/`)
@@ -63,12 +63,10 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`mlpf/jet_utils.py`**: Jet clustering and matching logic.
 - **`scripts/`**: Miscellaneous utility scripts.
   - **`benchmark.py`**: Benchmarks the forward and backward pass timings and peak memory usage for various model architectures.
-  - **`tallinn/`, `lxplus/`, `flatiron/`**: Site-specific orchestration scripts for training and evaluation on different clusters.
+  - **`tallinn/`, `lxplus/`, `flatiron/`, `lumi/`, `local/`**: Site-specific and local orchestration scripts for training and evaluation.
+  - **`legacy/`**: Older site-specific scripts retained for previous cluster workflows.
   - **`upload_model_hf.py` / `upload_hf.py`**: Utilities for uploading experiment results and model checkpoints to HuggingFace Hub.
   - **`visualize_hits.py`**: Tool for visualizing detector hits and model embeddings using UMAP and 3D plotting.
-  - **`visualize_assignment_graphs.py`**: Visualization of particle-to-element assignment graphs.
-  - **`visualize_gt_hit_labels.py`**: Analysis and visualization of ground-truth hit labels.
-  - **`visualize_oc.py`**: Overlap-counting hit assignment visualizations.
   - **`local_test_cld.sh` / `local_test_cms.sh`**: Scripts for quick local verification of the pipeline.
   - **`fetch_test_data_cld.sh` / `fetch_test_data_cms.sh`**: Scripts to download test data for CLD and CMS.
 - **`tests/`**: Unit tests for various components of the pipeline.
