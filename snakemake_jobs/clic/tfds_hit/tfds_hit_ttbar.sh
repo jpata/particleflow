@@ -14,7 +14,7 @@ mkdir -p $TMPDIR
 cd /home/joosep/particleflow
 
 config_id=$1
-tfds_id=zz_tfds_hit_$config_id
+tfds_id=ttbar_tfds_hit_$config_id
 job_scratch_dir=/scratch/local/joosep/tfds_tmp/$tfds_id
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
@@ -23,8 +23,8 @@ hostname
 export TFDS_VERSION=3.2.0
 env
 
-echo "Building TFDS for mlpf/heptfds/cld_pf_edm4hep_hits/zz config $config_id"
-echo "Manual dir: /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/post"
+echo "Building TFDS for mlpf/heptfds/clic_pf_edm4hep_hits/ttbar config $config_id"
+echo "Manual dir: /local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/post"
 echo "Scratch dir: $job_scratch_dir"
 
 mkdir -p $job_scratch_dir
@@ -39,6 +39,6 @@ export TMPDIR=$job_scratch_dir
 export TEMPDIR=$job_scratch_dir
 export TEMP=$job_scratch_dir
 export TMP=$job_scratch_dir
-tfds build mlpf/heptfds/cld_pf_edm4hep_hits/zz --config $config_id --data_dir $job_scratch_dir --manual_dir /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/post --overwrite
-echo "Copying from $job_scratch_dir to /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds"
-cp -r $job_scratch_dir/* /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds/
+tfds build mlpf/heptfds/clic_pf_edm4hep_hits/ttbar --config $config_id --data_dir $job_scratch_dir --manual_dir /local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/post --overwrite
+echo "Copying from $job_scratch_dir to /local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds"
+cp -r $job_scratch_dir/* /local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds/

@@ -33,6 +33,7 @@ Y_FEATURES = [
     "gp_to_track",
     "gp_to_cluster",
     "jet_idx",
+    "particle_number",
 ]
 labels = [0, 211, 130, 22, 11, 13]
 

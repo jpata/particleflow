@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --partition gpu
-#SBATCH --gres gpu:l40:2
+#SBATCH --gres gpu:l40:1
 #SBATCH --mem-per-gpu 80G
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%j-%N.out
-#SBATCH --job-name=train-cld-hits
+#SBATCH --job-name=test
 
 set -e
 export PF_SITE=tallinn
@@ -21,7 +21,7 @@ uv run python3 mlpf/pipeline.py \
     --model-name pyg-cld-hits-v1 \
     --production cld \
     --data-dir $DATA_DIR \
-    train \
-    --gpus 2 \
-    --num_workers 4 \
-    --prefetch_factor 2 --make_plots
+    --experiment-dir $1 \
+    test \
+    --gpus 1 \
+    --load $1/checkpoints/checkpoint-10000.pth

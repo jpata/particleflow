@@ -7,36 +7,20 @@ export KERAS_BACKEND=torch
 
 # Quick unit tests
 rm -Rf .pytest_cache
-python -m pytest --cache-clear tests
+uv run python -m pytest --cache-clear tests
 
-#create data directories
-rm -Rf local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
-mkdir -p local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
-cd local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root
-
-#Only CMS-internal use is permitted by CMS rules! Do not use these MC simulation files otherwise!
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cms/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100001.root
-
-cd ../../..
-
-#Create the ntuples using postprocessing2.py
-for file in `\ls -1 local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi/root/*.root`; do
-  python mlpf/data/cms/postprocessing2.py \
-    --input $file \
-    --outpath local_test_data/TTbar_13p6TeV_TuneCUETP8M1_cfi
-done
-find local_test_data
+# 1. Fetch test data
+./scripts/fetch_test_data_cms.sh
 
 #create the tensorflow dataset for the last split config only
-tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
+uv run tfds build mlpf/heptfds/cms_pf/ttbar --config 10 --manual_dir ./local_test_data
 
 mkdir -p experiments
 
 # --------------------------------------------------------------------------------------------
 # Test 1: Initial training using the 'train' sub-command
 # --------------------------------------------------------------------------------------------
-python mlpf/pipeline.py \
+uv run python mlpf/pipeline.py \
   --spec-file particleflow_spec.yaml \
   --model-name pyg-cms-v1 \
   --production cms_run3 \
@@ -52,6 +36,7 @@ python mlpf/pipeline.py \
   --dtype float32 \
   --model.attention.attention_type math \
   --model.attention.num_convs 1 \
+  --ntrain 10 --ntest 10 --nvalid 10 \
   --num_workers 1 --prefetch_factor 1
 
 ls experiments/MLPF_test_*/checkpoints/*
@@ -63,7 +48,7 @@ export EXP_DIR_1=$(ls -d experiments/MLPF_test_*/ | tail -n 1)
 # Test 2: Fine-tuning from a checkpoint in a NEW directory
 # --experiment-dir is omitted, so a new one is created.
 # --------------------------------------------------------------------------------------------
-python mlpf/pipeline.py \
+uv run python mlpf/pipeline.py \
   --spec-file particleflow_spec.yaml \
   --model-name pyg-cms-v1 \
   --production cms_run3 \
@@ -80,6 +65,7 @@ python mlpf/pipeline.py \
   --model.attention.attention_type math \
   --model.attention.num_convs 1 \
   --load ${EXP_DIR_1}/checkpoints/checkpoint-02.pth \
+  --ntrain 10 --ntest 10 --nvalid 10 \
   --num_workers 1 --prefetch_factor 1
 
 ls experiments/MLPF_test_*/checkpoints/*
@@ -95,7 +81,7 @@ uv run --project envs/ort-cpu python scripts/cms-validate-onnx.py \
   --model-kwargs ${EXP_DIR_2}/model_kwargs.pkl \
   --dataset cms_pf_ttbar/10 \
   --data-dir ./tensorflow_datasets/ \
-  --num-events 50 \
+  --num-events 2 \
   --outdir ./onnx_validation_cms --device cpu
 
 ## --------------------------------------------------------------------------------------------

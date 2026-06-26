@@ -2,6 +2,7 @@
 # Dataset-specific overrides are in particleflow_spec.yaml
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional, Dict, Any
+from dataclasses import dataclass, fields
 import os
 from enum import Enum
 from mlpf.utils import resolve_path, load_spec, set_nested_dict, _resolve_paths_recursive
@@ -72,9 +73,6 @@ class AttentionType(Enum):
 class KernelType(Enum):
     GAUSSIAN = "gaussian"
     ATTENTION = "attention"
-
-
-from dataclasses import dataclass, fields
 
 
 class EDM4HEP:
@@ -177,6 +175,7 @@ class ParticleFeatures:
     gp_to_track: Any
     gp_to_cluster: Any
     jet_idx: Any
+    particle_number: Any
 
     @classmethod
     def get_names(cls):
@@ -449,6 +448,16 @@ class ModelArchitectureConfig(BaseModel):
     hept: Optional[HEPTConfig] = None
 
 
+class RegressionLossWeights(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pt: float = Field(default=1.0, ge=0.0)
+    eta: float = Field(default=1e-2, ge=0.0)
+    sin_phi: float = Field(default=1e-2, ge=0.0)
+    cos_phi: float = Field(default=1e-2, ge=0.0)
+    energy: float = Field(default=1.0, ge=0.0)
+
+
 class DatasetSample(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: str
@@ -507,6 +516,7 @@ class MLPFConfig(BaseModel):
     optimizer: OptimizerType = OptimizerType.ADAMW
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
+    regression_loss_weights: RegressionLossWeights = Field(default_factory=RegressionLossWeights)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
 
     # Flags
@@ -517,6 +527,7 @@ class MLPFConfig(BaseModel):
     sort_data: bool = False
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
     relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
+    sampler_from_scratch: bool = False  # start the sampler from scratch (without resuming the sampler state)
 
     # Logging
     comet: bool = False
@@ -734,7 +745,7 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical_pu": {
                                 "batch_size": config_dict[ds][ds_name]["physical_pu"]["batch_size"],
-                                "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "3.0.0"}},
+                                "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "3.2.0"}},
                             }
                         }
                 if "test_dataset" in config_dict and "cms_pf_ttbar" in config_dict["test_dataset"]:
@@ -747,7 +758,7 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical": {
                                 "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.1"}},
+                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.2.0"}},
                             }
                         }
                 if "test_dataset" in config_dict and "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
@@ -759,7 +770,7 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical": {
                                 "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.1"}},
+                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.2.0"}},
                             }
                         }
                 if "test_dataset" in config_dict and "clic_edm_ttbar_pf" in config_dict["test_dataset"]:

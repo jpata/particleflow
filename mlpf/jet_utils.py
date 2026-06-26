@@ -18,7 +18,6 @@ def deltar(eta1, phi1, eta2, phi2):
     return np.sqrt(deta**2 + dphi**2)
 
 
-@numba.njit
 def match_jets(jets1, jets2, deltaR_cut):
     iev = len(jets1)
     jet_inds_1_ev = []

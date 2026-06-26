@@ -21,7 +21,7 @@ def main(args):
 
     features = ["eta", "phi"]
 
-    x_data = data.x.cpu().detach().numpy()
+    x_data = data.x.cpu().detach().float().numpy()
 
     mask = (x_data[:, 4] == 0) & (x_data[:, 5] == 0) & (x_data[:, 6] == 0) & (x_data[:, 7] == 0)
     # good_index = np.zeros((x_data.shape[0], 1, 2), dtype=int)
@@ -35,7 +35,7 @@ def main(args):
     df["isTrack"] = ~mask
 
     row, col = data.edge_index.cpu().detach().numpy()
-    y_truth = data.y.cpu().detach().numpy()
+    y_truth = data.y.cpu().detach().float().numpy()
 
     input_dim = data.x.shape[1]
     hidden_dim = 32

@@ -514,10 +514,13 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
 
                 nevents = None
                 n_split_val = getattr(config, f"n{split}")
+                split_configs_to_use = list(split_configs)
                 if n_split_val is not None:
-                    nevents = n_split_val // len(split_configs)
+                    if n_split_val < len(split_configs_to_use):
+                        split_configs_to_use = split_configs_to_use[:n_split_val]
+                    nevents = max(1, n_split_val // len(split_configs_to_use))
 
-                for split_config in split_configs:
+                for split_config in split_configs_to_use:
                     ds = PFDataset(
                         config.data_dir,
                         f"{sample_name}/{split_config}:{version}",

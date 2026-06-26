@@ -44,3 +44,14 @@ env
 
 pixi.lock
 uv.lock
+
+baselines
+
+tensorflow_datasets
+
+.cache
+
+onnx_validation/
+particleflow.egg-info/
+
+build

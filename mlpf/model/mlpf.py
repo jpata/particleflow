@@ -638,6 +638,33 @@ class MLPF(nn.Module):
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
 
+    def predict_particles(self, X_features, mask):
+        from mlpf.model.utils import unpack_predictions
+
+        ypred_raw = self.forward(X_features, mask)
+        ypred_raw = tuple([y.to(torch.float32) for y in ypred_raw])
+
+        # transform log (pt/elempt) -> pt
+        ypred_raw[2][..., 0] = torch.exp(ypred_raw[2][..., 0]) * X_features[..., 1]
+        # transform log (E/elemE) -> E
+        ypred_raw[2][..., 4] = torch.exp(ypred_raw[2][..., 4]) * X_features[..., 5]
+
+        ypred = unpack_predictions(ypred_raw)
+        ypred["ispu"] = torch.softmax(ypred["ispu"], axis=-1)[:, :, -1]
+
+        # By default, use standard argmax
+        pred_cls = torch.argmax(ypred_raw[0], axis=-1)
+
+        # Zero out predictions for non-particles
+        ypred["cls_id"][pred_cls == 0] = 0
+        ypred["pt"][pred_cls == 0] = 0
+        ypred["energy"][pred_cls == 0] = 0
+        ypred["eta"][pred_cls == 0] = 0
+        ypred["sin_phi"][pred_cls == 0] = 0
+        ypred["cos_phi"][pred_cls == 0] = 0
+
+        return ypred
+
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):
     """Set only the given layers as trainable in the model"""

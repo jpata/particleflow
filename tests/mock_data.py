@@ -1,3 +1,7 @@
+"""
+Spec: Provides factory classes and mocks for generating synthetic data. Key components: 'MockDictDataset' (returns dicts of tensors), 'MockDataset' (returns indices), and 'MockTFDS' (simulates a TFDS builder with a 'data_source' and 'dataset_info'). These are used to decouple tests from the file system and external datasets.
+"""
+
 import torch
 from torch.utils.data import Dataset
 from types import SimpleNamespace
