@@ -1,3 +1,7 @@
+"""
+Spec: Validates the 'MLPFConfig' class and its 'from_spec' method. Tests configuration construction from YAML specs with recursive path resolution ('resolve_path'). Key scenarios: Argparse Namespace overrides, extra CLI flags using dot-notation (e.g., '--model.gnnlsh.width'), pipeline-specific overrides (like CI/CD splits), and error handling for invalid or forbidden field overrides.
+"""
+
 import unittest
 import argparse
 import yaml
@@ -82,13 +86,14 @@ class TestConfigOverrides(unittest.TestCase):
         args.train = True
         args.test_datasets = []
 
-        extra_args = ["--model.gnnlsh.width", "128", "--num_steps", "200"]
+        extra_args = ["--model.gnnlsh.width", "128", "--num_steps", "200", "--regression_loss_weights.eta", "0.02"]
 
         config_obj = MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args, extra_args=extra_args)
         config = config_obj.model_dump()
 
         self.assertEqual(config["model"]["gnnlsh"]["width"], 128)
         self.assertEqual(config["num_steps"], 200)
+        self.assertEqual(config["regression_loss_weights"]["eta"], 0.02)
 
     def test_override_config_convenience_flags(self):
         args = argparse.Namespace()

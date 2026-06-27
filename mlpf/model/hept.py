@@ -1,6 +1,6 @@
 # --- HEPT Utilities ---
-# Adapted from https://github.com/mova/HEPT
-# Paper: "HEPT: Hashed Efficient Particle Transformer", https://arxiv.org/abs/2405.21051
+# Adapted from https://github.com/Graph-COM/HEPT
+# Paper: "Locality-Sensitive Hashing-Based Efficient Point Transformer for Charged Particle Reconstruction", https://arxiv.org/abs/2510.07594
 # MIT License
 # Copyright (c) 2024 Graph-COM
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -12,19 +12,22 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
-# Implementation Differences from Official HEPT (HEPT/example/hept.py & HEPT/hept.md):
-# 1. Batching & Precision: Supports batched inputs [B, N, D] via flattening. Coordinates
-#    and offsets are forced to float32. Note: Large batch sizes (>500) may cause "smearing"
-#    of hit coordinates due to float32 precision limits when adding large offsets.
-# 2. Query-Key Alignment (Sec 4.3): Implements coordinate-based AND LSH codes via
-#    quantile_partition() and get_geo_shift() specifically for HEP 2D eta-phi space.
+# Implementation Differences from Official HEPT (HEPT/example/hept.py and
+# HEPT/src/models/attention/hept.py):
+# 1. Batching & Precision: Supports batched inputs [B, N, D] via flattening and
+#    coordinate offsets. Coordinates and offsets are forced to float32. This is
+#    a heuristic isolation mechanism; very large batches can suffer float32
+#    precision loss when adding large offsets.
+# 2. Query-Key Alignment: Uses the coordinate-based AND-LSH region shifts from
+#    the official HEPT source implementation via quantile_partition() and
+#    get_geo_shift() for 2D eta-phi coordinates.
 # 3. Output Projection: HEPTAttention projects to full embedding dim (num_heads * dim_per_head)
 #    instead of dim_per_head as seen in some official examples.
 # 4. Numerical Stability & Gradient Safety: Core RBF distance and weighted sums are performed
-#    in float32. Includes 1e-20 eps and crops outputs back to raw_size before projection
+#    in float32. Uses 1e-5 eps and crops outputs back to raw_size before projection
 #    to ensure stable training and finite gradients in highly sparse attention patterns.
-# 5. Backbone Integration: Uses ELU activations and integrated PositionalEncoding
-#    as used in the paper's Tracking experiments.
+# 5. Backbone Integration: Wraps the HEPT attention in the local MLPF layer
+#    interface, including optional eta-phi positional encoding and an ELU FFN.
 
 import math
 import random
@@ -144,7 +147,8 @@ def qkv_res(s_query, s_key, s_value, s_mask_q=None, s_mask_k=None, return_attn=F
     clustered_dists = clustered_dists.clamp(max=0.0).exp()
     if s_mask_q is not None:
         clustered_dists = clustered_dists * s_mask_q.float()
-    denom = clustered_dists.sum(dim=-1, keepdim=True) + (1e-20)
+    # Epsilon increased to 1e-5 to prevent division overflow to inf in backward pass under float16 autocast
+    denom = clustered_dists.sum(dim=-1, keepdim=True) + (1e-5)
     qk = clustered_dists
     so = torch.einsum("...ij,...jd->...id", qk, s_value)
     if return_attn:
@@ -306,7 +310,8 @@ class HEPTAttention(nn.Module):
         o = o[:, :, :raw_size]
         logits = logits[:, :, :raw_size]
 
-        out = o.sum(dim=0) / (logits.sum(dim=0) + 1e-20)
+        # Epsilon increased to 1e-5 to prevent division overflow to inf in backward pass under float16 autocast
+        out = o.sum(dim=0) / (logits.sum(dim=0) + 1e-5)
         out = self.out_linear(rearrange(out, "h n d -> n (h d)"))
         if return_attn:
             return out, (qk, q_positions, k_positions)

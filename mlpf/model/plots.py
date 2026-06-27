@@ -26,15 +26,17 @@ def log_confusion_matrices(cm_X_target, cm_X_pred, cm_id, comet_experiment, epoc
 
 
 def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch, outdir):
-    X = batch.X[batch.mask].cpu()
-    ytarget_flat = batch.ytarget[batch.mask].cpu()
-    ypred_binary = ypred_raw[0][batch.mask].detach().cpu()
+    X = batch.X[batch.mask].cpu().float()
+    ytarget_flat = batch.ytarget[batch.mask].cpu().float()
+    ypred_binary = ypred_raw[0][batch.mask].detach().cpu().float()
     ypred_binary_cls = torch.argmax(ypred_binary, axis=-1)
-    ypred_cls = ypred_raw[1][batch.mask].detach().cpu()
-    ypred_p4 = ypred_raw[2][batch.mask].detach().cpu()
+    ypred_cls = ypred_raw[1][batch.mask].detach().cpu().float()
+    ypred_p4 = ypred_raw[2][batch.mask].detach().cpu().float()
+
+    to_concat = [X, ytarget_flat, ypred_binary, ypred_cls, ypred_p4]
 
     arr = torch.concatenate(
-        [X, ytarget_flat, ypred_binary, ypred_cls, ypred_p4],
+        to_concat,
         axis=-1,
     ).numpy()
     df = pandas.DataFrame(arr)
@@ -138,43 +140,43 @@ def validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, epoch
             _logger.info(f"plotted sig_proba_elemtype{int(xcls)}")
 
         try:
-            tensorboard_writer.add_histogram("pt_target", torch.clamp(batch.ytarget[batch.mask][:, 2], -10, 10), global_step=epoch)
+            tensorboard_writer.add_histogram("pt_target", torch.clamp(batch.ytarget[batch.mask][:, 2].float(), -10, 10), global_step=epoch)
             _logger.info("plotted pt_target histogram")
-            tensorboard_writer.add_histogram("pt_pred", torch.clamp(ypred_raw[2][batch.mask][:, 0], -10, 10), global_step=epoch)
+            tensorboard_writer.add_histogram("pt_pred", torch.clamp(ypred_raw[2][batch.mask][:, 0].float(), -10, 10), global_step=epoch)
             _logger.info("plotted pt_pred histogram")
-            ratio = (ypred_raw[2][batch.mask][:, 0] / batch.ytarget[batch.mask][:, 2])[batch.ytarget[batch.mask][:, 0] != 0]
+            ratio = (ypred_raw[2][batch.mask][:, 0].float() / batch.ytarget[batch.mask][:, 2].float())[batch.ytarget[batch.mask][:, 0] != 0]
             tensorboard_writer.add_histogram("pt_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
             _logger.info("plotted pt_ratio histogram")
 
-            tensorboard_writer.add_histogram("eta_target", torch.clamp(batch.ytarget[batch.mask][:, 3], -10, 10), global_step=epoch)
+            tensorboard_writer.add_histogram("eta_target", torch.clamp(batch.ytarget[batch.mask][:, 3].float(), -10, 10), global_step=epoch)
             _logger.info("plotted eta_target histogram")
-            tensorboard_writer.add_histogram("eta_pred", torch.clamp(ypred_raw[2][batch.mask][:, 1], -10, 10), global_step=epoch)
+            tensorboard_writer.add_histogram("eta_pred", torch.clamp(ypred_raw[2][batch.mask][:, 1].float(), -10, 10), global_step=epoch)
             _logger.info("plotted eta_pred histogram")
-            ratio = (ypred_raw[2][batch.mask][:, 1] / batch.ytarget[batch.mask][:, 3])[batch.ytarget[batch.mask][:, 0] != 0]
+            ratio = (ypred_raw[2][batch.mask][:, 1].float() / batch.ytarget[batch.mask][:, 3].float())[batch.ytarget[batch.mask][:, 0] != 0]
             tensorboard_writer.add_histogram("eta_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
             _logger.info("plotted eta_ratio histogram")
 
-            tensorboard_writer.add_histogram("sphi_target", torch.clamp(batch.ytarget[batch.mask][:, 4], -10, 10), global_step=epoch)
+            tensorboard_writer.add_histogram("sphi_target", torch.clamp(batch.ytarget[batch.mask][:, 4].float(), -10, 10), global_step=epoch)
             _logger.info("plotted sphi_target histogram")
-            tensorboard_writer.add_histogram("sphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 2], -10, 10), global_step=epoch)
+            tensorboard_writer.add_histogram("sphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 2].float(), -10, 10), global_step=epoch)
             _logger.info("plotted sphi_pred histogram")
-            ratio = (ypred_raw[2][batch.mask][:, 2] / batch.ytarget[batch.mask][:, 4])[batch.ytarget[batch.mask][:, 0] != 0]
+            ratio = (ypred_raw[2][batch.mask][:, 2].float() / batch.ytarget[batch.mask][:, 4].float())[batch.ytarget[batch.mask][:, 0] != 0]
             tensorboard_writer.add_histogram("sphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
             _logger.info("plotted sphi_ratio histogram")
 
-            tensorboard_writer.add_histogram("cphi_target", torch.clamp(batch.ytarget[batch.mask][:, 5], -10, 10), global_step=epoch)
+            tensorboard_writer.add_histogram("cphi_target", torch.clamp(batch.ytarget[batch.mask][:, 5].float(), -10, 10), global_step=epoch)
             _logger.info("plotted cphi_target histogram")
-            tensorboard_writer.add_histogram("cphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 3], -10, 10), global_step=epoch)
+            tensorboard_writer.add_histogram("cphi_pred", torch.clamp(ypred_raw[2][batch.mask][:, 3].float(), -10, 10), global_step=epoch)
             _logger.info("plotted cphi_pred histogram")
-            ratio = (ypred_raw[2][batch.mask][:, 3] / batch.ytarget[batch.mask][:, 5])[batch.ytarget[batch.mask][:, 0] != 0]
+            ratio = (ypred_raw[2][batch.mask][:, 3].float() / batch.ytarget[batch.mask][:, 5].float())[batch.ytarget[batch.mask][:, 0] != 0]
             tensorboard_writer.add_histogram("cphi_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
             _logger.info("plotted cphi_ratio histogram")
 
-            tensorboard_writer.add_histogram("energy_target", torch.clamp(batch.ytarget[batch.mask][:, 6], -10, 10), global_step=epoch)
+            tensorboard_writer.add_histogram("energy_target", torch.clamp(batch.ytarget[batch.mask][:, 6].float(), -10, 10), global_step=epoch)
             _logger.info("plotted energy_target histogram")
-            tensorboard_writer.add_histogram("energy_pred", torch.clamp(ypred_raw[2][batch.mask][:, 4], -10, 10), global_step=epoch)
+            tensorboard_writer.add_histogram("energy_pred", torch.clamp(ypred_raw[2][batch.mask][:, 4].float(), -10, 10), global_step=epoch)
             _logger.info("plotted energy_pred histogram")
-            ratio = (ypred_raw[2][batch.mask][:, 4] / batch.ytarget[batch.mask][:, 6])[batch.ytarget[batch.mask][:, 0] != 0]
+            ratio = (ypred_raw[2][batch.mask][:, 4].float() / batch.ytarget[batch.mask][:, 6].float())[batch.ytarget[batch.mask][:, 0] != 0]
             tensorboard_writer.add_histogram("energy_ratio", torch.clamp(ratio, -10, 10), global_step=epoch)
             _logger.info("plotted energy_ratio histogram")
         except ValueError as e:

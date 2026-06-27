@@ -1,3 +1,7 @@
+"""
+Spec: Validates 'mlpf.pipeline' CLI argument parsing and its interaction with 'MLPFConfig'. Tests all sub-commands: 'train', 'test', 'ray-train', 'ray-hpo'. Key checks: Verifies that CLI flags (including dot-notation overrides) are correctly captured and applied to the config object, and tests pipeline-specific logic like '--pipeline' CI/CD mode.
+"""
+
 import unittest
 import yaml
 import tempfile

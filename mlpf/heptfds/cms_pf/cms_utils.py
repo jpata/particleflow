@@ -130,6 +130,7 @@ Y_FEATURES = [
     "cp_to_track",
     "cp_to_cluster",
     "jet_idx",
+    "particle_number",
 ]
 
 # split each dataset into equal parts for faster building

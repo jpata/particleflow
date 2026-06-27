@@ -1,3 +1,7 @@
+"""
+Spec: Benchmarks the numerical stability and performance of attention layers ('SimpleMultiheadAttention', 'CombinedGraphLayer'). Tests across sequence lengths 1024 and 4096. Assertions: Verifies all outputs are finite (not NaN/Inf) in both FP32 and FP16 (using torch.amp.autocast). Includes a 'benchmark_module' helper to report average runtime in milliseconds.
+"""
+
 import torch
 import pytest
 import time

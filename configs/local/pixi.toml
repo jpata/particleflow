@@ -21,6 +21,49 @@ env = { SITE = "local", PROFILE = ".profiles/local", APPTAINER_ARGS = "-B /tmp -
 setup = { cmd = "sed -i '0,/^  <<: \\*.*$/s//  <<: \\*local/' particleflow_spec.yaml", description = "Set the profile in particleflow_spec.yaml" }
 init = { cmd = """
 mkdir -p .profiles/local \
+&& echo '#!/bin/bash
+# properties = {properties}
+export PYTHONUNBUFFERED=1
+export GOTO_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+
+# Create a unique TMPDIR for this job to avoid collisions
+export TMPDIR=/tmp/job_${SLURM_JOB_ID:-manual}
+mkdir -p $TMPDIR
+export TEMPDIR=$TMPDIR
+export TEMP=$TMPDIR
+export TMP=$TMPDIR
+
+# Ensure Apptainer uses this unique directory for extractions/cache
+export APPTAINER_TMPDIR=$TMPDIR
+export APPTAINER_CACHEDIR=$TMPDIR
+export SINGULARITY_TMPDIR=$TMPDIR
+export SINGULARITY_CACHEDIR=$TMPDIR
+
+ulimit -n 1048576
+echo "Initial ulimit -n: $(ulimit -Sn) (soft), $(ulimit -Hn) (hard)"
+ulimit -n $(ulimit -Hn)
+echo "Final ulimit -n: $(ulimit -Sn) (soft), $(ulimit -Hn) (hard)"
+
+env
+sleep $((RANDOM % 60))
+
+# Run the job
+stdbuf -oL -eL {exec_job}
+
+# Cleanup
+rm -rf $TMPDIR' > .profiles/local/jobscript.sh \
+&& echo 'executor: "local"
+jobs: 100
+restart-times: 0
+local-cores: 14
+verbose: false' > .profiles/local/config.v8+.yaml
+""", description = "Create the local snakemake profile" }
+
 snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/snakemake/produce_snakemake.py --production ${PROD:-cms_run3} \"$@\"' --", depends-on = ["setup"], description = "Generate the snakemake files" }
 
 all = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} all \"$@\"' --", depends-on = ["snakefile"], description = "Run the full production pipeline" }

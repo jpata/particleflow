@@ -268,7 +268,7 @@ def main():
         valid_mask = pred_id != 0
 
         pred_pdg = class_labels[pred_id[valid_mask]]
-        pred_p4 = preds_unpacked["p4"][0][valid_mask].cpu().numpy()
+        pred_p4 = preds_unpacked["p4"][0][valid_mask].cpu().float().numpy()
 
         results.append(
             {

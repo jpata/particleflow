@@ -365,22 +365,37 @@ def load_eval_data(path, max_events=None):
 
     yvals = {}
     for typ in ["target", "cand", "pred"]:
-        for k in data["particles"][typ].fields:
-            yvals["{}_{}".format(typ, k)] = data["particles"][typ][k]
+        if typ in data["particles"].fields:
+            for k in data["particles"][typ].fields:
+                yvals["{}_{}".format(typ, k)] = data["particles"][typ][k]
+
+            if (typ + "_px" in yvals) and (typ + "_pt" not in yvals):
+                # particles might be saved as px, py, pz, E
+                jetvec = vector.awk(
+                    awkward.zip({"px": yvals[typ + "_px"], "py": yvals[typ + "_py"], "pz": yvals[typ + "_pz"], "E": yvals[typ + "_E"]})
+                )
+                jetvec = awkward.Array(jetvec, with_name="Momentum4D")
+                yvals[typ + "_pt"] = jetvec.pt
+                yvals[typ + "_eta"] = jetvec.eta
+                yvals[typ + "_sin_phi"] = np.sin(jetvec.phi)
+                yvals[typ + "_cos_phi"] = np.cos(jetvec.phi)
+                yvals[typ + "_energy"] = jetvec.E
 
     for typ in ["target", "cand", "pred"]:
-        # Compute phi, px, py, pz
-        yvals[typ + "_phi"] = np.arctan2(yvals[typ + "_sin_phi"], yvals[typ + "_cos_phi"])
-        yvals[typ + "_px"] = yvals[typ + "_pt"] * yvals[typ + "_cos_phi"]
-        yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
-        yvals[typ + "_pz"] = yvals[typ + "_pt"] * np.sinh(yvals[typ + "_eta"])
+        if typ + "_pt" in yvals:
+            # Compute phi, px, py, pz
+            yvals[typ + "_phi"] = np.arctan2(yvals[typ + "_sin_phi"], yvals[typ + "_cos_phi"])
+            yvals[typ + "_px"] = yvals[typ + "_pt"] * yvals[typ + "_cos_phi"]
+            yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
+            yvals[typ + "_pz"] = yvals[typ + "_pt"] * np.sinh(yvals[typ + "_eta"])
 
     for typ in ["gen", "cand", "pred", "target", "pred_nopu"]:
-        # Get the jet vectors
-        jetvec = vector.awk(data["jets"][typ])
-        jetvec = awkward.Array(jetvec, with_name="Momentum4D")
-        for k in ["pt", "eta", "phi", "energy"]:
-            yvals["jets_{}_{}".format(typ, k)] = getattr(jetvec, k)
+        if typ in data["jets"].fields:
+            # Get the jet vectors
+            jetvec = vector.awk(data["jets"][typ])
+            jetvec = awkward.Array(jetvec, with_name="Momentum4D")
+            for k in ["pt", "eta", "phi", "energy"]:
+                yvals["jets_{}_{}".format(typ, k)] = getattr(jetvec, k)
 
     for typ in ["target", "cand", "pred"]:
         for val in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
@@ -394,7 +409,9 @@ def load_eval_data(path, max_events=None):
 def compute_jet_ratio(data, yvals):
     ret = {}
     # flatten across event dimension
-    for match1, match2 in [("gen", "pred"), ("gen", "pred_nopu"), ("gen", "cand"), ("gen", "target"), ("target", "pred"), ("target", "cand")]:
+    matches = [("gen", "pred"), ("gen", "pred_nopu"), ("gen", "cand"), ("gen", "target"), ("target", "pred"), ("target", "cand")]
+
+    for match1, match2 in matches:
         for val in ["pt", "eta"]:
             ret[f"jet_{match1}_to_{match2}_{match1}{val}"] = awkward.to_numpy(
                 awkward.flatten(

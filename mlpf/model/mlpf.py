@@ -14,6 +14,7 @@ except ImportError:
     LitePTLayer = None
 
 from mlpf.model.hept import HEPTLayer, trunc_normal_
+from mlpf.model.heptv2 import HEPTv2Layer
 
 from mlpf.conf import (
     MLPFConfig,
@@ -295,7 +296,7 @@ class MLPF(nn.Module):
 
         # Ensure sub_config is initialized if it's None (can happen if not in spec or args)
         if sub_config is None:
-            from mlpf.conf import AttentionConfig, GNNLSHConfig, LitePTConfig, HEPTConfig
+            from mlpf.conf import AttentionConfig, GNNLSHConfig, LitePTConfig, HEPTConfig, HEPTv2Config
 
             if self.conv_type == ModelType.ATTENTION:
                 sub_config = AttentionConfig()
@@ -305,6 +306,8 @@ class MLPF(nn.Module):
                 sub_config = LitePTConfig()
             elif self.conv_type == ModelType.HEPT:
                 sub_config = HEPTConfig()
+            elif self.conv_type == ModelType.HEPTV2:
+                sub_config = HEPTv2Config()
             setattr(self.config, self.conv_type.value, sub_config)
 
         # Extract architecture-level parameters
@@ -352,6 +355,8 @@ class MLPF(nn.Module):
             num_attention_heads = sub_config.num_attention_heads
             # attention_head_dim = sub_config.attention_head_dim
             distance_dim = sub_config.distance_dim
+            num_or_hashes = sub_config.num_or_hashes
+            num_and_hashes = sub_config.num_and_hashes
             if kernel_type == KernelType.ATTENTION:
                 if distance_dim % num_attention_heads != 0:
                     raise ValueError(f"distance_dim ({distance_dim}) must be divisible by num_attention_heads ({num_attention_heads})")
@@ -365,6 +370,11 @@ class MLPF(nn.Module):
             width = sub_config.width
             num_heads = sub_config.num_heads
             pos = sub_config.pos
+            self.use_pre_layernorm = False
+        elif self.conv_type == ModelType.HEPTV2:
+            embedding_dim = sub_config.embedding_dim
+            width = sub_config.width
+            num_heads = sub_config.num_heads
             self.use_pre_layernorm = False
 
         _logger.info(f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} input_encoding={self.input_encoding}")
@@ -449,6 +459,8 @@ class MLPF(nn.Module):
                         "use_interbin_attention": use_interbin_attention,
                         "num_interbin_heads": num_interbin_heads,
                         "num_attention_heads": num_attention_heads,
+                        "num_or_hashes": num_or_hashes,
+                        "num_and_hashes": num_and_hashes,
                     }
                     self.conv_id.append(CombinedGraphLayer(**gnn_conf))
                     self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
@@ -494,6 +506,36 @@ class MLPF(nn.Module):
                             dropout=dropout_ff,
                             pos=pos,
                             **hept_conf,
+                        )
+                    )
+            elif self.conv_type == ModelType.HEPTV2:
+                _logger.info("Initializing HEPTv2 convolution layers")
+                self.conv_id = nn.ModuleList()
+                self.conv_reg = nn.ModuleList()
+                heptv2_conf = self.config.heptv2.model_dump()
+                for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff", "num_heads"]:
+                    if key in heptv2_conf:
+                        heptv2_conf.pop(key)
+                for i in range(self.num_convs):
+                    _logger.info(f"Initializing HEPTv2 layer {i}")
+                    self.conv_id.append(
+                        HEPTv2Layer(
+                            name=f"heptv2_id_{i}",
+                            embedding_dim=embedding_dim,
+                            num_heads=num_heads,
+                            width=width,
+                            dropout=dropout_ff,
+                            **heptv2_conf,
+                        )
+                    )
+                    self.conv_reg.append(
+                        HEPTv2Layer(
+                            name=f"heptv2_reg_{i}",
+                            embedding_dim=embedding_dim,
+                            num_heads=num_heads,
+                            width=width,
+                            dropout=dropout_ff,
+                            **heptv2_conf,
                         )
                     )
             _logger.info("Convolution layers initialization took {:.2f}s".format(time.time() - t0))
@@ -571,7 +613,7 @@ class MLPF(nn.Module):
         if self.num_convs != 0:
             for num, conv in enumerate(self.conv_id):
                 conv_input = embedding_id if num == 0 else embeddings_id[-1]
-                if self.conv_type == ModelType.LITEPT or self.conv_type == ModelType.HEPT:
+                if self.conv_type in [ModelType.LITEPT, ModelType.HEPT, ModelType.HEPTV2]:
                     out_padded = conv(conv_input, mask, X_features)
                 else:
                     out_padded = conv(conv_input, mask, embedding_id)
@@ -579,7 +621,7 @@ class MLPF(nn.Module):
 
             for num, conv in enumerate(self.conv_reg):
                 conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-                if self.conv_type == ModelType.LITEPT or self.conv_type == ModelType.HEPT:
+                if self.conv_type in [ModelType.LITEPT, ModelType.HEPT, ModelType.HEPTV2]:
                     out_padded = conv(conv_input, mask, X_features)
                 else:
                     out_padded = conv(conv_input, mask, embedding_reg)
@@ -637,6 +679,33 @@ class MLPF(nn.Module):
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
+
+    def predict_particles(self, X_features, mask):
+        from mlpf.model.utils import unpack_predictions
+
+        ypred_raw = self.forward(X_features, mask)
+        ypred_raw = tuple([y.to(torch.float32) for y in ypred_raw])
+
+        # transform log (pt/elempt) -> pt
+        ypred_raw[2][..., 0] = torch.exp(ypred_raw[2][..., 0]) * X_features[..., 1]
+        # transform log (E/elemE) -> E
+        ypred_raw[2][..., 4] = torch.exp(ypred_raw[2][..., 4]) * X_features[..., 5]
+
+        ypred = unpack_predictions(ypred_raw)
+        ypred["ispu"] = torch.softmax(ypred["ispu"], axis=-1)[:, :, -1]
+
+        # By default, use standard argmax
+        pred_cls = torch.argmax(ypred_raw[0], axis=-1)
+
+        # Zero out predictions for non-particles
+        ypred["cls_id"][pred_cls == 0] = 0
+        ypred["pt"][pred_cls == 0] = 0
+        ypred["energy"][pred_cls == 0] = 0
+        ypred["eta"][pred_cls == 0] = 0
+        ypred["sin_phi"][pred_cls == 0] = 0
+        ypred["cos_phi"][pred_cls == 0] = 0
+
+        return ypred
 
 
 def configure_model_trainable(model: MLPF, trainable: Union[str, List[str]], is_training: bool):

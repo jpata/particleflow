@@ -10,6 +10,7 @@ import sys
 import os
 import matplotlib
 import datetime
+import math
 from puppi import compute_puppi_weights, deltaR_matrix
 import tqdm
 
@@ -34,19 +35,67 @@ from mlpf.jet_utils import match_jets
 from mlpf.standalone.dsl import parse_dsl
 
 
+DSL_DESCRIPTION = """\
+Model DSL:
+  The --dsl option describes the model as input|backbone|output.
+
+  Input:
+    i(input_dim,embedding_dim,width,type)
+
+  Backbone layers:
+    h(...) = HEPT, g(...) = global, s(...) = standard, f(...) = fastformer
+    Layer args are num_heads,embedding_dim,width, with optional pos=T and
+    dropout=... . HEPT also accepts block_size, n_hashes, num_regions, and
+    num_w_per_dist.
+
+  Backbone composition:
+    Use + to chain different layers and *N to repeat one layer. A plain
+    backbone is shared by all heads. Add a branch dictionary to give one or
+    more heads their own layers after the shared part.
+
+  Output:
+    o(num_classes,width,type) or o(num_classes,width,type,rg=linear)
+
+Examples:
+  --dsl 'i(55,128,256,default)|g(16,128,512)*3|o(8,256,default)'
+  --dsl 'i(55,128,256,default)|h(16,128,512,pos=T)*6|o(8,256,default,rg=linear)'
+  --dsl 'i(55,128,256,default)|h(16,128,512)*2+g(16,128,512)+s(16,128,512)|o(8,256,default)'
+  --dsl 'i(55,128,256,default)|h(16,128,512)*2+{pid:g(16,128,512),reg:s(16,128,512),binary:f(16,128,512)}|o(8,256,default)'
+"""
+
+
+def bucket_padding_multiple(config, attention_type):
+    bucket_sizes = []
+    if config is None:
+        if attention_type in {"hept", "gnnlsh"}:
+            bucket_sizes.append(100)
+        return math.lcm(*bucket_sizes) if bucket_sizes else None
+
+    for layers in config.backbone.values():
+        for layer in layers:
+            if layer.type == "hept":
+                bucket_sizes.append(layer.block_size)
+            elif layer.type == "gnnlsh":
+                bucket_sizes.append(getattr(layer, "bin_size", getattr(layer, "bucket_size", 100)))
+
+    bucket_sizes = [int(size) for size in bucket_sizes if int(size) > 0]
+    return math.lcm(*bucket_sizes) if bucket_sizes else None
+
+
 def get_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, epilog=DSL_DESCRIPTION)
     parser.add_argument("--data-dir", type=str, default=None, help="Path to tfds directory")
     parser.add_argument(
         "--attention-type",
         type=str,
-        default="global",
+        default="standard",
         choices=["hept", "global", "standard", "fastformer"],
         help="Attention type (ignored if --dsl is used)",
     )
-    parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string")
+    parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string; see examples below")
     parser.add_argument("--show-attention", action="store_true", help="Save attention visualization")
     parser.add_argument("--comet", action="store_true", help="Track loss using comet")
+    parser.add_argument("--puppi", action="store_true", help="Compute and save PUPPI weights during evaluation")
     parser.add_argument("--eval", action=None, help="Run eval only, pass the path to the pth file stored")
     return parser.parse_args()
 
@@ -69,11 +118,12 @@ def med_iqr(arr):
     return p50, iqr
 
 
-def evaluate(model, loader, device, output_dir="parquet", run_num=0):
+def evaluate(model, loader, device, output_dir="parquet", run_num=0, enable_puppi=False):
     model.eval()
     all_pred_particles = []
     all_target_particles = []
     awk_to_save = []
+    print("running predictions")
     with torch.no_grad():
         for i, batch in tqdm.tqdm(enumerate(loader)):
             #        if i % 10 == 0:
@@ -85,53 +135,62 @@ def evaluate(model, loader, device, output_dir="parquet", run_num=0):
             mask = batch.mask.to(device)
 
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
-                logits_binary, logits_pid, logits_pu, preds_momentum, attnss = model(X, mask, return_attn=True)
+                logits_binary, logits_pid, logits_pu, preds_momentum = model(X, mask, return_attn=False)
 
             # Predicted
             pred_id = torch.argmax(logits_pid, dim=-1)
 
-            pt = (torch.exp(preds_momentum[..., 0]) * X[..., 1]).detach().cpu().numpy()
-            eta = preds_momentum[..., 1].detach().cpu().numpy()
-            sin_phi = preds_momentum[..., 2].detach().cpu().numpy()
-            cos_phi = preds_momentum[..., 3].detach().cpu().numpy()
+            pt = (torch.exp(preds_momentum[..., 0]) * X[..., 1]).detach().cpu().float().numpy()
+            eta = preds_momentum[..., 1].detach().cpu().float().numpy()
+            sin_phi = preds_momentum[..., 2].detach().cpu().float().numpy()
+            cos_phi = preds_momentum[..., 3].detach().cpu().float().numpy()
             phi = np.arctan2(sin_phi, cos_phi)
-            energy = (torch.exp(preds_momentum[..., 4]) * X[..., 5]).detach().cpu().numpy()
+            energy = (torch.exp(preds_momentum[..., 4]) * X[..., 5]).detach().cpu().float().numpy()
 
             # Target
-            target_id = batch.ytarget[:, :, 0].detach().cpu().numpy()
-            target_pt_log = batch.ytarget[:, :, 2].detach().cpu().numpy()
-            target_eta_val = batch.ytarget[:, :, 3].detach().cpu().numpy()
-            target_sin_phi = batch.ytarget[:, :, 4].detach().cpu().numpy()
-            target_cos_phi = batch.ytarget[:, :, 5].detach().cpu().numpy()
-            target_energy_log = batch.ytarget[:, :, 6].detach().cpu().numpy()
-            target_ispu = batch.ytarget[:, :, 7].detach().cpu().numpy()
+            target_id = batch.ytarget[:, :, 0].detach().cpu().float().numpy()
+            target_pt_log = batch.ytarget[:, :, 2].detach().cpu().float().numpy()
+            target_eta_val = batch.ytarget[:, :, 3].detach().cpu().float().numpy()
+            target_sin_phi = batch.ytarget[:, :, 4].detach().cpu().float().numpy()
+            target_cos_phi = batch.ytarget[:, :, 5].detach().cpu().float().numpy()
+            target_energy_log = batch.ytarget[:, :, 6].detach().cpu().float().numpy()
+            target_ispu = batch.ytarget[:, :, 7].detach().cpu().float().numpy()
 
-            X_pt = X[..., 1].detach().cpu().numpy()
-            X_e = X[..., 5].detach().cpu().numpy()
+            X_pt = X[..., 1].detach().cpu().float().numpy()
+            X_e = X[..., 5].detach().cpu().float().numpy()
             mask_np = mask.detach().cpu().numpy()
 
             pred_id_np = pred_id.detach().cpu().numpy()
             logits_binary = logits_binary.detach().cpu().float().numpy()
-            puppi_weights, puppi_chi2, puppi_alpha = run_puppi(
-                X.detach().cpu().numpy(), target_ispu, pred_id_np, pt, eta, cos_phi, sin_phi, logits_binary, target_id
-            )
-
-            awk_shape = ak.num(puppi_weights)
-            real_parts = (pred_id_np != 0) & (np.argmax(logits_binary, axis=-1) == 1) & (target_id != 0)
-
-            awk_to_save.append(
-                ak.Array(
-                    {
-                        "puppi_weight": puppi_weights,
-                        "puppi_chi2": puppi_chi2,
-                        "puppi_alpha": puppi_alpha,
-                        "pid": ak.unflatten(pred_id_np[real_parts], awk_shape),
-                        "pt": ak.unflatten(pt[real_parts], awk_shape),
-                        "eta": ak.unflatten(eta[real_parts], awk_shape),
-                        "ispu": ak.unflatten(target_ispu[real_parts], awk_shape),
-                    }
+            if enable_puppi:
+                puppi_weights, puppi_chi2, puppi_alpha = run_puppi(
+                    X.detach().cpu().float().numpy(),
+                    target_ispu,
+                    pred_id_np,
+                    pt,
+                    eta,
+                    cos_phi,
+                    sin_phi,
+                    logits_binary,
+                    target_id,
                 )
-            )
+
+                awk_shape = ak.num(puppi_weights)
+                real_parts = (pred_id_np != 0) & (np.argmax(logits_binary, axis=-1) == 1) & (target_id != 0)
+
+                awk_to_save.append(
+                    ak.Array(
+                        {
+                            "puppi_weight": puppi_weights,
+                            "puppi_chi2": puppi_chi2,
+                            "puppi_alpha": puppi_alpha,
+                            "pid": ak.unflatten(pred_id_np[real_parts], awk_shape),
+                            "pt": ak.unflatten(pt[real_parts], awk_shape),
+                            "eta": ak.unflatten(eta[real_parts], awk_shape),
+                            "ispu": ak.unflatten(target_ispu[real_parts], awk_shape),
+                        }
+                    )
+                )
 
             # Collect particles for jet clustering
             for b in range(X.shape[0]):
@@ -155,12 +214,13 @@ def evaluate(model, loader, device, output_dir="parquet", run_num=0):
                     all_target_particles.append(vector.awk(ak.from_iter(p_target)))
                 else:
                     all_target_particles.append(None)
-
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    ak.to_parquet(ak.concatenate(awk_to_save), f"{output_dir}/puppi_info_{run_num}.parquet")
+    if enable_puppi and len(awk_to_save) > 0:
+        ak.to_parquet(ak.concatenate(awk_to_save), f"{output_dir}/puppi_info_{run_num}.parquet")
 
     # Compute response by clustering event-by-event
+    print("computing jet metrics")
     responses = []
     jet_match_dr = 0.4
     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
@@ -257,9 +317,9 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
 
     print("Computing dR")
 
-    eta = X[0, :, 2].cpu().numpy()
-    cosphi = X[0, :, 4].cpu().numpy()
-    sinphi = X[0, :, 3].cpu().numpy()
+    eta = X[0, :, 2].cpu().float().numpy()
+    cosphi = X[0, :, 4].cpu().float().numpy()
+    sinphi = X[0, :, 3].cpu().float().numpy()
     phi = np.arctan2(sinphi, cosphi)
 
     dR_mat = deltaR_matrix(eta, cosphi, sinphi)
@@ -284,7 +344,7 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
         if isinstance(attn, torch.Tensor):
             # Standard attention: [B=1, heads, N, N]
             # Average over heads
-            mat = attn[0].mean(dim=0).cpu().numpy()
+            mat = attn[0].mean(dim=0).cpu().float().numpy()
 
             mat_masked = mat[np.ix_(mask, mask)]
             dR_mat_masked = dR_mat[np.ix_(mask, mask)]
@@ -327,7 +387,7 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
 
                         if len(valid_q_idx) > 0 and len(valid_k_idx) > 0:
                             for row_local, row_global in enumerate(valid_q_idx):
-                                full_matrix[row_global, valid_k_idx] += valid_qk[row_local]
+                                full_matrix[row_global, valid_k_idx] += valid_qk[row_local].float()
                         if j == 0:
                             idx_in_bucket = torch.unique(torch.cat((valid_q_idx, valid_k_idx))).cpu().numpy()
                             coords_in_buckets[-1].append(np.concatenate((eta[idx_in_bucket][:, None], phi[idx_in_bucket][:, None]), axis=-1))
@@ -369,7 +429,7 @@ def save_attention_visualization(model, batch, device, output_dir="plots", run_n
             # Global or Fastformer: (alpha, beta)
             alpha, beta = attn
             # alpha: [B=1, N, heads]
-            mat = alpha[0].mean(dim=-1).cpu().numpy()
+            mat = alpha[0].mean(dim=-1).cpu().float().numpy()
             plt.plot(mat)
             plt.title("Global Attention Weights (alpha, mean over heads)")
 
@@ -385,15 +445,23 @@ if __name__ == "__main__":
     print(f"Data directory: {data_dir}")
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
     if args.eval:
         out_dir = args.eval
     else:
-        out_dir = f"/oscar/home/kho29/particleflow/mlpf/standalone/experiments/{args.attention_type}/{timestamp}/"
+        out_dir = f"experiments/standalone/{args.attention_type}/{timestamp}/"
         os.makedirs(out_dir, exist_ok=True)
 
+    config = None
+    if args.dsl:
+        print(f"Using DSL: {args.dsl}")
+        config = parse_dsl(args.dsl)
+
+    pad_to_multiple = bucket_padding_multiple(config, args.attention_type)
+
     # Load dataset
-    ds_train = PFDataset(data_dir, "cms_pf_qcd:3.0.0", "train", num_samples=5000).ds
-    ds_valid = PFDataset(data_dir, "cms_pf_qcd:3.0.0", "test", num_samples=500).ds
+    ds_train = PFDataset(data_dir, "cms_pf_qcd:3.0.0", "train", num_samples=5000, pad_to_multiple=pad_to_multiple).ds
+    ds_valid = PFDataset(data_dir, "cms_pf_qcd:3.0.0", "test", num_samples=500, pad_to_multiple=pad_to_multiple).ds
 
     collater = Collater(["X", "ytarget"], ["genmet"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -407,8 +475,6 @@ if __name__ == "__main__":
         print(f"\n--- Run {i+1}/3 ---")
 
         if args.dsl:
-            print(f"Using DSL: {args.dsl}")
-            config = parse_dsl(args.dsl)
             model = MLPF(config=config).to(device)
         else:
             # 55 features for CMS, re-initialize model for each run
@@ -429,6 +495,10 @@ if __name__ == "__main__":
         start_total = time.time()
 
         if args.eval is None:
+            # Since compilation is redone for each event size, we need to make sure to pad the dataset when compilation is used.
+            # This might not be worth it for quick trainings due to the initial startup time.
+            # model.compile()
+
             model.train()
 
             # Fresh loaders for each run (especially for shuffling)
@@ -436,9 +506,9 @@ if __name__ == "__main__":
 
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
-            # Train for a fixed time
+            # Train for a fixed time, e.g. 1 minute
             train_loss, train_loss_binary, train_loss_pid, train_loss_kinematics, train_loss_pu, num_steps = train(
-                model, train_loader, optimizer, device, duration_seconds=30 * 60, experiment=experiment
+                model, train_loader, optimizer, device, duration_seconds=1 * 60, experiment=experiment
             )
 
             training_seconds = time.time() - start_total
@@ -461,7 +531,14 @@ if __name__ == "__main__":
 
         # Evaluate jet metrics
         print("Evaluating jet metrics...")
-        val_jet_iqr, val_jet_matched_frac = evaluate(model, valid_loader, device, output_dir=out_dir, run_num=i)
+        val_jet_iqr, val_jet_matched_frac = evaluate(
+            model,
+            valid_loader,
+            device,
+            output_dir=out_dir,
+            run_num=i,
+            enable_puppi=args.puppi,
+        )
 
         total_seconds = time.time() - start_total
 

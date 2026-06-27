@@ -34,33 +34,49 @@ def point_wise_feed_forward_network(
     return nn.Sequential(*layers)
 
 
-def split_indices_to_bins_batch(cmul, bin_size, msk, stable_sort=False):
-    # Use float32 for binning logic
-    cmul_32 = cmul.to(torch.float32)
-    a = torch.argmax(cmul_32, axis=-1)
+class Qwen3RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
-    shp = cmul.shape
-    batch_size = shp[0]
-    n_points = shp[1]
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight.to(input_dtype) * hidden_states.to(input_dtype)
 
-    # Calculate nbins as a tensor
-    nbins = torch.div(n_points, bin_size, rounding_mode="floor")
 
-    # Assign masked elements to the last bin
-    bin_idx = torch.where(msk.to(torch.bool).reshape(batch_size, n_points), a, (nbins - 1))
+class SwiGLUFFN(nn.Module):
+    def __init__(self, d_in, d_hidden, d_out, dropout=0.0):
+        super().__init__()
+        self.gate_proj = nn.Linear(d_in, d_hidden, bias=False)
+        self.up_proj = nn.Linear(d_in, d_hidden, bias=False)
+        self.down_proj = nn.Linear(d_hidden, d_out, bias=False)
+        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
 
-    # Add a deterministic offset to stabilize the sort
-    # In float32, we need a larger offset so it's representable when added to bin indices (up to 200)
-    # The epsilon at 200 is approx 2.4e-5. We use an offset in range [0, 0.1]
-    n_points_active_t = torch.as_tensor(bin_idx.size(-1), device=bin_idx.device, dtype=torch.float32)
-    offset = torch.arange(bin_idx.size(-1), device=bin_idx.device, dtype=torch.float32) * (0.1 / (n_points_active_t + 1.0))
-    bin_idx_stable = bin_idx.to(torch.float32) + offset
+    def forward(self, x):
+        return self.dropout(self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x)))
 
-    # Use torch.sort
+
+def split_indices_to_bins_batch(a, bin_size, msk, stable_sort=False):
+    # a has shape [B, n_points, num_or_hashes]
+    batch_size, n_points, num_or_hashes = a.shape
+
+    # We want to independently sort for each OR hash.
+    # Transpose to [B, num_or_hashes, n_points]
+    a = a.permute(0, 2, 1)
+
+    bin_idx = torch.where(msk.to(torch.bool).view(batch_size, 1, n_points), a, float("inf"))
+
+    n_points_active_t = torch.as_tensor(n_points, device=a.device, dtype=torch.float32)
+    offset = torch.arange(n_points, device=a.device, dtype=torch.float32) * (0.1 / (n_points_active_t + 1.0))
+    bin_idx_stable = bin_idx + offset.view(1, 1, -1)
+
     _, bins_split = torch.sort(bin_idx_stable, dim=-1)
 
-    # Reshape using -1 for the bins dimension to avoid TopK K-input issues
-    bins_split = bins_split.reshape(batch_size, -1, bin_size)
+    bins_split = bins_split.reshape(batch_size, num_or_hashes * (n_points // bin_size), bin_size)
     return bins_split
 
 
@@ -104,17 +120,35 @@ class GHConvDense(nn.Module):
         x, adj, msk = inputs
         # Force FP32 for consistency
         x_32 = x.to(torch.float32)
-        adj_32 = adj.to(torch.float32).squeeze(-1)
+        adj_32 = adj.to(torch.float32)
         msk_32 = msk.to(torch.float32)
+
+        if adj_32.dim() == 5 and adj_32.shape[-1] == 1:
+            adj_32 = adj_32.squeeze(-1)
+
+        if adj_32.dim() == 4:
+            adj_32 = adj_32.unsqueeze(2)
+
+        B, n_bins, S, D = x_32.shape
+        num_heads = adj_32.shape[2]
+        head_dim = D // num_heads
 
         f_hom = F.linear(x_32 * msk_32, self.theta.to(torch.float32)) * msk_32
 
+        # Split and transpose f_hom to align with heads:
+        # [B, n_bins, S, D] -> [B, n_bins, S, num_heads, head_dim] -> [B, n_bins, num_heads, S, head_dim]
+        f_hom = f_hom.view(B, n_bins, S, num_heads, head_dim).permute(0, 1, 3, 2, 4)
+
         if self.normalize_degrees:
-            in_degrees = torch.sum(torch.abs(adj_32), axis=-1, keepdim=True)
-            norm_32 = torch.pow(in_degrees + 1e-6, -0.5) * msk_32
+            in_degrees = torch.sum(torch.abs(adj_32), dim=-1, keepdim=True)
+            norm_32 = torch.pow(in_degrees + 1e-6, -0.5) * msk_32.unsqueeze(2)
             f_hom = torch.matmul(adj_32, f_hom * norm_32) * norm_32
         else:
             f_hom = torch.matmul(adj_32, f_hom)
+
+        # Transpose and reshape back:
+        # [B, n_bins, num_heads, S, head_dim] -> [B, n_bins, S, num_heads, head_dim] -> [B, n_bins, S, D]
+        f_hom = f_hom.permute(0, 1, 3, 2, 4).reshape(B, n_bins, S, D) * msk_32
 
         f_het = F.linear(x_32 * msk_32, self.W_h.to(torch.float32))
         gate = torch.sigmoid(F.linear(x_32, self.W_t.to(torch.float32), self.b_t.to(torch.float32)))
@@ -146,7 +180,7 @@ class NodePairGaussianKernel(nn.Module):
         dm = torch.exp(-self.dist_mult * dm)
         dm = torch.clamp(dm, min=self.clip_value_low, max=1.0)
 
-        return dm.to(x_msg_binned.dtype)
+        return dm.squeeze(-1).unsqueeze(2).to(x_msg_binned.dtype)
 
 
 class AttentionKernel(nn.Module):
@@ -162,6 +196,10 @@ class AttentionKernel(nn.Module):
         self.W_k = nn.Linear(distance_dim, distance_dim)
         self.scale = self.head_dim**-0.5
 
+        # QK-Norm
+        self.q_norm = Qwen3RMSNorm(self.head_dim)
+        self.k_norm = Qwen3RMSNorm(self.head_dim)
+
     def forward(self, x, msk, training=False):
         B, n_bins, bin_size, D = x.shape
         x_32 = x.to(torch.float32)
@@ -169,6 +207,10 @@ class AttentionKernel(nn.Module):
 
         q = self.W_q(x_32).view(B, n_bins, bin_size, self.num_heads, self.head_dim)
         k = self.W_k(x_32).view(B, n_bins, bin_size, self.num_heads, self.head_dim)
+
+        # Apply QK-Norm
+        q = self.q_norm(q)
+        k = self.k_norm(k)
 
         q = q.permute(0, 1, 3, 2, 4)
         k = k.permute(0, 1, 3, 2, 4)
@@ -181,12 +223,7 @@ class AttentionKernel(nn.Module):
         attn = torch.softmax(scores, dim=-1)
         attn = torch.nan_to_num(attn)
 
-        if self.num_heads > 1:
-            attn = torch.mean(attn, dim=2)
-        else:
-            attn = attn.squeeze(2)
-
-        return torch.unsqueeze(attn, axis=-1).to(x.dtype)
+        return attn.to(x.dtype)
 
 
 def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, bin_size):
@@ -211,18 +248,19 @@ def split_msk_and_msg(bins_split, cmul, x_msg, x_node, msk, bin_size):
     return x_msg_binned, x_features_binned, msk_f_binned
 
 
-def reverse_lsh(bins_split, points_binned_enc):
+def reverse_lsh(bins_split, points_binned_enc, num_or_hashes=1):
     shp = points_binned_enc.shape
     batch_dim = shp[0]
-    n_points = bins_split.numel() // batch_dim
+    total_points = bins_split.numel() // batch_dim
+    n_points = total_points // num_or_hashes
     n_features = shp[-1]
 
-    bins_split_flat = torch.reshape(bins_split, (batch_dim, n_points))
-    points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, n_points, n_features))
+    bins_split_flat = torch.reshape(bins_split, (batch_dim, total_points))
+    points_binned_enc_flat = torch.reshape(points_binned_enc, (batch_dim, total_points, n_features))
 
     indices = bins_split_flat.unsqueeze(-1).expand(-1, -1, n_features)
     ret = torch.zeros(batch_dim, n_points, n_features, device=points_binned_enc.device, dtype=points_binned_enc.dtype)
-    ret.scatter_(1, indices, points_binned_enc_flat)
+    ret.scatter_add_(1, indices, points_binned_enc_flat)
     return ret
 
 
@@ -238,7 +276,12 @@ class InterBinAttentionLayer(nn.Module):
         self.in_proj_bias = nn.Parameter(torch.empty(3 * d_model))
         self.out_proj = nn.Linear(d_model, d_model)
 
-        self.layernorm = nn.LayerNorm(d_model)
+        self.layernorm = Qwen3RMSNorm(d_model)
+
+        # QK-Norm
+        self.q_norm = Qwen3RMSNorm(self.head_dim)
+        self.k_norm = Qwen3RMSNorm(self.head_dim)
+
         self.dropout = nn.Dropout(dropout)
         self.mha_dropout_p = dropout
         self.scale = self.head_dim**-0.5
@@ -266,14 +309,19 @@ class InterBinAttentionLayer(nn.Module):
         wq, wk, wv = torch.split(self.in_proj_weight, [embed_dim, embed_dim, embed_dim], dim=0)
         bq, bk, bv = torch.split(self.in_proj_bias, [embed_dim, embed_dim, embed_dim], dim=0)
 
-        q = torch.matmul(x_bin_mean, wq.T) + bq
-        k = torch.matmul(x_bin_mean, wk.T) + bk
-        v = torch.matmul(x_bin_mean, wv.T) + bv
+        q = torch.matmul(x_bin_mean, wq.to(torch.float32).T) + bq.to(torch.float32)
+        k = torch.matmul(x_bin_mean, wk.to(torch.float32).T) + bk.to(torch.float32)
+        v = torch.matmul(x_bin_mean, wv.to(torch.float32).T) + bv.to(torch.float32)
 
         # Use reshape with symbolic seq_len from size()
-        q = q.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
-        k = k.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
-        v = v.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
+        q = q.reshape(bs, seq_len, num_heads, head_dim)
+        k = k.reshape(bs, seq_len, num_heads, head_dim)
+        v = v.reshape(bs, seq_len, num_heads, head_dim)
+
+        # Apply QK-Norm
+        q = self.q_norm(q).transpose(1, 2)
+        k = self.k_norm(k).transpose(1, 2)
+        v = v.transpose(1, 2)
 
         bin_mask = x_bin_count.squeeze(-1) < 1e-6
         # Prepare attention mask for F.scaled_dot_product_attention (True = keep, False = ignore)
@@ -295,7 +343,8 @@ class InterBinAttentionLayer(nn.Module):
 
 class MessageBuildingLayerLSH(nn.Module):
     def __init__(self, distance_dim=128, max_num_bins=200, bin_size=128, kernel=NodePairGaussianKernel(), **kwargs):
-        self.initializer = kwargs.pop("initializer", "random_normal")
+        self.num_or_hashes = kwargs.pop("num_or_hashes", 1)
+        self.num_and_hashes = kwargs.pop("num_and_hashes", 1)
         super(MessageBuildingLayerLSH, self).__init__(**kwargs)
 
         self.distance_dim = distance_dim
@@ -304,10 +353,12 @@ class MessageBuildingLayerLSH(nn.Module):
         self.kernel = kernel
         self.stable_sort = False
 
-        self.register_buffer(
-            "codebook_random_rotations",
-            torch.randn(self.distance_dim, self.max_num_bins // 2),
+        self.lsh_proj = nn.Linear(
+            self.distance_dim,
+            self.num_or_hashes * self.num_and_hashes * (self.max_num_bins // 2),
+            bias=False,
         )
+        nn.init.normal_(self.lsh_proj.weight, std=1.0)
 
     def forward(self, x_msg, x_node, msk, training=False):
         # shp = x_msg.shape
@@ -318,32 +369,41 @@ class MessageBuildingLayerLSH(nn.Module):
         with torch.autocast(device_type=x_msg.device.type, enabled=False):
             x_msg_32 = x_msg.to(torch.float32)
 
-            mul = torch.matmul(
-                x_msg_32,
-                self.codebook_random_rotations.to(torch.float32),
-            )
+            mul = F.linear(x_msg_32, self.lsh_proj.weight.to(torch.float32), self.lsh_proj.bias)
 
-            n_rotations = self.codebook_random_rotations.shape[1]
-            rotation_idx = torch.arange(n_rotations, device=mul.device).unsqueeze(0).unsqueeze(0)
+            n_rotations = self.lsh_proj.out_features // (self.num_or_hashes * self.num_and_hashes)
+            rotation_idx = torch.arange(n_rotations, device=mul.device).view(1, 1, 1, 1, -1)
 
             # Calculate n_bins purely as a tensor
             n_points_t = torch.as_tensor(x_msg.size(1), device=x_msg.device)
             n_bins_t = torch.div(n_points_t, self.bin_size, rounding_mode="floor")
             codebook_slice_t = torch.div(n_bins_t, 2, rounding_mode="floor")
 
+            mul = mul.view(x_msg.shape[0], x_msg.shape[1], self.num_or_hashes, self.num_and_hashes, -1)
+
             # Mask out unused rotations
             mul = torch.where(rotation_idx < codebook_slice_t, mul, torch.full_like(mul, -1e4))
 
             cmul_32 = torch.concatenate([mul, -mul], axis=-1)
-            bins_split = split_indices_to_bins_batch(cmul_32, self.bin_size, msk, self.stable_sort)
+
+            # shape: [B, n_points, num_or_hashes, num_and_hashes]
+            a_parts = torch.argmax(cmul_32, axis=-1).to(torch.float32)
+
+            a = torch.zeros(a_parts.shape[:-1], device=a_parts.device, dtype=torch.float32)
+            base = 1.0
+            for i in range(self.num_and_hashes):
+                a += a_parts[..., i] * base
+                base *= float(self.max_num_bins)
+
+            bins_split = split_indices_to_bins_batch(a, self.bin_size, msk, self.stable_sort)
 
         x_msg_binned, x_features_binned, msk_f_binned = split_msk_and_msg(bins_split, cmul_32, x_msg, x_node, msk, self.bin_size)
 
         dm = self.kernel(x_msg_binned, msk_f_binned, training=training)
 
         shp_dm = dm.shape
-        msk_row = msk_f_binned.reshape(shp_dm[0], shp_dm[1], shp_dm[2], 1, 1).to(dm.dtype)
-        msk_col = msk_f_binned.reshape(shp_dm[0], shp_dm[1], 1, shp_dm[3], 1).to(dm.dtype)
+        msk_row = msk_f_binned.reshape(shp_dm[0], shp_dm[1], 1, shp_dm[3], 1).to(dm.dtype)
+        msk_col = msk_f_binned.reshape(shp_dm[0], shp_dm[1], 1, 1, shp_dm[4]).to(dm.dtype)
         dm = dm * msk_row * msk_col
 
         return bins_split, x_features_binned, dm, msk_f_binned
@@ -365,19 +425,21 @@ class CombinedGraphLayer(nn.Module):
         self.use_interbin_attention = kwargs.pop("use_interbin_attention", False)
         self.num_interbin_heads = kwargs.pop("num_interbin_heads", 4)
         self.num_attention_heads = kwargs.pop("num_attention_heads", 4)
+        self.num_or_hashes = kwargs.pop("num_or_hashes", 1)
+        self.num_and_hashes = kwargs.pop("num_and_hashes", 1)
         super(CombinedGraphLayer, self).__init__(**kwargs)
 
         if self.do_layernorm:
-            self.layernorm1 = torch.nn.LayerNorm(
+            self.layernorm1 = Qwen3RMSNorm(
                 self.inout_dim,
                 eps=1e-6,
             )
 
-        self.ffn_dist = point_wise_feed_forward_network(
+        # SwiGLU FFN instead of standard MLP
+        self.ffn_dist = SwiGLUFFN(
             self.inout_dim,
             self.ffn_dist_hidden_dim,
             self.distance_dim,
-            num_layers=self.ffn_dist_num_layers,
             dropout=self.dropout,
         )
 
@@ -391,6 +453,8 @@ class CombinedGraphLayer(nn.Module):
             max_num_bins=self.max_num_bins,
             bin_size=self.bin_size,
             kernel=kernel,
+            num_or_hashes=self.num_or_hashes,
+            num_and_hashes=self.num_and_hashes,
         )
 
         self.message_passing_layers = nn.ModuleList()
@@ -408,7 +472,7 @@ class CombinedGraphLayer(nn.Module):
         if self.do_layernorm:
             x = self.layernorm1(x)
 
-        x_dist = self.dist_activation(self.ffn_dist(x))
+        x_dist = self.ffn_dist(x)
 
         bins_split, x, dm, msk_f = self.message_building_layer(x_dist, x, msk)
 
@@ -421,6 +485,6 @@ class CombinedGraphLayer(nn.Module):
         if self.use_interbin_attention:
             x = self.interbin_attention(x, msk_f)
 
-        x = reverse_lsh(bins_split, x)
+        x = reverse_lsh(bins_split, x, num_or_hashes=self.message_building_layer.num_or_hashes)
 
         return x

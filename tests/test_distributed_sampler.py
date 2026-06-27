@@ -1,3 +1,7 @@
+"""
+Spec: Validates 'DistributedShardConsecutiveSampler' for multi-rank training. Key tests: 'num_replicas' and 'rank' initialization, sharding consistency (ranks yield disjoint indices covering the whole dataset), data locality (consecutive slicing within shards), and deterministic shuffling across ranks when using the same seed. Checks 'drop_last' and 'set_epoch' behavior.
+"""
+
 import pytest
 from torch.utils.data import ConcatDataset
 from tests.mock_data import MockDataset
