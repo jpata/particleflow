@@ -14,6 +14,7 @@ DEVICES = ["cuda", "cpu"]
 #DEVICES = ["cuda"]
 MODEL_NAME = "pyg-cms-v1"
 PRODUCTION = "cms_run3"
+PF_SITE = "local"
 NUM_STEPS = 2000
 CHECKPOINT_FREQ = 2000
 
@@ -40,7 +41,7 @@ def get_onnx_validate_extra_args(wildcards):
 # Helper to retrieve DATA_DIR from the spec file
 def get_data_dir():
     try:
-        cmd = "PF_SITE=tallinn uv run python3 scripts/get_param.py particleflow_spec.yaml productions.cms_run3.workspace_dir"
+        cmd = f"PF_SITE={PF_SITE} uv run python3 scripts/get_param.py particleflow_spec.yaml productions.cms_run3.workspace_dir"
         workspace_dir = subprocess.check_output(cmd, shell=True).decode().strip()
         return os.path.join(workspace_dir, "tfds/")
     except Exception as e:
@@ -75,7 +76,7 @@ rule train:
         }[wildcards.config]
     shell:
         """
-        PF_SITE=tallinn uv run python3 mlpf/pipeline.py \
+        PF_SITE={PF_SITE} uv run python3 mlpf/pipeline.py \
             --spec-file particleflow_spec.yaml \
             --model-name {MODEL_NAME} \
             --production {PRODUCTION} \
@@ -111,7 +112,7 @@ rule onnx_validate:
         uv_project = lambda wildcards: "envs/ort-gpu" if wildcards.device == "cuda" else "envs/ort-cpu"
     shell:
         """
-        PF_SITE=tallinn uv run --project {params.uv_project} python3 scripts/cms-validate-onnx.py \
+        PF_SITE={PF_SITE} uv run --project {params.uv_project} python3 scripts/cms-validate-onnx.py \
             --checkpoint {input.checkpoint} \
             --model-kwargs {input.model_kwargs} \
             --dataset cms_pf_ttbar \
@@ -137,5 +138,5 @@ rule plot_onnx_summary:
         os.path.join(ONNX_DIR, "{device}", "plots", "loss_vs_memory.png")
     shell:
         """
-        PF_SITE=tallinn uv run --project envs/ort-cpu python3 scripts/plot-onnx-summary.py --indir {ONNX_DIR}/{wildcards.device} --outdir {ONNX_DIR}/{wildcards.device}/plots
+        PF_SITE={PF_SITE} uv run --project envs/ort-cpu python3 scripts/plot-onnx-summary.py --indir {ONNX_DIR}/{wildcards.device} --outdir {ONNX_DIR}/{wildcards.device}/plots
         """
