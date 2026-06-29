@@ -31,6 +31,10 @@ import awkward
 import vector
 import fastjet
 
+# The optimized direct bucket gather path bakes sequence lengths into the
+# legacy TorchScript ONNX export. Use the export-safe path for validation.
+os.environ.setdefault("HEPTV2_DIRECT_BUCKET_GATHER", "0")
+
 print("onnxruntime", rt.__path__)
 from mlpf.model.mlpf import MLPF  # noqa: E402
 from mlpf.conf import MLPFConfig, ModelType, AttentionType  # noqa: E402
