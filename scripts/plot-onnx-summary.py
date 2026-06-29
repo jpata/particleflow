@@ -325,6 +325,187 @@ def plot_loss_vs_runtime(data, model_metadata, outdir, system_info):
     plt.savefig(os.path.join(outdir, "loss_vs_runtime.png"))
 
 
+def get_train_loss(model_metadata, model):
+    train_loss = model_metadata[model].get("train_loss")
+    if isinstance(train_loss, list) and len(train_loss) > 0:
+        train_loss = train_loss[-1]
+    return train_loss
+
+
+def collect_best_scenario_summary(data, model_metadata, require_loss=False):
+    plot_data = []
+    models = sorted(list(set(v["model"] for v in data.values())))
+
+    for model in models:
+        train_loss = get_train_loss(model_metadata, model)
+        if require_loss and train_loss is None:
+            continue
+
+        model_scenarios = {k: v for k, v in data.items() if v["model"] == model}
+        best_scenario_key = None
+        min_mean_rt = float("inf")
+
+        for key, vals in model_scenarios.items():
+            if len(vals["runtimes"]) > 0:
+                mean_rt = np.mean(vals["runtimes"])
+                if mean_rt < min_mean_rt:
+                    min_mean_rt = mean_rt
+                    best_scenario_key = key
+
+        if best_scenario_key is None:
+            continue
+
+        vals = data[best_scenario_key]
+        memory_maxs = vals.get("memory_maxs", [])
+        if not memory_maxs:
+            continue
+
+        plot_data.append(
+            {
+                "Model": model,
+                "Best Scenario": vals["scenario"],
+                "Avg Runtime [ms]": np.mean(vals["runtimes"]),
+                "Std Runtime [ms]": np.std(vals["runtimes"]),
+                "Max Memory [MiB]": np.max(memory_maxs),
+                "Train Loss": train_loss,
+            }
+        )
+
+    return plot_data
+
+
+def save_no_data_plot(outdir, basename, title, message):
+    plt.figure(figsize=(12, 8))
+    plt.text(0.5, 0.5, message, ha="center", va="center", transform=plt.gca().transAxes)
+    plt.title(title, y=1.05)
+    plt.axis("off")
+    plt.savefig(os.path.join(outdir, f"{basename}.pdf"))
+    plt.savefig(os.path.join(outdir, f"{basename}.png"))
+    plt.close()
+
+
+def plot_runtime_vs_memory(data, model_metadata, outdir, system_info):
+    plot_data = collect_best_scenario_summary(data, model_metadata)
+    if not plot_data:
+        save_no_data_plot(outdir, "runtime_vs_memory", "Inference Runtime vs. Max Peak Memory", "No runtime/memory data available")
+        return
+
+    df = pd.DataFrame(plot_data)
+    plt.figure(figsize=(12, 8))
+    ax = plt.gca()
+
+    unique_models = df["Model"].unique()
+    colors = plt.cm.tab10(np.linspace(0, 1, len(unique_models)))
+    model_to_color = {model: colors[i] for i, model in enumerate(unique_models)}
+
+    for _, row in df.iterrows():
+        plt.errorbar(
+            row["Max Memory [MiB]"],
+            row["Avg Runtime [ms]"],
+            yerr=row["Std Runtime [ms]"],
+            fmt="o",
+            markersize=10,
+            capsize=5,
+            color=model_to_color[row["Model"]],
+            label=row["Model"],
+        )
+        plt.text(
+            row["Max Memory [MiB]"],
+            row["Avg Runtime [ms]"],
+            f" {row['Model']}\n ({row['Best Scenario']})",
+            verticalalignment="bottom",
+            horizontalalignment="left",
+            fontsize=9,
+        )
+
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys())
+
+    plt.xlabel("Max Peak Memory [MiB]")
+    plt.ylabel("Avg Runtime [ms]")
+    plt.title("Inference Runtime vs. Max Peak Memory", y=1.05)
+    plt.grid(True, linestyle="--", alpha=0.7)
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.margins(x=0.3, y=0.2)
+
+    system_text = f"Device: {system_info.get('device', 'Unknown')}\nCPU: {system_info.get('cpu', 'Unknown')}\nGPU: {system_info.get('gpu', 'Unknown')}\nPyTorch: {system_info.get('pytorch_version', 'Unknown')}\nONNX Runtime: {system_info.get('onnxruntime_version', 'Unknown')}"
+    plt.text(
+        0.02,
+        0.98,
+        system_text,
+        transform=ax.transAxes,
+        verticalalignment="top",
+        fontsize=10,
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.5),
+    )
+
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+    plt.savefig(os.path.join(outdir, "runtime_vs_memory.pdf"))
+    plt.savefig(os.path.join(outdir, "runtime_vs_memory.png"))
+    plt.close()
+
+
+def plot_loss_vs_memory(data, model_metadata, outdir, system_info):
+    plot_data = collect_best_scenario_summary(data, model_metadata, require_loss=True)
+    if not plot_data:
+        save_no_data_plot(outdir, "loss_vs_memory", "Train Loss vs. Max Peak Memory", "No train loss/memory data available")
+        return
+
+    df = pd.DataFrame(plot_data)
+    plt.figure(figsize=(12, 8))
+    ax = plt.gca()
+
+    unique_models = df["Model"].unique()
+    colors = plt.cm.tab10(np.linspace(0, 1, len(unique_models)))
+    model_to_color = {model: colors[i] for i, model in enumerate(unique_models)}
+
+    for _, row in df.iterrows():
+        plt.scatter(
+            row["Max Memory [MiB]"],
+            row["Train Loss"],
+            s=100,
+            color=model_to_color[row["Model"]],
+            label=row["Model"],
+        )
+        plt.text(
+            row["Max Memory [MiB]"],
+            row["Train Loss"],
+            f" {row['Model']}\n ({row['Best Scenario']})",
+            verticalalignment="bottom",
+            horizontalalignment="left",
+            fontsize=9,
+        )
+
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys())
+
+    plt.xlabel("Max Peak Memory [MiB]")
+    plt.ylabel("Train Loss")
+    plt.title("Train Loss vs. Max Peak Memory", y=1.05)
+    plt.grid(True, linestyle="--", alpha=0.7)
+    plt.xscale("log")
+    plt.margins(x=0.3, y=0.2)
+
+    system_text = f"Device: {system_info.get('device', 'Unknown')}\nCPU: {system_info.get('cpu', 'Unknown')}\nGPU: {system_info.get('gpu', 'Unknown')}\nPyTorch: {system_info.get('pytorch_version', 'Unknown')}\nONNX Runtime: {system_info.get('onnxruntime_version', 'Unknown')}"
+    plt.text(
+        0.02,
+        0.98,
+        system_text,
+        transform=ax.transAxes,
+        verticalalignment="top",
+        fontsize=10,
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.5),
+    )
+
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+    plt.savefig(os.path.join(outdir, "loss_vs_memory.pdf"))
+    plt.savefig(os.path.join(outdir, "loss_vs_memory.png"))
+    plt.close()
+
+
 def plot_violin_summary(data, outdir, system_info):
     baseline = "PT_MATH_FP32"
     plot_data = []
@@ -630,6 +811,10 @@ def main():
 
     # Loss vs. Runtime plot
     plot_loss_vs_runtime(data, model_metadata, args.outdir, system_info)
+
+    # Runtime/Loss vs. Memory plots
+    plot_runtime_vs_memory(data, model_metadata, args.outdir, system_info)
+    plot_loss_vs_memory(data, model_metadata, args.outdir, system_info)
 
     # MAE vs. Runtime plot
     plot_mae_vs_runtime(data, args.outdir, system_info)

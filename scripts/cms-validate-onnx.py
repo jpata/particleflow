@@ -25,17 +25,21 @@ import boost_histogram as bh
 import torch
 import onnx
 import onnxruntime as rt
-
-print("onnxruntime", rt.__path__)
 import onnxscript
 from onnxscript import opset20 as op
 import awkward
 import vector
 import fastjet
-from mlpf.model.mlpf import MLPF
-from mlpf.conf import MLPFConfig, ModelType, AttentionType
-from mlpf.model.utils import unpack_predictions
-from mlpf.plotting.plot_utils import ELEM_NAMES_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CLIC
+
+# The optimized direct bucket gather path bakes sequence lengths into the
+# legacy TorchScript ONNX export. Use the export-safe path for validation.
+os.environ.setdefault("HEPTV2_DIRECT_BUCKET_GATHER", "0")
+
+print("onnxruntime", rt.__path__)
+from mlpf.model.mlpf import MLPF  # noqa: E402
+from mlpf.conf import MLPFConfig, ModelType, AttentionType  # noqa: E402
+from mlpf.model.utils import unpack_predictions  # noqa: E402
+from mlpf.plotting.plot_utils import ELEM_NAMES_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CLIC  # noqa: E402
 
 print("Imports finished.")
 
@@ -894,6 +898,44 @@ def main():
     plt.tight_layout()
     plt.savefig(os.path.join(args.outdir, "memory_usage.pdf"), bbox_inches="tight")
     plt.close()
+
+    # Runtime vs. maximum memory scatter plot
+    plt.figure(figsize=(12, 8))
+    for idx, cfg in enumerate(configs):
+        runtimes = np.array(results[cfg]["runtime"]) * 1000.0
+        mems = np.array(results[cfg]["memory_max"])
+        if len(runtimes) > 0 and len(mems) > 0:
+            plt.scatter(mems, runtimes, label=cfg, color=colors[idx], alpha=0.6)
+    plt.xlabel("Max Peak Memory [MiB]")
+    plt.ylabel("Inference time [ms]")
+    plt.title(f"Inference Runtime vs. Max Peak Memory ({'GPU' if args.device == 'cuda' else 'CPU'})", y=1.05)
+    plt.xscale("log")
+    plt.yscale("log")
+    plt.grid(True, linestyle="--", alpha=0.7)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(args.outdir, "runtime_vs_memory.pdf"), bbox_inches="tight")
+    plt.close()
+
+    # Loss vs. maximum memory scatter plot. The training loss is model-level,
+    # so each point represents a validation scenario for this checkpoint.
+    loss_for_plot = train_loss
+    if isinstance(loss_for_plot, list) and len(loss_for_plot) > 0:
+        loss_for_plot = loss_for_plot[-1]
+    if loss_for_plot is not None:
+        plt.figure(figsize=(12, 8))
+        for idx, cfg in enumerate(configs):
+            if results[cfg]["memory_max"]:
+                plt.scatter(max(results[cfg]["memory_max"]), loss_for_plot, label=cfg, color=colors[idx], s=80)
+        plt.xlabel("Max Peak Memory [MiB]")
+        plt.ylabel("Train Loss")
+        plt.title(f"Train Loss vs. Max Peak Memory ({'GPU' if args.device == 'cuda' else 'CPU'})", y=1.05)
+        plt.xscale("log")
+        plt.grid(True, linestyle="--", alpha=0.7)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(args.outdir, "loss_vs_memory.pdf"), bbox_inches="tight")
+        plt.close()
 
     plt.bar(sorted_configs, maes, color=[colors[configs.index(cfg)] for cfg in sorted_configs])
     plt.ylim(0, 1.5 * np.max(maes) if len(maes) > 0 and np.max(maes) > 0 else 1)
