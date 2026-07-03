@@ -1,5 +1,5 @@
 import time
-from typing import Union, List
+from typing import Union, List, Optional
 
 import torch
 import torch.nn as nn
@@ -20,6 +20,11 @@ from mlpf.conf import (
     MLPFConfig,
     Activation,
     AttentionType,
+    BackboneMode,
+    Dataset,
+    DatasetSource,
+    ElementModality,
+    InputStemMode,
     ModelType,
     InputEncoding,
     LearnedRepresentationMode,
@@ -46,7 +51,20 @@ def get_activation(activation: Activation):
 
 
 def count_parameters(model):
+    if isinstance(model, torch.nn.Parameter):
+        return model.numel() if model.requires_grad else 0
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def infer_num_heads(embed_dim: int, preferred_heads: Optional[int] = None) -> int:
+    candidates = []
+    if preferred_heads is not None:
+        candidates.append(preferred_heads)
+    candidates.extend([8, 4, 2, 1])
+    for num_heads in candidates:
+        if num_heads and embed_dim % num_heads == 0:
+            return num_heads
+    return 1
 
 
 class SimpleMultiheadAttention(nn.MultiheadAttention):
@@ -76,7 +94,9 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
 
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, need_weights=False, key_padding_mask=None) -> torch.Tensor:
         # q, k, v: 3D tensors (batch_size, seq_len, embed_dim), embed_dim = num_heads*head_dim
-        bs, seq_len, embed_dim = q.size()
+        bs, q_len, embed_dim = q.size()
+        k_len = k.size(1)
+        v_len = v.size(1)
         head_dim = self.head_dim
         num_heads = self.num_heads
 
@@ -90,9 +110,9 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
 
         # for pytorch internal scaled dot product attention, we need (bs, num_heads, seq_len, head_dim)
         if not self.export_onnx_fused:
-            q = q.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
-            k = k.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
-            v = v.reshape(bs, seq_len, num_heads, head_dim).transpose(1, 2)
+            q = q.reshape(bs, q_len, num_heads, head_dim).transpose(1, 2)
+            k = k.reshape(bs, k_len, num_heads, head_dim).transpose(1, 2)
+            v = v.reshape(bs, v_len, num_heads, head_dim).transpose(1, 2)
 
         # this function will have different shape signatures in native pytorch sdpa and in ONNX com.microsoft.MultiHeadAttention
         # in pytorch: (bs, num_heads, seq_len, head_dim)
@@ -106,17 +126,23 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
             if self.export_onnx_fused:
                 attn_mask = ~key_padding_mask.unsqueeze(1)
             else:
-                attn_mask = ~key_padding_mask.view(bs, 1, 1, seq_len)
+                attn_mask = ~key_padding_mask.view(bs, 1, 1, k_len)
 
         if self.export_onnx_fused:
             attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
         else:
-            with sdpa_kernel(self.attn_params[self.attention_type]):
-                attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
+            try:
+                with sdpa_kernel(self.attn_params[self.attention_type]):
+                    attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
+            except RuntimeError as err:
+                if "No available kernel" not in str(err):
+                    raise
+                with sdpa_kernel([SDPBackend.MATH]):
+                    attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
 
         # in case running with pytorch internal scaled dot product attention, reshape back to the original shape
         if not self.export_onnx_fused:
-            attn_output = attn_output.transpose(1, 2).reshape(bs, seq_len, num_heads * head_dim)
+            attn_output = attn_output.transpose(1, 2).reshape(bs, q_len, num_heads * head_dim)
 
         # assert list(attn_output.size()) == [bs, seq_len, num_heads * head_dim]
         attn_output = self.out_proj(attn_output)
@@ -212,6 +238,63 @@ class PreLnSelfAttentionLayer(nn.Module):
         return x
 
 
+class TaskQueryAttentionReadout(nn.Module):
+    def __init__(
+        self,
+        name="",
+        activation: Activation = Activation.ELU,
+        embedding_dim=128,
+        num_heads=2,
+        width=128,
+        dropout_mha=0.1,
+        dropout_ff=0.1,
+        attention_type: AttentionType = AttentionType.SIMPLE,
+        export_onnx_fused=False,
+    ):
+        super(TaskQueryAttentionReadout, self).__init__()
+        self.name = name
+        self.attention_type = AttentionType(attention_type)
+        self.act = get_activation(activation)
+
+        _logger.info("readout {} using attention_type={} (SimpleMultiheadAttention)".format(self.name, self.attention_type))
+        self.mha = SimpleMultiheadAttention(
+            embedding_dim,
+            num_heads,
+            dropout=dropout_mha,
+            export_onnx_fused=export_onnx_fused,
+            attention_type=self.attention_type,
+        )
+
+        self.query_norm = torch.nn.LayerNorm(embedding_dim)
+        self.key_norm = torch.nn.LayerNorm(embedding_dim)
+        self.post_norm = torch.nn.LayerNorm(embedding_dim)
+        self.ffn = torch.nn.Sequential(nn.Linear(embedding_dim, width), self.act(), nn.Linear(width, embedding_dim), self.act())
+        self.dropout = torch.nn.Dropout(dropout_ff)
+
+    def forward(self, x, mask, query):
+        residual = x
+        x_norm = self.key_norm(x)
+        q = self.query_norm(query.expand(x.shape[0], 1, -1))
+
+        key_padding_mask = None
+        if mask is not None:
+            key_padding_mask = ~mask if mask.dtype == torch.bool else mask <= 0
+
+        attn_out = self.mha(q, x_norm, x_norm, need_weights=False, key_padding_mask=key_padding_mask)[0]
+        attn_out = attn_out.expand(-1, x.shape[1], -1)
+
+        x = residual + attn_out
+        residual = x
+        x_norm = self.post_norm(x)
+        ffn_out = self.ffn(x_norm)
+        ffn_out = self.dropout(ffn_out)
+        x = residual + ffn_out
+
+        if mask is not None:
+            x = x * (mask.unsqueeze(-1).to(x.dtype) if mask.dtype == torch.bool else mask.unsqueeze(-1))
+        return x
+
+
 def ffn(input_dim, output_dim, width, act, dropout):
     return nn.Sequential(
         nn.Linear(input_dim, width),
@@ -286,6 +369,7 @@ class MLPF(nn.Module):
         super(MLPF, self).__init__()
 
         self.config = config.model
+        self.dataset = Dataset(config.dataset)
         self.input_dim = config.input_dim
         self.num_classes = config.num_classes
         self.elemtypes_nonzero = config.elemtypes_nonzero
@@ -313,26 +397,42 @@ class MLPF(nn.Module):
         # Extract architecture-level parameters
         self.input_encoding = InputEncoding(self.config.input_encoding)
         self.learned_representation_mode = LearnedRepresentationMode(self.config.learned_representation_mode)
+        self.task_queries = bool(getattr(self.config, "task_queries", True))
+        self.backbone_mode = BackboneMode(self.config.backbone.mode)
+        self.use_split_backbone = self.backbone_mode == BackboneMode.SPLIT
+        self.input_stem_mode = InputStemMode(self.config.input_stem.mode)
+        self.use_modality_stems = self.input_stem_mode == InputStemMode.MODALITY
+        self.use_modality_embedding = bool(self.config.input_stem.modality_embedding)
+        self.use_source_embedding = bool(self.config.input_stem.source_embedding)
+        self.use_input_stem_norm = bool(self.config.input_stem.input_norm)
+        if self.use_modality_stems and self.dataset not in [Dataset.CLIC, Dataset.CLD, Dataset.CLIC_HITS, Dataset.CLD_HITS]:
+            raise ValueError(f"Modality input stems are currently defined for CLIC/CLD PF and hits datasets, got {self.dataset}")
         pt_mode = RegressionMode(self.config.pt_mode)
         eta_mode = RegressionMode(self.config.eta_mode)
         sin_phi_mode = RegressionMode(self.config.sin_phi_mode)
         cos_phi_mode = RegressionMode(self.config.cos_phi_mode)
         energy_mode = RegressionMode(self.config.energy_mode)
 
+        backbone_config = self.config.backbone
+        if backbone_config is None:
+            backbone_num_convs = sub_config.num_convs
+        else:
+            backbone_num_convs = backbone_config.num_convs if backbone_config.num_convs is not None else sub_config.num_convs
+
         # Extract parameters from the sub-config per model type
-        self.num_convs = sub_config.num_convs
+        self.num_convs = backbone_num_convs
         activation = Activation(sub_config.activation)
         self.act = get_activation(activation)
-        dropout_ff = sub_config.dropout_ff
+        head_dropout_ff = sub_config.dropout_ff
+        backbone_dropout_ff = sub_config.dropout_ff
+        backbone_dropout_mha = 0.0
 
         if self.conv_type == ModelType.ATTENTION:
             num_heads = sub_config.num_heads
             head_dim = sub_config.head_dim
             attention_type = sub_config.attention_type
-            dropout_conv_reg_mha = sub_config.dropout_conv_reg_mha
-            dropout_conv_reg_ff = sub_config.dropout_conv_reg_ff
-            dropout_conv_id_mha = sub_config.dropout_conv_id_mha
-            dropout_conv_id_ff = sub_config.dropout_conv_id_ff
+            backbone_dropout_mha = sub_config.dropout_conv_id_mha
+            backbone_dropout_ff = sub_config.dropout_conv_id_ff
             self.use_pre_layernorm = sub_config.use_pre_layernorm
             export_onnx_fused = sub_config.export_onnx_fused
             save_attention = sub_config.save_attention
@@ -377,192 +477,174 @@ class MLPF(nn.Module):
             num_heads = sub_config.num_heads
             self.use_pre_layernorm = False
 
-        _logger.info(f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} input_encoding={self.input_encoding}")
+        _logger.info(
+            f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} "
+            f"input_encoding={self.input_encoding} input_stem_mode={self.input_stem_mode}"
+        )
 
-        # embedding of the inputs
+        # Input encoding and backbone
         t0 = time.time()
-        if self.input_encoding == InputEncoding.JOINT:
-            _logger.info("Initializing joint input encoding")
-            self.nn0_id = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
-            self.nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, dropout_ff)
-        elif self.input_encoding == InputEncoding.SPLIT:
-            _logger.info("Initializing split input encoding, elemtypes_nonzero={}".format(self.elemtypes_nonzero))
-            # Wide MLP approach: one large Linear layer to produce all embeddings at once
-            num_types = len(self.elemtypes_nonzero)
-            self.nn0_id = ffn(self.input_dim, num_types * embedding_dim, width, self.act, dropout_ff)
-            self.nn0_reg = ffn(self.input_dim, num_types * embedding_dim, width, self.act, dropout_ff)
+        self.embedding_dim = embedding_dim
+        if self.use_modality_stems:
+            _logger.info("Initializing modality-specific input stems for hit/track/cluster")
+            if self.use_split_backbone:
+                self._input_stems_id = self._build_modality_stems(embedding_dim, width, head_dropout_ff)
+                self._input_stems_reg = self._build_modality_stems(embedding_dim, width, head_dropout_ff)
+            else:
+                self.input_stems = self._build_modality_stems(embedding_dim, width, head_dropout_ff)
+            if self.use_modality_embedding:
+                self.modality_embedding = nn.Embedding(max(modality.value for modality in ElementModality) + 1, embedding_dim)
+            else:
+                self.modality_embedding = None
+            if self.use_source_embedding:
+                self.source_embedding = nn.Embedding(max(source.value for source in DatasetSource) + 1, embedding_dim)
+            else:
+                self.source_embedding = None
+            self.input_stem_norm = torch.nn.LayerNorm(embedding_dim) if self.use_input_stem_norm else None
+        else:
+            if self.input_encoding == InputEncoding.JOINT:
+                _logger.info("Initializing joint input encoding")
+                if self.use_split_backbone:
+                    self._nn0_id = ffn(self.input_dim, embedding_dim, width, self.act, head_dropout_ff)
+                    self._nn0_reg = ffn(self.input_dim, embedding_dim, width, self.act, head_dropout_ff)
+                else:
+                    self.nn0 = ffn(self.input_dim, embedding_dim, width, self.act, head_dropout_ff)
+            elif self.input_encoding == InputEncoding.SPLIT:
+                _logger.info("Initializing split input encoding, elemtypes_nonzero={}".format(self.elemtypes_nonzero))
+                num_types = len(self.elemtypes_nonzero)
+                if self.use_split_backbone:
+                    self._nn0_id = ffn(self.input_dim, num_types * embedding_dim, width, self.act, head_dropout_ff)
+                    self._nn0_reg = ffn(self.input_dim, num_types * embedding_dim, width, self.act, head_dropout_ff)
+                else:
+                    self.nn0 = ffn(self.input_dim, num_types * embedding_dim, width, self.act, head_dropout_ff)
         _logger.info("Input encoding initialization took {:.2f}s".format(time.time() - t0))
-        _logger.info("nn0_id parameters: {}".format(count_parameters(self.nn0_id)))
-        _logger.info("nn0_reg parameters: {}".format(count_parameters(self.nn0_reg)))
+        if self.use_modality_stems:
+            if self.use_split_backbone:
+                _logger.info("input_stems_id parameters: {}".format(count_parameters(self._input_stems_id)))
+                _logger.info("input_stems_reg parameters: {}".format(count_parameters(self._input_stems_reg)))
+            else:
+                _logger.info("input_stems parameters: {}".format(count_parameters(self.input_stems)))
+            _logger.info("modality_embedding parameters: {}".format(count_parameters(self.modality_embedding) if self.modality_embedding is not None else 0))
+            _logger.info("source_embedding parameters: {}".format(count_parameters(self.source_embedding) if self.source_embedding is not None else 0))
+            _logger.info("input_stem_norm parameters: {}".format(count_parameters(self.input_stem_norm) if self.input_stem_norm is not None else 0))
+        else:
+            if self.use_split_backbone:
+                _logger.info("nn0_id parameters: {}".format(count_parameters(self._nn0_id)))
+                _logger.info("nn0_reg parameters: {}".format(count_parameters(self._nn0_reg)))
+            else:
+                _logger.info("nn0 parameters: {}".format(count_parameters(self.nn0)))
 
+        t0 = time.time()
+        self.backbone = nn.ModuleList()
+        if self.use_split_backbone:
+            self._backbone_id = nn.ModuleList()
+            self._backbone_reg = nn.ModuleList()
         if self.num_convs != 0:
-            t0 = time.time()
-            if self.conv_type == ModelType.ATTENTION:
-                _logger.info("Initializing attention convolution layers, num_convs={}".format(self.num_convs))
-                self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
-
-                for i in range(self.num_convs):
-                    _logger.info(f"Initializing attention layer {i}")
-                    lastlayer = i == self.num_convs - 1
-
-                    self.conv_id.append(
-                        PreLnSelfAttentionLayer(
-                            name="conv_id_{}".format(i),
-                            activation=activation,
-                            embedding_dim=embedding_dim,
-                            num_heads=num_heads,
-                            width=width,
-                            dropout_mha=dropout_conv_id_mha,
-                            dropout_ff=dropout_conv_id_ff,
-                            attention_type=attention_type,
-                            elems_as_queries=lastlayer,
-                            # learnable_queries=lastlayer,
-                            export_onnx_fused=export_onnx_fused,
-                            save_attention=save_attention,
-                        )
-                    )
-                    self.conv_reg.append(
-                        PreLnSelfAttentionLayer(
-                            name="conv_reg_{}".format(i),
-                            activation=activation,
-                            embedding_dim=embedding_dim,
-                            num_heads=num_heads,
-                            width=width,
-                            dropout_mha=dropout_conv_reg_mha,
-                            dropout_ff=dropout_conv_reg_ff,
-                            attention_type=attention_type,
-                            elems_as_queries=lastlayer,
-                            # learnable_queries=lastlayer,
-                            export_onnx_fused=export_onnx_fused,
-                            save_attention=save_attention,
-                        )
-                    )
-
-            elif self.conv_type == ModelType.GNNLSH:
-                _logger.info("Initializing GNNLSH convolution layers")
-                self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
-                for i in range(self.num_convs):
-                    _logger.info(f"Initializing GNN-LSH layer {i}")
-                    gnn_conf = {
-                        "inout_dim": embedding_dim,
-                        "bin_size": self.bin_size,
-                        "max_num_bins": max_num_bins,
-                        "distance_dim": distance_dim,
-                        "layernorm": layernorm,
-                        "num_node_messages": num_node_messages,
-                        "dropout": dropout_ff,
-                        "ffn_dist_hidden_dim": ffn_dist_hidden_dim,
-                        "ffn_dist_num_layers": ffn_dist_num_layers,
-                        "kernel_type": kernel_type,
-                        "use_interbin_attention": use_interbin_attention,
-                        "num_interbin_heads": num_interbin_heads,
-                        "num_attention_heads": num_attention_heads,
-                        "num_or_hashes": num_or_hashes,
-                        "num_and_hashes": num_and_hashes,
-                    }
-                    self.conv_id.append(CombinedGraphLayer(**gnn_conf))
-                    self.conv_reg.append(CombinedGraphLayer(**gnn_conf))
-            elif self.conv_type == ModelType.LITEPT:
-                if LitePTLayer is None:
-                    raise ImportError("LitePTLayer is not available. Please check the LitePT installation.")
-                _logger.info("Initializing LitePT convolution layers")
-                self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
-                litept_conf = self.config.litept.model_dump()
-                for i in range(self.num_convs):
-                    _logger.info(f"Initializing LitePT layer {i}")
-                    self.conv_id.append(LitePTLayer(name=f"litept_id_{i}", litept_config=litept_conf, embedding_dim=embedding_dim))
-                    self.conv_reg.append(LitePTLayer(name=f"litept_reg_{i}", litept_config=litept_conf, embedding_dim=embedding_dim))
-            elif self.conv_type == ModelType.HEPT:
-                _logger.info("Initializing HEPT convolution layers")
-                self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
-                hept_conf = self.config.hept.model_dump()
-                # Remove keys that HEPTLayer constructor handles via explicit arguments
-                for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff", "num_heads", "pos"]:
-                    if key in hept_conf:
-                        hept_conf.pop(key)
-                for i in range(self.num_convs):
-                    _logger.info(f"Initializing HEPT layer {i}")
-                    self.conv_id.append(
-                        HEPTLayer(
-                            name=f"hept_id_{i}",
-                            embedding_dim=embedding_dim,
-                            num_heads=num_heads,
-                            width=width,
-                            dropout=dropout_ff,
-                            pos=pos,
-                            **hept_conf,
-                        )
-                    )
-                    self.conv_reg.append(
-                        HEPTLayer(
-                            name=f"hept_reg_{i}",
-                            embedding_dim=embedding_dim,
-                            num_heads=num_heads,
-                            width=width,
-                            dropout=dropout_ff,
-                            pos=pos,
-                            **hept_conf,
-                        )
-                    )
-            elif self.conv_type == ModelType.HEPTV2:
-                _logger.info("Initializing HEPTv2 convolution layers")
-                self.conv_id = nn.ModuleList()
-                self.conv_reg = nn.ModuleList()
-                heptv2_conf = self.config.heptv2.model_dump()
-                for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff", "num_heads"]:
-                    if key in heptv2_conf:
-                        heptv2_conf.pop(key)
-                for i in range(self.num_convs):
-                    _logger.info(f"Initializing HEPTv2 layer {i}")
-                    self.conv_id.append(
-                        HEPTv2Layer(
-                            name=f"heptv2_id_{i}",
-                            embedding_dim=embedding_dim,
-                            num_heads=num_heads,
-                            width=width,
-                            dropout=dropout_ff,
-                            **heptv2_conf,
-                        )
-                    )
-                    self.conv_reg.append(
-                        HEPTv2Layer(
-                            name=f"heptv2_reg_{i}",
-                            embedding_dim=embedding_dim,
-                            num_heads=num_heads,
-                            width=width,
-                            dropout=dropout_ff,
-                            **heptv2_conf,
-                        )
-                    )
-            _logger.info("Convolution layers initialization took {:.2f}s".format(time.time() - t0))
-            _logger.info("conv_id parameters: {}".format(count_parameters(self.conv_id)))
-            _logger.info("conv_reg parameters: {}".format(count_parameters(self.conv_reg)))
+            backbone_kwargs = {
+                "num_layers": self.num_convs,
+                "activation": activation,
+                "embedding_dim": embedding_dim,
+                "width": width,
+                "dropout_ff": backbone_dropout_ff,
+                "dropout_mha": backbone_dropout_mha,
+                "num_heads": num_heads if self.conv_type in [ModelType.ATTENTION, ModelType.HEPT, ModelType.HEPTV2] else None,
+                "attention_type": attention_type if self.conv_type == ModelType.ATTENTION else None,
+                "export_onnx_fused": export_onnx_fused if self.conv_type == ModelType.ATTENTION else False,
+                "save_attention": save_attention if self.conv_type == ModelType.ATTENTION else False,
+                "pos": pos if self.conv_type == ModelType.HEPT else False,
+                "layer_params": {
+                    "max_num_bins": max_num_bins if self.conv_type == ModelType.GNNLSH else None,
+                    "distance_dim": distance_dim if self.conv_type == ModelType.GNNLSH else None,
+                    "layernorm": layernorm if self.conv_type == ModelType.GNNLSH else None,
+                    "num_node_messages": num_node_messages if self.conv_type == ModelType.GNNLSH else None,
+                    "ffn_dist_hidden_dim": ffn_dist_hidden_dim if self.conv_type == ModelType.GNNLSH else None,
+                    "ffn_dist_num_layers": ffn_dist_num_layers if self.conv_type == ModelType.GNNLSH else None,
+                    "kernel_type": kernel_type if self.conv_type == ModelType.GNNLSH else None,
+                    "use_interbin_attention": use_interbin_attention if self.conv_type == ModelType.GNNLSH else None,
+                    "num_interbin_heads": num_interbin_heads if self.conv_type == ModelType.GNNLSH else None,
+                    "num_attention_heads": num_attention_heads if self.conv_type == ModelType.GNNLSH else None,
+                    "num_or_hashes": num_or_hashes if self.conv_type == ModelType.GNNLSH else None,
+                    "num_and_hashes": num_and_hashes if self.conv_type == ModelType.GNNLSH else None,
+                },
+            }
+            if self.use_split_backbone:
+                _logger.info("Initializing split id/reg backbone layers, num_convs={}".format(self.num_convs))
+                self._backbone_id = self._build_backbone_layers(name_prefix="backbone_id", **backbone_kwargs)
+                self._backbone_reg = self._build_backbone_layers(name_prefix="backbone_reg", **backbone_kwargs)
+            else:
+                _logger.info("Initializing shared backbone layers, num_convs={}".format(self.num_convs))
+                self.backbone = self._build_backbone_layers(name_prefix="backbone", **backbone_kwargs)
+        _logger.info("Backbone initialization took {:.2f}s".format(time.time() - t0))
+        if self.use_split_backbone:
+            _logger.info("backbone_id parameters: {}".format(count_parameters(self._backbone_id)))
+            _logger.info("backbone_reg parameters: {}".format(count_parameters(self._backbone_reg)))
+        else:
+            _logger.info("backbone parameters: {}".format(count_parameters(self.backbone)))
 
         if self.learned_representation_mode == LearnedRepresentationMode.CONCAT:
-            decoding_dim = self.num_convs * embedding_dim
+            decoding_dim = max(self.num_convs, 1) * embedding_dim
         elif self.learned_representation_mode == LearnedRepresentationMode.LAST:
             decoding_dim = embedding_dim
 
         _logger.info("Initializing output DNNs")
         t0 = time.time()
-        # DNN that acts on the node level to predict the PID
-        self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, dropout_ff)
-        self.nn_pid = ffn(decoding_dim, self.num_classes, width, self.act, dropout_ff)
-        # self.nn_pu = ffn(decoding_dim, 2, width, self.act, dropout_ff)
+        self.classification_norm = torch.nn.LayerNorm(decoding_dim) if self.use_pre_layernorm else None
+        self.regression_norm = torch.nn.LayerNorm(decoding_dim) if self.use_pre_layernorm else None
 
-        # elementwise DNN for node momentum regression
-        embed_dim = decoding_dim
-        self.nn_pt = RegressionOutput(pt_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
-        self.nn_eta = RegressionOutput(eta_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
-        self.nn_sin_phi = RegressionOutput(sin_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
-        self.nn_cos_phi = RegressionOutput(cos_phi_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
-        self.nn_energy = RegressionOutput(energy_mode, embed_dim, width, self.act, dropout_ff, self.elemtypes_nonzero)
+        if self.task_queries and not self.use_split_backbone:
+            self.classification_query = nn.Parameter(torch.zeros(1, 1, decoding_dim), requires_grad=True)
+            self.regression_query = nn.Parameter(torch.zeros(1, 1, decoding_dim), requires_grad=True)
+            trunc_normal_(self.classification_query, std=0.02)
+            trunc_normal_(self.regression_query, std=0.02)
+            readout_heads = infer_num_heads(decoding_dim, num_heads if self.conv_type in [ModelType.ATTENTION, ModelType.HEPT, ModelType.HEPTV2] else None)
+            readout_attention_type = AttentionType.MATH
+            readout_export_onnx_fused = False
+            self.classification_readout = TaskQueryAttentionReadout(
+                name="classification_readout",
+                activation=activation,
+                embedding_dim=decoding_dim,
+                num_heads=readout_heads,
+                width=width,
+                dropout_mha=backbone_dropout_mha,
+                dropout_ff=head_dropout_ff,
+                attention_type=readout_attention_type,
+                export_onnx_fused=readout_export_onnx_fused,
+            )
+            self.regression_readout = TaskQueryAttentionReadout(
+                name="regression_readout",
+                activation=activation,
+                embedding_dim=decoding_dim,
+                num_heads=readout_heads,
+                width=width,
+                dropout_mha=backbone_dropout_mha,
+                dropout_ff=head_dropout_ff,
+                attention_type=readout_attention_type,
+                export_onnx_fused=readout_export_onnx_fused,
+            )
+        else:
+            self.classification_query = None
+            self.regression_query = None
+            self.classification_readout = None
+            self.regression_readout = None
+
+        self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, head_dropout_ff)
+        self.nn_pid = ffn(decoding_dim, self.num_classes, width, self.act, head_dropout_ff)
+
+        self.nn_pt = RegressionOutput(pt_mode, decoding_dim, width, self.act, head_dropout_ff, self.elemtypes_nonzero)
+        self.nn_eta = RegressionOutput(eta_mode, decoding_dim, width, self.act, head_dropout_ff, self.elemtypes_nonzero)
+        self.nn_sin_phi = RegressionOutput(sin_phi_mode, decoding_dim, width, self.act, head_dropout_ff, self.elemtypes_nonzero)
+        self.nn_cos_phi = RegressionOutput(cos_phi_mode, decoding_dim, width, self.act, head_dropout_ff, self.elemtypes_nonzero)
+        self.nn_energy = RegressionOutput(energy_mode, decoding_dim, width, self.act, head_dropout_ff, self.elemtypes_nonzero)
         _logger.info("Output DNNs initialization took {:.2f}s".format(time.time() - t0))
 
+        _logger.info("backbone_mode={}".format(self.backbone_mode))
+        _logger.info("task_queries enabled={}".format(self.task_queries and not self.use_split_backbone))
+        _logger.info("classification_norm parameters: {}".format(count_parameters(self.classification_norm) if self.classification_norm is not None else 0))
+        _logger.info("regression_norm parameters: {}".format(count_parameters(self.regression_norm) if self.regression_norm is not None else 0))
+        _logger.info("classification_query parameters: {}".format(count_parameters(self.classification_query) if self.classification_query is not None else 0))
+        _logger.info("regression_query parameters: {}".format(count_parameters(self.regression_query) if self.regression_query is not None else 0))
+        _logger.info("classification_readout parameters: {}".format(count_parameters(self.classification_readout) if self.classification_readout is not None else 0))
+        _logger.info("regression_readout parameters: {}".format(count_parameters(self.regression_readout) if self.regression_readout is not None else 0))
         _logger.info("nn_binary_particle parameters: {}".format(count_parameters(self.nn_binary_particle)))
         _logger.info("nn_pid parameters: {}".format(count_parameters(self.nn_pid)))
         _logger.info("nn_pt parameters: {}".format(count_parameters(self.nn_pt)))
@@ -570,90 +652,356 @@ class MLPF(nn.Module):
         _logger.info("nn_sin_phi parameters: {}".format(count_parameters(self.nn_sin_phi)))
         _logger.info("nn_cos_phi parameters: {}".format(count_parameters(self.nn_cos_phi)))
         _logger.info("nn_energy parameters: {}".format(count_parameters(self.nn_energy)))
-
-        if self.use_pre_layernorm:  # add final norm after last attention block as per https://arxiv.org/abs/2002.04745
-            _logger.info("Initializing final normalization layers")
-            self.final_norm_id = torch.nn.LayerNorm(decoding_dim)
-            self.final_norm_reg = torch.nn.LayerNorm(embed_dim)
-            _logger.info("final_norm_id parameters: {}".format(count_parameters(self.final_norm_id)))
-            _logger.info("final_norm_reg parameters: {}".format(count_parameters(self.final_norm_reg)))
         _logger.info("Total MLPF parameters: {}".format(count_parameters(self)))
         _logger.info("MLPF __init__ done")
 
-    # @torch.compile
-    def forward(self, X_features, mask):
-        Xfeat_normed = X_features
+    def _build_backbone_layers(
+        self,
+        num_layers,
+        activation,
+        embedding_dim,
+        width,
+        dropout_ff,
+        name_prefix="backbone",
+        dropout_mha=0.0,
+        num_heads=None,
+        attention_type=None,
+        export_onnx_fused=False,
+        save_attention=False,
+        pos=False,
+        layer_params=None,
+    ):
+        layers = nn.ModuleList()
+        layer_params = layer_params or {}
+        for i in range(num_layers):
+            _logger.info(f"Initializing backbone layer {i}")
+            layers.append(
+                self._build_backbone_layer(
+                    name=f"{name_prefix}_{i}",
+                    is_last=i == num_layers - 1,
+                    activation=activation,
+                    embedding_dim=embedding_dim,
+                    width=width,
+                    dropout_ff=dropout_ff,
+                    dropout_mha=dropout_mha,
+                    num_heads=num_heads,
+                    attention_type=attention_type,
+                    export_onnx_fused=export_onnx_fused,
+                    save_attention=save_attention,
+                    pos=pos,
+                    layer_params=layer_params,
+                )
+            )
+        return layers
 
-        embeddings_id, embeddings_reg = [], []
+    def _build_backbone_layer(
+        self,
+        name,
+        is_last,
+        activation,
+        embedding_dim,
+        width,
+        dropout_ff,
+        dropout_mha=0.0,
+        num_heads=None,
+        attention_type=None,
+        export_onnx_fused=False,
+        save_attention=False,
+        pos=False,
+        layer_params=None,
+    ):
+        layer_params = layer_params or {}
+        if self.conv_type == ModelType.ATTENTION:
+            return PreLnSelfAttentionLayer(
+                name=name,
+                activation=activation,
+                embedding_dim=embedding_dim,
+                num_heads=num_heads,
+                width=width,
+                dropout_mha=dropout_mha,
+                dropout_ff=layer_params.get("dropout_ff", dropout_ff),
+                attention_type=attention_type,
+                elems_as_queries=is_last,
+                export_onnx_fused=export_onnx_fused,
+                save_attention=save_attention,
+            )
+        if self.conv_type == ModelType.GNNLSH:
+            gnn_conf = {
+                "inout_dim": embedding_dim,
+                "bin_size": self.bin_size,
+                "max_num_bins": layer_params["max_num_bins"],
+                "distance_dim": layer_params["distance_dim"],
+                "layernorm": layer_params["layernorm"],
+                "num_node_messages": layer_params["num_node_messages"],
+                "dropout": dropout_ff,
+                "ffn_dist_hidden_dim": layer_params["ffn_dist_hidden_dim"],
+                "ffn_dist_num_layers": layer_params["ffn_dist_num_layers"],
+                "kernel_type": layer_params["kernel_type"],
+                "use_interbin_attention": layer_params["use_interbin_attention"],
+                "num_interbin_heads": layer_params["num_interbin_heads"],
+                "num_attention_heads": layer_params["num_attention_heads"],
+                "num_or_hashes": layer_params["num_or_hashes"],
+                "num_and_hashes": layer_params["num_and_hashes"],
+            }
+            return CombinedGraphLayer(**gnn_conf)
+        if self.conv_type == ModelType.LITEPT:
+            if LitePTLayer is None:
+                raise ImportError("LitePTLayer is not available. Please check the LitePT installation.")
+            litept_conf = self.config.litept.model_dump()
+            return LitePTLayer(name=name, litept_config=litept_conf, embedding_dim=embedding_dim)
+        if self.conv_type == ModelType.HEPT:
+            hept_conf = self.config.hept.model_dump()
+            for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff", "num_heads", "pos"]:
+                if key in hept_conf:
+                    hept_conf.pop(key)
+            return HEPTLayer(
+                name=name,
+                embedding_dim=embedding_dim,
+                num_heads=num_heads,
+                width=width,
+                dropout=dropout_ff,
+                pos=pos,
+                **hept_conf,
+            )
+        if self.conv_type == ModelType.HEPTV2:
+            heptv2_conf = self.config.heptv2.model_dump()
+            for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff", "num_heads"]:
+                if key in heptv2_conf:
+                    heptv2_conf.pop(key)
+            return HEPTv2Layer(
+                name=name,
+                embedding_dim=embedding_dim,
+                num_heads=num_heads,
+                width=width,
+                dropout=dropout_ff,
+                **heptv2_conf,
+            )
+        raise ValueError(f"Unsupported conv type {self.conv_type}")
+
+    def _build_modality_stems(self, embedding_dim, width, dropout):
+        return nn.ModuleDict(
+            {
+                "hit": ffn(self.input_dim, embedding_dim, width, self.act, dropout),
+                "track": ffn(self.input_dim, embedding_dim, width, self.act, dropout),
+                "cluster": ffn(self.input_dim, embedding_dim, width, self.act, dropout),
+            }
+        )
+
+    def _source_id(self):
+        if self.dataset in [Dataset.CLIC, Dataset.CLIC_HITS]:
+            return DatasetSource.CLIC.value
+        if self.dataset in [Dataset.CLD, Dataset.CLD_HITS]:
+            return DatasetSource.CLD.value
+        if self.dataset == Dataset.CMS:
+            return DatasetSource.CMS.value
+        return DatasetSource.UNKNOWN.value
+
+    def _infer_modality_ids(self, X_features):
+        elemtype = X_features[..., 0].to(torch.long)
+        modality_ids = torch.zeros_like(elemtype)
+        if self.dataset in [Dataset.CLIC_HITS, Dataset.CLD_HITS]:
+            modality_ids = torch.where(elemtype > 0, torch.full_like(modality_ids, ElementModality.HIT.value), modality_ids)
+        elif self.dataset in [Dataset.CLIC, Dataset.CLD]:
+            modality_ids = torch.where(elemtype == 1, torch.full_like(modality_ids, ElementModality.TRACK.value), modality_ids)
+            modality_ids = torch.where(elemtype == 2, torch.full_like(modality_ids, ElementModality.CLUSTER.value), modality_ids)
+        return modality_ids
+
+    def _encode_modality_stems(self, X_features, mask, stems, source_id=None):
+        modality_ids = self._infer_modality_ids(X_features)
+        encoded = torch.zeros(*X_features.shape[:2], self.embedding_dim, device=X_features.device, dtype=X_features.dtype)
+        modality_to_stem = {
+            ElementModality.HIT.value: stems["hit"],
+            ElementModality.TRACK.value: stems["track"],
+            ElementModality.CLUSTER.value: stems["cluster"],
+        }
+        for modality_id, stem in modality_to_stem.items():
+            modality_mask = (modality_ids == modality_id).unsqueeze(-1).to(X_features.dtype)
+            encoded = encoded + stem(X_features) * modality_mask
+
+        if self.modality_embedding is not None:
+            encoded = encoded + self.modality_embedding(modality_ids)
+        if self.source_embedding is not None:
+            if source_id is None:
+                source_ids = torch.full_like(modality_ids, self._source_id())
+            else:
+                source_ids = source_id.to(device=X_features.device, dtype=torch.long)
+                if source_ids.ndim == 1:
+                    source_ids = source_ids.unsqueeze(-1).expand_as(modality_ids)
+                elif source_ids.ndim == 2 and source_ids.shape[1] == 1:
+                    source_ids = source_ids.expand_as(modality_ids)
+            encoded = encoded + self.source_embedding(source_ids)
+        if self.input_stem_norm is not None:
+            encoded = self.input_stem_norm(encoded)
+        if mask is not None:
+            encoded = encoded * mask.unsqueeze(-1).to(encoded.dtype)
+        return encoded
+
+    def _encode_inputs(self, X_features, mask=None, encoder=None, source_id=None):
+        if self.use_modality_stems:
+            stems = self.input_stems if encoder is None else encoder
+            return self._encode_modality_stems(X_features, mask, stems, source_id=source_id)
+
+        encoder = self.nn0 if encoder is None else encoder
         if self.input_encoding == InputEncoding.JOINT:
-            embedding_id = self.nn0_id(Xfeat_normed)
-            embedding_reg = self.nn0_reg(Xfeat_normed)
-        elif self.input_encoding == InputEncoding.SPLIT:
-            # embedding_id = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_id], axis=-1)
-            # elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
-            # embedding_id = torch.sum(embedding_id * elemtype_mask.unsqueeze(-2), axis=-1)
-
-            # embedding_reg = torch.stack([nn0(Xfeat_normed) for nn0 in self.nn0_reg], axis=-1)
-            # elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
-            # embedding_reg = torch.sum(embedding_reg * elemtype_mask.unsqueeze(-2), axis=-1)
-
-            B, S, _ = Xfeat_normed.shape
+            encoded = encoder(X_features)
+        if self.input_encoding == InputEncoding.SPLIT:
+            B, S, _ = X_features.shape
             num_types = len(self.elemtypes_nonzero)
-
-            # Wide MLP approach: compute all at once and reshape to [B, S, num_types, embedding_dim]
-            all_id = self.nn0_id(Xfeat_normed).view(B, S, num_types, -1)
-            all_reg = self.nn0_reg(Xfeat_normed).view(B, S, num_types, -1)
-
-            # Create mask [B, S, num_types]
+            all_embeddings = encoder(X_features).view(B, S, num_types, -1)
             elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
+            encoded = torch.sum(all_embeddings * elemtype_mask.unsqueeze(-1), axis=2)
+        elif self.input_encoding not in [InputEncoding.JOINT, InputEncoding.SPLIT]:
+            raise ValueError(f"Unsupported input encoding {self.input_encoding}")
+        if mask is not None:
+            encoded = encoded * mask.unsqueeze(-1).to(encoded.dtype)
+        return encoded
 
-            # Select relevant embedding: [B, S, num_types, D] * [B, S, num_types, 1] -> [B, S, num_types, D] -> sum over num_types -> [B, S, D]
-            embedding_id = torch.sum(all_id * elemtype_mask.unsqueeze(-1), axis=2)
-            embedding_reg = torch.sum(all_reg * elemtype_mask.unsqueeze(-1), axis=2)
-        if self.num_convs != 0:
-            for num, conv in enumerate(self.conv_id):
-                conv_input = embedding_id if num == 0 else embeddings_id[-1]
-                if self.conv_type in [ModelType.LITEPT, ModelType.HEPT, ModelType.HEPTV2]:
-                    out_padded = conv(conv_input, mask, X_features)
-                else:
-                    out_padded = conv(conv_input, mask, embedding_id)
-                embeddings_id.append(out_padded)
+    def _run_backbone(self, x, mask, initial_embedding, X_features, backbone=None):
+        backbone = self.backbone if backbone is None else backbone
+        embeddings = []
+        if self.num_convs == 0:
+            embeddings.append(x)
+            return embeddings
 
-            for num, conv in enumerate(self.conv_reg):
-                conv_input = embedding_reg if num == 0 else embeddings_reg[-1]
-                if self.conv_type in [ModelType.LITEPT, ModelType.HEPT, ModelType.HEPTV2]:
-                    out_padded = conv(conv_input, mask, X_features)
-                else:
-                    out_padded = conv(conv_input, mask, embedding_reg)
-                embeddings_reg.append(out_padded)
+        for conv in backbone:
+            if self.conv_type in [ModelType.LITEPT, ModelType.HEPT, ModelType.HEPTV2]:
+                x = conv(x, mask, X_features)
+            else:
+                x = conv(x, mask, initial_embedding)
+            embeddings.append(x)
+        return embeddings
+
+    def _collect_representation(self, embeddings, fallback_embedding):
+        if self.learned_representation_mode == LearnedRepresentationMode.CONCAT:
+            if len(embeddings) == 0:
+                return fallback_embedding
+            return torch.cat(embeddings, axis=-1)
+        if self.learned_representation_mode == LearnedRepresentationMode.LAST:
+            if len(embeddings) == 0:
+                return fallback_embedding
+            return embeddings[-1]
+        raise ValueError(f"Unsupported learned representation mode {self.learned_representation_mode}")
+
+    def encode_backbone(self, X_features, mask, source_id=None):
+        if self.use_split_backbone:
+            input_encoder = self._input_stems_id if self.use_modality_stems else self._nn0_id
+            x = self._encode_inputs(X_features, mask=mask, encoder=input_encoder, source_id=source_id)
+            embeddings = self._run_backbone(x, mask, x, X_features, backbone=self._backbone_id)
         else:
-            embeddings_id.append(embedding_id)
-            embeddings_reg.append(embedding_reg)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
+            embeddings = self._run_backbone(x, mask, x, X_features)
+        return self._collect_representation(embeddings, x)
 
-        # id input
-        if self.learned_representation_mode == LearnedRepresentationMode.CONCAT:
-            final_embedding_id = torch.cat(embeddings_id, axis=-1)
-        elif self.learned_representation_mode == LearnedRepresentationMode.LAST:
-            final_embedding_id = torch.cat([embeddings_id[-1]], axis=-1)
+    @property
+    def nn0_id(self):
+        if self.use_modality_stems:
+            return self._input_stems_id if self.use_split_backbone else self.input_stems
+        return self._nn0_id if self.use_split_backbone else self.nn0
 
-        if self.use_pre_layernorm:
-            final_embedding_id = self.final_norm_id(final_embedding_id)
+    @property
+    def nn0_reg(self):
+        if self.use_modality_stems:
+            return self._input_stems_reg if self.use_split_backbone else self.input_stems
+        return self._nn0_reg if self.use_split_backbone else self.nn0
 
-        preds_binary_particle = self.nn_binary_particle(final_embedding_id)
-        preds_pid = self.nn_pid(final_embedding_id)
-        # preds_pu = self.nn_pu(final_embedding_id)
+    @property
+    def conv_id(self):
+        return self._backbone_id if self.use_split_backbone else self.backbone
+
+    @property
+    def conv_reg(self):
+        return self._backbone_reg if self.use_split_backbone else self.backbone
+
+    @property
+    def final_norm_id(self):
+        return self.classification_norm
+
+    @property
+    def final_norm_reg(self):
+        return self.regression_norm
+
+    def load_state_dict(self, state_dict, strict: bool = True):
+        # Backward compatibility with checkpoints saved before the backbone refactor.
+        if self.use_split_backbone:
+            legacy_prefix_groups = [
+                ("_nn0_id.", ["nn0_id."]),
+                ("_nn0_reg.", ["nn0_reg."]),
+                ("_backbone_id.", ["conv_id."]),
+                ("_backbone_reg.", ["conv_reg."]),
+            ]
+        else:
+            legacy_prefix_groups = [
+                ("nn0.", ["nn0_id.", "nn0_reg."]),
+                ("backbone.", ["conv_id.", "conv_reg."]),
+            ]
+        remapped = {}
+        used_legacy = False
+        current_state = super().state_dict()
+
+        for target_prefix, source_prefixes in legacy_prefix_groups:
+            grouped = {}
+            for source_prefix in source_prefixes:
+                for key, value in state_dict.items():
+                    if key.startswith(source_prefix):
+                        used_legacy = True
+                        suffix = key[len(source_prefix) :]
+                        grouped.setdefault(suffix, []).append(value)
+            for suffix, values in grouped.items():
+                if len(values) == 1:
+                    remapped[target_prefix + suffix] = values[0]
+                else:
+                    stacked = torch.stack([v.to(torch.float32) for v in values], dim=0)
+                    remapped[target_prefix + suffix] = stacked.mean(dim=0).to(values[0].dtype)
+
+        if used_legacy:
+            for key, value in state_dict.items():
+                if key.startswith("nn0_id.") or key.startswith("nn0_reg.") or key.startswith("conv_id.") or key.startswith("conv_reg."):
+                    continue
+                if key.startswith("final_norm_id."):
+                    remapped[key.replace("final_norm_id.", "classification_norm.")] = value
+                elif key.startswith("final_norm_reg."):
+                    remapped[key.replace("final_norm_reg.", "regression_norm.")] = value
+                else:
+                    remapped[key] = value
+            state_dict = remapped
+
+        for key, value in current_state.items():
+            if key not in state_dict:
+                state_dict[key] = value
+
+        return super().load_state_dict(state_dict, strict=strict)
+
+    # @torch.compile
+    def forward(self, X_features, mask, source_id=None):
+        if self.use_split_backbone:
+            input_encoder_id = self._input_stems_id if self.use_modality_stems else self._nn0_id
+            input_encoder_reg = self._input_stems_reg if self.use_modality_stems else self._nn0_reg
+            x_id = self._encode_inputs(X_features, mask=mask, encoder=input_encoder_id, source_id=source_id)
+            x_reg = self._encode_inputs(X_features, mask=mask, encoder=input_encoder_reg, source_id=source_id)
+            embeddings_id = self._run_backbone(x_id, mask, x_id, X_features, backbone=self._backbone_id)
+            embeddings_reg = self._run_backbone(x_reg, mask, x_reg, X_features, backbone=self._backbone_reg)
+            final_embedding_cls = self._collect_representation(embeddings_id, x_id)
+            final_embedding_reg = self._collect_representation(embeddings_reg, x_reg)
+        else:
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
+            backbone_embeddings = self._run_backbone(x, mask, x, X_features)
+            final_embedding = self._collect_representation(backbone_embeddings, x)
+
+            if self.task_queries:
+                final_embedding_cls = self.classification_readout(final_embedding, mask, self.classification_query)
+                final_embedding_reg = self.regression_readout(final_embedding, mask, self.regression_query)
+            else:
+                final_embedding_cls = final_embedding
+                final_embedding_reg = final_embedding
+
+        if self.classification_norm is not None:
+            final_embedding_cls = self.classification_norm(final_embedding_cls)
+        if self.regression_norm is not None:
+            final_embedding_reg = self.regression_norm(final_embedding_reg)
+
+        preds_binary_particle = self.nn_binary_particle(final_embedding_cls)
+        preds_pid = self.nn_pid(final_embedding_cls)
         preds_pu = torch.zeros_like(preds_binary_particle)
-
-        # pred_charge = self.nn_charge(final_embedding_id)
-
-        # regression input
-        if self.learned_representation_mode == LearnedRepresentationMode.CONCAT:
-            final_embedding_reg = torch.cat(embeddings_reg, axis=-1)
-        elif self.learned_representation_mode == LearnedRepresentationMode.LAST:
-            final_embedding_reg = torch.cat([embeddings_reg[-1]], axis=-1)
-
-        if self.use_pre_layernorm:
-            final_embedding_reg = self.final_norm_reg(final_embedding_reg)
 
         # The PFElement feature order in X_features defined in fcc/postprocessing.py
         preds_pt = self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])
@@ -663,8 +1011,6 @@ class MLPF(nn.Module):
 
         # ensure created particle has positive mass^2 by computing energy from pt and adding a positive-only correction
         pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
-        # sinh does not exist on opset13, required for CMSSW_12_3_0_pre6
-        # pz_real = pt_real * torch.sinh(preds_eta.detach())
         pz_real = pt_real * (torch.exp(preds_eta.detach()) - torch.exp(-preds_eta.detach())) / 2.0
         e_real = torch.log(torch.sqrt(pt_real**2 + pz_real**2) / X_features[..., 5:6])
         if mask is not None:
@@ -673,17 +1019,16 @@ class MLPF(nn.Module):
         preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
-        # Guard against nan/inf to prevent segfaults in downstream libraries like fastjet
         preds_binary_particle = torch.nan_to_num(preds_binary_particle, nan=0.0, posinf=0.0, neginf=0.0)
         preds_pid = torch.nan_to_num(preds_pid, nan=0.0, posinf=0.0, neginf=0.0)
         preds_momentum = torch.nan_to_num(preds_momentum, nan=0.0, posinf=0.0, neginf=0.0)
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
 
-    def predict_particles(self, X_features, mask):
+    def predict_particles(self, X_features, mask, source_id=None):
         from mlpf.model.utils import unpack_predictions
 
-        ypred_raw = self.forward(X_features, mask)
+        ypred_raw = self.forward(X_features, mask, source_id=source_id)
         ypred_raw = tuple([y.to(torch.float32) for y in ypred_raw])
 
         # transform log (pt/elempt) -> pt

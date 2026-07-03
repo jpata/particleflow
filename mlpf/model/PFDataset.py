@@ -49,9 +49,18 @@ class TFDSDataSource:
         ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
         assert len(ret) == 1
         ret = ret[0]
+        ds_name = self.ds.dataset_info.name
+        if ds_name.startswith("clic_"):
+            ret["source_id"] = np.int64(2)
+        elif ds_name.startswith("cld_"):
+            ret["source_id"] = np.int64(3)
+        elif ds_name.startswith("cms_"):
+            ret["source_id"] = np.int64(1)
+        else:
+            ret["source_id"] = np.int64(0)
 
         Xshape = ret["X"].shape
-        _logger.debug(f"Getting item={item}, ds={self.ds.dataset_info.name}:{self.ds.dataset_info.config_name}, X={Xshape}")
+        _logger.debug(f"Getting item={item}, ds={ds_name}:{self.ds.dataset_info.config_name}, X={Xshape}")
 
         # sort the elements in each event in pT descending order
         # the transformer is permutation-covariant, but this can be helpful for other types of models
@@ -72,7 +81,7 @@ class TFDSDataSource:
                         pad_width = ((0, num_to_pad), (0, 0))  # Pad only the first axis
                         ret[key_to_pad] = np.pad(array_to_pad, pad_width, mode="constant", constant_values=0)
 
-        if self.ds.dataset_info.name.startswith("cms_"):
+        if ds_name.startswith("cms_"):
             # track, target label neutral hadron -> reconstruct as charged hadron
             ret["ytarget"][:, 0][(ret["X"][:, 0] == 1) & (ret["ytarget"][:, 0] == 2)] = 1
 
@@ -183,13 +192,14 @@ class PFBatch:
         self.genmet = kwargs.get("genmet", None)
         self.genjets = kwargs.get("genjets", None)
         self.targetjets = kwargs.get("targetjets", None)
+        self.source_id = kwargs.get("source_id", None)
         self.mask = self.X[:, :, 0] != 0
 
     def to(self, device, **kwargs):
         attrs = {}
         for attr in self.attrs:
             this_attr = getattr(self, attr)
-            attrs[attr] = this_attr.to(device, **kwargs)
+            attrs[attr] = this_attr.to(device, **kwargs) if this_attr is not None else None
         return PFBatch(**attrs)
 
 
@@ -552,7 +562,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ytarget"], ["genmet"]),
+                collate_fn=Collater(["X", "ytarget"], ["genmet", "source_id"]),
                 sampler=sampler,
                 num_workers=config.num_workers,
                 prefetch_factor=config.prefetch_factor,
