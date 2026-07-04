@@ -29,7 +29,7 @@ except Exception as e:
 
 
 class TFDSDataSource:
-    def __init__(self, ds, sort, pad_to_multiple=None):
+    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None):
         self.ds = ds
         tmp = self.ds.dataset_info
         self.ds.dataset_info = SimpleNamespace()
@@ -38,6 +38,7 @@ class TFDSDataSource:
         self.ds.dataset_info.config_name = tmp.config_name
         self.sort = sort
         self.pad_to_multiple = pad_to_multiple
+        self.feature_dim = feature_dim
 
     def __getitem__(self, item):
         if isinstance(item, int):
@@ -58,9 +59,16 @@ class TFDSDataSource:
             ret["source_id"] = np.int64(1)
         else:
             ret["source_id"] = np.int64(0)
+        ret["input_type_id"] = np.int64(1 if "_hits" in ds_name else 2)
 
         Xshape = ret["X"].shape
         _logger.debug(f"Getting item={item}, ds={ds_name}:{self.ds.dataset_info.config_name}, X={Xshape}")
+
+        if self.feature_dim is not None:
+            if ret["X"].shape[1] > self.feature_dim:
+                raise ValueError(f"Input feature dimension {ret['X'].shape[1]} exceeds configured feature_dim={self.feature_dim}")
+            if ret["X"].shape[1] < self.feature_dim:
+                ret["X"] = np.pad(ret["X"], ((0, 0), (0, self.feature_dim - ret["X"].shape[1])), mode="constant", constant_values=0)
 
         # sort the elements in each event in pT descending order
         # the transformer is permutation-covariant, but this can be helpful for other types of models
@@ -149,7 +157,7 @@ class TFDSDataSource:
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name, split, num_samples=None, sort=False, pad_to_multiple=512):
+    def __init__(self, data_dir, name, split, num_samples=None, sort=False, pad_to_multiple=512, feature_dim=None):
         """
         Args
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
@@ -169,7 +177,7 @@ class PFDataset:
             sys.exit(1)
 
         _logger.debug(f"PFDataset opening dataset {name} in {builder.data_path} for split {split}")
-        self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort, pad_to_multiple=pad_to_multiple)
+        self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort, pad_to_multiple=pad_to_multiple, feature_dim=feature_dim)
 
         if num_samples and num_samples < len(self.ds):
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
@@ -193,6 +201,7 @@ class PFBatch:
         self.genjets = kwargs.get("genjets", None)
         self.targetjets = kwargs.get("targetjets", None)
         self.source_id = kwargs.get("source_id", None)
+        self.input_type_id = kwargs.get("input_type_id", None)
         self.mask = self.X[:, :, 0] != 0
 
     def to(self, device, **kwargs):
@@ -538,6 +547,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                         num_samples=nevents,
                         sort=config.sort_data,
                         pad_to_multiple=config.pad_to_multiple_elements,
+                        feature_dim=config.input_dim,
                     ).ds
 
                     if (rank == 0) or (rank == "cpu"):
@@ -562,7 +572,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ytarget"], ["genmet", "source_id"]),
+                collate_fn=Collater(["X", "ytarget"], ["genmet", "source_id", "input_type_id"]),
                 sampler=sampler,
                 num_workers=config.num_workers,
                 prefetch_factor=config.prefetch_factor,

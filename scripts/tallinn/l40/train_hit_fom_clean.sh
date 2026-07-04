@@ -27,10 +27,6 @@ PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-100}
 DATA_CONFIG=${DATA_CONFIG:-1}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 
-# Clean hit-FOM matrix:
-#   trainset:  cld-hits, clic-hits, mixed-hits, mixed-hits-pf
-#   scenario:  baseline, stems, modality, modality-source
-# Every job evaluates cld_edm_ttbar_hits and clic_edm_ttbar_hits.
 TRAINSETS=(cld-hits clic-hits mixed-hits mixed-hits-pf)
 SCENARIOS=(baseline stems modality modality-source)
 

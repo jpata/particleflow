@@ -796,18 +796,30 @@ class MLPF(nn.Module):
             return DatasetSource.CMS.value
         return DatasetSource.UNKNOWN.value
 
-    def _infer_modality_ids(self, X_features):
+    def _infer_modality_ids(self, X_features, input_type_id=None):
         elemtype = X_features[..., 0].to(torch.long)
         modality_ids = torch.zeros_like(elemtype)
-        if self.dataset in [Dataset.CLIC_HITS, Dataset.CLD_HITS]:
+
+        if input_type_id is not None:
+            input_type_ids = input_type_id.to(device=X_features.device, dtype=torch.long)
+            if input_type_ids.ndim == 1:
+                input_type_ids = input_type_ids.unsqueeze(-1).expand_as(modality_ids)
+            elif input_type_ids.ndim == 2 and input_type_ids.shape[1] == 1:
+                input_type_ids = input_type_ids.expand_as(modality_ids)
+            hit_input = input_type_ids == 1
+            pf_input = input_type_ids == 2
+            modality_ids = torch.where(hit_input & (elemtype > 0), torch.full_like(modality_ids, ElementModality.HIT.value), modality_ids)
+            modality_ids = torch.where(pf_input & (elemtype == 1), torch.full_like(modality_ids, ElementModality.TRACK.value), modality_ids)
+            modality_ids = torch.where(pf_input & (elemtype == 2), torch.full_like(modality_ids, ElementModality.CLUSTER.value), modality_ids)
+        elif self.dataset in [Dataset.CLIC_HITS, Dataset.CLD_HITS]:
             modality_ids = torch.where(elemtype > 0, torch.full_like(modality_ids, ElementModality.HIT.value), modality_ids)
         elif self.dataset in [Dataset.CLIC, Dataset.CLD]:
             modality_ids = torch.where(elemtype == 1, torch.full_like(modality_ids, ElementModality.TRACK.value), modality_ids)
             modality_ids = torch.where(elemtype == 2, torch.full_like(modality_ids, ElementModality.CLUSTER.value), modality_ids)
         return modality_ids
 
-    def _encode_modality_stems(self, X_features, mask, stems, source_id=None):
-        modality_ids = self._infer_modality_ids(X_features)
+    def _encode_modality_stems(self, X_features, mask, stems, source_id=None, input_type_id=None):
+        modality_ids = self._infer_modality_ids(X_features, input_type_id=input_type_id)
         encoded = torch.zeros(*X_features.shape[:2], self.embedding_dim, device=X_features.device, dtype=X_features.dtype)
         modality_to_stem = {
             ElementModality.HIT.value: stems["hit"],
@@ -836,10 +848,10 @@ class MLPF(nn.Module):
             encoded = encoded * mask.unsqueeze(-1).to(encoded.dtype)
         return encoded
 
-    def _encode_inputs(self, X_features, mask=None, encoder=None, source_id=None):
+    def _encode_inputs(self, X_features, mask=None, encoder=None, source_id=None, input_type_id=None):
         if self.use_modality_stems:
             stems = self.input_stems if encoder is None else encoder
-            return self._encode_modality_stems(X_features, mask, stems, source_id=source_id)
+            return self._encode_modality_stems(X_features, mask, stems, source_id=source_id, input_type_id=input_type_id)
 
         encoder = self.nn0 if encoder is None else encoder
         if self.input_encoding == InputEncoding.JOINT:
@@ -882,13 +894,13 @@ class MLPF(nn.Module):
             return embeddings[-1]
         raise ValueError(f"Unsupported learned representation mode {self.learned_representation_mode}")
 
-    def encode_backbone(self, X_features, mask, source_id=None):
+    def encode_backbone(self, X_features, mask, source_id=None, input_type_id=None):
         if self.use_split_backbone:
             input_encoder = self._input_stems_id if self.use_modality_stems else self._nn0_id
-            x = self._encode_inputs(X_features, mask=mask, encoder=input_encoder, source_id=source_id)
+            x = self._encode_inputs(X_features, mask=mask, encoder=input_encoder, source_id=source_id, input_type_id=input_type_id)
             embeddings = self._run_backbone(x, mask, x, X_features, backbone=self._backbone_id)
         else:
-            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id, input_type_id=input_type_id)
             embeddings = self._run_backbone(x, mask, x, X_features)
         return self._collect_representation(embeddings, x)
 
@@ -972,18 +984,18 @@ class MLPF(nn.Module):
         return super().load_state_dict(state_dict, strict=strict)
 
     # @torch.compile
-    def forward(self, X_features, mask, source_id=None):
+    def forward(self, X_features, mask, source_id=None, input_type_id=None):
         if self.use_split_backbone:
             input_encoder_id = self._input_stems_id if self.use_modality_stems else self._nn0_id
             input_encoder_reg = self._input_stems_reg if self.use_modality_stems else self._nn0_reg
-            x_id = self._encode_inputs(X_features, mask=mask, encoder=input_encoder_id, source_id=source_id)
-            x_reg = self._encode_inputs(X_features, mask=mask, encoder=input_encoder_reg, source_id=source_id)
+            x_id = self._encode_inputs(X_features, mask=mask, encoder=input_encoder_id, source_id=source_id, input_type_id=input_type_id)
+            x_reg = self._encode_inputs(X_features, mask=mask, encoder=input_encoder_reg, source_id=source_id, input_type_id=input_type_id)
             embeddings_id = self._run_backbone(x_id, mask, x_id, X_features, backbone=self._backbone_id)
             embeddings_reg = self._run_backbone(x_reg, mask, x_reg, X_features, backbone=self._backbone_reg)
             final_embedding_cls = self._collect_representation(embeddings_id, x_id)
             final_embedding_reg = self._collect_representation(embeddings_reg, x_reg)
         else:
-            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id, input_type_id=input_type_id)
             backbone_embeddings = self._run_backbone(x, mask, x, X_features)
             final_embedding = self._collect_representation(backbone_embeddings, x)
 
@@ -1025,10 +1037,10 @@ class MLPF(nn.Module):
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
 
-    def predict_particles(self, X_features, mask, source_id=None):
+    def predict_particles(self, X_features, mask, source_id=None, input_type_id=None):
         from mlpf.model.utils import unpack_predictions
 
-        ypred_raw = self.forward(X_features, mask, source_id=source_id)
+        ypred_raw = self.forward(X_features, mask, source_id=source_id, input_type_id=input_type_id)
         ypred_raw = tuple([y.to(torch.float32) for y in ypred_raw])
 
         # transform log (pt/elempt) -> pt

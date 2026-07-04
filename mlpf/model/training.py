@@ -85,7 +85,7 @@ from mlpf.jet_utils import get_jet_config
 
 def model_step(batch, model, loss_fn, regression_weights):
     _logger.debug(f"model_step X={batch.X.shape}")
-    ypred_raw = model(batch.X, batch.mask, source_id=batch.source_id)
+    ypred_raw = model(batch.X, batch.mask, source_id=batch.source_id, input_type_id=batch.input_type_id)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
 
@@ -409,7 +409,7 @@ def evaluate(
                 )
 
                 model_module = model.module if hasattr(model, "module") else model
-                ypred_particles = model_module.predict_particles(batch.X, batch.mask, source_id=batch.source_id)
+                ypred_particles = model_module.predict_particles(batch.X, batch.mask, source_id=batch.source_id, input_type_id=batch.input_type_id)
 
                 if ival == 0 and (rank == 0 or rank == "cpu"):
                     print_event_table(batch, ytarget, ypred_particles, config)
@@ -866,6 +866,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
             "test",
             num_samples=ntest,
             pad_to_multiple=config.pad_to_multiple_elements,
+            feature_dim=config.input_dim,
         ).ds
         dataset.append(ds)
     ds = torch.utils.data.ConcatDataset(dataset)
@@ -887,7 +888,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
-        collate_fn=Collater(vals_for_test, ["genmet", "source_id"]),
+        collate_fn=Collater(vals_for_test, ["genmet", "source_id", "input_type_id"]),
         sampler=sampler,
         num_workers=config.num_workers,
         prefetch_factor=config.prefetch_factor,

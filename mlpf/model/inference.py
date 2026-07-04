@@ -50,7 +50,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     else:
         model_module = model
 
-    ypred = model_module.predict_particles(batch.X, batch.mask, source_id=batch.source_id)
+    ypred = model_module.predict_particles(batch.X, batch.mask, source_id=batch.source_id, input_type_id=batch.input_type_id)
 
     batch.ytarget[..., 2] = batch.ytarget_pt_orig
     batch.ytarget[..., 6] = batch.ytarget_e_orig
