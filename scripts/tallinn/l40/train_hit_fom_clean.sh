@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%a-%j-%N.out
 #SBATCH --job-name=train-hit-fom-clean
-#SBATCH --array=0-15
+#SBATCH --array=0-11
 
 set -euo pipefail
 export PF_SITE=tallinn
@@ -28,7 +28,7 @@ DATA_CONFIG=${DATA_CONFIG:-1}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 
 TRAINSETS=(cld-hits clic-hits mixed-hits mixed-hits-pf)
-SCENARIOS=(baseline stems modality modality-source)
+SCENARIOS=(baseline stems modality)
 
 NUM_SCENARIOS=${#SCENARIOS[@]}
 TRAINSET_INDEX=$((SLURM_ARRAY_TASK_ID / NUM_SCENARIOS))
@@ -118,17 +118,6 @@ case "$SCENARIO" in
             --model.input_stem.mode modality \
             --model.input_stem.modality_embedding true \
             --model.input_stem.source_embedding false \
-            --model.input_stem.input_norm true
-        ;;
-    modality-source)
-        uv run python3 mlpf/pipeline.py \
-            "${COMMON_ARGS[@]}" \
-            --model.backbone.mode shared \
-            --model.backbone.num_convs 6 \
-            --model.task_queries true \
-            --model.input_stem.mode modality \
-            --model.input_stem.modality_embedding true \
-            --model.input_stem.source_embedding true \
             --model.input_stem.input_norm true
         ;;
     *)

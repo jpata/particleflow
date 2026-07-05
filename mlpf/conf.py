@@ -46,9 +46,11 @@ class InputStemMode(Enum):
 
 class ElementModality(Enum):
     UNKNOWN = 0
+    TRACKER_HIT = 1
+    CALO_HIT = 2
+    TRACK = 3
+    CLUSTER = 4
     HIT = 1
-    TRACK = 2
-    CLUSTER = 3
 
 
 class DatasetSource(Enum):
@@ -481,7 +483,7 @@ class InputStemConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: InputStemMode = InputStemMode.STANDARD
     modality_embedding: bool = True
-    source_embedding: bool = True
+    source_embedding: bool = False
     input_norm: bool = True
 
 

@@ -327,20 +327,21 @@ class RegressionOutput(nn.Module):
             self.nn1 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
             self.nn2 = ffn(embed_dim, len(self.elemtypes), width, act, dropout)
 
-    def forward(self, elems, x, orig_value):
+    def forward(self, elems, x, orig_value, selector_ids=None):
+        selectors = elems[..., 0:1] if selector_ids is None else selector_ids.unsqueeze(-1)
         if self.mode == RegressionMode.DIRECT:
             nn_out = self.nn(x)
             return nn_out
         elif self.mode == RegressionMode.DIRECT_ELEMTYPE:
             nn_out = self.nn(x)
-            elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
+            elemtype_mask = torch.cat([selectors == elemtype for elemtype in self.elemtypes], axis=-1)
             nn_out = torch.sum(elemtype_mask * nn_out, axis=-1, keepdims=True)
             return nn_out
         elif self.mode == RegressionMode.DIRECT_ELEMTYPE_SPLIT:
             elem_outs = []
             for elem in range(len(self.elemtypes)):
                 elem_outs.append(self.nn[elem](x))
-            elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
+            elemtype_mask = torch.cat([selectors == elemtype for elemtype in self.elemtypes], axis=-1)
             elem_outs = torch.cat(elem_outs, axis=-1)
             return torch.sum(elem_outs * elemtype_mask, axis=-1, keepdims=True)
         elif self.mode == RegressionMode.ADDITIVE:
@@ -355,7 +356,7 @@ class RegressionOutput(nn.Module):
         elif self.mode == RegressionMode.LINEAR_ELEMTYPE:
             nn_out1 = self.nn1(x)
             nn_out2 = self.nn2(x)
-            elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
+            elemtype_mask = torch.cat([selectors == elemtype for elemtype in self.elemtypes], axis=-1)
             a = torch.sum(elemtype_mask * nn_out1, axis=-1, keepdims=True)
             b = torch.sum(elemtype_mask * nn_out2, axis=-1, keepdims=True)
             return orig_value * a + b
@@ -405,6 +406,13 @@ class MLPF(nn.Module):
         self.use_modality_embedding = bool(self.config.input_stem.modality_embedding)
         self.use_source_embedding = bool(self.config.input_stem.source_embedding)
         self.use_input_stem_norm = bool(self.config.input_stem.input_norm)
+        self.modality_selector_values = [
+            ElementModality.TRACKER_HIT.value,
+            ElementModality.CALO_HIT.value,
+            ElementModality.TRACK.value,
+            ElementModality.CLUSTER.value,
+        ]
+        regression_selector_values = self.modality_selector_values if self.use_modality_stems else self.elemtypes_nonzero
         if self.use_modality_stems and self.dataset not in [Dataset.CLIC, Dataset.CLD, Dataset.CLIC_HITS, Dataset.CLD_HITS]:
             raise ValueError(f"Modality input stems are currently defined for CLIC/CLD PF and hits datasets, got {self.dataset}")
         pt_mode = RegressionMode(self.config.pt_mode)
@@ -486,7 +494,7 @@ class MLPF(nn.Module):
         t0 = time.time()
         self.embedding_dim = embedding_dim
         if self.use_modality_stems:
-            _logger.info("Initializing modality-specific input stems for hit/track/cluster")
+            _logger.info("Initializing schema-aware input stems for tracker_hit/calo_hit/track/cluster")
             if self.use_split_backbone:
                 self._input_stems_id = self._build_modality_stems(embedding_dim, width, head_dropout_ff)
                 self._input_stems_reg = self._build_modality_stems(embedding_dim, width, head_dropout_ff)
@@ -630,11 +638,11 @@ class MLPF(nn.Module):
         self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, head_dropout_ff)
         self.nn_pid = ffn(decoding_dim, self.num_classes, width, self.act, head_dropout_ff)
 
-        self.nn_pt = RegressionOutput(pt_mode, decoding_dim, width, self.act, head_dropout_ff, self.elemtypes_nonzero)
-        self.nn_eta = RegressionOutput(eta_mode, decoding_dim, width, self.act, head_dropout_ff, self.elemtypes_nonzero)
-        self.nn_sin_phi = RegressionOutput(sin_phi_mode, decoding_dim, width, self.act, head_dropout_ff, self.elemtypes_nonzero)
-        self.nn_cos_phi = RegressionOutput(cos_phi_mode, decoding_dim, width, self.act, head_dropout_ff, self.elemtypes_nonzero)
-        self.nn_energy = RegressionOutput(energy_mode, decoding_dim, width, self.act, head_dropout_ff, self.elemtypes_nonzero)
+        self.nn_pt = RegressionOutput(pt_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
+        self.nn_eta = RegressionOutput(eta_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
+        self.nn_sin_phi = RegressionOutput(sin_phi_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
+        self.nn_cos_phi = RegressionOutput(cos_phi_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
+        self.nn_energy = RegressionOutput(energy_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
         _logger.info("Output DNNs initialization took {:.2f}s".format(time.time() - t0))
 
         _logger.info("backbone_mode={}".format(self.backbone_mode))
@@ -779,9 +787,11 @@ class MLPF(nn.Module):
         raise ValueError(f"Unsupported conv type {self.conv_type}")
 
     def _build_modality_stems(self, embedding_dim, width, dropout):
+        hit_dim = min(self.input_dim, 12)
         return nn.ModuleDict(
             {
-                "hit": ffn(self.input_dim, embedding_dim, width, self.act, dropout),
+                "tracker_hit": ffn(hit_dim, embedding_dim, width, self.act, dropout),
+                "calo_hit": ffn(hit_dim, embedding_dim, width, self.act, dropout),
                 "track": ffn(self.input_dim, embedding_dim, width, self.act, dropout),
                 "cluster": ffn(self.input_dim, embedding_dim, width, self.act, dropout),
             }
@@ -808,11 +818,13 @@ class MLPF(nn.Module):
                 input_type_ids = input_type_ids.expand_as(modality_ids)
             hit_input = input_type_ids == 1
             pf_input = input_type_ids == 2
-            modality_ids = torch.where(hit_input & (elemtype > 0), torch.full_like(modality_ids, ElementModality.HIT.value), modality_ids)
+            modality_ids = torch.where(hit_input & (elemtype == 1), torch.full_like(modality_ids, ElementModality.TRACKER_HIT.value), modality_ids)
+            modality_ids = torch.where(hit_input & (elemtype == 2), torch.full_like(modality_ids, ElementModality.CALO_HIT.value), modality_ids)
             modality_ids = torch.where(pf_input & (elemtype == 1), torch.full_like(modality_ids, ElementModality.TRACK.value), modality_ids)
             modality_ids = torch.where(pf_input & (elemtype == 2), torch.full_like(modality_ids, ElementModality.CLUSTER.value), modality_ids)
         elif self.dataset in [Dataset.CLIC_HITS, Dataset.CLD_HITS]:
-            modality_ids = torch.where(elemtype > 0, torch.full_like(modality_ids, ElementModality.HIT.value), modality_ids)
+            modality_ids = torch.where(elemtype == 1, torch.full_like(modality_ids, ElementModality.TRACKER_HIT.value), modality_ids)
+            modality_ids = torch.where(elemtype == 2, torch.full_like(modality_ids, ElementModality.CALO_HIT.value), modality_ids)
         elif self.dataset in [Dataset.CLIC, Dataset.CLD]:
             modality_ids = torch.where(elemtype == 1, torch.full_like(modality_ids, ElementModality.TRACK.value), modality_ids)
             modality_ids = torch.where(elemtype == 2, torch.full_like(modality_ids, ElementModality.CLUSTER.value), modality_ids)
@@ -822,13 +834,14 @@ class MLPF(nn.Module):
         modality_ids = self._infer_modality_ids(X_features, input_type_id=input_type_id)
         encoded = torch.zeros(*X_features.shape[:2], self.embedding_dim, device=X_features.device, dtype=X_features.dtype)
         modality_to_stem = {
-            ElementModality.HIT.value: stems["hit"],
-            ElementModality.TRACK.value: stems["track"],
-            ElementModality.CLUSTER.value: stems["cluster"],
+            ElementModality.TRACKER_HIT.value: (stems["tracker_hit"], min(X_features.shape[-1], 12)),
+            ElementModality.CALO_HIT.value: (stems["calo_hit"], min(X_features.shape[-1], 12)),
+            ElementModality.TRACK.value: (stems["track"], X_features.shape[-1]),
+            ElementModality.CLUSTER.value: (stems["cluster"], X_features.shape[-1]),
         }
-        for modality_id, stem in modality_to_stem.items():
+        for modality_id, (stem, input_dim) in modality_to_stem.items():
             modality_mask = (modality_ids == modality_id).unsqueeze(-1).to(X_features.dtype)
-            encoded = encoded + stem(X_features) * modality_mask
+            encoded = encoded + stem(X_features[..., :input_dim]) * modality_mask
 
         if self.modality_embedding is not None:
             encoded = encoded + self.modality_embedding(modality_ids)
@@ -1014,12 +1027,13 @@ class MLPF(nn.Module):
         preds_binary_particle = self.nn_binary_particle(final_embedding_cls)
         preds_pid = self.nn_pid(final_embedding_cls)
         preds_pu = torch.zeros_like(preds_binary_particle)
+        regression_selector_ids = self._infer_modality_ids(X_features, input_type_id=input_type_id) if self.use_modality_stems else None
 
         # The PFElement feature order in X_features defined in fcc/postprocessing.py
-        preds_pt = self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])
-        preds_eta = self.nn_eta(X_features, final_embedding_reg, X_features[..., 2:3])
-        preds_sin_phi = self.nn_sin_phi(X_features, final_embedding_reg, X_features[..., 3:4])
-        preds_cos_phi = self.nn_cos_phi(X_features, final_embedding_reg, X_features[..., 4:5])
+        preds_pt = self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2], regression_selector_ids)
+        preds_eta = self.nn_eta(X_features, final_embedding_reg, X_features[..., 2:3], regression_selector_ids)
+        preds_sin_phi = self.nn_sin_phi(X_features, final_embedding_reg, X_features[..., 3:4], regression_selector_ids)
+        preds_cos_phi = self.nn_cos_phi(X_features, final_embedding_reg, X_features[..., 4:5], regression_selector_ids)
 
         # ensure created particle has positive mass^2 by computing energy from pt and adding a positive-only correction
         pt_real = torch.exp(preds_pt.detach()) * X_features[..., 1:2]
@@ -1028,7 +1042,7 @@ class MLPF(nn.Module):
         if mask is not None:
             e_real = e_real * mask.unsqueeze(-1)
         e_real = torch.nan_to_num(e_real, nan=0.0, posinf=0.0, neginf=0.0)
-        preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6]))
+        preds_energy = e_real + torch.nn.functional.relu(self.nn_energy(X_features, final_embedding_reg, X_features[..., 5:6], regression_selector_ids))
         preds_momentum = torch.cat([preds_pt, preds_eta, preds_sin_phi, preds_cos_phi, preds_energy], axis=-1)
 
         preds_binary_particle = torch.nan_to_num(preds_binary_particle, nan=0.0, posinf=0.0, neginf=0.0)
