@@ -1,6 +1,7 @@
 import sys
 import random
 import resource
+import math
 from types import SimpleNamespace
 
 import numpy as np
@@ -9,7 +10,7 @@ import torch
 import torch.utils.data
 
 from mlpf.logger import _logger
-from mlpf.conf import MLPFConfig
+from mlpf.conf import DatasetSamplerMode, MLPFConfig
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
@@ -273,6 +274,59 @@ class ShardConsecutiveSampler(torch.utils.data.Sampler):
         return len(self.concat_dataset)
 
 
+def _build_interleaved_shard_indices(concat_dataset, shuffle=True, seed=0):
+    rng = random.Random(seed)
+
+    shard_indices_lists = []
+    start_idx = 0
+    for end_idx in concat_dataset.cumulative_sizes:
+        shard_indices = list(range(start_idx, end_idx))
+        if shuffle:
+            rng.shuffle(shard_indices)
+        shard_indices_lists.append(shard_indices)
+        start_idx = end_idx
+
+    positions = [0] * len(shard_indices_lists)
+    active_shards = [idx for idx, indices in enumerate(shard_indices_lists) if indices]
+    indices = []
+
+    while active_shards:
+        shard_order = list(active_shards)
+        if shuffle:
+            rng.shuffle(shard_order)
+        for shard_idx in shard_order:
+            pos = positions[shard_idx]
+            indices.append(shard_indices_lists[shard_idx][pos])
+            positions[shard_idx] += 1
+
+        active_shards = [idx for idx in active_shards if positions[idx] < len(shard_indices_lists[idx])]
+
+    return indices
+
+
+class InterleavedShardSampler(torch.utils.data.Sampler):
+    """Interleave events across ConcatDataset shards.
+
+    This avoids long single-source stretches when a training config combines
+    multiple samples under one physical dataset.
+    """
+
+    def __init__(self, concat_dataset, shuffle=True, seed=0):
+        self.concat_dataset = concat_dataset
+        self.shuffle = shuffle
+        self.seed = seed
+        self.epoch = 0
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+
+    def __iter__(self):
+        return iter(_build_interleaved_shard_indices(self.concat_dataset, shuffle=self.shuffle, seed=self.seed + self.epoch))
+
+    def __len__(self):
+        return len(self.concat_dataset)
+
+
 class DistributedShardConsecutiveSampler(torch.utils.data.distributed.DistributedSampler):
     """
     A distributed version of ShardConsecutiveSampler.
@@ -328,6 +382,49 @@ class DistributedShardConsecutiveSampler(torch.utils.data.distributed.Distribute
         assert len(indices) == self.num_samples
 
         return iter(indices)
+
+
+class DistributedInterleavedShardSampler(torch.utils.data.Sampler):
+    """Distributed version of InterleavedShardSampler."""
+
+    def __init__(self, dataset, world_size=None, rank=None, shuffle=True, seed=0, drop_last=False):
+        self.dataset = dataset
+        self.num_replicas = world_size
+        self.rank = rank
+        self.shuffle = shuffle
+        self.seed = seed
+        self.drop_last = drop_last
+        self.epoch = 0
+
+        if self.drop_last and len(self.dataset) % self.num_replicas != 0:
+            self.num_samples = math.ceil((len(self.dataset) - self.num_replicas) / self.num_replicas)
+        else:
+            self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
+        self.total_size = self.num_samples * self.num_replicas
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+
+    def __iter__(self):
+        indices = _build_interleaved_shard_indices(self.dataset, shuffle=self.shuffle, seed=self.seed + self.epoch)
+
+        if not self.drop_last:
+            padding_size = self.total_size - len(indices)
+            if padding_size <= len(indices):
+                indices += indices[:padding_size]
+            else:
+                indices += (indices * math.ceil(padding_size / len(indices)))[:padding_size]
+        else:
+            indices = indices[: self.total_size]
+
+        assert len(indices) == self.total_size
+        indices = indices[self.rank : self.total_size : self.num_replicas]
+        assert len(indices) == self.num_samples
+
+        return iter(indices)
+
+    def __len__(self):
+        return self.num_samples
 
 
 class ResumableSampler(torch.utils.data.Sampler):
@@ -559,8 +656,14 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             shuffle = False
             if shuffle_train:
                 shuffle = split == "train"
-            if world_size > 1:
+            sampler_mode = DatasetSamplerMode(config.sampler_mode)
+            _logger.info(f"{split}_dataset sampler_mode={sampler_mode.value} shuffle={shuffle}")
+            if world_size > 1 and sampler_mode == DatasetSamplerMode.INTERLEAVED_SHARDS:
+                sampler = DistributedInterleavedShardSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle)
+            elif world_size > 1:
                 sampler = DistributedShardConsecutiveSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle)
+            elif sampler_mode == DatasetSamplerMode.INTERLEAVED_SHARDS:
+                sampler = InterleavedShardSampler(dataset, shuffle=shuffle)
             else:
                 sampler = ShardConsecutiveSampler(dataset, shuffle=shuffle)
 

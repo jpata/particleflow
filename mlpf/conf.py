@@ -60,6 +60,11 @@ class DatasetSource(Enum):
     CLD = 3
 
 
+class DatasetSamplerMode(Enum):
+    SHARD_CONSECUTIVE = "shard-consecutive"
+    INTERLEAVED_SHARDS = "interleaved-shards"
+
+
 class RegressionMode(Enum):
     DIRECT = "direct"
     ADDITIVE = "additive"
@@ -581,6 +586,7 @@ class MLPFConfig(BaseModel):
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
     regression_loss_weights: RegressionLossWeights = Field(default_factory=RegressionLossWeights)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
+    validation_diagnostics_batches: int = 0  # number of validation batches for embedding/domain diagnostics; 0 disables extra backbone passes
 
     # Flags
     train: bool = False
@@ -588,6 +594,7 @@ class MLPFConfig(BaseModel):
     compile: bool = False
     make_plots: bool = True
     sort_data: bool = False
+    sampler_mode: DatasetSamplerMode = DatasetSamplerMode.SHARD_CONSECUTIVE
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
     relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
     sampler_from_scratch: bool = False  # start the sampler from scratch (without resuming the sampler state)

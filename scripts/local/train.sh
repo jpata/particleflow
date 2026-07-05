@@ -16,6 +16,7 @@ CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-5000}
 GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-4}
 NUM_WORKERS=${NUM_WORKERS:-8}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-4}
+VALIDATION_DIAGNOSTICS_BATCHES=${VALIDATION_DIAGNOSTICS_BATCHES:-4}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 
 IFS=',' read -r -a TARGET_LIST <<< "$TARGETS"
@@ -68,6 +69,8 @@ make_common_args() {
     --num_steps "$NUM_STEPS"
     --num_workers "$NUM_WORKERS"
     --prefetch_factor "$PREFETCH_FACTOR"
+    --sampler_mode interleaved-shards
+    --validation_diagnostics_batches "$VALIDATION_DIAGNOSTICS_BATCHES"
     --make_plots
   )
 }

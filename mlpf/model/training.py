@@ -77,10 +77,184 @@ from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.plots import validation_plots
 from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
-from mlpf.model.losses import mlpf_loss
+from mlpf.model.losses import REGRESSION_FEATURES, mlpf_loss, particle_loss
 from mlpf.utils import create_comet_experiment
 from mlpf.conf import MLPFConfig
 from mlpf.jet_utils import get_jet_config
+
+
+SOURCE_LABELS = {
+    0: "unknown",
+    1: "cms",
+    2: "clic",
+    3: "cld",
+}
+INPUT_TYPE_LABELS = {
+    0: "unknown",
+    1: "hits",
+    2: "pf",
+}
+
+
+def _domain_label(source_id, input_type_id):
+    source = SOURCE_LABELS.get(int(source_id), f"source{int(source_id)}")
+    input_type = INPUT_TYPE_LABELS.get(int(input_type_id), f"input{int(input_type_id)}")
+    return f"{source}_{input_type}"
+
+
+def _event_domain_labels(batch):
+    if batch.source_id is None or batch.input_type_id is None:
+        return None
+    source_ids = batch.source_id.detach().to("cpu").long().view(-1)
+    input_type_ids = batch.input_type_id.detach().to("cpu").long().view(-1)
+    return [_domain_label(source_id.item(), input_type_id.item()) for source_id, input_type_id in zip(source_ids, input_type_ids)]
+
+
+def _log_batch_composition(batch, tensorboard_writer, step, prefix):
+    if tensorboard_writer is None:
+        return
+
+    valid_counts = batch.mask.sum(dim=1).detach().to("cpu")
+    target_counts = ((batch.ytarget[..., 0] != 0) & batch.mask).sum(dim=1).detach().to("cpu") if batch.ytarget is not None else None
+    tensorboard_writer.add_scalar(f"{prefix}/valid_elements_mean", valid_counts.float().mean().item(), step)
+    tensorboard_writer.add_scalar(f"{prefix}/valid_elements_max", valid_counts.max().item(), step)
+    if target_counts is not None:
+        tensorboard_writer.add_scalar(f"{prefix}/target_particles_mean", target_counts.float().mean().item(), step)
+        tensorboard_writer.add_scalar(f"{prefix}/target_particles_max", target_counts.max().item(), step)
+
+    domain_labels = _event_domain_labels(batch)
+    if domain_labels is not None:
+        for label in sorted(set(domain_labels)):
+            tensorboard_writer.add_scalar(f"{prefix}/events/{label}", domain_labels.count(label), step)
+
+    elemtypes = batch.X[..., 0][batch.mask].detach().to("cpu").long()
+    for elemtype in torch.unique(elemtypes).tolist():
+        tensorboard_writer.add_scalar(f"{prefix}/elements/elemtype_{int(elemtype)}", (elemtypes == elemtype).sum().item(), step)
+
+
+def _add_accumulator(accum, key, value, count=1.0):
+    if count <= 0:
+        return
+    if key not in accum:
+        accum[key] = [torch.zeros((), device=value.device, dtype=torch.float32), torch.zeros((), device=value.device, dtype=torch.float32)]
+    accum[key][0] += value.detach().to(torch.float32)
+    accum[key][1] += torch.as_tensor(float(count), device=value.device, dtype=torch.float32)
+
+
+def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weights, accum):
+    domain_labels = _event_domain_labels(batch)
+    if domain_labels is None:
+        return
+
+    valid_base = batch.mask.bool()
+    labels_unique = sorted(set(domain_labels))
+    for label in labels_unique:
+        event_mask_cpu = torch.tensor([event_label == label for event_label in domain_labels], device=batch.X.device, dtype=torch.bool)
+        valid = valid_base & event_mask_cpu.unsqueeze(-1)
+        if not valid.any():
+            continue
+
+        particle_targets = {
+            "cls_id": ytarget["cls_id"][valid],
+            **{feature: ytarget[feature][valid] for feature in REGRESSION_FEATURES},
+        }
+        particle_predictions = {
+            "cls_binary": ypred["cls_binary"][valid],
+            "cls_id_onehot": ypred["cls_id_onehot"][valid],
+            **{feature: ypred[feature][valid] for feature in REGRESSION_FEATURES},
+        }
+        losses = particle_loss(particle_targets, particle_predictions, batch.X[..., 1][valid], regression_weights)
+        for loss_name, loss_value in losses.items():
+            _add_accumulator(accum, f"diagnostic/loss/{label}/{loss_name}", loss_value)
+
+        is_particle = particle_targets["cls_id"] != 0
+        _add_accumulator(accum, f"diagnostic/composition/{label}/events", torch.as_tensor(float(event_mask_cpu.sum()), device=batch.X.device))
+        _add_accumulator(accum, f"diagnostic/composition/{label}/valid_elements", torch.as_tensor(float(valid.sum()), device=batch.X.device))
+        _add_accumulator(accum, f"diagnostic/composition/{label}/target_particles", torch.as_tensor(float(is_particle.sum()), device=batch.X.device))
+        if not is_particle.any():
+            continue
+
+        for feature in ("pt", "energy"):
+            target = particle_targets[feature][is_particle].to(torch.float32)
+            prediction = torch.nan_to_num(particle_predictions[feature][is_particle].to(torch.float32))
+            residual = prediction - target
+            count = float(target.numel())
+            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_target_mean", target.sum(), count=count)
+            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_pred_mean", prediction.sum(), count=count)
+            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_residual_mean", residual.sum(), count=count)
+            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_residual_abs_mean", residual.abs().sum(), count=count)
+            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_residual_rms", (residual**2).sum(), count=count)
+
+
+def _accumulate_embedding_diagnostics(batch, model, accum):
+    domain_labels = _event_domain_labels(batch)
+    if domain_labels is None:
+        return
+
+    model_module = model.module if hasattr(model, "module") else model
+    embeddings = model_module.encode_backbone(batch.X, batch.mask, source_id=batch.source_id, input_type_id=batch.input_type_id).detach().to(torch.float32)
+
+    valid_base = batch.mask.bool()
+    for label in sorted(set(domain_labels)):
+        event_mask = torch.tensor([event_label == label for event_label in domain_labels], device=batch.X.device, dtype=torch.bool)
+        valid = valid_base & event_mask.unsqueeze(-1)
+        if not valid.any():
+            continue
+        group_embeddings = embeddings[valid]
+        count = float(group_embeddings.shape[0])
+        _add_accumulator(accum, f"diagnostic/embedding/{label}/count", torch.as_tensor(count, device=batch.X.device))
+        _add_accumulator(accum, f"diagnostic/embedding/{label}/norm_mean", group_embeddings.norm(dim=-1).sum(), count=count)
+        sum_key = f"__embedding_sum__/{label}"
+        count_key = f"__embedding_count__/{label}"
+        if sum_key not in accum:
+            accum[sum_key] = [torch.zeros(group_embeddings.shape[-1], device=batch.X.device, dtype=torch.float32), torch.zeros((), device=batch.X.device)]
+            accum[count_key] = [torch.zeros((), device=batch.X.device, dtype=torch.float32), torch.ones((), device=batch.X.device)]
+        accum[sum_key][0] += group_embeddings.sum(dim=0)
+        accum[sum_key][1] += torch.zeros((), device=batch.X.device)
+        accum[count_key][0] += torch.as_tensor(count, device=batch.X.device)
+
+
+def _finalize_diagnostics(accum, world_size):
+    finalized = {}
+    for key, (value_sum, count_sum) in accum.items():
+        if key.startswith("__"):
+            continue
+        if world_size > 1:
+            torch.distributed.all_reduce(value_sum)
+            torch.distributed.all_reduce(count_sum)
+        if count_sum.item() <= 0:
+            continue
+        value = value_sum / count_sum
+        if key.endswith("_residual_rms"):
+            value = torch.sqrt(torch.clamp(value, min=0.0))
+        finalized[key] = value.cpu().item()
+
+    embedding_sums = {}
+    embedding_counts = {}
+    for key, (value_sum, _) in accum.items():
+        if not key.startswith("__embedding_sum__/"):
+            continue
+        label = key.split("/", 1)[1]
+        count_key = f"__embedding_count__/{label}"
+        count_sum = accum[count_key][0]
+        if world_size > 1:
+            torch.distributed.all_reduce(value_sum)
+            torch.distributed.all_reduce(count_sum)
+        if count_sum.item() > 0:
+            embedding_sums[label] = value_sum
+            embedding_counts[label] = count_sum
+
+    labels = sorted(embedding_sums)
+    for i, label_i in enumerate(labels):
+        centroid_i = embedding_sums[label_i] / embedding_counts[label_i].clamp_min(1.0)
+        finalized[f"diagnostic/embedding/{label_i}/centroid_norm"] = centroid_i.norm().cpu().item()
+        for label_j in labels[i + 1 :]:
+            centroid_j = embedding_sums[label_j] / embedding_counts[label_j].clamp_min(1.0)
+            denom = centroid_i.norm() * centroid_j.norm()
+            cosine = torch.dot(centroid_i, centroid_j) / denom.clamp_min(1e-12)
+            finalized[f"diagnostic/embedding_cosine/{label_i}__{label_j}"] = cosine.cpu().item()
+
+    return finalized
 
 
 def model_step(batch, model, loss_fn, regression_weights):
@@ -174,6 +348,7 @@ def train_step(
         log_gpu_utilization_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
+        _log_batch_composition(batch, tensorboard_writer, step, "diagnostic/train_batch")
         if step % tensorboard_step_freq == 0:
             log_gradients_to_tensorboard(model, tensorboard_writer, step)
             log_residuals_to_tensorboard(model, tensorboard_writer, step)
@@ -388,6 +563,7 @@ def evaluate(
 
     model.eval()
     eval_loss = {}
+    diagnostic_accum = {}
 
     # Only show progress bar on rank 0
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
@@ -414,6 +590,16 @@ def evaluate(
                 if ival == 0 and (rank == 0 or rank == "cpu"):
                     print_event_table(batch, ytarget, ypred_particles, config)
 
+                _accumulate_domain_losses_and_stats(
+                    batch,
+                    ytarget,
+                    ypred,
+                    config.regression_loss_weights.model_dump(),
+                    diagnostic_accum,
+                )
+                if config.validation_diagnostics_batches > 0 and ival < config.validation_diagnostics_batches:
+                    _accumulate_embedding_diagnostics(batch, model, diagnostic_accum)
+
         # Save validation plots for first batch
         if (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
             validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
@@ -433,6 +619,8 @@ def evaluate(
         if world_size > 1:
             torch.distributed.all_reduce(eval_loss[loss_name])
         eval_loss[loss_name] = eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
+
+    eval_loss.update(_finalize_diagnostics(diagnostic_accum, world_size))
 
     if world_size > 1:
         dist.barrier()

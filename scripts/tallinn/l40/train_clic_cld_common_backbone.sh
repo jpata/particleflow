@@ -24,6 +24,7 @@ GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-2}
 NUM_WORKERS=${NUM_WORKERS:-4}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-2}
 PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-100}
+VALIDATION_DIAGNOSTICS_BATCHES=${VALIDATION_DIAGNOSTICS_BATCHES:-8}
 DATA_CONFIG=${DATA_CONFIG:-1}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 
@@ -90,6 +91,8 @@ COMMON_ARGS=(
     --checkpoint_freq "$CHECKPOINT_FREQ"
     --data_config "$DATA_CONFIG"
     --pad_to_multiple_elements "$PAD_TO_MULTIPLE_ELEMENTS"
+    --sampler_mode interleaved-shards
+    --validation_diagnostics_batches "$VALIDATION_DIAGNOSTICS_BATCHES"
     --test-datasets cld_edm_ttbar_hits clic_edm_ttbar_hits
 )
 
