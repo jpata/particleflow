@@ -7,7 +7,7 @@ SPEC_FILE=${SPEC_FILE:-particleflow_spec.yaml}
 USE_LOCAL_AVAILABLE_SPEC=${USE_LOCAL_AVAILABLE_SPEC:-true}
 LOCAL_SPEC_FILE=${LOCAL_SPEC_FILE:-/tmp/particleflow_local_available_spec.yaml}
 TARGETS=${TARGETS:-cld-hits}
-SCENARIOS=${SCENARIOS:-baseline,stems,stems-modality,stems-modality-source,split}
+SCENARIOS=${SCENARIOS:-baseline,stems,stems-modality,stems-modality-source,partial,partial-cluster,split}
 DATA_CONFIG=${DATA_CONFIG:-1}
 
 NUM_STEPS=${NUM_STEPS:-20000}
@@ -17,6 +17,8 @@ GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-4}
 NUM_WORKERS=${NUM_WORKERS:-8}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-4}
 VALIDATION_DIAGNOSTICS_BATCHES=${VALIDATION_DIAGNOSTICS_BATCHES:-4}
+CLUSTERING_LOSS_WEIGHT=${CLUSTERING_LOSS_WEIGHT:-0.01}
+PARTIAL_PRIVATE_NUM_CONVS=${PARTIAL_PRIVATE_NUM_CONVS:-2}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 
 IFS=',' read -r -a TARGET_LIST <<< "$TARGETS"
@@ -124,6 +126,33 @@ run_scenario() {
         --model.input_stem.source_embedding true \
         --model.input_stem.input_norm true
       ;;
+    partial)
+      uv run python3 mlpf/pipeline.py \
+        --prefix "${target}_partial-backbone_" \
+        "${COMMON_ARGS[@]}" \
+        --model.backbone.mode partial \
+        --model.backbone.num_convs 6 \
+        --model.backbone.private_num_convs "$PARTIAL_PRIVATE_NUM_CONVS" \
+        --model.task_queries true \
+        --model.input_stem.mode modality \
+        --model.input_stem.modality_embedding false \
+        --model.input_stem.source_embedding false \
+        --model.input_stem.input_norm true
+      ;;
+    partial-cluster)
+      uv run python3 mlpf/pipeline.py \
+        --prefix "${target}_partial-backbone-cluster_" \
+        "${COMMON_ARGS[@]}" \
+        --model.backbone.mode partial \
+        --model.backbone.num_convs 6 \
+        --model.backbone.private_num_convs "$PARTIAL_PRIVATE_NUM_CONVS" \
+        --model.task_queries true \
+        --model.input_stem.mode modality \
+        --model.input_stem.modality_embedding false \
+        --model.input_stem.source_embedding false \
+        --model.input_stem.input_norm true \
+        --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT"
+      ;;
     split)
       uv run python3 mlpf/pipeline.py \
         --prefix "${target}_split-backbone_" \
@@ -134,7 +163,7 @@ run_scenario() {
         --model.input_stem.mode standard
       ;;
     *)
-      echo "Unknown scenario '$scenario'. Valid scenarios: baseline, stems, stems-modality, stems-modality-source, split" >&2
+      echo "Unknown scenario '$scenario'. Valid scenarios: baseline, stems, stems-modality, stems-modality-source, partial, partial-cluster, split" >&2
       exit 1
       ;;
   esac

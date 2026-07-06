@@ -77,7 +77,7 @@ from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.plots import validation_plots
 from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
-from mlpf.model.losses import REGRESSION_FEATURES, mlpf_loss, particle_loss
+from mlpf.model.losses import REGRESSION_FEATURES, hit_particle_clustering_loss, mlpf_loss, particle_loss
 from mlpf.utils import create_comet_experiment
 from mlpf.conf import MLPFConfig
 from mlpf.jet_utils import get_jet_config
@@ -257,13 +257,20 @@ def _finalize_diagnostics(accum, world_size):
     return finalized
 
 
-def model_step(batch, model, loss_fn, regression_weights):
+def model_step(batch, model, loss_fn, regression_weights, clustering_config=None):
     _logger.debug(f"model_step X={batch.X.shape}")
     ypred_raw = model(batch.X, batch.mask, source_id=batch.source_id, input_type_id=batch.input_type_id)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
 
     loss_opt, losses_detached = loss_fn(ytarget, ypred, batch, regression_weights)
+    if clustering_config is not None and clustering_config.weight > 0.0:
+        model_module = model.module if hasattr(model, "module") else model
+        embeddings = model_module.encode_backbone(batch.X, batch.mask, source_id=batch.source_id, input_type_id=batch.input_type_id)
+        clustering_loss = hit_particle_clustering_loss(embeddings, ytarget, batch, clustering_config)
+        loss_opt = loss_opt + clustering_loss
+        losses_detached["Clustering"] = clustering_loss.detach()
+        losses_detached["Total"] = loss_opt.detach()
     return loss_opt, losses_detached, ypred_raw, ypred, ytarget
 
 
@@ -301,6 +308,7 @@ def train_step(
     dtype=torch.float32,
     scaler=None,
     loader_state_dict={},
+    clustering_config=None,
 ):
     """Run one training step
 
@@ -332,7 +340,7 @@ def train_step(
     batch = batch.to(rank, non_blocking=True)
 
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-        loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss, regression_weights)
+        loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss, regression_weights, clustering_config=clustering_config)
 
     optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
 
@@ -582,6 +590,7 @@ def evaluate(
                     model,
                     mlpf_loss,
                     config.regression_loss_weights.model_dump(),
+                    clustering_config=config.clustering_loss,
                 )
 
                 model_module = model.module if hasattr(model, "module") else model
@@ -940,6 +949,7 @@ def train_all_steps(
             scaler=scaler,
             loader_state_dict=train_loader.state_dict()["loader_state_dict"],
             regression_weights=config.regression_loss_weights.model_dump(),
+            clustering_config=config.clustering_loss,
         )
         log_memory("train_step_end", rank, tensorboard_writer_train, step)
         model_forward_time = time.time() - model_forward_start

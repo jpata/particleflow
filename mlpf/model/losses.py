@@ -84,6 +84,67 @@ def particle_loss(y, ypred, input_pt, regression_weights):
     return losses
 
 
+def hit_particle_clustering_loss(embeddings, y, batch, clustering_config):
+    """Supervise hit embeddings to cluster by target particle_number.
+
+    The objective is centroid-based to avoid O(N^2) hit-pair losses on raw-hit
+    events. It applies only to hit-input events when input_type_id is present.
+    """
+    weight = float(clustering_config.weight)
+    if weight <= 0.0 or "particle_number" not in y:
+        return embeddings.sum() * 0.0
+
+    margin = float(clustering_config.margin)
+    max_particles_per_event = int(clustering_config.max_particles_per_event)
+    min_elements_per_particle = int(clustering_config.min_elements_per_particle)
+
+    embeddings = F.normalize(embeddings.to(torch.float32), dim=-1)
+    cls_id = y["cls_id"]
+    particle_number = y["particle_number"].to(torch.long)
+    event_losses = []
+
+    for iev in range(embeddings.shape[0]):
+        if batch.input_type_id is not None and int(batch.input_type_id[iev].detach().item()) != 1:
+            continue
+
+        valid = batch.mask[iev].bool() & (cls_id[iev] != 0) & (particle_number[iev] > 0)
+        if not valid.any():
+            continue
+
+        event_embeddings = embeddings[iev][valid]
+        event_particle_number = particle_number[iev][valid]
+        unique_particles = torch.unique(event_particle_number)
+        if unique_particles.numel() > max_particles_per_event:
+            unique_particles = unique_particles[:max_particles_per_event]
+
+        centroids = []
+        pull_terms = []
+        for particle_id in unique_particles:
+            particle_mask = event_particle_number == particle_id
+            if particle_mask.sum() < min_elements_per_particle:
+                continue
+            particle_embeddings = event_embeddings[particle_mask]
+            centroid = F.normalize(particle_embeddings.mean(dim=0, keepdim=True), dim=-1).squeeze(0)
+            centroids.append(centroid)
+            pull_terms.append(((particle_embeddings - centroid) ** 2).sum(dim=-1).mean())
+
+        if not pull_terms:
+            continue
+
+        pull_loss = torch.stack(pull_terms).mean()
+        if len(centroids) > 1:
+            centroids_tensor = torch.stack(centroids, dim=0)
+            distances = torch.pdist(centroids_tensor, p=2)
+            push_loss = torch.relu(margin - distances).pow(2).mean()
+            event_losses.append(pull_loss + push_loss)
+        else:
+            event_losses.append(pull_loss)
+
+    if not event_losses:
+        return embeddings.sum() * 0.0
+    return weight * torch.stack(event_losses).mean()
+
+
 def event_loss(y, ypred, batch, regression_weights):
     """Compute losses for complete padded event batches.
 

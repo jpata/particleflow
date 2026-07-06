@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%a-%j-%N.out
 #SBATCH --job-name=train-hit-fom-clean
-#SBATCH --array=0-11
+#SBATCH --array=0-19
 
 set -euo pipefail
 export PF_SITE=tallinn
@@ -25,11 +25,13 @@ NUM_WORKERS=${NUM_WORKERS:-4}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-2}
 PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-100}
 VALIDATION_DIAGNOSTICS_BATCHES=${VALIDATION_DIAGNOSTICS_BATCHES:-8}
+CLUSTERING_LOSS_WEIGHT=${CLUSTERING_LOSS_WEIGHT:-0.01}
+PARTIAL_PRIVATE_NUM_CONVS=${PARTIAL_PRIVATE_NUM_CONVS:-2}
 DATA_CONFIG=${DATA_CONFIG:-1}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 
 TRAINSETS=(cld-hits clic-hits mixed-hits mixed-hits-pf)
-SCENARIOS=(baseline stems modality)
+SCENARIOS=(baseline stems modality partial partial-cluster)
 
 NUM_SCENARIOS=${#SCENARIOS[@]}
 TRAINSET_INDEX=$((SLURM_ARRAY_TASK_ID / NUM_SCENARIOS))
@@ -122,6 +124,31 @@ case "$SCENARIO" in
             --model.input_stem.modality_embedding true \
             --model.input_stem.source_embedding false \
             --model.input_stem.input_norm true
+        ;;
+    partial)
+        uv run python3 mlpf/pipeline.py \
+            "${COMMON_ARGS[@]}" \
+            --model.backbone.mode partial \
+            --model.backbone.num_convs 6 \
+            --model.backbone.private_num_convs "$PARTIAL_PRIVATE_NUM_CONVS" \
+            --model.task_queries true \
+            --model.input_stem.mode modality \
+            --model.input_stem.modality_embedding false \
+            --model.input_stem.source_embedding false \
+            --model.input_stem.input_norm true
+        ;;
+    partial-cluster)
+        uv run python3 mlpf/pipeline.py \
+            "${COMMON_ARGS[@]}" \
+            --model.backbone.mode partial \
+            --model.backbone.num_convs 6 \
+            --model.backbone.private_num_convs "$PARTIAL_PRIVATE_NUM_CONVS" \
+            --model.task_queries true \
+            --model.input_stem.mode modality \
+            --model.input_stem.modality_embedding false \
+            --model.input_stem.source_embedding false \
+            --model.input_stem.input_norm true \
+            --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT"
         ;;
     *)
         echo "Unknown scenario: $SCENARIO" >&2
