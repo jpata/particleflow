@@ -40,17 +40,34 @@ def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     return ret
 
 
-def classification_loss(y, ypred):
+def _weighted_sum(values, weights=None):
+    if weights is None:
+        return values.sum()
+    return (values * weights).sum()
+
+
+def _weighted_count(mask, weights=None):
+    if weights is None:
+        return mask.sum()
+    return weights[mask].sum()
+
+
+def classification_loss(y, ypred, element_weights=None):
     """Compute per-element particle-presence and particle-ID losses."""
     cls_id = y["cls_id"]
     num_elements = cls_id.numel()
     is_particle = cls_id != 0
 
-    binary = 10.0 * F.cross_entropy(ypred["cls_binary"], is_particle.long())
+    binary_per_element = F.cross_entropy(ypred["cls_binary"], is_particle.long(), reduction="none")
+    if element_weights is None:
+        binary_denominator = torch.as_tensor(float(num_elements), dtype=binary_per_element.dtype, device=binary_per_element.device)
+    else:
+        binary_denominator = element_weights.sum()
+    binary = 10.0 * _weighted_sum(binary_per_element, element_weights) / binary_denominator.clamp_min(1.0)
 
     pid_per_element = FocalLoss(gamma=2.0, reduction="none")(ypred["cls_id_onehot"], cls_id)
     pid_per_element = torch.where(is_particle, pid_per_element, torch.zeros_like(pid_per_element))
-    pid = pid_per_element.sum() / num_elements
+    pid = _weighted_sum(pid_per_element, element_weights) / binary_denominator.clamp_min(1.0)
 
     return {
         "Classification_binary": binary,
@@ -58,10 +75,10 @@ def classification_loss(y, ypred):
     }
 
 
-def regression_loss(y, ypred, input_pt, regression_weights):
+def regression_loss(y, ypred, input_pt, regression_weights, element_weights=None):
     """Compute per-particle kinematic losses for flattened event elements."""
     is_particle = y["cls_id"] != 0
-    num_particles = is_particle.sum().clamp_min(1)
+    num_particles = _weighted_count(is_particle, element_weights).clamp_min(1.0)
     sqrt_target_pt = torch.sqrt(torch.clamp(torch.exp(y["pt"]) * input_pt, min=1e-6))
 
     losses = {}
@@ -72,26 +89,25 @@ def regression_loss(y, ypred, input_pt, regression_weights):
         per_element = torch.where(is_particle, per_element, torch.zeros_like(per_element))
         if feature in {"pt", "energy"}:
             per_element = per_element * sqrt_target_pt
-        losses[f"Regression_{feature}"] = per_element.sum() / num_particles
+        losses[f"Regression_{feature}"] = _weighted_sum(per_element, element_weights) / num_particles
 
     return losses
 
 
-def particle_loss(y, ypred, input_pt, regression_weights):
+def particle_loss(y, ypred, input_pt, regression_weights, element_weights=None):
     """Compute classification and regression losses over flattened particles."""
-    losses = classification_loss(y, ypred)
-    losses.update(regression_loss(y, ypred, input_pt, regression_weights))
+    losses = classification_loss(y, ypred, element_weights=element_weights)
+    losses.update(regression_loss(y, ypred, input_pt, regression_weights, element_weights=element_weights))
     return losses
 
 
-def hit_particle_clustering_loss(embeddings, y, batch, clustering_config):
+def hit_particle_clustering_loss_raw(embeddings, y, batch, clustering_config):
     """Supervise hit embeddings to cluster by target particle_number.
 
     The objective is centroid-based to avoid O(N^2) hit-pair losses on raw-hit
     events. It applies only to hit-input events when input_type_id is present.
     """
-    weight = float(clustering_config.weight)
-    if weight <= 0.0 or "particle_number" not in y:
+    if "particle_number" not in y:
         return embeddings.sum() * 0.0
 
     margin = float(clustering_config.margin)
@@ -142,10 +158,35 @@ def hit_particle_clustering_loss(embeddings, y, batch, clustering_config):
 
     if not event_losses:
         return embeddings.sum() * 0.0
-    return weight * torch.stack(event_losses).mean()
+    return torch.stack(event_losses).mean()
 
 
-def event_loss(y, ypred, batch, regression_weights):
+def hit_particle_clustering_loss(embeddings, y, batch, clustering_config):
+    weight = float(clustering_config.weight)
+    if weight <= 0.0:
+        return embeddings.sum() * 0.0
+    return weight * hit_particle_clustering_loss_raw(embeddings, y, batch, clustering_config)
+
+
+def _input_type_element_weights(batch, input_type_loss_weights):
+    if input_type_loss_weights is None or batch.input_type_id is None:
+        return None
+
+    unknown_weight = float(input_type_loss_weights.get("unknown", 1.0))
+    event_weights = torch.full(
+        batch.input_type_id.shape,
+        unknown_weight,
+        dtype=batch.X.dtype,
+        device=batch.X.device,
+    )
+    hit_weight = torch.as_tensor(float(input_type_loss_weights.get("hits", 1.0)), dtype=batch.X.dtype, device=batch.X.device)
+    pf_weight = torch.as_tensor(float(input_type_loss_weights.get("pf", 1.0)), dtype=batch.X.dtype, device=batch.X.device)
+    event_weights = torch.where(batch.input_type_id == 1, hit_weight, event_weights)
+    event_weights = torch.where(batch.input_type_id == 2, pf_weight, event_weights)
+    return event_weights.unsqueeze(-1).expand_as(batch.mask)[batch.mask.bool()]
+
+
+def event_loss(y, ypred, batch, regression_weights, input_type_loss_weights=None):
     """Compute losses for complete padded event batches.
 
     The standard loss currently contains only independent particle terms.
@@ -164,13 +205,14 @@ def event_loss(y, ypred, batch, regression_weights):
         **{feature: ypred[feature][valid] for feature in REGRESSION_FEATURES},
     }
     input_pt = batch.X[..., 1][valid]
+    element_weights = _input_type_element_weights(batch, input_type_loss_weights)
 
-    return particle_loss(particle_targets, particle_predictions, input_pt, regression_weights)
+    return particle_loss(particle_targets, particle_predictions, input_pt, regression_weights, element_weights=element_weights)
 
 
-def mlpf_loss(y, ypred, batch, regression_weights):
+def mlpf_loss(y, ypred, batch, regression_weights, input_type_loss_weights=None):
     """Compute the standard MLPF objective for a batch of events."""
-    loss = event_loss(y, ypred, batch, regression_weights)
+    loss = event_loss(y, ypred, batch, regression_weights, input_type_loss_weights=input_type_loss_weights)
 
     loss_opt = sum(loss.values())
     loss["Total"] = loss_opt

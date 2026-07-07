@@ -183,6 +183,41 @@ def test_regression_loss_weights_are_applied():
         torch.testing.assert_close(reweighted[f"Regression_{feature}"], baseline[f"Regression_{feature}"])
 
 
+def test_input_type_loss_weights_preserve_default_loss():
+    batch, y, ypred = get_mock_data(batch_size=2, seq_len=8)
+    batch.input_type_id = torch.tensor([1, 2])
+
+    baseline_opt, baseline = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+    weighted_opt, weighted = mlpf_loss(
+        y,
+        ypred,
+        batch,
+        REGRESSION_WEIGHTS,
+        input_type_loss_weights={"unknown": 1.0, "hits": 1.0, "pf": 1.0},
+    )
+
+    torch.testing.assert_close(weighted_opt, baseline_opt)
+    assert weighted.keys() == baseline.keys()
+    for name in baseline:
+        torch.testing.assert_close(weighted[name], baseline[name])
+
+
+def test_input_type_loss_weights_change_mixed_batch_loss():
+    batch, y, ypred = get_mock_data(batch_size=2, seq_len=8)
+    batch.input_type_id = torch.tensor([1, 2])
+
+    baseline_opt, _ = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+    weighted_opt, _ = mlpf_loss(
+        y,
+        ypred,
+        batch,
+        REGRESSION_WEIGHTS,
+        input_type_loss_weights={"unknown": 1.0, "hits": 4.0, "pf": 0.25},
+    )
+
+    assert not torch.allclose(weighted_opt, baseline_opt)
+
+
 if __name__ == "__main__":
     test_mlpf_loss_standard()
     test_mlpf_loss_standard_no_particles()
@@ -193,3 +228,5 @@ if __name__ == "__main__":
     test_mlpf_loss_standard_masks_no_target_without_mutating_inputs()
     test_event_loss_decomposes_into_particle_loss()
     test_regression_loss_weights_are_applied()
+    test_input_type_loss_weights_preserve_default_loss()
+    test_input_type_loss_weights_change_mixed_batch_loss()
