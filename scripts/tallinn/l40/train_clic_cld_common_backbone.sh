@@ -4,8 +4,8 @@
 #SBATCH --mem-per-gpu 80G
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%a-%j-%N.out
-#SBATCH --job-name=train-hit-pf-hypothesis
-#SBATCH --array=0-15
+#SBATCH --job-name=train-hit-cluster-hypothesis
+#SBATCH --array=0-11
 
 set -euo pipefail
 export PF_SITE=tallinn
@@ -25,37 +25,36 @@ NUM_WORKERS=${NUM_WORKERS:-4}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-2}
 PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-100}
 VALIDATION_DIAGNOSTICS_BATCHES=${VALIDATION_DIAGNOSTICS_BATCHES:-8}
-CLUSTERING_LOSS_WEIGHT=${CLUSTERING_LOSS_WEIGHT:-0.01}
+CLUSTERING_LOSS_WEIGHT_LOW=${CLUSTERING_LOSS_WEIGHT_LOW:-0.03}
 CLUSTERING_LOSS_WEIGHT_MEDIUM=${CLUSTERING_LOSS_WEIGHT_MEDIUM:-0.10}
 CLUSTERING_LOSS_WEIGHT_STRONG=${CLUSTERING_LOSS_WEIGHT_STRONG:-0.30}
-PARTIAL_PRIVATE_NUM_CONVS=${PARTIAL_PRIVATE_NUM_CONVS:-2}
 DATA_CONFIG=${DATA_CONFIG:-1}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 
-# Targeted hit/PF hypothesis matrix:
-#   H0: mixed hits+PF cannot beat direct hit-only training.
-#   H1: PF can help raw-hit learning when treated as an auxiliary task:
-#       use modality-specific stems, downweight PF loss relative to hits, and
-#       add a stronger hit particle-number clustering objective.
-# Success criterion: best mixed-hits-pf run improves hit-test jet matching over
-# the best hit-only control, not just over the equal-loss mixed-hits-pf baseline.
+# Targeted hit-only clustering hypothesis matrix:
+#   H0: hit particle-number clustering does not improve hit-task FOM.
+#   H1: a modest clustering loss improves the learned hit representation and
+#       increases per-dataset jet matching fraction over the no-clustering
+#       baseline for CLD-only, CLIC-only, and mixed CLIC+CLD hit training.
+# Fixed architecture:
+#   shared backbone, modality-specific hit stems, no modality embedding.
+# Success criterion:
+#   for each trainset, at least one clustering weight beats its no-clustering
+#   baseline on the average of CLD and CLIC hit-test jet matching fractions,
+#   without degrading either dataset strongly.
 JOBS=(
     cld-hits:stems
+    cld-hits:stems-cluster003
+    cld-hits:stems-cluster010
+    cld-hits:stems-cluster030
     clic-hits:stems
+    clic-hits:stems-cluster003
+    clic-hits:stems-cluster010
+    clic-hits:stems-cluster030
     mixed-hits:stems
-    mixed-hits:partial
+    mixed-hits:stems-cluster003
     mixed-hits:stems-cluster010
-    mixed-hits-pf:stems
-    mixed-hits-pf:modality
-    mixed-hits-pf:stems-hit2-pf05
-    mixed-hits-pf:stems-hit4-pf025
-    mixed-hits-pf:modality-hit4-pf025
-    mixed-hits-pf:stems-cluster010
-    mixed-hits-pf:stems-hit4-pf025-cluster010
-    mixed-hits-pf:modality-hit4-pf025-cluster010
-    mixed-hits-pf:partial-hit4-pf025-cluster010
-    mixed-hits-pf:stems-hit4-pf025-cluster030
-    mixed-hits-pf:modality-hit4-pf025-cluster030
+    mixed-hits:stems-cluster030
 )
 
 IFS=: read -r TRAINSET SCENARIO <<< "${JOBS[$SLURM_ARRAY_TASK_ID]}"
@@ -67,9 +66,7 @@ CLEAN_SPEC_FILE=${CLEAN_SPEC_FILE:-${TMPDIR:-/tmp}/particleflow_hit_fom_clean_sp
 
 mkdir -p "$MIXED_DATA_DIR" logs
 ln -sfn "$CLD_DATA_DIR/cld_edm_ttbar_hits" "$MIXED_DATA_DIR/cld_edm_ttbar_hits"
-ln -sfn "$CLD_DATA_DIR/cld_edm_ttbar_pf" "$MIXED_DATA_DIR/cld_edm_ttbar_pf"
 ln -sfn "$CLIC_DATA_DIR/clic_edm_ttbar_hits" "$MIXED_DATA_DIR/clic_edm_ttbar_hits"
-ln -sfn "$CLIC_DATA_DIR/clic_edm_ttbar_pf" "$MIXED_DATA_DIR/clic_edm_ttbar_pf"
 
 uv run python3 scripts/tallinn/l40/make_hit_fom_clean_spec.py "$SPEC_FILE" "$CLEAN_SPEC_FILE"
 
@@ -82,9 +79,6 @@ case "$TRAINSET" in
         ;;
     mixed-hits)
         MODEL_NAME=pyg-clean-mixed-hits-v1
-        ;;
-    mixed-hits-pf)
-        MODEL_NAME=pyg-clean-mixed-hits-pf-v1
         ;;
     *)
         echo "Unknown trainset: $TRAINSET" >&2
@@ -127,79 +121,14 @@ case "$SCENARIO" in
     stems)
         MODEL_ARGS+=(--model.input_stem.modality_embedding false)
         ;;
-    modality)
-        MODEL_ARGS+=(--model.input_stem.modality_embedding true)
-        ;;
-    partial)
-        MODEL_ARGS=(
-            --model.backbone.mode partial
-            --model.backbone.num_convs 6
-            --model.backbone.private_num_convs "$PARTIAL_PRIVATE_NUM_CONVS"
-            --model.task_queries true
-            --model.input_stem.mode modality
-            --model.input_stem.modality_embedding false
-            --model.input_stem.source_embedding false
-            --model.input_stem.input_norm true
-        )
+    stems-cluster003)
+        MODEL_ARGS+=(--model.input_stem.modality_embedding false --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_LOW")
         ;;
     stems-cluster010)
         MODEL_ARGS+=(--model.input_stem.modality_embedding false --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_MEDIUM")
         ;;
-    stems-hit2-pf05)
-        MODEL_ARGS+=(--model.input_stem.modality_embedding false --input_type_loss_weights.hits 2.0 --input_type_loss_weights.pf 0.5)
-        ;;
-    stems-hit4-pf025)
-        MODEL_ARGS+=(--model.input_stem.modality_embedding false --input_type_loss_weights.hits 4.0 --input_type_loss_weights.pf 0.25)
-        ;;
-    modality-hit4-pf025)
-        MODEL_ARGS+=(--model.input_stem.modality_embedding true --input_type_loss_weights.hits 4.0 --input_type_loss_weights.pf 0.25)
-        ;;
-    stems-hit4-pf025-cluster010)
-        MODEL_ARGS+=(
-            --model.input_stem.modality_embedding false
-            --input_type_loss_weights.hits 4.0
-            --input_type_loss_weights.pf 0.25
-            --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_MEDIUM"
-        )
-        ;;
-    modality-hit4-pf025-cluster010)
-        MODEL_ARGS+=(
-            --model.input_stem.modality_embedding true
-            --input_type_loss_weights.hits 4.0
-            --input_type_loss_weights.pf 0.25
-            --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_MEDIUM"
-        )
-        ;;
-    partial-hit4-pf025-cluster010)
-        MODEL_ARGS=(
-            --model.backbone.mode partial
-            --model.backbone.num_convs 6
-            --model.backbone.private_num_convs "$PARTIAL_PRIVATE_NUM_CONVS"
-            --model.task_queries true
-            --model.input_stem.mode modality
-            --model.input_stem.modality_embedding false
-            --model.input_stem.source_embedding false
-            --model.input_stem.input_norm true
-            --input_type_loss_weights.hits 4.0
-            --input_type_loss_weights.pf 0.25
-            --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_MEDIUM"
-        )
-        ;;
-    stems-hit4-pf025-cluster030)
-        MODEL_ARGS+=(
-            --model.input_stem.modality_embedding false
-            --input_type_loss_weights.hits 4.0
-            --input_type_loss_weights.pf 0.25
-            --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_STRONG"
-        )
-        ;;
-    modality-hit4-pf025-cluster030)
-        MODEL_ARGS+=(
-            --model.input_stem.modality_embedding true
-            --input_type_loss_weights.hits 4.0
-            --input_type_loss_weights.pf 0.25
-            --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_STRONG"
-        )
+    stems-cluster030)
+        MODEL_ARGS+=(--model.input_stem.modality_embedding false --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_STRONG")
         ;;
     *)
         echo "Unknown scenario: $SCENARIO" >&2
