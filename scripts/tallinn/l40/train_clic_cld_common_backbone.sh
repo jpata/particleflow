@@ -4,8 +4,8 @@
 #SBATCH --mem-per-gpu 80G
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%a-%j-%N.out
-#SBATCH --job-name=train-hit-cluster-hypothesis
-#SBATCH --array=0-11
+#SBATCH --job-name=train-hit-cluster-long
+#SBATCH --array=0-5
 
 set -euo pipefail
 export PF_SITE=tallinn
@@ -17,43 +17,35 @@ export NCCL_IB_DISABLE=1
 nvidia-smi topo -m
 
 SPEC_FILE=${SPEC_FILE:-particleflow_spec.yaml}
-NUM_STEPS=${NUM_STEPS:-20000}
-VAL_FREQ=${VAL_FREQ:-5000}
-CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-5000}
+NUM_STEPS=${NUM_STEPS:-50000}
+VAL_FREQ=${VAL_FREQ:-10000}
+CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-10000}
 GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-2}
 NUM_WORKERS=${NUM_WORKERS:-4}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-2}
 PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-100}
 VALIDATION_DIAGNOSTICS_BATCHES=${VALIDATION_DIAGNOSTICS_BATCHES:-8}
-CLUSTERING_LOSS_WEIGHT_LOW=${CLUSTERING_LOSS_WEIGHT_LOW:-0.03}
 CLUSTERING_LOSS_WEIGHT_MEDIUM=${CLUSTERING_LOSS_WEIGHT_MEDIUM:-0.10}
 CLUSTERING_LOSS_WEIGHT_STRONG=${CLUSTERING_LOSS_WEIGHT_STRONG:-0.30}
 DATA_CONFIG=${DATA_CONFIG:-1}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 
-# Targeted hit-only clustering hypothesis matrix:
+# Long hit-only clustering confirmation matrix:
 #   H0: hit particle-number clustering does not improve hit-task FOM.
-#   H1: a modest clustering loss improves the learned hit representation and
-#       increases per-dataset jet matching fraction over the no-clustering
-#       baseline for CLD-only, CLIC-only, and mixed CLIC+CLD hit training.
+#   H1: the best clustering weights from the short sweep improve the learned hit
+#       representation and increase per-dataset jet matching fraction over the
+#       no-clustering baseline for CLD-only, CLIC-only, and mixed CLIC+CLD hits.
 # Fixed architecture:
 #   shared backbone, modality-specific hit stems, no modality embedding.
 # Success criterion:
-#   for each trainset, at least one clustering weight beats its no-clustering
-#   baseline on the average of CLD and CLIC hit-test jet matching fractions,
-#   without degrading either dataset strongly.
+#   each clustering run should beat the matched no-clustering baseline on the
+#   average of CLD and CLIC hit-test jet matching fractions at 50k steps.
 JOBS=(
     cld-hits:stems
-    cld-hits:stems-cluster003
     cld-hits:stems-cluster010
-    cld-hits:stems-cluster030
     clic-hits:stems
-    clic-hits:stems-cluster003
-    clic-hits:stems-cluster010
     clic-hits:stems-cluster030
     mixed-hits:stems
-    mixed-hits:stems-cluster003
-    mixed-hits:stems-cluster010
     mixed-hits:stems-cluster030
 )
 
@@ -120,9 +112,6 @@ MODEL_ARGS=(
 case "$SCENARIO" in
     stems)
         MODEL_ARGS+=(--model.input_stem.modality_embedding false)
-        ;;
-    stems-cluster003)
-        MODEL_ARGS+=(--model.input_stem.modality_embedding false --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_LOW")
         ;;
     stems-cluster010)
         MODEL_ARGS+=(--model.input_stem.modality_embedding false --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_MEDIUM")
