@@ -537,14 +537,6 @@ class ClusteringLossConfig(BaseModel):
     min_elements_per_particle: int = Field(default=1, ge=1)
 
 
-class InputTypeLossWeights(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    unknown: float = Field(default=1.0, ge=0.0)
-    hits: float = Field(default=1.0, ge=0.0)
-    pf: float = Field(default=1.0, ge=0.0)
-
-
 class DatasetSample(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: str
@@ -605,7 +597,6 @@ class MLPFConfig(BaseModel):
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
     regression_loss_weights: RegressionLossWeights = Field(default_factory=RegressionLossWeights)
     clustering_loss: ClusteringLossConfig = Field(default_factory=ClusteringLossConfig)
-    input_type_loss_weights: InputTypeLossWeights = Field(default_factory=InputTypeLossWeights)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
     validation_diagnostics_batches: int = 0  # number of validation batches for embedding/domain diagnostics; 0 disables extra backbone passes
 

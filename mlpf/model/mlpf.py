@@ -131,14 +131,8 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         if self.export_onnx_fused:
             attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
         else:
-            try:
-                with sdpa_kernel(self.attn_params[self.attention_type]):
-                    attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
-            except RuntimeError as err:
-                if "No available kernel" not in str(err):
-                    raise
-                with sdpa_kernel([SDPBackend.MATH]):
-                    attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
+            with sdpa_kernel(self.attn_params[self.attention_type]):
+                attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
 
         # in case running with pytorch internal scaled dot product attention, reshape back to the original shape
         if not self.export_onnx_fused:
@@ -378,22 +372,8 @@ class MLPF(nn.Module):
         # Determine architecture parameters based on the chosen type
         self.conv_type = ModelType(self.config.type)
         sub_config = getattr(self.config, self.conv_type.value)
-
-        # Ensure sub_config is initialized if it's None (can happen if not in spec or args)
         if sub_config is None:
-            from mlpf.conf import AttentionConfig, GNNLSHConfig, LitePTConfig, HEPTConfig, HEPTv2Config
-
-            if self.conv_type == ModelType.ATTENTION:
-                sub_config = AttentionConfig()
-            elif self.conv_type == ModelType.GNNLSH:
-                sub_config = GNNLSHConfig()
-            elif self.conv_type == ModelType.LITEPT:
-                sub_config = LitePTConfig()
-            elif self.conv_type == ModelType.HEPT:
-                sub_config = HEPTConfig()
-            elif self.conv_type == ModelType.HEPTV2:
-                sub_config = HEPTv2Config()
-            setattr(self.config, self.conv_type.value, sub_config)
+            raise ValueError(f"Missing model.{self.conv_type.value} configuration for model type {self.conv_type.value}")
 
         # Extract architecture-level parameters
         self.input_encoding = InputEncoding(self.config.input_encoding)
@@ -425,11 +405,8 @@ class MLPF(nn.Module):
         energy_mode = RegressionMode(self.config.energy_mode)
 
         backbone_config = self.config.backbone
-        if backbone_config is None:
-            backbone_num_convs = sub_config.num_convs
-        else:
-            backbone_num_convs = backbone_config.num_convs if backbone_config.num_convs is not None else sub_config.num_convs
-        self.private_num_convs = min(backbone_config.private_num_convs if backbone_config is not None else 0, backbone_num_convs)
+        backbone_num_convs = backbone_config.num_convs
+        self.private_num_convs = min(backbone_config.private_num_convs, backbone_num_convs)
         self.shared_num_convs = backbone_num_convs - self.private_num_convs if self.use_partial_backbone else backbone_num_convs
 
         # Extract parameters from the sub-config per model type

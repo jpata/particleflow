@@ -4,8 +4,8 @@
 #SBATCH --mem-per-gpu 80G
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%a-%j-%N.out
-#SBATCH --job-name=train-hit-cluster-long
-#SBATCH --array=0-5
+#SBATCH --job-name=train-mixed-hit-cluster-100k
+#SBATCH --array=0-1
 
 set -euo pipefail
 export PF_SITE=tallinn
@@ -17,7 +17,7 @@ export NCCL_IB_DISABLE=1
 nvidia-smi topo -m
 
 SPEC_FILE=${SPEC_FILE:-particleflow_spec.yaml}
-NUM_STEPS=${NUM_STEPS:-50000}
+NUM_STEPS=${NUM_STEPS:-100000}
 VAL_FREQ=${VAL_FREQ:-10000}
 CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-10000}
 GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-2}
@@ -25,28 +25,17 @@ NUM_WORKERS=${NUM_WORKERS:-4}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-2}
 PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-100}
 VALIDATION_DIAGNOSTICS_BATCHES=${VALIDATION_DIAGNOSTICS_BATCHES:-8}
-CLUSTERING_LOSS_WEIGHT_MEDIUM=${CLUSTERING_LOSS_WEIGHT_MEDIUM:-0.10}
-CLUSTERING_LOSS_WEIGHT_STRONG=${CLUSTERING_LOSS_WEIGHT_STRONG:-0.30}
 DATA_CONFIG=${DATA_CONFIG:-1}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 
-# Long hit-only clustering confirmation matrix:
-#   H0: hit particle-number clustering does not improve hit-task FOM.
-#   H1: the best clustering weights from the short sweep improve the learned hit
-#       representation and increase per-dataset jet matching fraction over the
-#       no-clustering baseline for CLD-only, CLIC-only, and mixed CLIC+CLD hits.
-# Fixed architecture:
+# Mixed-hit clustering comparison:
 #   shared backbone, modality-specific hit stems, no modality embedding.
-# Success criterion:
-#   each clustering run should beat the matched no-clustering baseline on the
-#   average of CLD and CLIC hit-test jet matching fractions at 50k steps.
+#   baseline: clustering_loss.weight = 0
+#   default-cluster: generated mixed-hit spec uses clustering_loss.weight = 0.30
+# Both train on mixed CLD+CLIC hits and evaluate CLD/CLIC hit-test FOM up to 100k steps.
 JOBS=(
-    cld-hits:stems
-    cld-hits:stems-cluster010
-    clic-hits:stems
-    clic-hits:stems-cluster030
-    mixed-hits:stems
-    mixed-hits:stems-cluster030
+    mixed-hits:stems-baseline
+    mixed-hits:stems-default-cluster
 )
 
 IFS=: read -r TRAINSET SCENARIO <<< "${JOBS[$SLURM_ARRAY_TASK_ID]}"
@@ -63,12 +52,6 @@ ln -sfn "$CLIC_DATA_DIR/clic_edm_ttbar_hits" "$MIXED_DATA_DIR/clic_edm_ttbar_hit
 uv run python3 scripts/tallinn/l40/make_hit_fom_clean_spec.py "$SPEC_FILE" "$CLEAN_SPEC_FILE"
 
 case "$TRAINSET" in
-    cld-hits)
-        MODEL_NAME=pyg-clean-cld-hits-v1
-        ;;
-    clic-hits)
-        MODEL_NAME=pyg-clean-clic-hits-v1
-        ;;
     mixed-hits)
         MODEL_NAME=pyg-clean-mixed-hits-v1
         ;;
@@ -110,14 +93,11 @@ MODEL_ARGS=(
 )
 
 case "$SCENARIO" in
-    stems)
+    stems-baseline)
+        MODEL_ARGS+=(--model.input_stem.modality_embedding false --clustering_loss.weight 0.0)
+        ;;
+    stems-default-cluster)
         MODEL_ARGS+=(--model.input_stem.modality_embedding false)
-        ;;
-    stems-cluster010)
-        MODEL_ARGS+=(--model.input_stem.modality_embedding false --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_MEDIUM")
-        ;;
-    stems-cluster030)
-        MODEL_ARGS+=(--model.input_stem.modality_embedding false --clustering_loss.weight "$CLUSTERING_LOSS_WEIGHT_STRONG")
         ;;
     *)
         echo "Unknown scenario: $SCENARIO" >&2
