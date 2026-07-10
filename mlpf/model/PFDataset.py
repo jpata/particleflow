@@ -183,13 +183,15 @@ class PFBatch:
         self.genmet = kwargs.get("genmet", None)
         self.genjets = kwargs.get("genjets", None)
         self.targetjets = kwargs.get("targetjets", None)
+        self.source_id = kwargs.get("source_id", None)
+        self.input_type_id = kwargs.get("input_type_id", None)
         self.mask = self.X[:, :, 0] != 0
 
     def to(self, device, **kwargs):
         attrs = {}
         for attr in self.attrs:
             this_attr = getattr(self, attr)
-            attrs[attr] = this_attr.to(device, **kwargs)
+            attrs[attr] = this_attr.to(device, **kwargs) if this_attr is not None else None
         return PFBatch(**attrs)
 
 
