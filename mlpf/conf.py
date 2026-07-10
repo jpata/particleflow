@@ -37,7 +37,6 @@ class LearnedRepresentationMode(Enum):
 class BackboneMode(Enum):
     SHARED = "shared"
     SPLIT = "split"
-    PARTIAL = "partial"
 
 
 class InputStemMode(Enum):
@@ -51,7 +50,6 @@ class ElementModality(Enum):
     CALO_HIT = 2
     TRACK = 3
     CLUSTER = 4
-    HIT = 1
 
 
 class DatasetSource(Enum):
@@ -483,7 +481,6 @@ class BackboneConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: BackboneMode = BackboneMode.SHARED
     num_convs: Optional[int] = None
-    private_num_convs: int = Field(default=0, ge=0)
 
 
 class InputStemConfig(BaseModel):
@@ -526,15 +523,6 @@ class RegressionLossWeights(BaseModel):
     sin_phi: float = Field(default=1e-2, ge=0.0)
     cos_phi: float = Field(default=1e-2, ge=0.0)
     energy: float = Field(default=1.0, ge=0.0)
-
-
-class ClusteringLossConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    weight: float = Field(default=0.0, ge=0.0)
-    margin: float = Field(default=1.0, ge=0.0)
-    max_particles_per_event: int = Field(default=128, ge=1)
-    min_elements_per_particle: int = Field(default=1, ge=1)
 
 
 class DatasetSample(BaseModel):
@@ -596,7 +584,6 @@ class MLPFConfig(BaseModel):
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
     regression_loss_weights: RegressionLossWeights = Field(default_factory=RegressionLossWeights)
-    clustering_loss: ClusteringLossConfig = Field(default_factory=ClusteringLossConfig)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
     validation_diagnostics_batches: int = 0  # number of validation batches for embedding/domain diagnostics; 0 disables extra backbone passes
 

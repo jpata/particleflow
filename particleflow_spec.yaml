@@ -592,8 +592,6 @@ models:
     <<: *defaults
     dataset: cld_hits
     gpu_batch_multiplier: 12
-    clustering_loss:
-      weight: 0.0
 
     hyperparameters:
       batch_size: 1
@@ -709,8 +707,6 @@ models:
     <<: *defaults
     dataset: clic_hits
     gpu_batch_multiplier: 16
-    clustering_loss:
-      weight: 0.0
 
     hyperparameters:
       batch_size: 1

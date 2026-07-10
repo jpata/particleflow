@@ -378,10 +378,9 @@ class MLPF(nn.Module):
         # Extract architecture-level parameters
         self.input_encoding = InputEncoding(self.config.input_encoding)
         self.learned_representation_mode = LearnedRepresentationMode(self.config.learned_representation_mode)
-        self.task_queries = bool(getattr(self.config, "task_queries", True))
+        self.task_queries = bool(self.config.task_queries)
         self.backbone_mode = BackboneMode(self.config.backbone.mode)
         self.use_split_backbone = self.backbone_mode == BackboneMode.SPLIT
-        self.use_partial_backbone = self.backbone_mode == BackboneMode.PARTIAL
         self.input_stem_mode = InputStemMode(self.config.input_stem.mode)
         self.use_modality_stems = self.input_stem_mode == InputStemMode.MODALITY
         self.use_modality_embedding = bool(self.config.input_stem.modality_embedding)
@@ -396,8 +395,6 @@ class MLPF(nn.Module):
         regression_selector_values = self.modality_selector_values if self.use_modality_stems else self.elemtypes_nonzero
         if self.use_modality_stems and self.dataset not in [Dataset.CLIC, Dataset.CLD, Dataset.CLIC_HITS, Dataset.CLD_HITS]:
             raise ValueError(f"Modality input stems are currently defined for CLIC/CLD PF and hits datasets, got {self.dataset}")
-        if self.use_partial_backbone and not self.use_modality_stems:
-            raise ValueError("backbone.mode=partial requires model.input_stem.mode=modality for modality routing")
         pt_mode = RegressionMode(self.config.pt_mode)
         eta_mode = RegressionMode(self.config.eta_mode)
         sin_phi_mode = RegressionMode(self.config.sin_phi_mode)
@@ -406,8 +403,6 @@ class MLPF(nn.Module):
 
         backbone_config = self.config.backbone
         backbone_num_convs = backbone_config.num_convs
-        self.private_num_convs = min(backbone_config.private_num_convs, backbone_num_convs)
-        self.shared_num_convs = backbone_num_convs - self.private_num_convs if self.use_partial_backbone else backbone_num_convs
 
         # Extract parameters from the sub-config per model type
         self.num_convs = backbone_num_convs
@@ -529,8 +524,6 @@ class MLPF(nn.Module):
         if self.use_split_backbone:
             self._backbone_id = nn.ModuleList()
             self._backbone_reg = nn.ModuleList()
-        if self.use_partial_backbone:
-            self._private_backbones = nn.ModuleDict()
         if self.num_convs != 0:
             backbone_kwargs = {
                 "num_layers": self.num_convs,
@@ -563,25 +556,6 @@ class MLPF(nn.Module):
                 _logger.info("Initializing split id/reg backbone layers, num_convs={}".format(self.num_convs))
                 self._backbone_id = self._build_backbone_layers(name_prefix="backbone_id", **backbone_kwargs)
                 self._backbone_reg = self._build_backbone_layers(name_prefix="backbone_reg", **backbone_kwargs)
-            elif self.use_partial_backbone:
-                _logger.info(
-                    "Initializing partial backbone layers, private_num_convs={} shared_num_convs={}".format(
-                        self.private_num_convs, self.shared_num_convs
-                    )
-                )
-                private_kwargs = dict(backbone_kwargs)
-                private_kwargs["num_layers"] = self.private_num_convs
-                shared_kwargs = dict(backbone_kwargs)
-                shared_kwargs["num_layers"] = self.shared_num_convs
-                self._private_backbones = nn.ModuleDict(
-                    {
-                        "tracker_hit": self._build_backbone_layers(name_prefix="private_tracker_hit", **private_kwargs),
-                        "calo_hit": self._build_backbone_layers(name_prefix="private_calo_hit", **private_kwargs),
-                        "track": self._build_backbone_layers(name_prefix="private_track", **private_kwargs),
-                        "cluster": self._build_backbone_layers(name_prefix="private_cluster", **private_kwargs),
-                    }
-                )
-                self.backbone = self._build_backbone_layers(name_prefix="shared_backbone", **shared_kwargs)
             else:
                 _logger.info("Initializing shared backbone layers, num_convs={}".format(self.num_convs))
                 self.backbone = self._build_backbone_layers(name_prefix="backbone", **backbone_kwargs)
@@ -589,9 +563,6 @@ class MLPF(nn.Module):
         if self.use_split_backbone:
             _logger.info("backbone_id parameters: {}".format(count_parameters(self._backbone_id)))
             _logger.info("backbone_reg parameters: {}".format(count_parameters(self._backbone_reg)))
-        elif self.use_partial_backbone:
-            _logger.info("private_backbones parameters: {}".format(count_parameters(self._private_backbones)))
-            _logger.info("shared_backbone parameters: {}".format(count_parameters(self.backbone)))
         else:
             _logger.info("backbone parameters: {}".format(count_parameters(self.backbone)))
 
@@ -902,54 +873,10 @@ class MLPF(nn.Module):
             embeddings.append(x)
         return embeddings
 
-    def _run_partial_backbone(self, x, mask, initial_embedding, X_features, input_type_id=None):
-        if self.num_convs == 0:
-            return [x]
-
-        modality_ids = self._infer_modality_ids(X_features, input_type_id=input_type_id)
-        modality_to_private_backbone = {
-            ElementModality.TRACKER_HIT.value: self._private_backbones["tracker_hit"],
-            ElementModality.CALO_HIT.value: self._private_backbones["calo_hit"],
-            ElementModality.TRACK.value: self._private_backbones["track"],
-            ElementModality.CLUSTER.value: self._private_backbones["cluster"],
-        }
-        private_embeddings_by_modality = {}
-        private_final = torch.zeros_like(x)
-
-        for modality_id, private_backbone in modality_to_private_backbone.items():
-            modality_mask = mask & (modality_ids == modality_id) if mask is not None else modality_ids == modality_id
-            if not modality_mask.any():
-                continue
-            modality_mask_f = modality_mask.unsqueeze(-1).to(x.dtype)
-            x_mod = x * modality_mask_f
-            init_mod = initial_embedding * modality_mask_f
-            embeddings_mod = self._run_backbone(x_mod, modality_mask, init_mod, X_features, backbone=private_backbone)
-            private_embeddings_by_modality[modality_id] = embeddings_mod
-            private_final = private_final + embeddings_mod[-1] * modality_mask_f
-
-        embeddings = []
-        for layer_idx in range(self.private_num_convs):
-            layer_embedding = torch.zeros_like(x)
-            for modality_id, embeddings_mod in private_embeddings_by_modality.items():
-                modality_mask = (modality_ids == modality_id).unsqueeze(-1).to(x.dtype)
-                layer_embedding = layer_embedding + embeddings_mod[layer_idx] * modality_mask
-            embeddings.append(layer_embedding)
-
-        shared_embeddings = self._run_backbone(private_final, mask, private_final, X_features, backbone=self.backbone)
-        if self.shared_num_convs > 0:
-            embeddings.extend(shared_embeddings)
-        elif not embeddings:
-            embeddings.append(private_final)
-        return embeddings
-
-    def _collect_representation(self, embeddings, fallback_embedding):
+    def _collect_representation(self, embeddings):
         if self.learned_representation_mode == LearnedRepresentationMode.CONCAT:
-            if len(embeddings) == 0:
-                return fallback_embedding
             return torch.cat(embeddings, axis=-1)
         if self.learned_representation_mode == LearnedRepresentationMode.LAST:
-            if len(embeddings) == 0:
-                return fallback_embedding
             return embeddings[-1]
         raise ValueError(f"Unsupported learned representation mode {self.learned_representation_mode}")
 
@@ -958,13 +885,10 @@ class MLPF(nn.Module):
             input_encoder = self._input_stems_id if self.use_modality_stems else self._nn0_id
             x = self._encode_inputs(X_features, mask=mask, encoder=input_encoder, source_id=source_id, input_type_id=input_type_id)
             embeddings = self._run_backbone(x, mask, x, X_features, backbone=self._backbone_id)
-        elif self.use_partial_backbone:
-            x = self._encode_inputs(X_features, mask=mask, source_id=source_id, input_type_id=input_type_id)
-            embeddings = self._run_partial_backbone(x, mask, x, X_features, input_type_id=input_type_id)
         else:
             x = self._encode_inputs(X_features, mask=mask, source_id=source_id, input_type_id=input_type_id)
             embeddings = self._run_backbone(x, mask, x, X_features)
-        return self._collect_representation(embeddings, x)
+        return self._collect_representation(embeddings)
 
     @property
     def nn0_id(self):
@@ -994,57 +918,6 @@ class MLPF(nn.Module):
     def final_norm_reg(self):
         return self.regression_norm
 
-    def load_state_dict(self, state_dict, strict: bool = True):
-        # Backward compatibility with checkpoints saved before the backbone refactor.
-        if self.use_split_backbone:
-            legacy_prefix_groups = [
-                ("_nn0_id.", ["nn0_id."]),
-                ("_nn0_reg.", ["nn0_reg."]),
-                ("_backbone_id.", ["conv_id."]),
-                ("_backbone_reg.", ["conv_reg."]),
-            ]
-        else:
-            legacy_prefix_groups = [
-                ("nn0.", ["nn0_id.", "nn0_reg."]),
-                ("backbone.", ["conv_id.", "conv_reg."]),
-            ]
-        remapped = {}
-        used_legacy = False
-        current_state = super().state_dict()
-
-        for target_prefix, source_prefixes in legacy_prefix_groups:
-            grouped = {}
-            for source_prefix in source_prefixes:
-                for key, value in state_dict.items():
-                    if key.startswith(source_prefix):
-                        used_legacy = True
-                        suffix = key[len(source_prefix) :]
-                        grouped.setdefault(suffix, []).append(value)
-            for suffix, values in grouped.items():
-                if len(values) == 1:
-                    remapped[target_prefix + suffix] = values[0]
-                else:
-                    stacked = torch.stack([v.to(torch.float32) for v in values], dim=0)
-                    remapped[target_prefix + suffix] = stacked.mean(dim=0).to(values[0].dtype)
-
-        if used_legacy:
-            for key, value in state_dict.items():
-                if key.startswith("nn0_id.") or key.startswith("nn0_reg.") or key.startswith("conv_id.") or key.startswith("conv_reg."):
-                    continue
-                if key.startswith("final_norm_id."):
-                    remapped[key.replace("final_norm_id.", "classification_norm.")] = value
-                elif key.startswith("final_norm_reg."):
-                    remapped[key.replace("final_norm_reg.", "regression_norm.")] = value
-                else:
-                    remapped[key] = value
-            state_dict = remapped
-
-        for key, value in current_state.items():
-            if key not in state_dict:
-                state_dict[key] = value
-
-        return super().load_state_dict(state_dict, strict=strict)
-
     # @torch.compile
     def forward(self, X_features, mask, source_id=None, input_type_id=None):
         if self.use_split_backbone:
@@ -1054,15 +927,12 @@ class MLPF(nn.Module):
             x_reg = self._encode_inputs(X_features, mask=mask, encoder=input_encoder_reg, source_id=source_id, input_type_id=input_type_id)
             embeddings_id = self._run_backbone(x_id, mask, x_id, X_features, backbone=self._backbone_id)
             embeddings_reg = self._run_backbone(x_reg, mask, x_reg, X_features, backbone=self._backbone_reg)
-            final_embedding_cls = self._collect_representation(embeddings_id, x_id)
-            final_embedding_reg = self._collect_representation(embeddings_reg, x_reg)
+            final_embedding_cls = self._collect_representation(embeddings_id)
+            final_embedding_reg = self._collect_representation(embeddings_reg)
         else:
             x = self._encode_inputs(X_features, mask=mask, source_id=source_id, input_type_id=input_type_id)
-            if self.use_partial_backbone:
-                backbone_embeddings = self._run_partial_backbone(x, mask, x, X_features, input_type_id=input_type_id)
-            else:
-                backbone_embeddings = self._run_backbone(x, mask, x, X_features)
-            final_embedding = self._collect_representation(backbone_embeddings, x)
+            backbone_embeddings = self._run_backbone(x, mask, x, X_features)
+            final_embedding = self._collect_representation(backbone_embeddings)
 
             if self.task_queries:
                 final_embedding_cls = self.classification_readout(final_embedding, mask, self.classification_query)
