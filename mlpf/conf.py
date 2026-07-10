@@ -34,6 +34,11 @@ class LearnedRepresentationMode(Enum):
     CONCAT = "concat"
 
 
+class BackboneMode(Enum):
+    SHARED = "shared"
+    SPLIT = "split"
+
+
 class RegressionMode(Enum):
     DIRECT = "direct"
     ADDITIVE = "additive"
@@ -447,6 +452,12 @@ class HEPTv2Config(BaseModel):
     mlp_ratio: float = 4.0
 
 
+class BackboneConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: BackboneMode = BackboneMode.SHARED
+    num_convs: Optional[int] = None
+
+
 class ModelArchitectureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -459,6 +470,8 @@ class ModelArchitectureConfig(BaseModel):
     cos_phi_mode: RegressionMode = RegressionMode.LINEAR
     energy_mode: RegressionMode = RegressionMode.DIRECT_ELEMTYPE_SPLIT
     trainable: str = "all"
+    task_queries: bool = True
+    backbone: Optional[BackboneConfig] = None
 
     # Nested configs
     gnnlsh: Optional[GNNLSHConfig] = None
@@ -576,6 +589,12 @@ class MLPFConfig(BaseModel):
     @model_validator(mode="after")
     def populate_defaults(self) -> "MLPFConfig":
         self.conv_type = ModelType(self.model.type)
+        if self.model.backbone is None:
+            self.model.backbone = BackboneConfig()
+        if self.model.backbone.num_convs is None:
+            sub_config = getattr(self.model, self.conv_type.value)
+            if sub_config is not None and hasattr(sub_config, "num_convs"):
+                self.model.backbone.num_convs = sub_config.num_convs
         if self.dataset.value in X_FEATURES:
             if self.input_dim is None:
                 self.input_dim = len(X_FEATURES[self.dataset.value])
@@ -670,9 +689,10 @@ class MLPFConfig(BaseModel):
                 set_nested_dict(config_dict, "model.attention.attention_type", args.attention_type)
 
             if hasattr(args, "num_convs") and args.num_convs is not None:
-                for m in ["gnnlsh", "attention", "litept", "hept"]:
+                for m in ["gnnlsh", "attention", "litept", "hept", "heptv2"]:
                     if m in config_dict["model"]:
                         set_nested_dict(config_dict, f"model.{m}.num_convs", args.num_convs)
+                set_nested_dict(config_dict, "model.backbone.num_convs", args.num_convs)
 
         # 6. Apply Dot-notation overrides (extra_args)
         if extra_args:
