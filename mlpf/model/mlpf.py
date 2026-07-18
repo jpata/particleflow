@@ -130,6 +130,9 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
             with sdpa_kernel(self.attn_params[self.attention_type]):
                 attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
 
+        # Keep residual paths type-stable for half-precision ONNX export.
+        attn_output = attn_output.to(q.dtype)
+
         # in case running with pytorch internal scaled dot product attention, reshape back to the original shape
         if not self.export_onnx_fused:
             attn_output = attn_output.transpose(1, 2).reshape(bs, q_len, num_heads * head_dim)
@@ -392,6 +395,7 @@ class MLPF(nn.Module):
         head_dropout_ff = sub_config.dropout_ff
         backbone_dropout_ff = sub_config.dropout_ff
         backbone_dropout_mha = 0.0
+        export_onnx_fused = False
 
         if self.conv_type == ModelType.ATTENTION:
             num_heads = sub_config.num_heads
@@ -537,7 +541,7 @@ class MLPF(nn.Module):
             trunc_normal_(self.regression_query, std=0.02)
             readout_heads = infer_num_heads(decoding_dim, num_heads if self.conv_type in [ModelType.ATTENTION, ModelType.HEPT, ModelType.HEPTV2] else None)
             readout_attention_type = AttentionType.MATH
-            readout_export_onnx_fused = False
+            readout_export_onnx_fused = bool(export_onnx_fused)
             self.classification_readout = TaskQueryAttentionReadout(
                 name="classification_readout",
                 activation=activation,
