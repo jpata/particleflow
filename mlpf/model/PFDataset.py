@@ -231,6 +231,8 @@ class Collater:
 
         # per-event quantities can be stacked across events
         for key_to_get in self.per_event_keys_to_get:
+            if not all(key_to_get in inp for inp in inputs):
+                continue
             ret[key_to_get] = torch.stack([torch.as_tensor(inp[key_to_get]) for inp in inputs])
         return PFBatch(**ret)
 
