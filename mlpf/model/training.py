@@ -79,21 +79,8 @@ from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
 from mlpf.model.losses import REGRESSION_FEATURES, mlpf_loss, particle_loss
 from mlpf.utils import create_comet_experiment
-from mlpf.conf import MLPFConfig
+from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
-
-
-SOURCE_LABELS = {
-    0: "unknown",
-    1: "cms",
-    2: "clic",
-    3: "cld",
-}
-INPUT_TYPE_LABELS = {
-    0: "unknown",
-    1: "hits",
-    2: "pf",
-}
 
 
 def _domain_label(source_id, input_type_id):

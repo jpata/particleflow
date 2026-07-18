@@ -9,6 +9,7 @@ import pytest
 import numpy as np
 from torch.utils.data import ConcatDataset
 
+from mlpf.conf import INPUT_TYPE_IDS, SOURCE_IDS, dataset_input_type_id, dataset_source_id
 from mlpf.model.PFDataset import Collater, DistributedInterleavedShardSampler, InterleavedShardSampler, ShardConsecutiveSampler, TFDSDataSource
 from tests.mock_data import MockDataset
 
@@ -150,11 +151,26 @@ def test_tfds_datasource_adds_source_and_input_type_metadata_and_pads_features()
 
     event = ds[0]
 
-    assert event["source_id"] == 2
-    assert event["input_type_id"] == 1
+    assert event["source_id"] == SOURCE_IDS["clic"]
+    assert event["input_type_id"] == INPUT_TYPE_IDS["hits"]
     assert event["X"].shape == (3, 6)
     assert np.all(event["X"][:, :4] == 1.0)
     assert np.all(event["X"][:, 4:] == 0.0)
+
+
+@pytest.mark.parametrize(
+    ("dataset_name", "source_id", "input_type_id"),
+    [
+        ("cms_pf_ttbar", SOURCE_IDS["cms"], INPUT_TYPE_IDS["pf"]),
+        ("clic_edm_ttbar_pf", SOURCE_IDS["clic"], INPUT_TYPE_IDS["pf"]),
+        ("clic_edm_ttbar_hits", SOURCE_IDS["clic"], INPUT_TYPE_IDS["hits"]),
+        ("cld_edm_ttbar_hits", SOURCE_IDS["cld"], INPUT_TYPE_IDS["hits"]),
+        ("unknown_sample", SOURCE_IDS["unknown"], INPUT_TYPE_IDS["pf"]),
+    ],
+)
+def test_dataset_domain_metadata_mapping(dataset_name, source_id, input_type_id):
+    assert dataset_source_id(dataset_name) == source_id
+    assert dataset_input_type_id(dataset_name) == input_type_id
 
 
 def test_collater_preserves_source_and_input_type_metadata():

@@ -10,7 +10,7 @@ import torch
 import torch.utils.data
 
 from mlpf.logger import _logger
-from mlpf.conf import DatasetSamplerMode, MLPFConfig
+from mlpf.conf import DatasetSamplerMode, MLPFConfig, dataset_input_type_id, dataset_source_id
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
@@ -52,15 +52,8 @@ class TFDSDataSource:
         assert len(ret) == 1
         ret = ret[0]
         ds_name = self.ds.dataset_info.name
-        if ds_name.startswith("clic_"):
-            ret["source_id"] = np.int64(2)
-        elif ds_name.startswith("cld_"):
-            ret["source_id"] = np.int64(3)
-        elif ds_name.startswith("cms_"):
-            ret["source_id"] = np.int64(1)
-        else:
-            ret["source_id"] = np.int64(0)
-        ret["input_type_id"] = np.int64(1 if "_hits" in ds_name else 2)
+        ret["source_id"] = np.int64(dataset_source_id(ds_name))
+        ret["input_type_id"] = np.int64(dataset_input_type_id(ds_name))
 
         Xshape = ret["X"].shape
         _logger.debug(f"Getting item={item}, ds={ds_name}:{self.ds.dataset_info.config_name}, X={Xshape}")
