@@ -539,7 +539,9 @@ class MLPF(nn.Module):
             self.regression_query = nn.Parameter(torch.zeros(1, 1, decoding_dim), requires_grad=True)
             trunc_normal_(self.classification_query, std=0.02)
             trunc_normal_(self.regression_query, std=0.02)
-            readout_heads = infer_num_heads(decoding_dim, num_heads if self.conv_type in [ModelType.ATTENTION, ModelType.HEPT, ModelType.HEPTV2] else None)
+            readout_heads = infer_num_heads(
+                decoding_dim, num_heads if self.conv_type in [ModelType.ATTENTION, ModelType.HEPT, ModelType.HEPTV2] else None
+            )
             readout_attention_type = AttentionType.MATH
             readout_export_onnx_fused = bool(export_onnx_fused)
             self.classification_readout = TaskQueryAttentionReadout(
@@ -582,12 +584,22 @@ class MLPF(nn.Module):
 
         _logger.info("backbone_mode={}".format(self.backbone_mode))
         _logger.info("task_queries enabled={}".format(self.task_queries and not self.use_split_backbone))
-        _logger.info("classification_norm parameters: {}".format(count_parameters(self.classification_norm) if self.classification_norm is not None else 0))
+        _logger.info(
+            "classification_norm parameters: {}".format(count_parameters(self.classification_norm) if self.classification_norm is not None else 0)
+        )
         _logger.info("regression_norm parameters: {}".format(count_parameters(self.regression_norm) if self.regression_norm is not None else 0))
-        _logger.info("classification_query parameters: {}".format(count_parameters(self.classification_query) if self.classification_query is not None else 0))
+        _logger.info(
+            "classification_query parameters: {}".format(count_parameters(self.classification_query) if self.classification_query is not None else 0)
+        )
         _logger.info("regression_query parameters: {}".format(count_parameters(self.regression_query) if self.regression_query is not None else 0))
-        _logger.info("classification_readout parameters: {}".format(count_parameters(self.classification_readout) if self.classification_readout is not None else 0))
-        _logger.info("regression_readout parameters: {}".format(count_parameters(self.regression_readout) if self.regression_readout is not None else 0))
+        _logger.info(
+            "classification_readout parameters: {}".format(
+                count_parameters(self.classification_readout) if self.classification_readout is not None else 0
+            )
+        )
+        _logger.info(
+            "regression_readout parameters: {}".format(count_parameters(self.regression_readout) if self.regression_readout is not None else 0)
+        )
         _logger.info("nn_binary_particle parameters: {}".format(count_parameters(self.nn_binary_particle)))
         _logger.info("nn_pid parameters: {}".format(count_parameters(self.nn_pid)))
         _logger.info("nn_pt parameters: {}".format(count_parameters(self.nn_pt)))
