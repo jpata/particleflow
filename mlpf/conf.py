@@ -538,6 +538,7 @@ class MLPFConfig(BaseModel):
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
     regression_loss_weights: RegressionLossWeights = Field(default_factory=RegressionLossWeights)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
+    validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
 
     # Flags
     train: bool = False
