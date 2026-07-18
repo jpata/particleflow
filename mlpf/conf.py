@@ -34,6 +34,40 @@ class LearnedRepresentationMode(Enum):
     CONCAT = "concat"
 
 
+class DatasetSamplerMode(Enum):
+    SHARD_CONSECUTIVE = "shard-consecutive"
+    INTERLEAVED_SHARDS = "interleaved-shards"
+
+
+SOURCE_IDS = {
+    "unknown": 0,
+    Dataset.CMS.value: 1,
+    Dataset.CLIC.value: 2,
+    Dataset.CLD.value: 3,
+}
+SOURCE_LABELS = {source_id: source_name for source_name, source_id in SOURCE_IDS.items()}
+
+INPUT_TYPE_IDS = {
+    "unknown": 0,
+    "hits": 1,
+    "pf": 2,
+}
+INPUT_TYPE_LABELS = {input_type_id: input_type_name for input_type_name, input_type_id in INPUT_TYPE_IDS.items()}
+
+
+def dataset_source_id(dataset_name: str) -> int:
+    for source_name, source_id in SOURCE_IDS.items():
+        if source_name != "unknown" and dataset_name.startswith(f"{source_name}_"):
+            return source_id
+    return SOURCE_IDS["unknown"]
+
+
+def dataset_input_type_id(dataset_name: str) -> int:
+    if "_hits" in dataset_name:
+        return INPUT_TYPE_IDS["hits"]
+    return INPUT_TYPE_IDS["pf"]
+
+
 class RegressionMode(Enum):
     DIRECT = "direct"
     ADDITIVE = "additive"
@@ -459,7 +493,6 @@ class ModelArchitectureConfig(BaseModel):
     cos_phi_mode: RegressionMode = RegressionMode.LINEAR
     energy_mode: RegressionMode = RegressionMode.DIRECT_ELEMTYPE_SPLIT
     trainable: str = "all"
-
     # Nested configs
     gnnlsh: Optional[GNNLSHConfig] = None
     attention: Optional[AttentionConfig] = None
@@ -546,6 +579,7 @@ class MLPFConfig(BaseModel):
     compile: bool = False
     make_plots: bool = True
     sort_data: bool = False
+    sampler_mode: DatasetSamplerMode = DatasetSamplerMode.SHARD_CONSECUTIVE
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
     relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
     sampler_from_scratch: bool = False  # start the sampler from scratch (without resuming the sampler state)

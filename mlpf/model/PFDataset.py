@@ -1,6 +1,7 @@
 import sys
 import random
 import resource
+import math
 from types import SimpleNamespace
 
 import numpy as np
@@ -9,7 +10,7 @@ import torch
 import torch.utils.data
 
 from mlpf.logger import _logger
-from mlpf.conf import MLPFConfig
+from mlpf.conf import DatasetSamplerMode, MLPFConfig, dataset_input_type_id, dataset_source_id
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
@@ -29,7 +30,7 @@ except Exception as e:
 
 
 class TFDSDataSource:
-    def __init__(self, ds, sort, pad_to_multiple=None):
+    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None):
         self.ds = ds
         tmp = self.ds.dataset_info
         self.ds.dataset_info = SimpleNamespace()
@@ -38,6 +39,7 @@ class TFDSDataSource:
         self.ds.dataset_info.config_name = tmp.config_name
         self.sort = sort
         self.pad_to_multiple = pad_to_multiple
+        self.feature_dim = feature_dim
 
     def __getitem__(self, item):
         if isinstance(item, int):
@@ -49,9 +51,18 @@ class TFDSDataSource:
         ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
         assert len(ret) == 1
         ret = ret[0]
+        ds_name = self.ds.dataset_info.name
+        ret["source_id"] = np.int64(dataset_source_id(ds_name))
+        ret["input_type_id"] = np.int64(dataset_input_type_id(ds_name))
 
         Xshape = ret["X"].shape
-        _logger.debug(f"Getting item={item}, ds={self.ds.dataset_info.name}:{self.ds.dataset_info.config_name}, X={Xshape}")
+        _logger.debug(f"Getting item={item}, ds={ds_name}:{self.ds.dataset_info.config_name}, X={Xshape}")
+
+        if self.feature_dim is not None:
+            if ret["X"].shape[1] > self.feature_dim:
+                raise ValueError(f"Input feature dimension {ret['X'].shape[1]} exceeds configured feature_dim={self.feature_dim}")
+            if ret["X"].shape[1] < self.feature_dim:
+                ret["X"] = np.pad(ret["X"], ((0, 0), (0, self.feature_dim - ret["X"].shape[1])), mode="constant", constant_values=0)
 
         # sort the elements in each event in pT descending order
         # the transformer is permutation-covariant, but this can be helpful for other types of models
@@ -72,7 +83,7 @@ class TFDSDataSource:
                         pad_width = ((0, num_to_pad), (0, 0))  # Pad only the first axis
                         ret[key_to_pad] = np.pad(array_to_pad, pad_width, mode="constant", constant_values=0)
 
-        if self.ds.dataset_info.name.startswith("cms_"):
+        if ds_name.startswith("cms_"):
             # track, target label neutral hadron -> reconstruct as charged hadron
             ret["ytarget"][:, 0][(ret["X"][:, 0] == 1) & (ret["ytarget"][:, 0] == 2)] = 1
 
@@ -140,7 +151,7 @@ class TFDSDataSource:
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name, split, num_samples=None, sort=False, pad_to_multiple=512):
+    def __init__(self, data_dir, name, split, num_samples=None, sort=False, pad_to_multiple=512, feature_dim=None):
         """
         Args
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
@@ -160,7 +171,7 @@ class PFDataset:
             sys.exit(1)
 
         _logger.debug(f"PFDataset opening dataset {name} in {builder.data_path} for split {split}")
-        self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort, pad_to_multiple=pad_to_multiple)
+        self.ds = TFDSDataSource(builder.as_data_source(split=split), sort=sort, pad_to_multiple=pad_to_multiple, feature_dim=feature_dim)
 
         if num_samples and num_samples < len(self.ds):
             self.ds = torch.utils.data.Subset(self.ds, range(num_samples))
@@ -213,6 +224,8 @@ class Collater:
 
         # per-event quantities can be stacked across events
         for key_to_get in self.per_event_keys_to_get:
+            if not all(key_to_get in inp for inp in inputs):
+                continue
             ret[key_to_get] = torch.stack([torch.as_tensor(inp[key_to_get]) for inp in inputs])
         return PFBatch(**ret)
 
@@ -251,6 +264,59 @@ class ShardConsecutiveSampler(torch.utils.data.Sampler):
 
         indices = [idx for shard_list in shard_indices_lists for idx in shard_list]
         return iter(indices)
+
+    def __len__(self):
+        return len(self.concat_dataset)
+
+
+def _build_interleaved_shard_indices(concat_dataset, shuffle=True, seed=0):
+    rng = random.Random(seed)
+
+    shard_indices_lists = []
+    start_idx = 0
+    for end_idx in concat_dataset.cumulative_sizes:
+        shard_indices = list(range(start_idx, end_idx))
+        if shuffle:
+            rng.shuffle(shard_indices)
+        shard_indices_lists.append(shard_indices)
+        start_idx = end_idx
+
+    positions = [0] * len(shard_indices_lists)
+    active_shards = [idx for idx, indices in enumerate(shard_indices_lists) if indices]
+    indices = []
+
+    while active_shards:
+        shard_order = list(active_shards)
+        if shuffle:
+            rng.shuffle(shard_order)
+        for shard_idx in shard_order:
+            pos = positions[shard_idx]
+            indices.append(shard_indices_lists[shard_idx][pos])
+            positions[shard_idx] += 1
+
+        active_shards = [idx for idx in active_shards if positions[idx] < len(shard_indices_lists[idx])]
+
+    return indices
+
+
+class InterleavedShardSampler(torch.utils.data.Sampler):
+    """Interleave events across ConcatDataset shards.
+
+    This avoids long single-source stretches when a training config combines
+    multiple samples under one physical dataset.
+    """
+
+    def __init__(self, concat_dataset, shuffle=True, seed=0):
+        self.concat_dataset = concat_dataset
+        self.shuffle = shuffle
+        self.seed = seed
+        self.epoch = 0
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+
+    def __iter__(self):
+        return iter(_build_interleaved_shard_indices(self.concat_dataset, shuffle=self.shuffle, seed=self.seed + self.epoch))
 
     def __len__(self):
         return len(self.concat_dataset)
@@ -311,6 +377,49 @@ class DistributedShardConsecutiveSampler(torch.utils.data.distributed.Distribute
         assert len(indices) == self.num_samples
 
         return iter(indices)
+
+
+class DistributedInterleavedShardSampler(torch.utils.data.Sampler):
+    """Distributed version of InterleavedShardSampler."""
+
+    def __init__(self, dataset, world_size=None, rank=None, shuffle=True, seed=0, drop_last=False):
+        self.dataset = dataset
+        self.num_replicas = world_size
+        self.rank = rank
+        self.shuffle = shuffle
+        self.seed = seed
+        self.drop_last = drop_last
+        self.epoch = 0
+
+        if self.drop_last and len(self.dataset) % self.num_replicas != 0:
+            self.num_samples = math.ceil((len(self.dataset) - self.num_replicas) / self.num_replicas)
+        else:
+            self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
+        self.total_size = self.num_samples * self.num_replicas
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+
+    def __iter__(self):
+        indices = _build_interleaved_shard_indices(self.dataset, shuffle=self.shuffle, seed=self.seed + self.epoch)
+
+        if not self.drop_last:
+            padding_size = self.total_size - len(indices)
+            if padding_size <= len(indices):
+                indices += indices[:padding_size]
+            else:
+                indices += (indices * math.ceil(padding_size / len(indices)))[:padding_size]
+        else:
+            indices = indices[: self.total_size]
+
+        assert len(indices) == self.total_size
+        indices = indices[self.rank : self.total_size : self.num_replicas]
+        assert len(indices) == self.num_samples
+
+        return iter(indices)
+
+    def __len__(self):
+        return self.num_samples
 
 
 class ResumableSampler(torch.utils.data.Sampler):
@@ -530,6 +639,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                         num_samples=nevents,
                         sort=config.sort_data,
                         pad_to_multiple=config.pad_to_multiple_elements,
+                        feature_dim=config.input_dim,
                     ).ds
 
                     if (rank == 0) or (rank == "cpu"):
@@ -541,8 +651,14 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             shuffle = False
             if shuffle_train:
                 shuffle = split == "train"
-            if world_size > 1:
+            sampler_mode = DatasetSamplerMode(config.sampler_mode)
+            _logger.info(f"{split}_dataset sampler_mode={sampler_mode.value} shuffle={shuffle}")
+            if world_size > 1 and sampler_mode == DatasetSamplerMode.INTERLEAVED_SHARDS:
+                sampler = DistributedInterleavedShardSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle)
+            elif world_size > 1:
                 sampler = DistributedShardConsecutiveSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle)
+            elif sampler_mode == DatasetSamplerMode.INTERLEAVED_SHARDS:
+                sampler = InterleavedShardSampler(dataset, shuffle=shuffle)
             else:
                 sampler = ShardConsecutiveSampler(dataset, shuffle=shuffle)
 
@@ -554,7 +670,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ytarget"], ["genmet"]),
+                collate_fn=Collater(["X", "ytarget"], ["genmet", "source_id", "input_type_id"]),
                 sampler=sampler,
                 num_workers=config.num_workers,
                 prefetch_factor=config.prefetch_factor,
