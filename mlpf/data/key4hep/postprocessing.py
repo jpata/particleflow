@@ -1276,7 +1276,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             "VETrackerHits",
         ]
     else:
-        raise Exception("--dataset provided is not supported. Only 'clic', 'cld', or 'maia' are supported atm.")
+        raise ValueError(f"Unknown detector type: {detector}")
 
     hit_data = {}
     for k in hit_collections:
