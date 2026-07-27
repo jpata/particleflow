@@ -303,7 +303,10 @@ def get_hit_matrix_and_genadj(
                     mcp_idx = sim_mcp_idx[isim]
                     genparticle_to_hit_matrix_coo0.append(mcp_idx)
                     genparticle_to_hit_matrix_coo1.append(hit_idx_global)
-                    genparticle_to_hit_matrix_w.append(1.0)
+                    # the genparticle is the sole contributor to this tracker hit, so it
+                    # gets the full deposited energy. Weights are energies in GeV
+                    # throughout this matrix, see the calorimeter branch below.
+                    genparticle_to_hit_matrix_w.append(hit_features["energy"][ihit])
 
             hit_idx_global += 1
 
@@ -319,6 +322,14 @@ def get_hit_matrix_and_genadj(
         calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]
         calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index"][iev]
 
+        # The link weights are proportional to the energy the genparticle deposited in the
+        # hit, but the constant of proportionality differs per subdetector (it absorbs the
+        # sampling fraction), so the raw weights cannot be summed across collections. Take
+        # each genparticle's *share* of the total weight on its hit and scale that by the
+        # calibrated hit energy instead: that is its contribution in GeV, independent of
+        # whatever convention the weights follow.
+        hit_energy = awkward.to_numpy(hit_feature_matrix["energy"])
+        link_gen_idx, link_hit_idx, link_w = [], [], []
         for calo_colid, calo_idx, gen_colid, gen_idx, w in zip(
             calohit_to_gen_calo_colid,
             calohit_to_gen_calo_idx,
@@ -327,9 +338,18 @@ def get_hit_matrix_and_genadj(
             calohit_to_gen_weight,
         ):
             if (calo_colid, calo_idx) in hit_idx_local_to_global:
-                genparticle_to_hit_matrix_coo0.append(gen_idx)
-                genparticle_to_hit_matrix_coo1.append(hit_idx_local_to_global[(calo_colid, calo_idx)])
-                genparticle_to_hit_matrix_w.append(w)
+                link_gen_idx.append(gen_idx)
+                link_hit_idx.append(hit_idx_local_to_global[(calo_colid, calo_idx)])
+                link_w.append(w)
+
+        if len(link_w) > 0:
+            link_hit_idx = np.array(link_hit_idx, dtype=np.int64)
+            link_w = np.array(link_w, dtype=np.float64)
+            w_per_hit = np.bincount(link_hit_idx, weights=link_w, minlength=len(hit_energy))[link_hit_idx]
+            share = np.divide(link_w, w_per_hit, out=np.zeros_like(link_w), where=w_per_hit > 0)
+            genparticle_to_hit_matrix_coo0.extend(link_gen_idx)
+            genparticle_to_hit_matrix_coo1.extend(link_hit_idx.tolist())
+            genparticle_to_hit_matrix_w.extend((share * hit_energy[link_hit_idx]).tolist())
 
     return (
         hit_feature_matrix,
@@ -742,10 +762,25 @@ def get_genparticles_and_adjacencies(
     # 20% of the hits of a track must come from the genparticle
     gp_in_tracker = np.array(gp_to_track >= 0.2)[:, 0]
 
-    # at least 5% of the energy of the genparticle should be matched to a calorimeter cluster
+    # at least 5% of the energy of the genparticle should be matched to a calorimeter cluster.
+    # gp_to_cluster is in GeV, since the gp_to_hit weights are calibrated hit energies
+    # (see get_hit_matrix_and_genadj), so this really is an energy fraction.
     gp_in_calo = (np.array(gp_to_cluster)[:, 0] / gen_features["energy"]) > 0.05
 
-    # new hit-based visibility mask: genparticles that leave at least 10% of their energy to hits
+    # Hit-based visibility mask (#463): a status-1 genparticle enters the target if it deposits
+    # at least 10% of its energy in reconstructed hits. The gp_to_hit weights are calibrated hit
+    # energies in GeV, so this ratio is a true energy fraction (median 0.66 on the MAIA ttbar
+    # sample, i.e. typical calorimeter containment).
+    #
+    # This is a purely calorimetric criterion, so note what it does NOT describe:
+    #  - MIPs. A muon deposits a roughly constant ~GeV whatever its momentum, so its energy
+    #    fraction falls with energy (~0.02 here) and the cut removes it even though its track is
+    #    perfectly reconstructed. On the MAIA ttbar sample it drops 6 of 7 muons, and 22
+    #    genparticles carrying 1071 GeV that all have a good track. gp_in_tracker above selects
+    #    exactly these, but is currently only stored as a feature, not used in the mask.
+    #  - particles that deposit nothing at all, ~15% of the status-1 energy here, mostly photons
+    #    down the beampipe. No threshold can recover those, and they set a floor on how close the
+    #    target jet pT can get to the truth jet pT.
     gp_energy_in_hits = np.array(gp_to_hit.sum(axis=1))[:, 0]
     mask_visible_hit = (gp_energy_in_hits / gen_features["energy"]) > 0.10
 
