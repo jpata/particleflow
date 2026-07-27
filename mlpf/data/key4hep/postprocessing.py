@@ -920,11 +920,13 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
             phi=gpdata.gen_features["phi"][igp_unmatched],
             e=gpdata.gen_features["energy"][igp_unmatched],
         )
+        # read the host from the running arrays, not from gen_features, so that several
+        # unmatched particles merging into the same host accumulate instead of overwriting
         vec1 = vector.obj(
-            pt=gpdata.gen_features["pt"][idx_gp_bestcluster],
-            eta=gpdata.gen_features["eta"][idx_gp_bestcluster],
-            phi=gpdata.gen_features["phi"][idx_gp_bestcluster],
-            e=gpdata.gen_features["energy"][idx_gp_bestcluster],
+            pt=pt_arr[idx_gp_bestcluster],
+            eta=eta_arr[idx_gp_bestcluster],
+            phi=phi_arr[idx_gp_bestcluster],
+            e=energy_arr[idx_gp_bestcluster],
         )
         vec = vec0 + vec1
         pt_arr[idx_gp_bestcluster] = vec.pt
