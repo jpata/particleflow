@@ -1170,7 +1170,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             "_PandoraClusters_hits/_PandoraClusters_hits.index",
             "_PandoraClusters_hits/_PandoraClusters_hits.collectionID",
             "PandoraPFOs",
-            "SiTracks_Refitted_dQdx",
+            f"{track_coll}_dQdx",
         ]
     )
     calohit_links = arrs.arrays(
