@@ -67,6 +67,13 @@ class EventRecord:
 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
 jet_ptcut = 5
 
+# A status-1 genparticle enters the target if it deposits at least this fraction of its energy in
+# reconstructed hits, or at least this absolute amount. The absolute term is what keeps MIPs, whose
+# deposit is roughly independent of momentum; it is a detector-dependent scale, since it has to sit
+# below the MIP peak (~4 GeV for muons crossing the MAIA calorimeters) and above the noise.
+visible_energy_fraction = 0.10
+visible_energy_deposit = 1.0  # GeV
+
 track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
 
@@ -767,22 +774,26 @@ def get_genparticles_and_adjacencies(
     # (see get_hit_matrix_and_genadj), so this really is an energy fraction.
     gp_in_calo = (np.array(gp_to_cluster)[:, 0] / gen_features["energy"]) > 0.05
 
-    # Hit-based visibility mask (#463): a status-1 genparticle enters the target if it deposits
-    # at least 10% of its energy in reconstructed hits. The gp_to_hit weights are calibrated hit
-    # energies in GeV, so this ratio is a true energy fraction (median 0.66 on the MAIA ttbar
-    # sample, i.e. typical calorimeter containment).
+    # Hit-based visibility mask (#463). The gp_to_hit weights are calibrated hit energies in GeV,
+    # so gp_energy_in_hits is what the genparticle actually deposited and the first term below is
+    # a true energy fraction (median 0.66 on the MAIA ttbar sample, typical calorimeter
+    # containment).
     #
-    # This is a purely calorimetric criterion, so note what it does NOT describe:
-    #  - MIPs. A muon deposits a roughly constant ~GeV whatever its momentum, so its energy
-    #    fraction falls with energy (~0.02 here) and the cut removes it even though its track is
-    #    perfectly reconstructed. On the MAIA ttbar sample it drops 6 of 7 muons, and 22
-    #    genparticles carrying 1071 GeV that all have a good track. gp_in_tracker above selects
-    #    exactly these, but is currently only stored as a feature, not used in the mask.
-    #  - particles that deposit nothing at all, ~15% of the status-1 energy here, mostly photons
-    #    down the beampipe. No threshold can recover those, and they set a floor on how close the
-    #    target jet pT can get to the truth jet pT.
+    # The fractional term alone is a shower-containment criterion and so misses MIPs: a muon
+    # deposits a roughly constant few GeV whatever its momentum, so its fraction falls with energy
+    # (0.006-0.04 for the muons in this sample) and a 10% cut drops 6 of 7 of them. The absolute
+    # term recovers all 7. It cannot be replaced by gp_in_tracker here, because none of these
+    # muons have a track linked above the 20% threshold.
+    #
+    # Caveats for anyone tuning this:
+    #  - the particles the absolute term admits deposit only ~2.6% of their generated energy, so
+    #    their energy has to come from the track. That is right for MIPs but not for the neutrals
+    #    it also lets in (9 of the 20 added here are photons that leaked).
+    #  - it cannot recover particles that deposit nothing at all, ~15% of the status-1 energy
+    #    here, mostly photons down the beampipe. Those set a floor on how close the target jet pT
+    #    can get to the truth jet pT, since the truth reference includes them.
     gp_energy_in_hits = np.array(gp_to_hit.sum(axis=1))[:, 0]
-    mask_visible_hit = (gp_energy_in_hits / gen_features["energy"]) > 0.10
+    mask_visible_hit = ((gp_energy_in_hits / gen_features["energy"]) > visible_energy_fraction) | (gp_energy_in_hits > visible_energy_deposit)
 
     # temporary logging to debug visibility logic
     mask_status1 = gen_features["generatorStatus"] == 1
