@@ -69,10 +69,14 @@ jet_ptcut = 5
 
 # A status-1 genparticle enters the target if it deposits at least this fraction of its energy in
 # reconstructed hits, or at least this absolute amount. The absolute term is what keeps MIPs, whose
-# deposit is roughly independent of momentum; it is a detector-dependent scale, since it has to sit
-# below the MIP peak (~4 GeV for muons crossing the MAIA calorimeters) and above the noise.
+# deposit is roughly independent of momentum.
+#
+# The absolute term is a detector-dependent scale: it has to sit below the MIP peak and above the
+# noise, and the MIP peak scales with calorimeter depth. Median muon deposit is 4.22 GeV on MAIA but
+# only 1.98 GeV on CLD, so the usable range is 0.1-2.0 GeV on MAIA and 0.05-1.0 GeV on CLD (2.0 GeV
+# already eats into CLD's MIP peak, keeping 15/20 muons instead of 19/20). 0.5 GeV is inside both.
 visible_energy_fraction = 0.10
-visible_energy_deposit = 1.0  # GeV
+visible_energy_deposit = 0.5  # GeV
 
 track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
