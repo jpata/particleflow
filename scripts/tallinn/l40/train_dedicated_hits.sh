@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition gpu
-#SBATCH --gres gpu:l40:1
+#SBATCH --gres gpu:l40:2
 #SBATCH --mem-per-gpu 80G
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%a-%j-%N.out
@@ -17,10 +17,10 @@ export NCCL_IB_DISABLE=1
 nvidia-smi topo -m
 
 SPEC_FILE=${SPEC_FILE:-particleflow_spec.yaml}
-NUM_STEPS=${NUM_STEPS:-100000}
+NUM_STEPS=${NUM_STEPS:-500000}
 VAL_FREQ=${VAL_FREQ:-10000}
 CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-10000}
-GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-2}
+GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-16}
 NUM_WORKERS=${NUM_WORKERS:-4}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-2}
 PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-100}
@@ -63,7 +63,7 @@ COMMON_ARGS=(
     --data-dir "$MIXED_DATA_DIR"
     --experiments-dir "$EXPERIMENTS_DIR"
     train
-    --gpus 1
+    --gpus 2
     --num_workers "$NUM_WORKERS"
     --prefetch_factor "$PREFETCH_FACTOR"
     --gpu_batch_multiplier "$GPU_BATCH_MULTIPLIER"
