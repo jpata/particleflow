@@ -77,7 +77,12 @@ from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.plots import validation_plots
 from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
-from mlpf.model.losses import REGRESSION_FEATURES, mlpf_loss, particle_loss
+from mlpf.model.losses import (
+    REGRESSION_FEATURES,
+    make_task_loss_weighter,
+    mlpf_loss,
+    particle_loss,
+)
 from mlpf.utils import create_comet_experiment
 from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
@@ -188,14 +193,29 @@ def _finalize_diagnostics(accum, world_size):
     return finalized
 
 
+def _get_task_loss_weighter(model):
+    model_module = model.module if hasattr(model, "module") else model
+    return getattr(model_module, "task_loss_weighter", None)
+
+
+def _format_task_weights(task_weights):
+    if not task_weights:
+        return ""
+    return " | ".join(
+        f"{name}: {value:.4f}" for name, value in sorted(task_weights.items())
+    )
+
+
 def model_step(batch, model, loss_fn, regression_weights):
     _logger.debug(f"model_step X={batch.X.shape}")
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
 
-    loss_opt, losses_detached = loss_fn(ytarget, ypred, batch, regression_weights)
-    return loss_opt, losses_detached, ypred_raw, ypred, ytarget
+    loss_opt, losses_detached, task_weights = loss_fn(
+        ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model)
+    )
+    return loss_opt, losses_detached, task_weights, ypred_raw, ypred, ytarget
 
 
 def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
@@ -263,7 +283,9 @@ def train_step(
     batch = batch.to(rank, non_blocking=True)
 
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-        loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss, regression_weights)
+        loss_opt, loss, task_weights, _, _, _ = model_step(
+            batch, model, mlpf_loss, regression_weights
+        )
 
     optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
 
@@ -304,7 +326,7 @@ def train_step(
         dist.barrier()
     _logger.debug(f"train_step reduced {step_loss}")
 
-    return step_loss
+    return step_loss, task_weights
 
 
 def compute_particle_quality_metrics(batch, ypred_particles, ytarget):
@@ -508,7 +530,7 @@ def evaluate(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
-                _, loss, ypred_raw, ypred, ytarget = model_step(
+                _, loss, _, ypred_raw, ypred, ytarget = model_step(
                     batch,
                     model,
                     mlpf_loss,
@@ -566,6 +588,7 @@ def _log_and_checkpoint_step(
     optimizer,
     lr_schedule,
     losses_train,
+    task_weights,
     tensorboard_writer_train,
     comet_experiment,
     checkpoint_freq,
@@ -583,6 +606,11 @@ def _log_and_checkpoint_step(
         # Log training losses
         for loss, value in losses_train.items():
             tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
+        if task_weights:
+            for task, value in task_weights.items():
+                tensorboard_writer_train.add_scalar(
+                    f"step/task_weight_{task}", value, step
+                )
 
         tensorboard_writer_train.flush()
 
@@ -852,7 +880,7 @@ def train_all_steps(
         # Run a single training step
         model_forward_start = time.time()
         log_memory("train_step_start", rank, tensorboard_writer_train, step)
-        losses_train = train_step(
+        losses_train, task_weights = train_step(
             rank=rank,
             world_size=world_size,
             model=model,
@@ -883,9 +911,17 @@ def train_all_steps(
         if step % config.tensorboard_step_freq == 0:
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
+            train_loss_components = " | ".join(
+                f"{loss_name}: {loss_value:.4f}"
+                for loss_name, loss_value in sorted(losses_train.items())
+                if loss_name != "Total"
+            )
+            task_weight_components = _format_task_weights(task_weights)
             _logger.info(
                 f"Step {step}/{num_steps} rank{rank} | "
                 f"Train Loss: {losses_train['Total']:.4f} | "
+                f"Train Loss Components: {train_loss_components} | "
+                f"Task Weights: {task_weight_components} | "
                 f"LR: {current_lr:.2e} | "
                 f"DataLoad Time: {data_load_time:.4f}s | "
                 f"Model Forward Time: {model_forward_time:.4f}s"
@@ -907,6 +943,7 @@ def train_all_steps(
             optimizer,
             lr_schedule,
             losses_train,
+            task_weights,
             tensorboard_writer_train,
             comet_experiment,
             checkpoint_freq,
@@ -1065,6 +1102,9 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     _logger.info("Instantiating model")
     model = MLPF(config)
+    model.task_loss_weighter = make_task_loss_weighter(
+        config.regression_loss_weights.model_dump()
+    )
     _logger.info("Instantiated model")
 
     _logger.info("Moving model to device rank={}".format(rank))
@@ -1072,6 +1112,8 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     _logger.info("Moved model to device rank={}".format(rank))
 
     configure_model_trainable(model, config.model.trainable, True)
+    for param in model.task_loss_weighter.parameters():
+        param.requires_grad = True
 
     optimizer = get_optimizer(model, config)
     lr_schedule = get_lr_schedule(config, optimizer, config.num_steps)
@@ -1093,7 +1135,16 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
 
         if len(missing_keys) > 0:
             _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
-            if config.relaxed_load:
+            missing_task_loss_weight_keys = [
+                key for key in missing_keys if key.startswith("task_loss_weighter.")
+            ]
+            missing_non_task_loss_weight_keys = [
+                key for key in missing_keys if not key.startswith("task_loss_weighter.")
+            ]
+            if missing_task_loss_weight_keys and not missing_non_task_loss_weight_keys:
+                _logger.warning("Task loss weights missing from checkpoint; initializing them from config", color="bold")
+                strict = False
+            elif config.relaxed_load:
                 _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
                 strict = False
             else:

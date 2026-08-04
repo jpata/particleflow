@@ -66,6 +66,6 @@ uv run python3 -u mlpf/pipeline.py \
     --gpus 8 \
     --gpu_batch_multiplier 32 \
     --model.backbone.num_convs 6 \
-    --lr 0.001 --val_freq 1000 --checkpoint_freq 1000
+    --lr 0.001 --num_steps 10000 --val_freq 1000 --checkpoint_freq 1000
 
 echo 'Training done.'

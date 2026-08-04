@@ -8,6 +8,64 @@ from mlpf.logger import _logger
 
 
 REGRESSION_FEATURES = ("pt", "eta", "sin_phi", "cos_phi", "energy")
+LOSS_TASKS = (
+    "Classification_binary",
+    "Classification",
+    "Regression_pt",
+    "Regression_eta",
+    "Regression_sin_phi",
+    "Regression_cos_phi",
+    "Regression_energy",
+)
+
+
+class LearnableTaskLossWeights(nn.Module):
+    """Homoscedastic uncertainty task weighting with clamped log variances."""
+
+    def __init__(self, initial_weights, clamp_min=-5.0, clamp_max=8.0):
+        super().__init__()
+        self.tasks = LOSS_TASKS
+        self.clamp_min = clamp_min
+        self.clamp_max = clamp_max
+
+        initial_log_vars = []
+        for task in self.tasks:
+            initial_weight = float(initial_weights.get(task, 1.0))
+            initial_log_vars.append(
+                -torch.log(torch.tensor(initial_weight, dtype=torch.float32)).item()
+            )
+        self.log_vars = nn.Parameter(torch.tensor(initial_log_vars, dtype=torch.float32))
+
+    def clamped_log_vars(self):
+        return torch.clamp(self.log_vars, min=self.clamp_min, max=self.clamp_max)
+
+    def current_weights(self):
+        return {
+            task: torch.exp(-log_var)
+            for task, log_var in zip(self.tasks, self.clamped_log_vars())
+        }
+
+    def forward(self, losses):
+        log_vars = self.clamped_log_vars()
+        weighted_losses = []
+        weights = {}
+        for task, log_var in zip(self.tasks, log_vars):
+            weight = torch.exp(-log_var)
+            weights[task] = weight
+            weighted_losses.append(weight * losses[task] + log_var)
+        return sum(weighted_losses), weights
+
+
+def make_task_loss_weighter(regression_loss_weights):
+    initial_weights = {
+        "Classification_binary": 1.0,
+        "Classification": 1.0,
+        **{
+            f"Regression_{feature}": regression_loss_weights[feature]
+            for feature in REGRESSION_FEATURES
+        },
+    }
+    return LearnableTaskLossWeights(initial_weights)
 
 
 def _mask_no_target_regression(y, ypred):
@@ -107,11 +165,17 @@ def event_loss(y, ypred, batch, regression_weights):
     return particle_loss(particle_targets, particle_predictions, input_pt, regression_weights)
 
 
-def mlpf_loss(y, ypred, batch, regression_weights):
+def mlpf_loss(y, ypred, batch, regression_weights, task_loss_weighter=None):
     """Compute the standard MLPF objective for a batch of events."""
-    loss = event_loss(y, ypred, batch, regression_weights)
+    if task_loss_weighter is None:
+        loss = event_loss(y, ypred, batch, regression_weights)
+        loss_opt = sum(loss.values())
+        task_weights = None
+    else:
+        unweighted_regression_weights = {feature: 1.0 for feature in REGRESSION_FEATURES}
+        loss = event_loss(y, ypred, batch, unweighted_regression_weights)
+        loss_opt, task_weights = task_loss_weighter(loss)
 
-    loss_opt = sum(loss.values())
     loss["Total"] = loss_opt
     if torch.isnan(loss_opt):
         _logger.error(ypred)
@@ -122,7 +186,10 @@ def mlpf_loss(y, ypred, batch, regression_weights):
     for k in loss.keys():
         loss[k] = loss[k].detach()
 
-    return loss_opt, loss
+    if task_weights is not None:
+        task_weights = {k: v.detach() for k, v in task_weights.items()}
+
+    return loss_opt, loss, task_weights
 
 
 # from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
