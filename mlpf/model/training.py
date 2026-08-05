@@ -72,6 +72,9 @@ from mlpf.model.monitoring import (
     log_gpu_utilization_to_tensorboard,
     log_gradients_to_tensorboard,
     log_residuals_to_tensorboard,
+    collect_process_memory_metrics,
+    collect_cuda_memory_metrics,
+    log_diagnostics_to_tensorboard,
 )
 from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.plots import validation_plots
@@ -206,6 +209,90 @@ def _format_task_diagnostic(task_diagnostic):
     )
 
 
+def _format_compact_diagnostic(values, keys):
+    if not values:
+        return ""
+    parts = []
+    for key in keys:
+        value = values.get(key)
+        if value is None and key.startswith(("max_", "mean_", "min_")):
+            value = values.get(key.split("_", 1)[1])
+        if value is not None:
+            parts.append(f"{key}: {value:.4f}")
+    return " | ".join(parts)
+
+
+def _format_compact_memory(values):
+    if not values:
+        return ""
+    parts = []
+    for key in ["rss_MB", "uss_MB", "child_rss_MB", "allocated_MB", "reserved_MB", "inactive_split_MB"]:
+        value = values.get(key)
+        if value is not None:
+            parts.append(f"{key}: {value:.1f}")
+    return " | ".join(parts)
+
+
+def _sync_cuda(device_type):
+    if device_type == "cuda" and torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+
+def _record_phase_time(timings, phase, start_time, device_type):
+    _sync_cuda(device_type)
+    end_time = time.perf_counter()
+    timings[phase] = end_time - start_time
+    return end_time
+
+
+def _collect_step_memory(rank, prefix, diagnostics):
+    cpu_metrics = collect_process_memory_metrics()
+    diagnostics["memory_cpu"].update({f"{prefix}_{key}": value for key, value in cpu_metrics.items()})
+
+    device = rank if isinstance(rank, int) else None
+    cuda_metrics = collect_cuda_memory_metrics(device)
+    diagnostics["memory_cuda"].update({f"{prefix}_{key}": value for key, value in cuda_metrics.items()})
+
+
+def _summarize_distributed_diagnostics(local_diagnostics, rank, world_size):
+    summarized = {}
+    for group, values in local_diagnostics.items():
+        if not isinstance(values, dict):
+            continue
+        summarized[group] = dict(values)
+        if world_size <= 1:
+            continue
+        numeric_items = [(key, value) for key, value in values.items() if isinstance(value, (int, float))]
+        if not numeric_items:
+            continue
+        local_values = torch.tensor([value for _, value in numeric_items], device=rank, dtype=torch.float64)
+        sum_values = local_values.clone()
+        max_values = local_values.clone()
+        min_values = local_values.clone()
+        torch.distributed.all_reduce(sum_values, op=torch.distributed.ReduceOp.SUM)
+        torch.distributed.all_reduce(max_values, op=torch.distributed.ReduceOp.MAX)
+        torch.distributed.all_reduce(min_values, op=torch.distributed.ReduceOp.MIN)
+        mean_values = sum_values / world_size
+        for idx, (key, _) in enumerate(numeric_items):
+            summarized[group][f"mean_{key}"] = mean_values[idx].item()
+            summarized[group][f"max_{key}"] = max_values[idx].item()
+            summarized[group][f"min_{key}"] = min_values[idx].item()
+    return summarized
+
+
+def _current_step_memory_summary(diagnostics):
+    cpu = diagnostics.get("memory_cpu", {})
+    cuda = diagnostics.get("memory_cuda", {})
+    return {
+        "rss_MB": cpu.get("max_train_step_end_rss_MB", cpu.get("train_step_end_rss_MB")),
+        "uss_MB": cpu.get("max_train_step_end_uss_MB", cpu.get("train_step_end_uss_MB")),
+        "child_rss_MB": cpu.get("max_train_step_end_child_rss_MB", cpu.get("train_step_end_child_rss_MB")),
+        "allocated_MB": cuda.get("max_train_step_end_allocated_MB", cuda.get("train_step_end_allocated_MB")),
+        "reserved_MB": cuda.get("max_train_step_end_reserved_MB", cuda.get("train_step_end_reserved_MB")),
+        "inactive_split_MB": cuda.get("max_train_step_end_inactive_split_MB", cuda.get("train_step_end_inactive_split_MB")),
+    }
+
+
 def model_step(batch, model, loss_fn, regression_weights):
     _logger.debug(f"model_step X={batch.X.shape}")
     ypred_raw = model(batch.X, batch.mask)
@@ -274,20 +361,70 @@ def train_step(
     Returns:
         dict: Dictionary of step losses
     """
+    diagnostics = {
+        "time": {},
+        "memory_cpu": {},
+        "memory_cuda": {},
+        "batch": {},
+        "gc": {},
+    }
+    phase_start = time.perf_counter()
     if world_size > 1:
         dist.barrier()
+    phase_start = _record_phase_time(diagnostics["time"], "pre_step_barrier", phase_start, device_type)
 
     model.train()
     step_loss = {}
 
+    _collect_step_memory(rank, "train_step_start", diagnostics)
+    diagnostics["gc"].update({f"start_gen{idx}": float(value) for idx, value in enumerate(gc.get_count())})
+    diagnostics["batch"]["num_batch"] = float(batch.X.shape[0])
+    diagnostics["batch"]["padded_elements"] = float(batch.X.shape[1])
+    diagnostics["batch"]["num_elems"] = float(batch.mask.sum().detach().cpu().item())
+    diagnostics["batch"]["valid_elements_mean"] = diagnostics["batch"]["num_elems"] / max(diagnostics["batch"]["num_batch"], 1.0)
+    diagnostics["batch"]["valid_elements_max"] = float(batch.mask.sum(dim=1).detach().max().cpu().item())
+
+    phase_start = time.perf_counter()
     batch = batch.to(rank, non_blocking=True)
+    phase_start = _record_phase_time(diagnostics["time"], "batch_to_device", phase_start, device_type)
+    _collect_step_memory(rank, "after_batch_to_device", diagnostics)
 
+    phase_start = time.perf_counter()
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-        loss_opt, loss, task_loss_diagnostics, _, _, _ = model_step(
-            batch, model, mlpf_loss, regression_weights
-        )
+        _logger.debug(f"model_step X={batch.X.shape}")
+        ypred_raw = model(batch.X, batch.mask)
+    phase_start = _record_phase_time(diagnostics["time"], "forward", phase_start, device_type)
+    _collect_step_memory(rank, "after_forward", diagnostics)
 
-    optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
+    phase_start = time.perf_counter()
+    with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
+        ypred = unpack_predictions(ypred_raw)
+        ytarget = unpack_target(batch.ytarget, model)
+        loss_opt, loss, task_loss_diagnostics = mlpf_loss(
+            ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model)
+        )
+    phase_start = _record_phase_time(diagnostics["time"], "loss", phase_start, device_type)
+    _collect_step_memory(rank, "after_loss", diagnostics)
+
+    phase_start = time.perf_counter()
+    for param in model.parameters():
+        param.grad = None
+    phase_start = _record_phase_time(diagnostics["time"], "zero_grad", phase_start, device_type)
+
+    _logger.debug(f"optimizer_step scale={scaler.get_scale():.2E}")
+    scaler.scale(loss_opt).backward()
+    phase_start = _record_phase_time(diagnostics["time"], "backward", phase_start, device_type)
+    _collect_step_memory(rank, "after_backward", diagnostics)
+
+    scaler.step(optimizer)
+    scaler.update()
+    phase_start = _record_phase_time(diagnostics["time"], "optimizer_step", phase_start, device_type)
+
+    if lr_schedule:
+        if not isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            lr_schedule.step()
+    phase_start = _record_phase_time(diagnostics["time"], "scheduler_step", phase_start, device_type)
+    _collect_step_memory(rank, "after_optimizer", diagnostics)
 
     # Accumulate losses
     for loss_name in loss:
@@ -297,6 +434,7 @@ def train_step(
 
     # Log step metrics
     if tensorboard_writer is not None:
+        phase_start = time.perf_counter()
         log_open_files_to_tensorboard(tensorboard_writer, step)
         log_gpu_utilization_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
@@ -305,28 +443,46 @@ def train_step(
         if step % tensorboard_step_freq == 0:
             log_gradients_to_tensorboard(model, tensorboard_writer, step)
             log_residuals_to_tensorboard(model, tensorboard_writer, step)
+        phase_start = _record_phase_time(diagnostics["time"], "tensorboard_logging", phase_start, device_type)
+        phase_start = time.perf_counter()
         tensorboard_writer.flush()
+        _record_phase_time(diagnostics["time"], "tensorboard_flush", phase_start, device_type)
 
     if comet_experiment is not None and (step % comet_step_freq == 0):
+        phase_start = time.perf_counter()
         comet_experiment.log_metrics(loss, prefix="train", step=step)
         comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
+        _record_phase_time(diagnostics["time"], "comet_logging", phase_start, device_type)
 
     # Average losses across steps
     num_steps = torch.tensor(1.0, device=rank, dtype=torch.float32)
     if world_size > 1:
+        phase_start = time.perf_counter()
         torch.distributed.all_reduce(num_steps)
+        _record_phase_time(diagnostics["time"], "num_steps_all_reduce", phase_start, device_type)
 
     for loss_name in step_loss:
         _logger.debug(f"train_step {loss_name}={step_loss[loss_name]}")
         if world_size > 1:
+            phase_start = time.perf_counter()
             torch.distributed.all_reduce(step_loss[loss_name])
+            diagnostics["time"][f"loss_{loss_name}_all_reduce"] = time.perf_counter() - phase_start
         step_loss[loss_name] = step_loss[loss_name].cpu().item() / num_steps.cpu().item()
 
+    _collect_step_memory(rank, "train_step_end", diagnostics)
+    diagnostics["gc"].update({f"end_gen{idx}": float(value) for idx, value in enumerate(gc.get_count())})
+
     if world_size > 1:
+        phase_start = time.perf_counter()
         dist.barrier()
+        _record_phase_time(diagnostics["time"], "post_step_barrier", phase_start, device_type)
     _logger.debug(f"train_step reduced {step_loss}")
 
-    return step_loss, task_loss_diagnostics
+    diagnostics = _summarize_distributed_diagnostics(diagnostics, rank, world_size)
+    if (rank == 0) or (rank == "cpu"):
+        log_diagnostics_to_tensorboard(tensorboard_writer, diagnostics, step, prefix="diagnostic/train_step")
+
+    return step_loss, task_loss_diagnostics, diagnostics
 
 
 def compute_particle_quality_metrics(batch, ypred_particles, ytarget):
@@ -603,6 +759,7 @@ def _log_and_checkpoint_step(
 
     # Log training losses to TensorBoard and CometML on the main process
     if (rank == 0) or (rank == "cpu"):
+        log_start = time.perf_counter()
         # Log training losses
         for loss, value in losses_train.items():
             tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
@@ -613,14 +770,21 @@ def _log_and_checkpoint_step(
                         f"step/task_{diagnostic_name}_{task}", value, step
                     )
 
+        tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_tensorboard_logging", time.perf_counter() - log_start, step)
+        flush_start = time.perf_counter()
         tensorboard_writer_train.flush()
+        tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_tensorboard_flush", time.perf_counter() - flush_start, step)
 
     if comet_experiment:
+        comet_start = time.perf_counter()
         comet_experiment.log_metrics(losses_train, prefix="step_train_loss", step=step)
+        if (rank == 0) or (rank == "cpu"):
+            tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_comet_logging", time.perf_counter() - comet_start, step)
 
     # Save a periodic checkpoint
     if checkpoint_freq and (step % checkpoint_freq == 0):
         if (rank == 0) or (rank == "cpu"):
+            checkpoint_start = time.perf_counter()
             extra_state = {
                 "step": step,
                 "optimizer_state_dict": optimizer.state_dict(),
@@ -632,12 +796,15 @@ def _log_and_checkpoint_step(
             checkpoint_path = (Path(checkpoint_dir) / f"checkpoint-{step:02d}.pth").resolve()
             _logger.info("saving checkpoint {}".format(checkpoint_path))
             save_checkpoint(checkpoint_path, model, optimizer, extra_state)
+            tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_checkpoint_save", time.perf_counter() - checkpoint_start, step)
 
             # Clean up old checkpoints, keeping the last num_patience
+            cleanup_start = time.perf_counter()
             checkpoints = sorted(Path(checkpoint_dir).glob("checkpoint-*.pth"), key=os.path.getmtime)
             for i in range(len(checkpoints) - num_patience):
                 _logger.info("removing old checkpoint {}".format(checkpoints[i]))
                 os.remove(checkpoints[i])
+            tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_checkpoint_cleanup", time.perf_counter() - cleanup_start, step)
 
 
 def _run_validation_cycle(
@@ -881,7 +1048,7 @@ def train_all_steps(
         # Run a single training step
         model_forward_start = time.time()
         log_memory("train_step_start", rank, tensorboard_writer_train, step)
-        losses_train, task_loss_diagnostics = train_step(
+        losses_train, task_loss_diagnostics, step_diagnostics = train_step(
             rank=rank,
             world_size=world_size,
             model=model,
@@ -904,9 +1071,12 @@ def train_all_steps(
         model_forward_time = time.time() - model_forward_start
         train_time = time.time() - step_start_time
 
+        step_time_summary = step_diagnostics.get("time", {}) if step_diagnostics else {}
+        step_memory_summary = _current_step_memory_summary(step_diagnostics) if step_diagnostics else {}
         if tensorboard_writer_train is not None:
             tensorboard_writer_train.add_scalar("step/time_data_load", data_load_time, step)
             tensorboard_writer_train.add_scalar("step/time_model_forward", model_forward_time, step)
+            tensorboard_writer_train.add_scalar("step/time_train_total", train_time, step)
 
         # Log a brief training status periodically on the main process
         if step % config.tensorboard_step_freq == 0:
@@ -936,7 +1106,9 @@ def train_all_steps(
                 f"Task Weighted Losses: {task_weighted_loss_components} | "
                 f"LR: {current_lr:.2e} | "
                 f"DataLoad Time: {data_load_time:.4f}s | "
-                f"Model Forward Time: {model_forward_time:.4f}s"
+                f"Model Forward Time: {model_forward_time:.4f}s | "
+                f"Phase Times: {_format_compact_diagnostic(step_time_summary, ['max_pre_step_barrier', 'max_batch_to_device', 'max_forward', 'max_loss', 'max_backward', 'max_optimizer_step', 'max_tensorboard_logging', 'max_tensorboard_flush', 'max_post_step_barrier'])} | "
+                f"Memory: {_format_compact_memory(step_memory_summary)}"
             )
 
             # check smi status
