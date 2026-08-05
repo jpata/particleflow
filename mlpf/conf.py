@@ -576,6 +576,7 @@ class MLPFConfig(BaseModel):
     val_freq: int = 10000
     num_workers: int = 8
     prefetch_factor: int = 2
+    max_open_readers: Optional[int] = 64  # cap on open array_record shard readers per worker; excess are closed to bound FD usage
     gpu_batch_multiplier: int = 1
     dtype: str = "float32"
     lr: float = 0.0001
