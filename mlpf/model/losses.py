@@ -22,7 +22,7 @@ LOSS_TASKS = (
 class LearnableTaskLossWeights(nn.Module):
     """Homoscedastic uncertainty task weighting with clamped log variances."""
 
-    def __init__(self, initial_weights, clamp_min=-5.0, clamp_max=8.0):
+    def __init__(self, initial_weights, clamp_min=-3.0, clamp_max=8.0):
         super().__init__()
         self.tasks = LOSS_TASKS
         self.clamp_min = clamp_min
@@ -48,12 +48,19 @@ class LearnableTaskLossWeights(nn.Module):
     def forward(self, losses):
         log_vars = self.clamped_log_vars()
         weighted_losses = []
-        weights = {}
+        diagnostics = {
+            "weight": {},
+            "log_var": {},
+            "weighted_loss": {},
+        }
         for task, log_var in zip(self.tasks, log_vars):
             weight = torch.exp(-log_var)
-            weights[task] = weight
-            weighted_losses.append(weight * losses[task] + log_var)
-        return sum(weighted_losses), weights
+            weighted_loss = weight * losses[task] + log_var
+            diagnostics["weight"][task] = weight
+            diagnostics["log_var"][task] = log_var
+            diagnostics["weighted_loss"][task] = weighted_loss
+            weighted_losses.append(weighted_loss)
+        return sum(weighted_losses), diagnostics
 
 
 def make_task_loss_weighter(regression_loss_weights):
@@ -170,11 +177,11 @@ def mlpf_loss(y, ypred, batch, regression_weights, task_loss_weighter=None):
     if task_loss_weighter is None:
         loss = event_loss(y, ypred, batch, regression_weights)
         loss_opt = sum(loss.values())
-        task_weights = None
+        task_loss_diagnostics = None
     else:
         unweighted_regression_weights = {feature: 1.0 for feature in REGRESSION_FEATURES}
         loss = event_loss(y, ypred, batch, unweighted_regression_weights)
-        loss_opt, task_weights = task_loss_weighter(loss)
+        loss_opt, task_loss_diagnostics = task_loss_weighter(loss)
 
     loss["Total"] = loss_opt
     if torch.isnan(loss_opt):
@@ -186,10 +193,15 @@ def mlpf_loss(y, ypred, batch, regression_weights, task_loss_weighter=None):
     for k in loss.keys():
         loss[k] = loss[k].detach()
 
-    if task_weights is not None:
-        task_weights = {k: v.detach() for k, v in task_weights.items()}
+    if task_loss_diagnostics is not None:
+        task_loss_diagnostics = {
+            diagnostic_name: {
+                task: value.detach() for task, value in diagnostic_values.items()
+            }
+            for diagnostic_name, diagnostic_values in task_loss_diagnostics.items()
+        }
 
-    return loss_opt, loss, task_weights
+    return loss_opt, loss, task_loss_diagnostics
 
 
 # from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py

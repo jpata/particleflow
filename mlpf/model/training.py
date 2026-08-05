@@ -198,11 +198,11 @@ def _get_task_loss_weighter(model):
     return getattr(model_module, "task_loss_weighter", None)
 
 
-def _format_task_weights(task_weights):
-    if not task_weights:
+def _format_task_diagnostic(task_diagnostic):
+    if not task_diagnostic:
         return ""
     return " | ".join(
-        f"{name}: {value:.4f}" for name, value in sorted(task_weights.items())
+        f"{name}: {value:.4f}" for name, value in sorted(task_diagnostic.items())
     )
 
 
@@ -212,10 +212,10 @@ def model_step(batch, model, loss_fn, regression_weights):
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
 
-    loss_opt, losses_detached, task_weights = loss_fn(
+    loss_opt, losses_detached, task_loss_diagnostics = loss_fn(
         ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model)
     )
-    return loss_opt, losses_detached, task_weights, ypred_raw, ypred, ytarget
+    return loss_opt, losses_detached, task_loss_diagnostics, ypred_raw, ypred, ytarget
 
 
 def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
@@ -283,7 +283,7 @@ def train_step(
     batch = batch.to(rank, non_blocking=True)
 
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-        loss_opt, loss, task_weights, _, _, _ = model_step(
+        loss_opt, loss, task_loss_diagnostics, _, _, _ = model_step(
             batch, model, mlpf_loss, regression_weights
         )
 
@@ -326,7 +326,7 @@ def train_step(
         dist.barrier()
     _logger.debug(f"train_step reduced {step_loss}")
 
-    return step_loss, task_weights
+    return step_loss, task_loss_diagnostics
 
 
 def compute_particle_quality_metrics(batch, ypred_particles, ytarget):
@@ -588,7 +588,7 @@ def _log_and_checkpoint_step(
     optimizer,
     lr_schedule,
     losses_train,
-    task_weights,
+    task_loss_diagnostics,
     tensorboard_writer_train,
     comet_experiment,
     checkpoint_freq,
@@ -606,11 +606,12 @@ def _log_and_checkpoint_step(
         # Log training losses
         for loss, value in losses_train.items():
             tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
-        if task_weights:
-            for task, value in task_weights.items():
-                tensorboard_writer_train.add_scalar(
-                    f"step/task_weight_{task}", value, step
-                )
+        if task_loss_diagnostics:
+            for diagnostic_name, diagnostic_values in task_loss_diagnostics.items():
+                for task, value in diagnostic_values.items():
+                    tensorboard_writer_train.add_scalar(
+                        f"step/task_{diagnostic_name}_{task}", value, step
+                    )
 
         tensorboard_writer_train.flush()
 
@@ -880,7 +881,7 @@ def train_all_steps(
         # Run a single training step
         model_forward_start = time.time()
         log_memory("train_step_start", rank, tensorboard_writer_train, step)
-        losses_train, task_weights = train_step(
+        losses_train, task_loss_diagnostics = train_step(
             rank=rank,
             world_size=world_size,
             model=model,
@@ -916,12 +917,23 @@ def train_all_steps(
                 for loss_name, loss_value in sorted(losses_train.items())
                 if loss_name != "Total"
             )
-            task_weight_components = _format_task_weights(task_weights)
+            diagnostics = task_loss_diagnostics or {}
+            task_weight_components = _format_task_diagnostic(
+                diagnostics.get("weight", {})
+            )
+            task_log_var_components = _format_task_diagnostic(
+                diagnostics.get("log_var", {})
+            )
+            task_weighted_loss_components = _format_task_diagnostic(
+                diagnostics.get("weighted_loss", {})
+            )
             _logger.info(
                 f"Step {step}/{num_steps} rank{rank} | "
                 f"Train Loss: {losses_train['Total']:.4f} | "
                 f"Train Loss Components: {train_loss_components} | "
                 f"Task Weights: {task_weight_components} | "
+                f"Task LogVars: {task_log_var_components} | "
+                f"Task Weighted Losses: {task_weighted_loss_components} | "
                 f"LR: {current_lr:.2e} | "
                 f"DataLoad Time: {data_load_time:.4f}s | "
                 f"Model Forward Time: {model_forward_time:.4f}s"
@@ -943,7 +955,7 @@ def train_all_steps(
             optimizer,
             lr_schedule,
             losses_train,
-            task_weights,
+            task_loss_diagnostics,
             tensorboard_writer_train,
             comet_experiment,
             checkpoint_freq,
