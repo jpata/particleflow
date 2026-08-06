@@ -36,6 +36,10 @@ def get_optimizer(model: torch.nn.Module, config: MLPFConfig):
                 "params": list(task_loss_weighter.parameters()),
                 "lr": config.lr,
                 "weight_decay": 0.0,
+                # Keep LAMB's layer-wise trust scaling for the weighter (the
+                # pre-split optimizer applied it via weight_decay != 0); without
+                # it the log variances adapt roughly 3x slower.
+                "always_adapt": True,
             },
         ]
 
