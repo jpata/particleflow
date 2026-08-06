@@ -270,10 +270,21 @@ def _summarize_distributed_diagnostics(local_diagnostics, rank, world_size):
         summarized[group] = dict(values)
         if world_size <= 1:
             continue
-        numeric_items = [(key, value) for key, value in values.items() if isinstance(value, (int, float))]
-        if not numeric_items:
+        numeric_keys = {key for key, value in values.items() if isinstance(value, (int, float))}
+        if not numeric_keys:
             continue
-        local_values = torch.tensor([value for _, value in numeric_items], device=rank, dtype=torch.float64)
+        # Diagnostics may contain rank-dependent keys (e.g. tensorboard_logging
+        # is only recorded on the rank holding the tensorboard writer). Gather
+        # the union of numeric keys across ranks so that every rank builds a
+        # same-sized tensor for the all-reduce; missing values are counted as 0.
+        gathered_key_sets = [set() for _ in range(world_size)]
+        torch.distributed.all_gather_object(gathered_key_sets, numeric_keys)
+        all_keys = sorted(set().union(*gathered_key_sets))
+        local_values = torch.tensor(
+            [values.get(key, 0.0) for key in all_keys],
+            device=rank,
+            dtype=torch.float64,
+        )
         sum_values = local_values.clone()
         max_values = local_values.clone()
         min_values = local_values.clone()
@@ -281,7 +292,7 @@ def _summarize_distributed_diagnostics(local_diagnostics, rank, world_size):
         torch.distributed.all_reduce(max_values, op=torch.distributed.ReduceOp.MAX)
         torch.distributed.all_reduce(min_values, op=torch.distributed.ReduceOp.MIN)
         mean_values = sum_values / world_size
-        for idx, (key, _) in enumerate(numeric_items):
+        for idx, key in enumerate(all_keys):
             summarized[group][f"mean_{key}"] = mean_values[idx].item()
             summarized[group][f"max_{key}"] = max_values[idx].item()
             summarized[group][f"min_{key}"] = min_values[idx].item()
@@ -1298,7 +1309,16 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
-        dist.init_process_group("nccl", rank=int(rank), world_size=world_size)  # (nccl should be faster than gloo)
+        # Bind each rank to its GPU so NCCL collectives and barriers use the
+        # correct device. Without device_id, barrier() falls back to the current
+        # context device (0 on all ranks), which can create NCCL contexts on GPU 0.
+        torch.cuda.set_device(rank)
+        dist.init_process_group(
+            "nccl",
+            rank=int(rank),
+            world_size=world_size,
+            device_id=torch.device(rank),  # (nccl should be faster than gloo)
+        )
 
     checkpoint_dir = Path(outdir) / "checkpoints"
     if (rank == 0) | (rank == "cpu"):
