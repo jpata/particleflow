@@ -34,7 +34,7 @@ def get_optimizer(model: torch.nn.Module, config: MLPFConfig):
             },
             {
                 "params": list(task_loss_weighter.parameters()),
-                "lr": config.lr * 0.1,
+                "lr": config.lr,
                 "weight_decay": 0.0,
             },
         ]
