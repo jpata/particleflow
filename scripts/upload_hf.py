@@ -85,9 +85,7 @@ def main():
     parser.add_argument("--spec", default="particleflow_spec.yaml", help="Path to particleflow_spec.yaml")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing upload")
     parser.add_argument("--site", default="tallinn", help="Site profile to use (default: tallinn)")
-    parser.add_argument(
-        "--root-num-files", type=int, default=10, help="Number of ROOT files to upload per sample (default: 10)"
-    )
+    parser.add_argument("--root-num-files", type=int, default=2, help="Number of ROOT files to upload per sample (default: 2)")
     parser.add_argument("--no-root", action="store_true", help="Skip uploading raw ROOT files")
 
     args = parser.parse_args()
@@ -180,7 +178,7 @@ def main():
                 continue
 
             selected = root_files[: args.root_num_files]
-            remote_dir = f"root_datasets/{args.scenario}/{sample_name}"
+            remote_dir = f"root/{args.scenario}/{sample_name}"
             for root_file in selected:
                 size = root_file.stat().st_size
                 root_total_size += size
