@@ -22,7 +22,11 @@ LOSS_TASKS = (
 class LearnableTaskLossWeights(nn.Module):
     """Homoscedastic uncertainty task weighting with clamped log variances."""
 
-    def __init__(self, initial_weights, clamp_min=-3.0, clamp_max=8.0):
+    # Lower clamp must leave room for the homoscedastic equilibrium weight
+    # (~1/loss): angular losses of ~0.03 imply weights ~30, so -3 (weight cap
+    # exp(3) ~ 20) pins them at the boundary. -5 matches the proven reference
+    # run (cap exp(5) ~ 148) and still bounds classification weight growth.
+    def __init__(self, initial_weights, clamp_min=-5.0, clamp_max=8.0):
         super().__init__()
         self.tasks = LOSS_TASKS
         self.clamp_min = clamp_min
