@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [cms, cld]
+        target: [cms, cld, clic]
 
     steps:
       - name: Checkout repository
@@ -43,3 +43,11 @@ jobs:
 
       - name: Run ${{ matrix.target }} test
         run: bash scripts/local_test_${{ matrix.target }}.sh
+
+      - name: Upload validation plots
+        if: always() && matrix.target != 'cms'
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-plots-${{ matrix.target }}
+          path: plots/*.png
+          if-no-files-found: warn
