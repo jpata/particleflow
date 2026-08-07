@@ -2,9 +2,11 @@
 Spec: Validates 'mlpf_loss' with 'LossType.STANDARD'. Tests classification (PID) and regression (momentum/energy) heads. Assertions: Verifies loss components are correctly masked for noise elements, checks stability with extreme/NaN values, and confirms that 'Regression_pt' and other components are zero for perfectly matching predictions.
 """
 
+import math
+
 import torch
 from mlpf.conf import RegressionLossWeights
-from mlpf.model.losses import REGRESSION_FEATURES, event_loss, mlpf_loss, particle_loss
+from mlpf.model.losses import REGRESSION_FEATURES, event_loss, mlpf_loss, particle_loss, regression_loss
 from mlpf.model.PFDataset import PFBatch
 
 
@@ -49,7 +51,7 @@ def get_mock_data(batch_size=2, seq_len=10, num_classes=6):
 
 def test_mlpf_loss_standard():
     batch, y, ypred = get_mock_data()
-    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+    loss_opt, losses, _ = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -60,7 +62,7 @@ def test_mlpf_loss_standard_no_particles():
     batch, y, ypred = get_mock_data()
     y["cls_id"][:] = 0
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+    loss_opt, losses, _ = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -73,7 +75,7 @@ def test_mlpf_loss_standard_single_particle():
     y["cls_id"][:] = 0
     y["cls_id"][0, 0] = 1
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+    loss_opt, losses, _ = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -83,7 +85,7 @@ def test_mlpf_loss_standard_single_particle():
 
 def test_mlpf_loss_standard_large_batch():
     batch, y, ypred = get_mock_data(batch_size=8, seq_len=50)
-    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+    loss_opt, losses, _ = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -107,7 +109,7 @@ def test_mlpf_loss_standard_perfect_prediction():
     for k in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
         ypred[k][0, 0] = y[k][0, 0]
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+    loss_opt, losses, _ = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert "Total" in losses
     assert not torch.isnan(loss_opt)
@@ -122,7 +124,7 @@ def test_mlpf_loss_standard_stability():
     ypred["pt"][0, 0] = 1e5
     ypred["energy"][1, 1] = torch.nan
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+    loss_opt, losses, _ = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert not torch.isnan(loss_opt)
     assert not torch.isnan(losses["Regression_energy"])
@@ -140,7 +142,7 @@ def test_mlpf_loss_standard_masks_no_target_without_mutating_inputs():
     y_pt_before = y["pt"].clone()
     ypred_eta_before = ypred["eta"].clone()
 
-    loss_opt, losses = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
+    loss_opt, losses, _ = mlpf_loss(y, ypred, batch, REGRESSION_WEIGHTS)
 
     assert not torch.isnan(loss_opt)
     torch.testing.assert_close(y["pt"], y_pt_before, equal_nan=True)
@@ -181,6 +183,30 @@ def test_regression_loss_weights_are_applied():
     torch.testing.assert_close(reweighted["Regression_eta"], 2 * baseline["Regression_eta"])
     for feature in set(REGRESSION_FEATURES) - {"eta"}:
         torch.testing.assert_close(reweighted[f"Regression_{feature}"], baseline[f"Regression_{feature}"])
+
+
+def test_regression_loss_weights_angular_features_by_sqrt_target_pt():
+    y = {
+        "cls_id": torch.tensor([1, 1]),
+        "pt": torch.tensor([0.0, math.log(4.0)]),  # sqrt_target_pt = 1 and 2
+        "eta": torch.tensor([0.0, 0.0]),
+        "sin_phi": torch.tensor([0.0, 0.0]),
+        "cos_phi": torch.tensor([0.0, 0.0]),
+        "energy": torch.tensor([0.0, 0.0]),
+    }
+    ypred = {feature: torch.tensor([0.1, 0.1]) for feature in REGRESSION_FEATURES}
+    ypred["pt"] = y["pt"].clone()
+    input_pt = torch.tensor([1.0, 1.0])
+    weights = {feature: 1.0 for feature in REGRESSION_FEATURES}
+
+    losses = regression_loss(y, ypred, input_pt, weights)
+
+    # per-element squared error is 0.01, weighted by sqrt_target_pt 1 and 2:
+    # (0.01 * 1 + 0.01 * 2) / 2 particles = 0.015 for every feature
+    expected = torch.tensor(0.01 * (1 + 2) / 2)
+    torch.testing.assert_close(losses["Regression_pt"], torch.tensor(0.0))
+    for feature in ["eta", "sin_phi", "cos_phi", "energy"]:
+        torch.testing.assert_close(losses[f"Regression_{feature}"], expected)
 
 
 if __name__ == "__main__":

@@ -139,8 +139,10 @@ def regression_loss(y, ypred, input_pt, regression_weights):
         prediction = torch.nan_to_num(ypred[feature])
         per_element = weight * F.mse_loss(prediction, y[feature], reduction="none")
         per_element = torch.where(is_particle, per_element, torch.zeros_like(per_element))
-        if feature in {"pt", "energy"}:
-            per_element = per_element * sqrt_target_pt
+        # Weight per-particle losses by sqrt(pt) for all kinematic targets so
+        # high-pt particles (which dominate jet axes) drive eta/phi learning
+        # too, not just pt/energy.
+        per_element = per_element * sqrt_target_pt
         losses[f"Regression_{feature}"] = per_element.sum() / num_particles
 
     return losses
