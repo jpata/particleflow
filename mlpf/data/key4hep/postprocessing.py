@@ -78,6 +78,12 @@ jet_ptcut = 5
 visible_energy_fraction = 0.10
 visible_energy_deposit = 0.5  # GeV
 
+# PROTOTYPE, under discussion in PR #490. Let a long-lived neutral parent that decayed outside the
+# detector stand in for its status-1 daughters, which the simulation never propagated, since the
+# parent is what the detector actually saw. See find_surrogate_ancestors. Set False to recover the
+# previous behaviour.
+use_surrogate_ancestors = True
+
 track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
 
@@ -703,6 +709,95 @@ def add_daughters_to_status1(
     return genparticle_to_hit, genparticle_to_trk
 
 
+def find_surrogate_ancestors(gen_features: GenFeatures, genparticle_to_hit: SparseMatrixCOO, max_depth: int = 8) -> np.ndarray:
+    """Mark long-lived parents that should enter the target in place of their status-1 daughters.
+
+    At a muon collider, neutral hadrons such as K0S and Lambda are boosted hard enough to be
+    tracked through the entire detector by the simulation and to decay, in the generator record,
+    at a vertex metres outside it. The parent deposits the energy but is not status 1; its
+    status-1 daughters are never propagated, carry no hits, and so fail the visibility mask and
+    drop out of the target -- while remaining in the truth jets, which biases the response low.
+
+    On the MAIA ttbar sample this is 49 particles carrying 2.9% of the status-1 scalar pT, and
+    42 of them have an ancestor that did deposit. One 636 GeV K0S deposits 583 GeV in the
+    calorimeter while its 256 and 239 GeV pT pions are recorded 58 m out with nothing.
+
+    The detector saw one K0S shower, not two pion showers, so the parent is the reconstructable
+    object and is what the target should contain. Its four-momentum is the sum of its daughters',
+    so the truth jets are unchanged. map_pdgid_to_candid already sends it to the neutral-hadron
+    class, so no new target class appears.
+
+    A parent is only used if *none* of its status-1 descendants deposited anything, otherwise
+    taking both the parent and the depositing daughter would double count. Nested candidates are
+    reduced to the deepest one for the same reason.
+    """
+    dau_beg = gen_features["daughters_begin"]
+    dau_end = gen_features["daughters_end"]
+    dau_ind = gen_features["index"]
+    mask_status1 = np.asarray(awkward.to_numpy(gen_features["generatorStatus"])) == 1
+    surrogate = np.zeros(len(mask_status1), dtype=bool)
+    if dau_ind is None:
+        return surrogate
+
+    n_gp = len(dau_beg)
+    parent_of: Dict[int, int] = {}
+    for ip in range(n_gp):
+        for d in dau_ind[dau_beg[ip] : dau_end[ip]]:
+            parent_of.setdefault(int(d), ip)
+
+    has_hits = set(int(gp) for gp in genparticle_to_hit[0])
+
+    # for each status-1 particle with no hits, the nearest non-status-1 ancestor that has some
+    candidates = set()
+    for idx_st1 in np.where(mask_status1)[0]:
+        idx_st1 = int(idx_st1)
+        if idx_st1 in has_hits:
+            continue
+        cur, depth, seen = idx_st1, 0, set()
+        while depth < max_depth:
+            nxt = parent_of.get(cur)
+            if nxt is None or nxt in seen:
+                break
+            cur, depth = nxt, depth + 1
+            seen.add(cur)
+            # a status-1 ancestor is a target particle in its own right, leave it alone
+            if cur in has_hits and not mask_status1[cur]:
+                candidates.add(cur)
+                break
+
+    # drop a candidate if any status-1 descendant of it did deposit: that daughter is already in
+    # the target on its own, and adding the parent as well would count the energy twice
+    def status1_descendants_deposited(root: int) -> bool:
+        stack, seen = [root], {root}
+        while stack:
+            cur = stack.pop()
+            for d in dau_ind[dau_beg[cur] : dau_end[cur]]:
+                d = int(d)
+                if d in seen:
+                    continue
+                seen.add(d)
+                if mask_status1[d] and d in has_hits:
+                    return True
+                stack.append(d)
+        return False
+
+    candidates = {c for c in candidates if not status1_descendants_deposited(c)}
+
+    # if two candidates are nested, keep only the deeper one
+    for c in list(candidates):
+        cur, depth = c, 0
+        while depth < max_depth:
+            nxt = parent_of.get(cur)
+            if nxt is None:
+                break
+            cur, depth = nxt, depth + 1
+            candidates.discard(cur)
+
+    for c in candidates:
+        surrogate[c] = True
+    return surrogate
+
+
 def get_genparticles_and_adjacencies(
     prop_data: awkward.Record,
     hit_data: Dict[str, awkward.Array],
@@ -726,6 +821,13 @@ def get_genparticles_and_adjacencies(
 
     # collect hits of st=1 direct daughters to the st=1 particles
     genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
+
+    # long-lived parents that decayed outside the detector and stand in for st=1 daughters the
+    # simulation never propagated (see find_surrogate_ancestors)
+    if use_surrogate_ancestors:
+        mask_surrogate = find_surrogate_ancestors(gen_features, genparticle_to_hit)
+    else:
+        mask_surrogate = np.zeros(awkward.count(gen_features["PDG"]), dtype=bool)
 
     n_gp = awkward.count(gen_features["PDG"])
     n_track = awkward.count(track_features["type"])
@@ -814,7 +916,7 @@ def get_genparticles_and_adjacencies(
     gen_features["gp_to_track"] = np.asarray(gp_to_track)[:, 0]
     gen_features["gp_to_cluster"] = np.asarray(gp_to_cluster)[:, 0]
 
-    mask_visible = awkward.to_numpy(mask_status1 & mask_visible_hit)
+    mask_visible = awkward.to_numpy(mask_status1 & mask_visible_hit) | mask_surrogate
 
     idx_all_masked = np.where(mask_visible)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
