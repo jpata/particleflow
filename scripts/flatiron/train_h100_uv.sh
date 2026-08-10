@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH -t 24:00:00
+#SBATCH -t 48:00:00
 #SBATCH -N 1
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
@@ -65,7 +65,9 @@ uv run python3 -u mlpf/pipeline.py \
     train \
     --gpus 8 \
     --gpu_batch_multiplier 32 \
-    --model.backbone.num_convs 6 \
-    --lr 0.001 --num_steps 10000 --val_freq 1000 --checkpoint_freq 1000
+    --model.attention.num_convs 6 --model.type attention \
+    --model.task_queries false \
+    --lr 0.001 --num_steps 50000 --val_freq 1000 --checkpoint_freq 1000
 
+    # --pad_to_multiple_elements 100 \
 echo 'Training done.'
