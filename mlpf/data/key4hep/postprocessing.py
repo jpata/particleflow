@@ -801,9 +801,7 @@ def get_genparticles_and_adjacencies(
     #    target jet pT relative to the truth jet pT.
     gp_energy_in_hits = np.array(gp_to_hit.sum(axis=1))[:, 0]
     mask_visible_hit = (
-        ((gp_energy_in_hits / gen_features["energy"]) > visible_energy_fraction)
-        | (gp_energy_in_hits > visible_energy_deposit)
-        | gp_in_tracker
+        ((gp_energy_in_hits / gen_features["energy"]) > visible_energy_fraction) | (gp_energy_in_hits > visible_energy_deposit) | gp_in_tracker
     )
 
     # temporary logging to debug visibility logic
@@ -1012,9 +1010,9 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
     # accounting two-sided so that any silent energy loss (a merge overwrite, an unaccounted drop,
     # a double-count) fails loudly instead of passing a one-sided inequality that can only ever
     # hold when energy is lost.
-    assert len(gp_merges_gp0) + len(dropped_gps) == len(unmatched), (
-        "every unmatched genparticle must be either merged into a host or explicitly dropped"
-    )
+    assert len(gp_merges_gp0) + len(dropped_gps) == len(
+        unmatched
+    ), "every unmatched genparticle must be either merged into a host or explicitly dropped"
     sum_energy_original = float(np.sum(np.asarray(awkward.to_numpy(gpdata.gen_features["energy"]))))
     sum_energy_after = float(np.sum(gen_features_new["energy"]))
     assert abs(sum_energy_after + dropped_energy - sum_energy_original) < 1e-6 * max(1.0, sum_energy_original), (

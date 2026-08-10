@@ -1052,9 +1052,7 @@ class ParquetValidator:
             f"be MIP-like (deposited fraction < {frac_lim:.0%}); those are "
             f"kept by the absolute term (deposit > {dep_lim:.1f} GeV), and "
             "removing it drops them from the target.",
-            f"muons={n_mu}, frac<{frac_lim:.0%}={n_lowfrac} "
-            f"({100 * n_lowfrac / max(n_mu, 1):.0f}%), "
-            f"with deposit>{dep_lim:.1f} GeV={n_abs}",
+            f"muons={n_mu}, frac<{frac_lim:.0%}={n_lowfrac} " f"({100 * n_lowfrac / max(n_mu, 1):.0f}%), " f"with deposit>{dep_lim:.1f} GeV={n_abs}",
             status,
         )
         self.bar_plot(
@@ -1131,8 +1129,7 @@ class ParquetValidator:
             "mostly be charged (track-measured); a large neutral share means "
             f"leaked energy with no measurement. WARN above {warn_frac:.0%} "
             "neutrals.",
-            f"absolute-retained={n_abs_total}, neutrals={n_neutral} "
-            f"({100 * n_neutral / max(n_abs_total, 1):.0f}%)",
+            f"absolute-retained={n_abs_total}, neutrals={n_neutral} " f"({100 * n_neutral / max(n_abs_total, 1):.0f}%)",
             status,
         )
         self.bar_plot(
