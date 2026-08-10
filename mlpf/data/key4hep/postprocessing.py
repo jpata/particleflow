@@ -786,18 +786,25 @@ def get_genparticles_and_adjacencies(
     # The fractional term alone is a shower-containment criterion and so misses MIPs: a muon
     # deposits a roughly constant few GeV whatever its momentum, so its fraction falls with energy
     # (0.006-0.04 for the muons in this sample) and a 10% cut drops 6 of 7 of them. The absolute
-    # term recovers all 7. It cannot be replaced by gp_in_tracker here, because none of these
-    # muons have a track linked above the 20% threshold.
+    # term recovers all 7. The track term does not help the muons (none have a track linked above
+    # the 20% threshold), but it does recover charged hadrons whose calorimeter deposit falls
+    # below the absolute threshold (e.g. low-momentum pions and kaons decaying in the tracker):
+    # their momentum is measured by the tracker even though their shower is sub-threshold.
     #
     # Caveats for anyone tuning this:
     #  - the particles the absolute term admits deposit only ~2.6% of their generated energy, so
     #    their energy has to come from the track. That is right for MIPs but not for the neutrals
     #    it also lets in (9 of the 20 added here are photons that leaked).
     #  - it cannot recover particles that deposit nothing at all, ~15% of the status-1 energy
-    #    here, mostly photons down the beampipe. Those set a floor on how close the target jet pT
-    #    can get to the truth jet pT, since the truth reference includes them.
+    #    here, mostly photons down the beampipe. Those are excluded from the truth reference
+    #    (see the simulator endpoint-bit filter in process_one_file), so they no longer bias the
+    #    target jet pT relative to the truth jet pT.
     gp_energy_in_hits = np.array(gp_to_hit.sum(axis=1))[:, 0]
-    mask_visible_hit = ((gp_energy_in_hits / gen_features["energy"]) > visible_energy_fraction) | (gp_energy_in_hits > visible_energy_deposit)
+    mask_visible_hit = (
+        ((gp_energy_in_hits / gen_features["energy"]) > visible_energy_fraction)
+        | (gp_energy_in_hits > visible_energy_deposit)
+        | gp_in_tracker
+    )
 
     # temporary logging to debug visibility logic
     mask_status1 = gen_features["generatorStatus"] == 1
@@ -1292,9 +1299,25 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         else:
             raise KeyError(f"Hit collection {k} not found in the input file! Available collections: {arrs.keys()}")
 
-    # Compute truth MET and jets from status=1 pythia particles
+    # Compute truth MET and jets from status-1 pythia particles that were actually propagated
+    # through the simulation. The simulatorStatus bitmask records what the simulation did with
+    # each particle (see edm4hep.yaml, edm4hep::MCParticle); 0x0F000000 selects bits 24-27:
+    #   BITStopped = 24, BITLeftDetector = 25, BITDecayedInCalorimeter = 26, BITDecayedInTracker = 27.
+    # Any of them set means Geant4 propagated the particle to an endpoint (stopped, left the
+    # detector, or decayed in the tracker/calorimeter) and it could therefore deposit energy.
+    # Particles with none of these bits were never tracked (e.g. generator particles skipped by
+    # the simulation); they deposit nothing and can never enter the target, so including them in
+    # the truth reference biases the target/truth response down. Bits 28-30 (vertex-not-parent-
+    # endpoint, backscatter, created-in-simulation) and the slcio conversion artifact on bit 31
+    # are deliberately not used.
     mc_pdg = np.abs(prop_data[f"{mc_coll}.PDG"])
-    mc_st1_mask = (prop_data[f"{mc_coll}.generatorStatus"] == 1) & (mc_pdg != 12) & (mc_pdg != 14) & (mc_pdg != 16)
+    mc_st1_mask = (
+        (prop_data[f"{mc_coll}.generatorStatus"] == 1)
+        & (mc_pdg != 12)
+        & (mc_pdg != 14)
+        & (mc_pdg != 16)
+        & ((prop_data[f"{mc_coll}.simulatorStatus"] & 0x0F000000) != 0)
+    )
     mc_st1_p4 = vector.awk(
         awkward.zip(
             {
