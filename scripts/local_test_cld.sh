@@ -39,5 +39,6 @@ uv run python3 mlpf/pipeline.py \
   --checkpoint_freq 1 \
   --gpus 0 \
   --dtype float32 \
+  --gpu_batch_multiplier 1 \
   --ntrain 10 --ntest 10 --nvalid 10 \
   --num_workers 1 --prefetch_factor 1
