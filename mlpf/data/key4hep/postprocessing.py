@@ -1215,42 +1215,12 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
-    if detector == "clic":
-        b_field = 4.0
-        hit_collections = [
-            "ECALBarrel",
-            "ECALEndcap",
-            "ECALOther",
-            "HCALBarrel",
-            "HCALEndcap",
-            "HCALOther",
-            "MUON",
-            "LumiCal_Hits",
-            "ITrackerHits",
-            "ITrackerEndcapHits",
-            "OTrackerHits",
-            "OTrackerEndcapHits",
-            "VXDTrackerHits",
-            "VXDEndcapTrackerHits",
-        ]
-    elif detector == "cld":
-        b_field = 2.0
-        hit_collections = [
-            "ECALBarrel",
-            "ECALEndcap",
-            "HCALBarrel",
-            "HCALEndcap",
-            "HCALOther",
-            "MUON",
-            "ITrackerHits",
-            "ITrackerEndcapHits",
-            "OTrackerHits",
-            "OTrackerEndcapHits",
-            "VXDTrackerHits",
-            "VXDEndcapTrackerHits",
-        ]
-    else:
-        raise ValueError(f"Unknown detector type: {detector}")
+    try:
+        detector_cfg = EDM4HEP.DETECTORS[detector]
+    except KeyError:
+        raise ValueError(f"Unknown detector type: {detector}. Available detectors: {list(EDM4HEP.DETECTORS.keys())}")
+    b_field = detector_cfg.b_field
+    hit_collections = detector_cfg.hit_collections
 
     hit_data = {}
     for k in hit_collections:
@@ -1542,7 +1512,13 @@ def parse_args() -> Any:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
-    parser.add_argument("--detector", type=str, default="clic", help="detector type (clic, cld)")
+    parser.add_argument(
+        "--detector",
+        type=str,
+        default="clic",
+        choices=list(EDM4HEP.DETECTORS.keys()),
+        help=f"detector scenario from mlpf/conf.py ({', '.join(EDM4HEP.DETECTORS.keys())})",
+    )
     parser.add_argument("--first-event", type=int, default=0, help="first event to process")
     parser.add_argument("--num-events", type=int, default=-1, help="number of events to process")
 

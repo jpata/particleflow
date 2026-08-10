@@ -5,6 +5,7 @@
 *.pdf
 *.png
 experiments/*
+plots/
 prp/*
 *.pth
 

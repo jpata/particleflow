@@ -14,13 +14,11 @@ rm -Rf local_test_data/cld
 # Run Postprocessing validation
 # Find the first parquet file for validation
 SAMPLE_PARQUET=$(ls local_test_data/cld/p8_ee_ttbar_ecm365/*.parquet | head -n 1)
-uv run python3 tests/visualize_pn.py $SAMPLE_PARQUET 0
-uv run python3 tests/validate_inclusive_hits.py $SAMPLE_PARQUET --bfield 2.0
-
-# Collect validation plots for the CI artifact upload
-mkdir -p plots
-cp pn_validation_side_*.png plots/
-cp unified_validation.png plots/unified_validation_cld.png
+uv run python3 tests/validate_parquet.py \
+  --input $SAMPLE_PARQUET \
+  --detector cld \
+  --max-events 20 \
+  --plots-dir plots
 
 # 4. TFDS Build
 # Using config 10 because with only 2 files, split_list puts them in the last (10th) split

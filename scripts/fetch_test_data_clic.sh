@@ -26,4 +26,4 @@ done
 
 echo "CLIC test data setup complete."
 echo "You can now run validation scripts, for example:"
-echo "  uv run python3 tests/validate_inclusive_hits.py local_test_data/clic/p8_ee_ttbar_ecm380/reco_p8_ee_ttbar_ecm380_300000.parquet --bfield 4.0"
+echo "  uv run python3 tests/validate_parquet.py --input local_test_data/clic/p8_ee_ttbar_ecm380/reco_p8_ee_ttbar_ecm380_300000.parquet --detector clic"

@@ -49,5 +49,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: validation-plots-${{ matrix.target }}
-          path: plots/*.png
+          path: plots/**
           if-no-files-found: warn

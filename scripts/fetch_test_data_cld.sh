@@ -26,4 +26,4 @@ done
 
 echo "CLD test data setup complete."
 echo "You can now run validation scripts, for example:"
-echo "  uv run python3 tests/validate_inclusive_hits.py local_test_data/cld/p8_ee_ttbar_ecm365/reco_p8_ee_ttbar_ecm365_300000.parquet --bfield 2.0"
+echo "  uv run python3 tests/validate_parquet.py --input local_test_data/cld/p8_ee_ttbar_ecm365/reco_p8_ee_ttbar_ecm365_300000.parquet --detector cld"
