@@ -942,6 +942,8 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
     # now merge unmatched genparticles to their closest genparticle
     gp_merges_gp0 = []
     gp_merges_gp1 = []
+    dropped_gps = []  # indices removed from the target because they have no track/cluster host
+    dropped_energy = 0.0
     for igp_unmatched in unmatched:
         mask_gp_unmatched[igp_unmatched] = False
 
@@ -953,17 +955,14 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         else:
             idx_gp_bestcluster = []
 
-        # if the genparticle is not matched to any cluster, then it left a few hits to some other track
-        # this is rare, happens only for low-pT particles and we don't want to try to reconstruct it
+        # If the genparticle is not matched to any cluster, then it left a few hits to some other
+        # track. This happens only for low-pT particles with no calorimeter deposit at all, so it
+        # cannot be represented in the target: every kept genparticle must own a track or cluster
+        # (asserted downstream). Removing it does lose its energy from the target, so record the
+        # drop explicitly here; the two-sided accounting check below depends on it.
         if len(idx_gp_bestcluster) != 1:
-            # raise RuntimeError(
-            #     f"Unmatched genparticle {igp_unmatched} with pt={pt_arr[igp_unmatched]:.2f} "
-            #     f"could not be associated with a unique cluster (found {len(idx_gp_bestcluster)})"
-            # )
-            print(
-                f"Unmatched genparticle {igp_unmatched} with pt={pt_arr[igp_unmatched]:.2f} "
-                f"could not be associated with a unique cluster (found {len(idx_gp_bestcluster)})"
-            )
+            dropped_gps.append(int(igp_unmatched))
+            dropped_energy += float(energy_arr[igp_unmatched])
             continue
 
         idx_gp_bestcluster = idx_gp_bestcluster[0]
@@ -1008,7 +1007,25 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         "jet_idx": gpdata.gen_features["jet_idx"][mask_gp_unmatched],
         "particle_number": np.arange(len(idx_all_masked), dtype=np.float32) + 1,
     }
-    assert (np.sum(gen_features_new["energy"]) - np.sum(gpdata.gen_features["energy"])) < 1e-2
+    # The merges conserve energy exactly (hosts accumulate in the running arrays), and the only
+    # particles removed from the target are the explicitly accounted drops above. Check the full
+    # accounting two-sided so that any silent energy loss (a merge overwrite, an unaccounted drop,
+    # a double-count) fails loudly instead of passing a one-sided inequality that can only ever
+    # hold when energy is lost.
+    assert len(gp_merges_gp0) + len(dropped_gps) == len(unmatched), (
+        "every unmatched genparticle must be either merged into a host or explicitly dropped"
+    )
+    sum_energy_original = float(np.sum(np.asarray(awkward.to_numpy(gpdata.gen_features["energy"]))))
+    sum_energy_after = float(np.sum(gen_features_new["energy"]))
+    assert abs(sum_energy_after + dropped_energy - sum_energy_original) < 1e-6 * max(1.0, sum_energy_original), (
+        f"genparticle merge energy accounting mismatch: after + dropped = "
+        f"{sum_energy_after + dropped_energy:.6g} GeV, original = {sum_energy_original:.6g} GeV"
+    )
+    if dropped_gps:
+        print(
+            f"Dropped {len(dropped_gps)} unmatched genparticles without a track/cluster host "
+            f"(pT {float(np.sum(pt_arr[dropped_gps])):.1f} GeV, E {dropped_energy:.1f} GeV)"
+        )
 
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
     genparticle_to_hit = filter_adj(gpdata.genparticle_to_hit, genpart_idx_all_to_filtered)
