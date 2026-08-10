@@ -21,17 +21,9 @@ def get_optimizer(model: torch.nn.Module, config: MLPFConfig):
     if task_loss_weighter is None:
         parameters = model.parameters()
     else:
-        task_loss_weight_param_ids = {
-            id(param) for param in task_loss_weighter.parameters()
-        }
+        task_loss_weight_param_ids = {id(param) for param in task_loss_weighter.parameters()}
         parameters = [
-            {
-                "params": [
-                    param
-                    for param in model.parameters()
-                    if id(param) not in task_loss_weight_param_ids
-                ]
-            },
+            {"params": [param for param in model.parameters() if id(param) not in task_loss_weight_param_ids]},
             {
                 "params": list(task_loss_weighter.parameters()),
                 "lr": config.lr,

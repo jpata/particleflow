@@ -35,19 +35,14 @@ class LearnableTaskLossWeights(nn.Module):
         initial_log_vars = []
         for task in self.tasks:
             initial_weight = float(initial_weights.get(task, 1.0))
-            initial_log_vars.append(
-                -torch.log(torch.tensor(initial_weight, dtype=torch.float32)).item()
-            )
+            initial_log_vars.append(-torch.log(torch.tensor(initial_weight, dtype=torch.float32)).item())
         self.log_vars = nn.Parameter(torch.tensor(initial_log_vars, dtype=torch.float32))
 
     def clamped_log_vars(self):
         return torch.clamp(self.log_vars, min=self.clamp_min, max=self.clamp_max)
 
     def current_weights(self):
-        return {
-            task: torch.exp(-log_var)
-            for task, log_var in zip(self.tasks, self.clamped_log_vars())
-        }
+        return {task: torch.exp(-log_var) for task, log_var in zip(self.tasks, self.clamped_log_vars())}
 
     def forward(self, losses):
         log_vars = self.clamped_log_vars()
@@ -71,10 +66,7 @@ def make_task_loss_weighter(regression_loss_weights):
     initial_weights = {
         "Classification_binary": 1.0,
         "Classification": 1.0,
-        **{
-            f"Regression_{feature}": regression_loss_weights[feature]
-            for feature in REGRESSION_FEATURES
-        },
+        **{f"Regression_{feature}": regression_loss_weights[feature] for feature in REGRESSION_FEATURES},
     }
     return LearnableTaskLossWeights(initial_weights)
 
@@ -201,9 +193,7 @@ def mlpf_loss(y, ypred, batch, regression_weights, task_loss_weighter=None):
 
     if task_loss_diagnostics is not None:
         task_loss_diagnostics = {
-            diagnostic_name: {
-                task: value.detach() for task, value in diagnostic_values.items()
-            }
+            diagnostic_name: {task: value.detach() for task, value in diagnostic_values.items()}
             for diagnostic_name, diagnostic_values in task_loss_diagnostics.items()
         }
 

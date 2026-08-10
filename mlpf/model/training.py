@@ -204,9 +204,7 @@ def _get_task_loss_weighter(model):
 def _format_task_diagnostic(task_diagnostic):
     if not task_diagnostic:
         return ""
-    return " | ".join(
-        f"{name}: {value:.4f}" for name, value in sorted(task_diagnostic.items())
-    )
+    return " | ".join(f"{name}: {value:.4f}" for name, value in sorted(task_diagnostic.items()))
 
 
 def _format_compact_diagnostic(values, keys):
@@ -318,9 +316,7 @@ def model_step(batch, model, loss_fn, regression_weights):
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
 
-    loss_opt, losses_detached, task_loss_diagnostics = loss_fn(
-        ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model)
-    )
+    loss_opt, losses_detached, task_loss_diagnostics = loss_fn(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
     return loss_opt, losses_detached, task_loss_diagnostics, ypred_raw, ypred, ytarget
 
 
@@ -381,13 +377,17 @@ def train_step(
         dict: Dictionary of step losses
     """
     log_this_step = step % tensorboard_step_freq == 0
-    diagnostics = {
-        "time": {},
-        "memory_cpu": {},
-        "memory_cuda": {},
-        "batch": {},
-        "gc": {},
-    } if log_this_step else {}
+    diagnostics = (
+        {
+            "time": {},
+            "memory_cpu": {},
+            "memory_cuda": {},
+            "batch": {},
+            "gc": {},
+        }
+        if log_this_step
+        else {}
+    )
     phase_start = time.perf_counter()
     if world_size > 1:
         dist.barrier()
@@ -423,9 +423,7 @@ def train_step(
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
         ypred = unpack_predictions(ypred_raw)
         ytarget = unpack_target(batch.ytarget, model)
-        loss_opt, loss, task_loss_diagnostics = mlpf_loss(
-            ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model)
-        )
+        loss_opt, loss, task_loss_diagnostics = mlpf_loss(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
     phase_start = _record_phase_time_if_enabled(diagnostics.get("time", {}), "loss", phase_start, device_type, log_this_step)
     if log_this_step:
         _collect_step_memory(rank, "after_loss", diagnostics)
@@ -797,9 +795,7 @@ def _log_and_checkpoint_step(
         if task_loss_diagnostics:
             for diagnostic_name, diagnostic_values in task_loss_diagnostics.items():
                 for task, value in diagnostic_values.items():
-                    tensorboard_writer_train.add_scalar(
-                        f"step/task_{diagnostic_name}_{task}", value, step
-                    )
+                    tensorboard_writer_train.add_scalar(f"step/task_{diagnostic_name}_{task}", value, step)
 
         tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_tensorboard_logging", time.perf_counter() - log_start, step)
 
@@ -825,7 +821,9 @@ def _log_and_checkpoint_step(
             _logger.info("saving checkpoint {}".format(checkpoint_path))
             save_checkpoint(checkpoint_path, model, optimizer, extra_state)
             if log_this_step:
-                tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_checkpoint_save", time.perf_counter() - checkpoint_start, step)
+                tensorboard_writer_train.add_scalar(
+                    "diagnostic/log_and_checkpoint/time_checkpoint_save", time.perf_counter() - checkpoint_start, step
+                )
 
             # Clean up old checkpoints, keeping the last num_patience
             cleanup_start = time.perf_counter()
@@ -834,7 +832,9 @@ def _log_and_checkpoint_step(
                 _logger.info("removing old checkpoint {}".format(checkpoints[i]))
                 os.remove(checkpoints[i])
             if log_this_step:
-                tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_checkpoint_cleanup", time.perf_counter() - cleanup_start, step)
+                tensorboard_writer_train.add_scalar(
+                    "diagnostic/log_and_checkpoint/time_checkpoint_cleanup", time.perf_counter() - cleanup_start, step
+                )
 
     if log_this_step and ((rank == 0) or (rank == "cpu")):
         tensorboard_writer_train.flush()
@@ -1117,20 +1117,12 @@ def train_all_steps(
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
             train_loss_components = " | ".join(
-                f"{loss_name}: {loss_value:.4f}"
-                for loss_name, loss_value in sorted(losses_train.items())
-                if loss_name != "Total"
+                f"{loss_name}: {loss_value:.4f}" for loss_name, loss_value in sorted(losses_train.items()) if loss_name != "Total"
             )
             diagnostics = task_loss_diagnostics or {}
-            task_weight_components = _format_task_diagnostic(
-                diagnostics.get("weight", {})
-            )
-            task_log_var_components = _format_task_diagnostic(
-                diagnostics.get("log_var", {})
-            )
-            task_weighted_loss_components = _format_task_diagnostic(
-                diagnostics.get("weighted_loss", {})
-            )
+            task_weight_components = _format_task_diagnostic(diagnostics.get("weight", {}))
+            task_log_var_components = _format_task_diagnostic(diagnostics.get("log_var", {}))
+            task_weighted_loss_components = _format_task_diagnostic(diagnostics.get("weighted_loss", {}))
             _logger.info(
                 f"Step {step}/{num_steps} rank{rank} | "
                 f"Train Loss: {losses_train['Total']:.4f} | "
@@ -1331,9 +1323,7 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     _logger.info("Instantiating model")
     model = MLPF(config)
-    model.task_loss_weighter = make_task_loss_weighter(
-        config.regression_loss_weights.model_dump()
-    )
+    model.task_loss_weighter = make_task_loss_weighter(config.regression_loss_weights.model_dump())
     _logger.info("Instantiated model")
 
     _logger.info("Moving model to device rank={}".format(rank))
@@ -1364,12 +1354,8 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
 
         if len(missing_keys) > 0:
             _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
-            missing_task_loss_weight_keys = [
-                key for key in missing_keys if key.startswith("task_loss_weighter.")
-            ]
-            missing_non_task_loss_weight_keys = [
-                key for key in missing_keys if not key.startswith("task_loss_weighter.")
-            ]
+            missing_task_loss_weight_keys = [key for key in missing_keys if key.startswith("task_loss_weighter.")]
+            missing_non_task_loss_weight_keys = [key for key in missing_keys if not key.startswith("task_loss_weighter.")]
             if missing_task_loss_weight_keys and not missing_non_task_loss_weight_keys:
                 _logger.warning("Task loss weights missing from checkpoint; initializing them from config", color="bold")
                 strict = False
