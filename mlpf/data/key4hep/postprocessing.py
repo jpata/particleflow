@@ -901,9 +901,16 @@ def get_genparticles_and_adjacencies(
     #    here, mostly photons down the beampipe. Those are excluded from the truth reference
     #    (see the simulator endpoint-bit filter in process_one_file), so they no longer bias the
     #    target jet pT relative to the truth jet pT.
+    # The absolute term exists to catch MIPs, which are charged by definition, so restrict it to
+    # charged particles. A neutral that deposits more than the threshold but less than the
+    # fractional cut is one that leaked: nothing measured its momentum and it has no track to
+    # supply it, so asking the model to predict its energy is asking for something unlearnable.
+    gp_charged = np.abs(np.asarray(awkward.to_numpy(gen_features["charge"]), dtype=float)) > 0
     gp_energy_in_hits = np.array(gp_to_hit.sum(axis=1))[:, 0]
     mask_visible_hit = (
-        ((gp_energy_in_hits / gen_features["energy"]) > visible_energy_fraction) | (gp_energy_in_hits > visible_energy_deposit) | gp_in_tracker
+        ((gp_energy_in_hits / gen_features["energy"]) > visible_energy_fraction)
+        | ((gp_energy_in_hits > visible_energy_deposit) & gp_charged)
+        | gp_in_tracker
     )
 
     # temporary logging to debug visibility logic
