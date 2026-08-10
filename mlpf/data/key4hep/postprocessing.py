@@ -786,18 +786,25 @@ def get_genparticles_and_adjacencies(
     # The fractional term alone is a shower-containment criterion and so misses MIPs: a muon
     # deposits a roughly constant few GeV whatever its momentum, so its fraction falls with energy
     # (0.006-0.04 for the muons in this sample) and a 10% cut drops 6 of 7 of them. The absolute
-    # term recovers all 7. It cannot be replaced by gp_in_tracker here, because none of these
-    # muons have a track linked above the 20% threshold.
+    # term recovers all 7. The track term does not help the muons (none have a track linked above
+    # the 20% threshold), but it does recover charged hadrons whose calorimeter deposit falls
+    # below the absolute threshold (e.g. low-momentum pions and kaons decaying in the tracker):
+    # their momentum is measured by the tracker even though their shower is sub-threshold.
     #
     # Caveats for anyone tuning this:
     #  - the particles the absolute term admits deposit only ~2.6% of their generated energy, so
     #    their energy has to come from the track. That is right for MIPs but not for the neutrals
     #    it also lets in (9 of the 20 added here are photons that leaked).
     #  - it cannot recover particles that deposit nothing at all, ~15% of the status-1 energy
-    #    here, mostly photons down the beampipe. Those set a floor on how close the target jet pT
-    #    can get to the truth jet pT, since the truth reference includes them.
+    #    here, mostly photons down the beampipe. Those are excluded from the truth reference
+    #    (see the simulator endpoint-bit filter in process_one_file), so they no longer bias the
+    #    target jet pT relative to the truth jet pT.
     gp_energy_in_hits = np.array(gp_to_hit.sum(axis=1))[:, 0]
-    mask_visible_hit = ((gp_energy_in_hits / gen_features["energy"]) > visible_energy_fraction) | (gp_energy_in_hits > visible_energy_deposit)
+    mask_visible_hit = (
+        ((gp_energy_in_hits / gen_features["energy"]) > visible_energy_fraction)
+        | (gp_energy_in_hits > visible_energy_deposit)
+        | gp_in_tracker
+    )
 
     # temporary logging to debug visibility logic
     mask_status1 = gen_features["generatorStatus"] == 1
@@ -935,6 +942,8 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
     # now merge unmatched genparticles to their closest genparticle
     gp_merges_gp0 = []
     gp_merges_gp1 = []
+    dropped_gps = []  # indices removed from the target because they have no track/cluster host
+    dropped_energy = 0.0
     for igp_unmatched in unmatched:
         mask_gp_unmatched[igp_unmatched] = False
 
@@ -946,17 +955,14 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         else:
             idx_gp_bestcluster = []
 
-        # if the genparticle is not matched to any cluster, then it left a few hits to some other track
-        # this is rare, happens only for low-pT particles and we don't want to try to reconstruct it
+        # If the genparticle is not matched to any cluster, then it left a few hits to some other
+        # track. This happens only for low-pT particles with no calorimeter deposit at all, so it
+        # cannot be represented in the target: every kept genparticle must own a track or cluster
+        # (asserted downstream). Removing it does lose its energy from the target, so record the
+        # drop explicitly here; the two-sided accounting check below depends on it.
         if len(idx_gp_bestcluster) != 1:
-            # raise RuntimeError(
-            #     f"Unmatched genparticle {igp_unmatched} with pt={pt_arr[igp_unmatched]:.2f} "
-            #     f"could not be associated with a unique cluster (found {len(idx_gp_bestcluster)})"
-            # )
-            print(
-                f"Unmatched genparticle {igp_unmatched} with pt={pt_arr[igp_unmatched]:.2f} "
-                f"could not be associated with a unique cluster (found {len(idx_gp_bestcluster)})"
-            )
+            dropped_gps.append(int(igp_unmatched))
+            dropped_energy += float(energy_arr[igp_unmatched])
             continue
 
         idx_gp_bestcluster = idx_gp_bestcluster[0]
@@ -1001,7 +1007,25 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         "jet_idx": gpdata.gen_features["jet_idx"][mask_gp_unmatched],
         "particle_number": np.arange(len(idx_all_masked), dtype=np.float32) + 1,
     }
-    assert (np.sum(gen_features_new["energy"]) - np.sum(gpdata.gen_features["energy"])) < 1e-2
+    # The merges conserve energy exactly (hosts accumulate in the running arrays), and the only
+    # particles removed from the target are the explicitly accounted drops above. Check the full
+    # accounting two-sided so that any silent energy loss (a merge overwrite, an unaccounted drop,
+    # a double-count) fails loudly instead of passing a one-sided inequality that can only ever
+    # hold when energy is lost.
+    assert len(gp_merges_gp0) + len(dropped_gps) == len(unmatched), (
+        "every unmatched genparticle must be either merged into a host or explicitly dropped"
+    )
+    sum_energy_original = float(np.sum(np.asarray(awkward.to_numpy(gpdata.gen_features["energy"]))))
+    sum_energy_after = float(np.sum(gen_features_new["energy"]))
+    assert abs(sum_energy_after + dropped_energy - sum_energy_original) < 1e-6 * max(1.0, sum_energy_original), (
+        f"genparticle merge energy accounting mismatch: after + dropped = "
+        f"{sum_energy_after + dropped_energy:.6g} GeV, original = {sum_energy_original:.6g} GeV"
+    )
+    if dropped_gps:
+        print(
+            f"Dropped {len(dropped_gps)} unmatched genparticles without a track/cluster host "
+            f"(pT {float(np.sum(pt_arr[dropped_gps])):.1f} GeV, E {dropped_energy:.1f} GeV)"
+        )
 
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
     genparticle_to_hit = filter_adj(gpdata.genparticle_to_hit, genpart_idx_all_to_filtered)
@@ -1278,57 +1302,12 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
-    if detector == "clic":
-        b_field = 4.0
-        hit_collections = [
-            "ECALBarrel",
-            "ECALEndcap",
-            "ECALOther",
-            "HCALBarrel",
-            "HCALEndcap",
-            "HCALOther",
-            "MUON",
-            "LumiCal_Hits",
-            "ITrackerHits",
-            "ITrackerEndcapHits",
-            "OTrackerHits",
-            "OTrackerEndcapHits",
-            "VXDTrackerHits",
-            "VXDEndcapTrackerHits",
-        ]
-    elif detector == "cld":
-        b_field = 2.0
-        hit_collections = [
-            "ECALBarrel",
-            "ECALEndcap",
-            "HCALBarrel",
-            "HCALEndcap",
-            "HCALOther",
-            "MUON",
-            "ITrackerHits",
-            "ITrackerEndcapHits",
-            "OTrackerHits",
-            "OTrackerEndcapHits",
-            "VXDTrackerHits",
-            "VXDEndcapTrackerHits",
-        ]
-    elif detector == "maia":
-        b_field = 5.0
-        hit_collections = [
-            "EcalBarrelCollectionRec",
-            "EcalEndcapCollectionRec",
-            "HcalBarrelCollectionRec",
-            "HcalEndcapCollectionRec",
-            "MUON",
-            "IBTrackerHits",
-            "IETrackerHits",
-            "OBTrackerHits",
-            "OETrackerHits",
-            "VBTrackerHits",
-            "VETrackerHits",
-        ]
-    else:
-        raise ValueError(f"Unknown detector type: {detector}")
+    try:
+        detector_cfg = EDM4HEP.DETECTORS[detector]
+    except KeyError:
+        raise ValueError(f"Unknown detector type: {detector}. Available detectors: {list(EDM4HEP.DETECTORS.keys())}")
+    b_field = detector_cfg.b_field
+    hit_collections = detector_cfg.hit_collections
 
     hit_data = {}
     for k in hit_collections:
@@ -1337,9 +1316,25 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         else:
             raise KeyError(f"Hit collection {k} not found in the input file! Available collections: {arrs.keys()}")
 
-    # Compute truth MET and jets from status=1 pythia particles
+    # Compute truth MET and jets from status-1 pythia particles that were actually propagated
+    # through the simulation. The simulatorStatus bitmask records what the simulation did with
+    # each particle (see edm4hep.yaml, edm4hep::MCParticle); 0x0F000000 selects bits 24-27:
+    #   BITStopped = 24, BITLeftDetector = 25, BITDecayedInCalorimeter = 26, BITDecayedInTracker = 27.
+    # Any of them set means Geant4 propagated the particle to an endpoint (stopped, left the
+    # detector, or decayed in the tracker/calorimeter) and it could therefore deposit energy.
+    # Particles with none of these bits were never tracked (e.g. generator particles skipped by
+    # the simulation); they deposit nothing and can never enter the target, so including them in
+    # the truth reference biases the target/truth response down. Bits 28-30 (vertex-not-parent-
+    # endpoint, backscatter, created-in-simulation) and the slcio conversion artifact on bit 31
+    # are deliberately not used.
     mc_pdg = np.abs(prop_data[f"{mc_coll}.PDG"])
-    mc_st1_mask = (prop_data[f"{mc_coll}.generatorStatus"] == 1) & (mc_pdg != 12) & (mc_pdg != 14) & (mc_pdg != 16)
+    mc_st1_mask = (
+        (prop_data[f"{mc_coll}.generatorStatus"] == 1)
+        & (mc_pdg != 12)
+        & (mc_pdg != 14)
+        & (mc_pdg != 16)
+        & ((prop_data[f"{mc_coll}.simulatorStatus"] & 0x0F000000) != 0)
+    )
     mc_st1_p4 = vector.awk(
         awkward.zip(
             {
@@ -1620,7 +1615,13 @@ def parse_args() -> Any:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
-    parser.add_argument("--detector", type=str, default="clic", help="detector type (clic, cld, maia)")
+    parser.add_argument(
+        "--detector",
+        type=str,
+        default="clic",
+        choices=list(EDM4HEP.DETECTORS.keys()),
+        help=f"detector scenario from mlpf/conf.py ({', '.join(EDM4HEP.DETECTORS.keys())})",
+    )
     parser.add_argument("--first-event", type=int, default=0, help="first event to process")
     parser.add_argument("--num-events", type=int, default=-1, help="number of events to process")
 

@@ -182,6 +182,75 @@ class EDM4HEP:
         def get_names(cls):
             return [f.name.replace("position_", "position.") for f in fields(cls)]
 
+    @dataclass
+    class Detector:
+        """Detector scenario configuration for key4hep post-processing and validation."""
+
+        name: str
+        b_field: float
+        hit_collections: List[str]
+
+    # Registry of supported key4hep detector scenarios. Add new detectors here;
+    # mlpf/data/key4hep/postprocessing.py and tests/validate_parquet.py pick up
+    # the B-field and hit collections from this configuration.
+    DETECTORS = {
+        "clic": Detector(
+            name="clic",
+            b_field=4.0,
+            hit_collections=[
+                "ECALBarrel",
+                "ECALEndcap",
+                "ECALOther",
+                "HCALBarrel",
+                "HCALEndcap",
+                "HCALOther",
+                "MUON",
+                "LumiCal_Hits",
+                "ITrackerHits",
+                "ITrackerEndcapHits",
+                "OTrackerHits",
+                "OTrackerEndcapHits",
+                "VXDTrackerHits",
+                "VXDEndcapTrackerHits",
+            ],
+        ),
+        "cld": Detector(
+            name="cld",
+            b_field=2.0,
+            hit_collections=[
+                "ECALBarrel",
+                "ECALEndcap",
+                "HCALBarrel",
+                "HCALEndcap",
+                "HCALOther",
+                "MUON",
+                "ITrackerHits",
+                "ITrackerEndcapHits",
+                "OTrackerHits",
+                "OTrackerEndcapHits",
+                "VXDTrackerHits",
+                "VXDEndcapTrackerHits",
+            ],
+        ),
+        "maia": Detector(
+            name="maia",
+            b_field=5.0,
+            hit_collections=[
+                "EcalBarrelCollectionRec",
+                "EcalEndcapCollectionRec",
+                "HcalBarrelCollectionRec",
+                "HcalEndcapCollectionRec",
+                "MUON",
+                "IBTrackerHits",
+                "IETrackerHits",
+                "OBTrackerHits",
+                "OETrackerHits",
+                "VBTrackerHits",
+                "VETrackerHits",
+            ],
+        ),
+    }
+
 
 def get_edm4hep_x_features():
     track_names = EDM4HEP.TrackFeatures.get_names()
