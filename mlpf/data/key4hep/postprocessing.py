@@ -80,8 +80,16 @@ visible_energy_deposit = 0.5  # GeV
 
 # PROTOTYPE, under discussion in PR #490. Let a long-lived neutral parent that decayed outside the
 # detector stand in for its status-1 daughters, which the simulation never propagated, since the
-# parent is what the detector actually saw. See find_surrogate_ancestors. Set False to recover the
-# previous behaviour.
+# parent is what the detector actually saw.
+#
+# This has to apply to BOTH sides or it biases the comparison. In the target it admits the parent
+# (find_surrogate_ancestors, decided on deposited hits); in the truth reference it admits the same
+# parent in place of the daughters that the propagated-bit filter removes
+# (find_surrogate_ancestors_from_record, decided on the simulator endpoint bits, since the hit
+# adjacency does not exist yet at that point). Enabling it on the target alone pushes the response
+# above 1, because the reference no longer contains the energy the target just gained.
+#
+# Set False to recover the previous behaviour on both sides.
 use_surrogate_ancestors = True
 
 track_coll = "SiTracks_Refitted"
@@ -707,6 +715,87 @@ def add_daughters_to_status1(
         )
 
     return genparticle_to_hit, genparticle_to_trk
+
+
+def find_surrogate_ancestors_from_record(prop_data: awkward.Record, mc_coll: str, max_depth: int = 8) -> awkward.Array:
+    """Same idea as find_surrogate_ancestors, but decided from the MCParticle record alone.
+
+    The truth jets are built before the per-event loop, so the hit adjacency is not available
+    there. "Was propagated" (an endpoint bit set) stands in for "deposited hits": a parent the
+    simulation tracked to an endpoint is the object the detector had a chance to measure, whereas
+    its status-1 daughters, created outside the world volume, were never tracked at all.
+
+    Returns a jagged boolean mask over MCParticles, one list per event.
+    """
+    PROPAGATED = 0x0F000000
+    gs_all = prop_data[f"{mc_coll}.generatorStatus"]
+    ss_all = prop_data[f"{mc_coll}.simulatorStatus"]
+    pdg_all = prop_data[f"{mc_coll}.PDG"]
+    db_all = prop_data[f"{mc_coll}.daughters_begin"]
+    de_all = prop_data[f"{mc_coll}.daughters_end"]
+    di_all = prop_data[f"_{mc_coll}_daughters/_{mc_coll}_daughters.index"]
+
+    out = []
+    for iev in range(len(gs_all)):
+        gs = np.asarray(awkward.to_numpy(gs_all[iev]))
+        ss = np.asarray(awkward.to_numpy(ss_all[iev])).astype(np.int64) & 0xFFFFFFFF
+        pdg = np.abs(np.asarray(awkward.to_numpy(pdg_all[iev])))
+        db = np.asarray(awkward.to_numpy(db_all[iev]))
+        de = np.asarray(awkward.to_numpy(de_all[iev]))
+        di = np.asarray(awkward.to_numpy(di_all[iev]))
+        n_gp = len(gs)
+        surrogate = np.zeros(n_gp, dtype=bool)
+
+        st1 = (gs == 1) & (pdg != 12) & (pdg != 14) & (pdg != 16)
+        propagated = (ss & PROPAGATED) != 0
+
+        parent_of: Dict[int, int] = {}
+        for ip in range(n_gp):
+            for d in di[db[ip] : de[ip]]:
+                parent_of.setdefault(int(d), ip)
+
+        candidates = set()
+        for idx in np.where(st1 & ~propagated)[0]:
+            cur, depth, seen = int(idx), 0, set()
+            while depth < max_depth:
+                nxt = parent_of.get(cur)
+                if nxt is None or nxt in seen:
+                    break
+                cur, depth = nxt, depth + 1
+                seen.add(cur)
+                if propagated[cur] and not st1[cur]:
+                    candidates.add(cur)
+                    break
+
+        def status1_descendants_propagated(root: int) -> bool:
+            stack, seen = [root], {root}
+            while stack:
+                cur = stack.pop()
+                for d in di[db[cur] : de[cur]]:
+                    d = int(d)
+                    if d in seen:
+                        continue
+                    seen.add(d)
+                    if st1[d] and propagated[d]:
+                        return True
+                    stack.append(d)
+            return False
+
+        candidates = {c for c in candidates if not status1_descendants_propagated(c)}
+        for c in list(candidates):
+            cur, depth = c, 0
+            while depth < max_depth:
+                nxt = parent_of.get(cur)
+                if nxt is None:
+                    break
+                cur, depth = nxt, depth + 1
+                candidates.discard(cur)
+
+        for c in candidates:
+            surrogate[c] = True
+        out.append(surrogate)
+
+    return awkward.Array(out)
 
 
 def find_surrogate_ancestors(gen_features: GenFeatures, genparticle_to_hit: SparseMatrixCOO, max_depth: int = 8) -> np.ndarray:
@@ -1442,6 +1531,17 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         & (mc_pdg != 16)
         & ((prop_data[f"{mc_coll}.simulatorStatus"] & 0x0F000000) != 0)
     )
+    # A parent the simulation propagated, whose status-1 daughters it did not, is the object the
+    # detector actually saw: the daughters were created outside the world volume. Dropping the
+    # daughters (above) removes their energy from the reference even though the parent's shower is
+    # sitting in the calorimeter, so the reference undercounts what is measurable. Adding the
+    # parent instead keeps the energy and matches what the target can contain. Its four-momentum
+    # is the sum of the daughters', so this is not double counting: the daughters are already
+    # excluded by the propagated requirement.
+    if use_surrogate_ancestors:
+        mc_surrogate_mask = find_surrogate_ancestors_from_record(prop_data, mc_coll)
+        mc_st1_mask = mc_st1_mask | mc_surrogate_mask
+
     mc_st1_p4 = vector.awk(
         awkward.zip(
             {
