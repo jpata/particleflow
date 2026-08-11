@@ -34,6 +34,13 @@ from mlpf.conf import (
 )
 
 
+@torch.compiler.disable
+def _flash_attn_varlen_eager(*args, **kwargs):
+    # The ROCm FlashAttention custom op can return an auxiliary softmax_lse
+    # layout that disagrees with its fake registration under torch.compile.
+    return _flash_attn_varlen_func(*args, **kwargs)
+
+
 def get_activation(activation: Activation):
     activation = Activation(activation)
     if activation == Activation.ELU:
@@ -205,7 +212,8 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
                 attn_mask = ~key_padding_mask.view(bs, 1, 1, k_len)
 
         if self.use_flash_attn_varlen:
-            attn_output = _flash_attn_varlen_func(
+            flash_attn_varlen = _flash_attn_varlen_eager if torch.version.hip is not None else _flash_attn_varlen_func
+            attn_output = flash_attn_varlen(
                 q_attn,
                 k_attn,
                 v_attn,

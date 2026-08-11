@@ -171,6 +171,27 @@ def test_flash_attn_varlen_autocast_keeps_projection_dtypes_consistent(monkeypat
     assert output.values.dtype == torch.bfloat16
 
 
+def test_flash_attn_varlen_uses_eager_custom_op_on_rocm(monkeypatch):
+    calls = []
+
+    def fake_eager(q, _k, _v, *_args, **_kwargs):
+        calls.append(q.shape)
+        return q
+
+    monkeypatch.setattr(torch.version, "hip", "test-rocm")
+    monkeypatch.setattr(mlpf_module, "_flash_attn_varlen_eager", fake_eager)
+    monkeypatch.setattr(mlpf_module, "_flash_attn_varlen_func", lambda *_args, **_kwargs: pytest.fail("compiled op used"))
+    module = SimpleMultiheadAttention(32, 4, attention_type="flash", use_flash_attn_varlen=True).eval()
+    mask = torch.tensor([[True, True, False], [True, True, True]])
+    packed = dense_to_jagged(torch.randn(2, 3, 32), mask)
+
+    with torch.no_grad():
+        output, _ = module(packed, packed, packed)
+
+    assert calls == [(5, 4, 8)]
+    assert output.values.shape == (5, 32)
+
+
 if __name__ == "__main__":
     d = get_device()
     test_simple_mha_masking(d)
