@@ -10,9 +10,9 @@ TARGETS=${TARGETS:-cld-hits}
 SCENARIOS=${SCENARIOS:-shared,split}
 DATA_CONFIG=${DATA_CONFIG:-1}
 
-NUM_STEPS=${NUM_STEPS:-20000}
-VAL_FREQ=${VAL_FREQ:-5000}
-CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-5000}
+NUM_STEPS=${NUM_STEPS:-2000}
+VAL_FREQ=${VAL_FREQ:-1000}
+CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-1000}
 GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-4}
 NUM_WORKERS=${NUM_WORKERS:-8}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-4}
@@ -72,6 +72,8 @@ make_common_args() {
     --sampler_mode interleaved-shards
     --validation_diagnostics_batches "$VALIDATION_DIAGNOSTICS_BATCHES"
     --make_plots
+    --model.attention.use_jagged_attention false
+    --pad_to_multiple_elements 100
   )
 }
 
