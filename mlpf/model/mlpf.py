@@ -155,9 +155,14 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         wq, wk, wv = torch.split(self.in_proj_weight, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
         bq, bk, bv = torch.split(self.in_proj_bias, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
 
-        q_values = torch.matmul(q_values, wq.T) + bq
-        k_values = torch.matmul(k_values, wk.T) + bk
-        v_values = torch.matmul(v_values, wv.T) + bv
+        q_values = torch.matmul(q_values, wq.T)
+        k_values = torch.matmul(k_values, wk.T)
+        v_values = torch.matmul(v_values, wv.T)
+        # ROCm Inductor 2.7 can fuse autocast matmul+bias into addmm without
+        # casting the FP32 bias. Cast to the actual matmul output dtype first.
+        q_values = q_values + bq.to(q_values.dtype)
+        k_values = k_values + bk.to(k_values.dtype)
+        v_values = v_values + bv.to(v_values.dtype)
 
         # for pytorch internal scaled dot product attention, we need (bs, num_heads, seq_len, head_dim)
         if jagged_input and self.use_flash_attn_varlen:
@@ -234,7 +239,8 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
             attn_output = attn_output.transpose(1, 2).reshape(bs, -1, num_heads * head_dim)
 
         # assert list(attn_output.size()) == [bs, seq_len, num_heads * head_dim]
-        attn_output = self.out_proj(attn_output)
+        attn_output_projected = torch.matmul(attn_output, self.out_proj.weight.T)
+        attn_output = attn_output_projected + self.out_proj.bias.to(attn_output_projected.dtype)
         if jagged_input:
             attn_output = q.with_values(attn_output)
         return attn_output, None

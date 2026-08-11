@@ -153,6 +153,24 @@ def test_flash_attn_varlen_uses_packed_values_and_offsets(monkeypatch):
     assert not causal
 
 
+def test_flash_attn_varlen_autocast_keeps_projection_dtypes_consistent(monkeypatch):
+    def fake_flash_attn_varlen(q, _k, _v, *_args, **_kwargs):
+        assert q.dtype == torch.bfloat16
+        return q
+
+    monkeypatch.setattr(mlpf_module, "_flash_attn_varlen_func", fake_flash_attn_varlen)
+    module = SimpleMultiheadAttention(32, 4, attention_type="flash", use_flash_attn_varlen=True).eval()
+    mask = torch.tensor([[True, True, False], [True, True, True]])
+    packed = dense_to_jagged(torch.randn(2, 3, 32), mask)
+
+    with torch.no_grad(), torch.autocast("cpu", dtype=torch.bfloat16):
+        output, _ = module(packed, packed, packed)
+
+    assert module.in_proj_bias.dtype == torch.float32
+    assert module.out_proj.bias.dtype == torch.float32
+    assert output.values.dtype == torch.bfloat16
+
+
 if __name__ == "__main__":
     d = get_device()
     test_simple_mha_masking(d)
