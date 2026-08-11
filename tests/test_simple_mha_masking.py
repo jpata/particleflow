@@ -4,7 +4,10 @@ Spec: Verifies 'SimpleMultiheadAttention' respects 'key_padding_mask'. Assertion
 
 import torch
 import pytest
-from mlpf.model.mlpf import SimpleMultiheadAttention
+from torch.nn.attention import SDPBackend
+
+from mlpf.conf import AttentionType
+from mlpf.model.mlpf import SimpleMultiheadAttention, dense_to_jagged, jagged_to_dense
 
 
 def get_device():
@@ -78,6 +81,31 @@ def test_simple_mha_onnx_fused_masking(device):
         out2, _ = module(q, k_modified, v_modified, key_padding_mask=key_padding_mask)
 
     assert torch.allclose(out1, out2, atol=1e-5), "Masked elements affected the output (ONNX fused path)"
+
+
+def test_flash_mha_processes_jagged_batch_without_padding(device):
+    torch.manual_seed(7)
+    embed_dim = 32
+    module = SimpleMultiheadAttention(embed_dim, 4, attention_type="flash").to(device).eval()
+    # Exercise the flash-specific variable-length branch on hosts without CUDA.
+    module.attn_params[AttentionType.FLASH] = [SDPBackend.MATH]
+
+    short = torch.randn(1, 4, embed_dim, device=device)
+    long = torch.randn(1, 7, embed_dim, device=device)
+    padded_short = torch.nn.functional.pad(short, (0, 0, 0, 3))
+    batch = torch.cat([padded_short, long], dim=0)
+    valid_mask = ~torch.tensor(
+        [[False, False, False, False, True, True, True], [False, False, False, False, False, False, False]],
+        device=device,
+    )
+    jagged_batch = dense_to_jagged(batch, valid_mask)
+
+    with torch.no_grad():
+        expected, _ = module(short, short, short)
+        actual_jagged, _ = module(jagged_batch, jagged_batch, jagged_batch)
+        actual = jagged_to_dense(actual_jagged, valid_mask)
+
+    torch.testing.assert_close(expected, actual[:1, : short.shape[1]], rtol=1e-5, atol=1e-6)
 
 
 if __name__ == "__main__":

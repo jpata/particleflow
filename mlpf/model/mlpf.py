@@ -1,5 +1,5 @@
 import time
-from typing import Union, List, Optional
+from typing import Union, List, Optional, NamedTuple
 
 import torch
 import torch.nn as nn
@@ -63,6 +63,32 @@ def infer_num_heads(embed_dim: int, preferred_heads: Optional[int] = None) -> in
     return 1
 
 
+class PackedJaggedTensor(NamedTuple):
+    values: torch.Tensor
+    offsets: torch.Tensor
+    batch_size: int
+    max_seqlen: int
+
+    def with_values(self, values):
+        return PackedJaggedTensor(values, self.offsets, self.batch_size, self.max_seqlen)
+
+
+def is_jagged_tensor(tensor):
+    return isinstance(tensor, PackedJaggedTensor)
+
+
+def dense_to_jagged(tensor, mask):
+    valid = mask.bool()
+    valid_lengths = valid.sum(dim=-1)
+    offsets = torch.nn.functional.pad(valid_lengths.cumsum(dim=0), (1, 0))
+    return PackedJaggedTensor(tensor[valid], offsets, tensor.shape[0], tensor.shape[1])
+
+
+def jagged_to_dense(tensor, mask):
+    output = tensor.values.new_zeros((*mask.shape, tensor.values.shape[-1]))
+    return output.masked_scatter(mask.bool().unsqueeze(-1), tensor.values)
+
+
 class SimpleMultiheadAttention(nn.MultiheadAttention):
     def __init__(
         self,
@@ -90,9 +116,19 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
 
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, need_weights=False, key_padding_mask=None) -> torch.Tensor:
         # q, k, v: 3D tensors (batch_size, seq_len, embed_dim), embed_dim = num_heads*head_dim
-        bs, q_len, embed_dim = q.size()
-        k_len = k.size(1)
-        v_len = v.size(1)
+        jagged_input = is_jagged_tensor(q)
+        if jagged_input != is_jagged_tensor(k) or jagged_input != is_jagged_tensor(v):
+            raise ValueError("q, k, and v must all use the same dense or jagged layout")
+        if jagged_input and (key_padding_mask is not None or self.export_onnx_fused):
+            raise ValueError("Jagged attention does not use padding masks and cannot use the ONNX-fused path")
+
+        if jagged_input:
+            bs = q.batch_size
+            q_values, k_values, v_values = q.values, k.values, v.values
+        else:
+            bs = q.size(0)
+            k_len = k.size(1)
+            q_values, k_values, v_values = q, k, v
         head_dim = self.head_dim
         num_heads = self.num_heads
 
@@ -100,45 +136,69 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         wq, wk, wv = torch.split(self.in_proj_weight, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
         bq, bk, bv = torch.split(self.in_proj_bias, [self.embed_dim, self.embed_dim, self.embed_dim], dim=0)
 
-        q = torch.matmul(q, wq.T) + bq
-        k = torch.matmul(k, wk.T) + bk
-        v = torch.matmul(v, wv.T) + bv
+        q_values = torch.matmul(q_values, wq.T) + bq
+        k_values = torch.matmul(k_values, wk.T) + bk
+        v_values = torch.matmul(v_values, wv.T) + bv
 
         # for pytorch internal scaled dot product attention, we need (bs, num_heads, seq_len, head_dim)
-        if not self.export_onnx_fused:
-            q = q.reshape(bs, q_len, num_heads, head_dim).transpose(1, 2)
-            k = k.reshape(bs, k_len, num_heads, head_dim).transpose(1, 2)
-            v = v.reshape(bs, v_len, num_heads, head_dim).transpose(1, 2)
+        if jagged_input:
+            nested_qkv = []
+            for tensor in (q_values, k_values, v_values):
+                nested = torch.nested.nested_tensor_from_jagged(
+                    tensor.reshape(-1, num_heads, head_dim),
+                    q.offsets,
+                    min_seqlen=1,
+                    max_seqlen=q.max_seqlen,
+                )
+                nested_qkv.append(nested.transpose(1, 2))
+            q_attn, k_attn, v_attn = nested_qkv
+        elif not self.export_onnx_fused:
+            q_attn = q_values.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
+            k_attn = k_values.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
+            v_attn = v_values.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
+        else:
+            q_attn, k_attn, v_attn = q_values, k_values, v_values
 
         # this function will have different shape signatures in native pytorch sdpa and in ONNX com.microsoft.MultiHeadAttention
         # in pytorch: (bs, num_heads, seq_len, head_dim)
         # in ONNX: (bs, seq_len, num_heads*head_dim)
 
-        # Prepare attention mask from key_padding_mask if provided
+        # Dense flash SDPA does not accept a non-null mask. Callers that need
+        # correct variable-length flash attention must pass jagged q/k/v.
         attn_mask = None
         if key_padding_mask is not None:
             # key_padding_mask: [bs, seq_len], True where elements are to be ignored
             # scaled_dot_product_attention expects attn_mask: [bs, 1, 1, seq_len], False where elements are to be ignored
             if self.export_onnx_fused:
                 attn_mask = ~key_padding_mask.unsqueeze(1)
+            elif self.attention_type == AttentionType.FLASH:
+                raise ValueError("Dense flash attention cannot use key_padding_mask; enable jagged attention")
             else:
                 attn_mask = ~key_padding_mask.view(bs, 1, 1, k_len)
 
         if self.export_onnx_fused:
-            attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout
+            )
         else:
             with sdpa_kernel(self.attn_params[self.attention_type]):
-                attn_output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=self.dropout)
+                attn_output = torch.nn.functional.scaled_dot_product_attention(
+                    q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout
+                )
 
         # Keep residual paths type-stable for half-precision ONNX export.
-        attn_output = attn_output.to(q.dtype)
+        attn_output = attn_output.to(q_values.dtype)
 
         # in case running with pytorch internal scaled dot product attention, reshape back to the original shape
-        if not self.export_onnx_fused:
-            attn_output = attn_output.transpose(1, 2).reshape(bs, q_len, num_heads * head_dim)
+        if jagged_input:
+            attn_output = attn_output.transpose(1, 2).values().reshape(-1, num_heads * head_dim)
+        elif not self.export_onnx_fused:
+            attn_output = attn_output.transpose(1, 2).reshape(bs, -1, num_heads * head_dim)
 
         # assert list(attn_output.size()) == [bs, seq_len, num_heads * head_dim]
         attn_output = self.out_proj(attn_output)
+        if jagged_input:
+            attn_output = q.with_values(attn_output)
         return attn_output, None
 
 
@@ -195,38 +255,43 @@ class PreLnSelfAttentionLayer(nn.Module):
         self.seq_len = 0
 
     def forward(self, x, mask, initial_embedding):
-        self.input_norm = x.norm().detach()
-        self.seq_len = x.shape[1]
+        jagged_input = is_jagged_tensor(x)
+        self.input_norm = (x.values if jagged_input else x).norm().detach()
+        self.seq_len = mask.shape[1] if jagged_input else x.shape[1]
 
-        if mask is not None:
+        if mask is not None and not jagged_input:
             mask_ = mask.unsqueeze(-1)
 
         residual = x
-        x_norm = self.norm0(x)
+        x_norm = x.with_values(self.norm0(x.values)) if jagged_input else self.norm0(x)
 
         q = x_norm
 
         if self.learnable_queries:
+            if jagged_input:
+                raise ValueError("Learnable per-element queries are not supported with jagged attention")
             q = self.queries.expand(*x.shape)
         elif self.elems_as_queries:
             q = initial_embedding
-        if mask is not None:
+        if mask is not None and not jagged_input:
             q = q * mask_
 
         mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
 
-        self.mha_res_norm = mha_out.norm().detach()
+        self.mha_res_norm = (mha_out.values if jagged_input else mha_out).norm().detach()
 
-        x = residual + mha_out
+        x = residual.with_values(residual.values + mha_out.values) if jagged_input else residual + mha_out
         residual = x
-        x_norm = self.norm1(x)
-        ffn_out = self.seq(x_norm)
-        ffn_out = self.dropout(ffn_out)
+        x_norm = x.with_values(self.norm1(x.values)) if jagged_input else self.norm1(x)
+        if jagged_input:
+            ffn_out = x.with_values(self.dropout(self.seq(x_norm.values)))
+        else:
+            ffn_out = self.dropout(self.seq(x_norm))
 
-        self.ffn_res_norm = ffn_out.norm().detach()
+        self.ffn_res_norm = (ffn_out.values if jagged_input else ffn_out).norm().detach()
 
-        x = residual + ffn_out
-        if mask is not None:
+        x = residual.with_values(residual.values + ffn_out.values) if jagged_input else residual + ffn_out
+        if mask is not None and not jagged_input:
             x = x * mask_
         return x
 
@@ -378,6 +443,7 @@ class MLPF(nn.Module):
         self.task_queries = bool(self.config.task_queries)
         self.backbone_mode = BackboneMode(self.config.backbone.mode)
         self.use_split_backbone = self.backbone_mode == BackboneMode.SPLIT
+        self.use_jagged_attention = False
         regression_selector_values = self.elemtypes_nonzero
         pt_mode = RegressionMode(self.config.pt_mode)
         eta_mode = RegressionMode(self.config.eta_mode)
@@ -404,8 +470,13 @@ class MLPF(nn.Module):
             backbone_dropout_mha = sub_config.dropout_conv_id_mha
             backbone_dropout_ff = sub_config.dropout_conv_id_ff
             self.use_pre_layernorm = sub_config.use_pre_layernorm
+            self.use_jagged_attention = sub_config.use_jagged_attention
             export_onnx_fused = sub_config.export_onnx_fused
             save_attention = sub_config.save_attention
+            if self.use_jagged_attention and export_onnx_fused:
+                raise ValueError("Jagged attention is not supported by the ONNX-fused path")
+            if self.use_jagged_attention and attention_type == AttentionType.FLASH and (head_dim < 8 or head_dim > 256 or head_dim % 8 != 0):
+                raise ValueError("Jagged flash attention requires head_dim to be a multiple of 8 between 8 and 256")
 
             embedding_dim = num_heads * head_dim
             width = num_heads * head_dim
@@ -583,6 +654,7 @@ class MLPF(nn.Module):
         _logger.info("Output DNNs initialization took {:.2f}s".format(time.time() - t0))
 
         _logger.info("backbone_mode={}".format(self.backbone_mode))
+        _logger.info("jagged_attention enabled={}".format(self.use_jagged_attention))
         _logger.info("task_queries enabled={}".format(self.task_queries and not self.use_split_backbone))
         _logger.info(
             "classification_norm parameters: {}".format(count_parameters(self.classification_norm) if self.classification_norm is not None else 0)
@@ -764,8 +836,20 @@ class MLPF(nn.Module):
             embeddings.append(x)
         return embeddings
 
+    def _prepare_backbone_input(self, x, mask):
+        if self.use_jagged_attention:
+            return dense_to_jagged(x, mask)
+        return x
+
+    def _restore_backbone_output(self, x, mask):
+        if self.use_jagged_attention:
+            return jagged_to_dense(x, mask)
+        return x
+
     def _collect_representation(self, embeddings):
         if self.learned_representation_mode == LearnedRepresentationMode.CONCAT:
+            if self.use_jagged_attention:
+                return embeddings[0].with_values(torch.cat([embedding.values for embedding in embeddings], dim=-1))
             return torch.cat(embeddings, axis=-1)
         if self.learned_representation_mode == LearnedRepresentationMode.LAST:
             return embeddings[-1]
@@ -774,11 +858,13 @@ class MLPF(nn.Module):
     def encode_backbone(self, X_features, mask):
         if self.use_split_backbone:
             x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
+            x = self._prepare_backbone_input(x, mask)
             embeddings = self._run_backbone(x, mask, x, X_features, backbone=self._backbone_id)
         else:
             x = self._encode_inputs(X_features, mask=mask)
+            x = self._prepare_backbone_input(x, mask)
             embeddings = self._run_backbone(x, mask, x, X_features)
-        return self._collect_representation(embeddings)
+        return self._restore_backbone_output(self._collect_representation(embeddings), mask)
 
     @property
     def nn0_id(self):
@@ -809,14 +895,17 @@ class MLPF(nn.Module):
         if self.use_split_backbone:
             x_id = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
             x_reg = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_reg)
+            x_id = self._prepare_backbone_input(x_id, mask)
+            x_reg = self._prepare_backbone_input(x_reg, mask)
             embeddings_id = self._run_backbone(x_id, mask, x_id, X_features, backbone=self._backbone_id)
             embeddings_reg = self._run_backbone(x_reg, mask, x_reg, X_features, backbone=self._backbone_reg)
-            final_embedding_cls = self._collect_representation(embeddings_id)
-            final_embedding_reg = self._collect_representation(embeddings_reg)
+            final_embedding_cls = self._restore_backbone_output(self._collect_representation(embeddings_id), mask)
+            final_embedding_reg = self._restore_backbone_output(self._collect_representation(embeddings_reg), mask)
         else:
             x = self._encode_inputs(X_features, mask=mask)
+            x = self._prepare_backbone_input(x, mask)
             backbone_embeddings = self._run_backbone(x, mask, x, X_features)
-            final_embedding = self._collect_representation(backbone_embeddings)
+            final_embedding = self._restore_backbone_output(self._collect_representation(backbone_embeddings), mask)
 
             if self.task_queries:
                 final_embedding_cls = self.classification_readout(final_embedding, mask, self.classification_query)

@@ -415,6 +415,7 @@ class AttentionConfig(BaseModel):
     dropout_conv_id_mha: float = 0.0
     dropout_conv_id_ff: float = 0.0
     use_pre_layernorm: bool = True
+    use_jagged_attention: bool = False  # opt-in packed backbone; dense unmasked attention remains checkpoint-compatible default
     export_onnx_fused: bool = False
     save_attention: bool = False
 
