@@ -415,7 +415,7 @@ class AttentionConfig(BaseModel):
     dropout_conv_id_mha: float = 0.0
     dropout_conv_id_ff: float = 0.0
     use_pre_layernorm: bool = True
-    use_jagged_attention: bool = True  # ensures attention is correct on variable-length sequences without a padding mask
+    use_jagged_attention: bool = False  # ensures attention is correct on variable-length sequences without a padding mask
     use_flash_attn_varlen: bool = False  # bypass PyTorch jagged SDPA and use flash_attn_varlen_func
     export_onnx_fused: bool = False
     save_attention: bool = False
