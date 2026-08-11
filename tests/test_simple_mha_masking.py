@@ -129,16 +129,12 @@ def test_flash_attn_varlen_uses_packed_values_and_offsets(monkeypatch):
     reference.load_state_dict(module.state_dict())
 
     batch = torch.randn(2, 7, 32)
-    valid_mask = torch.tensor(
-        [[True, True, True, True, False, False, False], [True, True, True, True, True, True, True]]
-    )
+    valid_mask = torch.tensor([[True, True, True, True, False, False, False], [True, True, True, True, True, True, True]])
     packed = dense_to_jagged(batch, valid_mask)
 
     with torch.no_grad():
         actual, _ = module(packed, packed, packed)
-        expected = torch.cat(
-            [reference(event, event, event)[0].squeeze(0) for event in (batch[:1, :4], batch[1:, :7])]
-        )
+        expected = torch.cat([reference(event, event, event)[0].squeeze(0) for event in (batch[:1, :4], batch[1:, :7])])
 
     assert actual.values.shape == (11, 32)
     torch.testing.assert_close(actual.values, expected)

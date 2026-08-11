@@ -40,9 +40,7 @@ class LearnableTaskLossWeights(nn.Module):
         self.log_vars = nn.Parameter(torch.tensor(initial_log_vars, dtype=torch.float32))
 
         if self.ema_decay is not None and self.ema_decay > 0:
-            initial_weights_tensor = torch.tensor(
-                [float(initial_weights.get(task, 1.0)) for task in self.tasks], dtype=torch.float32
-            )
+            initial_weights_tensor = torch.tensor([float(initial_weights.get(task, 1.0)) for task in self.tasks], dtype=torch.float32)
             self.register_buffer("weight_ema", initial_weights_tensor)
 
     def clamped_log_vars(self):

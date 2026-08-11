@@ -128,10 +128,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         if self.use_flash_attn_varlen and (self.head_dim < 8 or self.head_dim > 256 or self.head_dim % 8 != 0):
             raise ValueError("flash_attn_varlen requires head_dim to be a multiple of 8 between 8 and 256")
         if self.use_flash_attn_varlen and _flash_attn_varlen_func is None:
-            raise ImportError(
-                "use_flash_attn_varlen=True requires a compatible flash-attn installation "
-                "that provides flash_attn_varlen_func"
-            )
+            raise ImportError("use_flash_attn_varlen=True requires a compatible flash-attn installation " "that provides flash_attn_varlen_func")
         self.attn_params = {
             AttentionType.SIMPLE: [SDPBackend.MATH, SDPBackend.EFFICIENT_ATTENTION],
             AttentionType.MATH: [SDPBackend.MATH],
@@ -225,14 +222,10 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
                 causal=False,
             )
         elif self.export_onnx_fused:
-            attn_output = torch.nn.functional.scaled_dot_product_attention(
-                q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout
-            )
+            attn_output = torch.nn.functional.scaled_dot_product_attention(q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout)
         else:
             with sdpa_kernel(self.attn_params[self.attention_type]):
-                attn_output = torch.nn.functional.scaled_dot_product_attention(
-                    q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout
-                )
+                attn_output = torch.nn.functional.scaled_dot_product_attention(q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout)
 
         # Keep residual paths type-stable for half-precision ONNX export.
         attn_output = attn_output.to(q_values.dtype)

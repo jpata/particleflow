@@ -1325,9 +1325,7 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     _logger.info("Instantiating model")
     model = MLPF(config)
-    model.task_loss_weighter = make_task_loss_weighter(
-        config.regression_loss_weights.model_dump(), ema_decay=config.task_loss_weight_ema_decay
-    )
+    model.task_loss_weighter = make_task_loss_weighter(config.regression_loss_weights.model_dump(), ema_decay=config.task_loss_weight_ema_decay)
     _logger.info("Instantiated model")
 
     _logger.info("Moving model to device rank={}".format(rank))
