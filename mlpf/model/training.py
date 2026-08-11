@@ -1121,6 +1121,7 @@ def train_all_steps(
             )
             diagnostics = task_loss_diagnostics or {}
             task_weight_components = _format_task_diagnostic(diagnostics.get("weight", {}))
+            task_weight_ema_components = _format_task_diagnostic(diagnostics.get("weight_ema", {}))
             task_log_var_components = _format_task_diagnostic(diagnostics.get("log_var", {}))
             task_weighted_loss_components = _format_task_diagnostic(diagnostics.get("weighted_loss", {}))
             _logger.info(
@@ -1128,6 +1129,7 @@ def train_all_steps(
                 f"Train Loss: {losses_train['Total']:.4f} | "
                 f"Train Loss Components: {train_loss_components} | "
                 f"Task Weights: {task_weight_components} | "
+                f"Task Weights (EMA): {task_weight_ema_components} | "
                 f"Task LogVars: {task_log_var_components} | "
                 f"Task Weighted Losses: {task_weighted_loss_components} | "
                 f"LR: {current_lr:.2e} | "
@@ -1323,7 +1325,9 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     _logger.info("Instantiating model")
     model = MLPF(config)
-    model.task_loss_weighter = make_task_loss_weighter(config.regression_loss_weights.model_dump())
+    model.task_loss_weighter = make_task_loss_weighter(
+        config.regression_loss_weights.model_dump(), ema_decay=config.task_loss_weight_ema_decay
+    )
     _logger.info("Instantiated model")
 
     _logger.info("Moving model to device rank={}".format(rank))

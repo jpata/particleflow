@@ -427,6 +427,8 @@ models:
       sin_phi: 0.01
       cos_phi: 0.01
       energy: 1.0
+    task_loss_weight_lr: null # LR for the learned task-loss weights; defaults to 0.1 * lr
+    task_loss_weight_ema_decay: 0.99 # EMA smoothing for the applied task weights; set to 0 to disable
 
     raytune:
       local_dir:  # absolute path to store raytune results, e.g. "/scratch/local/user/raytune_results"

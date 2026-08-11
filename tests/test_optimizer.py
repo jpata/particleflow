@@ -1,4 +1,5 @@
 import torch
+import pytest
 
 from mlpf.conf import MLPFConfig
 from mlpf.optimizers import get_optimizer
@@ -52,14 +53,22 @@ def test_optimizer_single_group_without_task_weighter():
     assert opt.param_groups[0]["weight_decay"] == cfg.weight_decay
 
 
-def test_task_weighter_group_uses_full_lr_and_no_weight_decay():
+def test_task_weighter_group_uses_lower_lr_and_no_weight_decay():
     cfg = _config()
     opt = get_optimizer(_Model(with_weighter=True), cfg)
     assert len(opt.param_groups) == 2
-    assert [group["lr"] for group in opt.param_groups] == [cfg.lr, cfg.lr]
+    assert opt.param_groups[0]["lr"] == cfg.lr
+    assert opt.param_groups[1]["lr"] == pytest.approx(cfg.lr * 0.1)
     assert [group["weight_decay"] for group in opt.param_groups] == [
         cfg.weight_decay,
         0.0,
     ]
     assert opt.param_groups[1]["always_adapt"] is True
     assert len(opt.param_groups[1]["params"]) == 1
+
+
+def test_task_weighter_group_honors_explicit_lr():
+    cfg = _config()
+    cfg.task_loss_weight_lr = 5e-5
+    opt = get_optimizer(_Model(with_weighter=True), cfg)
+    assert opt.param_groups[1]["lr"] == 5e-5

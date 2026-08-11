@@ -22,11 +22,16 @@ def get_optimizer(model: torch.nn.Module, config: MLPFConfig):
         parameters = model.parameters()
     else:
         task_loss_weight_param_ids = {id(param) for param in task_loss_weighter.parameters()}
+        # The task weights are deliberately learned more slowly than the model:
+        # they scale the per-task gradients, so fast weight dynamics amplify
+        # gradient noise and can destabilize long runs. Default to 0.1x the
+        # main LR unless an explicit task_loss_weight_lr is configured.
+        task_loss_weight_lr = config.task_loss_weight_lr if config.task_loss_weight_lr is not None else config.lr * 0.1
         parameters = [
             {"params": [param for param in model.parameters() if id(param) not in task_loss_weight_param_ids]},
             {
                 "params": list(task_loss_weighter.parameters()),
-                "lr": config.lr,
+                "lr": task_loss_weight_lr,
                 "weight_decay": 0.0,
                 # Keep LAMB's layer-wise trust scaling for the weighter (the
                 # pre-split optimizer applied it via weight_decay != 0); without

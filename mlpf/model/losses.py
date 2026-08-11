@@ -26,17 +26,24 @@ class LearnableTaskLossWeights(nn.Module):
     # (~1/loss): angular losses of ~0.03 imply weights ~30, so -3 (weight cap
     # exp(3) ~ 20) pins them at the boundary. -5 matches the proven reference
     # run (cap exp(5) ~ 148) and still bounds classification weight growth.
-    def __init__(self, initial_weights, clamp_min=-5.0, clamp_max=8.0):
+    def __init__(self, initial_weights, clamp_min=-5.0, clamp_max=8.0, ema_decay=None):
         super().__init__()
         self.tasks = LOSS_TASKS
         self.clamp_min = clamp_min
         self.clamp_max = clamp_max
+        self.ema_decay = ema_decay
 
         initial_log_vars = []
         for task in self.tasks:
             initial_weight = float(initial_weights.get(task, 1.0))
             initial_log_vars.append(-torch.log(torch.tensor(initial_weight, dtype=torch.float32)).item())
         self.log_vars = nn.Parameter(torch.tensor(initial_log_vars, dtype=torch.float32))
+
+        if self.ema_decay is not None and self.ema_decay > 0:
+            initial_weights_tensor = torch.tensor(
+                [float(initial_weights.get(task, 1.0)) for task in self.tasks], dtype=torch.float32
+            )
+            self.register_buffer("weight_ema", initial_weights_tensor)
 
     def clamped_log_vars(self):
         return torch.clamp(self.log_vars, min=self.clamp_min, max=self.clamp_max)
@@ -46,29 +53,47 @@ class LearnableTaskLossWeights(nn.Module):
 
     def forward(self, losses):
         log_vars = self.clamped_log_vars()
+        raw_weights = torch.exp(-log_vars)
+
+        ema_enabled = self.ema_decay is not None and self.ema_decay > 0
+        if ema_enabled:
+            ema = self.ema_decay * self.weight_ema.detach() + (1.0 - self.ema_decay) * raw_weights
+            if self.training:
+                with torch.no_grad():
+                    self.weight_ema.copy_(ema)
+            # Apply the smoothed weights in the loss while keeping a
+            # straight-through gradient path through the current weights, so
+            # the weighter still learns (at its configured LR) instead of being
+            # frozen by the EMA. The EMA only damps the applied weight values.
+            applied_weights = ema.detach() + raw_weights - raw_weights.detach()
+        else:
+            applied_weights = raw_weights
+
         weighted_losses = []
         diagnostics = {
             "weight": {},
+            "weight_ema": {},
             "log_var": {},
             "weighted_loss": {},
         }
-        for task, log_var in zip(self.tasks, log_vars):
-            weight = torch.exp(-log_var)
+        for idx, (task, log_var) in enumerate(zip(self.tasks, log_vars)):
+            weight = applied_weights[idx]
             weighted_loss = weight * losses[task] + log_var
-            diagnostics["weight"][task] = weight
+            diagnostics["weight"][task] = raw_weights[idx]
+            diagnostics["weight_ema"][task] = weight
             diagnostics["log_var"][task] = log_var
             diagnostics["weighted_loss"][task] = weighted_loss
             weighted_losses.append(weighted_loss)
         return sum(weighted_losses), diagnostics
 
 
-def make_task_loss_weighter(regression_loss_weights):
+def make_task_loss_weighter(regression_loss_weights, ema_decay=None):
     initial_weights = {
         "Classification_binary": 1.0,
         "Classification": 1.0,
         **{f"Regression_{feature}": regression_loss_weights[feature] for feature in REGRESSION_FEATURES},
     }
-    return LearnableTaskLossWeights(initial_weights)
+    return LearnableTaskLossWeights(initial_weights, ema_decay=ema_decay)
 
 
 def _mask_no_target_regression(y, ypred):

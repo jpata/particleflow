@@ -585,6 +585,8 @@ class MLPFConfig(BaseModel):
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
     regression_loss_weights: RegressionLossWeights = Field(default_factory=RegressionLossWeights)
+    task_loss_weight_lr: Optional[float] = None  # LR for the learned task-loss weights; defaults to 0.1 * lr
+    task_loss_weight_ema_decay: float = 0.99  # EMA smoothing for the applied task weights; 0.0 disables
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
     validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
 
