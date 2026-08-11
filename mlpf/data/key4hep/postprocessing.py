@@ -72,13 +72,12 @@ jet_ptcut = 5
 # deposit is roughly independent of momentum.
 #
 # The absolute term is a detector-dependent scale: it has to sit below the MIP peak and above the
-# noise, and the MIP peak scales with calorimeter depth. Median muon deposit is 4.22 GeV on MAIA but
-# only 1.98 GeV on CLD, so the usable range is 0.1-2.0 GeV on MAIA and 0.05-1.0 GeV on CLD (2.0 GeV
-# already eats into CLD's MIP peak, keeping 15/20 muons instead of 19/20). 0.5 GeV is inside both.
+# noise, and the MIP peak scales with calorimeter depth. Median muon deposit is ~4 GeV on MAIA but
+# only ~2 GeV on CLD, so set to 0.5 GeV
 visible_energy_fraction = 0.10
 visible_energy_deposit = 0.5  # GeV
 
-# PROTOTYPE, under discussion in PR #490. Let a long-lived neutral parent that decayed outside the
+# PR #490: Let a long-lived neutral parent that decayed outside the
 # detector stand in for its status-1 daughters, which the simulation never propagated, since the
 # parent is what the detector actually saw.
 #
@@ -801,20 +800,11 @@ def find_surrogate_ancestors_from_record(prop_data: awkward.Record, mc_coll: str
 def find_surrogate_ancestors(gen_features: GenFeatures, genparticle_to_hit: SparseMatrixCOO, max_depth: int = 8) -> np.ndarray:
     """Mark long-lived parents that should enter the target in place of their status-1 daughters.
 
-    At a muon collider, neutral hadrons such as K0S and Lambda are boosted hard enough to be
-    tracked through the entire detector by the simulation and to decay, in the generator record,
-    at a vertex metres outside it. The parent deposits the energy but is not status 1; its
-    status-1 daughters are never propagated, carry no hits, and so fail the visibility mask and
-    drop out of the target -- while remaining in the truth jets, which biases the response low.
-
-    On the MAIA ttbar sample this is 49 particles carrying 2.9% of the status-1 scalar pT, and
-    42 of them have an ancestor that did deposit. One 636 GeV K0S deposits 583 GeV in the
-    calorimeter while its 256 and 239 GeV pT pions are recorded 58 m out with nothing.
-
-    The detector saw one K0S shower, not two pion showers, so the parent is the reconstructable
-    object and is what the target should contain. Its four-momentum is the sum of its daughters',
-    so the truth jets are unchanged. map_pdgid_to_candid already sends it to the neutral-hadron
-    class, so no new target class appears.
+    At a 10 TeV muon collider, neutral hadrons such as K0S and Lambda are boosted enough to be
+    tracked through the entire detector by the simulation and then decay far outside it.
+    The parent deposits the energy but is not status 1; its status-1 daughters are never propagated,
+    carry no hits, and so fail the visibility mask and drop out of the target, while remaining in
+    the truth jets, which biases the response low.
 
     A parent is only used if *none* of its status-1 descendants deposited anything, otherwise
     taking both the parent and the depositing daughter would double count. Nested candidates are
@@ -971,25 +961,15 @@ def get_genparticles_and_adjacencies(
 
     # Hit-based visibility mask (#463). The gp_to_hit weights are calibrated hit energies in GeV,
     # so gp_energy_in_hits is what the genparticle actually deposited and the first term below is
-    # a true energy fraction (median 0.66 on the MAIA ttbar sample, typical calorimeter
-    # containment).
+    # a true energy fraction.
     #
     # The fractional term alone is a shower-containment criterion and so misses MIPs: a muon
     # deposits a roughly constant few GeV whatever its momentum, so its fraction falls with energy
-    # (0.006-0.04 for the muons in this sample) and a 10% cut drops 6 of 7 of them. The absolute
-    # term recovers all 7. The track term does not help the muons (none have a track linked above
+    # The absolute term recovers these. The track term does not help the muons (none have a track linked above
     # the 20% threshold), but it does recover charged hadrons whose calorimeter deposit falls
     # below the absolute threshold (e.g. low-momentum pions and kaons decaying in the tracker):
     # their momentum is measured by the tracker even though their shower is sub-threshold.
     #
-    # Caveats for anyone tuning this:
-    #  - the particles the absolute term admits deposit only ~2.6% of their generated energy, so
-    #    their energy has to come from the track. That is right for MIPs but not for the neutrals
-    #    it also lets in (9 of the 20 added here are photons that leaked).
-    #  - it cannot recover particles that deposit nothing at all, ~15% of the status-1 energy
-    #    here, mostly photons down the beampipe. Those are excluded from the truth reference
-    #    (see the simulator endpoint-bit filter in process_one_file), so they no longer bias the
-    #    target jet pT relative to the truth jet pT.
     # The absolute term exists to catch MIPs, which are charged by definition, so restrict it to
     # charged particles. A neutral that deposits more than the threshold but less than the
     # fractional cut is one that leaked: nothing measured its momentum and it has no track to
