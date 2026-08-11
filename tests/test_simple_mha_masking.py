@@ -6,6 +6,7 @@ import torch
 import pytest
 from torch.nn.attention import SDPBackend
 
+import mlpf.model.mlpf as mlpf_module
 from mlpf.conf import AttentionType
 from mlpf.model.mlpf import SimpleMultiheadAttention, dense_to_jagged, jagged_to_dense
 
@@ -106,6 +107,50 @@ def test_flash_mha_processes_jagged_batch_without_padding(device):
         actual = jagged_to_dense(actual_jagged, valid_mask)
 
     torch.testing.assert_close(expected, actual[:1, : short.shape[1]], rtol=1e-5, atol=1e-6)
+
+
+def test_flash_attn_varlen_uses_packed_values_and_offsets(monkeypatch):
+    calls = []
+
+    def fake_flash_attn_varlen(q, k, v, cu_q, cu_k, max_q, max_k, dropout_p, causal):
+        calls.append((q.shape, k.shape, v.shape, cu_q.clone(), cu_k.clone(), max_q, max_k, dropout_p, causal))
+        outputs = []
+        for start, stop in zip(cu_q[:-1].tolist(), cu_q[1:].tolist()):
+            q_event = q[start:stop].transpose(0, 1).unsqueeze(0)
+            k_event = k[start:stop].transpose(0, 1).unsqueeze(0)
+            v_event = v[start:stop].transpose(0, 1).unsqueeze(0)
+            output = torch.nn.functional.scaled_dot_product_attention(q_event, k_event, v_event)
+            outputs.append(output.squeeze(0).transpose(0, 1))
+        return torch.cat(outputs)
+
+    monkeypatch.setattr(mlpf_module, "_flash_attn_varlen_func", fake_flash_attn_varlen)
+    module = SimpleMultiheadAttention(32, 4, attention_type="flash", use_flash_attn_varlen=True).eval()
+    reference = SimpleMultiheadAttention(32, 4, attention_type="math").eval()
+    reference.load_state_dict(module.state_dict())
+
+    batch = torch.randn(2, 7, 32)
+    valid_mask = torch.tensor(
+        [[True, True, True, True, False, False, False], [True, True, True, True, True, True, True]]
+    )
+    packed = dense_to_jagged(batch, valid_mask)
+
+    with torch.no_grad():
+        actual, _ = module(packed, packed, packed)
+        expected = torch.cat(
+            [reference(event, event, event)[0].squeeze(0) for event in (batch[:1, :4], batch[1:, :7])]
+        )
+
+    assert actual.values.shape == (11, 32)
+    torch.testing.assert_close(actual.values, expected)
+    assert len(calls) == 1
+    q_shape, k_shape, v_shape, cu_q, cu_k, max_q, max_k, dropout_p, causal = calls[0]
+    assert q_shape == k_shape == v_shape == (11, 4, 8)
+    assert cu_q.dtype == cu_k.dtype == torch.int32
+    torch.testing.assert_close(cu_q, torch.tensor([0, 4, 11], dtype=torch.int32))
+    torch.testing.assert_close(cu_k, cu_q)
+    assert max_q == max_k == 7
+    assert dropout_p == 0.0
+    assert not causal
 
 
 if __name__ == "__main__":

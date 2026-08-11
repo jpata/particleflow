@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 import mlpf.model.mlpf as mlpf_module
@@ -5,7 +6,13 @@ from mlpf.conf import MLPFConfig
 from mlpf.model.mlpf import MLPF, is_jagged_tensor
 
 
-def make_config(backbone_mode="shared", task_queries=True, num_convs=2, use_jagged_attention=False):
+def make_config(
+    backbone_mode="shared",
+    task_queries=True,
+    num_convs=2,
+    use_jagged_attention=False,
+    use_flash_attn_varlen=False,
+):
     return MLPFConfig.model_validate(
         {
             "dataset": "cms",
@@ -19,9 +26,10 @@ def make_config(backbone_mode="shared", task_queries=True, num_convs=2, use_jagg
                 "attention": {
                     "num_convs": num_convs,
                     "num_heads": 2,
-                    "head_dim": 4,
-                    "attention_type": "math",
+                    "head_dim": 8 if use_flash_attn_varlen else 4,
+                    "attention_type": "flash" if use_flash_attn_varlen else "math",
                     "use_jagged_attention": use_jagged_attention,
+                    "use_flash_attn_varlen": use_flash_attn_varlen,
                     "dropout_ff": 0.0,
                 },
             },
@@ -150,3 +158,19 @@ def test_shared_jagged_backbone_packs_and_unpacks_once(monkeypatch):
 
     assert pack_calls == 1
     assert unpack_calls == 1
+
+
+def test_flash_attn_varlen_flag_propagates_to_backbone(monkeypatch):
+    monkeypatch.setattr(mlpf_module, "_flash_attn_varlen_func", lambda *args, **kwargs: args[0])
+    config = make_config(use_jagged_attention=True, use_flash_attn_varlen=True)
+    model = MLPF(config)
+
+    assert model.use_flash_attn_varlen
+    assert all(layer.mha.use_flash_attn_varlen for layer in model.backbone)
+
+
+def test_flash_attn_varlen_requires_jagged_backbone():
+    config = make_config(use_jagged_attention=False, use_flash_attn_varlen=True)
+
+    with pytest.raises(ValueError, match="requires use_jagged_attention=True"):
+        MLPF(config)

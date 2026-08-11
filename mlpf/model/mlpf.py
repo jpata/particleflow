@@ -16,6 +16,11 @@ except ImportError:
 from mlpf.model.hept import HEPTLayer, trunc_normal_
 from mlpf.model.heptv2 import HEPTv2Layer
 
+try:
+    from flash_attn import flash_attn_varlen_func as _flash_attn_varlen_func
+except (ImportError, OSError):
+    _flash_attn_varlen_func = None
+
 from mlpf.conf import (
     MLPFConfig,
     Activation,
@@ -66,11 +71,12 @@ def infer_num_heads(embed_dim: int, preferred_heads: Optional[int] = None) -> in
 class PackedJaggedTensor(NamedTuple):
     values: torch.Tensor
     offsets: torch.Tensor
+    cu_seqlens: torch.Tensor
     batch_size: int
     max_seqlen: int
 
     def with_values(self, values):
-        return PackedJaggedTensor(values, self.offsets, self.batch_size, self.max_seqlen)
+        return PackedJaggedTensor(values, self.offsets, self.cu_seqlens, self.batch_size, self.max_seqlen)
 
 
 def is_jagged_tensor(tensor):
@@ -81,7 +87,7 @@ def dense_to_jagged(tensor, mask):
     valid = mask.bool()
     valid_lengths = valid.sum(dim=-1)
     offsets = torch.nn.functional.pad(valid_lengths.cumsum(dim=0), (1, 0))
-    return PackedJaggedTensor(tensor[valid], offsets, tensor.shape[0], tensor.shape[1])
+    return PackedJaggedTensor(tensor[valid], offsets, offsets.to(torch.int32), tensor.shape[0], tensor.shape[1])
 
 
 def jagged_to_dense(tensor, mask):
@@ -99,6 +105,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         dtype=None,
         export_onnx_fused=False,
         attention_type: AttentionType = AttentionType.SIMPLE,
+        use_flash_attn_varlen=False,
     ) -> None:
         factory_kwargs = {"device": device, "dtype": dtype}
         bias = True
@@ -108,6 +115,16 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
         self.export_onnx_fused = export_onnx_fused
         self.attention_type = AttentionType(attention_type)
+        self.use_flash_attn_varlen = use_flash_attn_varlen
+        if self.use_flash_attn_varlen and self.attention_type != AttentionType.FLASH:
+            raise ValueError("flash_attn_varlen requires attention_type='flash'")
+        if self.use_flash_attn_varlen and (self.head_dim < 8 or self.head_dim > 256 or self.head_dim % 8 != 0):
+            raise ValueError("flash_attn_varlen requires head_dim to be a multiple of 8 between 8 and 256")
+        if self.use_flash_attn_varlen and _flash_attn_varlen_func is None:
+            raise ImportError(
+                "use_flash_attn_varlen=True requires a compatible flash-attn installation "
+                "that provides flash_attn_varlen_func"
+            )
         self.attn_params = {
             AttentionType.SIMPLE: [SDPBackend.MATH, SDPBackend.EFFICIENT_ATTENTION],
             AttentionType.MATH: [SDPBackend.MATH],
@@ -121,6 +138,8 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
             raise ValueError("q, k, and v must all use the same dense or jagged layout")
         if jagged_input and (key_padding_mask is not None or self.export_onnx_fused):
             raise ValueError("Jagged attention does not use padding masks and cannot use the ONNX-fused path")
+        if self.use_flash_attn_varlen and not jagged_input:
+            raise ValueError("flash_attn_varlen_func requires packed jagged q, k, and v")
 
         if jagged_input:
             bs = q.batch_size
@@ -141,7 +160,11 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         v_values = torch.matmul(v_values, wv.T) + bv
 
         # for pytorch internal scaled dot product attention, we need (bs, num_heads, seq_len, head_dim)
-        if jagged_input:
+        if jagged_input and self.use_flash_attn_varlen:
+            q_attn = q_values.reshape(-1, num_heads, head_dim)
+            k_attn = k_values.reshape(-1, num_heads, head_dim)
+            v_attn = v_values.reshape(-1, num_heads, head_dim)
+        elif jagged_input:
             nested_qkv = []
             for tensor in (q_values, k_values, v_values):
                 nested = torch.nested.nested_tensor_from_jagged(
@@ -176,7 +199,19 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
             else:
                 attn_mask = ~key_padding_mask.view(bs, 1, 1, k_len)
 
-        if self.export_onnx_fused:
+        if self.use_flash_attn_varlen:
+            attn_output = _flash_attn_varlen_func(
+                q_attn,
+                k_attn,
+                v_attn,
+                q.cu_seqlens,
+                k.cu_seqlens,
+                q.max_seqlen,
+                k.max_seqlen,
+                dropout_p=self.dropout if self.training else 0.0,
+                causal=False,
+            )
+        elif self.export_onnx_fused:
             attn_output = torch.nn.functional.scaled_dot_product_attention(
                 q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout
             )
@@ -191,7 +226,10 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
 
         # in case running with pytorch internal scaled dot product attention, reshape back to the original shape
         if jagged_input:
-            attn_output = attn_output.transpose(1, 2).values().reshape(-1, num_heads * head_dim)
+            if self.use_flash_attn_varlen:
+                attn_output = attn_output.reshape(-1, num_heads * head_dim)
+            else:
+                attn_output = attn_output.transpose(1, 2).values().reshape(-1, num_heads * head_dim)
         elif not self.export_onnx_fused:
             attn_output = attn_output.transpose(1, 2).reshape(bs, -1, num_heads * head_dim)
 
@@ -217,6 +255,7 @@ class PreLnSelfAttentionLayer(nn.Module):
         elems_as_queries=False,
         export_onnx_fused=False,
         save_attention=False,
+        use_flash_attn_varlen=False,
     ):
         super(PreLnSelfAttentionLayer, self).__init__()
         self.name = name
@@ -231,6 +270,7 @@ class PreLnSelfAttentionLayer(nn.Module):
             dropout=dropout_mha,
             export_onnx_fused=export_onnx_fused,
             attention_type=self.attention_type,
+            use_flash_attn_varlen=use_flash_attn_varlen,
         )
 
         self.norm0 = torch.nn.LayerNorm(embedding_dim)
@@ -444,6 +484,7 @@ class MLPF(nn.Module):
         self.backbone_mode = BackboneMode(self.config.backbone.mode)
         self.use_split_backbone = self.backbone_mode == BackboneMode.SPLIT
         self.use_jagged_attention = False
+        self.use_flash_attn_varlen = False
         regression_selector_values = self.elemtypes_nonzero
         pt_mode = RegressionMode(self.config.pt_mode)
         eta_mode = RegressionMode(self.config.eta_mode)
@@ -471,10 +512,15 @@ class MLPF(nn.Module):
             backbone_dropout_ff = sub_config.dropout_conv_id_ff
             self.use_pre_layernorm = sub_config.use_pre_layernorm
             self.use_jagged_attention = sub_config.use_jagged_attention
+            self.use_flash_attn_varlen = sub_config.use_flash_attn_varlen
             export_onnx_fused = sub_config.export_onnx_fused
             save_attention = sub_config.save_attention
             if self.use_jagged_attention and export_onnx_fused:
                 raise ValueError("Jagged attention is not supported by the ONNX-fused path")
+            if self.use_flash_attn_varlen and not self.use_jagged_attention:
+                raise ValueError("flash_attn_varlen requires use_jagged_attention=True to pack the backbone input")
+            if self.use_flash_attn_varlen and attention_type != AttentionType.FLASH:
+                raise ValueError("flash_attn_varlen requires attention_type='flash'")
             if self.use_jagged_attention and attention_type == AttentionType.FLASH and (head_dim < 8 or head_dim > 256 or head_dim % 8 != 0):
                 raise ValueError("Jagged flash attention requires head_dim to be a multiple of 8 between 8 and 256")
 
@@ -564,6 +610,7 @@ class MLPF(nn.Module):
                 "num_heads": num_heads if self.conv_type in [ModelType.ATTENTION, ModelType.HEPT, ModelType.HEPTV2] else None,
                 "attention_type": attention_type if self.conv_type == ModelType.ATTENTION else None,
                 "export_onnx_fused": export_onnx_fused if self.conv_type == ModelType.ATTENTION else False,
+                "use_flash_attn_varlen": self.use_flash_attn_varlen if self.conv_type == ModelType.ATTENTION else False,
                 "save_attention": save_attention if self.conv_type == ModelType.ATTENTION else False,
                 "pos": pos if self.conv_type == ModelType.HEPT else False,
                 "layer_params": {
@@ -655,6 +702,7 @@ class MLPF(nn.Module):
 
         _logger.info("backbone_mode={}".format(self.backbone_mode))
         _logger.info("jagged_attention enabled={}".format(self.use_jagged_attention))
+        _logger.info("flash_attn_varlen enabled={}".format(self.use_flash_attn_varlen))
         _logger.info("task_queries enabled={}".format(self.task_queries and not self.use_split_backbone))
         _logger.info(
             "classification_norm parameters: {}".format(count_parameters(self.classification_norm) if self.classification_norm is not None else 0)
@@ -694,6 +742,7 @@ class MLPF(nn.Module):
         num_heads=None,
         attention_type=None,
         export_onnx_fused=False,
+        use_flash_attn_varlen=False,
         save_attention=False,
         pos=False,
         layer_params=None,
@@ -714,6 +763,7 @@ class MLPF(nn.Module):
                     num_heads=num_heads,
                     attention_type=attention_type,
                     export_onnx_fused=export_onnx_fused,
+                    use_flash_attn_varlen=use_flash_attn_varlen,
                     save_attention=save_attention,
                     pos=pos,
                     layer_params=layer_params,
@@ -733,6 +783,7 @@ class MLPF(nn.Module):
         num_heads=None,
         attention_type=None,
         export_onnx_fused=False,
+        use_flash_attn_varlen=False,
         save_attention=False,
         pos=False,
         layer_params=None,
@@ -750,6 +801,7 @@ class MLPF(nn.Module):
                 attention_type=attention_type,
                 elems_as_queries=is_last,
                 export_onnx_fused=export_onnx_fused,
+                use_flash_attn_varlen=use_flash_attn_varlen,
                 save_attention=save_attention,
             )
         if self.conv_type == ModelType.GNNLSH:
