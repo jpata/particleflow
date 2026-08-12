@@ -517,14 +517,21 @@ class ModelArchitectureConfig(BaseModel):
     heptv2: Optional[HEPTv2Config] = None
 
 
-class RegressionLossWeights(BaseModel):
+class TaskLossWeights(BaseModel):
+    """Configuration for one-time task-loss weight calibration."""
+
     model_config = ConfigDict(extra="forbid")
 
-    pt: float = Field(default=1.0, ge=0.0)
-    eta: float = Field(default=1e-2, ge=0.0)
-    sin_phi: float = Field(default=1e-2, ge=0.0)
-    cos_phi: float = Field(default=1e-2, ge=0.0)
-    energy: float = Field(default=1.0, ge=0.0)
+    calibration_steps: int = Field(default=100, ge=1)
+    epsilon: float = Field(default=1e-8, gt=0.0)
+    min_weight: float = Field(default=1e-2, gt=0.0)
+    max_weight: float = Field(default=1e3, gt=0.0)
+
+    @model_validator(mode="after")
+    def validate_weight_bounds(self):
+        if self.min_weight > self.max_weight:
+            raise ValueError("task loss min_weight must not exceed max_weight")
+        return self
 
 
 class DatasetSample(BaseModel):
@@ -586,9 +593,7 @@ class MLPFConfig(BaseModel):
     optimizer: OptimizerType = OptimizerType.ADAMW
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
-    regression_loss_weights: RegressionLossWeights = Field(default_factory=RegressionLossWeights)
-    task_loss_weight_lr: Optional[float] = None  # LR for the learned task-loss weights; defaults to 0.1 * lr
-    task_loss_weight_ema_decay: float = 0.99  # EMA smoothing for the applied task weights; 0.0 disables
+    task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
     validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
 

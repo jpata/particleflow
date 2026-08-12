@@ -1,6 +1,7 @@
 from typing import Optional
 
 import torch
+import torch.distributed as dist
 from torch.nn import functional as F
 from torch import Tensor, nn
 
@@ -19,79 +20,88 @@ LOSS_TASKS = (
 )
 
 
-class LearnableTaskLossWeights(nn.Module):
-    """Homoscedastic uncertainty task weighting with clamped log variances."""
+class CalibratedTaskLossWeights(nn.Module):
+    """Calibrate task weights from early losses once, then keep them fixed."""
 
-    # Lower clamp must leave room for the homoscedastic equilibrium weight
-    # (~1/loss): angular losses of ~0.03 imply weights ~30, so -3 (weight cap
-    # exp(3) ~ 20) pins them at the boundary. -5 matches the proven reference
-    # run (cap exp(5) ~ 148) and still bounds classification weight growth.
-    def __init__(self, initial_weights, clamp_min=-5.0, clamp_max=8.0, ema_decay=None):
+    def __init__(self, calibration_steps=100, epsilon=1e-8, min_weight=1e-2, max_weight=1e3):
         super().__init__()
         self.tasks = LOSS_TASKS
-        self.clamp_min = clamp_min
-        self.clamp_max = clamp_max
-        self.ema_decay = ema_decay
+        self.calibration_steps = calibration_steps
+        self.epsilon = epsilon
+        self.min_weight = min_weight
+        self.max_weight = max_weight
+        self.reference_task_index = self.tasks.index("Classification_binary")
 
-        initial_log_vars = []
-        for task in self.tasks:
-            initial_weight = float(initial_weights.get(task, 1.0))
-            initial_log_vars.append(-torch.log(torch.tensor(initial_weight, dtype=torch.float32)).item())
-        self.log_vars = nn.Parameter(torch.tensor(initial_log_vars, dtype=torch.float32))
-
-        if self.ema_decay is not None and self.ema_decay > 0:
-            initial_weights_tensor = torch.tensor([float(initial_weights.get(task, 1.0)) for task in self.tasks], dtype=torch.float32)
-            self.register_buffer("weight_ema", initial_weights_tensor)
-
-    def clamped_log_vars(self):
-        return torch.clamp(self.log_vars, min=self.clamp_min, max=self.clamp_max)
+        # These buffers make both a completed and a partially completed
+        # calibration exactly resumable from a checkpoint.
+        self.register_buffer("weights", torch.ones(len(self.tasks)))
+        self.register_buffer("loss_sums", torch.zeros(len(self.tasks), dtype=torch.float64))
+        self.register_buffer("calibration_count", torch.tensor(0, dtype=torch.long))
+        self.register_buffer("calibration_observations", torch.tensor(0, dtype=torch.long))
+        self.register_buffer("calibrated", torch.tensor(False, dtype=torch.bool))
 
     def current_weights(self):
-        return {task: torch.exp(-log_var) for task, log_var in zip(self.tasks, self.clamped_log_vars())}
+        return dict(zip(self.tasks, self.weights))
+
+    @torch.no_grad()
+    def _record_calibration_losses(self, losses):
+        if self.calibrated:
+            return
+
+        batch_losses = torch.stack([losses[task].detach() for task in self.tasks]).to(dtype=self.loss_sums.dtype)
+        observations = 1
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(batch_losses, op=dist.ReduceOp.SUM)
+            observations = dist.get_world_size()
+
+        # Reducing every calibration batch keeps these buffers identical on all
+        # ranks, including when DDP broadcasts model buffers before a forward.
+        self.loss_sums.add_(batch_losses)
+        self.calibration_count.add_(1)
+        self.calibration_observations.add_(observations)
+        if self.calibration_count.item() < self.calibration_steps:
+            return
+
+        mean_losses = self.loss_sums / self.calibration_observations
+        if not torch.isfinite(mean_losses).all():
+            raise RuntimeError(f"Non-finite task losses during weight calibration: {mean_losses}")
+
+        reference_loss = mean_losses[self.reference_task_index]
+        calibrated_weights = reference_loss / mean_losses.clamp_min(self.epsilon)
+        calibrated_weights.clamp_(min=self.min_weight, max=self.max_weight)
+        self.weights.copy_(calibrated_weights.to(dtype=self.weights.dtype))
+        self.calibrated.fill_(True)
+
+        task_means = {task: value.item() for task, value in zip(self.tasks, mean_losses)}
+        task_weights = {task: value.item() for task, value in self.current_weights().items()}
+        _logger.info(
+            f"Calibrated fixed task weights after {self.calibration_count.item()} steps "
+            f"({self.calibration_observations.item()} rank-batches); they will apply from the next training step: "
+            f"losses={task_means}, weights={task_weights}"
+        )
 
     def forward(self, losses):
-        log_vars = self.clamped_log_vars()
-        raw_weights = torch.exp(-log_vars)
-
-        ema_enabled = self.ema_decay is not None and self.ema_decay > 0
-        if ema_enabled:
-            ema = self.ema_decay * self.weight_ema.detach() + (1.0 - self.ema_decay) * raw_weights
-            if self.training:
-                with torch.no_grad():
-                    self.weight_ema.copy_(ema)
-            # Apply the smoothed weights in the loss while keeping a
-            # straight-through gradient path through the current weights, so
-            # the weighter still learns (at its configured LR) instead of being
-            # frozen by the EMA. The EMA only damps the applied weight values.
-            applied_weights = ema.detach() + raw_weights - raw_weights.detach()
-        else:
-            applied_weights = raw_weights
-
+        # Clone so the last calibration batch is still optimized with unit
+        # weights; calibrated weights take effect on the following step.
+        applied_weights = self.weights.clone()
         weighted_losses = []
         diagnostics = {
             "weight": {},
-            "weight_ema": {},
-            "log_var": {},
             "weighted_loss": {},
         }
-        for idx, (task, log_var) in enumerate(zip(self.tasks, log_vars)):
-            weight = applied_weights[idx]
-            weighted_loss = weight * losses[task] + log_var
-            diagnostics["weight"][task] = raw_weights[idx]
-            diagnostics["weight_ema"][task] = weight
-            diagnostics["log_var"][task] = log_var
+        for task, weight in zip(self.tasks, applied_weights):
+            weighted_loss = weight * losses[task]
+            diagnostics["weight"][task] = weight
             diagnostics["weighted_loss"][task] = weighted_loss
             weighted_losses.append(weighted_loss)
+
+        if self.training:
+            self._record_calibration_losses(losses)
         return sum(weighted_losses), diagnostics
 
 
-def make_task_loss_weighter(regression_loss_weights, ema_decay=None):
-    initial_weights = {
-        "Classification_binary": 1.0,
-        "Classification": 1.0,
-        **{f"Regression_{feature}": regression_loss_weights[feature] for feature in REGRESSION_FEATURES},
-    }
-    return LearnableTaskLossWeights(initial_weights, ema_decay=ema_decay)
+def make_task_loss_weighter(task_loss_weights):
+    return CalibratedTaskLossWeights(**task_loss_weights)
 
 
 def _mask_no_target_regression(y, ypred):

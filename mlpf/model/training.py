@@ -90,6 +90,8 @@ from mlpf.utils import create_comet_experiment
 from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
 
+UNIT_REGRESSION_WEIGHTS = {feature: 1.0 for feature in REGRESSION_FEATURES}
+
 
 def _domain_label(source_id, input_type_id):
     source = SOURCE_LABELS.get(int(source_id), f"source{int(source_id)}")
@@ -716,7 +718,7 @@ def evaluate(
                     batch,
                     model,
                     mlpf_loss,
-                    config.regression_loss_weights.model_dump(),
+                    UNIT_REGRESSION_WEIGHTS,
                 )
 
                 model_module = model.module if hasattr(model, "module") else model
@@ -730,7 +732,7 @@ def evaluate(
                         batch,
                         ytarget,
                         ypred,
-                        config.regression_loss_weights.model_dump(),
+                        UNIT_REGRESSION_WEIGHTS,
                         diagnostic_accum,
                     )
 
@@ -1099,7 +1101,7 @@ def train_all_steps(
             dtype=dtype,
             scaler=scaler,
             loader_state_dict=train_loader.state_dict()["loader_state_dict"],
-            regression_weights=config.regression_loss_weights.model_dump(),
+            regression_weights=UNIT_REGRESSION_WEIGHTS,
         )
         log_memory("train_step_end", rank, tensorboard_writer_train if log_this_step else None, step)
         model_forward_time = time.time() - model_forward_start
@@ -1121,16 +1123,12 @@ def train_all_steps(
             )
             diagnostics = task_loss_diagnostics or {}
             task_weight_components = _format_task_diagnostic(diagnostics.get("weight", {}))
-            task_weight_ema_components = _format_task_diagnostic(diagnostics.get("weight_ema", {}))
-            task_log_var_components = _format_task_diagnostic(diagnostics.get("log_var", {}))
             task_weighted_loss_components = _format_task_diagnostic(diagnostics.get("weighted_loss", {}))
             _logger.info(
                 f"Step {step}/{num_steps} rank{rank} | "
                 f"Train Loss: {losses_train['Total']:.4f} | "
                 f"Train Loss Components: {train_loss_components} | "
                 f"Task Weights: {task_weight_components} | "
-                f"Task Weights (EMA): {task_weight_ema_components} | "
-                f"Task LogVars: {task_log_var_components} | "
                 f"Task Weighted Losses: {task_weighted_loss_components} | "
                 f"LR: {current_lr:.2e} | "
                 f"DataLoad Time: {data_load_time:.4f}s | "
@@ -1325,7 +1323,7 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     _logger.info("Instantiating model")
     model = MLPF(config)
-    model.task_loss_weighter = make_task_loss_weighter(config.regression_loss_weights.model_dump(), ema_decay=config.task_loss_weight_ema_decay)
+    model.task_loss_weighter = make_task_loss_weighter(config.task_loss_weights.model_dump())
     _logger.info("Instantiated model")
 
     _logger.info("Moving model to device rank={}".format(rank))
@@ -1333,9 +1331,6 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     _logger.info("Moved model to device rank={}".format(rank))
 
     configure_model_trainable(model, config.model.trainable, True)
-    for param in model.task_loss_weighter.parameters():
-        param.requires_grad = True
-
     optimizer = get_optimizer(model, config)
     lr_schedule = get_lr_schedule(config, optimizer, config.num_steps)
 
@@ -1343,23 +1338,31 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
         checkpoint = torch.load(config.load, map_location=torch.device(rank))
         start_step = checkpoint["extra_state"]["step"] + 1
 
+        model_state_dict = model.state_dict()
+        checkpoint_state_dict = checkpoint["model_state_dict"]
         missing_keys, strict = [], True
-        for k in model.state_dict().keys():
-            shp0 = model.state_dict()[k].shape
+        for k in model_state_dict.keys():
+            shp0 = model_state_dict[k].shape
             try:
-                shp1 = checkpoint["model_state_dict"][k].shape
+                shp1 = checkpoint_state_dict[k].shape
             except KeyError:
                 missing_keys.append(k)
                 continue
             if shp0 != shp1:
                 raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
 
+        unexpected_keys = [key for key in checkpoint_state_dict if key not in model_state_dict]
+        obsolete_task_weight_keys = [key for key in unexpected_keys if key.startswith("task_loss_weighter.")]
+        if obsolete_task_weight_keys and len(obsolete_task_weight_keys) == len(unexpected_keys):
+            _logger.warning("Checkpoint contains obsolete learned task weights; recalibrating task weights", color="bold")
+            strict = False
+
         if len(missing_keys) > 0:
             _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
             missing_task_loss_weight_keys = [key for key in missing_keys if key.startswith("task_loss_weighter.")]
             missing_non_task_loss_weight_keys = [key for key in missing_keys if not key.startswith("task_loss_weighter.")]
             if missing_task_loss_weight_keys and not missing_non_task_loss_weight_keys:
-                _logger.warning("Task loss weights missing from checkpoint; initializing them from config", color="bold")
+                _logger.warning("Task loss calibration state missing from checkpoint; starting calibration from scratch", color="bold")
                 strict = False
             elif config.relaxed_load:
                 _logger.warning("Optimizer checkpoint will not be loaded", color="bold")

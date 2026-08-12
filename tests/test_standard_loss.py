@@ -5,12 +5,11 @@ Spec: Validates 'mlpf_loss' with 'LossType.STANDARD'. Tests classification (PID)
 import math
 
 import torch
-from mlpf.conf import RegressionLossWeights
 from mlpf.model.losses import REGRESSION_FEATURES, event_loss, mlpf_loss, particle_loss, regression_loss
 from mlpf.model.PFDataset import PFBatch
 
 
-REGRESSION_WEIGHTS = RegressionLossWeights().model_dump()
+REGRESSION_WEIGHTS = {feature: 1.0 for feature in REGRESSION_FEATURES}
 
 
 def get_mock_data(batch_size=2, seq_len=10, num_classes=6):
