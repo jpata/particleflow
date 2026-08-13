@@ -3,9 +3,9 @@
 #SBATCH -N 1
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
-#SBATCH --gpus-per-node=8
-#SBATCH --cpus-per-task=32
-#SBATCH --constraint=h100
+#SBATCH --gpus-per-node=4
+#SBATCH --cpus-per-task=16
+#SBATCH --constraint=a100
 
 # Job name
 #SBATCH -J train
@@ -26,7 +26,7 @@ module load slurm gcc cmake cuda/12.8.0 cudnn/9.2.0.82-12 nccl openmpi apptainer
 nvidia-smi
 export PYTHONPATH=`pwd`
 
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 num_gpus=$((SLURM_GPUS_PER_NODE))  # gpus per compute node
 
 export SRUN_CPUS_PER_TASK=${SLURM_CPUS_PER_TASK}  # necessary on JURECA for Ray to work
@@ -63,14 +63,14 @@ uv run python3 -u mlpf/pipeline.py \
     --data-dir $DATA_DIR \
     --experiments-dir /mnt/home/jpata/particleflow/experiments \
     train \
-    --gpus 8 \
+    --gpus $num_gpus \
     --gpu_batch_multiplier 32 \
     --model.attention.use_jagged_attention True \
     --model.attention.use_flash_attn_varlen False \
     --pad_to_multiple_elements 100 \
     --model.attention.num_convs 6 --model.type attention \
     --model.task_queries false \
-    --lr 0.001 --num_steps 20000 --val_freq 1000 --checkpoint_freq 1000
+    --lr 0.001 --num_steps 20000 --val_freq 2000 --checkpoint_freq 2000
 
 #    --compile \ # does not work on multiple H100 currently, needs debugging
 echo 'Training done.'
