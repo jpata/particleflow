@@ -31,6 +31,7 @@ from mlpf.conf import (
     LearnedRepresentationMode,
     RegressionMode,
     KernelType,
+    Dataset,
 )
 
 
@@ -410,6 +411,86 @@ def ffn(input_dim, output_dim, width, act, dropout):
     )
 
 
+class HitFeatureEngineering(nn.Module):
+    """Append inexpensive geometry features to the raw EDM4HEP hit inputs.
+
+    The original feature order is preserved because the regression heads use the
+    ET, eta, phi, and energy columns as skip-connection reference values. All
+    calculations are elementwise and run on the same device as the model input.
+    """
+
+    POSITION_SCALE_MM = 3000.0
+    CONFORMAL_SCALE_MM = 1000.0
+    TIME_SCALE_NS = 10.0
+    SPEED_OF_LIGHT_MM_PER_NS = 299.792458
+    NUM_OUTPUT_FEATURES = 15
+    OUTPUT_FEATURE_NAMES = (
+        "position_x_norm",
+        "position_y_norm",
+        "position_z_norm",
+        "rho_norm",
+        "radius_norm",
+        "sin_theta",
+        "cos_theta",
+        "barrel_fraction",
+        "conformal_u",
+        "conformal_v",
+        "time_residual_norm",
+        "is_ecal",
+        "is_hcal",
+        "is_other",
+        "is_tracker",
+    )
+
+    def forward(self, X_features, mask=None):
+        # Geometry is evaluated in float32 to avoid overflow and excessive
+        # quantization when training the rest of the model in bfloat16.
+        geometry = X_features.to(torch.float32)
+        x = geometry[..., 6:7]
+        y = geometry[..., 7:8]
+        z = geometry[..., 8:9]
+        time = geometry[..., 9:10]
+        subdetector = geometry[..., 10:11]
+        elemtype = geometry[..., 0:1]
+
+        rho_sq = x.square() + y.square()
+        rho = torch.sqrt(rho_sq)
+        radius = torch.sqrt(rho_sq + z.square())
+        safe_radius = radius.clamp_min(1.0e-6)
+
+        position_features = torch.cat(
+            [
+                x / self.POSITION_SCALE_MM,
+                y / self.POSITION_SCALE_MM,
+                z / self.POSITION_SCALE_MM,
+                rho / self.POSITION_SCALE_MM,
+                radius / self.POSITION_SCALE_MM,
+                rho / safe_radius,
+                z / safe_radius,
+                rho / (rho + z.abs()).clamp_min(1.0e-6),
+            ],
+            dim=-1,
+        ).clamp(min=-4.0, max=4.0)
+
+        # Prompt circular tracks become approximately straight in conformal
+        # coordinates. Calorimeter conformal coordinates are intentionally zero.
+        is_tracker = elemtype == 1
+        inverse_rho_sq = torch.where(rho_sq > 0, self.CONFORMAL_SCALE_MM / rho_sq, torch.zeros_like(rho_sq))
+        conformal_features = torch.cat([x * inverse_rho_sq, y * inverse_rho_sq], dim=-1)
+        conformal_features = torch.where(is_tracker.expand_as(conformal_features), conformal_features, 0.0).clamp(min=-4.0, max=4.0)
+
+        time_residual = (time - radius / self.SPEED_OF_LIGHT_MM_PER_NS) / self.TIME_SCALE_NS
+        time_residual = time_residual.clamp(min=-10.0, max=10.0)
+        subdetector_features = torch.cat([subdetector == index for index in range(4)], dim=-1).to(torch.float32)
+
+        engineered = torch.cat([position_features, conformal_features, time_residual, subdetector_features], dim=-1)
+        engineered = torch.nan_to_num(engineered, nan=0.0, posinf=0.0, neginf=0.0)
+        if mask is not None:
+            engineered = engineered * mask.unsqueeze(-1).to(engineered.dtype)
+
+        return torch.cat([X_features, engineered.to(X_features.dtype)], dim=-1)
+
+
 class RegressionOutput(nn.Module):
     def __init__(self, mode: RegressionMode, embed_dim, width, act, dropout, elemtypes):
         super(RegressionOutput, self).__init__()
@@ -474,7 +555,9 @@ class MLPF(nn.Module):
         super(MLPF, self).__init__()
 
         self.config = config.model
-        self.input_dim = config.input_dim
+        self.raw_input_dim = config.input_dim
+        self.feature_engineering = HitFeatureEngineering() if config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS) else nn.Identity()
+        self.input_dim = self.raw_input_dim + (HitFeatureEngineering.NUM_OUTPUT_FEATURES if self.uses_hit_feature_engineering else 0)
         self.num_classes = config.num_classes
         self.elemtypes_nonzero = config.elemtypes_nonzero
 
@@ -573,7 +656,8 @@ class MLPF(nn.Module):
 
         _logger.info(
             f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} "
-            f"input_encoding={self.input_encoding} backbone_mode={self.backbone_mode}"
+            f"input_encoding={self.input_encoding} backbone_mode={self.backbone_mode} "
+            f"raw_input_dim={self.raw_input_dim} engineered_input_dim={self.input_dim}"
         )
 
         # Input encoding and backbone
@@ -880,6 +964,15 @@ class MLPF(nn.Module):
             encoded = encoded * mask.unsqueeze(-1).to(encoded.dtype)
         return encoded
 
+    @property
+    def uses_hit_feature_engineering(self):
+        return isinstance(self.feature_engineering, HitFeatureEngineering)
+
+    def _engineer_input_features(self, X_features, mask):
+        if self.uses_hit_feature_engineering:
+            return self.feature_engineering(X_features, mask)
+        return X_features
+
     def _run_backbone(self, x, mask, initial_embedding, X_features, backbone=None):
         backbone = self.backbone if backbone is None else backbone
         embeddings = []
@@ -915,6 +1008,7 @@ class MLPF(nn.Module):
         raise ValueError(f"Unsupported learned representation mode {self.learned_representation_mode}")
 
     def encode_backbone(self, X_features, mask):
+        X_features = self._engineer_input_features(X_features, mask)
         if self.use_split_backbone:
             x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
             x = self._prepare_backbone_input(x, mask)
@@ -951,6 +1045,7 @@ class MLPF(nn.Module):
 
     # @torch.compile
     def forward(self, X_features, mask):
+        X_features = self._engineer_input_features(X_features, mask)
         if self.use_split_backbone:
             x_id = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
             x_reg = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_reg)
