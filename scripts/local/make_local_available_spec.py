@@ -14,10 +14,10 @@ LOCAL_DATASETS = {
 
 
 def set_ttbar_only(model_config, dataset_key, sample_name, splits):
-    sample = {"name": sample_name, "version": "3.2.0", "splits": splits}
+    sample = {"name": sample_name, "version": "3.2.1", "splits": splits}
     model_config["train_datasets"] = {"physical": {"batch_size": 1, "samples": [sample]}}
     model_config["validation_datasets"] = {"physical": {"batch_size": 1, "samples": [sample]}}
-    model_config["test_datasets"] = [{"name": sample_name, "version": "3.2.0", "splits": splits}]
+    model_config["test_datasets"] = [{"name": sample_name, "version": "3.2.1", "splits": splits}]
     model_config["dataset"] = dataset_key
 
 

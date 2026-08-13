@@ -507,7 +507,9 @@ def save_img(outfile, epoch=None, cp_dir=None, comet_experiment=None):
             comet_experiment.log_image(image_path, step=epoch - 1)
 
 
-def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None, dataset=None):
+def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None, dataset=None, baseline_yvals=None):
+
+    baseline_yvals = baseline_yvals if baseline_yvals is not None else yvals
 
     plt.figure()
     b = np.logspace(1, 3, 100)
@@ -520,7 +522,7 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         label="Target",
     )
 
-    pt = awkward.to_numpy(awkward.flatten(yvals["jets_cand_pt"]))
+    pt = awkward.to_numpy(awkward.flatten(baseline_yvals["jets_cand_pt"]))
     plt.hist(
         pt,
         bins=b,
@@ -578,7 +580,7 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         label="Target",
     )
 
-    pt = awkward.to_numpy(awkward.flatten(yvals["jets_cand_pt"]))
+    pt = awkward.to_numpy(awkward.flatten(baseline_yvals["jets_cand_pt"]))
     plt.hist(
         pt,
         bins=b,
@@ -633,7 +635,7 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         label="Target",
     )
 
-    eta = awkward.to_numpy(awkward.flatten(yvals["jets_cand_eta"]))
+    eta = awkward.to_numpy(awkward.flatten(baseline_yvals["jets_cand_eta"]))
     plt.hist(
         eta,
         bins=b,
@@ -689,7 +691,9 @@ def plot_jet_ratio(
     logy=False,
     dataset=None,
     sample=None,
+    baseline_yvals=None,
 ):
+    baseline_yvals = baseline_yvals if baseline_yvals is not None else yvals
     plt.figure()
     ax = plt.axes()
 
@@ -711,14 +715,14 @@ def plot_jet_ratio(
         label="target $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
-    p = med_iqr(yvals["jet_ratio_gen_to_cand_pt"])
+    p = med_iqr(baseline_yvals["jet_ratio_gen_to_cand_pt"])
     ret_dict["jet_ratio_gen_to_cand_pt"] = {
         "med": p[0],
         "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_cand_pt"]) / awkward.count(yvals["jets_gen_pt"]),
+        "match_frac": awkward.count(baseline_yvals["jet_ratio_gen_to_cand_pt"]) / awkward.count(baseline_yvals["jets_gen_pt"]),
     }
     plt.hist(
-        yvals["jet_ratio_gen_to_cand_pt"],
+        baseline_yvals["jet_ratio_gen_to_cand_pt"],
         bins=bins,
         histtype="step",
         lw=2,
@@ -779,15 +783,15 @@ def plot_jet_ratio(
     plt.figure()
     ax = plt.axes()
 
-    p = med_iqr(yvals["jet_ratio_target_to_cand_pt"])
+    p = med_iqr(baseline_yvals["jet_ratio_target_to_cand_pt"])
     ret_dict["jet_ratio_target_to_cand_pt"] = {
         "med": p[0],
         "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_target_to_cand_pt"]) / awkward.count(yvals["jets_target_pt"]),
+        "match_frac": awkward.count(baseline_yvals["jet_ratio_target_to_cand_pt"]) / awkward.count(baseline_yvals["jets_target_pt"]),
     }
     plt.plot([], [])
     plt.hist(
-        yvals["jet_ratio_target_to_cand_pt"],
+        baseline_yvals["jet_ratio_target_to_cand_pt"],
         bins=bins,
         histtype="step",
         lw=2,

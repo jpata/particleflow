@@ -1241,9 +1241,9 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
 
     if world_size > 1:
-        sampler = torch.utils.data.distributed.DistributedSampler(ds)
+        sampler = torch.utils.data.distributed.DistributedSampler(ds, shuffle=False)
     else:
-        sampler = torch.utils.data.RandomSampler(ds)
+        sampler = torch.utils.data.SequentialSampler(ds)
 
     vals_for_test = ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"]
 

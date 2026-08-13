@@ -229,9 +229,8 @@ def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[s
     else:
         feat_arr[sdcoll][:] = 2
 
-    # hit elemtype is always 2
-    # FIXME: this should be 1 for tracker hits and 2 for calorimeter hits
-    feat_arr["elemtype"] = 2 * np.ones(n_hits, dtype=np.int32)
+    # Keep tracker and calorimeter hits on their respective model input branches.
+    feat_arr["elemtype"] = np.where(feat_arr[sdcoll] == 3, 1, 2).astype(np.int32)
 
     # precompute some approximate et, eta, phi
     if n_hits > 0:
