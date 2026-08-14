@@ -1232,6 +1232,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
             "test",
             num_samples=ntest,
             pad_to_multiple=config.pad_to_multiple_elements,
+            feature_dim=config.input_dim,
             max_open_readers=config.max_open_readers,
         ).ds
         dataset.append(ds)
