@@ -1152,6 +1152,7 @@ class MLPF(nn.Module):
         super(MLPF, self).__init__()
 
         self.config = config.model
+        self.is_hit_dataset = config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS)
         self.raw_input_dim = config.input_dim
         hit_feature_config = config.model.hit_feature_engineering
         self.feature_engineering = (
@@ -1160,7 +1161,7 @@ class MLPF(nn.Module):
                 tracker_neighborhood=hit_feature_config.tracker_neighborhood,
                 calorimeter_neighborhood=hit_feature_config.calorimeter_neighborhood,
             )
-            if config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS) and hit_feature_config.enabled
+            if self.is_hit_dataset and hit_feature_config.enabled
             else nn.Identity()
         )
         self.input_dim = self.raw_input_dim + (self.feature_engineering.num_output_features if self.uses_hit_feature_engineering else 0)
@@ -1190,6 +1191,24 @@ class MLPF(nn.Module):
 
         backbone_config = self.config.backbone
         backbone_num_convs = backbone_config.num_convs
+        detector_layer_counts = (
+            backbone_config.num_tracker_layers,
+            backbone_config.num_calo_layers,
+            backbone_config.num_common_layers,
+        )
+        self.use_detector_backbone = all(count is not None for count in detector_layer_counts)
+        if self.use_detector_backbone:
+            self.num_tracker_layers, self.num_calo_layers, self.num_common_layers = detector_layer_counts
+            if sum(detector_layer_counts) != backbone_num_convs:
+                raise ValueError(
+                    "Detector-specific attention layers must preserve the backbone budget: "
+                    "num_tracker_layers + num_calo_layers + num_common_layers "
+                    f"must equal backbone.num_convs ({backbone_num_convs})"
+                )
+        else:
+            self.num_tracker_layers = 0
+            self.num_calo_layers = 0
+            self.num_common_layers = backbone_num_convs
 
         # Extract parameters from the sub-config per model type
         self.num_convs = backbone_num_convs
@@ -1219,6 +1238,16 @@ class MLPF(nn.Module):
                 raise ValueError("flash_attn_varlen requires attention_type='flash'")
             if self.use_jagged_attention and attention_type == AttentionType.FLASH and (head_dim < 8 or head_dim > 256 or head_dim % 8 != 0):
                 raise ValueError("Jagged flash attention requires head_dim to be a multiple of 8 between 8 and 256")
+
+            if self.use_detector_backbone:
+                if config.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS):
+                    raise ValueError("Detector-specific attention layers are only supported for hit-based CLD/CLIC datasets")
+                if self.use_split_backbone:
+                    raise ValueError("Detector-specific attention layers currently require backbone.mode='shared'")
+                if not self.use_jagged_attention:
+                    raise ValueError("Detector-specific attention layers require use_jagged_attention=True")
+                if self.learned_representation_mode != LearnedRepresentationMode.LAST:
+                    raise ValueError("Detector-specific attention layers currently require learned_representation_mode='last'")
 
             embedding_dim = num_heads * head_dim
             width = num_heads * head_dim
@@ -1260,6 +1289,9 @@ class MLPF(nn.Module):
             num_heads = sub_config.num_heads
             self.use_pre_layernorm = False
 
+        if self.use_detector_backbone and self.conv_type != ModelType.ATTENTION:
+            raise ValueError("Detector-specific tracker/calo/common layers are only supported by the attention model")
+
         _logger.info(
             f"MLPF __init__ conv_type={self.conv_type} num_convs={self.num_convs} "
             f"input_encoding={self.input_encoding} backbone_mode={self.backbone_mode} "
@@ -1293,6 +1325,8 @@ class MLPF(nn.Module):
 
         t0 = time.time()
         self.backbone = nn.ModuleList()
+        self.tracker_backbone = nn.ModuleList()
+        self.calo_backbone = nn.ModuleList()
         if self.use_split_backbone:
             self._backbone_id = nn.ModuleList()
             self._backbone_reg = nn.ModuleList()
@@ -1325,7 +1359,21 @@ class MLPF(nn.Module):
                     "num_and_hashes": num_and_hashes if self.conv_type == ModelType.GNNLSH else None,
                 },
             }
-            if self.use_split_backbone:
+            if self.use_detector_backbone:
+                _logger.info(
+                    "Initializing detector-specific attention layers: "
+                    f"tracker={self.num_tracker_layers} calo={self.num_calo_layers} common={self.num_common_layers}"
+                )
+                self.tracker_backbone = self._build_backbone_layers(
+                    name_prefix="tracker_backbone", **{**backbone_kwargs, "num_layers": self.num_tracker_layers}
+                )
+                self.calo_backbone = self._build_backbone_layers(
+                    name_prefix="calo_backbone", **{**backbone_kwargs, "num_layers": self.num_calo_layers}
+                )
+                self.backbone = self._build_backbone_layers(
+                    name_prefix="common_backbone", **{**backbone_kwargs, "num_layers": self.num_common_layers}
+                )
+            elif self.use_split_backbone:
                 _logger.info("Initializing split id/reg backbone layers, num_convs={}".format(self.num_convs))
                 self._backbone_id = self._build_backbone_layers(name_prefix="backbone_id", **backbone_kwargs)
                 self._backbone_reg = self._build_backbone_layers(name_prefix="backbone_reg", **backbone_kwargs)
@@ -1338,6 +1386,9 @@ class MLPF(nn.Module):
             _logger.info("backbone_reg parameters: {}".format(count_parameters(self._backbone_reg)))
         else:
             _logger.info("backbone parameters: {}".format(count_parameters(self.backbone)))
+            if self.use_detector_backbone:
+                _logger.info("tracker_backbone parameters: {}".format(count_parameters(self.tracker_backbone)))
+                _logger.info("calo_backbone parameters: {}".format(count_parameters(self.calo_backbone)))
 
         if self.learned_representation_mode == LearnedRepresentationMode.CONCAT:
             decoding_dim = max(self.num_convs, 1) * embedding_dim
@@ -1575,6 +1626,16 @@ class MLPF(nn.Module):
         return isinstance(self.feature_engineering, HitFeatureEngineering)
 
     def _engineer_input_features(self, X_features, mask):
+        if self.is_hit_dataset:
+            # Temporary compatibility fix for hit TFDS 3.2.0, where postprocessing
+            # incorrectly stored elemtype=2 for tracker hits. Remove this rewrite
+            # once training has moved to corrected 3.2.1 datasets.
+            X_features = X_features.clone()
+            X_features[..., 0] = torch.where(
+                X_features[..., 10] == 3,
+                X_features.new_tensor(1),
+                X_features.new_tensor(2),
+            )
         if self.uses_hit_feature_engineering:
             return self.feature_engineering(X_features, mask)
         return X_features
@@ -1613,8 +1674,52 @@ class MLPF(nn.Module):
             return embeddings[-1]
         raise ValueError(f"Unsupported learned representation mode {self.learned_representation_mode}")
 
+    def _run_detector_leg(self, x, detector_mask, X_features, backbone):
+        """Run one detector-only attention leg and restore the original dense layout."""
+        output = torch.zeros_like(x)
+        active_events = detector_mask.any(dim=-1)
+        if not active_events.any():
+            return output
+
+        active_x = x[active_events]
+        active_mask = detector_mask[active_events]
+        packed = dense_to_jagged(active_x, active_mask)
+        embeddings = self._run_backbone(
+            packed,
+            active_mask,
+            packed,
+            X_features[active_events],
+            backbone=backbone,
+        )
+        output[active_events] = jagged_to_dense(self._collect_representation(embeddings), active_mask)
+        return output
+
+    def _run_detector_backbone_layers(self, x, mask, X_features):
+        """Run tracker/calo attention independently, then mix them in common layers."""
+        valid_mask = mask.bool()
+        tracker_mask = valid_mask & (X_features[..., 0] == 1)
+        calo_mask = valid_mask & (X_features[..., 0] == 2)
+
+        local = self._run_detector_leg(x, tracker_mask, X_features, self.tracker_backbone)
+        local = local + self._run_detector_leg(x, calo_mask, X_features, self.calo_backbone)
+
+        # Preserve any valid element types not assigned to either detector leg.
+        other_mask = valid_mask & ~(tracker_mask | calo_mask)
+        local = local + x * other_mask.unsqueeze(-1).to(x.dtype)
+        representations = [local]
+
+        if len(self.backbone) > 0:
+            packed = dense_to_jagged(local, valid_mask)
+            common_embeddings = self._run_backbone(packed, valid_mask, packed, X_features, backbone=self.backbone)
+            representations.extend(jagged_to_dense(embedding, valid_mask) for embedding in common_embeddings)
+        return representations
+
     def encode_backbone(self, X_features, mask):
         X_features = self._engineer_input_features(X_features, mask)
+        if self.use_detector_backbone:
+            x = self._encode_inputs(X_features, mask=mask)
+            embeddings = self._run_detector_backbone_layers(x, mask, X_features)
+            return embeddings[-1]
         if self.use_split_backbone:
             x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
             x = self._prepare_backbone_input(x, mask)
@@ -1624,6 +1729,24 @@ class MLPF(nn.Module):
             x = self._prepare_backbone_input(x, mask)
             embeddings = self._run_backbone(x, mask, x, X_features)
         return self._restore_backbone_output(self._collect_representation(embeddings), mask)
+
+    def encode_backbone_layers(self, X_features, mask):
+        """Return the input encoding and each successive backbone representation."""
+        X_features = self._engineer_input_features(X_features, mask)
+        if self.use_detector_backbone:
+            x = self._encode_inputs(X_features, mask=mask)
+            return [x, *self._run_detector_backbone_layers(x, mask, X_features)]
+        if self.use_split_backbone:
+            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
+            backbone = self._backbone_id
+        else:
+            x = self._encode_inputs(X_features, mask=mask)
+            backbone = self.backbone
+        x = self._prepare_backbone_input(x, mask)
+        representations = [x]
+        if len(backbone) > 0:
+            representations.extend(self._run_backbone(x, mask, x, X_features, backbone=backbone))
+        return [self._restore_backbone_output(representation, mask) for representation in representations]
 
     @property
     def nn0_id(self):
@@ -1663,9 +1786,12 @@ class MLPF(nn.Module):
             final_embedding_reg = self._restore_backbone_output(self._collect_representation(embeddings_reg), mask)
         else:
             x = self._encode_inputs(X_features, mask=mask)
-            x = self._prepare_backbone_input(x, mask)
-            backbone_embeddings = self._run_backbone(x, mask, x, X_features)
-            final_embedding = self._restore_backbone_output(self._collect_representation(backbone_embeddings), mask)
+            if self.use_detector_backbone:
+                final_embedding = self._run_detector_backbone_layers(x, mask, X_features)[-1]
+            else:
+                x = self._prepare_backbone_input(x, mask)
+                backbone_embeddings = self._run_backbone(x, mask, x, X_features)
+                final_embedding = self._restore_backbone_output(self._collect_representation(backbone_embeddings), mask)
 
             if self.task_queries:
                 final_embedding_cls = self.classification_readout(final_embedding, mask, self.classification_query)

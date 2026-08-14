@@ -162,6 +162,18 @@ def test_non_hit_model_does_not_engineer_features():
     assert model.raw_input_dim == model.input_dim == config.input_dim
 
 
+def test_hit_model_reconstructs_legacy_elemtype_from_subdetector():
+    config = make_model_config("cld_hits", hit_feature_engineering={"enabled": False})
+    model = MLPF(config)
+    features, mask = make_hit_input()
+    features[..., 0] = 2  # TFDS 3.2.0 postprocessing mistake
+
+    corrected = model._engineer_input_features(features, mask)
+
+    torch.testing.assert_close(corrected[0, :2, 0], torch.tensor([1.0, 2.0]))
+    torch.testing.assert_close(features[..., 0], torch.full_like(features[..., 0], 2))
+
+
 def test_hit_feature_blocks_are_independently_toggleable():
     features, mask = make_hit_input()
     cases = [

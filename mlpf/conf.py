@@ -495,6 +495,16 @@ class BackboneConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: BackboneMode = BackboneMode.SHARED
     num_convs: Optional[int] = None
+    num_tracker_layers: Optional[int] = Field(default=None, ge=0)
+    num_calo_layers: Optional[int] = Field(default=None, ge=0)
+    num_common_layers: Optional[int] = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_detector_layer_counts(self):
+        counts = (self.num_tracker_layers, self.num_calo_layers, self.num_common_layers)
+        if any(count is not None for count in counts) and not all(count is not None for count in counts):
+            raise ValueError("num_tracker_layers, num_calo_layers, and num_common_layers must be configured together")
+        return self
 
 
 class HitFeatureEngineeringConfig(BaseModel):

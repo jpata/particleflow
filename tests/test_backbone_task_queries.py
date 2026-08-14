@@ -12,17 +12,28 @@ def make_config(
     num_convs=2,
     use_jagged_attention=False,
     use_flash_attn_varlen=False,
+    dataset="cms",
+    detector_layers=None,
 ):
+    backbone = {"mode": backbone_mode, "num_convs": num_convs}
+    if detector_layers is not None:
+        backbone.update(
+            {
+                "num_tracker_layers": detector_layers[0],
+                "num_calo_layers": detector_layers[1],
+                "num_common_layers": detector_layers[2],
+            }
+        )
     return MLPFConfig.model_validate(
         {
-            "dataset": "cms",
+            "dataset": dataset,
             "data_dir": "/tmp",
             "conv_type": "attention",
             "model": {
                 "type": "attention",
                 "input_encoding": "split",
                 "task_queries": task_queries,
-                "backbone": {"mode": backbone_mode, "num_convs": num_convs},
+                "backbone": backbone,
                 "attention": {
                     "num_convs": num_convs,
                     "num_heads": 2,
@@ -63,9 +74,13 @@ def test_shared_backbone_uses_task_query_readouts():
     with torch.no_grad():
         outputs = model(X, mask)
         embedding = model.encode_backbone(X, mask)
+        layer_embeddings = model.encode_backbone_layers(X, mask)
 
     assert_output_shapes(outputs, config)
     assert embedding.shape == (2, 8, 8)
+    assert len(layer_embeddings) == 3
+    assert all(layer.shape == (2, 8, 8) for layer in layer_embeddings)
+    torch.testing.assert_close(layer_embeddings[-1], embedding)
     assert model.classification_query is not None
     assert model.regression_query is not None
     assert model.classification_readout is not None
@@ -174,3 +189,76 @@ def test_flash_attn_varlen_requires_jagged_backbone():
 
     with pytest.raises(ValueError, match="requires use_jagged_attention=True"):
         MLPF(config)
+
+
+def test_detector_specific_backbone_preserves_layer_budget_and_shapes():
+    config = make_config(
+        dataset="cld_hits",
+        task_queries=False,
+        num_convs=4,
+        use_jagged_attention=True,
+        detector_layers=(1, 1, 2),
+    )
+    model = MLPF(config).eval()
+    X, mask = make_inputs(config)
+
+    with torch.no_grad():
+        outputs = model(X, mask)
+        embedding = model.encode_backbone(X, mask)
+        layer_embeddings = model.encode_backbone_layers(X, mask)
+
+    assert_output_shapes(outputs, config)
+    assert embedding.shape == (2, 8, 8)
+    assert len(model.tracker_backbone) == 1
+    assert len(model.calo_backbone) == 1
+    assert len(model.backbone) == 2
+    assert len(model.tracker_backbone) + len(model.calo_backbone) + len(model.backbone) == 4
+    assert len(layer_embeddings) == 4  # input, merged local legs, two common layers
+    torch.testing.assert_close(layer_embeddings[-1], embedding)
+
+
+def test_detector_legs_do_not_mix_tracker_and_calo_before_common_attention():
+    torch.manual_seed(11)
+    config = make_config(
+        dataset="cld_hits",
+        task_queries=False,
+        num_convs=2,
+        use_jagged_attention=True,
+        detector_layers=(1, 1, 0),
+    )
+    model = MLPF(config).eval()
+    X, mask = make_inputs(config, batch_size=1, seq_len=6)
+    X[0, :3, 0] = 1
+    X[0, 3:, 0] = 2
+    X[0, :3, 10] = 3
+    X[0, 3:, 10] = 0
+    changed_calo = X.clone()
+    changed_calo[0, 3:, 1:10] = changed_calo[0, 3:, 1:10] + 3.0
+
+    with torch.no_grad():
+        embedding = model.encode_backbone(X, mask)
+        changed_embedding = model.encode_backbone(changed_calo, mask)
+
+    torch.testing.assert_close(embedding[0, :3], changed_embedding[0, :3])
+    assert not torch.allclose(embedding[0, 3:], changed_embedding[0, 3:])
+
+
+def test_detector_specific_backbone_rejects_layer_budget_mismatch():
+    config = make_config(
+        dataset="cld_hits",
+        task_queries=False,
+        num_convs=4,
+        use_jagged_attention=True,
+        detector_layers=(1, 1, 1),
+    )
+
+    with pytest.raises(ValueError, match="preserve the backbone budget"):
+        MLPF(config)
+
+
+def test_detector_layer_counts_must_be_configured_together():
+    config_dict = make_config().model_dump(mode="json")
+    config_dict["model"]["backbone"]["num_tracker_layers"] = 1
+
+    with pytest.raises(ValueError, match="must be configured together"):
+        MLPFConfig.model_validate(config_dict)

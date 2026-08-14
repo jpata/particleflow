@@ -68,7 +68,12 @@ uv run python3 -u mlpf/pipeline.py \
     --model.attention.use_jagged_attention True \
     --model.attention.use_flash_attn_varlen False \
     --pad_to_multiple_elements 100 \
-    --model.attention.num_convs 6 --model.type attention \
+    --model.backbone.mode shared \
+    --model.backbone.num_convs 6 \
+    --model.backbone.num_tracker_layers 2 \
+    --model.backbone.num_calo_layers 2 \
+    --model.backbone.num_common_layers 2 \
+    --model.type attention \
     --model.task_queries false \
     --lr 0.001 --num_steps 20000 --val_freq 2000 --checkpoint_freq 2000
 
