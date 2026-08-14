@@ -617,6 +617,359 @@ class CalorimeterNeighborhoodFeatures(nn.Module):
         return engineered.reshape(batch_size, sequence_length, -1).to(X_features.dtype)
 
 
+TRACKER_NEIGHBORHOOD_SCALE_NAMES = ("small", "large")
+TRACKER_SURFACE_BASE_FEATURE_NAMES = (
+    "count_log",
+    "centroid_delta_eta",
+    "centroid_delta_phi",
+    "sigma_eta",
+    "sigma_phi",
+    "time_delta",
+    "sigma_time",
+    "is_isolated",
+)
+TRACKER_TRACKLET_BASE_FEATURE_NAMES = (
+    "count_log",
+    "distinct_surface_count_log",
+    "path_span",
+    "path_rank",
+    "rho_span",
+    "abs_z_span",
+    "centroid_delta_eta",
+    "centroid_delta_phi",
+    "sigma_eta",
+    "sigma_phi",
+    "conformal_linearity",
+    "conformal_axis_residual",
+    "time_delta",
+    "sigma_time",
+    "vxd_fraction",
+    "inner_fraction",
+    "outer_fraction",
+)
+TRACKER_NEIGHBORHOOD_FEATURE_NAMES = (
+    tuple(
+        f"tracker_surface_{scale}_{feature}"
+        for scale in TRACKER_NEIGHBORHOOD_SCALE_NAMES
+        for feature in TRACKER_SURFACE_BASE_FEATURE_NAMES
+    )
+    + tuple(
+        f"tracker_tracklet_{scale}_{feature}"
+        for scale in TRACKER_NEIGHBORHOOD_SCALE_NAMES
+        for feature in TRACKER_TRACKLET_BASE_FEATURE_NAMES
+    )
+    + (
+        "tracker_surface_count_small_over_large",
+        "tracker_tracklet_count_small_over_large",
+        "tracker_tracklet_surfaces_small_over_large",
+    )
+)
+
+
+class TrackerNeighborhoodFeatures(nn.Module):
+    """GPU-native local-surface and cross-layer tracker-hit summaries."""
+
+    FINE_ANGULAR_BIN_SIZE = 0.025
+    SCALE_SHIFTS = (0, 2)
+    ETA_MIN = -5.0
+    ETA_MAX = 5.0
+    MAX_SYSTEMS = 32
+    NUM_SIDES = 3
+    MAX_LAYERS = 64
+    NUM_SURFACES = MAX_SYSTEMS * NUM_SIDES * MAX_LAYERS
+    POSITION_SCALE_MM = 3000.0
+    CONFORMAL_SCALE_MM = 100.0
+    TIME_SCALE_NS = 10.0
+    SPEED_OF_LIGHT_MM_PER_NS = 299.792458
+    NUM_OUTPUT_FEATURES = len(TRACKER_NEIGHBORHOOD_FEATURE_NAMES)
+    OUTPUT_FEATURE_NAMES = TRACKER_NEIGHBORHOOD_FEATURE_NAMES
+
+    @staticmethod
+    def _scatter_sum(inverse, values, num_bins):
+        reductions = torch.zeros((num_bins, values.shape[-1]), dtype=torch.float32, device=values.device)
+        reductions.scatter_add_(0, inverse.unsqueeze(-1).expand_as(values), values)
+        return reductions
+
+    def _surface_summary(
+        self,
+        batch_index,
+        eta_bin,
+        phi_bin,
+        num_eta_bins,
+        num_phi_bins,
+        valid,
+        surface,
+        eta,
+        phi,
+        time_residual,
+    ):
+        keys = (((batch_index * self.NUM_SURFACES + surface) * num_eta_bins + eta_bin) * num_phi_bins + phi_bin)
+        occupied_keys, inverse = torch.unique(keys, sorted=True, return_inverse=True)
+        num_bins = occupied_keys.shape[0]
+        weight = valid.to(torch.float32)
+        sin_phi = torch.sin(phi)
+        cos_phi = torch.cos(phi)
+        values = torch.stack(
+            [
+                weight,
+                weight * eta,
+                weight * eta.square(),
+                weight * sin_phi,
+                weight * cos_phi,
+                weight * time_residual,
+                weight * time_residual.square(),
+            ],
+            dim=-1,
+        )
+        local = self._scatter_sum(inverse, values, num_bins)[inverse]
+        count = local[:, 0]
+        safe_count = count.clamp_min(1.0)
+        mean_eta = local[:, 1] / safe_count
+        mean_phi = torch.atan2(local[:, 3], local[:, 4])
+        delta_phi = torch.atan2(torch.sin(phi - mean_phi), torch.cos(phi - mean_phi))
+        variance_eta = (local[:, 2] / safe_count - mean_eta.square()).clamp_min(0.0)
+        circular_resultant = torch.sqrt(local[:, 3].square() + local[:, 4].square()) / safe_count
+        variance_phi = (2.0 * (1.0 - circular_resultant.clamp(max=1.0))).clamp_min(0.0)
+        mean_time = local[:, 5] / safe_count
+        variance_time = (local[:, 6] / safe_count - mean_time.square()).clamp_min(0.0)
+        features = torch.stack(
+            [
+                torch.log1p(count),
+                eta - mean_eta,
+                delta_phi,
+                torch.sqrt(variance_eta),
+                torch.sqrt(variance_phi),
+                time_residual - mean_time,
+                torch.sqrt(variance_time),
+                count <= 1.0,
+            ],
+            dim=-1,
+        )
+        return features * valid.unsqueeze(-1), count * weight
+
+    def _tracklet_summary(
+        self,
+        batch_index,
+        eta_bin,
+        phi_bin,
+        num_eta_bins,
+        num_phi_bins,
+        valid,
+        surface,
+        eta,
+        phi,
+        rho,
+        abs_z,
+        path,
+        conformal_u,
+        conformal_v,
+        time_residual,
+        system,
+    ):
+        keys = (batch_index * num_eta_bins + eta_bin) * num_phi_bins + phi_bin
+        occupied_keys, inverse = torch.unique(keys, sorted=True, return_inverse=True)
+        num_bins = occupied_keys.shape[0]
+        weight = valid.to(torch.float32)
+        sin_phi = torch.sin(phi)
+        cos_phi = torch.cos(phi)
+        values = torch.stack(
+            [
+                weight,
+                weight * eta,
+                weight * eta.square(),
+                weight * sin_phi,
+                weight * cos_phi,
+                weight * conformal_u,
+                weight * conformal_u.square(),
+                weight * conformal_v,
+                weight * conformal_v.square(),
+                weight * conformal_u * conformal_v,
+                weight * time_residual,
+                weight * time_residual.square(),
+                weight * ((system == 1) | (system == 2)),
+                weight * ((system == 3) | (system == 4)),
+                weight * ((system == 5) | (system == 6)),
+            ],
+            dim=-1,
+        )
+        reductions = self._scatter_sum(inverse, values, num_bins)
+        local = reductions[inverse]
+        count = local[:, 0]
+        safe_count = count.clamp_min(1.0)
+
+        min_values = torch.full((num_bins, 3), torch.inf, dtype=torch.float32, device=values.device)
+        max_values = torch.full((num_bins, 3), -torch.inf, dtype=torch.float32, device=values.device)
+        coordinates = torch.stack([path, rho, abs_z], dim=-1)
+        coordinate_indices = inverse.unsqueeze(-1).expand_as(coordinates)
+        min_values.scatter_reduce_(
+            0, coordinate_indices, torch.where(valid.unsqueeze(-1), coordinates, torch.inf), reduce="amin", include_self=True
+        )
+        max_values.scatter_reduce_(
+            0, coordinate_indices, torch.where(valid.unsqueeze(-1), coordinates, -torch.inf), reduce="amax", include_self=True
+        )
+        local_min = min_values[inverse]
+        local_max = max_values[inverse]
+        spans = torch.where(valid.unsqueeze(-1), local_max - local_min, 0.0)
+        path_rank = (path - local_min[:, 0]) / spans[:, 0].clamp_min(1.0e-6)
+
+        # Count unique detector surfaces in each projective bin without a dense
+        # one-hot tensor. The compact projective-bin index is part of the key.
+        surface_pair_keys = inverse * self.NUM_SURFACES + surface
+        occupied_pairs, pair_inverse = torch.unique(surface_pair_keys, sorted=True, return_inverse=True)
+        pair_is_valid = torch.zeros(occupied_pairs.shape[0], dtype=torch.int64, device=values.device)
+        pair_is_valid.scatter_reduce_(0, pair_inverse, valid.to(torch.int64), reduce="amax", include_self=True)
+        pair_bins = torch.div(occupied_pairs, self.NUM_SURFACES, rounding_mode="floor")
+        distinct_surfaces = torch.zeros(num_bins, dtype=torch.float32, device=values.device)
+        distinct_surfaces.scatter_add_(0, pair_bins, pair_is_valid.to(torch.float32))
+        local_distinct_surfaces = distinct_surfaces[inverse]
+
+        mean_eta = local[:, 1] / safe_count
+        mean_phi = torch.atan2(local[:, 3], local[:, 4])
+        delta_phi = torch.atan2(torch.sin(phi - mean_phi), torch.cos(phi - mean_phi))
+        variance_eta = (local[:, 2] / safe_count - mean_eta.square()).clamp_min(0.0)
+        circular_resultant = torch.sqrt(local[:, 3].square() + local[:, 4].square()) / safe_count
+        variance_phi = (2.0 * (1.0 - circular_resultant.clamp(max=1.0))).clamp_min(0.0)
+
+        mean_u = local[:, 5] / safe_count
+        mean_v = local[:, 7] / safe_count
+        covariance_u = (local[:, 6] / safe_count - mean_u.square()).clamp_min(0.0)
+        covariance_v = (local[:, 8] / safe_count - mean_v.square()).clamp_min(0.0)
+        covariance_uv = local[:, 9] / safe_count - mean_u * mean_v
+        covariance_trace = covariance_u + covariance_v
+        covariance_discriminant = torch.sqrt((covariance_u - covariance_v).square() + 4.0 * covariance_uv.square())
+        conformal_linearity = (covariance_discriminant / covariance_trace.clamp_min(1.0e-8)).clamp(max=1.0)
+        principal_axis_angle = 0.5 * torch.atan2(2.0 * covariance_uv, covariance_u - covariance_v)
+        delta_u = conformal_u - mean_u
+        delta_v = conformal_v - mean_v
+        conformal_axis_residual = torch.abs(-torch.sin(principal_axis_angle) * delta_u + torch.cos(principal_axis_angle) * delta_v)
+
+        mean_time = local[:, 10] / safe_count
+        variance_time = (local[:, 11] / safe_count - mean_time.square()).clamp_min(0.0)
+        features = torch.stack(
+            [
+                torch.log1p(count),
+                torch.log1p(local_distinct_surfaces),
+                spans[:, 0] / self.POSITION_SCALE_MM,
+                path_rank,
+                spans[:, 1] / self.POSITION_SCALE_MM,
+                spans[:, 2] / self.POSITION_SCALE_MM,
+                eta - mean_eta,
+                delta_phi,
+                torch.sqrt(variance_eta),
+                torch.sqrt(variance_phi),
+                conformal_linearity,
+                conformal_axis_residual,
+                time_residual - mean_time,
+                torch.sqrt(variance_time),
+                local[:, 12] / safe_count,
+                local[:, 13] / safe_count,
+                local[:, 14] / safe_count,
+            ],
+            dim=-1,
+        )
+        return features * valid.unsqueeze(-1), count * weight, local_distinct_surfaces * weight
+
+    def forward(self, X_features, mask=None):
+        geometry = X_features.to(torch.float32)
+        batch_size, sequence_length = geometry.shape[:2]
+        flat = geometry.reshape(-1, geometry.shape[-1])
+        elemtype = flat[:, 0]
+        eta = flat[:, 2].clamp(min=self.ETA_MIN, max=self.ETA_MAX - 1.0e-6)
+        phi = torch.atan2(flat[:, 3], flat[:, 4])
+        x, y, z = flat[:, 6], flat[:, 7], flat[:, 8]
+        time = flat[:, 9]
+        system = flat[:, 12].to(torch.int64).clamp(min=0, max=self.MAX_SYSTEMS - 1)
+        side = flat[:, 13].to(torch.int64).clamp(min=-1, max=1)
+        layer = flat[:, 14].to(torch.int64).clamp(min=0, max=self.MAX_LAYERS - 1)
+
+        if mask is None:
+            flat_mask = torch.ones_like(elemtype, dtype=torch.bool)
+        else:
+            flat_mask = mask.reshape(-1).to(torch.bool)
+        valid = flat_mask & (elemtype == 1) & (system >= 1) & (system <= 6)
+
+        rho_sq = x.square() + y.square()
+        rho = torch.sqrt(rho_sq)
+        abs_z = z.abs()
+        path = torch.sqrt(rho_sq + z.square())
+        inverse_rho_sq = torch.where(rho_sq > 0.0, self.CONFORMAL_SCALE_MM / rho_sq, 0.0)
+        conformal_u = (x * inverse_rho_sq).clamp(min=-8.0, max=8.0)
+        conformal_v = (y * inverse_rho_sq).clamp(min=-8.0, max=8.0)
+        time_residual = ((time - path / self.SPEED_OF_LIGHT_MM_PER_NS) / self.TIME_SCALE_NS).clamp(min=-10.0, max=10.0)
+
+        batch_index = torch.arange(batch_size, device=flat.device).unsqueeze(1).expand(batch_size, sequence_length).reshape(-1)
+        fine_eta_bin = torch.floor((eta - self.ETA_MIN) / self.FINE_ANGULAR_BIN_SIZE).to(torch.int64)
+        fine_phi_bin = torch.floor((phi + math.pi) / self.FINE_ANGULAR_BIN_SIZE).to(torch.int64)
+        # Collapse calorimeter hits and padding to one harmless bin per event so
+        # tracker reductions do not pay for the much larger calorimeter occupancy.
+        fine_eta_bin = torch.where(valid, fine_eta_bin, 0)
+        fine_phi_bin = torch.where(valid, fine_phi_bin, 0)
+        surface = ((system * self.NUM_SIDES + (side + 1)) * self.MAX_LAYERS + layer).clamp(
+            min=0, max=self.NUM_SURFACES - 1
+        )
+        surface = torch.where(valid, surface, 0)
+
+        surface_features = []
+        tracklet_features = []
+        surface_counts = []
+        tracklet_counts = []
+        tracklet_surface_counts = []
+        for shift in self.SCALE_SHIFTS:
+            divisor = 1 << shift
+            eta_bin = torch.div(fine_eta_bin, divisor, rounding_mode="floor")
+            phi_bin = torch.div(fine_phi_bin, divisor, rounding_mode="floor")
+            num_eta_bins = math.ceil((self.ETA_MAX - self.ETA_MIN) / (self.FINE_ANGULAR_BIN_SIZE * divisor))
+            num_phi_bins = math.ceil((2.0 * math.pi) / (self.FINE_ANGULAR_BIN_SIZE * divisor))
+            local_surface_features, surface_count = self._surface_summary(
+                batch_index,
+                eta_bin,
+                phi_bin,
+                num_eta_bins,
+                num_phi_bins,
+                valid,
+                surface,
+                eta,
+                phi,
+                time_residual,
+            )
+            local_tracklet_features, tracklet_count, tracklet_surface_count = self._tracklet_summary(
+                batch_index,
+                eta_bin,
+                phi_bin,
+                num_eta_bins,
+                num_phi_bins,
+                valid,
+                surface,
+                eta,
+                phi,
+                rho,
+                abs_z,
+                path,
+                conformal_u,
+                conformal_v,
+                time_residual,
+                system,
+            )
+            surface_features.append(local_surface_features)
+            tracklet_features.append(local_tracklet_features)
+            surface_counts.append(surface_count)
+            tracklet_counts.append(tracklet_count)
+            tracklet_surface_counts.append(tracklet_surface_count)
+
+        ratios = torch.stack(
+            [
+                surface_counts[0] / surface_counts[-1].clamp_min(1.0),
+                tracklet_counts[0] / tracklet_counts[-1].clamp_min(1.0),
+                tracklet_surface_counts[0] / tracklet_surface_counts[-1].clamp_min(1.0),
+            ],
+            dim=-1,
+        )
+        engineered = torch.cat([*surface_features, *tracklet_features, ratios], dim=-1)
+        engineered = torch.nan_to_num(engineered, nan=0.0, posinf=0.0, neginf=0.0)
+        engineered = engineered * valid.unsqueeze(-1)
+        return engineered.reshape(batch_size, sequence_length, -1).to(X_features.dtype)
+
+
 class HitFeatureEngineering(nn.Module):
     """Append inexpensive geometry features to the raw EDM4HEP hit inputs.
 
@@ -650,15 +1003,24 @@ class HitFeatureEngineering(nn.Module):
 
     def __init__(self):
         super().__init__()
+        self.tracker_neighborhood = TrackerNeighborhoodFeatures()
         self.calorimeter_neighborhood = CalorimeterNeighborhoodFeatures()
 
     @property
     def num_output_features(self):
-        return self.NUM_GEOMETRY_FEATURES + self.calorimeter_neighborhood.NUM_OUTPUT_FEATURES
+        return (
+            self.NUM_GEOMETRY_FEATURES
+            + self.tracker_neighborhood.NUM_OUTPUT_FEATURES
+            + self.calorimeter_neighborhood.NUM_OUTPUT_FEATURES
+        )
 
     @property
     def output_feature_names(self):
-        return self.GEOMETRY_FEATURE_NAMES + self.calorimeter_neighborhood.OUTPUT_FEATURE_NAMES
+        return (
+            self.GEOMETRY_FEATURE_NAMES
+            + self.tracker_neighborhood.OUTPUT_FEATURE_NAMES
+            + self.calorimeter_neighborhood.OUTPUT_FEATURE_NAMES
+        )
 
     def forward(self, X_features, mask=None):
         # Geometry is evaluated in float32 to avoid overflow and excessive
@@ -706,8 +1068,9 @@ class HitFeatureEngineering(nn.Module):
         if mask is not None:
             engineered = engineered * mask.unsqueeze(-1).to(engineered.dtype)
 
+        tracker_features = self.tracker_neighborhood(X_features, mask)
         calorimeter_features = self.calorimeter_neighborhood(X_features, mask)
-        return torch.cat([X_features, engineered.to(X_features.dtype), calorimeter_features], dim=-1)
+        return torch.cat([X_features, engineered.to(X_features.dtype), tracker_features, calorimeter_features], dim=-1)
 
 
 class RegressionOutput(nn.Module):

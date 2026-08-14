@@ -1,7 +1,7 @@
 import torch
 
 from mlpf.conf import EDM4HEP, MLPFConfig
-from mlpf.model.mlpf import CalorimeterNeighborhoodFeatures, HitFeatureEngineering, MLPF
+from mlpf.model.mlpf import CalorimeterNeighborhoodFeatures, HitFeatureEngineering, MLPF, TrackerNeighborhoodFeatures
 
 
 def make_hit_input():
@@ -61,6 +61,59 @@ def test_multiscale_calorimeter_reductions():
     torch.testing.assert_close(output[0, 0, indices["calo_small_is_energy_max"]], torch.tensor(0.0))
     torch.testing.assert_close(output[0, 1, indices["calo_small_is_energy_max"]], torch.tensor(1.0))
     torch.testing.assert_close(output[0, 3], torch.zeros(layer.NUM_OUTPUT_FEATURES))
+
+
+def test_tracker_surface_and_cross_layer_tracklet_reductions():
+    features = torch.zeros(1, 6, len(EDM4HEP.HitFeatures.get_names()))
+    mask = torch.tensor([[True, True, True, True, True, False]])
+
+    # Four tracker hits lie in one projective angular bin. The first two also
+    # share an exact detector surface, while the other two extend the tracklet
+    # through the inner and outer tracker systems.
+    radii = torch.tensor([100.0, 100.0, 400.0, 1000.0])
+    phis = torch.tensor([0.0, 0.001, 0.0, 0.0])
+    systems = torch.tensor([1.0, 1.0, 3.0, 5.0])
+    for index in range(4):
+        features[0, index, 0] = 1
+        features[0, index, 2] = 0
+        features[0, index, 3] = torch.sin(phis[index])
+        features[0, index, 4] = torch.cos(phis[index])
+        features[0, index, 6] = radii[index] * torch.cos(phis[index])
+        features[0, index, 7] = radii[index] * torch.sin(phis[index])
+        features[0, index, 9] = radii[index] / TrackerNeighborhoodFeatures.SPEED_OF_LIGHT_MM_PER_NS
+        features[0, index, 10] = 3
+        features[0, index, 12] = systems[index]
+        features[0, index, 13] = 0
+        features[0, index, 14] = 0
+
+    # A calorimeter hit and padding must not enter tracker reductions.
+    features[0, 4, 0] = 2
+    features[0, 4, 4] = 1
+    features[0, 4, 6] = 100.0
+    features[0, 4, 10] = 0
+    features[0, 4, 12] = 20
+
+    layer = TrackerNeighborhoodFeatures()
+    output = layer(features, mask)
+    indices = {name: index for index, name in enumerate(layer.OUTPUT_FEATURE_NAMES)}
+
+    assert output.shape == (1, 6, layer.NUM_OUTPUT_FEATURES)
+    torch.testing.assert_close(output[0, 0, indices["tracker_surface_small_count_log"]], torch.log1p(torch.tensor(2.0)))
+    torch.testing.assert_close(output[0, 2, indices["tracker_surface_small_count_log"]], torch.log1p(torch.tensor(1.0)))
+    torch.testing.assert_close(output[0, 0, indices["tracker_surface_small_is_isolated"]], torch.tensor(0.0))
+    torch.testing.assert_close(output[0, 2, indices["tracker_surface_small_is_isolated"]], torch.tensor(1.0))
+    torch.testing.assert_close(output[0, 0, indices["tracker_tracklet_small_count_log"]], torch.log1p(torch.tensor(4.0)))
+    torch.testing.assert_close(
+        output[0, 0, indices["tracker_tracklet_small_distinct_surface_count_log"]], torch.log1p(torch.tensor(3.0))
+    )
+    torch.testing.assert_close(output[0, 0, indices["tracker_tracklet_small_path_span"]], torch.tensor(0.3))
+    torch.testing.assert_close(output[0, 2, indices["tracker_tracklet_small_path_rank"]], torch.tensor(1.0 / 3.0))
+    torch.testing.assert_close(output[0, 0, indices["tracker_tracklet_small_vxd_fraction"]], torch.tensor(0.5))
+    torch.testing.assert_close(output[0, 0, indices["tracker_tracklet_small_inner_fraction"]], torch.tensor(0.25))
+    torch.testing.assert_close(output[0, 0, indices["tracker_tracklet_small_outer_fraction"]], torch.tensor(0.25))
+    assert output[0, 0, indices["tracker_tracklet_small_conformal_linearity"]] > 0.99
+    torch.testing.assert_close(output[0, 4], torch.zeros(layer.NUM_OUTPUT_FEATURES))
+    torch.testing.assert_close(output[0, 5], torch.zeros(layer.NUM_OUTPUT_FEATURES))
 
 
 def make_model_config(dataset):
