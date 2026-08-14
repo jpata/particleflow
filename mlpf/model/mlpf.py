@@ -1,3 +1,4 @@
+import math
 import time
 from typing import Union, List, Optional, NamedTuple
 
@@ -411,6 +412,213 @@ def ffn(input_dim, output_dim, width, act, dropout):
     )
 
 
+CALO_NEIGHBORHOOD_SCALE_NAMES = ("small", "medium", "large")
+CALO_NEIGHBORHOOD_BASE_FEATURE_NAMES = (
+    "count_log",
+    "energy_sum_log",
+    "energy_max_log",
+    "energy_l2_log",
+    "hit_energy_fraction",
+    "ecal_energy_sum_log",
+    "hcal_energy_sum_log",
+    "ecal_energy_fraction",
+    "hcal_energy_fraction",
+    "other_energy_fraction",
+    "centroid_delta_eta",
+    "centroid_delta_phi",
+    "centroid_delta_depth",
+    "sigma_eta",
+    "sigma_phi",
+    "sigma_depth",
+    "early_energy_fraction",
+    "late_energy_fraction",
+    "time_mean_norm",
+    "centroid_delta_time",
+    "sigma_time",
+    "centroid_distance",
+    "is_energy_max",
+)
+CALO_NEIGHBORHOOD_FEATURE_NAMES = tuple(
+    f"calo_{scale}_{feature}"
+    for scale in CALO_NEIGHBORHOOD_SCALE_NAMES
+    for feature in CALO_NEIGHBORHOOD_BASE_FEATURE_NAMES
+) + ("calo_energy_small_over_large", "calo_energy_medium_over_large")
+
+
+class CalorimeterNeighborhoodFeatures(nn.Module):
+    """Compact multi-scale calorimeter reductions on regular angular grids."""
+
+    FINE_ANGULAR_BIN_SIZE = 0.025
+    ETA_MIN = -5.0
+    ETA_MAX = 5.0
+    NUM_SCALES = len(CALO_NEIGHBORHOOD_SCALE_NAMES)
+    NUM_OUTPUT_FEATURES = len(CALO_NEIGHBORHOOD_FEATURE_NAMES)
+    OUTPUT_FEATURE_NAMES = CALO_NEIGHBORHOOD_FEATURE_NAMES
+    POSITION_SCALE_MM = 3000.0
+    TIME_SCALE_NS = 10.0
+
+    def _summarize_scale(
+        self,
+        scale,
+        batch_index,
+        fine_eta_bin,
+        fine_phi_bin,
+        valid,
+        energy,
+        eta,
+        phi,
+        depth,
+        time,
+        subdetector,
+    ):
+        divisor = 1 << scale
+        eta_bin = torch.div(fine_eta_bin, divisor, rounding_mode="floor")
+        phi_bin = torch.div(fine_phi_bin, divisor, rounding_mode="floor")
+        num_eta_bins = math.ceil((self.ETA_MAX - self.ETA_MIN) / (self.FINE_ANGULAR_BIN_SIZE * divisor))
+        num_phi_bins = math.ceil((2.0 * math.pi) / (self.FINE_ANGULAR_BIN_SIZE * divisor))
+        keys = (batch_index * num_eta_bins + eta_bin) * num_phi_bins + phi_bin
+        occupied_keys, inverse = torch.unique(keys, sorted=True, return_inverse=True)
+        num_occupied_bins = occupied_keys.shape[0]
+
+        weight = valid.to(torch.float32)
+        weighted_energy = energy * weight
+        sin_phi = torch.sin(phi)
+        cos_phi = torch.cos(phi)
+        values = torch.stack(
+            [
+                weight,
+                weighted_energy,
+                weighted_energy * eta,
+                weighted_energy * eta.square(),
+                weighted_energy * sin_phi,
+                weighted_energy * cos_phi,
+                weighted_energy * depth,
+                weighted_energy * depth.square(),
+                weighted_energy * time,
+                weighted_energy * time.square(),
+                weighted_energy * (subdetector == 0),
+                weighted_energy * (subdetector == 1),
+                weighted_energy * (subdetector == 2),
+                weighted_energy.square(),
+            ],
+            dim=-1,
+        )
+        reductions = torch.zeros((num_occupied_bins, values.shape[-1]), dtype=torch.float32, device=values.device)
+        reduction_indices = inverse.unsqueeze(-1).expand_as(values)
+        reductions.scatter_add_(0, reduction_indices, values)
+
+        max_energy = torch.zeros(num_occupied_bins, dtype=torch.float32, device=values.device)
+        max_energy.scatter_reduce_(0, inverse, weighted_energy, reduce="amax", include_self=True)
+        min_depth = torch.full((num_occupied_bins,), torch.inf, dtype=torch.float32, device=values.device)
+        max_depth = torch.full((num_occupied_bins,), -torch.inf, dtype=torch.float32, device=values.device)
+        min_depth.scatter_reduce_(0, inverse, torch.where(valid, depth, torch.inf), reduce="amin", include_self=True)
+        max_depth.scatter_reduce_(0, inverse, torch.where(valid, depth, -torch.inf), reduce="amax", include_self=True)
+
+        local = reductions[inverse]
+        local_energy = local[:, 1]
+        safe_energy = local_energy.clamp_min(1.0e-8)
+        mean_eta = local[:, 2] / safe_energy
+        mean_depth = local[:, 6] / safe_energy
+        mean_time = local[:, 8] / safe_energy
+        mean_phi = torch.atan2(local[:, 4], local[:, 5])
+        delta_eta = eta - mean_eta
+        delta_phi = torch.atan2(torch.sin(phi - mean_phi), torch.cos(phi - mean_phi))
+        delta_depth = depth - mean_depth
+
+        variance_eta = (local[:, 3] / safe_energy - mean_eta.square()).clamp_min(0.0)
+        circular_resultant = torch.sqrt(local[:, 4].square() + local[:, 5].square()) / safe_energy
+        variance_phi = (2.0 * (1.0 - circular_resultant.clamp(max=1.0))).clamp_min(0.0)
+        variance_depth = (local[:, 7] / safe_energy - mean_depth.square()).clamp_min(0.0)
+        variance_time = (local[:, 9] / safe_energy - mean_time.square()).clamp_min(0.0)
+
+        depth_midpoint = 0.5 * (min_depth[inverse] + max_depth[inverse])
+        early_energy = torch.where(valid & (depth <= depth_midpoint), energy, 0.0)
+        early_reduction = torch.zeros(num_occupied_bins, dtype=torch.float32, device=values.device)
+        early_reduction.scatter_add_(0, inverse, early_energy)
+        early_fraction = early_reduction[inverse] / safe_energy
+
+        ecal_hcal_energy = (local[:, 10] + local[:, 11]).clamp_min(1.0e-8)
+        features = torch.stack(
+            [
+                torch.log1p(local[:, 0]),
+                torch.log1p(local_energy),
+                torch.log1p(max_energy[inverse]),
+                torch.log1p(torch.sqrt(local[:, 13])),
+                energy / safe_energy,
+                torch.log1p(local[:, 10]),
+                torch.log1p(local[:, 11]),
+                local[:, 10] / ecal_hcal_energy,
+                local[:, 11] / ecal_hcal_energy,
+                local[:, 12] / safe_energy,
+                delta_eta,
+                delta_phi,
+                delta_depth,
+                torch.sqrt(variance_eta),
+                torch.sqrt(variance_phi),
+                torch.sqrt(variance_depth),
+                early_fraction,
+                1.0 - early_fraction,
+                mean_time / self.TIME_SCALE_NS,
+                (time - mean_time) / self.TIME_SCALE_NS,
+                torch.sqrt(variance_time) / self.TIME_SCALE_NS,
+                torch.sqrt(delta_eta.square() + delta_phi.square()),
+                valid & (energy >= max_energy[inverse]),
+            ],
+            dim=-1,
+        )
+        features = features * valid.unsqueeze(-1)
+        return features, local_energy * weight
+
+    def forward(self, X_features, mask=None):
+        geometry = X_features.to(torch.float32)
+        batch_size, sequence_length = geometry.shape[:2]
+        flat = geometry.reshape(-1, geometry.shape[-1])
+        elemtype = flat[:, 0]
+        eta = flat[:, 2].clamp(min=self.ETA_MIN, max=self.ETA_MAX - 1.0e-6)
+        phi = torch.atan2(flat[:, 3], flat[:, 4])
+        energy = flat[:, 5].clamp_min(0.0)
+        radius = torch.linalg.vector_norm(flat[:, 6:9], dim=-1)
+        depth = radius / self.POSITION_SCALE_MM
+        time = flat[:, 9]
+        subdetector = flat[:, 10]
+
+        if mask is None:
+            flat_mask = torch.ones_like(elemtype, dtype=torch.bool)
+        else:
+            flat_mask = mask.reshape(-1).to(torch.bool)
+        valid = flat_mask & (elemtype == 2)
+
+        batch_index = torch.arange(batch_size, device=flat.device).unsqueeze(1).expand(batch_size, sequence_length).reshape(-1)
+        fine_eta_bin = torch.floor((eta - self.ETA_MIN) / self.FINE_ANGULAR_BIN_SIZE).to(torch.int64)
+        fine_phi_bin = torch.floor((phi + math.pi) / self.FINE_ANGULAR_BIN_SIZE).to(torch.int64)
+
+        scale_features = []
+        scale_energies = []
+        for scale in range(self.NUM_SCALES):
+            features, local_energy = self._summarize_scale(
+                scale,
+                batch_index,
+                fine_eta_bin,
+                fine_phi_bin,
+                valid,
+                energy,
+                eta,
+                phi,
+                depth,
+                time,
+                subdetector,
+            )
+            scale_features.append(features)
+            scale_energies.append(local_energy)
+
+        large_energy = scale_energies[-1].clamp_min(1.0e-8)
+        scale_ratios = torch.stack([scale_energies[0] / large_energy, scale_energies[1] / large_energy], dim=-1)
+        engineered = torch.cat([*scale_features, scale_ratios], dim=-1)
+        engineered = torch.nan_to_num(engineered, nan=0.0, posinf=0.0, neginf=0.0)
+        engineered = engineered * valid.unsqueeze(-1)
+        return engineered.reshape(batch_size, sequence_length, -1).to(X_features.dtype)
+
+
 class HitFeatureEngineering(nn.Module):
     """Append inexpensive geometry features to the raw EDM4HEP hit inputs.
 
@@ -423,8 +631,8 @@ class HitFeatureEngineering(nn.Module):
     CONFORMAL_SCALE_MM = 1000.0
     TIME_SCALE_NS = 10.0
     SPEED_OF_LIGHT_MM_PER_NS = 299.792458
-    NUM_OUTPUT_FEATURES = 15
-    OUTPUT_FEATURE_NAMES = (
+    NUM_GEOMETRY_FEATURES = 15
+    GEOMETRY_FEATURE_NAMES = (
         "position_x_norm",
         "position_y_norm",
         "position_z_norm",
@@ -441,6 +649,18 @@ class HitFeatureEngineering(nn.Module):
         "is_other",
         "is_tracker",
     )
+
+    def __init__(self):
+        super().__init__()
+        self.calorimeter_neighborhood = CalorimeterNeighborhoodFeatures()
+
+    @property
+    def num_output_features(self):
+        return self.NUM_GEOMETRY_FEATURES + self.calorimeter_neighborhood.NUM_OUTPUT_FEATURES
+
+    @property
+    def output_feature_names(self):
+        return self.GEOMETRY_FEATURE_NAMES + self.calorimeter_neighborhood.OUTPUT_FEATURE_NAMES
 
     def forward(self, X_features, mask=None):
         # Geometry is evaluated in float32 to avoid overflow and excessive
@@ -488,7 +708,8 @@ class HitFeatureEngineering(nn.Module):
         if mask is not None:
             engineered = engineered * mask.unsqueeze(-1).to(engineered.dtype)
 
-        return torch.cat([X_features, engineered.to(X_features.dtype)], dim=-1)
+        calorimeter_features = self.calorimeter_neighborhood(X_features, mask)
+        return torch.cat([X_features, engineered.to(X_features.dtype), calorimeter_features], dim=-1)
 
 
 class RegressionOutput(nn.Module):
@@ -557,7 +778,7 @@ class MLPF(nn.Module):
         self.config = config.model
         self.raw_input_dim = config.input_dim
         self.feature_engineering = HitFeatureEngineering() if config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS) else nn.Identity()
-        self.input_dim = self.raw_input_dim + (HitFeatureEngineering.NUM_OUTPUT_FEATURES if self.uses_hit_feature_engineering else 0)
+        self.input_dim = self.raw_input_dim + (self.feature_engineering.num_output_features if self.uses_hit_feature_engineering else 0)
         self.num_classes = config.num_classes
         self.elemtypes_nonzero = config.elemtypes_nonzero
 
