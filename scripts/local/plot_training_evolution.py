@@ -44,9 +44,7 @@ def load_history(history_dir: Path, sample: str) -> dict[str, np.ndarray]:
         raise FileNotFoundError(f"No step_*.json history files found in {history_dir}")
 
     rows.sort(key=lambda row: row["step"])
-    return {
-        key: np.asarray([row[key] for row in rows], dtype=np.float64) for key in rows[0]
-    }
+    return {key: np.asarray([row[key] for row in rows], dtype=np.float64) for key in rows[0]}
 
 
 def plot_training_evolution(history: dict[str, np.ndarray], output_dir: Path) -> None:
@@ -69,9 +67,7 @@ def plot_training_evolution(history: dict[str, np.ndarray], output_dir: Path) ->
     axes[1, 0].set_xlabel("Training step")
 
     axes[1, 1].plot(steps, history["response_median"], marker="o", color="tab:purple")
-    axes[1, 1].axhline(
-        1.0, color="black", linestyle="--", linewidth=1, label="Ideal response"
-    )
+    axes[1, 1].axhline(1.0, color="black", linestyle="--", linewidth=1, label="Ideal response")
     axes[1, 1].set_ylabel("Median jet response")
     axes[1, 1].set_xlabel("Training step")
     axes[1, 1].legend(frameon=False)
@@ -83,9 +79,7 @@ def plot_training_evolution(history: dict[str, np.ndarray], output_dir: Path) ->
     fig.suptitle("Training evolution")
     fig.tight_layout()
     for extension in ("png", "pdf"):
-        fig.savefig(
-            output_dir / f"training_evolution.{extension}", dpi=150, bbox_inches="tight"
-        )
+        fig.savefig(output_dir / f"training_evolution.{extension}", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -93,16 +87,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--history-dir", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
-    parser.add_argument(
-        "--sample", required=True, help="Test sample used in the history metric keys"
-    )
+    parser.add_argument("--sample", required=True, help="Test sample used in the history metric keys")
     args = parser.parse_args()
 
     history = load_history(args.history_dir, args.sample)
     plot_training_evolution(history, args.output_dir)
-    print(
-        f"Training evolution plot written to {args.output_dir / 'training_evolution.png'}"
-    )
+    print(f"Training evolution plot written to {args.output_dir / 'training_evolution.png'}")
 
 
 if __name__ == "__main__":

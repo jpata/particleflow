@@ -60,9 +60,7 @@ def collect_distributions(args):
     geometry_names = list(layer.GEOMETRY_FEATURE_NAMES)
     tracker_names = list(layer.tracker_neighborhood.OUTPUT_FEATURE_NAMES)
     calo_names = list(layer.calorimeter_neighborhood.OUTPUT_FEATURE_NAMES)
-    offsets = np.cumsum(
-        [0, len(raw_names), len(geometry_names), len(tracker_names), len(calo_names)]
-    )
+    offsets = np.cumsum([0, len(raw_names), len(geometry_names), len(tracker_names), len(calo_names)])
 
     chunks = {
         "raw_tracker": [],
@@ -79,30 +77,22 @@ def collect_distributions(args):
         for event_index in event_indices:
             raw = np.asarray(source[int(event_index)]["X"], dtype=np.float32)
             if raw.ndim != 2 or raw.shape[1] != len(raw_names):
-                raise ValueError(
-                    f"Event {event_index} has unexpected X shape {raw.shape}"
-                )
+                raise ValueError(f"Event {event_index} has unexpected X shape {raw.shape}")
             if not np.isfinite(raw).all():
-                raise ValueError(
-                    f"Event {event_index} contains non-finite raw features"
-                )
+                raise ValueError(f"Event {event_index} contains non-finite raw features")
 
             tensor = torch.from_numpy(raw).unsqueeze(0).to(device)
             mask = torch.ones(tensor.shape[:2], dtype=torch.bool, device=device)
             engineered = layer(tensor, mask)[0].cpu().numpy()
             if not np.isfinite(engineered).all():
-                raise ValueError(
-                    f"Event {event_index} contains non-finite engineered features"
-                )
+                raise ValueError(f"Event {event_index} contains non-finite engineered features")
 
             tracker_mask = raw[:, 0] == 1
             calo_mask = raw[:, 0] == 2
             total_hits["tracker"] += int(tracker_mask.sum())
             total_hits["calorimeter"] += int(calo_mask.sum())
 
-            tracker_rows = sample_rows(
-                engineered, tracker_mask, args.max_tracker_per_event, rng
-            )
+            tracker_rows = sample_rows(engineered, tracker_mask, args.max_tracker_per_event, rng)
             calo_rows = sample_rows(engineered, calo_mask, args.max_calo_per_event, rng)
             sampled_hits["tracker"] += len(tracker_rows)
             sampled_hits["calorimeter"] += len(calo_rows)
@@ -182,9 +172,7 @@ def feature_stats(values):
 
 
 def plot_feature(ax, name, populations, feature_index):
-    values_by_population = {
-        label: values[:, feature_index] for label, values in populations.items()
-    }
+    values_by_population = {label: values[:, feature_index] for label, values in populations.items()}
     edges = robust_edges(list(values_by_population.values()))
     for label, values in values_by_population.items():
         clipped = values[(values >= edges[0]) & (values <= edges[-1])]
@@ -209,9 +197,7 @@ def plot_feature(ax, name, populations, feature_index):
 
 def save_group_grids(output_dir, group_name, feature_names, populations, chunk_size=25):
     outputs = []
-    for chunk_index, start in enumerate(
-        range(0, len(feature_names), chunk_size), start=1
-    ):
+    for chunk_index, start in enumerate(range(0, len(feature_names), chunk_size), start=1):
         stop = min(start + chunk_size, len(feature_names))
         nplots = stop - start
         ncols = 5
@@ -242,14 +228,10 @@ def save_complete_pdf(output_dir, groups):
                 stop = min(start + 4, len(feature_names))
                 fig, axes = plt.subplots(2, 2, figsize=(11, 8.5), squeeze=False)
                 for axis, feature_index in zip(axes.flat, range(start, stop)):
-                    plot_feature(
-                        axis, feature_names[feature_index], populations, feature_index
-                    )
+                    plot_feature(axis, feature_names[feature_index], populations, feature_index)
                 for axis in axes.flat[stop - start :]:
                     axis.set_visible(False)
-                fig.suptitle(
-                    f"{group_name.capitalize()} features ({start + 1}–{stop} of {len(feature_names)})"
-                )
+                fig.suptitle(f"{group_name.capitalize()} features ({start + 1}–{stop} of {len(feature_names)})")
                 fig.tight_layout(rect=(0, 0, 1, 0.97))
                 pdf.savefig(fig)
                 plt.close(fig)
@@ -297,19 +279,13 @@ def main():
     groups, summary = collect_distributions(args)
     outputs = []
     for group_name, feature_names, populations in groups:
-        outputs.extend(
-            save_group_grids(args.output_dir, group_name, feature_names, populations)
-        )
+        outputs.extend(save_group_grids(args.output_dir, group_name, feature_names, populations))
     outputs.append(save_complete_pdf(args.output_dir, groups))
     outputs.append(save_statistics(args.output_dir, groups))
 
     print(f"Dataset: {summary['dataset']} ({summary['split']})")
-    print(
-        f"Device: {summary['device']}; events: {len(summary['event_indices'])}; features: {summary['num_features']}"
-    )
-    print(
-        f"Total hits: {summary['total_hits']}; sampled hits: {summary['sampled_hits']}"
-    )
+    print(f"Device: {summary['device']}; events: {len(summary['event_indices'])}; features: {summary['num_features']}")
+    print(f"Total hits: {summary['total_hits']}; sampled hits: {summary['sampled_hits']}")
     for output in outputs:
         print(output)
 

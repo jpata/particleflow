@@ -648,16 +648,8 @@ TRACKER_TRACKLET_BASE_FEATURE_NAMES = (
     "outer_fraction",
 )
 TRACKER_NEIGHBORHOOD_FEATURE_NAMES = (
-    tuple(
-        f"tracker_surface_{scale}_{feature}"
-        for scale in TRACKER_NEIGHBORHOOD_SCALE_NAMES
-        for feature in TRACKER_SURFACE_BASE_FEATURE_NAMES
-    )
-    + tuple(
-        f"tracker_tracklet_{scale}_{feature}"
-        for scale in TRACKER_NEIGHBORHOOD_SCALE_NAMES
-        for feature in TRACKER_TRACKLET_BASE_FEATURE_NAMES
-    )
+    tuple(f"tracker_surface_{scale}_{feature}" for scale in TRACKER_NEIGHBORHOOD_SCALE_NAMES for feature in TRACKER_SURFACE_BASE_FEATURE_NAMES)
+    + tuple(f"tracker_tracklet_{scale}_{feature}" for scale in TRACKER_NEIGHBORHOOD_SCALE_NAMES for feature in TRACKER_TRACKLET_BASE_FEATURE_NAMES)
     + (
         "tracker_surface_count_small_over_large",
         "tracker_tracklet_count_small_over_large",
@@ -703,7 +695,7 @@ class TrackerNeighborhoodFeatures(nn.Module):
         phi,
         time_residual,
     ):
-        keys = (((batch_index * self.NUM_SURFACES + surface) * num_eta_bins + eta_bin) * num_phi_bins + phi_bin)
+        keys = ((batch_index * self.NUM_SURFACES + surface) * num_eta_bins + eta_bin) * num_phi_bins + phi_bin
         occupied_keys, inverse = torch.unique(keys, sorted=True, return_inverse=True)
         num_bins = occupied_keys.shape[0]
         weight = valid.to(torch.float32)
@@ -801,12 +793,8 @@ class TrackerNeighborhoodFeatures(nn.Module):
         max_values = torch.full((num_bins, 3), -torch.inf, dtype=torch.float32, device=values.device)
         coordinates = torch.stack([path, rho, abs_z], dim=-1)
         coordinate_indices = inverse.unsqueeze(-1).expand_as(coordinates)
-        min_values.scatter_reduce_(
-            0, coordinate_indices, torch.where(valid.unsqueeze(-1), coordinates, torch.inf), reduce="amin", include_self=True
-        )
-        max_values.scatter_reduce_(
-            0, coordinate_indices, torch.where(valid.unsqueeze(-1), coordinates, -torch.inf), reduce="amax", include_self=True
-        )
+        min_values.scatter_reduce_(0, coordinate_indices, torch.where(valid.unsqueeze(-1), coordinates, torch.inf), reduce="amin", include_self=True)
+        max_values.scatter_reduce_(0, coordinate_indices, torch.where(valid.unsqueeze(-1), coordinates, -torch.inf), reduce="amax", include_self=True)
         local_min = min_values[inverse]
         local_max = max_values[inverse]
         spans = torch.where(valid.unsqueeze(-1), local_max - local_min, 0.0)
@@ -904,9 +892,7 @@ class TrackerNeighborhoodFeatures(nn.Module):
         # tracker reductions do not pay for the much larger calorimeter occupancy.
         fine_eta_bin = torch.where(valid, fine_eta_bin, 0)
         fine_phi_bin = torch.where(valid, fine_phi_bin, 0)
-        surface = ((system * self.NUM_SIDES + (side + 1)) * self.MAX_LAYERS + layer).clamp(
-            min=0, max=self.NUM_SURFACES - 1
-        )
+        surface = ((system * self.NUM_SIDES + (side + 1)) * self.MAX_LAYERS + layer).clamp(min=0, max=self.NUM_SURFACES - 1)
         surface = torch.where(valid, surface, 0)
 
         surface_features = []
@@ -1067,9 +1053,7 @@ class HitFeatureEngineering(nn.Module):
             is_tracker = elemtype == 1
             inverse_rho_sq = torch.where(rho_sq > 0, self.CONFORMAL_SCALE_MM / rho_sq, torch.zeros_like(rho_sq))
             conformal_features = torch.cat([x * inverse_rho_sq, y * inverse_rho_sq], dim=-1)
-            conformal_features = torch.where(is_tracker.expand_as(conformal_features), conformal_features, 0.0).clamp(
-                min=-4.0, max=4.0
-            )
+            conformal_features = torch.where(is_tracker.expand_as(conformal_features), conformal_features, 0.0).clamp(min=-4.0, max=4.0)
 
             time_residual = (time - radius / self.SPEED_OF_LIGHT_MM_PER_NS) / self.TIME_SCALE_NS
             time_residual = time_residual.clamp(min=-10.0, max=10.0)

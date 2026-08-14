@@ -103,9 +103,7 @@ def test_tracker_surface_and_cross_layer_tracklet_reductions():
     torch.testing.assert_close(output[0, 0, indices["tracker_surface_small_is_isolated"]], torch.tensor(0.0))
     torch.testing.assert_close(output[0, 2, indices["tracker_surface_small_is_isolated"]], torch.tensor(1.0))
     torch.testing.assert_close(output[0, 0, indices["tracker_tracklet_small_count_log"]], torch.log1p(torch.tensor(4.0)))
-    torch.testing.assert_close(
-        output[0, 0, indices["tracker_tracklet_small_distinct_surface_count_log"]], torch.log1p(torch.tensor(3.0))
-    )
+    torch.testing.assert_close(output[0, 0, indices["tracker_tracklet_small_distinct_surface_count_log"]], torch.log1p(torch.tensor(3.0)))
     torch.testing.assert_close(output[0, 0, indices["tracker_tracklet_small_path_span"]], torch.tensor(0.3))
     torch.testing.assert_close(output[0, 2, indices["tracker_tracklet_small_path_rank"]], torch.tensor(1.0 / 3.0))
     torch.testing.assert_close(output[0, 0, indices["tracker_tracklet_small_vxd_fraction"]], torch.tensor(0.5))
