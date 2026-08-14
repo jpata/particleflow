@@ -25,6 +25,7 @@ HIT_CALORIMETER_NEIGHBORHOOD_FEATURES=${HIT_CALORIMETER_NEIGHBORHOOD_FEATURES:-f
 
 CHECKPOINT=$(realpath "$CHECKPOINT")
 OUTPUT_ROOT=$(realpath -m "$OUTPUT_ROOT")
+TRAINING_HISTORY_DIR=${TRAINING_HISTORY_DIR:-$(dirname "$(dirname "$CHECKPOINT")")/history}
 
 # The local TFDS installation contains split 1 for both hit-based datasets.
 # Generate a matching spec so pipeline.py does not try to open unavailable splits.
@@ -77,8 +78,8 @@ run_validation() {
     --model.task_queries false
 }
 
-run_validation \
-  pyg-cld-hits-v1 cld "$CLD_DATA_DIR" cld_edm_ttbar_hits "$OUTPUT_ROOT/cld"
+# run_validation \
+#   pyg-cld-hits-v1 cld "$CLD_DATA_DIR" cld_edm_ttbar_hits "$OUTPUT_ROOT/cld"
 
 uv run python3 -u scripts/local/plot_hit_validation_with_pf.py \
   --validation-dir "$OUTPUT_ROOT/cld" \
@@ -88,8 +89,13 @@ uv run python3 -u scripts/local/plot_hit_validation_with_pf.py \
   --dataset cld_hits \
   --num-events "$NTEST"
 
-run_validation \
-  pyg-clic-hits-v1 clic "$CLIC_DATA_DIR" clic_edm_ttbar_hits "$OUTPUT_ROOT/clic"
+uv run python3 -u scripts/local/plot_training_evolution.py \
+  --history-dir "$TRAINING_HISTORY_DIR" \
+  --output-dir "$OUTPUT_ROOT/cld/plots_test/cld_edm_ttbar_hits" \
+  --sample cld_edm_ttbar_hits
+
+# run_validation \
+#   pyg-clic-hits-v1 clic "$CLIC_DATA_DIR" clic_edm_ttbar_hits "$OUTPUT_ROOT/clic"
 
 uv run python3 -u scripts/local/plot_hit_validation_with_pf.py \
   --validation-dir "$OUTPUT_ROOT/clic" \
