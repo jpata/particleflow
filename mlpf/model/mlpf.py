@@ -439,9 +439,7 @@ CALO_NEIGHBORHOOD_BASE_FEATURE_NAMES = (
     "is_energy_max",
 )
 CALO_NEIGHBORHOOD_FEATURE_NAMES = tuple(
-    f"calo_{scale}_{feature}"
-    for scale in CALO_NEIGHBORHOOD_SCALE_NAMES
-    for feature in CALO_NEIGHBORHOOD_BASE_FEATURE_NAMES
+    f"calo_{scale}_{feature}" for scale in CALO_NEIGHBORHOOD_SCALE_NAMES for feature in CALO_NEIGHBORHOOD_BASE_FEATURE_NAMES
 ) + ("calo_energy_small_over_large", "calo_energy_medium_over_large")
 
 

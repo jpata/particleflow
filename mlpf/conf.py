@@ -130,6 +130,9 @@ class EDM4HEP:
         time: Any
         subdetector: Any
         type: Any
+        system: Any
+        side: Any
+        layer: Any
 
         @classmethod
         def get_names(cls):

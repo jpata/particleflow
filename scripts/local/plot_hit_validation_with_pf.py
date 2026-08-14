@@ -8,9 +8,7 @@ from mlpf.model.inference import load_pf_baseline, make_plots
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Replot hit-based MLPF validation with a tracks-and-clusters PF baseline."
-    )
+    parser = argparse.ArgumentParser(description="Replot hit-based MLPF validation with a tracks-and-clusters PF baseline.")
     parser.add_argument("--validation-dir", required=True)
     parser.add_argument("--hit-sample", required=True)
     parser.add_argument("--pf-data-dir", required=True)

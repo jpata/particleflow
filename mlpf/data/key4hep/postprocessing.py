@@ -98,6 +98,66 @@ cluster_feature_order = EDM4HEP.ClusterFeatures.get_names()
 hit_feature_order = EDM4HEP.HitFeatures.get_names()
 
 
+def parse_cellid_encoding(encoding: str) -> Dict[str, Tuple[int, int]]:
+    """Parse a DD4hep CellIDEncoding string into bit offsets and widths.
+
+    A negative width denotes a signed field. Offsets may be explicit, as in
+    ``layer:7:6``, or implicit, as in ``system:5,side:-2,layer:6``.
+    """
+    fields = {}
+    next_offset = 0
+    for item in encoding.split(","):
+        parts = [part.strip() for part in item.split(":")]
+        if len(parts) == 2:
+            name, width_string = parts
+            offset = next_offset
+        elif len(parts) == 3:
+            name, offset_string, width_string = parts
+            offset = int(offset_string)
+        else:
+            raise ValueError(f"Invalid CellIDEncoding field {item!r} in {encoding!r}")
+
+        width = int(width_string)
+        if width == 0:
+            raise ValueError(f"Zero-width CellIDEncoding field {name!r} in {encoding!r}")
+        fields[name] = (offset, width)
+        next_offset = offset + abs(width)
+    return fields
+
+
+def decode_cellid_field(cellids: np.ndarray, encoding: str, field: str) -> np.ndarray:
+    """Decode one integer field from an array of DD4hep cell IDs."""
+    fields = parse_cellid_encoding(encoding)
+    if field not in fields:
+        raise KeyError(f"CellIDEncoding {encoding!r} does not contain field {field!r}")
+
+    offset, encoded_width = fields[field]
+    width = abs(encoded_width)
+    unsigned_cellids = np.asarray(cellids, dtype=np.uint64)
+    values = ((unsigned_cellids >> np.uint64(offset)) & np.uint64((1 << width) - 1)).astype(np.int64)
+    if encoded_width < 0:
+        sign_bit = 1 << (width - 1)
+        values = np.where(values >= sign_bit, values - (1 << width), values)
+    return values.astype(np.int32)
+
+
+def get_cellid_encodings(root_file) -> Dict[str, str]:
+    """Read per-collection CellIDEncoding strings from podio metadata."""
+    metadata = root_file.get("metadata")
+    if metadata is None:
+        return {}
+
+    arrays = metadata.arrays(["GPStringKeys", "GPStringValues"], library="ak")
+    keys = awkward.to_list(arrays["GPStringKeys"][0])
+    values = awkward.to_list(arrays["GPStringValues"][0])
+    suffix = "__CellIDEncoding"
+    encodings = {}
+    for key, value in zip(keys, values):
+        if key.endswith(suffix) and len(value) == 1:
+            encodings[key[: -len(suffix)]] = value[0]
+    return encodings
+
+
 def deltaphi(phi1: float, phi2: float) -> float:
     diff = phi1 - phi2
     return np.arctan2(np.sin(diff), np.cos(diff))
@@ -195,7 +255,7 @@ class EventData:
         self.gp_merges = (np.array(self.gp_merges[0]), np.array(self.gp_merges[1]))
 
 
-def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[str]) -> awkward.Record:
+def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[str], cellid_encoding: Optional[str] = None) -> awkward.Record:
     available_fields = hit_data.fields
     feat_arr = {}
     n_hits = 0
@@ -232,6 +292,21 @@ def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[s
     # Keep tracker and calorimeter hits on their respective model input branches.
     feat_arr["elemtype"] = np.where(feat_arr[sdcoll] == 3, 1, 2).astype(np.int32)
 
+    # Preserve the exact DD4hep detector surface identity. Layer numbers are
+    # local to a detector system, so system and signed side must be retained as
+    # well. All supported Key4hep tracker collections provide these fields in
+    # their CellIDEncoding metadata. Collections without a side field (for
+    # example LumiCal) use the neutral value zero.
+    cellids = np.asarray(feat_arr["cellID"], dtype=np.uint64)
+    cellid_fields = parse_cellid_encoding(cellid_encoding) if cellid_encoding is not None else {}
+    if np.any(feat_arr[sdcoll] == 3) and not {"system", "side", "layer"}.issubset(cellid_fields):
+        raise RuntimeError(f"Tracker collection {coll!r} has no valid system/side/layer CellIDEncoding")
+    for field in ("system", "side", "layer"):
+        if field in cellid_fields:
+            feat_arr[field] = decode_cellid_field(cellids, cellid_encoding, field)
+        else:
+            feat_arr[field] = np.zeros(n_hits, dtype=np.int32)
+
     # precompute some approximate et, eta, phi
     if n_hits > 0:
         pos_mag = np.sqrt(feat_arr["position.x"] ** 2 + feat_arr["position.y"] ** 2 + feat_arr["position.z"] ** 2)
@@ -260,6 +335,7 @@ def get_hit_matrix_and_genadj(
     iev: int,
     collectionIDs: Dict[str, int],
     mcp_id: int,
+    cellid_encodings: Optional[Dict[str, str]] = None,
 ) -> Tuple[awkward.Record, SparseMatrixCOO, Dict[Tuple[int, int], int]]:
     feats = ["type", "cellID", "energy", "energyError", "time", "position.x", "position.y", "position.z"]
 
@@ -274,7 +350,8 @@ def get_hit_matrix_and_genadj(
 
     for col in sorted(hit_data.keys()):
         icol = collectionIDs[col]
-        hit_features = hits_to_features(hit_data[col], iev, col, feats)
+        encoding = cellid_encodings.get(col) if cellid_encodings is not None else None
+        hit_features = hits_to_features(hit_data[col], iev, col, feats, encoding)
         hit_feature_matrix.append(hit_features)
         n_hits = len(hit_features["energy"])
 
@@ -682,10 +759,11 @@ def get_genparticles_and_adjacencies(
     collectionIDs_reverse: Dict[int, str],
     mcp_id: int,
     b_field: float,
+    cellid_encodings: Optional[Dict[str, str]] = None,
 ) -> EventData:
     gen_features = gen_to_features(prop_data, iev)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_hit_matrix_and_genadj(
-        hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id
+        hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id, cellid_encodings
     )
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
@@ -1148,6 +1226,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         )
     }
     collectionIDs_reverse = {v: k for (k, v) in collectionIDs.items()}
+    cellid_encodings = get_cellid_encodings(fi)
 
     prop_data = arrs.arrays(
         [
@@ -1318,6 +1397,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
                 collectionIDs_reverse,
                 mcp_id,
                 b_field,
+                cellid_encodings,
             )
         except ValueError as e:
             print(f"Skipping event {iev} because it has no visible particles: {e}")

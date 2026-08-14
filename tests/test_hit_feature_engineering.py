@@ -1,11 +1,11 @@
 import torch
 
-from mlpf.conf import MLPFConfig
+from mlpf.conf import EDM4HEP, MLPFConfig
 from mlpf.model.mlpf import CalorimeterNeighborhoodFeatures, HitFeatureEngineering, MLPF
 
 
 def make_hit_input():
-    features = torch.zeros(1, 3, 12)
+    features = torch.zeros(1, 3, len(EDM4HEP.HitFeatures.get_names()))
 
     # Tracker hit at (3, 4, 12) mm with a 1 ns timestamp.
     features[0, 0, 0] = 1
@@ -26,8 +26,8 @@ def test_hit_feature_engineering_values_and_padding():
     output = HitFeatureEngineering()(features, mask)
     engineered = output[..., features.shape[-1] :]
 
-    assert output.shape == (1, 3, 12 + HitFeatureEngineering().num_output_features)
-    torch.testing.assert_close(output[..., :12], features)
+    assert output.shape == (1, 3, features.shape[-1] + HitFeatureEngineering().num_output_features)
+    torch.testing.assert_close(output[..., : features.shape[-1]], features)
     torch.testing.assert_close(engineered[0, 0, 3:7], torch.tensor([5.0 / 3000.0, 13.0 / 3000.0, 5.0 / 13.0, 12.0 / 13.0]))
     torch.testing.assert_close(engineered[0, 0, 8:10], torch.tensor([120.0, 160.0]).clamp(max=4.0))
     torch.testing.assert_close(engineered[0, 1, 8:10], torch.zeros(2))
@@ -37,7 +37,7 @@ def test_hit_feature_engineering_values_and_padding():
 
 
 def test_multiscale_calorimeter_reductions():
-    features = torch.zeros(1, 4, 12)
+    features = torch.zeros(1, 4, len(EDM4HEP.HitFeatures.get_names()))
     mask = torch.ones(1, 4, dtype=torch.bool)
 
     # Two hits share the finest angular bin and span ECAL/HCAL and depth.
@@ -91,8 +91,8 @@ def test_hit_model_engineers_features_before_input_encoder():
         outputs = model(features, mask)
     hook.remove()
 
-    assert model.raw_input_dim == config.input_dim == 12
-    assert model.input_dim == 12 + model.feature_engineering.num_output_features
+    assert model.raw_input_dim == config.input_dim == len(EDM4HEP.HitFeatures.get_names())
+    assert model.input_dim == config.input_dim + model.feature_engineering.num_output_features
     assert encoder_inputs[0].shape[-1] == model.input_dim
     assert all(output.shape[1] == features.shape[1] for output in outputs)
 
