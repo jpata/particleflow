@@ -513,7 +513,7 @@ class HitFeatureEngineeringConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: bool = True
     geometry: bool = True
-    tracker_neighborhood: bool = True
+    tracker_neighborhood: bool = False
     calorimeter_neighborhood: bool = True
 
 
