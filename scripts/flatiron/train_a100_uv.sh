@@ -1,10 +1,10 @@
 #!/bin/sh
-#SBATCH -t 24:00:00
+#SBATCH -t 12:00:00
 #SBATCH -N 1
 #SBATCH --tasks-per-node=1
 #SBATCH -p gpu
 #SBATCH --gpus-per-node=4
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=64
 #SBATCH --constraint=a100
 
 # Job name
@@ -70,7 +70,7 @@ uv run python3 -u mlpf/pipeline.py \
     --pad_to_multiple_elements 100 \
     --model.attention.num_convs 6 --model.type attention \
     --model.task_queries false \
-    --lr 0.001 --num_steps 20000 --val_freq 2000 --checkpoint_freq 2000
+    --lr 0.0005 --num_steps 20000 --val_freq 2000 --checkpoint_freq 2000
 
 #    --compile \ # does not work on multiple H100 currently, needs debugging
 echo 'Training done.'
