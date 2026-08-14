@@ -116,17 +116,21 @@ def test_tracker_surface_and_cross_layer_tracklet_reductions():
     torch.testing.assert_close(output[0, 5], torch.zeros(layer.NUM_OUTPUT_FEATURES))
 
 
-def make_model_config(dataset):
+def make_model_config(dataset, hit_feature_engineering=None, input_dim=None):
+    model = {
+        "type": "attention",
+        "input_encoding": "split",
+        "attention": {"num_convs": 1, "num_heads": 2, "head_dim": 4, "attention_type": "simple"},
+    }
+    if hit_feature_engineering is not None:
+        model["hit_feature_engineering"] = hit_feature_engineering
     return MLPFConfig.model_validate(
         {
             "dataset": dataset,
             "data_dir": "/tmp",
-            "model": {
-                "type": "attention",
-                "input_encoding": "split",
-                "attention": {"num_convs": 1, "num_heads": 2, "head_dim": 4, "attention_type": "simple"},
-            },
+            "model": model,
             "conv_type": "attention",
+            "input_dim": input_dim,
         }
     )
 
@@ -152,6 +156,46 @@ def test_hit_model_engineers_features_before_input_encoder():
 
 def test_non_hit_model_does_not_engineer_features():
     config = make_model_config("cld")
+    model = MLPF(config)
+
+    assert not model.uses_hit_feature_engineering
+    assert model.raw_input_dim == model.input_dim == config.input_dim
+
+
+def test_hit_feature_blocks_are_independently_toggleable():
+    features, mask = make_hit_input()
+    cases = [
+        (HitFeatureEngineering(tracker_neighborhood=False, calorimeter_neighborhood=False), 15),
+        (HitFeatureEngineering(geometry=False, calorimeter_neighborhood=False), 53),
+        (HitFeatureEngineering(geometry=False, tracker_neighborhood=False), 71),
+        (HitFeatureEngineering(geometry=False, tracker_neighborhood=False, calorimeter_neighborhood=False), 0),
+    ]
+
+    for layer, expected_features in cases:
+        output = layer(features, mask)
+        assert layer.num_output_features == expected_features
+        assert len(layer.output_feature_names) == expected_features
+        assert output.shape[-1] == features.shape[-1] + expected_features
+        if expected_features == 0:
+            torch.testing.assert_close(output, features)
+
+
+def test_geometry_only_model_supports_legacy_checkpoint_input_dimension():
+    config = make_model_config(
+        "cld_hits",
+        hit_feature_engineering={"tracker_neighborhood": False, "calorimeter_neighborhood": False},
+        input_dim=12,
+    )
+    model = MLPF(config)
+
+    assert model.uses_hit_feature_engineering
+    assert model.raw_input_dim == 12
+    assert model.input_dim == 27
+    assert model.nn0[0].in_features == 27
+
+
+def test_hit_feature_engineering_can_be_disabled():
+    config = make_model_config("cld_hits", hit_feature_engineering={"enabled": False})
     model = MLPF(config)
 
     assert not model.uses_hit_feature_engineering

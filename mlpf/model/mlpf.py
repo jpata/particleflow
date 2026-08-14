@@ -1001,76 +1001,91 @@ class HitFeatureEngineering(nn.Module):
         "is_tracker",
     )
 
-    def __init__(self):
+    def __init__(self, geometry=True, tracker_neighborhood=True, calorimeter_neighborhood=True):
         super().__init__()
+        self.enable_geometry = geometry
+        self.enable_tracker_neighborhood = tracker_neighborhood
+        self.enable_calorimeter_neighborhood = calorimeter_neighborhood
         self.tracker_neighborhood = TrackerNeighborhoodFeatures()
         self.calorimeter_neighborhood = CalorimeterNeighborhoodFeatures()
 
     @property
     def num_output_features(self):
-        return (
-            self.NUM_GEOMETRY_FEATURES
-            + self.tracker_neighborhood.NUM_OUTPUT_FEATURES
-            + self.calorimeter_neighborhood.NUM_OUTPUT_FEATURES
+        return sum(
+            [
+                self.NUM_GEOMETRY_FEATURES if self.enable_geometry else 0,
+                self.tracker_neighborhood.NUM_OUTPUT_FEATURES if self.enable_tracker_neighborhood else 0,
+                self.calorimeter_neighborhood.NUM_OUTPUT_FEATURES if self.enable_calorimeter_neighborhood else 0,
+            ]
         )
 
     @property
     def output_feature_names(self):
-        return (
-            self.GEOMETRY_FEATURE_NAMES
-            + self.tracker_neighborhood.OUTPUT_FEATURE_NAMES
-            + self.calorimeter_neighborhood.OUTPUT_FEATURE_NAMES
-        )
+        names = ()
+        if self.enable_geometry:
+            names += self.GEOMETRY_FEATURE_NAMES
+        if self.enable_tracker_neighborhood:
+            names += self.tracker_neighborhood.OUTPUT_FEATURE_NAMES
+        if self.enable_calorimeter_neighborhood:
+            names += self.calorimeter_neighborhood.OUTPUT_FEATURE_NAMES
+        return names
 
     def forward(self, X_features, mask=None):
-        # Geometry is evaluated in float32 to avoid overflow and excessive
-        # quantization when training the rest of the model in bfloat16.
-        geometry = X_features.to(torch.float32)
-        x = geometry[..., 6:7]
-        y = geometry[..., 7:8]
-        z = geometry[..., 8:9]
-        time = geometry[..., 9:10]
-        subdetector = geometry[..., 10:11]
-        elemtype = geometry[..., 0:1]
+        output_features = [X_features]
+        if self.enable_geometry:
+            # Geometry is evaluated in float32 to avoid overflow and excessive
+            # quantization when training the rest of the model in bfloat16.
+            geometry = X_features.to(torch.float32)
+            x = geometry[..., 6:7]
+            y = geometry[..., 7:8]
+            z = geometry[..., 8:9]
+            time = geometry[..., 9:10]
+            subdetector = geometry[..., 10:11]
+            elemtype = geometry[..., 0:1]
 
-        rho_sq = x.square() + y.square()
-        rho = torch.sqrt(rho_sq)
-        radius = torch.sqrt(rho_sq + z.square())
-        safe_radius = radius.clamp_min(1.0e-6)
+            rho_sq = x.square() + y.square()
+            rho = torch.sqrt(rho_sq)
+            radius = torch.sqrt(rho_sq + z.square())
+            safe_radius = radius.clamp_min(1.0e-6)
 
-        position_features = torch.cat(
-            [
-                x / self.POSITION_SCALE_MM,
-                y / self.POSITION_SCALE_MM,
-                z / self.POSITION_SCALE_MM,
-                rho / self.POSITION_SCALE_MM,
-                radius / self.POSITION_SCALE_MM,
-                rho / safe_radius,
-                z / safe_radius,
-                rho / (rho + z.abs()).clamp_min(1.0e-6),
-            ],
-            dim=-1,
-        ).clamp(min=-4.0, max=4.0)
+            position_features = torch.cat(
+                [
+                    x / self.POSITION_SCALE_MM,
+                    y / self.POSITION_SCALE_MM,
+                    z / self.POSITION_SCALE_MM,
+                    rho / self.POSITION_SCALE_MM,
+                    radius / self.POSITION_SCALE_MM,
+                    rho / safe_radius,
+                    z / safe_radius,
+                    rho / (rho + z.abs()).clamp_min(1.0e-6),
+                ],
+                dim=-1,
+            ).clamp(min=-4.0, max=4.0)
 
-        # Prompt circular tracks become approximately straight in conformal
-        # coordinates. Calorimeter conformal coordinates are intentionally zero.
-        is_tracker = elemtype == 1
-        inverse_rho_sq = torch.where(rho_sq > 0, self.CONFORMAL_SCALE_MM / rho_sq, torch.zeros_like(rho_sq))
-        conformal_features = torch.cat([x * inverse_rho_sq, y * inverse_rho_sq], dim=-1)
-        conformal_features = torch.where(is_tracker.expand_as(conformal_features), conformal_features, 0.0).clamp(min=-4.0, max=4.0)
+            # Prompt circular tracks become approximately straight in conformal
+            # coordinates. Calorimeter conformal coordinates are intentionally zero.
+            is_tracker = elemtype == 1
+            inverse_rho_sq = torch.where(rho_sq > 0, self.CONFORMAL_SCALE_MM / rho_sq, torch.zeros_like(rho_sq))
+            conformal_features = torch.cat([x * inverse_rho_sq, y * inverse_rho_sq], dim=-1)
+            conformal_features = torch.where(is_tracker.expand_as(conformal_features), conformal_features, 0.0).clamp(
+                min=-4.0, max=4.0
+            )
 
-        time_residual = (time - radius / self.SPEED_OF_LIGHT_MM_PER_NS) / self.TIME_SCALE_NS
-        time_residual = time_residual.clamp(min=-10.0, max=10.0)
-        subdetector_features = torch.cat([subdetector == index for index in range(4)], dim=-1).to(torch.float32)
+            time_residual = (time - radius / self.SPEED_OF_LIGHT_MM_PER_NS) / self.TIME_SCALE_NS
+            time_residual = time_residual.clamp(min=-10.0, max=10.0)
+            subdetector_features = torch.cat([subdetector == index for index in range(4)], dim=-1).to(torch.float32)
 
-        engineered = torch.cat([position_features, conformal_features, time_residual, subdetector_features], dim=-1)
-        engineered = torch.nan_to_num(engineered, nan=0.0, posinf=0.0, neginf=0.0)
-        if mask is not None:
-            engineered = engineered * mask.unsqueeze(-1).to(engineered.dtype)
+            engineered = torch.cat([position_features, conformal_features, time_residual, subdetector_features], dim=-1)
+            engineered = torch.nan_to_num(engineered, nan=0.0, posinf=0.0, neginf=0.0)
+            if mask is not None:
+                engineered = engineered * mask.unsqueeze(-1).to(engineered.dtype)
+            output_features.append(engineered.to(X_features.dtype))
 
-        tracker_features = self.tracker_neighborhood(X_features, mask)
-        calorimeter_features = self.calorimeter_neighborhood(X_features, mask)
-        return torch.cat([X_features, engineered.to(X_features.dtype), tracker_features, calorimeter_features], dim=-1)
+        if self.enable_tracker_neighborhood:
+            output_features.append(self.tracker_neighborhood(X_features, mask))
+        if self.enable_calorimeter_neighborhood:
+            output_features.append(self.calorimeter_neighborhood(X_features, mask))
+        return torch.cat(output_features, dim=-1)
 
 
 class RegressionOutput(nn.Module):
@@ -1138,7 +1153,16 @@ class MLPF(nn.Module):
 
         self.config = config.model
         self.raw_input_dim = config.input_dim
-        self.feature_engineering = HitFeatureEngineering() if config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS) else nn.Identity()
+        hit_feature_config = config.model.hit_feature_engineering
+        self.feature_engineering = (
+            HitFeatureEngineering(
+                geometry=hit_feature_config.geometry,
+                tracker_neighborhood=hit_feature_config.tracker_neighborhood,
+                calorimeter_neighborhood=hit_feature_config.calorimeter_neighborhood,
+            )
+            if config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS) and hit_feature_config.enabled
+            else nn.Identity()
+        )
         self.input_dim = self.raw_input_dim + (self.feature_engineering.num_output_features if self.uses_hit_feature_engineering else 0)
         self.num_classes = config.num_classes
         self.elemtypes_nonzero = config.elemtypes_nonzero

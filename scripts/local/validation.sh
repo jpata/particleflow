@@ -9,12 +9,19 @@ cd "$REPO_ROOT"
 
 SPEC_FILE=${SPEC_FILE:-particleflow_spec.yaml}
 LOCAL_SPEC_FILE=${LOCAL_SPEC_FILE:-/tmp/particleflow_local_validation_spec.yaml}
-CHECKPOINT=${CHECKPOINT:-experiments/pyg-cld-hits-v1_cld_20260813_015724_466794/checkpoints/checkpoint-20000.pth}
-OUTPUT_ROOT=${OUTPUT_ROOT:-experiments/pyg-cld-hits-v1_cld_20260813_015724_466794/validation_checkpoint_20000_n5000_with_pf}
+CHECKPOINT=${CHECKPOINT:-experiments/pyg-cld-hits-v1_cld_20260814_013544_620216/checkpoints/checkpoint-20000.pth}
+OUTPUT_ROOT=${OUTPUT_ROOT:-experiments/pyg-cld-hits-v1_cld_20260814_013544_620216/validation_checkpoint_20000_n5000_with_pf}
 NTEST=${NTEST:-5000}
 GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-4}
 NUM_WORKERS=${NUM_WORKERS:-4}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-2}
+# The default checkpoint predates the neighborhood summaries and was trained
+# with 12 raw columns plus the original 15 geometry features.
+HIT_INPUT_DIM=${HIT_INPUT_DIM:-12}
+HIT_FEATURE_ENGINEERING=${HIT_FEATURE_ENGINEERING:-true}
+HIT_GEOMETRY_FEATURES=${HIT_GEOMETRY_FEATURES:-true}
+HIT_TRACKER_NEIGHBORHOOD_FEATURES=${HIT_TRACKER_NEIGHBORHOOD_FEATURES:-false}
+HIT_CALORIMETER_NEIGHBORHOOD_FEATURES=${HIT_CALORIMETER_NEIGHBORHOOD_FEATURES:-false}
 
 CHECKPOINT=$(realpath "$CHECKPOINT")
 OUTPUT_ROOT=$(realpath -m "$OUTPUT_ROOT")
@@ -56,7 +63,12 @@ run_validation() {
     --num_workers "$NUM_WORKERS" \
     --prefetch_factor "$PREFETCH_FACTOR" \
     --pad_to_multiple_elements 100 \
+    --input_dim "$HIT_INPUT_DIM" \
     --model.type attention \
+    --model.hit_feature_engineering.enabled "$HIT_FEATURE_ENGINEERING" \
+    --model.hit_feature_engineering.geometry "$HIT_GEOMETRY_FEATURES" \
+    --model.hit_feature_engineering.tracker_neighborhood "$HIT_TRACKER_NEIGHBORHOOD_FEATURES" \
+    --model.hit_feature_engineering.calorimeter_neighborhood "$HIT_CALORIMETER_NEIGHBORHOOD_FEATURES" \
     --model.backbone.mode shared \
     --model.backbone.num_convs 6 \
     --model.attention.num_convs 6 \

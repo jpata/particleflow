@@ -497,6 +497,16 @@ class BackboneConfig(BaseModel):
     num_convs: Optional[int] = None
 
 
+class HitFeatureEngineeringConfig(BaseModel):
+    """Forward-pass feature blocks for hit-level datasets."""
+
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+    geometry: bool = True
+    tracker_neighborhood: bool = True
+    calorimeter_neighborhood: bool = True
+
+
 class ModelArchitectureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -511,6 +521,7 @@ class ModelArchitectureConfig(BaseModel):
     trainable: str = "all"
     task_queries: bool = True
     backbone: Optional[BackboneConfig] = None
+    hit_feature_engineering: HitFeatureEngineeringConfig = Field(default_factory=HitFeatureEngineeringConfig)
 
     # Nested configs
     gnnlsh: Optional[GNNLSHConfig] = None
