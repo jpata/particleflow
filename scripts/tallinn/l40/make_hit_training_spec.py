@@ -7,7 +7,7 @@ import yaml
 
 
 SPLITS = [str(i) for i in range(1, 11)]
-VERSION = "3.2.1"
+VERSION = "3.2.0"
 HIT_TEST_SAMPLES = ["cld_edm_ttbar_hits", "clic_edm_ttbar_hits"]
 
 
@@ -33,16 +33,18 @@ def main():
         spec = yaml.safe_load(f)
 
     cld_hits = copy.deepcopy(spec["models"]["pyg-cld-hits-v1"])
-    set_datasets(cld_hits, "cld_hits", ["cld_edm_ttbar_hits"])
-    spec["models"]["pyg-clean-cld-hits-v1"] = cld_hits
+    cld_datasets = ["cld_edm_ttbar_hits", "cld_edm_qq_hits", "cld_edm_ww_fullhad_hits"]
+    set_datasets(cld_hits, "cld_hits", cld_datasets)
+    spec["models"]["cld-hits"] = cld_hits
 
     clic_hits = copy.deepcopy(spec["models"]["pyg-clic-hits-v1"])
-    set_datasets(clic_hits, "clic_hits", ["clic_edm_ttbar_hits"])
-    spec["models"]["pyg-clean-clic-hits-v1"] = clic_hits
+    clic_datasets = ["clic_edm_ttbar_hits", "clic_edm_qq_hits", "clic_edm_ww_fullhad_hits"]
+    set_datasets(clic_hits, "clic_hits", clic_datasets)
+    spec["models"]["clic-hits"] = clic_hits
 
     mixed_hits = copy.deepcopy(spec["models"]["pyg-cld-hits-v1"])
-    set_datasets(mixed_hits, "cld_hits", ["cld_edm_ttbar_hits", "clic_edm_ttbar_hits"])
-    spec["models"]["pyg-clean-mixed-hits-v1"] = mixed_hits
+    set_datasets(mixed_hits, "cld_hits", cld_datasets + clic_datasets)
+    spec["models"]["mixed-hits"] = mixed_hits
 
     output_spec.parent.mkdir(parents=True, exist_ok=True)
     with output_spec.open("w") as f:

@@ -217,10 +217,10 @@ def main():
     config_obj = MLPFConfig.from_spec(args.spec_file, args.model_name, args.production_name, args, extra_args)
     config = config_obj.model_dump()
 
-    print("Final configuration (dot-notation):")
+    logging.getLogger().info("Final configuration (dot-notation):")
     flat_config = config_obj.flatten_config()
     for k in sorted(flat_config.keys()):
-        print(f"  --{k} {flat_config[k]}")
+        logging.getLogger().info(f"  --{k} {flat_config[k]}")
 
     # --- Main logic based on sub-command ---
     if cmd == Command.RAY_HPO:
