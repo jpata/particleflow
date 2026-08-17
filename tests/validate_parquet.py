@@ -81,10 +81,36 @@ THRESHOLDS = {
     "v2_calo_frac": (0.0, 500.0, 0.90),
     "v2_min_reps": 100,
     "v2_min_hits": 5,
+    # target-definition gates (PR #490: merge overwrite, calibrated gp_to_hit
+    # weights, MIP-retention OR, simulator-status sanity). Values are
+    # calibrated on the CLIC/CLD 100-event test parquets.
+    "r1_median": (0.9, 1.1),  # median target/gen jet pT response
+    "r1_frac_above_1": 0.02,  # >=2% of matched jets must have response > 1.0
+    "r1_min_jets": 50,
+    "r2_median": (0.3, 1.1),  # median gp_to_cluster / E_gen per target rep
+    "r2_frac_range": (0.0, 1.5, 0.95),  # >=95% of deposit fractions in [0, 1.5]
+    "r2_p99": 3.0,  # 99th percentile of deposit fractions
+    "r2_min_measurements": 100,
+    "m1_visible_energy_fraction": 0.10,  # mirrors mlpf/data/key4hep/postprocessing.py
+    "m1_visible_energy_deposit": 0.5,  # mirrors mlpf/data/key4hep/postprocessing.py
+    "m1_min_muons": 10,
+    "m1_min_lowfrac_frac": 0.10,  # >=10% of target muons must be MIP-like (frac < 0.1)
+    "e1_endpoint_mask": 0x0F000000,  # EDM4hep bits 24-27 (simulator endpoint flags)
+    "w1_neutral_frac_warn": 0.50,  # WARN if neutrals dominate absolute-term admissions
+    "w1_min_particles": 3,
 }
+
+# jet matching radius for the response gate (matches JET_CONFIG.match_dr in mlpf/conf.py)
+JET_MATCH_DR = 0.1
 
 # plotting extent used by the 3D PN visualization
 VIS_RANGE = 2500.0  # mm
+
+
+def _deltaphi(phi1: float, phi2: float) -> float:
+    """Signed difference of two azimuthal angles in [-pi, pi]."""
+    d = phi1 - phi2
+    return np.arctan2(np.sin(d), np.cos(d))
 
 
 def fit_circle(x, y, max_iters=50, threshold=10.0):
@@ -327,7 +353,9 @@ class ParquetValidator:
         # H1: target consistency across all categories (noise, reps, PID)
         noise_bad = rep_missing = pid_conflict = 0
         for i in range(self.nev_used):
-            y = np.concatenate([self.ev(f, i) for f in TARGET_FIELDS])
+            # reshape(-1, 14) normalizes fully empty events (e.g. no tracker
+            # hits) to (0, 14) so concatenation does not fail on a 1-D empty array
+            y = np.concatenate([self.ev(f, i).reshape(-1, 14) for f in TARGET_FIELDS])
             pn = y[:, PN].astype(int)
             pid = y[:, PID].astype(int)
             e = y[:, ENERGY]
@@ -482,6 +510,8 @@ class ParquetValidator:
             if f not in self.data.fields:
                 continue
             x = self.ev(f, iev)
+            if len(x) == 0:
+                continue
             y = self.ev(f.replace("X_", "ytarget_"), iev)
             mask = x[:, X_ELEMTYPE] != 0
             positions.append(x[mask, 6:9])
@@ -489,10 +519,11 @@ class ParquetValidator:
         if "X_track" in self.data.fields:
             x = self.ev("X_track", iev)
             y = self.ev("ytarget_track", iev)
-            mask = x[:, X_ELEMTYPE] != 0
-            # track position: innermost radius (10), sin_phi (3), cos_phi (4), Z0 (14)
-            positions.append(np.stack([x[mask, 10] * x[mask, 4], x[mask, 10] * x[mask, 3], x[mask, 14]], axis=1))
-            pns.append(y[mask, PN])
+            if len(x):
+                mask = x[:, X_ELEMTYPE] != 0
+                # track position: innermost radius (10), sin_phi (3), cos_phi (4), Z0 (14)
+                positions.append(np.stack([x[mask, 10] * x[mask, 4], x[mask, 10] * x[mask, 3], x[mask, 14]], axis=1))
+                pns.append(y[mask, PN])
         positions = np.concatenate(positions) if positions else np.empty((0, 3))
         pns = np.concatenate(pns) if pns else np.empty(0)
         return positions, pns
@@ -606,6 +637,8 @@ class ParquetValidator:
             cluster_pos = self._cluster_rep_positions(i)
             x = self.ev("X_hit_calo", i)
             y = self.ev("ytarget_hit_calo", i)
+            if len(x) == 0 or len(y) == 0:
+                continue
             mask = x[:, X_ELEMTYPE] != 0
             pns = y[mask, PN].astype(int)
             pos = x[mask, 6:9]
@@ -650,6 +683,8 @@ class ParquetValidator:
         cluster_pos = {}
         x = self.ev("X_cluster", iev)
         y = self.ev("ytarget_cluster", iev)
+        if len(x) == 0 or len(y) == 0:
+            return cluster_pos
         mask = x[:, X_ELEMTYPE] != 0
         pns = y[mask, PN].astype(int)
         pids = y[mask, PID].astype(int)
@@ -699,6 +734,8 @@ class ParquetValidator:
             pn_all, pid_all, pt_all, e_all = [], [], [], []
             for f in ["ytarget_track", "ytarget_cluster"]:
                 y = self.ev(f, i)
+                if len(y) == 0:
+                    continue
                 pn_all.append(y[:, PN])
                 pid_all.append(y[:, PID])
                 pt_all.append(y[:, PT])
@@ -738,14 +775,16 @@ class ParquetValidator:
         cluster_charge_bad = track_charge_bad = 0
         for i in range(self.nev_used):
             yc = self.ev("ytarget_cluster", i)
-            if np.any((yc[:, PID] > 0) & (yc[:, CHARGE] != 0)):
-                cluster_charge_bad += 1
             yt = self.ev("ytarget_track", i)
-            pid = yt[:, PID].astype(int)
-            charge = yt[:, CHARGE]
-            rep = pid > 0
-            if np.any(rep & (np.abs(charge) > 1)):
-                track_charge_bad += 1
+            if len(yc):
+                if np.any((yc[:, PID] > 0) & (yc[:, CHARGE] != 0)):
+                    cluster_charge_bad += 1
+            if len(yt):
+                pid = yt[:, PID].astype(int)
+                charge = yt[:, CHARGE]
+                rep = pid > 0
+                if np.any(rep & (np.abs(charge) > 1)):
+                    track_charge_bad += 1
         gate = self.add_gate(
             "T3",
             "tracks/clusters",
@@ -768,12 +807,14 @@ class ParquetValidator:
         for i in range(self.nev_used):
             x = self.ev("X_track", i)
             y = self.ev("ytarget_track", i)
-            m = (x[:, X_ELEMTYPE] != 0) & (y[:, PID] > 0) & (x[:, X_TRACK_PT] > 0)
-            r_pt.extend((y[m, PT] / x[m, X_TRACK_PT]).tolist())
+            if len(x) and len(y):
+                m = (x[:, X_ELEMTYPE] != 0) & (y[:, PID] > 0) & (x[:, X_TRACK_PT] > 0)
+                r_pt.extend((y[m, PT] / x[m, X_TRACK_PT]).tolist())
             x = self.ev("X_cluster", i)
             y = self.ev("ytarget_cluster", i)
-            m = (x[:, X_ELEMTYPE] != 0) & (y[:, PID] > 0) & (x[:, X_CLUSTER_ENERGY] > 0)
-            r_e.extend((y[m, ENERGY] / x[m, X_CLUSTER_ENERGY]).tolist())
+            if len(x) and len(y):
+                m = (x[:, X_ELEMTYPE] != 0) & (y[:, PID] > 0) & (x[:, X_CLUSTER_ENERGY] > 0)
+                r_e.extend((y[m, ENERGY] / x[m, X_CLUSTER_ENERGY]).tolist())
         r_pt = np.array(r_pt)
         r_e = np.array(r_e)
         lo, hi = THRESHOLDS["t4_median"]
@@ -814,6 +855,8 @@ class ParquetValidator:
             pn_all, pt_all, e_all = [], [], []
             for f in TARGET_FIELDS:
                 y = self.ev(f, i)
+                if len(y) == 0:
+                    continue
                 rep = y[:, PID] > 0
                 pn_all.append(y[rep, PN])
                 pt_all.append(y[rep, PT])
@@ -845,6 +888,8 @@ class ParquetValidator:
             n_jets = len(self.data["targetjet"][i])
             for f in ["ytarget_track", "ytarget_cluster"]:
                 y = self.ev(f, i)
+                if len(y) == 0:
+                    continue
                 jidx = y[y[:, PID] > 0, JET_IDX].astype(int)
                 if np.any((jidx < -1) | (jidx >= n_jets)):
                     bad_events += 1
@@ -858,6 +903,242 @@ class ParquetValidator:
             "PASS" if bad_events == 0 else "WARN",
         )
         self.bar_plot(gate, ["events with bad jet_idx"], [bad_events], "events", colors=["#ff7f0e" if bad_events else "#2ca02c"])
+
+    def gate_target_definition(self):
+        """R1/R2/M1/E1/W1: target-definition invariants raised in PR #490.
+
+        R1 - the target jet response must be a smear around 1.0, not a hard
+             ceiling: a downward-only response was the symptom of the
+             merge-overwrite energy loss, which also affects CLIC/CLD in
+             principle even though it only fired on MAIA in practice.
+        R2 - gp_to_cluster (the visibility-mask input) must be a calibrated
+             energy in GeV, so deposit/energy is a true energy fraction.
+        M1 - the absolute MIP-deposit term must actually retain muons: on
+             ttbar-like samples a healthy fraction of target muons are
+             MIP-like (deposited fraction below visible_energy_fraction).
+        E1 - every depositing target representative must carry simulator
+             endpoint bits (EDM4hep bits 24-27); missing flags indicate
+             unsimulated particles (e.g. the MAIA 0x80000000 sample issue).
+        W1 - particles admitted only by the absolute term should not be
+             dominated by neutrals, whose energy nothing measured
+             (informational; mirrors the open question in PR #490).
+        """
+        if not all(f in self.data.fields for f in PF_FIELDS):
+            gate = self.add_gate(
+                "R1",
+                "targets",
+                "Target-definition gates present",
+                "PF-level target fields are required for the target-definition gates.",
+                "track/cluster fields absent",
+                "SKIP",
+            )
+            self.text_plot(gate, ["Track/cluster fields not present in this file.", "Gates R1/R2/M1/E1/W1 skipped."])
+            return
+
+        # R1: jet response, target jet matched to the nearest gen jet
+        responses = []
+        for i in range(self.nev_used):
+            gj = self.ev("genjet", i)
+            tj = self.ev("targetjet", i)
+            if len(gj) == 0 or len(tj) == 0:
+                continue
+            for tjet in tj:
+                deta = gj[:, 1] - tjet[1]
+                dphi = _deltaphi(gj[:, 2], tjet[2])
+                dr = np.sqrt(deta**2 + dphi**2)
+                m = int(np.argmin(dr))
+                if dr[m] < JET_MATCH_DR:
+                    responses.append(tjet[0] / gj[m, 0])
+        responses = np.array(responses)
+        r1_lo, r1_hi = THRESHOLDS["r1_median"]
+        r1_min_above = THRESHOLDS["r1_frac_above_1"]
+        r1_min_jets = THRESHOLDS["r1_min_jets"]
+        if len(responses) < r1_min_jets:
+            status = "WARN"
+        else:
+            frac_above = float(np.mean(responses > 1.0))
+            ok = (r1_lo <= np.median(responses) <= r1_hi) and (frac_above >= r1_min_above)
+            status = "PASS" if ok else "FAIL"
+        observed = (
+            f"matched jets={len(responses)}, "
+            f"median={np.median(responses) if len(responses) else float('nan'):.3f}, "
+            f"frac>1.0={float(np.mean(responses > 1.0)) if len(responses) else float('nan'):.3f}"
+        )
+        gate = self.add_gate(
+            "R1",
+            "targets",
+            "Jet response has no hard ceiling",
+            "The target jet pT should be a smear of the truth jet pT, not a "
+            f"strict subset: median target/gen response in [{r1_lo}, {r1_hi}] "
+            f"and >={r1_min_above:.0%} of matched jets above 1.0.",
+            observed,
+            status,
+        )
+        self.hist_plot(gate, responses, "target jet pT / gen jet pT", vlines=((1.0, "red"),))
+
+        # R2: deposited-energy fraction of target representatives
+        fracs = []
+        for f in ["ytarget_track", "ytarget_cluster"]:
+            for i in range(self.nev_used):
+                y = self.ev(f, i)
+                if len(y) == 0:
+                    continue
+                rep = y[:, PID] > 0
+                e = y[rep, ENERGY]
+                gc = y[rep, GP_TO_CLUSTER]
+                ok = e > 0
+                fracs.extend((gc[ok] / e[ok]).tolist())
+        fracs = np.array(fracs)
+        r2_lo, r2_hi = THRESHOLDS["r2_median"]
+        flo, fhi, fmin = THRESHOLDS["r2_frac_range"]
+        p99_lim = THRESHOLDS["r2_p99"]
+        n_frac = len(fracs)
+        if n_frac < THRESHOLDS["r2_min_measurements"]:
+            status = "WARN"
+        else:
+            med = float(np.median(fracs))
+            in_range = float(np.mean((fracs >= flo) & (fracs <= fhi)))
+            p99 = float(np.percentile(fracs, 99))
+            ok = (r2_lo <= med <= r2_hi) and (in_range >= fmin) and (p99 < p99_lim)
+            status = "PASS" if ok else "FAIL"
+        observed = (
+            f"n={n_frac}, "
+            f"median={np.median(fracs) if n_frac else float('nan'):.3f}, "
+            f"in [{flo}, {fhi}]={float(np.mean((fracs >= flo) & (fracs <= fhi))) if n_frac else float('nan'):.3f}, "
+            f"p99={float(np.percentile(fracs, 99)) if n_frac else float('nan'):.2f}"
+        )
+        gate = self.add_gate(
+            "R2",
+            "targets",
+            "Deposited-energy fraction is a calibrated energy",
+            "gp_to_cluster (the visibility-mask input) must be an energy in "
+            f"GeV: median deposit/energy in [{r2_lo}, {r2_hi}], >={fmin:.0%} "
+            f"within [{flo}, {fhi}], and p99 < {p99_lim}.",
+            observed,
+            status,
+        )
+        self.hist_plot(gate, fracs, "gp_to_cluster / E_gen (target reps)", bins=80, shade=(flo, fhi), vlines=((1.0, "red"),))
+
+        # M1: MIP muons retained by the absolute deposit term
+        frac_lim = THRESHOLDS["m1_visible_energy_fraction"]
+        dep_lim = THRESHOLDS["m1_visible_energy_deposit"]
+        min_muons = THRESHOLDS["m1_min_muons"]
+        min_lowfrac_frac = THRESHOLDS["m1_min_lowfrac_frac"]
+        mu_frac, mu_dep = [], []
+        for f in ["ytarget_track", "ytarget_cluster"]:
+            for i in range(self.nev_used):
+                y = self.ev(f, i)
+                if len(y) == 0:
+                    continue
+                m = (y[:, PID] == 13) & (y[:, ENERGY] > 0)
+                mu_frac.extend((y[m, GP_TO_CLUSTER] / y[m, ENERGY]).tolist())
+                mu_dep.extend(y[m, GP_TO_CLUSTER].tolist())
+        mu_frac = np.array(mu_frac)
+        mu_dep = np.array(mu_dep)
+        n_mu = len(mu_frac)
+        n_lowfrac = int(np.sum(mu_frac < frac_lim)) if n_mu else 0
+        n_abs = int(np.sum((mu_frac < frac_lim) & (mu_dep > dep_lim))) if n_mu else 0
+        if n_mu < min_muons:
+            status = "WARN"
+        elif n_mu and (n_lowfrac / n_mu) >= min_lowfrac_frac:
+            status = "PASS"
+        else:
+            status = "FAIL"
+        gate = self.add_gate(
+            "M1",
+            "targets",
+            "MIP muons retained by the absolute deposit term",
+            "On ttbar-like samples a meaningful fraction of target muons must "
+            f"be MIP-like (deposited fraction < {frac_lim:.0%}); those are "
+            f"kept by the absolute term (deposit > {dep_lim:.1f} GeV), and "
+            "removing it drops them from the target.",
+            f"muons={n_mu}, frac<{frac_lim:.0%}={n_lowfrac} " f"({100 * n_lowfrac / max(n_mu, 1):.0f}%), " f"with deposit>{dep_lim:.1f} GeV={n_abs}",
+            status,
+        )
+        self.bar_plot(
+            gate,
+            ["target muons", f"frac<{frac_lim:.0%}", f"deposit>{dep_lim:.1f} GeV"],
+            [n_mu, n_lowfrac, n_abs],
+            "count",
+            colors=["#4c72b0", "#2ca02c", "#ff7f0e"],
+        )
+
+        # E1: simulator endpoint bits on all target representatives
+        endpoint_mask = THRESHOLDS["e1_endpoint_mask"]
+        n_reps = 0
+        n_endpoint_viol = 0
+        for f in ["ytarget_track", "ytarget_cluster"]:
+            for i in range(self.nev_used):
+                y = self.ev(f, i)
+                if len(y) == 0:
+                    continue
+                rep = y[:, PID] > 0
+                n_reps += int(np.sum(rep))
+                if np.any(rep):
+                    sim = y[rep, SIM_STATUS].astype(np.int64)
+                    n_endpoint_viol += int(np.sum((sim & endpoint_mask) == 0))
+        status = "WARN" if n_reps == 0 else ("PASS" if n_endpoint_viol == 0 else "FAIL")
+        gate = self.add_gate(
+            "E1",
+            "targets",
+            "Target representatives carry simulator endpoint bits",
+            "Every particle that deposited energy must have at least one "
+            f"EDM4hep simulator endpoint flag set (bits 24-27, mask "
+            f"0x{endpoint_mask:08X}); missing flags indicate unsimulated "
+            "particles leaking into the target.",
+            f"representatives={n_reps}, without endpoint bits={n_endpoint_viol}",
+            status,
+        )
+        self.bar_plot(
+            gate,
+            ["representatives", "no endpoint bits"],
+            [n_reps, n_endpoint_viol],
+            "count",
+            colors=["#2ca02c" if n_endpoint_viol == 0 else "#d62728", "#d62728" if n_endpoint_viol else "#2ca02c"],
+        )
+
+        # W1: neutrals among absolute-term-only admissions (informational)
+        abs_pids = []
+        for f in ["ytarget_track", "ytarget_cluster"]:
+            for i in range(self.nev_used):
+                y = self.ev(f, i)
+                if len(y) == 0:
+                    continue
+                e = y[:, ENERGY]
+                gc = y[:, GP_TO_CLUSTER]
+                rep = y[:, PID] > 0
+                denom = np.where(e > 0, e, 1.0)
+                abs_only = rep & (gc / denom < frac_lim) & (gc > dep_lim)
+                abs_pids.extend(y[abs_only, PID].tolist())
+        abs_pids = np.array(abs_pids)
+        n_abs_total = len(abs_pids)
+        n_neutral = int(np.sum(np.isin(abs_pids, [22, 130])))
+        warn_frac = THRESHOLDS["w1_neutral_frac_warn"]
+        min_part = THRESHOLDS["w1_min_particles"]
+        if n_abs_total < min_part:
+            status = "WARN"
+        else:
+            neutral_frac = n_neutral / n_abs_total
+            status = "WARN" if neutral_frac > warn_frac else "PASS"
+        gate = self.add_gate(
+            "W1",
+            "targets",
+            "Absolute-term admissions are not neutral-dominated",
+            "Particles kept only by the absolute MIP term (deposited fraction "
+            f"below {frac_lim:.0%} but deposit above {dep_lim:.1f} GeV) should "
+            "mostly be charged (track-measured); a large neutral share means "
+            f"leaked energy with no measurement. WARN above {warn_frac:.0%} "
+            "neutrals.",
+            f"absolute-retained={n_abs_total}, neutrals={n_neutral} " f"({100 * n_neutral / max(n_abs_total, 1):.0f}%)",
+            status,
+        )
+        self.bar_plot(
+            gate,
+            ["absolute-retained", "neutrals (22/130)"],
+            [n_abs_total, n_neutral],
+            "count",
+            colors=["#4c72b0", "#ff7f0e" if n_neutral else "#2ca02c"],
+        )
 
     def gate_baseline_pf(self):
         if not all(f in self.data.fields for f in YCAND_FIELDS):
@@ -896,6 +1177,8 @@ class ParquetValidator:
             for xf, yf in [("X_track", "ycand_track"), ("X_cluster", "ycand_cluster")]:
                 x = self.ev(xf, i)
                 y = self.ev(yf, i)
+                if len(x) == 0 or len(y) == 0:
+                    continue
                 m = x[:, X_ELEMTYPE] != 0
                 pid = y[m, PID].astype(int)
                 e = y[m, ENERGY]
@@ -1004,6 +1287,8 @@ class ParquetValidator:
         for i in range(self.nev_used):
             for f in TARGET_FIELDS:
                 y = self.ev(f, i)
+                if len(y) == 0:
+                    continue
                 present.update(y[y[:, PID] > 0, PID].astype(int).tolist())
         missing = sorted(EXPECTED_PIDS - present)
         gate = self.add_gate(
@@ -1066,39 +1351,41 @@ class ParquetValidator:
             # Tracker hits: circle fit per particle -> pT
             x = self.ev("X_hit_tracker", iev)
             y = self.ev("ytarget_hit_tracker", iev)
-            mask = x[:, X_ELEMTYPE] != 0
-            if np.any(mask):
-                pos = x[mask, X_HIT_POS_XY]
-                pns = y[mask, PN]
-                for pn in np.unique(pns):
-                    if pn == 0 or pn not in pn_to_truth:
-                        continue
-                    hits = pos[pns == pn]
-                    if len(hits) >= 5:
-                        r = fit_circle(hits[:, 0], hits[:, 1])
-                        if r and r < 1e5:
-                            pT_fit = 0.0003 * self.bfield * r
-                            track_results["pT_truth"].append(pn_to_truth[pn]["pt"])
-                            track_results["pT_fit"].append(pT_fit)
+            if len(x) and len(y):
+                mask = x[:, X_ELEMTYPE] != 0
+                if np.any(mask):
+                    pos = x[mask, X_HIT_POS_XY]
+                    pns = y[mask, PN]
+                    for pn in np.unique(pns):
+                        if pn == 0 or pn not in pn_to_truth:
+                            continue
+                        hits = pos[pns == pn]
+                        if len(hits) >= 5:
+                            r = fit_circle(hits[:, 0], hits[:, 1])
+                            if r and r < 1e5:
+                                pT_fit = 0.0003 * self.bfield * r
+                                track_results["pT_truth"].append(pn_to_truth[pn]["pt"])
+                                track_results["pT_fit"].append(pT_fit)
 
-                            if pT_fit / pn_to_truth[pn]["pt"] < 0.5 and len(track_results.get("bad_tracks", [])) < 5:
-                                if "bad_tracks" not in track_results:
-                                    track_results["bad_tracks"] = []
-                                track_results["bad_tracks"].append(1)
-                                print(f"Bad fit: event={iev} pn={pn} pT_truth={pn_to_truth[pn]['pt']:.3f} " f"pT_fit={pT_fit:.3f} R={r:.3f} mm")
+                                if pT_fit / pn_to_truth[pn]["pt"] < 0.5 and len(track_results.get("bad_tracks", [])) < 5:
+                                    if "bad_tracks" not in track_results:
+                                        track_results["bad_tracks"] = []
+                                    track_results["bad_tracks"].append(1)
+                                    print(f"Bad fit: event={iev} pn={pn} pT_truth={pn_to_truth[pn]['pt']:.3f} " f"pT_fit={pT_fit:.3f} R={r:.3f} mm")
 
             # Calo hits: energy sum per particle
             x = self.ev("X_hit_calo", iev)
             y = self.ev("ytarget_hit_calo", iev)
-            mask = x[:, X_ELEMTYPE] != 0
-            if np.any(mask):
-                e_calo = x[mask, X_HIT_ENERGY]
-                pns = y[mask, PN]
-                for pn in np.unique(pns):
-                    if pn == 0 or pn not in pn_to_truth:
-                        continue
-                    calo_results["E_truth"].append(pn_to_truth[pn]["energy"])
-                    calo_results["E_hit_sum"].append(np.sum(e_calo[pns == pn]))
+            if len(x) and len(y):
+                mask = x[:, X_ELEMTYPE] != 0
+                if np.any(mask):
+                    e_calo = x[mask, X_HIT_ENERGY]
+                    pns = y[mask, PN]
+                    for pn in np.unique(pns):
+                        if pn == 0 or pn not in pn_to_truth:
+                            continue
+                        calo_results["E_truth"].append(pn_to_truth[pn]["energy"])
+                        calo_results["E_hit_sum"].append(np.sum(e_calo[pns == pn]))
 
         for k in track_results:
             track_results[k] = np.array(track_results[k])
@@ -1231,6 +1518,7 @@ class ParquetValidator:
             self.gate_hit_rep_consistency()
             self.gate_tracks_clusters()
             self.gate_targets()
+            self.gate_target_definition()
             self.gate_baseline_pf()
             self.gate_truth()
         return self.write_report(self.plots_dir / "validation_report.json")

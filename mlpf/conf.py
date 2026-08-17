@@ -232,6 +232,23 @@ class EDM4HEP:
                 "VXDEndcapTrackerHits",
             ],
         ),
+        "maia": Detector(
+            name="maia",
+            b_field=5.0,
+            hit_collections=[
+                "EcalBarrelCollectionRec",
+                "EcalEndcapCollectionRec",
+                "HcalBarrelCollectionRec",
+                "HcalEndcapCollectionRec",
+                "MUON",
+                "IBTrackerHits",
+                "IETrackerHits",
+                "OBTrackerHits",
+                "OETrackerHits",
+                "VBTrackerHits",
+                "VETrackerHits",
+            ],
+        ),
     }
 
 
