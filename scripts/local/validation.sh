@@ -1,108 +1,84 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 export PF_SITE=local
 export MPLCONFIGDIR=${MPLCONFIGDIR:-/tmp/particleflow-matplotlib}
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$REPO_ROOT"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$repo_root"
 
-SPEC_FILE=${SPEC_FILE:-particleflow_spec.yaml}
-LOCAL_SPEC_FILE=${LOCAL_SPEC_FILE:-/tmp/particleflow_local_validation_spec.yaml}
-CHECKPOINT=${CHECKPOINT:-experiments/pyg-cld-hits-v1_cld_20260814_013544_620216/checkpoints/checkpoint-20000.pth}
-OUTPUT_ROOT=${OUTPUT_ROOT:-experiments/pyg-cld-hits-v1_cld_20260814_013544_620216/validation_checkpoint_20000_n5000_with_pf}
-NTEST=${NTEST:-5000}
-GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-4}
-NUM_WORKERS=${NUM_WORKERS:-4}
-PREFETCH_FACTOR=${PREFETCH_FACTOR:-2}
-# The default checkpoint predates the neighborhood summaries and was trained
-# with 12 raw columns plus the original 15 geometry features.
-HIT_INPUT_DIM=${HIT_INPUT_DIM:-12}
-HIT_FEATURE_ENGINEERING=${HIT_FEATURE_ENGINEERING:-true}
-HIT_GEOMETRY_FEATURES=${HIT_GEOMETRY_FEATURES:-true}
-HIT_TRACKER_NEIGHBORHOOD_FEATURES=${HIT_TRACKER_NEIGHBORHOOD_FEATURES:-false}
-HIT_CALORIMETER_NEIGHBORHOOD_FEATURES=${HIT_CALORIMETER_NEIGHBORHOOD_FEATURES:-false}
+spec_file=${SPEC_FILE:-particleflow_spec.yaml}
+local_spec_file=${LOCAL_SPEC_FILE:-/tmp/particleflow_local_physics_validation_spec.yaml}
+output_root=${OUTPUT_ROOT:-notebooks/studies/20260819_hit_vs_pf_comparison/physics_validation}
+ntest=${NTEST:-1000}
+gpu_batch_multiplier=${GPU_BATCH_MULTIPLIER:-4}
+num_workers=${NUM_WORKERS:-4}
+prefetch_factor=${PREFETCH_FACTOR:-2}
+run_hit=${RUN_HIT:-true}
+run_pf=${RUN_PF:-true}
 
-CHECKPOINT=$(realpath "$CHECKPOINT")
-OUTPUT_ROOT=$(realpath -m "$OUTPUT_ROOT")
-TRAINING_HISTORY_DIR=${TRAINING_HISTORY_DIR:-$(dirname "$(dirname "$CHECKPOINT")")/history}
+hit_checkpoint=${HIT_CHECKPOINT:-experiments/pyg-cld-hits-v1_cld_20260815_011516_887054/checkpoints/checkpoint-20000.pth}
+pf_checkpoint=${PF_CHECKPOINT:-experiments/pyg-cld-v1_cld_20260815_135053_268848/checkpoints/checkpoint-40000.pth}
+hit_data_dir=${HIT_DATA_DIR:-data/tfds_validation_cld/tensorflow_datasets/cld}
+pf_data_dir=${PF_DATA_DIR:-data/tfds_validation_cld/tensorflow_datasets/cld}
+hit_version=${HIT_VERSION:-3.2.0}
+hit_split=${HIT_SPLIT:-1}
+pf_version=${PF_VERSION:-3.2.0}
+pf_split=${PF_SPLIT:-1}
 
-# The local TFDS installation contains split 1 for both hit-based datasets.
-# Generate a matching spec so pipeline.py does not try to open unavailable splits.
-uv run python3 scripts/local/make_local_available_spec.py "$SPEC_FILE" "$LOCAL_SPEC_FILE"
-SPEC_FILE="$LOCAL_SPEC_FILE"
+hit_checkpoint=$(realpath "$hit_checkpoint")
+pf_checkpoint=$(realpath "$pf_checkpoint")
+hit_data_dir=$(realpath "$hit_data_dir")
+pf_data_dir=$(realpath "$pf_data_dir")
+output_root=$(realpath -m "$output_root")
 
-CLD_DATA_DIR=$(python3 scripts/get_param.py "$SPEC_FILE" productions.cld.workspace_dir)/tfds
-CLIC_DATA_DIR=$(python3 scripts/get_param.py "$SPEC_FILE" productions.clic.workspace_dir)/tfds
+test -f "$hit_checkpoint"
+test -f "$pf_checkpoint"
+test -d "$hit_data_dir/cld_edm_ttbar_hits/$hit_split/$hit_version"
+test -d "$pf_data_dir/cld_edm_ttbar_pf/$pf_split/$pf_version"
+mkdir -p "$output_root/hit" "$output_root/pf"
 
-test -f "$CHECKPOINT"
-test -d "$CLD_DATA_DIR/cld_edm_ttbar_hits"
-test -d "$CLIC_DATA_DIR/clic_edm_ttbar_hits"
-mkdir -p "$OUTPUT_ROOT/cld" "$OUTPUT_ROOT/clic"
+uv run python3 scripts/local/make_local_available_spec.py \
+  "$spec_file" "$local_spec_file" \
+  --hit-version "$hit_version" --hit-splits "$hit_split" \
+  --pf-version "$pf_version" --pf-splits "$pf_split"
 
-run_validation() {
-  local model_name=$1
-  local production_name=$2
-  local data_dir=$3
-  local sample=$4
-  local output_dir=$5
+common_args=(--spec-file "$local_spec_file" --production-name cld)
+test_args=(
+  test --gpus 1 --ntest "$ntest" --make-plots
+  --dtype bfloat16 --gpu_batch_multiplier "$gpu_batch_multiplier"
+  --num_workers "$num_workers" --prefetch_factor "$prefetch_factor"
+  --pad_to_multiple_elements 100
+  --model.type attention --model.backbone.mode shared
+  --model.backbone.num_convs 6 --model.attention.num_convs 3
+  --model.attention.use_jagged_attention true
+  --model.attention.use_flash_attn_varlen false
+  --model.task_queries false
+)
 
+if [[ "$run_hit" == true ]]; then
+  echo "Running hit-input physics validation ($ntest events)"
   uv run python3 -u mlpf/pipeline.py \
-    --spec-file "$SPEC_FILE" \
-    --model-name "$model_name" \
-    --production-name "$production_name" \
-    --data-dir "$data_dir" \
-    --experiment-dir "$output_dir" \
-    test \
-    --gpus 1 \
-    --load "$CHECKPOINT" \
-    --test-datasets "$sample" \
-    --ntest "$NTEST" \
-    --make-plots \
-    --dtype bfloat16 \
-    --gpu_batch_multiplier "$GPU_BATCH_MULTIPLIER" \
-    --num_workers "$NUM_WORKERS" \
-    --prefetch_factor "$PREFETCH_FACTOR" \
-    --pad_to_multiple_elements 100 \
-    --input_dim "$HIT_INPUT_DIM" \
-    --model.type attention \
-    --model.hit_feature_engineering.enabled "$HIT_FEATURE_ENGINEERING" \
-    --model.hit_feature_engineering.geometry "$HIT_GEOMETRY_FEATURES" \
-    --model.hit_feature_engineering.tracker_neighborhood "$HIT_TRACKER_NEIGHBORHOOD_FEATURES" \
-    --model.hit_feature_engineering.calorimeter_neighborhood "$HIT_CALORIMETER_NEIGHBORHOOD_FEATURES" \
-    --model.backbone.mode shared \
-    --model.backbone.num_convs 6 \
-    --model.attention.num_convs 6 \
-    --model.attention.use_jagged_attention true \
-    --model.attention.use_flash_attn_varlen false \
-    --model.task_queries false
-}
+    "${common_args[@]}" --model-name pyg-cld-hits-v1 \
+    --data-dir "$hit_data_dir" --experiment-dir "$output_root/hit" \
+    "${test_args[@]}" --load "$hit_checkpoint" \
+    --test-datasets cld_edm_ttbar_hits --input_dim 15 \
+    --model.hit_feature_engineering.enabled true \
+    --model.hit_feature_engineering.geometry true \
+    --model.hit_feature_engineering.tracker_neighborhood false \
+    --model.hit_feature_engineering.calorimeter_neighborhood true \
+    --model.backbone.num_tracker_layers 2 \
+    --model.backbone.num_calo_layers 2 \
+    --model.backbone.num_common_layers 2
+fi
 
-# run_validation \
-#   pyg-cld-hits-v1 cld "$CLD_DATA_DIR" cld_edm_ttbar_hits "$OUTPUT_ROOT/cld"
+if [[ "$run_pf" == true ]]; then
+  echo "Running track/cluster-input physics validation ($ntest events)"
+  uv run python3 -u mlpf/pipeline.py \
+    "${common_args[@]}" --model-name pyg-cld-v1 \
+    --data-dir "$pf_data_dir" --experiment-dir "$output_root/pf" \
+    "${test_args[@]}" --load "$pf_checkpoint" \
+    --test-datasets cld_edm_ttbar_pf --input_dim 17
+fi
 
-uv run python3 -u scripts/local/plot_hit_validation_with_pf.py \
-  --validation-dir "$OUTPUT_ROOT/cld" \
-  --hit-sample cld_edm_ttbar_hits \
-  --pf-data-dir "$CLD_DATA_DIR" \
-  --pf-sample cld_edm_ttbar_pf \
-  --dataset cld_hits \
-  --num-events "$NTEST"
-
-uv run python3 -u scripts/local/plot_training_evolution.py \
-  --history-dir "$TRAINING_HISTORY_DIR" \
-  --output-dir "$OUTPUT_ROOT/cld/plots_test/cld_edm_ttbar_hits" \
-  --sample cld_edm_ttbar_hits
-
-# run_validation \
-#   pyg-clic-hits-v1 clic "$CLIC_DATA_DIR" clic_edm_ttbar_hits "$OUTPUT_ROOT/clic"
-
-uv run python3 -u scripts/local/plot_hit_validation_with_pf.py \
-  --validation-dir "$OUTPUT_ROOT/clic" \
-  --hit-sample clic_edm_ttbar_hits \
-  --pf-data-dir "$CLIC_DATA_DIR" \
-  --pf-sample clic_edm_ttbar_pf \
-  --dataset clic_hits \
-  --num-events "$NTEST"
-
-echo "Validation predictions and plot_utils.py plots written under: $OUTPUT_ROOT"
+echo "Physics validation outputs written under: $output_root"
