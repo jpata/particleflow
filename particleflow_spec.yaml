@@ -345,17 +345,17 @@ productions:
       ttbar:
         process_name: "p8_ee_ttbar_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [300000, 305010]
+        seed_range: [300000, 310010]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [400000, 405010]
+        seed_range: [400000, 410010]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [500000, 505010]
+        seed_range: [500000, 510010]
         events_per_job: 100
 
     postprocessing:
