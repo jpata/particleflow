@@ -17,12 +17,14 @@ def get_optimizer(model: torch.nn.Module, config: MLPFConfig):
     """
 
     wd = config.weight_decay
+    parameters = model.parameters()
+
     if config.optimizer == OptimizerType.ADAMW:
-        ret = torch.optim.AdamW(model.parameters(), lr=config.lr, weight_decay=wd)
+        ret = torch.optim.AdamW(parameters, lr=config.lr, weight_decay=wd)
     elif config.optimizer == OptimizerType.LAMB:
-        ret = Lamb(model.parameters(), lr=config.lr, weight_decay=wd)
+        ret = Lamb(parameters, lr=config.lr, weight_decay=wd)
     elif config.optimizer == OptimizerType.SGD:
-        ret = torch.optim.SGD(model.parameters(), lr=config.lr, weight_decay=wd)
+        ret = torch.optim.SGD(parameters, lr=config.lr, weight_decay=wd)
     else:
         raise ValueError(f"Unsupported optimizer type: {config.optimizer}")
 

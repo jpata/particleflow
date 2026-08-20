@@ -81,6 +81,13 @@ def prepare_data_hits(fn, dataset: Dataset):
         if len(X2) == 0:
             X2 = np.zeros((0, len(X_FEATURES)))
 
+        for collection_name, hit_matrix in (("X_hit_tracker", X1), ("X_hit_calo", X2)):
+            if hit_matrix.ndim != 2 or hit_matrix.shape[1] != len(X_FEATURES):
+                raise ValueError(
+                    f"{collection_name} in {fn}, event {iev} has shape {hit_matrix.shape}; "
+                    f"expected (num_hits, {len(X_FEATURES)}) with features {X_FEATURES}"
+                )
+
         # concatenate tracker hits and calorimeter hits
         X = np.concatenate([X1, X2])
 

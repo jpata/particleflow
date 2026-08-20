@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition gpu
-#SBATCH --gres gpu:l40:1
+#SBATCH --gres gpu:l40:2
 #SBATCH --mem-per-gpu 80G
 #SBATCH --cpus-per-gpu 4
 #SBATCH -o logs/slurm-%x-%a-%j-%N.out
@@ -20,12 +20,11 @@ SPEC_FILE=${SPEC_FILE:-particleflow_spec.yaml}
 NUM_STEPS=${NUM_STEPS:-100000}
 VAL_FREQ=${VAL_FREQ:-10000}
 CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-10000}
-GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-2}
+GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-24}
 NUM_WORKERS=${NUM_WORKERS:-4}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-2}
 PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-100}
 VALIDATION_DIAGNOSTICS_BATCHES=${VALIDATION_DIAGNOSTICS_BATCHES:-8}
-DATA_CONFIG=${DATA_CONFIG:-1}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 
 TRAINSETS=(cld-hits clic-hits)
@@ -38,16 +37,21 @@ CLEAN_SPEC_FILE=${CLEAN_SPEC_FILE:-${TMPDIR:-/tmp}/particleflow_hit_training_spe
 
 mkdir -p "$MIXED_DATA_DIR" logs
 ln -sfn "$CLD_DATA_DIR/cld_edm_ttbar_hits" "$MIXED_DATA_DIR/cld_edm_ttbar_hits"
+ln -sfn "$CLD_DATA_DIR/cld_edm_qq_hits" "$MIXED_DATA_DIR/cld_edm_qq_hits"
+ln -sfn "$CLD_DATA_DIR/cld_edm_ww_fullhad_hits" "$MIXED_DATA_DIR/cld_edm_ww_fullhad_hits"
 ln -sfn "$CLIC_DATA_DIR/clic_edm_ttbar_hits" "$MIXED_DATA_DIR/clic_edm_ttbar_hits"
+ln -sfn "$CLIC_DATA_DIR/clic_edm_qq_hits" "$MIXED_DATA_DIR/clic_edm_qq_hits"
+ln -sfn "$CLIC_DATA_DIR/clic_edm_ww_fullhad_hits" "$MIXED_DATA_DIR/clic_edm_ww_fullhad_hits"
+ls -al $MIXED_DATA_DIR
 
 uv run python3 scripts/tallinn/l40/make_hit_training_spec.py "$SPEC_FILE" "$CLEAN_SPEC_FILE"
 
 case "$TRAINSET" in
     cld-hits)
-        MODEL_NAME=pyg-clean-cld-hits-v1
+        MODEL_NAME=cld-hits
         ;;
     clic-hits)
-        MODEL_NAME=pyg-clean-clic-hits-v1
+        MODEL_NAME=clic-hits
         ;;
     *)
         echo "Unknown trainset: $TRAINSET" >&2
@@ -59,18 +63,17 @@ COMMON_ARGS=(
     --spec-file "$CLEAN_SPEC_FILE"
     --model-name "$MODEL_NAME"
     --production-name cld
-    --prefix "dedicated-${TRAINSET}_"
+    --prefix "dedicated_"
     --data-dir "$MIXED_DATA_DIR"
     --experiments-dir "$EXPERIMENTS_DIR"
     train
-    --gpus 1
+    --gpus 2
     --num_workers "$NUM_WORKERS"
     --prefetch_factor "$PREFETCH_FACTOR"
     --gpu_batch_multiplier "$GPU_BATCH_MULTIPLIER"
     --num_steps "$NUM_STEPS"
     --val_freq "$VAL_FREQ"
     --checkpoint_freq "$CHECKPOINT_FREQ"
-    --data_config "$DATA_CONFIG"
     --pad_to_multiple_elements "$PAD_TO_MULTIPLE_ELEMENTS"
     --sampler_mode interleaved-shards
     --validation_diagnostics_batches "$VALIDATION_DIAGNOSTICS_BATCHES"
@@ -79,6 +82,14 @@ COMMON_ARGS=(
 
 uv run python3 mlpf/pipeline.py \
     "${COMMON_ARGS[@]}" \
+    --model.attention.use_jagged_attention True \
+    --model.attention.use_flash_attn_varlen False \
+    --pad_to_multiple_elements 100 \
     --model.backbone.mode shared \
     --model.backbone.num_convs 6 \
-    --model.task_queries true
+    --model.backbone.num_tracker_layers 2 \
+    --model.backbone.num_calo_layers 2 \
+    --model.backbone.num_common_layers 2 \
+    --model.type attention \
+    --model.task_queries false \
+    --lr 0.0005
