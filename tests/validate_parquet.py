@@ -389,8 +389,15 @@ class ParquetValidator:
         )
 
         # H2: hit multiplicity (informational)
-        n_trk_hits = np.array([int(ak.sum(self.data["X_hit_tracker"][i][:, X_ELEMTYPE] != 0)) for i in range(self.nev_used)])
-        n_calo_hits = np.array([int(ak.sum(self.data["X_hit_calo"][i][:, X_ELEMTYPE] != 0)) for i in range(self.nev_used)])
+        # reshape also handles intentionally empty hit collections, whose
+        # inner dimension is not retained by Awkward/Parquet.
+        n_hit_features = len(EDM4HEP.HitFeatures.get_names())
+        n_trk_hits = np.array(
+            [int(np.sum(self.ev("X_hit_tracker", i).reshape(-1, n_hit_features)[:, X_ELEMTYPE] != 0)) for i in range(self.nev_used)]
+        )
+        n_calo_hits = np.array(
+            [int(np.sum(self.ev("X_hit_calo", i).reshape(-1, n_hit_features)[:, X_ELEMTYPE] != 0)) for i in range(self.nev_used)]
+        )
         ok = (n_trk_hits > 0).all() and (n_calo_hits > 0).all()
         gate = self.add_gate(
             "H2",
@@ -534,13 +541,13 @@ class ParquetValidator:
         pos_trk_h = pn_trk_h = pos_calo_h = pn_calo_h = None
         pos_trk = pn_trk = pos_cl = pn_cl = None
 
-        x = self.ev("X_hit_tracker", iev)
-        y = self.ev("ytarget_hit_tracker", iev)
+        x = self.ev("X_hit_tracker", iev).reshape(-1, len(EDM4HEP.HitFeatures.get_names()))
+        y = self.ev("ytarget_hit_tracker", iev).reshape(-1, 14)
         mask = x[:, X_ELEMTYPE] != 0
         pos_trk_h, pn_trk_h = x[mask, 6:9], y[mask, PN]
 
-        x = self.ev("X_hit_calo", iev)
-        y = self.ev("ytarget_hit_calo", iev)
+        x = self.ev("X_hit_calo", iev).reshape(-1, len(EDM4HEP.HitFeatures.get_names()))
+        y = self.ev("ytarget_hit_calo", iev).reshape(-1, 14)
         mask = x[:, X_ELEMTYPE] != 0
         pos_calo_h, pn_calo_h = x[mask, 6:9], y[mask, PN]
 

@@ -390,6 +390,45 @@ productions:
         version: "3.2.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
+  # IDEA full simulation and the reconstruction currently provided by FCC-config.
+  # This is generation-only until the IDEA chain provides the particle-flow
+  # collections and truth associations expected by the common postprocessor.
+  idea:
+    type: "key4hep"
+    generation_only: true
+    comment: "IDEA_o1_v03 production with the pinned official FCC-config workflow"
+    workspace_dir: "${project.paths.storage_root}/idea/IDEA_o1_v03_fccconfig_a05a3a9"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+
+    memory:
+      gen: 6000
+
+    slurm_partition: "main"
+    slurm_runtime: "48h"
+
+    samples:
+      gun_e_10gev:
+        process_name: "gun_e_10gev"
+        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
+        seed_range: [424242, 424243]
+        events_per_job: 1
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
+        seed_range: [300000, 310010]
+        events_per_job: 100
+      ww_fullhad:
+        process_name: "p8_ee_WW_fullhad_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
+        seed_range: [400000, 410010]
+        events_per_job: 100
+      qq:
+        process_name: "p8_ee_qq_ecm365"
+        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
+        seed_range: [500000, 510010]
+        events_per_job: 100
+
 # -----------------------------------------------------------------------------
 # Model Configurations
 # Defines training recipes. Can inherit from defaults or other models.

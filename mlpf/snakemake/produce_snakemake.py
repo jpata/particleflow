@@ -101,6 +101,8 @@ def main():
 
     prod_config = spec["productions"][args.production]
     prod_type = prod_config.get("type", "cms")
+    if prod_config.get("generation_only", False):
+        req_steps = ["gen"]
 
     # Determine models to train
     models_to_train = []
@@ -155,8 +157,9 @@ def main():
         bind_args += f" -B {tmpdir}:/tmp"
 
     # Get postprocessing script from spec
-    postproc_script = prod_config["postprocessing"]["script"]
-    postproc_extra_args = prod_config["postprocessing"].get("args", {})
+    postproc_config = prod_config.get("postprocessing", {})
+    postproc_script = postproc_config.get("script", "")
+    postproc_extra_args = postproc_config.get("args", {})
 
     config_dir = resolve_path(prod_config.get("config_dir", ""), spec)
 

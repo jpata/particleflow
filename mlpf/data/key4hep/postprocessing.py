@@ -1377,11 +1377,289 @@ def compute_jets(particles_p4: Any, min_pt: float = jet_ptcut, with_indices: boo
     return ret
 
 
+def idea_track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Record:
+    """Read the truth-seeded EDM4hep tracks produced by the IDEA example."""
+    coll = "TracksFromGenParticles"
+    states_coll = f"_{coll}_trackStates"
+    tracks = prop_data[coll][iev]
+    states = prop_data[states_coll][iev]
+    n_tracks = len(tracks[f"{coll}.type"])
+    state_idx = awkward.to_numpy(tracks[f"{coll}.trackStates_begin"])
+
+    ret = {name: awkward.to_numpy(tracks[f"{coll}.{name}"]) for name in ["type", "chi2", "ndf"]}
+    for name in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
+        ret[name] = awkward.to_numpy(states[f"{states_coll}.{name}"])[state_idx]
+
+    refx = awkward.to_numpy(states[f"{states_coll}.referencePoint.x"])[state_idx]
+    refy = awkward.to_numpy(states[f"{states_coll}.referencePoint.y"])[state_idx]
+    ret["radiusOfInnermostHit"] = np.hypot(refx, refy)
+    # TracksFromGenParticles has no particle-identification estimator. Keep the
+    # established feature layout and use explicit missing-value placeholders.
+    ret["dEdx"] = np.zeros(n_tracks, dtype=np.float32)
+    ret["dEdxError"] = np.zeros(n_tracks, dtype=np.float32)
+
+    ret["pt"] = track_pt(ret["omega"], b_field)
+    ret["p"] = ret["pt"] * np.sqrt(1.0 + ret["tanLambda"] ** 2)
+    ret["eta"] = np.arcsinh(ret["tanLambda"])
+    ret["sin_phi"] = np.sin(ret["phi"])
+    ret["cos_phi"] = np.cos(ret["phi"])
+    ret["elemtype"] = np.ones(n_tracks, dtype=np.float32)
+    return awkward.Record(ret)
+
+
+def idea_cluster_to_features(prop_data: Any, iev: int) -> awkward.Record:
+    """Map IDEA dual-readout topological clusters to the common PF schema.
+
+    The current TopoClusterAll collection stores one combined cluster energy,
+    not separate scintillation and Cherenkov energies. It is therefore kept in
+    energy_other until the reconstruction exports both dual-readout components.
+    """
+    coll = "TopoClusterAll"
+    clusters = prop_data[coll][iev]
+    get = lambda name: awkward.to_numpy(clusters[f"{coll}.{name}"])
+    energy = get("energy")
+    posx, posy, posz = get("position.x"), get("position.y"), get("position.z")
+    phi = np.arctan2(posy, posx)
+    rho = np.hypot(posx, posy)
+    eta = np.arcsinh(np.divide(posz, rho, out=np.zeros_like(posz), where=rho > 0))
+    theta = np.arctan2(rho, posz)
+    num_hits = get("hits_end") - get("hits_begin")
+    n_clusters = len(energy)
+    return awkward.Record(
+        {
+            "elemtype": 2 * np.ones(n_clusters, dtype=np.float32),
+            "et": np.divide(energy * rho, np.hypot(rho, posz), out=np.zeros_like(energy), where=np.hypot(rho, posz) > 0),
+            "eta": eta,
+            "sin_phi": np.sin(phi),
+            "cos_phi": np.cos(phi),
+            "energy": energy,
+            "position.x": posx,
+            "position.y": posy,
+            "position.z": posz,
+            "iTheta": theta,
+            "energy_ecal": np.zeros(n_clusters, dtype=np.float32),
+            "energy_hcal": np.zeros(n_clusters, dtype=np.float32),
+            "energy_other": energy,
+            "num_hits": num_hits,
+            # Cluster-cell coordinates are intentionally not loaded in the
+            # no-hit IDEA mode, so shower-width features are unavailable.
+            "sigma_x": np.zeros(n_clusters, dtype=np.float32),
+            "sigma_y": np.zeros(n_clusters, dtype=np.float32),
+            "sigma_z": np.zeros(n_clusters, dtype=np.float32),
+        }
+    )
+
+
+def _idea_relation(prop_data: Any, name: str, iev: int) -> SparseMatrixCOO:
+    """Return an IDEA MCParticle -> reconstructed-object relation."""
+    obj = awkward.to_numpy(prop_data[f"_{name}_from/_{name}_from.index"][iev])
+    gp = awkward.to_numpy(prop_data[f"_{name}_to/_{name}_to.index"][iev])
+    weight = awkward.to_numpy(prop_data[f"{name}.weight"][iev])
+    return gp.astype(np.int32), obj.astype(np.int32), weight.astype(np.float32)
+
+
+def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: int = -1) -> None:
+    """Initial IDEA track/cluster post-processing without hits or PFOs."""
+    print(f"loading IDEA track/cluster data from {fn}")
+    tree = uproot.open(fn)["events"]
+    branches = [
+        mc_coll,
+        f"{mc_coll}.PDG",
+        f"{mc_coll}.momentum.x",
+        f"{mc_coll}.momentum.y",
+        f"{mc_coll}.momentum.z",
+        f"{mc_coll}.mass",
+        f"{mc_coll}.charge",
+        f"{mc_coll}.generatorStatus",
+        f"{mc_coll}.simulatorStatus",
+        f"{mc_coll}.daughters_begin",
+        f"{mc_coll}.daughters_end",
+        f"_{mc_coll}_daughters/_{mc_coll}_daughters.index",
+        "TracksFromGenParticles",
+        "_TracksFromGenParticles_trackStates",
+        "TopoClusterAll",
+        "TracksFromGenParticlesAssociation.weight",
+        "_TracksFromGenParticlesAssociation_from/_TracksFromGenParticlesAssociation_from.index",
+        "_TracksFromGenParticlesAssociation_to/_TracksFromGenParticlesAssociation_to.index",
+        "ClusterMCParticleLinks.weight",
+        "_ClusterMCParticleLinks_from/_ClusterMCParticleLinks_from.index",
+        "_ClusterMCParticleLinks_to/_ClusterMCParticleLinks_to.index",
+    ]
+    prop_data = tree.arrays(branches)
+    b_field = EDM4HEP.DETECTORS["idea"].b_field
+    stop = tree.num_entries if num_events == -1 else min(tree.num_entries, first_event + num_events)
+    empty_x_hit = np.empty((0, len(hit_feature_order)), dtype=np.float32)
+    empty_y_hit = np.empty((0, len(particle_feature_order)), dtype=np.float32)
+    ret = []
+
+    # Truth reference uses the same propagated-particle definition as the
+    # established CLIC/CLD path.
+    pdg_abs = np.abs(prop_data[f"{mc_coll}.PDG"])
+    truth_mask = (
+        (prop_data[f"{mc_coll}.generatorStatus"] == 1)
+        & (pdg_abs != 12)
+        & (pdg_abs != 14)
+        & (pdg_abs != 16)
+        & ((prop_data[f"{mc_coll}.simulatorStatus"] & 0x0F000000) != 0)
+    )
+    truth_p4 = vector.awk(
+        awkward.zip(
+            {
+                "px": prop_data[f"{mc_coll}.momentum.x"][truth_mask],
+                "py": prop_data[f"{mc_coll}.momentum.y"][truth_mask],
+                "pz": prop_data[f"{mc_coll}.momentum.z"][truth_mask],
+                "mass": prop_data[f"{mc_coll}.mass"][truth_mask],
+            }
+        )
+    )
+    genmet = compute_met(truth_p4)
+    genjets = compute_jets(truth_p4)
+
+    for iev in tqdm.tqdm(range(first_event, stop), total=stop - first_event):
+        gen = gen_to_features(prop_data, iev)
+        tracks = idea_track_to_features(prop_data, iev, b_field)
+        clusters = idea_cluster_to_features(prop_data, iev)
+        gp_to_track = _idea_relation(prop_data, "TracksFromGenParticlesAssociation", iev)
+        gp_to_cluster = _idea_relation(prop_data, "ClusterMCParticleLinks", iev)
+        # Propagate reconstructed-object links from generator descendants to
+        # their status-1 ancestor, matching the existing target convention.
+        gp_to_cluster, gp_to_track = add_daughters_to_status1(gen, gp_to_cluster, gp_to_track)
+
+        n_gp, n_track, n_cluster = len(gen["PDG"]), len(tracks["type"]), len(clusters["elemtype"])
+        trk_weights = np.asarray(
+            coo_matrix((gp_to_track[2], (gp_to_track[0], gp_to_track[1])), shape=(n_gp, n_track)).todense()
+        )
+        cl_weights = np.asarray(
+            coo_matrix((gp_to_cluster[2], (gp_to_cluster[0], gp_to_cluster[1])), shape=(n_gp, n_cluster)).todense()
+        )
+        gp_track_measurement = np.max(trk_weights, axis=1) if n_track else np.zeros(n_gp)
+        if n_cluster:
+            weight_per_cluster = np.sum(cl_weights, axis=0)
+            cluster_shares = np.divide(
+                cl_weights, weight_per_cluster[None, :], out=np.zeros_like(cl_weights), where=weight_per_cluster[None, :] > 0
+            )
+            gp_cluster_measurement = cluster_shares @ awkward.to_numpy(clusters["energy"])
+        else:
+            gp_cluster_measurement = np.zeros(n_gp)
+
+        # Give every object to its largest contributor, then retain only
+        # visible status-1 particles. Tracks take precedence over clusters.
+        trk_to_gp = np.argmax(trk_weights, axis=0) if n_gp and n_track else np.empty(0, dtype=np.int32)
+        cl_to_gp = np.argmax(cl_weights, axis=0) if n_gp and n_cluster else np.empty(0, dtype=np.int32)
+        if n_track:
+            trk_to_gp[np.max(trk_weights, axis=0) <= 0] = -1
+        if n_cluster:
+            cl_to_gp[np.max(cl_weights, axis=0) <= 0] = -1
+
+        status1 = awkward.to_numpy(gen["generatorStatus"] == 1)
+        nonnu = ~np.isin(np.abs(awkward.to_numpy(gen["PDG"])), [12, 14, 16])
+        represented = np.zeros(n_gp, dtype=bool)
+        represented[trk_to_gp[trk_to_gp >= 0]] = True
+        represented[cl_to_gp[cl_to_gp >= 0]] = True
+        keep = status1 & nonnu & represented
+        print(
+            f"idea_counts: iev={iev} gen={n_gp} tracks={n_track} clusters={n_cluster} "
+            f"status1_visible={np.sum(status1 & nonnu)} represented={np.sum(keep)} "
+            f"track_links={len(gp_to_track[0])} cluster_links={len(gp_to_cluster[0])}"
+        )
+        kept_gp = np.where(keep)[0]
+        old_to_new = {old: new for new, old in enumerate(kept_gp)}
+        gen_for_matrix = {feat: gen[feat] for feat in particle_feature_order if feat != "particle_number"}
+        gen_for_matrix["gp_to_track"] = gp_track_measurement
+        gen_for_matrix["gp_to_cluster"] = gp_cluster_measurement
+        gen_for_matrix["particle_number"] = np.zeros(n_gp, dtype=np.float32)
+        gen_matrix = get_feature_matrix(gen_for_matrix, particle_feature_order)
+        gen_matrix = gen_matrix[kept_gp]
+        gen_matrix[:, particle_feature_order.index("particle_number")] = np.arange(1, len(kept_gp) + 1)
+
+        ytrack = np.zeros((n_track, len(particle_feature_order)), dtype=np.float32)
+        ycluster = np.zeros((n_cluster, len(particle_feature_order)), dtype=np.float32)
+        used = set()
+        # Exactly one representative carries each target particle's kinematics;
+        # other associated elements carry only the shared particle number.
+        for it, old_gp in enumerate(trk_to_gp):
+            if old_gp not in old_to_new:
+                continue
+            new_gp = old_to_new[int(old_gp)]
+            pn = gen_matrix[new_gp, particle_feature_order.index("particle_number")]
+            ytrack[it, particle_feature_order.index("particle_number")] = pn
+            if old_gp not in used:
+                ytrack[it] = gen_matrix[new_gp]
+                ytrack[it, 0] = map_neutral_to_charged(map_pdgid_to_candid(ytrack[it, 0], ytrack[it, 1]))
+                used.add(int(old_gp))
+        for ic, old_gp in enumerate(cl_to_gp):
+            if old_gp not in old_to_new:
+                continue
+            new_gp = old_to_new[int(old_gp)]
+            pn = gen_matrix[new_gp, particle_feature_order.index("particle_number")]
+            ycluster[ic, particle_feature_order.index("particle_number")] = pn
+            if old_gp not in used:
+                ycluster[ic] = gen_matrix[new_gp]
+                ycluster[ic, 0] = map_charged_to_neutral(map_pdgid_to_candid(ycluster[ic, 0], ycluster[ic, 1]))
+                ycluster[ic, 1] = 0
+                used.add(int(old_gp))
+
+        # Drop a target that lost its representative due to relation conflicts.
+        valid_pn = set(ytrack[ytrack[:, 0] > 0, -1].astype(int)) | set(ycluster[ycluster[:, 0] > 0, -1].astype(int))
+        for y in (ytrack, ycluster):
+            y[~np.isin(y[:, -1].astype(int), list(valid_pn))] = 0
+
+        ytarget = np.concatenate([ytrack, ycluster])
+        reps = ytarget[ytarget[:, 0] != 0]
+        if len(reps):
+            target_p4 = vector.awk(
+                awkward.zip(
+                    {
+                        "pt": reps[:, 2],
+                        "eta": reps[:, 3],
+                        "phi": np.arctan2(reps[:, 4], reps[:, 5]),
+                        "energy": reps[:, 6],
+                    }
+                )
+            )
+            targetjets, constituents = compute_jets(target_p4, with_indices=True)
+            rep_indices = np.where(ytarget[:, 0] != 0)[0]
+            for jet_idx, indices in enumerate(constituents.to_list()):
+                ytarget[rep_indices[indices], particle_feature_order.index("jet_idx")] = jet_idx
+            ytrack = ytarget[:n_track]
+            ycluster = ytarget[n_track:]
+        else:
+            targetjets = awkward.Array({"pt": [], "eta": [], "phi": [], "energy": []})
+
+        xtrack = get_feature_matrix(tracks, track_feature_order).astype(np.float32)
+        xcluster = get_feature_matrix(clusters, cluster_feature_order).astype(np.float32)
+        for arr in (xtrack, xcluster, ytrack, ycluster):
+            sanitize(arr)
+        ret.append(
+            {
+                "X_track": xtrack,
+                "X_cluster": xcluster,
+                "X_hit_tracker": empty_x_hit,
+                "X_hit_calo": empty_x_hit,
+                "ytarget_track": ytrack,
+                "ytarget_cluster": ycluster,
+                "ytarget_hit_tracker": empty_y_hit,
+                "ytarget_hit_calo": empty_y_hit,
+                # IDEA_o1_v03 does not produce reconstructed PFOs.
+                "genmet": float(genmet[iev]),
+                "genjet": get_feature_matrix(genjets[iev], ["pt", "eta", "phi", "energy"]),
+                "targetjet": get_feature_matrix(targetjets, ["pt", "eta", "phi", "energy"]),
+            }
+        )
+
+    if ret:
+        awkward.to_parquet(awkward.Record({k: awkward.from_iter([r[k] for r in ret]) for k in ret[0]}), ofn)
+
+
 def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
 
     # output exists, do not recreate
     if os.path.isfile(ofn) and num_events == -1 and first_event == 0:
         print("{} exists".format(ofn))
+        return
+
+    if detector == "idea":
+        process_one_file_idea(fn, ofn, first_event, num_events)
         return
 
     print("loading {}".format(fn))

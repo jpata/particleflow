@@ -194,6 +194,13 @@ class EDM4HEP:
     # mlpf/data/key4hep/postprocessing.py and tests/validate_parquet.py pick up
     # the B-field and hit collections from this configuration.
     DETECTORS = {
+        "idea": Detector(
+            name="idea",
+            b_field=2.0,
+            # The initial IDEA PF proof of concept consumes truth-seeded tracks
+            # and topological clusters directly, without storing detector hits.
+            hit_collections=[],
+        ),
         "clic": Detector(
             name="clic",
             b_field=4.0,
