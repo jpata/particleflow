@@ -30,7 +30,7 @@ class CldEdmWwFullhadHits(tfds.core.GeneratorBasedBuilder):
         "3.1.0": "Hit-level version with separated tracker and calorimeter hits",
         "3.1.1": "New generation with v1.2.5_key4hep_2025-05-29, 1M events",
         "3.2.0": "Added particle_number target for Object Condensation",
-        "3.2.1": "Corrected elemtype for tracker hits",
+        "3.2.1": "Corrected tracker hit elemtype, updated target and truth definitions, and fixed energy accounting",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
