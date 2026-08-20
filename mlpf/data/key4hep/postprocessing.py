@@ -67,6 +67,30 @@ class EventRecord:
 jetdef = fastjet.JetDefinition(fastjet.ee_genkt_algorithm, 0.4, -1.0)
 jet_ptcut = 5
 
+# A status-1 genparticle enters the target if it deposits at least this fraction of its energy in
+# reconstructed hits, or at least this absolute amount. The absolute term is what keeps MIPs, whose
+# deposit is roughly independent of momentum.
+#
+# The absolute term is a detector-dependent scale: it has to sit below the MIP peak and above the
+# noise, and the MIP peak scales with calorimeter depth. Median muon deposit is ~4 GeV on MAIA but
+# only ~2 GeV on CLD, so set to 0.5 GeV
+visible_energy_fraction = 0.10
+visible_energy_deposit = 0.5  # GeV
+
+# PR #490: Let a long-lived neutral parent that decayed outside the
+# detector stand in for its status-1 daughters, which the simulation never propagated, since the
+# parent is what the detector actually saw.
+#
+# This has to apply to BOTH sides or it biases the comparison. In the target it admits the parent
+# (find_surrogate_ancestors, decided on deposited hits); in the truth reference it admits the same
+# parent in place of the daughters that the propagated-bit filter removes
+# (find_surrogate_ancestors_from_record, decided on the simulator endpoint bits, since the hit
+# adjacency does not exist yet at that point). Enabling it on the target alone pushes the response
+# above 1, because the reference no longer contains the energy the target just gained.
+#
+# Set False to recover the previous behaviour on both sides.
+use_surrogate_ancestors = True
+
 track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
 
@@ -379,7 +403,10 @@ def get_hit_matrix_and_genadj(
                     mcp_idx = sim_mcp_idx[isim]
                     genparticle_to_hit_matrix_coo0.append(mcp_idx)
                     genparticle_to_hit_matrix_coo1.append(hit_idx_global)
-                    genparticle_to_hit_matrix_w.append(1.0)
+                    # the genparticle is the sole contributor to this tracker hit, so it
+                    # gets the full deposited energy. Weights are energies in GeV
+                    # throughout this matrix, see the calorimeter branch below.
+                    genparticle_to_hit_matrix_w.append(hit_features["energy"][ihit])
 
             hit_idx_global += 1
 
@@ -395,6 +422,14 @@ def get_hit_matrix_and_genadj(
         calohit_to_gen_calo_idx = calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index"][iev]
         calohit_to_gen_gen_idx = calohit_links["_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index"][iev]
 
+        # The link weights are proportional to the energy the genparticle deposited in the
+        # hit, but the constant of proportionality differs per subdetector (it absorbs the
+        # sampling fraction), so the raw weights cannot be summed across collections. Take
+        # each genparticle's *share* of the total weight on its hit and scale that by the
+        # calibrated hit energy instead: that is its contribution in GeV, independent of
+        # whatever convention the weights follow.
+        hit_energy = awkward.to_numpy(hit_feature_matrix["energy"])
+        link_gen_idx, link_hit_idx, link_w = [], [], []
         for calo_colid, calo_idx, gen_colid, gen_idx, w in zip(
             calohit_to_gen_calo_colid,
             calohit_to_gen_calo_idx,
@@ -403,9 +438,18 @@ def get_hit_matrix_and_genadj(
             calohit_to_gen_weight,
         ):
             if (calo_colid, calo_idx) in hit_idx_local_to_global:
-                genparticle_to_hit_matrix_coo0.append(gen_idx)
-                genparticle_to_hit_matrix_coo1.append(hit_idx_local_to_global[(calo_colid, calo_idx)])
-                genparticle_to_hit_matrix_w.append(w)
+                link_gen_idx.append(gen_idx)
+                link_hit_idx.append(hit_idx_local_to_global[(calo_colid, calo_idx)])
+                link_w.append(w)
+
+        if len(link_w) > 0:
+            link_hit_idx = np.array(link_hit_idx, dtype=np.int64)
+            link_w = np.array(link_w, dtype=np.float64)
+            w_per_hit = np.bincount(link_hit_idx, weights=link_w, minlength=len(hit_energy))[link_hit_idx]
+            share = np.divide(link_w, w_per_hit, out=np.zeros_like(link_w), where=w_per_hit > 0)
+            genparticle_to_hit_matrix_coo0.extend(link_gen_idx)
+            genparticle_to_hit_matrix_coo1.extend(link_hit_idx.tolist())
+            genparticle_to_hit_matrix_w.extend((share * hit_energy[link_hit_idx]).tolist())
 
     return (
         hit_feature_matrix,
@@ -498,7 +542,7 @@ def gen_to_features(prop_data: awkward.Record, iev: int) -> GenFeatures:
         "jet_idx": np.zeros(len(gen_arr["PDG"]), dtype=np.int64),
         "daughters_begin": gen_arr["daughters_begin"],
         "daughters_end": gen_arr["daughters_end"],
-        "index": prop_data["_MCParticles_daughters/_MCParticles_daughters.index"][iev],
+        "index": prop_data[f"_{mc_coll}_daughters/_{mc_coll}_daughters.index"][iev],
     }
 
     return ret
@@ -520,7 +564,7 @@ def genparticle_track_adj(sitrack_links: Any, iev: int) -> SparseMatrixCOO:
 def cluster_to_features(prop_data: Any, hit_features: awkward.Record, hit_to_cluster: SparseMatrixCOO, iev: int) -> awkward.Record:
     cluster_arr = prop_data["PandoraClusters"][iev]
     feats = ["type", "position.x", "position.y", "position.z", "iTheta", "phi", "energy"]
-    ret = {feat: cluster_arr["PandoraClusters." + feat] for feat in feats}
+    ret = {feat: cluster_arr[f"PandoraClusters.{feat}"] for feat in feats}
 
     hit_idx = np.array(hit_to_cluster[0])
     cluster_idx = np.array(hit_to_cluster[1])
@@ -592,14 +636,14 @@ def cluster_to_features(prop_data: Any, hit_features: awkward.Record, hit_to_clu
 def track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Record:
     track_arr = prop_data[track_coll][iev]
     # the following are needed since they are no longer defined under SiTracks_Refitted
-    track_arr_dQdx = prop_data["SiTracks_Refitted_dQdx"][iev]
-    track_arr_trackStates = prop_data["_SiTracks_Refitted_trackStates"][iev]
+    track_arr_dQdx = prop_data[f"{track_coll}_dQdx"][iev]
+    track_arr_trackStates = prop_data[f"_{track_coll}_trackStates"][iev]
 
     feats_from_track = ["type", "chi2", "ndf"]
-    ret = {feat: track_arr[track_coll + "." + feat] for feat in feats_from_track}
+    ret = {feat: track_arr[f"{track_coll}.{feat}"] for feat in feats_from_track}
 
-    ret["dEdx"] = track_arr_dQdx["SiTracks_Refitted_dQdx.dQdx.value"]
-    ret["dEdxError"] = track_arr_dQdx["SiTracks_Refitted_dQdx.dQdx.error"]
+    ret["dEdx"] = track_arr_dQdx[f"{track_coll}_dQdx.dQdx.value"]
+    ret["dEdxError"] = track_arr_dQdx[f"{track_coll}_dQdx.dQdx.error"]
 
     # build the radiusOfInnermostHit variable
     num_tracks = len(ret["dEdx"])
@@ -609,12 +653,12 @@ def track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Recor
         # select the track states corresponding to itrack
         # pick the state AtFirstHit
         # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
-        ibegin = track_arr[track_coll + "." + "trackStates_begin"][itrack]
-        iend = track_arr[track_coll + "." + "trackStates_end"][itrack]
+        ibegin = track_arr[f"{track_coll}.trackStates_begin"][itrack]
+        iend = track_arr[f"{track_coll}.trackStates_end"][itrack]
 
-        refX = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "referencePoint.x"][ibegin:iend]
-        refY = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "referencePoint.y"][ibegin:iend]
-        location = track_arr_trackStates["_SiTracks_Refitted_trackStates" + "." + "location"][ibegin:iend]
+        refX = track_arr_trackStates[f"_{track_coll}_trackStates.referencePoint.x"][ibegin:iend]
+        refY = track_arr_trackStates[f"_{track_coll}_trackStates.referencePoint.y"][ibegin:iend]
+        location = track_arr_trackStates[f"_{track_coll}_trackStates.location"][ibegin:iend]
 
         istate = np.argmax(location == 2)  # 2 refers to AtFirstHit
 
@@ -625,10 +669,10 @@ def track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Recor
     n_tr = len(ret["type"])
 
     # get the index of the first track state
-    trackstate_idx = prop_data[track_coll][track_coll + ".trackStates_begin"][iev]
+    trackstate_idx = prop_data[track_coll][f"{track_coll}.trackStates_begin"][iev]
     # get the properties of the track at the first track state (at the origin)
     for k in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
-        ret[k] = awkward.to_numpy(prop_data["_SiTracks_Refitted_trackStates"]["_SiTracks_Refitted_trackStates." + k][iev][trackstate_idx])
+        ret[k] = awkward.to_numpy(prop_data[f"_{track_coll}_trackStates"][f"_{track_coll}_trackStates.{k}"][iev][trackstate_idx])
 
     ret["pt"] = awkward.to_numpy(track_pt(ret["omega"], b_field))
     ret["px"] = awkward.to_numpy(np.cos(ret["phi"])) * ret["pt"]
@@ -748,6 +792,167 @@ def add_daughters_to_status1(
     return genparticle_to_hit, genparticle_to_trk
 
 
+def find_surrogate_ancestors_from_record(prop_data: awkward.Record, mc_coll: str, max_depth: int = 8) -> awkward.Array:
+    """Same idea as find_surrogate_ancestors, but decided from the MCParticle record alone.
+
+    The truth jets are built before the per-event loop, so the hit adjacency is not available
+    there. "Was propagated" (an endpoint bit set) stands in for "deposited hits": a parent the
+    simulation tracked to an endpoint is the object the detector had a chance to measure, whereas
+    its status-1 daughters, created outside the world volume, were never tracked at all.
+
+    Returns a jagged boolean mask over MCParticles, one list per event.
+    """
+    PROPAGATED = 0x0F000000
+    gs_all = prop_data[f"{mc_coll}.generatorStatus"]
+    ss_all = prop_data[f"{mc_coll}.simulatorStatus"]
+    pdg_all = prop_data[f"{mc_coll}.PDG"]
+    db_all = prop_data[f"{mc_coll}.daughters_begin"]
+    de_all = prop_data[f"{mc_coll}.daughters_end"]
+    di_all = prop_data[f"_{mc_coll}_daughters/_{mc_coll}_daughters.index"]
+
+    out = []
+    for iev in range(len(gs_all)):
+        gs = np.asarray(awkward.to_numpy(gs_all[iev]))
+        ss = np.asarray(awkward.to_numpy(ss_all[iev])).astype(np.int64) & 0xFFFFFFFF
+        pdg = np.abs(np.asarray(awkward.to_numpy(pdg_all[iev])))
+        db = np.asarray(awkward.to_numpy(db_all[iev]))
+        de = np.asarray(awkward.to_numpy(de_all[iev]))
+        di = np.asarray(awkward.to_numpy(di_all[iev]))
+        n_gp = len(gs)
+        surrogate = np.zeros(n_gp, dtype=bool)
+
+        st1 = (gs == 1) & (pdg != 12) & (pdg != 14) & (pdg != 16)
+        propagated = (ss & PROPAGATED) != 0
+
+        parent_of: Dict[int, int] = {}
+        for ip in range(n_gp):
+            for d in di[db[ip] : de[ip]]:
+                parent_of.setdefault(int(d), ip)
+
+        candidates = set()
+        for idx in np.where(st1 & ~propagated)[0]:
+            cur, depth, seen = int(idx), 0, set()
+            while depth < max_depth:
+                nxt = parent_of.get(cur)
+                if nxt is None or nxt in seen:
+                    break
+                cur, depth = nxt, depth + 1
+                seen.add(cur)
+                if propagated[cur] and not st1[cur]:
+                    candidates.add(cur)
+                    break
+
+        def status1_descendants_propagated(root: int) -> bool:
+            stack, seen = [root], {root}
+            while stack:
+                cur = stack.pop()
+                for d in di[db[cur] : de[cur]]:
+                    d = int(d)
+                    if d in seen:
+                        continue
+                    seen.add(d)
+                    if st1[d] and propagated[d]:
+                        return True
+                    stack.append(d)
+            return False
+
+        candidates = {c for c in candidates if not status1_descendants_propagated(c)}
+        for c in list(candidates):
+            cur, depth = c, 0
+            while depth < max_depth:
+                nxt = parent_of.get(cur)
+                if nxt is None:
+                    break
+                cur, depth = nxt, depth + 1
+                candidates.discard(cur)
+
+        for c in candidates:
+            surrogate[c] = True
+        out.append(surrogate)
+
+    return awkward.Array(out)
+
+
+def find_surrogate_ancestors(gen_features: GenFeatures, genparticle_to_hit: SparseMatrixCOO, max_depth: int = 8) -> np.ndarray:
+    """Mark long-lived parents that should enter the target in place of their status-1 daughters.
+
+    At a 10 TeV muon collider, neutral hadrons such as K0S and Lambda are boosted enough to be
+    tracked through the entire detector by the simulation and then decay far outside it.
+    The parent deposits the energy but is not status 1; its status-1 daughters are never propagated,
+    carry no hits, and so fail the visibility mask and drop out of the target, while remaining in
+    the truth jets, which biases the response low.
+
+    A parent is only used if *none* of its status-1 descendants deposited anything, otherwise
+    taking both the parent and the depositing daughter would double count. Nested candidates are
+    reduced to the deepest one for the same reason.
+    """
+    dau_beg = gen_features["daughters_begin"]
+    dau_end = gen_features["daughters_end"]
+    dau_ind = gen_features["index"]
+    mask_status1 = np.asarray(awkward.to_numpy(gen_features["generatorStatus"])) == 1
+    surrogate = np.zeros(len(mask_status1), dtype=bool)
+    if dau_ind is None:
+        return surrogate
+
+    n_gp = len(dau_beg)
+    parent_of: Dict[int, int] = {}
+    for ip in range(n_gp):
+        for d in dau_ind[dau_beg[ip] : dau_end[ip]]:
+            parent_of.setdefault(int(d), ip)
+
+    has_hits = set(int(gp) for gp in genparticle_to_hit[0])
+
+    # for each status-1 particle with no hits, the nearest non-status-1 ancestor that has some
+    candidates = set()
+    for idx_st1 in np.where(mask_status1)[0]:
+        idx_st1 = int(idx_st1)
+        if idx_st1 in has_hits:
+            continue
+        cur, depth, seen = idx_st1, 0, set()
+        while depth < max_depth:
+            nxt = parent_of.get(cur)
+            if nxt is None or nxt in seen:
+                break
+            cur, depth = nxt, depth + 1
+            seen.add(cur)
+            # a status-1 ancestor is a target particle in its own right, leave it alone
+            if cur in has_hits and not mask_status1[cur]:
+                candidates.add(cur)
+                break
+
+    # drop a candidate if any status-1 descendant of it did deposit: that daughter is already in
+    # the target on its own, and adding the parent as well would count the energy twice
+    def status1_descendants_deposited(root: int) -> bool:
+        stack, seen = [root], {root}
+        while stack:
+            cur = stack.pop()
+            for d in dau_ind[dau_beg[cur] : dau_end[cur]]:
+                d = int(d)
+                if d in seen:
+                    continue
+                seen.add(d)
+                if mask_status1[d] and d in has_hits:
+                    return True
+                stack.append(d)
+        return False
+
+    candidates = {c for c in candidates if not status1_descendants_deposited(c)}
+
+    # if two candidates are nested, keep only the deeper one
+    for c in list(candidates):
+        cur, depth = c, 0
+        while depth < max_depth:
+            nxt = parent_of.get(cur)
+            if nxt is None:
+                break
+            cur, depth = nxt, depth + 1
+            candidates.discard(cur)
+
+    for c in candidates:
+        surrogate[c] = True
+    return surrogate
+
+
 def get_genparticles_and_adjacencies(
     prop_data: awkward.Record,
     hit_data: Dict[str, awkward.Array],
@@ -772,6 +977,13 @@ def get_genparticles_and_adjacencies(
 
     # collect hits of st=1 direct daughters to the st=1 particles
     genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
+
+    # long-lived parents that decayed outside the detector and stand in for st=1 daughters the
+    # simulation never propagated (see find_surrogate_ancestors)
+    if use_surrogate_ancestors:
+        mask_surrogate = find_surrogate_ancestors(gen_features, genparticle_to_hit)
+    else:
+        mask_surrogate = np.zeros(awkward.count(gen_features["PDG"]), dtype=bool)
 
     n_gp = awkward.count(gen_features["PDG"])
     n_track = awkward.count(track_features["type"])
@@ -819,12 +1031,33 @@ def get_genparticles_and_adjacencies(
     # 20% of the hits of a track must come from the genparticle
     gp_in_tracker = np.array(gp_to_track >= 0.2)[:, 0]
 
-    # at least 5% of the energy of the genparticle should be matched to a calorimeter cluster
+    # at least 5% of the energy of the genparticle should be matched to a calorimeter cluster.
+    # gp_to_cluster is in GeV, since the gp_to_hit weights are calibrated hit energies
+    # (see get_hit_matrix_and_genadj), so this really is an energy fraction.
     gp_in_calo = (np.array(gp_to_cluster)[:, 0] / gen_features["energy"]) > 0.05
 
-    # new hit-based visibility mask: genparticles that leave at least 10% of their energy to hits
+    # Hit-based visibility mask (#463). The gp_to_hit weights are calibrated hit energies in GeV,
+    # so gp_energy_in_hits is what the genparticle actually deposited and the first term below is
+    # a true energy fraction.
+    #
+    # The fractional term alone is a shower-containment criterion and so misses MIPs: a muon
+    # deposits a roughly constant few GeV whatever its momentum, so its fraction falls with energy
+    # The absolute term recovers these. The track term does not help the muons (none have a track linked above
+    # the 20% threshold), but it does recover charged hadrons whose calorimeter deposit falls
+    # below the absolute threshold (e.g. low-momentum pions and kaons decaying in the tracker):
+    # their momentum is measured by the tracker even though their shower is sub-threshold.
+    #
+    # The absolute term exists to catch MIPs, which are charged by definition, so restrict it to
+    # charged particles. A neutral that deposits more than the threshold but less than the
+    # fractional cut is one that leaked: nothing measured its momentum and it has no track to
+    # supply it, so asking the model to predict its energy is asking for something unlearnable.
+    gp_charged = np.abs(np.asarray(awkward.to_numpy(gen_features["charge"]), dtype=float)) > 0
     gp_energy_in_hits = np.array(gp_to_hit.sum(axis=1))[:, 0]
-    mask_visible_hit = (gp_energy_in_hits / gen_features["energy"]) > 0.10
+    mask_visible_hit = (
+        ((gp_energy_in_hits / gen_features["energy"]) > visible_energy_fraction)
+        | ((gp_energy_in_hits > visible_energy_deposit) & gp_charged)
+        | gp_in_tracker
+    )
 
     # temporary logging to debug visibility logic
     mask_status1 = gen_features["generatorStatus"] == 1
@@ -836,7 +1069,7 @@ def get_genparticles_and_adjacencies(
     gen_features["gp_to_track"] = np.asarray(gp_to_track)[:, 0]
     gen_features["gp_to_cluster"] = np.asarray(gp_to_cluster)[:, 0]
 
-    mask_visible = awkward.to_numpy(mask_status1 & mask_visible_hit)
+    mask_visible = awkward.to_numpy(mask_status1 & mask_visible_hit) | mask_surrogate
 
     idx_all_masked = np.where(mask_visible)[0]
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
@@ -962,6 +1195,8 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
     # now merge unmatched genparticles to their closest genparticle
     gp_merges_gp0 = []
     gp_merges_gp1 = []
+    dropped_gps = []  # indices removed from the target because they have no track/cluster host
+    dropped_energy = 0.0
     for igp_unmatched in unmatched:
         mask_gp_unmatched[igp_unmatched] = False
 
@@ -973,17 +1208,14 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         else:
             idx_gp_bestcluster = []
 
-        # if the genparticle is not matched to any cluster, then it left a few hits to some other track
-        # this is rare, happens only for low-pT particles and we don't want to try to reconstruct it
+        # If the genparticle is not matched to any cluster, then it left a few hits to some other
+        # track. This happens only for low-pT particles with no calorimeter deposit at all, so it
+        # cannot be represented in the target: every kept genparticle must own a track or cluster
+        # (asserted downstream). Removing it does lose its energy from the target, so record the
+        # drop explicitly here; the two-sided accounting check below depends on it.
         if len(idx_gp_bestcluster) != 1:
-            # raise RuntimeError(
-            #     f"Unmatched genparticle {igp_unmatched} with pt={pt_arr[igp_unmatched]:.2f} "
-            #     f"could not be associated with a unique cluster (found {len(idx_gp_bestcluster)})"
-            # )
-            print(
-                f"Unmatched genparticle {igp_unmatched} with pt={pt_arr[igp_unmatched]:.2f} "
-                f"could not be associated with a unique cluster (found {len(idx_gp_bestcluster)})"
-            )
+            dropped_gps.append(int(igp_unmatched))
+            dropped_energy += float(energy_arr[igp_unmatched])
             continue
 
         idx_gp_bestcluster = idx_gp_bestcluster[0]
@@ -997,11 +1229,13 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
             phi=gpdata.gen_features["phi"][igp_unmatched],
             e=gpdata.gen_features["energy"][igp_unmatched],
         )
+        # read the host from the running arrays, not from gen_features, so that several
+        # unmatched particles merging into the same host accumulate instead of overwriting
         vec1 = vector.obj(
-            pt=gpdata.gen_features["pt"][idx_gp_bestcluster],
-            eta=gpdata.gen_features["eta"][idx_gp_bestcluster],
-            phi=gpdata.gen_features["phi"][idx_gp_bestcluster],
-            e=gpdata.gen_features["energy"][idx_gp_bestcluster],
+            pt=pt_arr[idx_gp_bestcluster],
+            eta=eta_arr[idx_gp_bestcluster],
+            phi=phi_arr[idx_gp_bestcluster],
+            e=energy_arr[idx_gp_bestcluster],
         )
         vec = vec0 + vec1
         pt_arr[idx_gp_bestcluster] = vec.pt
@@ -1026,7 +1260,25 @@ def assign_genparticles_to_obj_and_merge(gpdata: EventData) -> Tuple[EventData, 
         "jet_idx": gpdata.gen_features["jet_idx"][mask_gp_unmatched],
         "particle_number": np.arange(len(idx_all_masked), dtype=np.float32) + 1,
     }
-    assert (np.sum(gen_features_new["energy"]) - np.sum(gpdata.gen_features["energy"])) < 1e-2
+    # The merges conserve energy exactly (hosts accumulate in the running arrays), and the only
+    # particles removed from the target are the explicitly accounted drops above. Check the full
+    # accounting two-sided so that any silent energy loss (a merge overwrite, an unaccounted drop,
+    # a double-count) fails loudly instead of passing a one-sided inequality that can only ever
+    # hold when energy is lost.
+    assert len(gp_merges_gp0) + len(dropped_gps) == len(
+        unmatched
+    ), "every unmatched genparticle must be either merged into a host or explicitly dropped"
+    sum_energy_original = float(np.sum(np.asarray(awkward.to_numpy(gpdata.gen_features["energy"]))))
+    sum_energy_after = float(np.sum(gen_features_new["energy"]))
+    assert abs(sum_energy_after + dropped_energy - sum_energy_original) < 1e-6 * max(1.0, sum_energy_original), (
+        f"genparticle merge energy accounting mismatch: after + dropped = "
+        f"{sum_energy_after + dropped_energy:.6g} GeV, original = {sum_energy_original:.6g} GeV"
+    )
+    if dropped_gps:
+        print(
+            f"Dropped {len(dropped_gps)} unmatched genparticles without a track/cluster host "
+            f"(pT {float(np.sum(pt_arr[dropped_gps])):.1f} GeV, E {dropped_energy:.1f} GeV)"
+        )
 
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
     genparticle_to_hit = filter_adj(gpdata.genparticle_to_hit, genpart_idx_all_to_filtered)
@@ -1231,24 +1483,24 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     prop_data = arrs.arrays(
         [
             mc_coll,
-            "MCParticles.PDG",
-            "MCParticles.momentum.x",
-            "MCParticles.momentum.y",
-            "MCParticles.momentum.z",
-            "MCParticles.mass",
-            "MCParticles.charge",
-            "MCParticles.generatorStatus",
-            "MCParticles.simulatorStatus",
-            "MCParticles.daughters_begin",
-            "MCParticles.daughters_end",
-            "_MCParticles_daughters/_MCParticles_daughters.index",
+            f"{mc_coll}.PDG",
+            f"{mc_coll}.momentum.x",
+            f"{mc_coll}.momentum.y",
+            f"{mc_coll}.momentum.z",
+            f"{mc_coll}.mass",
+            f"{mc_coll}.charge",
+            f"{mc_coll}.generatorStatus",
+            f"{mc_coll}.simulatorStatus",
+            f"{mc_coll}.daughters_begin",
+            f"{mc_coll}.daughters_end",
+            f"_{mc_coll}_daughters/_{mc_coll}_daughters.index",
             track_coll,
-            "_SiTracks_Refitted_trackStates",
+            f"_{track_coll}_trackStates",
             "PandoraClusters",
             "_PandoraClusters_hits/_PandoraClusters_hits.index",
             "_PandoraClusters_hits/_PandoraClusters_hits.collectionID",
             "PandoraPFOs",
-            "SiTracks_Refitted_dQdx",
+            f"{track_coll}_dQdx",
         ]
     )
     calohit_links = arrs.arrays(
@@ -1260,6 +1512,17 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index",
         ]
     )
+    if detector == "maia":
+        # CalohitMCTruthLink references Digi hits, but PandoraClusters references Rec hits.
+        # Since Digi and Rec hits have identical ordering (same index = same cell),
+        # remap the Digi collection IDs in the link to their Rec counterparts.
+        _digi_colls = ["EcalBarrelCollectionDigi", "EcalEndcapCollectionDigi", "HcalBarrelCollectionDigi", "HcalEndcapCollectionDigi"]
+        _rec_colls = ["EcalBarrelCollectionRec", "EcalEndcapCollectionRec", "HcalBarrelCollectionRec", "HcalEndcapCollectionRec"]
+        _digi_to_rec_colid = {collectionIDs[d]: collectionIDs[r] for d, r in zip(_digi_colls, _rec_colls)}
+        _from_colid_key = "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"
+        calohit_links[_from_colid_key] = awkward.Array(
+            [[_digi_to_rec_colid.get(int(x), int(x)) for x in ev] for ev in calohit_links[_from_colid_key]]
+        )
     sitrack_links = arrs.arrays(
         [
             "SiTracksMCTruthLink.weight",
@@ -1286,49 +1549,19 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             ]
         )
     tracker_links = arrs.arrays(tracker_link_branches)
-    mcp_id = collectionIDs["MCParticles"]
+    mcp_id = collectionIDs[mc_coll]
 
     # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
     # to the index in the track/cluster collection
     idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
-    if detector == "clic":
-        b_field = 4.0
-        hit_collections = [
-            "ECALBarrel",
-            "ECALEndcap",
-            "ECALOther",
-            "HCALBarrel",
-            "HCALEndcap",
-            "HCALOther",
-            "MUON",
-            "LumiCal_Hits",
-            "ITrackerHits",
-            "ITrackerEndcapHits",
-            "OTrackerHits",
-            "OTrackerEndcapHits",
-            "VXDTrackerHits",
-            "VXDEndcapTrackerHits",
-        ]
-    elif detector == "cld":
-        b_field = 2.0
-        hit_collections = [
-            "ECALBarrel",
-            "ECALEndcap",
-            "HCALBarrel",
-            "HCALEndcap",
-            "HCALOther",
-            "MUON",
-            "ITrackerHits",
-            "ITrackerEndcapHits",
-            "OTrackerHits",
-            "OTrackerEndcapHits",
-            "VXDTrackerHits",
-            "VXDEndcapTrackerHits",
-        ]
-    else:
-        raise ValueError(f"Unknown detector type: {detector}")
+    try:
+        detector_cfg = EDM4HEP.DETECTORS[detector]
+    except KeyError:
+        raise ValueError(f"Unknown detector type: {detector}. Available detectors: {list(EDM4HEP.DETECTORS.keys())}")
+    b_field = detector_cfg.b_field
+    hit_collections = detector_cfg.hit_collections
 
     hit_data = {}
     for k in hit_collections:
@@ -1337,16 +1570,43 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         else:
             raise KeyError(f"Hit collection {k} not found in the input file! Available collections: {arrs.keys()}")
 
-    # Compute truth MET and jets from status=1 pythia particles
-    mc_pdg = np.abs(prop_data["MCParticles.PDG"])
-    mc_st1_mask = (prop_data["MCParticles.generatorStatus"] == 1) & (mc_pdg != 12) & (mc_pdg != 14) & (mc_pdg != 16)
+    # Compute truth MET and jets from status-1 pythia particles that were actually propagated
+    # through the simulation. The simulatorStatus bitmask records what the simulation did with
+    # each particle (see edm4hep.yaml, edm4hep::MCParticle); 0x0F000000 selects bits 24-27:
+    #   BITStopped = 24, BITLeftDetector = 25, BITDecayedInCalorimeter = 26, BITDecayedInTracker = 27.
+    # Any of them set means Geant4 propagated the particle to an endpoint (stopped, left the
+    # detector, or decayed in the tracker/calorimeter) and it could therefore deposit energy.
+    # Particles with none of these bits were never tracked (e.g. generator particles skipped by
+    # the simulation); they deposit nothing and can never enter the target, so including them in
+    # the truth reference biases the target/truth response down. Bits 28-30 (vertex-not-parent-
+    # endpoint, backscatter, created-in-simulation) and the slcio conversion artifact on bit 31
+    # are deliberately not used.
+    mc_pdg = np.abs(prop_data[f"{mc_coll}.PDG"])
+    mc_st1_mask = (
+        (prop_data[f"{mc_coll}.generatorStatus"] == 1)
+        & (mc_pdg != 12)
+        & (mc_pdg != 14)
+        & (mc_pdg != 16)
+        & ((prop_data[f"{mc_coll}.simulatorStatus"] & 0x0F000000) != 0)
+    )
+    # A parent the simulation propagated, whose status-1 daughters it did not, is the object the
+    # detector actually saw: the daughters were created outside the world volume. Dropping the
+    # daughters (above) removes their energy from the reference even though the parent's shower is
+    # sitting in the calorimeter, so the reference undercounts what is measurable. Adding the
+    # parent instead keeps the energy and matches what the target can contain. Its four-momentum
+    # is the sum of the daughters', so this is not double counting: the daughters are already
+    # excluded by the propagated requirement.
+    if use_surrogate_ancestors:
+        mc_surrogate_mask = find_surrogate_ancestors_from_record(prop_data, mc_coll)
+        mc_st1_mask = mc_st1_mask | mc_surrogate_mask
+
     mc_st1_p4 = vector.awk(
         awkward.zip(
             {
-                "px": prop_data["MCParticles.momentum.x"][mc_st1_mask],
-                "py": prop_data["MCParticles.momentum.y"][mc_st1_mask],
-                "pz": prop_data["MCParticles.momentum.z"][mc_st1_mask],
-                "mass": prop_data["MCParticles.mass"][mc_st1_mask],
+                "px": prop_data[f"{mc_coll}.momentum.x"][mc_st1_mask],
+                "py": prop_data[f"{mc_coll}.momentum.y"][mc_st1_mask],
+                "pz": prop_data[f"{mc_coll}.momentum.z"][mc_st1_mask],
+                "mass": prop_data[f"{mc_coll}.mass"][mc_st1_mask],
             }
         )
     )
@@ -1621,7 +1881,13 @@ def parse_args() -> Any:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, help="Input file ROOT file", required=True)
     parser.add_argument("--outpath", type=str, default="raw", help="output path")
-    parser.add_argument("--detector", type=str, default="clic", help="detector type (clic, cld)")
+    parser.add_argument(
+        "--detector",
+        type=str,
+        default="clic",
+        choices=list(EDM4HEP.DETECTORS.keys()),
+        help=f"detector scenario from mlpf/conf.py ({', '.join(EDM4HEP.DETECTORS.keys())})",
+    )
     parser.add_argument("--first-event", type=int, default=0, help="first event to process")
     parser.add_argument("--num-events", type=int, default=-1, help="number of events to process")
 
@@ -1646,4 +1912,23 @@ def process(args: Any) -> None:
 
 if __name__ == "__main__":
     args = parse_args()
+    if args.detector == "maia":
+        # override global collection names (find a better way to do this)
+        mc_coll = "MCParticle"
+        tracker_hit_relations = {
+            "IBTrackerHits": "IBTrackerHitsRelations",
+            "IETrackerHits": "IETrackerHitsRelations",
+            "OBTrackerHits": "OBTrackerHitsRelations",
+            "OETrackerHits": "OETrackerHitsRelations",
+            "VBTrackerHits": "VBTrackerHitsRelations",
+            "VETrackerHits": "VETrackerHitsRelations",
+        }
+        tracker_hit_sim = {
+            "IBTrackerHits": "InnerTrackerBarrelCollection",
+            "IETrackerHits": "InnerTrackerEndcapCollection",
+            "OBTrackerHits": "OuterTrackerBarrelCollection",
+            "OETrackerHits": "OuterTrackerEndcapCollection",
+            "VBTrackerHits": "VertexBarrelCollection",
+            "VETrackerHits": "VertexEndcapCollection",
+        }
     process(args)
