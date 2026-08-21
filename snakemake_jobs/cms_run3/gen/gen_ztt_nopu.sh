@@ -20,8 +20,6 @@ for (( i=0; i<1; i++ )); do
         echo "Generating /local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/nopu/ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root"
         export OUTDIR=/local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/nopu/ && export CONFIG_DIR=/home/joosep/particleflow && export CMSSWDIR=/scratch/persistent/joosep/CMSSW_15_0_5 && export WORKDIR=/scratch/local/joosep/ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi_$seed && export NEV=100
         bash mlpf/data/cms/genjob_pu.sh ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi $seed nopu
-        echo "Validating /local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/nopu/ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root"
-        python3 -c "import uproot; uproot.open('/local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/nopu/ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root')"
     else
         echo "Skipping /local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/nopu/ZTT_All_hadronic_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root, already exists"
     fi

@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 import numpy as np
-from utils_edm import X_FEATURES_CL, X_FEATURES_TRK, Y_FEATURES, generate_examples, split_sample, NUM_SPLITS
+from mlpf.heptfds.edm4hep_utils.utils_pf import X_FEATURES_CL, X_FEATURES_TRK, Y_FEATURES, generate_examples, split_sample, NUM_SPLITS
 
 import tensorflow_datasets as tfds
 
@@ -21,7 +21,7 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "2.5.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.0"))
     RELEASE_NOTES = {
         "1.3.0": "Update stats to ~1M events",
         "1.4.0": "Fix ycand matching",
@@ -31,6 +31,8 @@ class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
         "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",
         "2.5.0": "Use 10 splits, skip 2.4.0 to unify with CMS datasets",
         "3.0.0": "New generation with v1.2.4_key4hep_2025-05-29_CLIC_819e4e",
+        "3.1.0": "New generation with v1.2.5_key4hep_2025-05-29 500k events",
+        "3.2.0": "add particle_number to Y_FEATURES",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
@@ -76,9 +78,11 @@ class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
             ),
         )
 
+    # Abstract method needs to be specified
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
         return split_sample(Path(path / "p8_ee_WW_fullhad_ecm380/"), self.builder_config, num_splits=NUM_SPLITS)
 
+    # Abstract method needs to be specified
     def _generate_examples(self, files):
         return generate_examples(files)

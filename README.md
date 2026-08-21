@@ -1,124 +1,144 @@
-## **TLDR; I just want to run the code**
-This runs the data preparation and training on a very small sample, so you can see how to run the code:
-```
-apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cld.sh
-apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cms.sh
-```
-
 ### **Summary**
 
 **ML-based particle flow (MLPF)** focuses on developing full event reconstruction for particle detectors using computationally scalable and flexible machine learning models. The project aims to improve particle flow reconstruction across various detector environments, including CMS, as well as future detectors via Key4HEP.
 We build on existing, open-source simulation software by the experimental collaborations.
 
 <p float="left">
-  <img src="images/schematic.png" alt="High-level overview" width="600"/>
+  <img src="images/diagram.svg" alt="High-level overview" width="800"/>
 </p>
+
+---
+
+### **TLDR; I just want to run the code**
+You can use `uv` to set up the repo and test that everything works:
+```
+git clone --recurse-submodules https://github.com/jpata/particleflow.git
+uv sync --project envs/ort-gpu
+uv run ./scripts/local_test_cld.sh
+uv run ./scripts/local_test_cms.sh
+```
+
+Alternatively, you can use a prepared container:
+```
+apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cld.sh
+apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cms.sh
+```
+
+
+
+### **Datasets**
+
+If you wish to train on pre-made datasets, you can download them from the [Hugging Face Hub](https://huggingface.co/datasets/jpata/particleflow).
+To download a specific dataset and split (e.g., CLD, PF setup, configuration split 1):
+```bash
+uv run hf download jpata/particleflow \
+  --include "tensorflow_datasets/cld/cld_edm_*_pf/1/*" \
+  --local-dir data/tfds \
+  --repo-type dataset
+```
+This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_*_pf/1/`.
+
+### **Dataset Upload**
+
+To upload a generated dataset to the Hugging Face Hub:
+```bash
+uv run python3 scripts/upload_hf.py --repo jpata/particleflow --spec particleflow_spec.yaml clic 1
+```
+
+### **Training**
+
+Run the training on the downloaded data configuration split
+```
+uv run \
+    python mlpf/pipeline.py \
+    --spec-file particleflow_spec.yaml \
+    --production cld \
+    --model-name pyg-cld-v1 \
+    --data-dir data/tfds/tensorflow_datasets/cld \
+    train \
+    --data_config 1 \
+    --gpu_batch_multiplier 4 \
+    --gpus 1
+```
+
+### **Model Upload**
+
+To upload a trained model to the Hugging Face Hub:
+```bash
+uv run python3 scripts/upload_model_hf.py experiments/pyg-clic-hits-v1_clic_20260328_144021_479374 --version v3.1.0
+```
+
+### **Model Download & Evaluation**
+
+To download a specific model (e.g., CLD, cluster-based, version v3.1.0) and run evaluation on a sample ROOT file:
+
+1. Download the model files from the Hugging Face Hub:
+```bash
+uv run hf download jpata/particleflow \
+  --include "cld/clusters/v3.1.0/pyg-cld-v1_cld_20260328_101206_533260/*" \
+  --local-dir models \
+  --repo-type model
+```
+
+2. Run the evaluation script:
+```bash
+
+mkdir -p local_test_data/cld/p8_ee_ttbar_ecm365/root
+cd local_test_data/cld/p8_ee_ttbar_ecm365/root
+wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9/gen/root/reco_p8_ee_ttbar_ecm365_300000.root
+cd ../../..
+
+uv run python3 mlpf/standalone_eval/key4hep/evaluator.py \
+  --input local_test_data/cld/p8_ee_ttbar_ecm365/root/reco_p8_ee_ttbar_ecm365_300000.root \
+  --checkpoint models/cld/clusters/v3.1.0/pyg-cld-v1_cld_20260328_101206_533260/checkpoints/best_weights.pth \
+  --detector cld \
+  --outpath eval_results.parquet
+```
+The input ROOT file should be in the [EDM4hep format](https://github.com/key4hep/EDM4hep).
+
+## **End-to-end workflow: dataset generation and model training**
+
+The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration. Apptainer images are used to provide the software for the steps for different detetors.
+
+```bash
+#ensure all gen configs are downloaded
+git submodule update --init --recursive
+
+# install pixi, restart your shell or source your .bashrc after this. only do once.
+curl -fsSL https://pixi.sh/install.sh | bash
+
+# copy the configuration for your site. only do once.
+ln -s configs/{local,tallinn,lxplus}/pixi.toml pixi.toml
+
+# initalize the orhcestrator python environment. only do this once.
+pixi run init
+
+# generate the snakefile (will overwrite the defaults)
+PROD={cms_run3,clic,cld} pixi run snakefile
+
+# run the steps (this will take many days and thousands of jobs), so run inside screen or tmux
+PROD={cms_run3,clic,cld} pixi run gen
+PROD={cms_run3,clic,cld} pixi run post
+PROD={cms_run3,clic,cld} pixi run tfds
+PROD={cms_run3,clic,cld} pixi run train
+```
 
 ---
 
 ### **Publications**
 
-Below is the development timeline of MLPF by our team, ranging from initial proofs of concept to full detector simulations and fine-tuning studies.
+The following publications trace the development of MLPF from early proofs of concept to full detector simulations and fine-tuning studies across detectors.
 
-**2021: First full-event GNN demonstration of MLPF**
-* **Paper:** [MLPF: efficient machine-learned particle-flow reconstruction using graph neural networks](https://doi.org/10.1140/epjc/s10052-021-09158-w) (Eur. Phys. J. C)
-* **Focus:** Initial idea with a GNN and scalable graph building.
-* **Code:** [v1.1](https://zenodo.org/records/4559587)
-* **Dataset:** [Zenodo Record](https://doi.org/10.5281/zenodo.4559324)
-
-**2021: First demonstration in CMS Run 3**
-* **Paper:** [Machine Learning for Particle Flow Reconstruction at CMS](http://dx.doi.org/10.1088/1742-6596/2438/1/012100) (J. Phys. Conf. Ser.)
-* **Focus:** First demonstration of feasibility within CMS.
-* **Detector Performance Note:** [CERN-CMS-DP-2021-030](https://cds.cern.ch/record/2792320)
-
-**2022: Improved performance in CMS Run 3**
-* **Detector Performance Note:** [CERN-CMS-DP-2022-061](http://cds.cern.ch/record/2842375)
-* **Focus:** We showed that training against a generator-level target can improve performance in CMS.
-
-**2024: Improved performance with full simulation for future colliders**
-* **Paper:** [Improved particle-flow event reconstruction with scalable neural networks for current and future particle detectors](https://doi.org/10.1038/s42005-024-01599-5) (Communications Physics)
-* **Focus:** Improved event-level performance in full simulation for future colliders.
-* **Code:** [v1.6.2](https://zenodo.org/records/10928968)
-* **Results:** [Zenodo Record](https://doi.org/10.5281/zenodo.10567397)
-
-**2025: Fine-tuning across detectors**
-* **Paper:** [Fine-tuning machine-learned particle-flow reconstruction for new detector geometries in future colliders](https://doi.org/10.1103/PhysRevD.111.092015) (Phys. Rev. D)
-* **Focus:** Showing that the amount of training data can be reduced by 10x by fine-tuning.
-* **Code:** [v2.3.0](https://zenodo.org/records/14930299)
-
-**2026: CMS Run 3 full results**
-* **Detector Performance Note:** [CERN-CMS-DP-2025-033](https://cds.cern.ch/record/2937578)
-* **Focus:** Improve jet performance over baseline, first validation on real data.
-* **Paper:** [CMS Run 3 paper](https://arxiv.org/abs/2601.17554) (submitted to EPJC)
-* **Code:** [v2.4.0](https://zenodo.org/records/15573658)
+* [2021] First full-event GNN demonstration of MLPF: [Paper](https://doi.org/10.1140/epjc/s10052-021-09158-w) [Code](https://zenodo.org/records/4559587) [Dataset](https://doi.org/10.5281/zenodo.4559324)
+* [2021] First demonstration in CMS Run 3: [Paper](http://dx.doi.org/10.1088/1742-6596/2438/1/012100) [CMS-DP](https://cds.cern.ch/record/2792320)
+* [2022] Improved performance in CMS Run 3: [CMS-DP](http://cds.cern.ch/record/2842375)
+* [2024] Improved performance with full simulation for future colliders: [Paper](https://doi.org/10.1038/s42005-024-01599-5) [Code](https://zenodo.org/records/10928968) [Results](https://doi.org/10.5281/zenodo.10567397)
+* [2025] Fine-tuning across detectors: [Paper](https://doi.org/10.1103/PhysRevD.111.092015) [Code](https://zenodo.org/records/14930299)
+* [2026] CMS Run 3 full results: [Paper](https://arxiv.org/abs/2601.17554) [CMS-DP](https://cds.cern.ch/record/2937578) [Code](https://zenodo.org/records/15573658)
 
 ---
 
-### **Datasets**
-
-If you wish to train on pre-made datasets, you can download them from the [Hugging Face Hub](https://huggingface.co/datasets/jpata/particleflow).
-To download a specific dataset and split (e.g., CLD ttbar PF split 1):
-```bash
-hf download jpata/particleflow \
-  --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/*" \
-  --local-dir data/tfds \
-  --repo-type dataset
-```
-This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_ttbar_pf/1/`.
-
-## **Getting Started with Pixi & Snakemake**
-
-The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment management and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration. We provide site-specific configurations for Tallinn, LXPlus, and local execution.
-
-### **1. Install Pixi**
-```bash
-curl -fsSL https://pixi.sh/install.sh | bash
-# Restart your shell or source your .bashrc
-```
-
-### **2. Select Your Site**
-Pick the site that you are using. Supported sites are Tallinn, lxplus, or local.
-
-```bash
-ln -s configs/{local,tallinn,lxplus}/pixi.toml pixi.toml
-```
-
-### **3. Initialize Your Site**
-Configure the environment for your specific cluster. This sets up the necessary Snakemake profiles and site defaults.
-```bash
-pixi run init
-```
-
-### **4. Generate the Workflow**
-Generate the `Snakefile` for a production campaign.
-```bash
-PROD=cms_run3 STEPS=gen,post,tfds,train pixi run snakefile
-```
-You can inspect `snakemake_jobs/cms_run3/Snakefile` and the related scripts to understand the workflow.
-
-### **5. Execute the Workflow**
-Launch the workflow on the batch system. You can run the steps individually.
-```bash
-PROD=cms_run3 pixi run gen
-PROD=cms_run3 pixi run post
-PROD=cms_run3 pixi run tfds
-PROD=cms_run3 pixi run train
-```
-On clusters like Tallinn, you can run the `gen` and `post` steps in batches using the `BATCH` environment variable:
-```bash
-PROD=cms_run3 BATCH=1/10 pixi run gen
-```
-It is recommended to run this inside a `tmux` or `screen` session.
-
-### **6. Validation & Plots**
-To run the validation plotting workflow:
-```bash
-PROD=cms_run3 pixi run validation
-```
-
----
-
-# **Citations and Reuse**
+### **Citations and Reuse**
 
 You are welcome to reuse the code in accordance with the [LICENSE](https://github.com/jpata/particleflow/blob/main/LICENSE).
 

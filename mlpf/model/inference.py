@@ -10,6 +10,7 @@ import mplhep
 import torch
 import tqdm
 import vector
+import numpy as np
 from mlpf.jet_utils import match_two_jet_collections
 from mlpf.plotting.plot_utils import (
     # get_class_names,
@@ -31,7 +32,7 @@ from mlpf.plotting.plot_utils import (
 )
 
 from mlpf.logger import _logger
-from mlpf.model.utils import unpack_predictions, unpack_target
+from mlpf.model.utils import unpack_target
 
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
@@ -43,27 +44,19 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     # run model on batch
     batch = batch.to(rank)
-    ypred = model(batch.X, batch.mask)
 
-    # convert all outputs to float32 in case running in float16 or bfloat16
-    ypred = tuple([y.to(torch.float32) for y in ypred])
+    if hasattr(model, "module"):
+        model_module = model.module
+    else:
+        model_module = model
 
-    # transform log (pt/elempt) -> pt
-    pred_cls = torch.argmax(ypred[0], axis=-1)
-    ypred[2][..., 0] = torch.exp(ypred[2][..., 0]) * batch.X[..., 1]
-    ypred[2][..., 0][pred_cls == 0] = 0
-
-    # transform log (E/elemE) -> E
-    ypred[2][..., 4] = torch.exp(ypred[2][..., 4]) * batch.X[..., 5]
-    ypred[2][..., 4][pred_cls == 0] = 0
+    ypred = model_module.predict_particles(batch.X, batch.mask)
 
     batch.ytarget[..., 2] = batch.ytarget_pt_orig
     batch.ytarget[..., 6] = batch.ytarget_e_orig
 
-    ytarget = unpack_target(batch.ytarget.to(torch.float32), model)
-    ycand = unpack_target(batch.ycand.to(torch.float32), model)
-    ypred = unpack_predictions(ypred)
-    ypred["ispu"] = torch.softmax(ypred["ispu"], axis=-1)[:, :, -1]
+    ytarget = unpack_target(batch.ytarget.to(torch.float32), model_module)
+    ycand = unpack_target(batch.ycand.to(torch.float32), model_module)
 
     genjets_msk = batch.genjets[:, :, 0].cpu() > jet_ptcut
     genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
@@ -77,20 +70,20 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
             }
         )
     )
-    genjets = vector.awk(awkward.zip({"px": genjets.px, "py": genjets.py, "pz": genjets.pz, "E": genjets.e}))
+    genjets = vector.awk(awkward.zip({"px": genjets.px, "py": genjets.py, "pz": genjets.pz, "E": genjets.E}))
 
     jets_coll = {}
     jets_coll["gen"] = genjets
 
-    # we need to turn 3d-padded arrays into awkward arrays
+    # now cluster jets
     # first, flatten events across batch dim with padding mask
-    X = batch.X[batch.mask].cpu().contiguous().numpy()
+    X = batch.X[batch.mask].cpu().float().contiguous().numpy()
     for k, v in ytarget.items():
-        ytarget[k] = v[batch.mask].detach().cpu().contiguous().numpy()
+        ytarget[k] = v[batch.mask].detach().cpu().float().contiguous().numpy()
     for k, v in ycand.items():
-        ycand[k] = v[batch.mask].detach().cpu().contiguous().numpy()
+        ycand[k] = v[batch.mask].detach().cpu().float().contiguous().numpy()
     for k, v in ypred.items():
-        ypred[k] = v[batch.mask].detach().cpu().contiguous().numpy()
+        ypred[k] = v[batch.mask].detach().cpu().float().contiguous().numpy()
 
     # second, create awkward arrays according to the counts of not padded elements
     counts = torch.sum(batch.mask, axis=1).cpu().numpy()
@@ -101,25 +94,33 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     Xs = awkward.unflatten(awkward.from_numpy(X), counts)
 
     # now cluster jets
-    for typ, ydata in zip(["cand", "target", "pred", "pred_nopu"], [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]]):
+    for typ, ydata in zip(
+        ["cand", "target", "pred", "pred_nopu"],
+        [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]],
+    ):
         msk = ydata["cls_id"] != 0
         # placeholder cut on the PU frac prediction
         if typ == "pred_nopu":
             msk1 = ydata["ispu"] < 0.8
             msk = msk & msk1
-        vec = vector.awk(
-            awkward.zip(
-                {
-                    "pt": ydata["pt"][msk],
-                    "eta": ydata["eta"][msk],
-                    "phi": ydata["phi"][msk],
-                    "e": ydata["energy"][msk],
-                }
-            )
+
+        pt = ydata["pt"][msk]
+        eta = ydata["eta"][msk]
+        phi = ydata["phi"][msk]
+        energy = ydata["energy"][msk]
+
+        vec = awkward.zip(
+            {
+                "px": pt * np.cos(phi),
+                "py": pt * np.sin(phi),
+                "pz": pt * np.sinh(eta),
+                "E": energy,
+            }
         )
-        cluster = fastjet.ClusterSequence(vec.to_xyzt(), jetdef)
+
+        cluster = fastjet.ClusterSequence(vec, jetdef)
         jets = cluster.inclusive_jets(min_pt=jet_ptcut)
-        jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.e}))
+        jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.E}))
 
     matched_jets = awkward.Array(
         {

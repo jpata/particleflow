@@ -15,25 +15,39 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [cms, cld]
+        target: [cms, cld, clic]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache pip packages
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y wget gcc g++ build-essential curl
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Cache uv
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/uv.lock') }}
           restore-keys: |
-            ${{ runner.os }}-pip-
+            ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: uv pip install --system .
 
-      - name: Install system dependencies
-        run: apt-get update && apt-get install -y wget gcc g++ build-essential
+      - name: Sync ONNX environment
+        run: uv sync --project envs/ort-cpu
 
       - name: Run ${{ matrix.target }} test
         run: bash scripts/local_test_${{ matrix.target }}.sh
+
+      - name: Upload validation plots
+        if: always() && matrix.target != 'cms'
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-plots-${{ matrix.target }}
+          path: plots/**
+          if-no-files-found: warn

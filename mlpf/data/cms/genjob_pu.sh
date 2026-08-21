@@ -58,6 +58,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Staggered start to avoid thundering herd on CVMFS
+sleep $((1 + RANDOM % 60))
+
+# Pre-flight CVMFS check
+CVMFS_PATH="/cvmfs/cms.cern.ch/cmsset_default.sh"
+SUCCESS=0
+for delay in 5 10 30; do
+    if [ -f "$CVMFS_PATH" ]; then
+        SUCCESS=1
+        break
+    fi
+    echo "CVMFS not found at $CVMFS_PATH on $(hostname). Retrying in ${delay}s..."
+    sleep $delay
+done
+
+if [ $SUCCESS -eq 0 ]; then
+    echo "Error: CVMFS not available on $(hostname) after multiple retries."
+    exit 1
+fi
+
 env
 source /cvmfs/cms.cern.ch/cmsset_default.sh
 

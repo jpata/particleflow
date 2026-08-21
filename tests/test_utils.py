@@ -1,3 +1,7 @@
+"""
+Spec: Unit tests for 'mlpf.utils'. Focuses on 'resolve_path' for recursive string interpolation in configs (e.g., resolving '${project.workspace_dir}' within other strings). Tests nested dictionary resolution and handling of unresolved/missing keys.
+"""
+
 import unittest
 from mlpf.utils import resolve_path
 

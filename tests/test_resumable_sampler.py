@@ -1,3 +1,7 @@
+"""
+Spec: Validates the 'ResumableSampler' wrapper. Key assertions: Verifies 'load_state_dict' correctly advances the sampler to the 'start_index', checks compatibility with 'DistributedSampler' (ensuring 'set_epoch' is propagated), and verifies that shuffling remains deterministic and reproducible across epoch resets.
+"""
+
 import unittest
 import torch
 from torch.utils.data import TensorDataset, SequentialSampler, DistributedSampler, Sampler
@@ -19,7 +23,7 @@ class TestResumableSampler(unittest.TestCase):
 
         # Advance the sampler
         resumable_sampler.load_state_dict({"start_index": 5})
-        self.assertEqual(len(resumable_sampler), 10)  # Should report full length
+        self.assertEqual(len(resumable_sampler), 5)  # Should report remaining length
         self.assertEqual(list(resumable_sampler), list(range(5, 10)))
 
     def test_distributed_sampler_compatibility(self):

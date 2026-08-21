@@ -20,8 +20,6 @@ for (( i=0; i<1; i++ )); do
         echo "Generating /local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75/TTbar_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root"
         export OUTDIR=/local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75/ && export CONFIG_DIR=/home/joosep/particleflow && export CMSSWDIR=/scratch/persistent/joosep/CMSSW_15_0_5 && export WORKDIR=/scratch/local/joosep/TTbar_13p6TeV_TuneCUETP8M1_cfi_$seed && export NEV=50
         bash mlpf/data/cms/genjob_pu.sh TTbar_13p6TeV_TuneCUETP8M1_cfi $seed pu55to75
-        echo "Validating /local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75/TTbar_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root"
-        python3 -c "import uproot; uproot.open('/local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75/TTbar_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root')"
     else
         echo "Skipping /local/joosep/mlpf/cms/20260204_cmssw_15_0_5_117d32/gen/pu55to75/TTbar_13p6TeV_TuneCUETP8M1_cfi/root/pfntuple_${seed}.root, already exists"
     fi

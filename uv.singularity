@@ -1,0 +1,79 @@
+Bootstrap: docker
+From: nvidia/cuda:12.8.0-cudnn-devel-ubuntu22.04
+
+%labels
+    Maintainer: Joosep Pata
+    Version: 3.1.0
+    Description: Standalone Apptainer image for particleflow with Python environment managed by uv
+
+%files
+    pyproject.toml /opt/particleflow/pyproject.toml
+    uv.lock /opt/particleflow/uv.lock
+
+%post
+    export DEBIAN_FRONTEND=noninteractive
+    export TZ=Etc/UTC
+
+    # Install system dependencies
+    apt-get update -y && apt-get install -y --no-install-recommends \
+        tzdata \
+        make \
+        cmake \
+        parallel \
+        gcc \
+        g++ \
+        gfortran \
+        binutils \
+        libblas3 \
+        libblas-dev \
+        liblapack3 \
+        liblapack-dev \
+        libatlas3-base \
+        libatlas-base-dev \
+        libtcmalloc-minimal4 \
+        graphviz \
+        graphviz-dev \
+        git \
+        wget \
+        curl \
+        ca-certificates \
+        libglx-mesa0 \
+        libgl1 \
+        texlive \
+        libsparsehash-dev \
+        libboost-all-dev \
+        && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    # Install uv
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="/root/.local/bin:$PATH"
+
+    # Create the virtual environment using uv
+    cd /opt/particleflow
+    uv sync --frozen --no-install-project --python 3.11
+
+    # Install specific workspace members to their own environments
+    # This ensures they are installed to different paths
+    uv sync --python 3.11 --project envs/ort-cpu
+    uv sync --python 3.11 --project envs/ort-gpu
+
+    # Cleanup uv cache to reduce image size
+    uv cache clean
+
+%environment
+    export LC_ALL=C.UTF-8
+    export PATH="/opt/particleflow/.venv/bin:$PATH"
+
+%runscript
+    exec /bin/bash "$@"
+
+%test
+    export PATH="/opt/particleflow/.venv/bin:$PATH"
+    # Verify PyTorch installation and version
+    echo "check torch" && python3 -c "import torch; print('PyTorch version:', torch.__version__)"
+    # Verify Git availability
+    echo "check git" && git --version
+    # Verify key HEP and ML libraries
+    echo "check uproot" && python3 -c "import uproot; print('Uproot version:', uproot.__version__)"
+    # Ensure the virtual environment is correctly activated in the PATH
+    which python3 | grep "/opt/particleflow/.venv/bin/python3"

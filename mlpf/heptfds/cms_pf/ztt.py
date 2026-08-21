@@ -23,7 +23,7 @@ _CITATION = """
 class CmsPfZtt(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     """DatasetBuilder for cms_pf_ztt dataset."""
 
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.0.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.0"))
     RELEASE_NOTES = {
         "2.5.0": "Remove neutrinos from genjets, split to 10",
         "2.5.1": "Associate ele with GSF first",
@@ -32,6 +32,7 @@ class CmsPfZtt(tfds.core.GeneratorBasedBuilder, skip_registration=True):
         "2.7.1": "Use fixed split_caloparticle",
         "2.8.0": "Add Pythia",
         "3.0.0": "updated beamspot, 13.6 TeV",
+        "3.2.0": "add particle_number to Y_FEATURES",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ztt ~/tensorflow_datasets/

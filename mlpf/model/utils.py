@@ -19,6 +19,8 @@ def unpack_target(y, model):
     ret["charge"] = torch.clamp((y[..., 1] + 1).to(dtype=torch.float32), 0, 2)  # -1, 0, 1 -> 0, 1, 2
 
     for i, feat in enumerate(Y_FEATURES):
+        if i >= y.shape[-1]:
+            break
         if i >= 2:  # skip the cls and charge as they are defined above
             ret[feat] = y[..., i].to(dtype=torch.float32)
     ret["phi"] = torch.atan2(ret["sin_phi"], ret["cos_phi"])
@@ -36,7 +38,7 @@ def unpack_target(y, model):
     return ret
 
 
-@torch.compile
+# @torch.compile
 def unpack_predictions(preds):
     ret = {}
     ret["cls_binary"], ret["cls_id_onehot"], ret["momentum"], ret["ispu"] = preds
@@ -114,16 +116,24 @@ def print_optimizer_stats(optimizer, stage):
 
 
 def load_checkpoint(checkpoint, model, optimizer, strict=True, start_step=0):
+    logging.info(f"Loading checkpoint with strict={strict}")
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        model.module.load_state_dict(checkpoint["model_state_dict"], strict=strict)
+        msg = model.module.load_state_dict(checkpoint["model_state_dict"], strict=strict)
     else:
-        model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
+        msg = model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
+
+    if len(msg.missing_keys) > 0:
+        logging.warning(f"Missing keys in model state dict: {msg.missing_keys}")
+    if len(msg.unexpected_keys) > 0:
+        logging.warning(f"Unexpected keys in model state dict: {msg.unexpected_keys}")
 
     if strict:
         print_optimizer_stats(optimizer, "Before loading optimizer state")
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         logging.info("Loaded optimizer state")
         print_optimizer_stats(optimizer, "After loading optimizer state")
+    else:
+        logging.info("Skipping optimizer state loading because strict=False")
 
     if "rng_state" in checkpoint["extra_state"]:
         torch.set_rng_state(checkpoint["extra_state"]["rng_state"].cpu())

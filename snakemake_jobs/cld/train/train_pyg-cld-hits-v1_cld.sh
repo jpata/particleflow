@@ -19,4 +19,4 @@ export KERAS_BACKEND=torch
 export TORCH_COMPILE_DISABLE=1
 env
 nvidia-smi
-python3 mlpf/pipeline.py --spec-file particleflow_spec.yaml --model-name pyg-cld-hits-v1 --production-name cld train --gpus 1 --make_plots True --val_freq 1000
+python3 mlpf/pipeline.py --spec-file particleflow_spec.yaml --model-name pyg-cld-hits-v1 --production-name cld train --gpus 1

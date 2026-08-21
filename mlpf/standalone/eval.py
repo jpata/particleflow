@@ -9,6 +9,12 @@ import argparse
 import sys
 import os
 import matplotlib
+import datetime
+import math
+from puppi import compute_puppi_weights, deltaR_matrix
+import tqdm
+
+from comet_ml import Experiment
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -29,18 +35,68 @@ from mlpf.jet_utils import match_jets
 from mlpf.standalone.dsl import parse_dsl
 
 
+DSL_DESCRIPTION = """\
+Model DSL:
+  The --dsl option describes the model as input|backbone|output.
+
+  Input:
+    i(input_dim,embedding_dim,width,type)
+
+  Backbone layers:
+    h(...) = HEPT, g(...) = global, s(...) = standard, f(...) = fastformer
+    Layer args are num_heads,embedding_dim,width, with optional pos=T and
+    dropout=... . HEPT also accepts block_size, n_hashes, num_regions, and
+    num_w_per_dist.
+
+  Backbone composition:
+    Use + to chain different layers and *N to repeat one layer. A plain
+    backbone is shared by all heads. Add a branch dictionary to give one or
+    more heads their own layers after the shared part.
+
+  Output:
+    o(num_classes,width,type) or o(num_classes,width,type,rg=linear)
+
+Examples:
+  --dsl 'i(55,128,256,default)|g(16,128,512)*3|o(8,256,default)'
+  --dsl 'i(55,128,256,default)|h(16,128,512,pos=T)*6|o(8,256,default,rg=linear)'
+  --dsl 'i(55,128,256,default)|h(16,128,512)*2+g(16,128,512)+s(16,128,512)|o(8,256,default)'
+  --dsl 'i(55,128,256,default)|h(16,128,512)*2+{pid:g(16,128,512),reg:s(16,128,512),binary:f(16,128,512)}|o(8,256,default)'
+"""
+
+
+def bucket_padding_multiple(config, attention_type):
+    bucket_sizes = []
+    if config is None:
+        if attention_type in {"hept", "gnnlsh"}:
+            bucket_sizes.append(100)
+        return math.lcm(*bucket_sizes) if bucket_sizes else None
+
+    for layers in config.backbone.values():
+        for layer in layers:
+            if layer.type == "hept":
+                bucket_sizes.append(layer.block_size)
+            elif layer.type == "gnnlsh":
+                bucket_sizes.append(getattr(layer, "bin_size", getattr(layer, "bucket_size", 100)))
+
+    bucket_sizes = [int(size) for size in bucket_sizes if int(size) > 0]
+    return math.lcm(*bucket_sizes) if bucket_sizes else None
+
+
 def get_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter, epilog=DSL_DESCRIPTION)
     parser.add_argument("--data-dir", type=str, default=None, help="Path to tfds directory")
     parser.add_argument(
         "--attention-type",
         type=str,
-        default="global",
+        default="standard",
         choices=["hept", "global", "standard", "fastformer"],
         help="Attention type (ignored if --dsl is used)",
     )
-    parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string")
+    parser.add_argument("--dsl", type=str, default=None, help="Model architecture DSL string; see examples below")
     parser.add_argument("--show-attention", action="store_true", help="Save attention visualization")
+    parser.add_argument("--comet", action="store_true", help="Track loss using comet")
+    parser.add_argument("--puppi", action="store_true", help="Compute and save PUPPI weights during evaluation")
+    parser.add_argument("--eval", action=None, help="Run eval only, pass the path to the pth file stored")
     return parser.parse_args()
 
 
@@ -62,46 +118,79 @@ def med_iqr(arr):
     return p50, iqr
 
 
-def evaluate(model, loader, device):
+def evaluate(model, loader, device, output_dir="parquet", run_num=0, enable_puppi=False):
     model.eval()
     all_pred_particles = []
     all_target_particles = []
-
+    awk_to_save = []
+    print("running predictions")
     with torch.no_grad():
-        for i, batch in enumerate(loader):
-            if i % 10 == 0:
-                print("eval batch {}".format(i))
-            if i > 10:  # Limit evaluation for speed
-                break
+        for i, batch in tqdm.tqdm(enumerate(loader)):
+            #        if i % 10 == 0:
+            #            print("eval batch {}".format(i))
+            #        if i > 10:  # Limit evaluation for speed
+            #            break
 
             X = batch.X.to(device)
             mask = batch.mask.to(device)
 
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
-                logits_binary, logits_pid, preds_momentum = model(X, mask)
+                logits_binary, logits_pid, logits_pu, preds_momentum = model(X, mask, return_attn=False)
 
             # Predicted
             pred_id = torch.argmax(logits_pid, dim=-1)
 
-            pt = (torch.exp(preds_momentum[..., 0]) * X[..., 1]).detach().cpu().numpy()
-            eta = preds_momentum[..., 1].detach().cpu().numpy()
-            sin_phi = preds_momentum[..., 2].detach().cpu().numpy()
-            cos_phi = preds_momentum[..., 3].detach().cpu().numpy()
+            pt = (torch.exp(preds_momentum[..., 0]) * X[..., 1]).detach().cpu().float().numpy()
+            eta = preds_momentum[..., 1].detach().cpu().float().numpy()
+            sin_phi = preds_momentum[..., 2].detach().cpu().float().numpy()
+            cos_phi = preds_momentum[..., 3].detach().cpu().float().numpy()
             phi = np.arctan2(sin_phi, cos_phi)
-            energy = (torch.exp(preds_momentum[..., 4]) * X[..., 5]).detach().cpu().numpy()
+            energy = (torch.exp(preds_momentum[..., 4]) * X[..., 5]).detach().cpu().float().numpy()
 
             # Target
-            target_id = batch.ytarget[:, :, 0].detach().cpu().numpy()
-            target_pt_log = batch.ytarget[:, :, 2].detach().cpu().numpy()
-            target_eta_val = batch.ytarget[:, :, 3].detach().cpu().numpy()
-            target_sin_phi = batch.ytarget[:, :, 4].detach().cpu().numpy()
-            target_cos_phi = batch.ytarget[:, :, 5].detach().cpu().numpy()
-            target_energy_log = batch.ytarget[:, :, 6].detach().cpu().numpy()
+            target_id = batch.ytarget[:, :, 0].detach().cpu().float().numpy()
+            target_pt_log = batch.ytarget[:, :, 2].detach().cpu().float().numpy()
+            target_eta_val = batch.ytarget[:, :, 3].detach().cpu().float().numpy()
+            target_sin_phi = batch.ytarget[:, :, 4].detach().cpu().float().numpy()
+            target_cos_phi = batch.ytarget[:, :, 5].detach().cpu().float().numpy()
+            target_energy_log = batch.ytarget[:, :, 6].detach().cpu().float().numpy()
+            target_ispu = batch.ytarget[:, :, 7].detach().cpu().float().numpy()
 
-            X_pt = X[..., 1].detach().cpu().numpy()
-            X_e = X[..., 5].detach().cpu().numpy()
+            X_pt = X[..., 1].detach().cpu().float().numpy()
+            X_e = X[..., 5].detach().cpu().float().numpy()
             mask_np = mask.detach().cpu().numpy()
+
             pred_id_np = pred_id.detach().cpu().numpy()
+            logits_binary = logits_binary.detach().cpu().float().numpy()
+            if enable_puppi:
+                puppi_weights, puppi_chi2, puppi_alpha = run_puppi(
+                    X.detach().cpu().float().numpy(),
+                    target_ispu,
+                    pred_id_np,
+                    pt,
+                    eta,
+                    cos_phi,
+                    sin_phi,
+                    logits_binary,
+                    target_id,
+                )
+
+                awk_shape = ak.num(puppi_weights)
+                real_parts = (pred_id_np != 0) & (np.argmax(logits_binary, axis=-1) == 1) & (target_id != 0)
+
+                awk_to_save.append(
+                    ak.Array(
+                        {
+                            "puppi_weight": puppi_weights,
+                            "puppi_chi2": puppi_chi2,
+                            "puppi_alpha": puppi_alpha,
+                            "pid": ak.unflatten(pred_id_np[real_parts], awk_shape),
+                            "pt": ak.unflatten(pt[real_parts], awk_shape),
+                            "eta": ak.unflatten(eta[real_parts], awk_shape),
+                            "ispu": ak.unflatten(target_ispu[real_parts], awk_shape),
+                        }
+                    )
+                )
 
             # Collect particles for jet clustering
             for b in range(X.shape[0]):
@@ -125,8 +214,13 @@ def evaluate(model, loader, device):
                     all_target_particles.append(vector.awk(ak.from_iter(p_target)))
                 else:
                     all_target_particles.append(None)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    if enable_puppi and len(awk_to_save) > 0:
+        ak.to_parquet(ak.concatenate(awk_to_save), f"{output_dir}/puppi_info_{run_num}.parquet")
 
     # Compute response by clustering event-by-event
+    print("computing jet metrics")
     responses = []
     jet_match_dr = 0.4
     jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
@@ -175,9 +269,41 @@ def evaluate(model, loader, device):
     return res_iqr, matched_fraction
 
 
-def save_attention_visualization(model, batch, device, output_dir="plots"):
+def run_puppi(Xs, ispus, pred_ids, pred_pts, pred_etas, pred_cosphis, pred_sinphis, pred_logits_binaries, cls_ids):
+    puppi_weights, puppi_chi2s, puppi_alphas = [], [], []
+
+    for _ in range(Xs.shape[0]):
+        logits_binary, pred_id, pred_pt, pred_eta, pred_cosphi, pred_sinphi = (
+            pred_logits_binaries[_],
+            pred_ids[_],
+            pred_pts[_],
+            pred_etas[_],
+            pred_cosphis[_],
+            pred_sinphis[_],
+        )
+        cls_id = cls_ids[_]
+
+        real_parts = (pred_id != 0) & (np.argmax(logits_binary, axis=-1) == 1) & (cls_id != 0)
+        is_charged = (pred_id == 1) | (pred_id == 6) | (pred_id == 7)
+        ispu = ispus[_] < 0.5
+
+        puppi_weight, puppi_chi2, puppi_alpha = compute_puppi_weights(
+            pred_pt[real_parts], pred_eta[real_parts], pred_cosphi[real_parts], pred_sinphi[real_parts], is_charged[real_parts], ispu[real_parts]
+        )
+
+        puppi_weights.append(puppi_weight)
+        puppi_chi2s.append(puppi_chi2)
+        puppi_alphas.append(puppi_alpha)
+
+    return ak.Array(puppi_weights), ak.Array(puppi_chi2s), ak.Array(puppi_alphas)
+
+    return puppi_weights, puppi_chi2, puppi_alpha
+
+
+def save_attention_visualization(model, batch, device, output_dir="plots", run_num=0):
     model.eval()
     X = batch.X.to(device)
+
     mask = batch.mask.to(device)
 
     # We must run with batch size one for visualization to be interpretable
@@ -185,83 +311,131 @@ def save_attention_visualization(model, batch, device, output_dir="plots"):
     mask = mask[0:1]
     assert X.shape[0] == 1
 
+    Y = {
+        "cls_id": batch.ytarget[0, :, 0].to(device),
+    }
+
+    print("Computing dR")
+
+    eta = X[0, :, 2].cpu().float().numpy()
+    cosphi = X[0, :, 4].cpu().float().numpy()
+    sinphi = X[0, :, 3].cpu().float().numpy()
+    phi = np.arctan2(sinphi, cosphi)
+
+    dR_mat = deltaR_matrix(eta, cosphi, sinphi)
+    print("Done")
+
     with torch.no_grad():
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=(device.type == "cuda")):
-            _, _, _, attns = model(X, mask, return_attn=True)
+            logits_binary, logits_pid, logits_PU, preds_momentum, attns = model(X, mask, return_attn=True)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    mask = (Y["cls_id"] != 0).cpu().numpy()
     # Take the last layer's attention for visualization
-    attn = attns[-1]
+    for layer in range(len(attns)):
+        attn = attns[layer]
 
-    if attn is None:
-        print("No attention weights available for this model type.")
-        return
+        if attn is None:
+            print("No attention weights available for this model type.")
+            return
 
-    if isinstance(attn, torch.Tensor):
-        plt.figure(figsize=(10, 8))
-        # Standard attention: [B=1, heads, N, N]
-        # Average over heads
-        mat = attn[0].mean(dim=0).cpu().numpy()
-        plt.imshow(mat, cmap="viridis", interpolation="nearest")
-        plt.colorbar()
-        plt.title("Standard Attention Matrix (Mean over heads)")
-    elif isinstance(attn, tuple) and len(attn) == 3:
-        # HEPT: (qk, q_positions, k_positions)
-        # qk: [hashes, heads, nbuckets, bsz, bsz]
-        qk, q_pos, k_pos = attn
-        n = X.shape[1]
-        hashes, heads, nbuckets, bsz, _ = qk.shape
+        if isinstance(attn, torch.Tensor):
+            # Standard attention: [B=1, heads, N, N]
+            # Average over heads
+            mat = attn[0].mean(dim=0).cpu().float().numpy()
 
-        # 1. Natural Order reconstruction
-        full_matrix = torch.zeros((n, n), device=qk.device)
-        for i in range(hashes):
-            for j in range(heads):
-                for b in range(nbuckets):
-                    q_idx = q_pos[i, j, b * bsz : (b + 1) * bsz]
-                    k_idx = k_pos[i, j, b * bsz : (b + 1) * bsz]
-                    q_mask = q_idx < n
-                    k_mask = k_idx < n
+            mat_masked = mat[np.ix_(mask, mask)]
+            dR_mat_masked = dR_mat[np.ix_(mask, mask)]
 
-                    valid_qk = qk[i, j, b][q_mask][:, k_mask]
-                    valid_q_idx = q_idx[q_mask]
-                    valid_k_idx = k_idx[k_mask]
+            plt.figure(figsize=(10, 8))
+            plt.scatter(dR_mat_masked.flatten(), mat_masked.flatten())
+            plt.savefig(os.path.join(output_dir, f"dR_attention_matrix_{run_num}_{layer}.png"))
+            plt.close()
 
-                    if len(valid_q_idx) > 0 and len(valid_k_idx) > 0:
-                        for row_local, row_global in enumerate(valid_q_idx):
-                            full_matrix[row_global, valid_k_idx] += valid_qk[row_local]
+            plt.figure(figsize=(10, 8))
+            plt.imshow(mat_masked, cmap="viridis", interpolation="nearest")
+            plt.colorbar()
+            plt.title("Standard Attention Matrix (Mean over heads)")
 
-        full_matrix /= hashes * heads
+            np.savez(output_dir + f"attention_map_{run_num}_{layer}.npz", mat=mat, dR_mat=dR_mat, mask=mask)
 
-        # 2. LSH-Sorted Order reconstruction (for the first hash)
-        sorted_matrix = torch.zeros((nbuckets * bsz, nbuckets * bsz), device=qk.device)
-        sorted_blocks = qk[0].mean(dim=0)  # Average over heads for the first hash
-        for b in range(nbuckets):
-            sorted_matrix[b * bsz : (b + 1) * bsz, b * bsz : (b + 1) * bsz] = sorted_blocks[b]
+        elif isinstance(attn, tuple) and len(attn) == 3:
 
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+            coords_in_buckets = []
 
-        im1 = ax1.imshow(full_matrix.cpu().numpy(), cmap="viridis", interpolation="nearest")
-        fig.colorbar(im1, ax=ax1)
-        ax1.set_title("HEPT Natural Order\n(Input sequence indices)")
+            # HEPT: (qk, q_positions, k_positions)
+            # qk: [hashes, heads, nbuckets, bsz, bsz]
+            qk, q_pos, k_pos = attn
+            n = X.shape[1]
+            hashes, heads, nbuckets, bsz, _ = qk.shape
+            # 1. Natural Order reconstruction
+            full_matrix = torch.zeros((n, n), device=qk.device)
+            for i in range(hashes):
+                coords_in_buckets.append([])
+                for j in range(heads):
+                    for b in range(nbuckets):
+                        q_idx = q_pos[i, j, b * bsz : (b + 1) * bsz]
+                        k_idx = k_pos[i, j, b * bsz : (b + 1) * bsz]
+                        q_mask = q_idx < n
+                        k_mask = k_idx < n
 
-        im2 = ax2.imshow(sorted_matrix.cpu().numpy(), cmap="viridis", interpolation="nearest")
-        fig.colorbar(im2, ax=ax2)
-        ax2.set_title("HEPT LSH-Sorted Order\n(Block-diagonal structure)")
+                        valid_qk = qk[i, j, b][q_mask][:, k_mask]
+                        valid_q_idx = q_idx[q_mask]
+                        valid_k_idx = k_idx[k_mask]
 
-    elif isinstance(attn, tuple) and len(attn) == 2:
-        plt.figure(figsize=(10, 8))
-        # Global or Fastformer: (alpha, beta)
-        alpha, beta = attn
-        # alpha: [B=1, N, heads]
-        mat = alpha[0].mean(dim=-1).cpu().numpy()
-        plt.plot(mat)
-        plt.title("Global Attention Weights (alpha, mean over heads)")
+                        if len(valid_q_idx) > 0 and len(valid_k_idx) > 0:
+                            for row_local, row_global in enumerate(valid_q_idx):
+                                full_matrix[row_global, valid_k_idx] += valid_qk[row_local].float()
+                        if j == 0:
+                            idx_in_bucket = torch.unique(torch.cat((valid_q_idx, valid_k_idx))).cpu().numpy()
+                            coords_in_buckets[-1].append(np.concatenate((eta[idx_in_bucket][:, None], phi[idx_in_bucket][:, None]), axis=-1))
 
-    plt.savefig(os.path.join(output_dir, "attention_matrix.png"))
-    plt.close()
-    print(f"Attention visualization saved to {output_dir}/attention_matrix.png")
+            ak.to_parquet(ak.Array(coords_in_buckets), f"{output_dir}/hashing_{run_num}_{layer}.parquet")
+
+            full_matrix /= hashes * heads
+            full_matrix = full_matrix.cpu().numpy()
+
+            # 2. LSH-Sorted Order reconstruction (for the first hash)
+            sorted_matrix = torch.zeros((nbuckets * bsz, nbuckets * bsz), device=qk.device)
+            sorted_blocks = qk[0].mean(dim=0)  # Average over heads for the first hash
+            for b in range(nbuckets):
+                sorted_matrix[b * bsz : (b + 1) * bsz, b * bsz : (b + 1) * bsz] = sorted_blocks[b]
+            sorted_matrix = sorted_matrix.cpu().numpy()
+
+            mat_masked = full_matrix[np.ix_(mask, mask)]
+            dR_mat_masked = dR_mat[np.ix_(mask, mask)]
+
+            plt.figure(figsize=(10, 8))
+            plt.scatter(dR_mat_masked.flatten(), mat_masked.flatten())
+            plt.savefig(os.path.join(output_dir, f"dR_attention_matrix_{run_num}_{layer}.png"))
+            plt.close()
+
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+
+            im1 = ax1.imshow(full_matrix, cmap="viridis", interpolation="nearest")
+            fig.colorbar(im1, ax=ax1)
+            ax1.set_title("HEPT Natural Order\n(Input sequence indices)")
+
+            im2 = ax2.imshow(sorted_matrix, cmap="viridis", interpolation="nearest")
+            fig.colorbar(im2, ax=ax2)
+            ax2.set_title("HEPT LSH-Sorted Order\n(Block-diagonal structure)")
+
+            np.savez(output_dir + f"attention_map_{run_num}_{layer}.npz", mat=full_matrix, sorted_matrix=sorted_matrix, dR_mat=dR_mat, mask=mask)
+
+        elif isinstance(attn, tuple) and len(attn) == 2:
+            plt.figure(figsize=(10, 8))
+            # Global or Fastformer: (alpha, beta)
+            alpha, beta = attn
+            # alpha: [B=1, N, heads]
+            mat = alpha[0].mean(dim=-1).cpu().float().numpy()
+            plt.plot(mat)
+            plt.title("Global Attention Weights (alpha, mean over heads)")
+
+        plt.savefig(os.path.join(output_dir, f"attention_matrix_{run_num}_{layer}.png"))
+        plt.close()
+        print(f"Attention visualization saved to {output_dir}/attention_matrix_{run_num}_{layer}.png")
 
 
 if __name__ == "__main__":
@@ -270,22 +444,37 @@ if __name__ == "__main__":
     data_dir = args.data_dir
     print(f"Data directory: {data_dir}")
 
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    if args.eval:
+        out_dir = args.eval
+    else:
+        out_dir = f"experiments/standalone/{args.attention_type}/{timestamp}/"
+        os.makedirs(out_dir, exist_ok=True)
+
+    config = None
+    if args.dsl:
+        print(f"Using DSL: {args.dsl}")
+        config = parse_dsl(args.dsl)
+
+    pad_to_multiple = bucket_padding_multiple(config, args.attention_type)
+
     # Load dataset
-    ds_train = PFDataset(data_dir, "cms_pf_ttbar/1:3.0.0", "train", num_samples=1000).ds
-    ds_valid = PFDataset(data_dir, "cms_pf_ttbar/1:3.0.0", "test", num_samples=200).ds
+    ds_train = PFDataset(data_dir, "cms_pf_qcd:3.0.0", "train", num_samples=5000, pad_to_multiple=pad_to_multiple).ds
+    ds_valid = PFDataset(data_dir, "cms_pf_qcd:3.0.0", "test", num_samples=500, pad_to_multiple=pad_to_multiple).ds
 
     collater = Collater(["X", "ytarget"], ["genmet"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     all_results = []
 
+    experiment = Experiment(project_name="hept_studies") if args.comet else None
+
     # Run training 3 times
     for i in range(3):
         print(f"\n--- Run {i+1}/3 ---")
 
         if args.dsl:
-            print(f"Using DSL: {args.dsl}")
-            config = parse_dsl(args.dsl)
             model = MLPF(config=config).to(device)
         else:
             # 55 features for CMS, re-initialize model for each run
@@ -294,7 +483,7 @@ if __name__ == "__main__":
                 num_classes=8,
                 embedding_dim=128,
                 width=128,
-                num_convs=6,
+                num_convs=3,
                 num_heads=16,
                 attention_type=args.attention_type,
             ).to(device)
@@ -302,35 +491,54 @@ if __name__ == "__main__":
         if i == 0:
             print(model)
 
-        model.train()
-
-        # Fresh loaders for each run (especially for shuffling)
-        train_loader = DataLoader(ds_train, batch_size=8, collate_fn=collater, shuffle=True, num_workers=1, persistent_workers=True)
-        valid_loader = DataLoader(ds_valid, batch_size=8, collate_fn=collater, num_workers=1, persistent_workers=True)
-
-        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
-
         # Record start time
         start_total = time.time()
 
-        # Train for a fixed time
-        train_loss, num_steps = train(model, train_loader, optimizer, device, duration_seconds=300)
+        if args.eval is None:
+            # Since compilation is redone for each event size, we need to make sure to pad the dataset when compilation is used.
+            # This might not be worth it for quick trainings due to the initial startup time.
+            # model.compile()
 
-        training_seconds = time.time() - start_total
+            model.train()
+
+            # Fresh loaders for each run (especially for shuffling)
+            train_loader = DataLoader(ds_train, batch_size=8, collate_fn=collater, shuffle=True, num_workers=1, persistent_workers=True)
+
+            optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+
+            # Train for a fixed time, e.g. 1 minute
+            train_loss, train_loss_binary, train_loss_pid, train_loss_kinematics, train_loss_pu, num_steps = train(
+                model, train_loader, optimizer, device, duration_seconds=1 * 60, experiment=experiment
+            )
+
+            training_seconds = time.time() - start_total
+
+            torch.save(model.state_dict(), f"{out_dir}run{i}.pth")
+        else:
+            model.load_state_dict(torch.load(args.eval + f"run{i}.pth", weights_only=True))
+
+        valid_loader = DataLoader(ds_valid, batch_size=8, collate_fn=collater, num_workers=1, persistent_workers=True)
 
         # Save attention visualization for one event
         if args.show_attention:
             print("Saving attention visualization...")
             one_batch = next(iter(valid_loader))
-            save_attention_visualization(model, one_batch, device)
+            save_attention_visualization(model, one_batch, device, output_dir=out_dir, run_num=i)
 
         # Validation loss
         print("Computing validation loss...")
-        val_loss = validate(model, valid_loader, device)
+        val_loss, val_loss_binary, val_loss_pid, val_loss_kinematics, val_loss_pu = validate(model, valid_loader, device)
 
         # Evaluate jet metrics
         print("Evaluating jet metrics...")
-        val_jet_iqr, val_jet_matched_frac = evaluate(model, valid_loader, device)
+        val_jet_iqr, val_jet_matched_frac = evaluate(
+            model,
+            valid_loader,
+            device,
+            output_dir=out_dir,
+            run_num=i,
+            enable_puppi=args.puppi,
+        )
 
         total_seconds = time.time() - start_total
 
@@ -388,18 +596,28 @@ if __name__ == "__main__":
 
         all_results.append(
             {
-                "train_loss": train_loss,
                 "val_loss": val_loss,
+                "val_loss_binary": val_loss_binary,
+                "val_loss_pid": val_loss_pid,
+                "val_loss_kinematics": val_loss_kinematics,
+                "val_loss_pu": val_loss_pu,
                 "val_jet_iqr": val_jet_iqr,
                 "val_jet_matched_frac": val_jet_matched_frac,
-                "training_seconds": training_seconds,
                 "total_seconds": total_seconds,
                 "peak_vram_mb": peak_vram_mb,
-                "num_steps": num_steps,
                 "runtime_cpu_ms": runtime_cpu_ms,
                 "runtime_gpu_ms": runtime_gpu_ms,
             }
         )
+
+        if args.eval is None:
+            all_results[-1]["train_loss"] = train_loss
+            all_results[-1]["train_loss_binary"] = train_loss_binary
+            all_results[-1]["train_loss_pid"] = train_loss_pid
+            all_results[-1]["train_loss_kinematics"] = train_loss_kinematics
+            all_results[-1]["train_loss_pu"] = train_loss_pu
+            all_results[-1]["training_seconds"] = training_seconds
+            all_results[-1]["num_steps"] = num_steps
 
     # Model info
     num_params_M = sum(p.numel() for p in model.parameters()) / 1e6
@@ -413,3 +631,6 @@ if __name__ == "__main__":
         print(f"{key:16}: {mean:.6f} ± {variance:.6f} (var)")
 
     print(f"num_params_M:     {num_params_M:.1f}")
+
+    if experiment:
+        experiment.end()

@@ -12,12 +12,15 @@ python mlpf/pipeline.py \
   --data-dir $TFDS_DATA_DIR \
   train \
   --num_steps 100000 \
-  --checkpoint_freq 10000 \
-  --val_freq 10000 \
+  --checkpoint_freq 100 \
+  --val_freq 500 \
   --gpus 8 \
-  --make_plots \
   --dtype bfloat16 \
-  --num_workers 1 \
-  --prefetch_factor 1 \
+  --num_workers 2 \
+  --prefetch_factor 2 \
   --gpu_batch_multiplier 16 \
-  --compile
+  --compile \
+  --lr 0.0002 \
+  --optimizer lamb \
+  --model.attention.use_pre_layernorm True \
+  --model.attention.num_convs 6

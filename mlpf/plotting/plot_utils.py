@@ -130,10 +130,11 @@ EVALUATION_DATASET_NAMES = {
     "cld_edm_qq_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "cld_edm_ww_fullhad_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
-    "clic_edm_ttbar_pu10_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$, PU10",
-    "clic_edm_ttbar_hits_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "clic_edm_ttbar_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "clic_edm_qq_pf": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
+    "clic_edm_qq_hits": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
+    "clic_edm_ww_fullhad_hits": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
     "cms_pf_qcd": r"QCD multijets, pileup 55-75",
     "cms_pf_qcd_nopu": r"QCD multijets, no pileup",
@@ -298,6 +299,7 @@ EXPERIMENT_LABELS = {
     "cld": cld_label,
     "clic_hits": clic_label,
     "cld_hits": cld_label,
+    "clic_hits": clic_label,
 }
 
 
@@ -321,7 +323,7 @@ def particle_label(ax, pid):
 def load_eval_data(path, max_events=None):
     yvals = []
     filenames = []
-    print("path", path)
+    print("load_eval_data: path {}".format(path))
 
     filelist = sorted(list(glob.glob(path)))
     assert len(filelist) > 0
@@ -333,6 +335,8 @@ def load_eval_data(path, max_events=None):
 
     total_events = 0
     for fi in iterator:
+        if not is_interactive:
+            print("load_eval_data: loading {}".format(fi))
         dd = awkward.from_parquet(fi)
         num_in_file = len(dd)
         print(fi, num_in_file, total_events, max_events)
@@ -354,27 +358,44 @@ def load_eval_data(path, max_events=None):
 
     assert len(yvals) > 0
 
+    print("load_eval_data: concatenating yvals={}".format(len(yvals)))
     data = awkward.concatenate(yvals, axis=0)
     X = data["inputs"]
+    print("load_eval_data: concat done X={}".format(len(X)))
 
     yvals = {}
     for typ in ["target", "cand", "pred"]:
-        for k in data["particles"][typ].fields:
-            yvals["{}_{}".format(typ, k)] = data["particles"][typ][k]
+        if typ in data["particles"].fields:
+            for k in data["particles"][typ].fields:
+                yvals["{}_{}".format(typ, k)] = data["particles"][typ][k]
+
+            if (typ + "_px" in yvals) and (typ + "_pt" not in yvals):
+                # particles might be saved as px, py, pz, E
+                jetvec = vector.awk(
+                    awkward.zip({"px": yvals[typ + "_px"], "py": yvals[typ + "_py"], "pz": yvals[typ + "_pz"], "E": yvals[typ + "_E"]})
+                )
+                jetvec = awkward.Array(jetvec, with_name="Momentum4D")
+                yvals[typ + "_pt"] = jetvec.pt
+                yvals[typ + "_eta"] = jetvec.eta
+                yvals[typ + "_sin_phi"] = np.sin(jetvec.phi)
+                yvals[typ + "_cos_phi"] = np.cos(jetvec.phi)
+                yvals[typ + "_energy"] = jetvec.E
 
     for typ in ["target", "cand", "pred"]:
-        # Compute phi, px, py, pz
-        yvals[typ + "_phi"] = np.arctan2(yvals[typ + "_sin_phi"], yvals[typ + "_cos_phi"])
-        yvals[typ + "_px"] = yvals[typ + "_pt"] * yvals[typ + "_cos_phi"]
-        yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
-        yvals[typ + "_pz"] = yvals[typ + "_pt"] * np.sinh(yvals[typ + "_eta"])
+        if typ + "_pt" in yvals:
+            # Compute phi, px, py, pz
+            yvals[typ + "_phi"] = np.arctan2(yvals[typ + "_sin_phi"], yvals[typ + "_cos_phi"])
+            yvals[typ + "_px"] = yvals[typ + "_pt"] * yvals[typ + "_cos_phi"]
+            yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
+            yvals[typ + "_pz"] = yvals[typ + "_pt"] * np.sinh(yvals[typ + "_eta"])
 
     for typ in ["gen", "cand", "pred", "target", "pred_nopu"]:
-        # Get the jet vectors
-        jetvec = vector.awk(data["jets"][typ])
-        jetvec = awkward.Array(jetvec, with_name="Momentum4D")
-        for k in ["pt", "eta", "phi", "energy"]:
-            yvals["jets_{}_{}".format(typ, k)] = getattr(jetvec, k)
+        if typ in data["jets"].fields:
+            # Get the jet vectors
+            jetvec = vector.awk(data["jets"][typ])
+            jetvec = awkward.Array(jetvec, with_name="Momentum4D")
+            for k in ["pt", "eta", "phi", "energy"]:
+                yvals["jets_{}_{}".format(typ, k)] = getattr(jetvec, k)
 
     for typ in ["target", "cand", "pred"]:
         for val in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
@@ -388,7 +409,9 @@ def load_eval_data(path, max_events=None):
 def compute_jet_ratio(data, yvals):
     ret = {}
     # flatten across event dimension
-    for match1, match2 in [("gen", "pred"), ("gen", "pred_nopu"), ("gen", "cand"), ("gen", "target"), ("target", "pred"), ("target", "cand")]:
+    matches = [("gen", "pred"), ("gen", "pred_nopu"), ("gen", "cand"), ("gen", "target"), ("target", "pred"), ("target", "cand")]
+
+    for match1, match2 in matches:
         for val in ["pt", "eta"]:
             ret[f"jet_{match1}_to_{match2}_{match1}{val}"] = awkward.to_numpy(
                 awkward.flatten(

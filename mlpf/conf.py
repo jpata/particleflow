@@ -2,6 +2,7 @@
 # Dataset-specific overrides are in particleflow_spec.yaml
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional, Dict, Any
+from dataclasses import dataclass, fields
 import os
 from enum import Enum
 from mlpf.utils import resolve_path, load_spec, set_nested_dict, _resolve_paths_recursive
@@ -17,7 +18,10 @@ class Dataset(Enum):
 
 class ModelType(Enum):
     ATTENTION = "attention"
-    GNN_LSH = "gnn_lsh"
+    GNNLSH = "gnnlsh"
+    LITEPT = "litept"
+    HEPT = "hept"
+    HEPTV2 = "heptv2"
 
 
 class InputEncoding(Enum):
@@ -28,6 +32,45 @@ class InputEncoding(Enum):
 class LearnedRepresentationMode(Enum):
     LAST = "last"
     CONCAT = "concat"
+
+
+class BackboneMode(Enum):
+    SHARED = "shared"
+    SPLIT = "split"
+
+
+class DatasetSamplerMode(Enum):
+    SHARD_CONSECUTIVE = "shard-consecutive"
+    INTERLEAVED_SHARDS = "interleaved-shards"
+
+
+SOURCE_IDS = {
+    "unknown": 0,
+    Dataset.CMS.value: 1,
+    Dataset.CLIC.value: 2,
+    Dataset.CLD.value: 3,
+}
+SOURCE_LABELS = {source_id: source_name for source_name, source_id in SOURCE_IDS.items()}
+
+INPUT_TYPE_IDS = {
+    "unknown": 0,
+    "hits": 1,
+    "pf": 2,
+}
+INPUT_TYPE_LABELS = {input_type_id: input_type_name for input_type_name, input_type_id in INPUT_TYPE_IDS.items()}
+
+
+def dataset_source_id(dataset_name: str) -> int:
+    for source_name, source_id in SOURCE_IDS.items():
+        if source_name != "unknown" and dataset_name.startswith(f"{source_name}_"):
+            return source_id
+    return SOURCE_IDS["unknown"]
+
+
+def dataset_input_type_id(dataset_name: str) -> int:
+    if "_hits" in dataset_name:
+        return INPUT_TYPE_IDS["hits"]
+    return INPUT_TYPE_IDS["pf"]
 
 
 class RegressionMode(Enum):
@@ -63,12 +106,13 @@ class LRSchedule(Enum):
 
 class AttentionType(Enum):
     MATH = "math"
-    EFFICIENT = "efficient"
     FLASH = "flash"
-    LINEAR = "linear"
+    SIMPLE = "simple"
 
 
-from dataclasses import dataclass, fields
+class KernelType(Enum):
+    GAUSSIAN = "gaussian"
+    ATTENTION = "attention"
 
 
 class EDM4HEP:
@@ -138,6 +182,75 @@ class EDM4HEP:
         def get_names(cls):
             return [f.name.replace("position_", "position.") for f in fields(cls)]
 
+    @dataclass
+    class Detector:
+        """Detector scenario configuration for key4hep post-processing and validation."""
+
+        name: str
+        b_field: float
+        hit_collections: List[str]
+
+    # Registry of supported key4hep detector scenarios. Add new detectors here;
+    # mlpf/data/key4hep/postprocessing.py and tests/validate_parquet.py pick up
+    # the B-field and hit collections from this configuration.
+    DETECTORS = {
+        "clic": Detector(
+            name="clic",
+            b_field=4.0,
+            hit_collections=[
+                "ECALBarrel",
+                "ECALEndcap",
+                "ECALOther",
+                "HCALBarrel",
+                "HCALEndcap",
+                "HCALOther",
+                "MUON",
+                "LumiCal_Hits",
+                "ITrackerHits",
+                "ITrackerEndcapHits",
+                "OTrackerHits",
+                "OTrackerEndcapHits",
+                "VXDTrackerHits",
+                "VXDEndcapTrackerHits",
+            ],
+        ),
+        "cld": Detector(
+            name="cld",
+            b_field=2.0,
+            hit_collections=[
+                "ECALBarrel",
+                "ECALEndcap",
+                "HCALBarrel",
+                "HCALEndcap",
+                "HCALOther",
+                "MUON",
+                "ITrackerHits",
+                "ITrackerEndcapHits",
+                "OTrackerHits",
+                "OTrackerEndcapHits",
+                "VXDTrackerHits",
+                "VXDEndcapTrackerHits",
+            ],
+        ),
+        "maia": Detector(
+            name="maia",
+            b_field=5.0,
+            hit_collections=[
+                "EcalBarrelCollectionRec",
+                "EcalEndcapCollectionRec",
+                "HcalBarrelCollectionRec",
+                "HcalEndcapCollectionRec",
+                "MUON",
+                "IBTrackerHits",
+                "IETrackerHits",
+                "OBTrackerHits",
+                "OETrackerHits",
+                "VBTrackerHits",
+                "VETrackerHits",
+            ],
+        ),
+    }
+
 
 def get_edm4hep_x_features():
     track_names = EDM4HEP.TrackFeatures.get_names()
@@ -171,6 +284,7 @@ class ParticleFeatures:
     gp_to_track: Any
     gp_to_cluster: Any
     jet_idx: Any
+    particle_number: Any
 
     @classmethod
     def get_names(cls):
@@ -186,6 +300,7 @@ ELEM_TYPES = {
     Dataset.CMS.value: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
     Dataset.CLIC.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.CLD.value: [0, 1, 2],  # 1 - track, 2 - cluster
+    Dataset.CLIC_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
     Dataset.CLD_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
 }
 
@@ -194,6 +309,7 @@ ELEM_TYPES_NONZERO = {
     Dataset.CMS.value: [1, 4, 5, 6, 8, 9, 10, 11],
     Dataset.CLIC.value: [1, 2],
     Dataset.CLD.value: [1, 2],
+    Dataset.CLIC_HITS.value: [1, 2],
     Dataset.CLD_HITS.value: [1, 2],
 }
 
@@ -287,6 +403,7 @@ X_FEATURES = {
     ],
     Dataset.CLIC.value: get_edm4hep_x_features(),
     Dataset.CLD.value: get_edm4hep_x_features(),
+    Dataset.CLIC_HITS.value: EDM4HEP.HitFeatures.get_names(),
     Dataset.CLD_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
@@ -311,6 +428,13 @@ JET_CONFIG = {
         "ptcut": 5.0,
         "match_dr": 0.1,
     },
+    Dataset.CLIC_HITS.value: {
+        "algo": "ee_genkt_algorithm",
+        "r": 0.4,
+        "p": -1.0,
+        "ptcut": 5.0,
+        "match_dr": 0.1,
+    },
     Dataset.CLD_HITS.value: {
         "algo": "ee_genkt_algorithm",
         "r": 0.4,
@@ -325,27 +449,30 @@ Y_FEATURES = ParticleFeatures.get_names()
 
 class GNNLSHConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    conv_type: ModelType = ModelType.GNN_LSH
     embedding_dim: int = 128
     width: int = 128
     num_convs: int = 2
     dropout_ff: float = 0.0
     activation: Activation = Activation.ELU
     layernorm: bool = True
-    bin_size: int = 32
+    bin_size: int = 100
     max_num_bins: int = 200
     distance_dim: int = 128
     num_node_messages: int = 2
+    num_or_hashes: int = 1
+    num_and_hashes: int = 1
     ffn_dist_hidden_dim: int = 128
     ffn_dist_num_layers: int = 2
+    kernel_type: KernelType = KernelType.GAUSSIAN
+    use_interbin_attention: bool = False
+    num_interbin_heads: int = 4
+    num_attention_heads: int = 4
+    attention_head_dim: int = 32
 
 
 class AttentionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    conv_type: ModelType = ModelType.ATTENTION
-    embedding_dim: int = 128
-    width: int = 128
-    num_convs: int = 2
+    num_convs: int = 3
     dropout_ff: float = 0.0
     activation: Activation = Activation.ELU
     layernorm: bool = True
@@ -356,10 +483,82 @@ class AttentionConfig(BaseModel):
     dropout_conv_reg_ff: float = 0.0
     dropout_conv_id_mha: float = 0.0
     dropout_conv_id_ff: float = 0.0
-    use_pre_layernorm: bool = False
-    use_simplified_attention: bool = False
+    use_pre_layernorm: bool = True
     export_onnx_fused: bool = False
     save_attention: bool = False
+
+
+class LitePTConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    embedding_dim: int = 144
+    width: int = 144
+    num_convs: int = 1
+    activation: Activation = Activation.GELU
+    dropout_ff: float = 0.0
+    order: List[str] = ["z", "z-trans", "hilbert", "hilbert-trans"]
+    stride: List[int] = [2, 2, 2, 2]
+    enc_depths: List[int] = [2, 2, 2, 6, 2]
+    enc_channels: List[int] = [144, 144, 144, 144, 144]
+    enc_num_head: List[int] = [8, 8, 8, 8, 8]
+    enc_patch_size: List[int] = [1024, 1024, 1024, 1024, 1024]
+    enc_conv: List[bool] = [True, True, True, False, False]
+    enc_attn: List[bool] = [False, False, False, True, True]
+    enc_rope_freq: List[float] = [100.0, 100.0, 100.0, 100.0, 100.0]
+    dec_depths: List[int] = [0, 0, 0, 0]
+    dec_channels: List[int] = [144, 144, 144, 144]
+    dec_num_head: List[int] = [8, 8, 8, 8]
+    dec_patch_size: List[int] = [1024, 1024, 1024, 1024]
+    dec_conv: List[bool] = [False, False, False, False]
+    dec_attn: List[bool] = [False, False, False, False]
+    dec_rope_freq: List[float] = [100.0, 100.0, 100.0, 100.0]
+    mlp_ratio: int = 4
+    qkv_bias: bool = True
+    qk_scale: Optional[float] = None
+    attn_drop: float = 0.0
+    proj_drop: float = 0.0
+    drop_path: float = 0.3
+    pre_norm: bool = True
+    shuffle_orders: bool = True
+    enc_mode: bool = False
+    coord_indices: List[int] = [2, 3, 4]
+    grid_size: float = 0.01
+
+
+class HEPTConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    embedding_dim: int = 128
+    width: int = 512
+    num_convs: int = 6
+    num_heads: int = 8
+    dropout_ff: float = 0.1
+    activation: Activation = Activation.ELU
+    pos: bool = False
+    block_size: int = 100
+    n_hashes: int = 3
+    num_regions: int = 140
+    num_w_per_dist: int = 10
+
+
+class HEPTv2Config(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    embedding_dim: int = 128
+    width: int = 512
+    num_convs: int = 6
+    num_heads: int = 8
+    dropout_ff: float = 0.1
+    activation: Activation = Activation.ELU
+    pe_type: str = "learned"
+    block_size: int = 100
+    n_hashes: int = 3
+    num_regions: int = 140
+    num_w_per_dist: int = 10
+    mlp_ratio: float = 4.0
+
+
+class BackboneConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: BackboneMode = BackboneMode.SHARED
+    num_convs: Optional[int] = None
 
 
 class ModelArchitectureConfig(BaseModel):
@@ -374,10 +573,25 @@ class ModelArchitectureConfig(BaseModel):
     cos_phi_mode: RegressionMode = RegressionMode.LINEAR
     energy_mode: RegressionMode = RegressionMode.DIRECT_ELEMTYPE_SPLIT
     trainable: str = "all"
+    task_queries: bool = True
+    backbone: Optional[BackboneConfig] = None
 
     # Nested configs
-    gnn_lsh: Optional[GNNLSHConfig] = None
+    gnnlsh: Optional[GNNLSHConfig] = None
     attention: Optional[AttentionConfig] = None
+    litept: Optional[LitePTConfig] = None
+    hept: Optional[HEPTConfig] = None
+    heptv2: Optional[HEPTv2Config] = None
+
+
+class RegressionLossWeights(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pt: float = Field(default=1.0, ge=0.0)
+    eta: float = Field(default=1e-2, ge=0.0)
+    sin_phi: float = Field(default=1e-2, ge=0.0)
+    cos_phi: float = Field(default=1e-2, ge=0.0)
+    energy: float = Field(default=1.0, ge=0.0)
 
 
 class DatasetSample(BaseModel):
@@ -438,7 +652,9 @@ class MLPFConfig(BaseModel):
     optimizer: OptimizerType = OptimizerType.ADAMW
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
-    pad_to_multiple_elements: Optional[int] = None
+    regression_loss_weights: RegressionLossWeights = Field(default_factory=RegressionLossWeights)
+    pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
+    validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
 
     # Flags
     train: bool = False
@@ -446,14 +662,17 @@ class MLPFConfig(BaseModel):
     compile: bool = False
     make_plots: bool = True
     sort_data: bool = False
-    load: Optional[str] = None
-    relaxed_load: bool = True
+    sampler_mode: DatasetSamplerMode = DatasetSamplerMode.SHARD_CONSECUTIVE
+    load: Optional[str] = None  # path to model and optimizer checkpoint to load
+    relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
+    sampler_from_scratch: bool = False  # start the sampler from scratch (without resuming the sampler state)
 
     # Logging
     comet: bool = False
     comet_offline: bool = False
     comet_name: str = "particleflow"
     comet_step_freq: int = 10000
+    tensorboard_step_freq: int = 100
 
     raytune: Dict[str, Any] = Field(default_factory=dict)
 
@@ -467,12 +686,20 @@ class MLPFConfig(BaseModel):
     ntrain: Optional[int] = None  # number of training events
     nvalid: Optional[int] = None  # number of validation events, ran at periodic intervals during training
     ntest: Optional[int] = None  # number of testing events, ran at the end of the training
+    data_config: Optional[List[str]] = None  # used to limit the data loading to the specified configurations (e.g. config split 1 only)
 
     # Multi-GPU
     gpus: int = 0
 
     @model_validator(mode="after")
     def populate_defaults(self) -> "MLPFConfig":
+        self.conv_type = ModelType(self.model.type)
+        if self.model.backbone is None:
+            self.model.backbone = BackboneConfig()
+        if self.model.backbone.num_convs is None:
+            sub_config = getattr(self.model, self.conv_type.value)
+            if sub_config is not None and hasattr(sub_config, "num_convs"):
+                self.model.backbone.num_convs = sub_config.num_convs
         if self.dataset.value in X_FEATURES:
             if self.input_dim is None:
                 self.input_dim = len(X_FEATURES[self.dataset.value])
@@ -548,45 +775,13 @@ class MLPFConfig(BaseModel):
         config_dict["num_classes"] = len(CLASS_LABELS[ds_name])
         config_dict["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[ds_name]
 
-        # Helper for datasets
-        def build_dataset_config_dict(dataset_input):
-            ds_config = {}
-            ds_config[ds_name] = {}
-            for phys_key, phys_val in dataset_input.items():
-                ds_config[ds_name][phys_key] = {
-                    "batch_size": phys_val.get("batch_size", config_dict.get("batch_size", 1)),
-                    "samples": {},
-                }
-                target_dict = ds_config[ds_name][phys_key]["samples"]
-                for ds_item in phys_val["samples"]:
-                    name = ds_item["name"]
-                    entry = {"version": ds_item.get("version"), "splits": ds_item.get("splits")}
-                    if "batch_size" in ds_item:
-                        entry["batch_size"] = ds_item["batch_size"]
-                    target_dict[name] = entry
-            return ds_config
-
-        if "train_datasets" in model_config_raw:
-            config_dict["train_dataset"] = build_dataset_config_dict(model_config_raw["train_datasets"])
-        if "validation_datasets" in model_config_raw:
-            config_dict["valid_dataset"] = build_dataset_config_dict(model_config_raw["validation_datasets"])
-        if "test_datasets" in model_config_raw:
-            config_dict["test_dataset"] = {}
-            for ds_item in model_config_raw.get("test_datasets", []):
-                name = ds_item["name"]
-                config_dict["test_dataset"][name] = {
-                    "version": ds_item.get("version"),
-                    "splits": ds_item.get("splits", ["test"]),
-                    "batch_size": ds_item.get("batch_size", 1),
-                }
-
         # 5. Apply Argparse overrides
         if args:
             for arg in vars(args):
                 val = getattr(args, arg)
                 if val is not None:
-                    # Direct override if key exists in config_dict
-                    if arg in config_dict:
+                    # Direct override if key exists in config_dict or is a valid field in MLPFConfig
+                    if arg in config_dict or arg in MLPFConfig.model_fields:
                         config_dict[arg] = val
 
             # Action flags
@@ -599,9 +794,10 @@ class MLPFConfig(BaseModel):
                 set_nested_dict(config_dict, "model.attention.attention_type", args.attention_type)
 
             if hasattr(args, "num_convs") and args.num_convs is not None:
-                for m in ["gnn_lsh", "attention"]:
+                for m in ["gnnlsh", "attention", "litept", "hept", "heptv2"]:
                     if m in config_dict["model"]:
                         set_nested_dict(config_dict, f"model.{m}.num_convs", args.num_convs)
+                set_nested_dict(config_dict, "model.backbone.num_convs", args.num_convs)
 
         # 6. Apply Dot-notation overrides (extra_args)
         if extra_args:
@@ -625,14 +821,63 @@ class MLPFConfig(BaseModel):
                 else:
                     raise ValueError(f"Could not parse extra argument: {arg}")
 
+        # Normalize data_config if present
+        if "data_config" in config_dict and config_dict["data_config"] is not None:
+            dc = config_dict["data_config"]
+            if isinstance(dc, str):
+                dc = dc.split(",")
+            elif not isinstance(dc, list):
+                dc = [dc]
+            config_dict["data_config"] = [str(s).strip() for s in dc]
+
+        # 9. Build dataset configuration
+        def build_dataset_config_dict(dataset_input):
+            ds_config = {}
+            ds_config[ds_name] = {}
+            data_config = config_dict.get("data_config")
+            for phys_key, phys_val in dataset_input.items():
+                ds_config[ds_name][phys_key] = {
+                    "batch_size": phys_val.get("batch_size", config_dict.get("batch_size", 1)),
+                    "samples": {},
+                }
+                target_dict = ds_config[ds_name][phys_key]["samples"]
+                for ds_item in phys_val["samples"]:
+                    name = ds_item["name"]
+                    splits = ds_item.get("splits")
+                    if data_config:
+                        splits = [s for s in splits if s in data_config]
+                    entry = {"version": ds_item.get("version"), "splits": splits}
+                    if "batch_size" in ds_item:
+                        entry["batch_size"] = ds_item["batch_size"]
+                    target_dict[name] = entry
+            return ds_config
+
+        if "train_datasets" in model_config_raw:
+            config_dict["train_dataset"] = build_dataset_config_dict(model_config_raw["train_datasets"])
+        if "validation_datasets" in model_config_raw:
+            config_dict["valid_dataset"] = build_dataset_config_dict(model_config_raw["validation_datasets"])
+        if "test_datasets" in model_config_raw:
+            config_dict["test_dataset"] = {}
+            data_config = config_dict.get("data_config")
+            for ds_item in model_config_raw.get("test_datasets", []):
+                name = ds_item["name"]
+                splits = ds_item.get("splits", ["test"])
+                if data_config:
+                    splits = [s for s in splits if s in data_config]
+                config_dict["test_dataset"][name] = {
+                    "version": ds_item.get("version"),
+                    "splits": splits,
+                    "batch_size": ds_item.get("batch_size", 1),
+                }
+
         # 7. Pipeline Overrides
         if args and hasattr(args, "pipeline") and args.pipeline:
             # Replicate pipeline-specific overrides
-            if "gnn_lsh" not in config_dict["model"]:
-                config_dict["model"]["gnn_lsh"] = {}
-            config_dict["model"]["gnn_lsh"]["num_convs"] = 1
-            config_dict["model"]["gnn_lsh"]["width"] = 32
-            config_dict["model"]["gnn_lsh"]["embedding_dim"] = 32
+            if "gnnlsh" not in config_dict["model"]:
+                config_dict["model"]["gnnlsh"] = {}
+            config_dict["model"]["gnnlsh"]["num_convs"] = 1
+            config_dict["model"]["gnnlsh"]["width"] = 32
+            config_dict["model"]["gnnlsh"]["embedding_dim"] = 32
 
             if "attention" not in config_dict["model"]:
                 config_dict["model"]["attention"] = {}
@@ -646,10 +891,10 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical_pu": {
                                 "batch_size": config_dict[ds][ds_name]["physical_pu"]["batch_size"],
-                                "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "3.0.0"}},
+                                "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "3.2.0"}},
                             }
                         }
-                if "cms_pf_ttbar" in config_dict["test_dataset"]:
+                if "test_dataset" in config_dict and "cms_pf_ttbar" in config_dict["test_dataset"]:
                     config_dict["test_dataset"] = {"cms_pf_ttbar": config_dict["test_dataset"]["cms_pf_ttbar"]}
                     config_dict["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
             elif ds_name == "cld":
@@ -659,10 +904,10 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical": {
                                 "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.0"}},
+                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.2.0"}},
                             }
                         }
-                if "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
+                if "test_dataset" in config_dict and "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
                     config_dict["test_dataset"] = {"cld_edm_ttbar_pf": config_dict["test_dataset"]["cld_edm_ttbar_pf"]}
                     config_dict["test_dataset"]["cld_edm_ttbar_pf"]["splits"] = ["10"]
             elif ds_name == "clic":
@@ -671,14 +916,14 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical": {
                                 "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.1.0"}},
+                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.2.0"}},
                             }
                         }
-                if "clic_edm_ttbar_pf" in config_dict["test_dataset"]:
+                if "test_dataset" in config_dict and "clic_edm_ttbar_pf" in config_dict["test_dataset"]:
                     config_dict["test_dataset"] = {"clic_edm_ttbar_pf": config_dict["test_dataset"]["clic_edm_ttbar_pf"]}
                     config_dict["test_dataset"]["clic_edm_ttbar_pf"]["splits"] = ["10"]
 
-        # 8. Post-override adjustments
+        # Post-dataset adjustments
         if "test_dataset" in config_dict:
             config_dict["enabled_test_datasets"] = list(config_dict["test_dataset"].keys())
         if args and hasattr(args, "test_datasets") and args.test_datasets:

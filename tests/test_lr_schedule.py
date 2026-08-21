@@ -1,3 +1,7 @@
+"""
+Spec: Ensures 'CosineDecay' and other learning rate schedules can be resumed via 'load_lr_schedule'. Key assertions: Verifies that a scheduler restored from a checkpoint (containing 'last_epoch' and 'state_dict') produces the same LR sequence as one that ran uninterrupted. Tests against a known bug where incorrect 'last_batch' initialization led to LR jumps.
+"""
+
 from mlpf.conf import LRSchedule
 import torch
 from torch.optim import SGD

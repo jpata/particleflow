@@ -27,7 +27,7 @@ rule train_pyg_cms_v1:
         "snakemake_jobs/cms_run3/train/train_pyg-cms-v1_cms_run3.done"
     threads: 16
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, mem_per_gpu=80000, slurm_partition="gpu", runtime=2880, slurm_account="hepusers", gres="gpu:a100:1", cpus_per_task=16, threads=16
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, mem_per_gpu=80000, slurm_partition="gpu", runtime=2880, slurm_account="hepusers", gres="gpu:l40:1", cpus_per_task=16, threads=16
     container:
         "/scratch/persistent/joosep/singularity/pytorch-20260305-08d6950.sif"
     shell:

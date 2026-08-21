@@ -24,7 +24,7 @@ _CITATION = """
 class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for cms_pf_ttbar_nopu dataset."""
 
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.0.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.0"))
     RELEASE_NOTES = {
         "1.7.1": "First version",
         "1.8.0": "Add ispu, genjets, genmet; disable genjet_idx; improved merging",
@@ -39,6 +39,7 @@ class CmsPfTtbarNopu(tfds.core.GeneratorBasedBuilder):
         "2.7.1": "Use fixed split_caloparticle",
         "2.8.0": "Add Pythia",
         "3.0.0": "updated beamspot, 13.6 TeV",
+        "3.2.0": "add particle_number to Y_FEATURES",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     rsync -r --progress lxplus.cern.ch:/eos/user/j/jpata/mlpf/tensorflow_datasets/cms/cms_pf_ttbar_nopu ~/tensorflow_datasets/

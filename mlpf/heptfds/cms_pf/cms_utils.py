@@ -5,6 +5,15 @@ import datetime
 import awkward as ak
 import numpy as np
 
+# workaround for 'ModuleNotFoundError: No module named importlib_resources'
+try:
+    import importlib_resources  # noqa
+except Exception:
+    import sys
+    import importlib.resources
+
+    sys.modules["importlib_resources"] = importlib.resources
+
 import tensorflow_datasets as tfds
 
 tfds.disable_progress_bar()
@@ -121,6 +130,7 @@ Y_FEATURES = [
     "cp_to_track",
     "cp_to_cluster",
     "jet_idx",
+    "particle_number",
 ]
 
 # split each dataset into equal parts for faster building

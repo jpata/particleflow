@@ -19,6 +19,35 @@ def deltar(eta1, phi1, eta2, phi2):
 
 
 @numba.njit
+def _match_jets_event(j1_eta, j1_phi, j2_eta, j2_phi, deltaR_cut):
+    jet_inds_1 = np.empty(len(j1_eta), dtype=np.int64)
+    jet_inds_2 = np.empty(len(j1_eta), dtype=np.int64)
+    num_matches = 0
+
+    # loop over the first jet collection
+    for ij1 in range(len(j1_eta)):
+        # compute deltaR from this jet to all jets in the other collection
+        min_idx_dr = -1
+        min_dr = np.inf
+
+        # loop over the other jet collection
+        for ij2 in range(len(j2_eta)):
+            # Workaround for https://github.com/scikit-hep/vector/issues/303
+            # dr = j1[ij1].deltaR(j2[ij2])
+            dr = deltar(j1_eta[ij1], j1_phi[ij1], j2_eta[ij2], j2_phi[ij2])
+            if dr < min_dr:
+                min_idx_dr = ij2
+                min_dr = dr
+
+        # has to be closer than the deltaR_cut
+        if min_idx_dr >= 0 and min_dr < deltaR_cut:
+            jet_inds_1[num_matches] = ij1
+            jet_inds_2[num_matches] = min_idx_dr
+            num_matches += 1
+
+    return jet_inds_1[:num_matches], jet_inds_2[:num_matches]
+
+
 def match_jets(jets1, jets2, deltaR_cut):
     iev = len(jets1)
     jet_inds_1_ev = []
@@ -27,36 +56,14 @@ def match_jets(jets1, jets2, deltaR_cut):
         j1 = jets1[ev]  # first jet collection
         j2 = jets2[ev]  # second jet collection
 
-        jet_inds_1 = []
-        jet_inds_2 = []
+        j1_eta = np.asarray(j1.eta, dtype=np.float64)
+        j1_phi = np.asarray(j1.phi, dtype=np.float64)
+        j2_eta = np.asarray(j2.eta, dtype=np.float64)
+        j2_phi = np.asarray(j2.phi, dtype=np.float64)
 
-        # loop over the first jet collection
-        for ij1 in range(len(j1)):
-            # compute deltaR from this jet to all jets in the other collection
-            drs = np.zeros(len(j2), dtype=np.float64)
-
-            # loop over the other jet collection
-            for ij2 in range(len(j2)):
-                eta1 = j1.eta[ij1]
-                eta2 = j2.eta[ij2]
-                phi1 = j1.phi[ij1]
-                phi2 = j2.phi[ij2]
-
-                # Workaround for https://github.com/scikit-hep/vector/issues/303
-                # dr = j1[ij1].deltaR(j2[ij2])
-                dr = deltar(eta1, phi1, eta2, phi2)
-                drs[ij2] = dr
-
-            if len(drs) > 0:
-                # find closest match to this jet
-                min_idx_dr = np.argmin(drs)
-
-                # has to be closer than the deltaR_cut
-                if drs[min_idx_dr] < deltaR_cut:
-                    jet_inds_1.append(ij1)
-                    jet_inds_2.append(min_idx_dr)
-        jet_inds_1_ev.append(jet_inds_1)
-        jet_inds_2_ev.append(jet_inds_2)
+        jet_inds_1, jet_inds_2 = _match_jets_event(j1_eta, j1_phi, j2_eta, j2_phi, deltaR_cut)
+        jet_inds_1_ev.append(jet_inds_1.tolist())
+        jet_inds_2_ev.append(jet_inds_2.tolist())
     return jet_inds_1_ev, jet_inds_2_ev
 
 

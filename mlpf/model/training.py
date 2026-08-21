@@ -65,22 +65,136 @@ from mlpf.model.utils import (
     count_parameters,
     load_lr_schedule,
 )
-from mlpf.model.monitoring import log_step_to_tensorboard, log_dataloader_to_tensorboard, log_open_files_to_tensorboard
+from mlpf.model.monitoring import (
+    log_step_to_tensorboard,
+    log_dataloader_to_tensorboard,
+    log_open_files_to_tensorboard,
+    log_gpu_utilization_to_tensorboard,
+    log_gradients_to_tensorboard,
+    log_residuals_to_tensorboard,
+)
 from mlpf.model.inference import make_plots, run_predictions
+from mlpf.model.plots import validation_plots
 from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
-from mlpf.model.losses import mlpf_loss
+from mlpf.model.losses import REGRESSION_FEATURES, mlpf_loss, particle_loss
 from mlpf.utils import create_comet_experiment
-from mlpf.conf import MLPFConfig
+from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
 
 
-def model_step(batch, model, loss_fn):
+def _domain_label(source_id, input_type_id):
+    source = SOURCE_LABELS.get(int(source_id), f"source{int(source_id)}")
+    input_type = INPUT_TYPE_LABELS.get(int(input_type_id), f"input{int(input_type_id)}")
+    return f"{source}_{input_type}"
+
+
+def _event_domain_labels(batch):
+    if batch.source_id is None or batch.input_type_id is None:
+        return None
+    source_ids = batch.source_id.detach().to("cpu").long().view(-1)
+    input_type_ids = batch.input_type_id.detach().to("cpu").long().view(-1)
+    return [_domain_label(source_id.item(), input_type_id.item()) for source_id, input_type_id in zip(source_ids, input_type_ids)]
+
+
+def _log_batch_composition(batch, tensorboard_writer, step, prefix):
+    if tensorboard_writer is None:
+        return
+
+    valid_counts = batch.mask.sum(dim=1).detach().to("cpu")
+    tensorboard_writer.add_scalar(f"{prefix}/valid_elements_mean", valid_counts.float().mean().item(), step)
+    tensorboard_writer.add_scalar(f"{prefix}/valid_elements_max", valid_counts.max().item(), step)
+
+    if batch.ytarget is not None:
+        target_counts = ((batch.ytarget[..., 0] != 0) & batch.mask).sum(dim=1).detach().to("cpu")
+        tensorboard_writer.add_scalar(f"{prefix}/target_particles_mean", target_counts.float().mean().item(), step)
+        tensorboard_writer.add_scalar(f"{prefix}/target_particles_max", target_counts.max().item(), step)
+
+    domain_labels = _event_domain_labels(batch)
+    if domain_labels is not None:
+        for label in sorted(set(domain_labels)):
+            tensorboard_writer.add_scalar(f"{prefix}/events/{label}", domain_labels.count(label), step)
+
+    elemtypes = batch.X[..., 0][batch.mask].detach().to("cpu").long()
+    for elemtype in torch.unique(elemtypes).tolist():
+        tensorboard_writer.add_scalar(f"{prefix}/elements/elemtype_{int(elemtype)}", (elemtypes == elemtype).sum().item(), step)
+
+
+def _add_accumulator(accum, key, value, count=1.0):
+    if count <= 0:
+        return
+    if key not in accum:
+        accum[key] = [torch.zeros((), device=value.device, dtype=torch.float32), torch.zeros((), device=value.device, dtype=torch.float32)]
+    accum[key][0] += value.detach().to(torch.float32)
+    accum[key][1] += torch.as_tensor(float(count), device=value.device, dtype=torch.float32)
+
+
+def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weights, accum):
+    domain_labels = _event_domain_labels(batch)
+    if domain_labels is None:
+        return
+
+    valid_base = batch.mask.bool()
+    for label in sorted(set(domain_labels)):
+        event_mask = torch.tensor([event_label == label for event_label in domain_labels], device=batch.X.device, dtype=torch.bool)
+        valid = valid_base & event_mask.unsqueeze(-1)
+        if not valid.any():
+            continue
+
+        particle_targets = {
+            "cls_id": ytarget["cls_id"][valid],
+            **{feature: ytarget[feature][valid] for feature in REGRESSION_FEATURES},
+        }
+        particle_predictions = {
+            "cls_binary": ypred["cls_binary"][valid],
+            "cls_id_onehot": ypred["cls_id_onehot"][valid],
+            **{feature: ypred[feature][valid] for feature in REGRESSION_FEATURES},
+        }
+        losses = particle_loss(particle_targets, particle_predictions, batch.X[..., 1][valid], regression_weights)
+        for loss_name, loss_value in losses.items():
+            _add_accumulator(accum, f"diagnostic/loss/{label}/{loss_name}", loss_value)
+
+        is_particle = particle_targets["cls_id"] != 0
+        _add_accumulator(accum, f"diagnostic/composition/{label}/events", torch.as_tensor(float(event_mask.sum()), device=batch.X.device))
+        _add_accumulator(accum, f"diagnostic/composition/{label}/valid_elements", torch.as_tensor(float(valid.sum()), device=batch.X.device))
+        _add_accumulator(accum, f"diagnostic/composition/{label}/target_particles", torch.as_tensor(float(is_particle.sum()), device=batch.X.device))
+        if not is_particle.any():
+            continue
+
+        for feature in ("pt", "energy"):
+            target = particle_targets[feature][is_particle].to(torch.float32)
+            prediction = torch.nan_to_num(particle_predictions[feature][is_particle].to(torch.float32))
+            residual = prediction - target
+            count = float(target.numel())
+            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_target_mean", target.sum(), count=count)
+            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_pred_mean", prediction.sum(), count=count)
+            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_residual_mean", residual.sum(), count=count)
+            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_residual_abs_mean", residual.abs().sum(), count=count)
+            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_residual_rms", (residual**2).sum(), count=count)
+
+
+def _finalize_diagnostics(accum, world_size):
+    finalized = {}
+    for key, (value_sum, count_sum) in accum.items():
+        if world_size > 1:
+            torch.distributed.all_reduce(value_sum)
+            torch.distributed.all_reduce(count_sum)
+        if count_sum.item() <= 0:
+            continue
+        value = value_sum / count_sum
+        if key.endswith("_residual_rms"):
+            value = torch.sqrt(torch.clamp(value, min=0.0))
+        finalized[key] = value.cpu().item()
+    return finalized
+
+
+def model_step(batch, model, loss_fn, regression_weights):
     _logger.debug(f"model_step X={batch.X.shape}")
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
     ytarget = unpack_target(batch.ytarget, model)
-    loss_opt, losses_detached = loss_fn(ytarget, ypred, batch)
+
+    loss_opt, losses_detached = loss_fn(ytarget, ypred, batch, regression_weights)
     return loss_opt, losses_detached, ypred_raw, ypred, ytarget
 
 
@@ -108,9 +222,11 @@ def train_step(
     batch,
     lr_schedule,
     step: int,
+    regression_weights,
     tensorboard_writer=None,
     comet_experiment=None,
     comet_step_freq=None,
+    tensorboard_step_freq=100,
     checkpoint_dir="",
     device_type="cuda",
     dtype=torch.float32,
@@ -130,6 +246,7 @@ def train_step(
         tensorboard_writer: TensorBoard writer object
         comet_experiment: Comet.ml experiment object
         comet_step_freq: How often to log to comet
+        tensorboard_step_freq: How often to log to TensorBoard
         checkpoint_dir: Directory to save checkpoints
         device_type: 'cuda' or 'cpu'
         dtype: Torch dtype for computations
@@ -146,7 +263,7 @@ def train_step(
     batch = batch.to(rank, non_blocking=True)
 
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
-        loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss)
+        loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss, regression_weights)
 
     optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
 
@@ -159,8 +276,13 @@ def train_step(
     # Log step metrics
     if tensorboard_writer is not None:
         log_open_files_to_tensorboard(tensorboard_writer, step)
+        log_gpu_utilization_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
+        _log_batch_composition(batch, tensorboard_writer, step, "diagnostic/train_batch")
+        if step % tensorboard_step_freq == 0:
+            log_gradients_to_tensorboard(model, tensorboard_writer, step)
+            log_residuals_to_tensorboard(model, tensorboard_writer, step)
         tensorboard_writer.flush()
 
     if comet_experiment is not None and (step % comet_step_freq == 0):
@@ -183,6 +305,156 @@ def train_step(
     _logger.debug(f"train_step reduced {step_loss}")
 
     return step_loss
+
+
+def compute_particle_quality_metrics(batch, ypred_particles, ytarget):
+    sum_pt_true_list = []
+    sum_pt_pred_list = []
+    sum_e_true_list = []
+    sum_e_pred_list = []
+    n_true_list = []
+    n_pred_list = []
+
+    for ev_idx in range(batch.X.shape[0]):
+        mask_ev = batch.mask[ev_idx].bool()
+        if not mask_ev.any():
+            continue
+
+        # True particles in this event (cls_id > 0)
+        cls_id_true = ytarget["cls_id"][ev_idx][mask_ev]
+        is_true_part = cls_id_true > 0
+        if is_true_part.any():
+            pt_true = (torch.exp(ytarget["pt"][ev_idx][mask_ev]) * batch.X[ev_idx, mask_ev, 1])[is_true_part]
+            e_true = (torch.exp(ytarget["energy"][ev_idx][mask_ev]) * batch.X[ev_idx, mask_ev, 5])[is_true_part]
+            sum_pt_true = pt_true.sum().item()
+            sum_e_true = e_true.sum().item()
+            n_true = is_true_part.sum().item()
+        else:
+            sum_pt_true = 0.0
+            sum_e_true = 0.0
+            n_true = 0
+
+        # Predicted particles in this event (cls_id > 0)
+        cls_id_pred = ypred_particles["cls_id"][ev_idx][mask_ev]
+        is_pred_part = cls_id_pred > 0
+        if is_pred_part.any():
+            pt_pred = ypred_particles["pt"][ev_idx][mask_ev][is_pred_part]
+            e_pred = ypred_particles["energy"][ev_idx][mask_ev][is_pred_part]
+            sum_pt_pred = pt_pred.sum().item()
+            sum_e_pred = e_pred.sum().item()
+            n_pred = is_pred_part.sum().item()
+        else:
+            sum_pt_pred = 0.0
+            sum_e_pred = 0.0
+            n_pred = 0
+
+        sum_pt_true_list.append(sum_pt_true)
+        sum_pt_pred_list.append(sum_pt_pred)
+        sum_e_true_list.append(sum_e_true)
+        sum_e_pred_list.append(sum_e_pred)
+        n_true_list.append(n_true)
+        n_pred_list.append(n_pred)
+
+    metrics = {
+        "sum_pt_true": float(np.mean(sum_pt_true_list)),
+        "sum_pt_pred": float(np.mean(sum_pt_pred_list)),
+        "sum_e_true": float(np.mean(sum_e_true_list)),
+        "sum_e_pred": float(np.mean(sum_e_pred_list)),
+        "n_true": float(np.mean(n_true_list)),
+        "n_pred": float(np.mean(n_pred_list)),
+    }
+
+    metrics["ratio_sum_pt"] = metrics["sum_pt_pred"] / (metrics["sum_pt_true"] + 1e-6)
+    metrics["ratio_sum_e"] = metrics["sum_e_pred"] / (metrics["sum_e_true"] + 1e-6)
+
+    return metrics
+
+
+def print_event_table(batch, ytarget, ypred_particles, config):
+    import pandas as pd
+    from tabulate import tabulate
+    from mlpf.conf import CLASS_LABELS
+    import numpy as np
+
+    # We only print the first event in the batch (index 0)
+    mask = batch.mask[0].bool().cpu()
+    valid_indices = torch.nonzero(mask).squeeze(1).numpy()
+
+    X = batch.X[0].cpu().numpy()
+
+    # Target values
+    tgt_cls = ytarget["cls_id"][0].cpu().numpy()
+    tgt_pt_raw = ytarget["pt"][0].cpu().numpy()
+    tgt_eta = ytarget["eta"][0].cpu().numpy()
+    tgt_sin_phi = ytarget["sin_phi"][0].cpu().numpy()
+    tgt_cos_phi = ytarget["cos_phi"][0].cpu().numpy()
+    tgt_energy_raw = ytarget["energy"][0].cpu().numpy()
+
+    # Prediction values
+    pred_cls = ypred_particles["cls_id"][0].cpu().numpy()
+    pred_pt = ypred_particles["pt"][0].cpu().numpy()
+    pred_eta = ypred_particles["eta"][0].cpu().numpy()
+    pred_phi = ypred_particles["phi"][0].cpu().numpy() if "phi" in ypred_particles else np.zeros_like(pred_pt)
+    pred_energy = ypred_particles["energy"][0].cpu().numpy()
+    pred_beta = ypred_particles["oc_beta"][0, :, 0].cpu().numpy() if "oc_beta" in ypred_particles else np.zeros_like(pred_pt)
+
+    # Class names mapping
+    dataset_name = config.dataset.value if hasattr(config.dataset, "value") else config.dataset
+    class_names = CLASS_LABELS.get(dataset_name, ["none", "chhad", "nhad", "gamma", "ele", "mu"])
+
+    rows = []
+    for idx in valid_indices:
+        hit_type = X[idx, 0]
+        hit_pt = X[idx, 1]
+        hit_eta = X[idx, 2]
+        hit_phi = np.arctan2(X[idx, 3], X[idx, 4])
+        hit_energy = X[idx, 5]
+
+        t_cls = int(tgt_cls[idx])
+        t_cls_name = class_names[t_cls] if t_cls < len(class_names) else str(t_cls)
+
+        # calculate physical target values
+        t_pt = np.exp(tgt_pt_raw[idx]) * hit_pt if t_cls > 0 else 0.0
+        t_eta = tgt_eta[idx] if t_cls > 0 else 0.0
+        t_phi = np.arctan2(tgt_sin_phi[idx], tgt_cos_phi[idx]) if t_cls > 0 else 0.0
+        t_energy = np.exp(tgt_energy_raw[idx]) * hit_energy if t_cls > 0 else 0.0
+
+        p_cls = int(pred_cls[idx])
+        p_cls_name = class_names[p_cls] if p_cls < len(class_names) else str(p_cls)
+
+        p_pt = pred_pt[idx]
+        p_eta = pred_eta[idx]
+        p_phi = pred_phi[idx]
+        p_energy = pred_energy[idx]
+        p_beta = pred_beta[idx]
+
+        rows.append(
+            {
+                "idx": idx,
+                "hit_type": int(hit_type),
+                "hit_pt": hit_pt,
+                "hit_eta": hit_eta,
+                "hit_phi": hit_phi,
+                "hit_energy": hit_energy,
+                "tgt_cls": t_cls_name,
+                "tgt_pt": t_pt,
+                "tgt_eta": t_eta,
+                "tgt_phi": t_phi,
+                "tgt_energy": t_energy,
+                "pred_cls": p_cls_name,
+                "pred_pt": p_pt,
+                "pred_eta": p_eta,
+                "pred_phi": p_phi,
+                "pred_energy": p_energy,
+                "pred_beta": p_beta,
+            }
+        )
+
+    df = pd.DataFrame(rows)
+    table_str = tabulate(df, headers="keys", tablefmt="pipe", showindex=False)
+    print("\n=== EVENT HITS / TARGET / PREDICTION TABLE ===")
+    print(table_str)
+    print("==============================================\n")
 
 
 def evaluate(
@@ -222,6 +494,7 @@ def evaluate(
 
     model.eval()
     eval_loss = {}
+    diagnostic_accum = {}
 
     # Only show progress bar on rank 0
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
@@ -235,11 +508,31 @@ def evaluate(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
-                _, loss, ypred_raw, ypred, ytarget = model_step(batch, model, mlpf_loss)
+                _, loss, ypred_raw, ypred, ytarget = model_step(
+                    batch,
+                    model,
+                    mlpf_loss,
+                    config.regression_loss_weights.model_dump(),
+                )
+
+                model_module = model.module if hasattr(model, "module") else model
+                ypred_particles = model_module.predict_particles(batch.X, batch.mask)
+
+                if ival == 0 and (rank == 0 or rank == "cpu"):
+                    print_event_table(batch, ytarget, ypred_particles, config)
+
+                if config.validation_diagnostics_batches > 0 and ival < config.validation_diagnostics_batches:
+                    _accumulate_domain_losses_and_stats(
+                        batch,
+                        ytarget,
+                        ypred,
+                        config.regression_loss_weights.model_dump(),
+                        diagnostic_accum,
+                    )
 
         # Save validation plots for first batch
-        # if (rank == 0 or rank == "cpu") and ival == 0 and make_plots:
-        #     validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
+        if (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
+            validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
 
         # Accumulate losses
         for loss_name in loss:
@@ -256,6 +549,8 @@ def evaluate(
         if world_size > 1:
             torch.distributed.all_reduce(eval_loss[loss_name])
         eval_loss[loss_name] = eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
+
+    eval_loss.update(_finalize_diagnostics(diagnostic_accum, world_size))
 
     if world_size > 1:
         dist.barrier()
@@ -551,9 +846,11 @@ def train_all_steps(
         # Get next training batch
         _logger.debug(f"Getting batch for step {step}")
         batch = next(train_iterator)
+        data_load_time = time.time() - step_start_time
         _logger.debug(f"Got batch for step {step} rank={rank} batch={batch.X.shape}")
 
         # Run a single training step
+        model_forward_start = time.time()
         log_memory("train_step_start", rank, tensorboard_writer_train, step)
         losses_train = train_step(
             rank=rank,
@@ -566,20 +863,33 @@ def train_all_steps(
             tensorboard_writer=tensorboard_writer_train,
             comet_experiment=comet_experiment,
             comet_step_freq=comet_step_freq,
+            tensorboard_step_freq=config.tensorboard_step_freq,
             checkpoint_dir=checkpoint_dir,
             device_type=device_type,
             dtype=dtype,
             scaler=scaler,
             loader_state_dict=train_loader.state_dict()["loader_state_dict"],
+            regression_weights=config.regression_loss_weights.model_dump(),
         )
         log_memory("train_step_end", rank, tensorboard_writer_train, step)
+        model_forward_time = time.time() - model_forward_start
         train_time = time.time() - step_start_time
 
-        # Log a brief training status every 100 steps on the main process
-        if step % 100 == 0:
+        if tensorboard_writer_train is not None:
+            tensorboard_writer_train.add_scalar("step/time_data_load", data_load_time, step)
+            tensorboard_writer_train.add_scalar("step/time_model_forward", model_forward_time, step)
+
+        # Log a brief training status periodically on the main process
+        if step % config.tensorboard_step_freq == 0:
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
-            _logger.info(f"Step {step}/{num_steps} rank{rank} | " f"Train Loss: {losses_train['Total']:.4f} | " f"LR: {current_lr:.2e}")
+            _logger.info(
+                f"Step {step}/{num_steps} rank{rank} | "
+                f"Train Loss: {losses_train['Total']:.4f} | "
+                f"LR: {current_lr:.2e} | "
+                f"DataLoad Time: {data_load_time:.4f}s | "
+                f"Model Forward Time: {model_forward_time:.4f}s"
+            )
 
             # check smi status
             log_smi(rank)
@@ -661,11 +971,20 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     dataset = []
 
     ntest = None
+    split_configs_to_use = list(split_configs)
     if config.ntest is not None:
-        ntest = config.ntest // len(split_configs)
+        if config.ntest < len(split_configs_to_use):
+            split_configs_to_use = split_configs_to_use[: config.ntest]
+        ntest = max(1, config.ntest // len(split_configs_to_use))
 
-    for split_config in split_configs:
-        ds = PFDataset(config.data_dir, f"{sample}/{split_config}:{version}", "test", num_samples=ntest).ds
+    for split_config in split_configs_to_use:
+        ds = PFDataset(
+            config.data_dir,
+            f"{sample}/{split_config}:{version}",
+            "test",
+            num_samples=ntest,
+            pad_to_multiple=config.pad_to_multiple_elements,
+        ).ds
         dataset.append(ds)
     ds = torch.utils.data.ConcatDataset(dataset)
 
@@ -748,6 +1067,12 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     model = MLPF(config)
     _logger.info("Instantiated model")
 
+    _logger.info("Moving model to device rank={}".format(rank))
+    model = model.to(torch.device(rank))
+    _logger.info("Moved model to device rank={}".format(rank))
+
+    configure_model_trainable(model, config.model.trainable, True)
+
     optimizer = get_optimizer(model, config)
     lr_schedule = get_lr_schedule(config, optimizer, config.num_steps)
 
@@ -781,15 +1106,9 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
         load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
         model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
-    _logger.info("Moving model to device rank={}".format(rank))
-    model = model.to(torch.device(rank))
-    _logger.info("Moved model to device rank={}".format(rank))
-
     if config.compile:
         _logger.info("Compiling model")
         model = torch.compile(model)
-
-    configure_model_trainable(model, config.model.trainable, True)
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -848,10 +1167,11 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
         if config.load and checkpoint:
             train_loader = loaders["train"]
             valid_loader = loaders["valid"]
-            if "train_loader_state_dict" in checkpoint["extra_state"]:
-                train_loader.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
-            if "valid_loader_state_dict" in checkpoint["extra_state"]:
-                valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
+            if not config.sampler_from_scratch:
+                if "train_loader_state_dict" in checkpoint["extra_state"]:
+                    train_loader.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
+                if "valid_loader_state_dict" in checkpoint["extra_state"]:
+                    valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
 
         for split in loaders.keys():
             _logger.info("loader split={} rank={} len={}".format(split, rank, len(loaders[split])))

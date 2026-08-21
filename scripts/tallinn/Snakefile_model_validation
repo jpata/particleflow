@@ -1,0 +1,147 @@
+import os
+import subprocess
+import pickle as pkl
+import sys
+
+# Ensure mlpf is in the path for unpickling
+sys.path.append(os.getcwd())
+
+from mlpf.conf import MLPFConfig, ModelType
+
+CONFIGS = ["gnnlsh-bin32-attention-interbin", "attn", "hept", "heptv2"]
+DEVICES = ["cuda", "cpu"]
+#DEVICES = ["cuda"]
+
+MODEL_NAME = "pyg-cms-v1"
+DATASET = "cms_pf_ttbar"
+PRODUCTION = "cms_run3"
+
+#MODEL_NAME = "pyg-cld-hits-v1"
+#DATASET = "cld_edm_ttbar_hits"
+#PRODUCTION = "cld"
+
+PF_SITE = "local"
+NUM_STEPS = 2000
+CHECKPOINT_FREQ = 2000
+
+# Directory paths
+EXPERIMENTS_DIR = "experiments"
+ONNX_DIR = "onnx_validation"
+
+def get_onnx_validate_extra_args(wildcards):
+    extra_args = ""
+    if wildcards.config.startswith("gnnlsh"):
+        model_kwargs_path = os.path.join(EXPERIMENTS_DIR, f"training_{wildcards.config}", "model_kwargs.pkl")
+        if os.path.exists(model_kwargs_path):
+            with open(model_kwargs_path, "rb") as f:
+                config_raw = pkl.load(f)
+                if isinstance(config_raw, dict):
+                    config = MLPFConfig.model_validate(config_raw)
+                else:
+                    config = MLPFConfig.model_validate(config_raw.model_dump())
+
+                if config.model.type == ModelType.GNNLSH:
+                    extra_args += f" --pad-bin-size {config.model.gnnlsh.bin_size}"
+    return extra_args
+
+# Helper to retrieve DATA_DIR from the spec file
+def get_data_dir(production):
+    if "data_dir" in config:
+        return config["data_dir"]
+    try:
+        cmd = f"PF_SITE={PF_SITE} uv run python3 scripts/get_param.py particleflow_spec.yaml productions.{production}.workspace_dir"
+        workspace_dir = subprocess.check_output(cmd, shell=True).decode().strip()
+        return os.path.join(workspace_dir, "tfds/")
+    except Exception as e:
+        print(f"Error retrieving DATA_DIR: {e}")
+        prod_prefix = "cld" if "cld" in production else "cms"
+        return f"data/{prod_prefix}/tfds/" # Fallback default
+
+DATA_DIR = get_data_dir(PRODUCTION)
+
+rule all:
+    input:
+        [os.path.join(ONNX_DIR, device, config, "model_math_fp32.onnx") for device in DEVICES for config in CONFIGS],
+        expand(os.path.join(ONNX_DIR, "{device}", "plots", "runtime_scaling_summary.png"), device=DEVICES),
+        expand(os.path.join(ONNX_DIR, "{device}", "plots", "memory_scaling_summary.png"), device=DEVICES),
+        expand(os.path.join(ONNX_DIR, "{device}", "plots", "runtime_vs_memory.png"), device=DEVICES),
+        expand(os.path.join(ONNX_DIR, "{device}", "plots", "loss_vs_memory.png"), device=DEVICES)
+
+rule train:
+    output:
+        checkpoint = os.path.join(EXPERIMENTS_DIR, "training_{config}", "checkpoints", f"checkpoint-{NUM_STEPS}.pth"),
+        model_kwargs = os.path.join(EXPERIMENTS_DIR, "training_{config}", "model_kwargs.pkl")
+    params:
+        gpu_batch_multiplier = lambda wildcards: "1" if wildcards.config in ["hept", "heptv2"] else "6",
+        extra_args = lambda wildcards: {
+            "attn": "--model.attention.attention_type flash",
+            "hept": "--model.type hept --pad_to_multiple_elements 100",
+            "heptv2": "--model.type heptv2 --pad_to_multiple_elements 100",
+            "gnnlsh-bin32": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32",
+            "gnnlsh-bin128": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 128 --pad_to_multiple_elements 128",
+            "gnnlsh-bin32-attention": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32 --model.gnnlsh.kernel_type attention",
+            "gnnlsh-bin32-attention-interbin": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32 --model.gnnlsh.kernel_type attention --model.gnnlsh.use_interbin_attention True"
+        }[wildcards.config]
+    shell:
+        """
+        PF_SITE={PF_SITE} uv run python3 mlpf/pipeline.py \
+            --spec-file particleflow_spec.yaml \
+            --model-name {MODEL_NAME} \
+            --production {PRODUCTION} \
+            --data-dir {DATA_DIR} \
+            --experiment-dir {EXPERIMENTS_DIR}/training_{wildcards.config} \
+            train \
+            --gpu_batch_multiplier {params.gpu_batch_multiplier} \
+            --checkpoint_freq {CHECKPOINT_FREQ} \
+            --ntrain 1000 --ntest 1000 --nvalid 1000 \
+            --num_steps {NUM_STEPS} \
+            {params.extra_args}
+        """
+
+rule onnx_validate:
+    input:
+        checkpoint = os.path.join(EXPERIMENTS_DIR, "training_{config}", "checkpoints", f"checkpoint-{NUM_STEPS}.pth"),
+        model_kwargs = os.path.join(EXPERIMENTS_DIR, "training_{config}", "model_kwargs.pkl")
+    output:
+        onnx_model = os.path.join(ONNX_DIR, "{device}", "{config}", "model_math_fp32.onnx"),
+        summary = os.path.join(ONNX_DIR, "{device}", "{config}", "summary.json")
+    params:
+        configs_args = lambda wildcards: {
+            "attn": "--configs PT_ATTN_MATH_FP32 ONNX_ATTN_MATH_FP32 ONNX_ATTN_FLASH_FP32 PT_ATTN_MATH_FP16 ONNX_ATTN_MATH_FP16 ONNX_ATTN_FLASH_FP16",
+            "hept": "--configs PT_HEPT_FP32 ONNX_HEPT_FP32",
+            "heptv2": "--configs PT_HEPT_FP32 ONNX_HEPT_FP32",
+            "gnnlsh-bin32": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
+            "gnnlsh-bin128": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
+            "gnnlsh-bin32-attention": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
+            "gnnlsh-bin32-attention-interbin": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32"
+        }.get(wildcards.config, ""),
+        extra_args = get_onnx_validate_extra_args,
+        num_events = lambda wildcards: 100 if wildcards.device == "cuda" else 10,
+        uv_project = lambda wildcards: "envs/ort-gpu" if wildcards.device == "cuda" else "envs/ort-cpu"
+    shell:
+        """
+        PF_SITE={PF_SITE} uv run --project {params.uv_project} python3 scripts/cms-validate-onnx.py \
+            --checkpoint {input.checkpoint} \
+            --model-kwargs {input.model_kwargs} \
+            --dataset {DATASET} \
+            --data-dir {DATA_DIR} \
+            --num-events {params.num_events} \
+            --outdir {ONNX_DIR}/{wildcards.device}/{wildcards.config} \
+            --device {wildcards.device} \
+            {params.configs_args} \
+            {params.extra_args}
+
+        """
+
+rule plot_onnx_summary:
+    input:
+        lambda wildcards: expand(os.path.join(ONNX_DIR, wildcards.device, "{config}", "summary.json"), config=[c for c in CONFIGS])
+    output:
+        os.path.join(ONNX_DIR, "{device}", "plots", "runtime_scaling_summary.png"),
+        os.path.join(ONNX_DIR, "{device}", "plots", "memory_scaling_summary.png"),
+        os.path.join(ONNX_DIR, "{device}", "plots", "runtime_vs_memory.png"),
+        os.path.join(ONNX_DIR, "{device}", "plots", "loss_vs_memory.png")
+    shell:
+        """
+        PF_SITE={PF_SITE} uv run --project envs/ort-cpu python3 scripts/plot-onnx-summary.py --indir {ONNX_DIR}/{wildcards.device} --outdir {ONNX_DIR}/{wildcards.device}/plots
+        """

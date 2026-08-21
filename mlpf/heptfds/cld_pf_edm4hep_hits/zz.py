@@ -3,7 +3,8 @@ from pathlib import Path
 import os
 import numpy as np
 import tensorflow_datasets as tfds
-from .utils_hits import (
+from mlpf.conf import Dataset
+from mlpf.heptfds.edm4hep_utils.utils_hits import (
     NUM_SPLITS,
     X_FEATURES,
     Y_FEATURES,
@@ -24,9 +25,11 @@ FIXME
 
 
 class CldEdmZzHits(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.1.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.0"))
     RELEASE_NOTES = {
         "3.1.0": "Hit-level version with separated tracker and calorimeter hits",
+        "3.1.1": "New generation with v1.2.5_key4hep_2025-05-29, 1M events",
+        "3.2.0": "Added particle_number target for Object Condensation",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
@@ -69,9 +72,11 @@ class CldEdmZzHits(tfds.core.GeneratorBasedBuilder):
             ),
         )
 
+    # Abstract method needs to be specified
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_ZZ_ecm365"), self.builder_config, num_splits=NUM_SPLITS)
+        return split_sample(Path(path / "p8_ee_ZZ_ecm365"), self.builder_config, num_splits=NUM_SPLITS, dataset=Dataset.CLD_HITS)
 
+    # Abstract method needs to be specified
     def _generate_examples(self, files):
-        return generate_examples(files)
+        return generate_examples(files, Dataset.CLD_HITS)

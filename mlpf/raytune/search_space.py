@@ -22,7 +22,7 @@ search_space = {
     # "gpu_batch_multiplier": samp([1, 4, 8]),
     # "patience": samp([9999]),
     # model arch parameters
-    "conv_type": samp(["attention"]),  # can be "gnn_lsh", "attention"
+    "conv_type": samp(["attention"]),  # can be "gnnlsh", "attention"
     # attention parameters
     "model.attention.num_convs": samp([1, 2, 3, 4, 5]),
     "model.attention.num_heads": samp([8, 16, 32]),

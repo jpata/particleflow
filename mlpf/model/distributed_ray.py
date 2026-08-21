@@ -346,10 +346,11 @@ def train_ray_trial(config, args, outdir=None):
             load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
             model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict=True)
             start_step = checkpoint["extra_state"]["step"] + 1
-            if "train_loader_state_dict" in checkpoint["extra_state"]:
-                loaders["train"].load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
-            if "valid_loader_state_dict" in checkpoint["extra_state"]:
-                loaders["valid"].load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
+            if not mlpf_config.sampler_from_scratch:
+                if "train_loader_state_dict" in checkpoint["extra_state"]:
+                    loaders["train"].load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
+                if "valid_loader_state_dict" in checkpoint["extra_state"]:
+                    loaders["valid"].load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
 
     train_all_steps(
         rank,
