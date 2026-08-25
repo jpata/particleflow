@@ -124,7 +124,9 @@ def main():
     executor = spec["project"].get("executor", "slurm")
     slurm_account = spec["project"].get("slurm_account")
 
-    cmssw_dir = resolve_path(prod_config.get("environment", {}).get("cmssw_dir", ""), spec)
+    production_environment = prod_config.get("environment", {})
+    cmssw_dir = resolve_path(production_environment.get("cmssw_dir", ""), spec)
+    progress_interval = production_environment.get("progress_interval")
 
     cpu_partition = resolve_path(prod_config.get("slurm_partition", "main"), spec)
     cpu_runtime = resolve_path(prod_config.get("slurm_runtime", "120m"), spec)
@@ -243,6 +245,7 @@ def main():
             + (f" && export CMSSWDIR={cmssw_dir}" if cmssw_dir else "")
             + f" && export WORKDIR={scratch_root}/{process_name}_$seed"
             + f" && export NEV={events_per_job}"
+            + (f" && export PROGRESS_INTERVAL={progress_interval}" if progress_interval is not None else "")
         )
 
         gen_proto_content = f"""
@@ -349,7 +352,7 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 start_seed=$1
 for (( i=0; i<{CHUNK_SIZE}; i++ )); do
     seed=$((start_seed + i))
-    {post_cmd}
+    {post_cmd.lstrip()}
 done
 """
         write_bash_script(post_proto_path, post_proto_content, project_root=project_root, tmpdir=tmpdir)

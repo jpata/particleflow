@@ -165,6 +165,7 @@ def test_tfds_datasource_adds_source_and_input_type_metadata_and_pads_features()
         ("clic_edm_ttbar_pf", SOURCE_IDS["clic"], INPUT_TYPE_IDS["pf"]),
         ("clic_edm_ttbar_hits", SOURCE_IDS["clic"], INPUT_TYPE_IDS["hits"]),
         ("cld_edm_ttbar_hits", SOURCE_IDS["cld"], INPUT_TYPE_IDS["hits"]),
+        ("idea_edm_qq_pf", SOURCE_IDS["idea"], INPUT_TYPE_IDS["pf"]),
         ("unknown_sample", SOURCE_IDS["unknown"], INPUT_TYPE_IDS["pf"]),
     ],
 )

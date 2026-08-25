@@ -1,0 +1,26 @@
+#!/bin/bash
+set -e
+export GOTO_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+export TMPDIR=/scratch/local/joosep/tmp
+export TEMPDIR=/scratch/local/joosep/tmp
+export TEMP=/scratch/local/joosep/tmp
+export TMP=/scratch/local/joosep/tmp
+mkdir -p $TMPDIR
+cd /home/joosep/particleflow-dev
+
+start_seed=$1
+for (( i=0; i<1; i++ )); do
+    seed=$((start_seed + i))
+    if [ ! -f /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/p8_ee_ttbar_ecm365/root/reco_p8_ee_ttbar_ecm365_${seed}.root ]; then
+        echo "Generating /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/p8_ee_ttbar_ecm365/root/reco_p8_ee_ttbar_ecm365_${seed}.root"
+        export OUTDIR=/local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/ && export CONFIG_DIR=/home/joosep/particleflow-dev/mlpf/data/key4hep/gen/idea && export WORKDIR=/scratch/local/joosep/p8_ee_ttbar_ecm365_$seed && export NEV=100 && export PROGRESS_INTERVAL=60
+        bash mlpf/data/key4hep/gen/idea/run_sim.sh p8_ee_ttbar_ecm365 $seed nopu
+    else
+        echo "Skipping /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/p8_ee_ttbar_ecm365/root/reco_p8_ee_ttbar_ecm365_${seed}.root, already exists"
+    fi
+done

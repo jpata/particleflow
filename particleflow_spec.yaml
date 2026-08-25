@@ -24,7 +24,7 @@ project:
         storage_root: "/local/joosep/mlpf"
         scratch_root: "/scratch/local/joosep"
         tmpdir: "/scratch/local/joosep/tmp"
-        project_root: "/home/joosep/particleflow"
+        project_root: "/home/joosep/particleflow-dev"
       cmssw_dir: "/scratch/persistent/joosep/CMSSW_15_0_5"
       gpu_partition: "gpu"
       cpu_partition: "main"
@@ -391,43 +391,61 @@ productions:
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # IDEA full simulation and the reconstruction currently provided by FCC-config.
-  # This is generation-only until the IDEA chain provides the particle-flow
-  # collections and truth associations expected by the common postprocessor.
+  # This initial ML path deliberately uses truth-seeded proxy tracks and an
+  # oracle ycand reference to validate the software pipeline, not physics.
   idea:
     type: "key4hep"
-    generation_only: true
-    comment: "IDEA_o1_v03 production with the pinned official FCC-config workflow"
+    model: "pyg-idea-pipeline-v1"
+    comment: "IDEA_o1_v03 pipeline validation with truth-seeded proxy tracks"
     workspace_dir: "${project.paths.storage_root}/idea/IDEA_o1_v03_fccconfig_a05a3a9"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea"
     gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
 
+    environment:
+      progress_interval: 60
+
     memory:
-      gen: 6000
+      gen: 16000
+      post: 4000
+      tfds: 8000
 
     slurm_partition: "main"
     slurm_runtime: "48h"
 
     samples:
+      # Initial campaign: exactly 100 generation jobs per sample. The
+      # Snakemake launcher currently uses CHUNK_SIZE=1 and seed-range ends are
+      # exclusive, so each interval below contains 100 jobs.
       gun_e_10gev:
         process_name: "gun_e_10gev"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [424242, 424243]
-        events_per_job: 1
+        seed_range: [424242, 424342]
+        events_per_job: 100
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [300000, 310010]
+        seed_range: [300000, 300100]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [400000, 410010]
+        seed_range: [400000, 400100]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [500000, 510010]
+        seed_range: [500000, 500100]
         events_per_job: 100
+
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
+      args: {}
+
+    tfds_mapping:
+      qq:
+        builder_path: "mlpf/heptfds/idea_pf_edm4hep/qq"
+        version: "0.1.0"
+        config_ids: [1]
 
 # -----------------------------------------------------------------------------
 # Model Configurations
@@ -485,6 +503,53 @@ models:
         n_random_steps: 10
       nevergrad:
         n_random_steps: 10
+
+  # Engineering-only IDEA recipe. The dataset metadata records that tracks
+  # are truth-seeded and the baseline candidate is a target oracle.
+  pyg-idea-pipeline-v1:
+    <<: *defaults
+    dataset: idea
+    gpu_batch_multiplier: 1
+    num_steps: 200
+    ntrain: 10
+    nvalid: 10
+    ntest: 10
+    checkpoint_freq: 50
+    val_freq: 50
+    num_workers: 0
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0005
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 1
+        head_dim: 8
+        num_heads: 2
+
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "idea_edm_qq_pf"
+            version: "0.1.0"
+            splits: ["1"]
+
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "idea_edm_qq_pf"
+            version: "0.1.0"
+            splits: ["1"]
+
+    test_datasets:
+      - name: "idea_edm_qq_pf"
+        version: "0.1.0"
+        splits: ["1"]
 
   pyg-cms-v1:
     <<: *defaults

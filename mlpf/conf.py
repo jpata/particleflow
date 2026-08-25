@@ -5,13 +5,19 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, fields
 import os
 from enum import Enum
-from mlpf.utils import resolve_path, load_spec, set_nested_dict, _resolve_paths_recursive
+from mlpf.utils import (
+    resolve_path,
+    load_spec,
+    set_nested_dict,
+    _resolve_paths_recursive,
+)
 
 
 class Dataset(Enum):
     CMS = "cms"
     CLIC = "clic"
     CLD = "cld"
+    IDEA = "idea"
     CLIC_HITS = "clic_hits"
     CLD_HITS = "cld_hits"
 
@@ -49,15 +55,21 @@ SOURCE_IDS = {
     Dataset.CMS.value: 1,
     Dataset.CLIC.value: 2,
     Dataset.CLD.value: 3,
+    Dataset.IDEA.value: 4,
 }
-SOURCE_LABELS = {source_id: source_name for source_name, source_id in SOURCE_IDS.items()}
+SOURCE_LABELS = {
+    source_id: source_name for source_name, source_id in SOURCE_IDS.items()
+}
 
 INPUT_TYPE_IDS = {
     "unknown": 0,
     "hits": 1,
     "pf": 2,
 }
-INPUT_TYPE_LABELS = {input_type_id: input_type_name for input_type_name, input_type_id in INPUT_TYPE_IDS.items()}
+INPUT_TYPE_LABELS = {
+    input_type_id: input_type_name
+    for input_type_name, input_type_id in INPUT_TYPE_IDS.items()
+}
 
 
 def dataset_source_id(dataset_name: str) -> int:
@@ -307,6 +319,7 @@ ELEM_TYPES = {
     Dataset.CMS.value: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
     Dataset.CLIC.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.CLD.value: [0, 1, 2],  # 1 - track, 2 - cluster
+    Dataset.IDEA.value: [0, 1, 2],  # 1 - truth-seeded proxy track, 2 - cluster
     Dataset.CLIC_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
     Dataset.CLD_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
 }
@@ -316,38 +329,153 @@ ELEM_TYPES_NONZERO = {
     Dataset.CMS.value: [1, 4, 5, 6, 8, 9, 10, 11],
     Dataset.CLIC.value: [1, 2],
     Dataset.CLD.value: [1, 2],
+    Dataset.IDEA.value: [1, 2],
     Dataset.CLIC_HITS.value: [1, 2],
     Dataset.CLD_HITS.value: [1, 2],
 }
 
 CLASS_LABELS = {
-    Dataset.CMS.value: [0, 211, 130, 1, 2, 22, 11, 13, 15],  # we never actually predict 15/taus (not there in targets)
+    Dataset.CMS.value: [
+        0,
+        211,
+        130,
+        1,
+        2,
+        22,
+        11,
+        13,
+        15,
+    ],  # we never actually predict 15/taus (not there in targets)
     Dataset.CLIC.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLD.value: [0, 211, 130, 22, 11, 13],
+    Dataset.IDEA.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLIC_HITS.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLD_HITS.value: [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
-    Dataset.CMS.value: ["none", "Charged Hadron", "Neutral Hadron", "HFEM", "HFHAD", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$", r"$\tau$"],
-    Dataset.CLIC.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    Dataset.CLD.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    Dataset.CLIC_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    Dataset.CLD_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    Dataset.CMS.value: [
+        "none",
+        "Charged Hadron",
+        "Neutral Hadron",
+        "HFEM",
+        "HFHAD",
+        r"$\gamma$",
+        r"$e^\pm$",
+        r"$\mu^\pm$",
+        r"$\tau$",
+    ],
+    Dataset.CLIC.value: [
+        "none",
+        "Charged Hadron",
+        "Neutral Hadron",
+        r"$\gamma$",
+        r"$e^\pm$",
+        r"$\mu^\pm$",
+    ],
+    Dataset.CLD.value: [
+        "none",
+        "Charged Hadron",
+        "Neutral Hadron",
+        r"$\gamma$",
+        r"$e^\pm$",
+        r"$\mu^\pm$",
+    ],
+    Dataset.IDEA.value: [
+        "none",
+        "Charged Hadron",
+        "Neutral Hadron",
+        r"$\gamma$",
+        r"$e^\pm$",
+        r"$\mu^\pm$",
+    ],
+    Dataset.CLIC_HITS.value: [
+        "none",
+        "Charged Hadron",
+        "Neutral Hadron",
+        r"$\gamma$",
+        r"$e^\pm$",
+        r"$\mu^\pm$",
+    ],
+    Dataset.CLD_HITS.value: [
+        "none",
+        "Charged Hadron",
+        "Neutral Hadron",
+        r"$\gamma$",
+        r"$e^\pm$",
+        r"$\mu^\pm$",
+    ],
 }
 CLASS_NAMES = {
-    Dataset.CMS.value: ["none", "chhad", "nhad", "HFEM", "HFHAD", "gamma", "ele", "mu", "tau"],
+    Dataset.CMS.value: [
+        "none",
+        "chhad",
+        "nhad",
+        "HFEM",
+        "HFHAD",
+        "gamma",
+        "ele",
+        "mu",
+        "tau",
+    ],
     Dataset.CLIC.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLD.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.IDEA.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLIC_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLD_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
-    Dataset.CMS.value: ["none", "Charged hadron", "Neutral hadron", "HFEM", "HFHAD", "Photon", "Electron", "Muon", "Tau"],
-    Dataset.CLIC.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    Dataset.CLD.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    Dataset.CLIC_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    Dataset.CLD_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    Dataset.CMS.value: [
+        "none",
+        "Charged hadron",
+        "Neutral hadron",
+        "HFEM",
+        "HFHAD",
+        "Photon",
+        "Electron",
+        "Muon",
+        "Tau",
+    ],
+    Dataset.CLIC.value: [
+        "none",
+        "Charged hadron",
+        "Neutral hadron",
+        "Photon",
+        "Electron",
+        "Muon",
+    ],
+    Dataset.CLD.value: [
+        "none",
+        "Charged hadron",
+        "Neutral hadron",
+        "Photon",
+        "Electron",
+        "Muon",
+    ],
+    Dataset.IDEA.value: [
+        "none",
+        "Charged hadron",
+        "Neutral hadron",
+        "Photon",
+        "Electron",
+        "Muon",
+    ],
+    Dataset.CLIC_HITS.value: [
+        "none",
+        "Charged hadron",
+        "Neutral hadron",
+        "Photon",
+        "Electron",
+        "Muon",
+    ],
+    Dataset.CLD_HITS.value: [
+        "none",
+        "Charged hadron",
+        "Neutral hadron",
+        "Photon",
+        "Electron",
+        "Muon",
+    ],
 }
 
 X_FEATURES = {
@@ -410,6 +538,7 @@ X_FEATURES = {
     ],
     Dataset.CLIC.value: get_edm4hep_x_features(),
     Dataset.CLD.value: get_edm4hep_x_features(),
+    Dataset.IDEA.value: get_edm4hep_x_features(),
     Dataset.CLIC_HITS.value: EDM4HEP.HitFeatures.get_names(),
     Dataset.CLD_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
@@ -429,6 +558,13 @@ JET_CONFIG = {
         "match_dr": 0.1,
     },
     Dataset.CLD.value: {
+        "algo": "ee_genkt_algorithm",
+        "r": 0.4,
+        "p": -1.0,
+        "ptcut": 5.0,
+        "match_dr": 0.1,
+    },
+    Dataset.IDEA.value: {
         "algo": "ee_genkt_algorithm",
         "r": 0.4,
         "p": -1.0,
@@ -573,7 +709,9 @@ class ModelArchitectureConfig(BaseModel):
 
     type: ModelType
     input_encoding: InputEncoding = InputEncoding.SPLIT
-    learned_representation_mode: LearnedRepresentationMode = LearnedRepresentationMode.LAST
+    learned_representation_mode: LearnedRepresentationMode = (
+        LearnedRepresentationMode.LAST
+    )
     pt_mode: RegressionMode = RegressionMode.DIRECT_ELEMTYPE_SPLIT
     eta_mode: RegressionMode = RegressionMode.LINEAR
     sin_phi_mode: RegressionMode = RegressionMode.LINEAR
@@ -659,9 +797,15 @@ class MLPFConfig(BaseModel):
     optimizer: OptimizerType = OptimizerType.ADAMW
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
-    regression_loss_weights: RegressionLossWeights = Field(default_factory=RegressionLossWeights)
-    pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
-    validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
+    regression_loss_weights: RegressionLossWeights = Field(
+        default_factory=RegressionLossWeights
+    )
+    pad_to_multiple_elements: Optional[int] = (
+        None  # pad the dataset to multiples of this value
+    )
+    validation_diagnostics_batches: int = (
+        0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
+    )
 
     # Flags
     train: bool = False
@@ -671,8 +815,12 @@ class MLPFConfig(BaseModel):
     sort_data: bool = False
     sampler_mode: DatasetSamplerMode = DatasetSamplerMode.SHARD_CONSECUTIVE
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
-    relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
-    sampler_from_scratch: bool = False  # start the sampler from scratch (without resuming the sampler state)
+    relaxed_load: bool = (
+        False  # if enabled, skip layer mismatch and optimizer in loading
+    )
+    sampler_from_scratch: bool = (
+        False  # start the sampler from scratch (without resuming the sampler state)
+    )
 
     # Logging
     comet: bool = False
@@ -691,9 +839,15 @@ class MLPFConfig(BaseModel):
 
     # Sample limits
     ntrain: Optional[int] = None  # number of training events
-    nvalid: Optional[int] = None  # number of validation events, ran at periodic intervals during training
-    ntest: Optional[int] = None  # number of testing events, ran at the end of the training
-    data_config: Optional[List[str]] = None  # used to limit the data loading to the specified configurations (e.g. config split 1 only)
+    nvalid: Optional[int] = (
+        None  # number of validation events, ran at periodic intervals during training
+    )
+    ntest: Optional[int] = (
+        None  # number of testing events, ran at the end of the training
+    )
+    data_config: Optional[List[str]] = (
+        None  # used to limit the data loading to the specified configurations (e.g. config split 1 only)
+    )
 
     # Multi-GPU
     gpus: int = 0
@@ -735,7 +889,13 @@ class MLPFConfig(BaseModel):
         return items
 
     @staticmethod
-    def from_spec(spec_file: str, model_name: str, production_name: str, args=None, extra_args=None):
+    def from_spec(
+        spec_file: str,
+        model_name: str,
+        production_name: str,
+        args=None,
+        extra_args=None,
+    ):
         spec = load_spec(spec_file)
 
         if model_name not in spec["models"]:
@@ -758,7 +918,12 @@ class MLPFConfig(BaseModel):
 
         # 2. Merge model config
         for k, v in model_config_raw.items():
-            if k not in ["architecture", "train_datasets", "validation_datasets", "test_datasets"]:
+            if k not in [
+                "architecture",
+                "train_datasets",
+                "validation_datasets",
+                "test_datasets",
+            ]:
                 if isinstance(v, str):
                     v = resolve_path(v, spec)
                 config_dict[k] = v
@@ -772,7 +937,9 @@ class MLPFConfig(BaseModel):
         config_dict["conv_type"] = config_dict["model"]["type"]
 
         # 4. Dataset and Production
-        config_dict["dataset"] = Dataset(model_config_raw.get("dataset", prod_config_raw.get("type")))
+        config_dict["dataset"] = Dataset(
+            model_config_raw.get("dataset", prod_config_raw.get("type"))
+        )
         workspace_dir = resolve_path(prod_config_raw["workspace_dir"], spec)
         config_dict["data_dir"] = os.path.join(workspace_dir, "tfds")
 
@@ -798,12 +965,16 @@ class MLPFConfig(BaseModel):
 
             # Special mapping cases (convenience flags)
             if hasattr(args, "attention_type") and args.attention_type is not None:
-                set_nested_dict(config_dict, "model.attention.attention_type", args.attention_type)
+                set_nested_dict(
+                    config_dict, "model.attention.attention_type", args.attention_type
+                )
 
             if hasattr(args, "num_convs") and args.num_convs is not None:
                 for m in ["gnnlsh", "attention", "litept", "hept", "heptv2"]:
                     if m in config_dict["model"]:
-                        set_nested_dict(config_dict, f"model.{m}.num_convs", args.num_convs)
+                        set_nested_dict(
+                            config_dict, f"model.{m}.num_convs", args.num_convs
+                        )
                 set_nested_dict(config_dict, "model.backbone.num_convs", args.num_convs)
 
         # 6. Apply Dot-notation overrides (extra_args)
@@ -819,7 +990,11 @@ class MLPFConfig(BaseModel):
             while i < len(extra_args):
                 arg = extra_args[i]
                 if arg.startswith("--"):
-                    if i + 1 < len(extra_args) and not extra_args[i + 1].startswith("--") and "=" not in extra_args[i + 1]:
+                    if (
+                        i + 1 < len(extra_args)
+                        and not extra_args[i + 1].startswith("--")
+                        and "=" not in extra_args[i + 1]
+                    ):
                         i += 2
                     else:
                         i += 1
@@ -844,7 +1019,9 @@ class MLPFConfig(BaseModel):
             data_config = config_dict.get("data_config")
             for phys_key, phys_val in dataset_input.items():
                 ds_config[ds_name][phys_key] = {
-                    "batch_size": phys_val.get("batch_size", config_dict.get("batch_size", 1)),
+                    "batch_size": phys_val.get(
+                        "batch_size", config_dict.get("batch_size", 1)
+                    ),
                     "samples": {},
                 }
                 target_dict = ds_config[ds_name][phys_key]["samples"]
@@ -860,9 +1037,13 @@ class MLPFConfig(BaseModel):
             return ds_config
 
         if "train_datasets" in model_config_raw:
-            config_dict["train_dataset"] = build_dataset_config_dict(model_config_raw["train_datasets"])
+            config_dict["train_dataset"] = build_dataset_config_dict(
+                model_config_raw["train_datasets"]
+            )
         if "validation_datasets" in model_config_raw:
-            config_dict["valid_dataset"] = build_dataset_config_dict(model_config_raw["validation_datasets"])
+            config_dict["valid_dataset"] = build_dataset_config_dict(
+                model_config_raw["validation_datasets"]
+            )
         if "test_datasets" in model_config_raw:
             config_dict["test_dataset"] = {}
             data_config = config_dict.get("data_config")
@@ -897,12 +1078,24 @@ class MLPFConfig(BaseModel):
                     if ds in config_dict:
                         config_dict[ds][ds_name] = {
                             "physical_pu": {
-                                "batch_size": config_dict[ds][ds_name]["physical_pu"]["batch_size"],
-                                "samples": {"cms_pf_ttbar": {"splits": ["10"], "version": "3.2.0"}},
+                                "batch_size": config_dict[ds][ds_name]["physical_pu"][
+                                    "batch_size"
+                                ],
+                                "samples": {
+                                    "cms_pf_ttbar": {
+                                        "splits": ["10"],
+                                        "version": "3.2.0",
+                                    }
+                                },
                             }
                         }
-                if "test_dataset" in config_dict and "cms_pf_ttbar" in config_dict["test_dataset"]:
-                    config_dict["test_dataset"] = {"cms_pf_ttbar": config_dict["test_dataset"]["cms_pf_ttbar"]}
+                if (
+                    "test_dataset" in config_dict
+                    and "cms_pf_ttbar" in config_dict["test_dataset"]
+                ):
+                    config_dict["test_dataset"] = {
+                        "cms_pf_ttbar": config_dict["test_dataset"]["cms_pf_ttbar"]
+                    }
                     config_dict["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
             elif ds_name == "cld":
                 config_dict["gpu_batch_multiplier"] = 8
@@ -910,29 +1103,59 @@ class MLPFConfig(BaseModel):
                     if ds in config_dict:
                         config_dict[ds][ds_name] = {
                             "physical": {
-                                "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.2.0"}},
+                                "batch_size": config_dict[ds][ds_name]["physical"][
+                                    "batch_size"
+                                ],
+                                "samples": {
+                                    "cld_edm_ttbar_pf": {
+                                        "splits": ["10"],
+                                        "version": "3.2.0",
+                                    }
+                                },
                             }
                         }
-                if "test_dataset" in config_dict and "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
-                    config_dict["test_dataset"] = {"cld_edm_ttbar_pf": config_dict["test_dataset"]["cld_edm_ttbar_pf"]}
+                if (
+                    "test_dataset" in config_dict
+                    and "cld_edm_ttbar_pf" in config_dict["test_dataset"]
+                ):
+                    config_dict["test_dataset"] = {
+                        "cld_edm_ttbar_pf": config_dict["test_dataset"][
+                            "cld_edm_ttbar_pf"
+                        ]
+                    }
                     config_dict["test_dataset"]["cld_edm_ttbar_pf"]["splits"] = ["10"]
             elif ds_name == "clic":
                 for ds in ["train_dataset", "valid_dataset"]:
                     if ds in config_dict:
                         config_dict[ds][ds_name] = {
                             "physical": {
-                                "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.2.0"}},
+                                "batch_size": config_dict[ds][ds_name]["physical"][
+                                    "batch_size"
+                                ],
+                                "samples": {
+                                    "clic_edm_ttbar_pf": {
+                                        "splits": ["10"],
+                                        "version": "3.2.0",
+                                    }
+                                },
                             }
                         }
-                if "test_dataset" in config_dict and "clic_edm_ttbar_pf" in config_dict["test_dataset"]:
-                    config_dict["test_dataset"] = {"clic_edm_ttbar_pf": config_dict["test_dataset"]["clic_edm_ttbar_pf"]}
+                if (
+                    "test_dataset" in config_dict
+                    and "clic_edm_ttbar_pf" in config_dict["test_dataset"]
+                ):
+                    config_dict["test_dataset"] = {
+                        "clic_edm_ttbar_pf": config_dict["test_dataset"][
+                            "clic_edm_ttbar_pf"
+                        ]
+                    }
                     config_dict["test_dataset"]["clic_edm_ttbar_pf"]["splits"] = ["10"]
 
         # Post-dataset adjustments
         if "test_dataset" in config_dict:
-            config_dict["enabled_test_datasets"] = list(config_dict["test_dataset"].keys())
+            config_dict["enabled_test_datasets"] = list(
+                config_dict["test_dataset"].keys()
+            )
         if args and hasattr(args, "test_datasets") and args.test_datasets:
             config_dict["enabled_test_datasets"] = args.test_datasets
 
