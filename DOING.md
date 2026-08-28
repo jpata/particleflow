@@ -493,9 +493,11 @@ Initial branch validation completed during PR preparation:
 - both changed k4geo translation units compile against Key4HEP `2026-04-08`;
 - the k4RecCalorimeter truth-link and optical-link units compile against that
   stack;
-- the current-main topocluster unit is blocked on the April stack by an
-  existing use of `k4FWCore::putCollectionParameter`, which is unavailable in
-  that release; the failure occurs before the new event-processing code;
+- an exact current-main export of the five IDEA reconstruction components now
+  compiles and installs against the April stack with the validation harness's
+  recorded metadata-transport compatibility patch; unrelated components that
+  require the newer metadata API are deliberately outside that campaign-stack
+  build;
 - FCC-config passes Python compilation, and both default no-GGTF and
   `ENABLE_GGTF=1` configurations load successfully; and
 - the key4hep-sim runner and build scripts pass `bash -n`.
@@ -589,32 +591,45 @@ the rebased PR heads pass.
 
 #### Role of `validate_k4geo_changes.sh`
 
-`scripts/validate_k4geo_changes.sh` is the main execution harness for the
-k4geo-specific part of this plan, but it is not by itself the final component
-or dependency-graph acceptance test.
+`scripts/validate_k4geo_changes.sh` is now the main execution harness for both
+the k4geo and k4RecCalorimeter parts of this plan. It is still not a substitute
+for native component tests or the final clean dependency-graph acceptance run.
 
 It already provides the following useful isolation and evidence:
 
-- clones k4geo into a disposable directory, resolves and prints the selected
-  refs, exports source trees without checking them out, and builds `main`, PR
-  #1, PR #2, the combined branch, and a synthesized pre-PR-#620 baseline;
-- verifies the expected plugin-file scope of the focused k4geo branches and
-  verifies that the upstream keyed-hit fix can be reversed in isolation;
+- clones both component repositories into a disposable directory, resolves
+  and records immutable refs, exports source trees without checking them out,
+  and builds the k4geo and k4RecCalorimeter baseline, every focused branch,
+  and each combined branch;
+- verifies the exact full-tree file scope of all focused branches, verifies
+  exact composition of the three k4RecCalorimeter changes, and verifies that
+  the upstream keyed-hit fix can be reversed in isolation;
+- rejects a dirty workflow root by default and records the key4hep-sim,
+  CLDConfig, and FCC-config checkout commits and cleanliness state;
 - runs identical fixed-seed CLIC, CLD, IDEA-standard, and IDEA-fast gun cases
   across `main`, both focused branches, and the combined branch;
 - requires exact typed EDM4hep equality for PR #2 and for detectors unaffected
   by PR #1, while allowing only the intended DRC truth payload to differ for
   PR #1;
-- checks positive integral Cherenkov counts, hit/contribution closure, a valid
-  relation object, empty fast-simulation output, and exact composition of PR
-  #1 with PR #2;
+- checks positive integral Cherenkov counts, hit/contribution closure, both
+  ObjectID fields and collection membership for relations, charged ancestors,
+  empty fast-simulation output, and exact composition of PR #1 with PR #2;
 - records CPU, wall time, RSS, output size, loaded library paths, and DDSim
   timing, with non-regression gates and a standalone dense-map microbenchmark;
 - isolates the already-upstream PR #620 keyed-hit speedup with both a pion gun
   and identical five-event qq input; and
-- simulates qq with the combined k4geo branch and performs a no-GGTF
-  reconstruction smoke test that checks event count, required collections,
-  ERROR/FATAL logs, and the loaded k4geo/k4RecCalorimeter libraries.
+- simulates one fixed-seed qq sample with the combined k4geo branch, then
+  reconstructs that identical file with k4RecCalorimeter `main`, each of the
+  three focused PRs, and the combined branch, plus reversed-input runs for the
+  cluster and combined branches;
+- checks exact loaded-library provenance and ERROR/FATAL logs, scintillation
+  and optical digi/sim endpoint closure, normalized cell truth, positive-cell
+  filtering, cellID-based cluster truth, copied-cell membership, total and
+  per-channel cluster energy/error closure, shape-parameter metadata, and
+  normal/reversed input-order invariance; and
+- records reconstruction CPU, wall time, RSS, and output size, with focused
+  branch non-regression and input-order stability gates. The generated JSON
+  summaries retain per-event counts and canonical cluster payloads.
 
 The script therefore covers most of k4geo plan step 2, including branch
 composition. Its pre-fix/current 10x gate documents upstream PR #620 and must
@@ -624,50 +639,44 @@ microbenchmark, not a claim of a 10x application-level improvement.
 
 The following gaps remain:
 
-- Default `--workflow-root` points at the adjacent
-  `mlpf/data/key4hep/gen`, and reconstruction uses that tree's FCC-config plus
-  preinstalled local k4RecCalorimeter. In the current worktree those inputs are
-  dirty old-base checkouts. The reconstruction stage is consequently only a
-  smoke test unless `--workflow-root` points at a fresh recursive key4hep-sim
-  clone with the exact integration gitlinks and a clean k4RecCalorimeter
-  install.
+- Default `--workflow-root` points at the adjacent dirty old-base checkout, so
+  an acceptance invocation will deliberately reject it. Point
+  `--workflow-root` at a fresh recursive key4hep-sim clone; use
+  `--allow-dirty-workflow-root` only for explicitly non-acceptance development
+  runs.
 - Default branch names are moving refs. An acceptance run must pass the exact
   immutable SHAs listed above and record the resolved refs in its report.
-- The build uses `BUILD_TESTING=OFF`; it proves that the libraries build but
-  does not run native k4geo unit tests.
-- The PR #1 closure checker proves that a contribution relation exists, but it
-  does not independently prove that every related MCParticle is the intended
-  charged Geant4 ancestor, nor does it explicitly check both ObjectID fields
-  against collection bounds.
+- The builds use `BUILD_TESTING=OFF`; they prove the exercised plugins build
+  and execute but do not run either repository's native unit tests.
 - The standard-optical case covers electrons only; pions and the empty case
   currently exercise fast optical transport. Add at least one standard-optical
   hadron case before claiming both transport modes are covered for hadronic
   ancestry.
-- The combined reconstruction check only verifies collection presence and log
-  health. It does not validate optical digi/sim endpoint closure, cell-ID truth
-  propagation, dual-readout energy closure, or the three k4RecCalorimeter PRs
-  independently.
+- The qq matrix exercises realistic integration contracts, but it does not
+  replace focused empty-input, collection-name override, single-input
+  calorimeter, and scaling tests for the three reconstruction PRs.
 - The default release is the campaign stack `2026-04-08`. This is valuable for
-  compatibility, but it does not replace a build/test on the release supported
-  by current k4geo and k4RecCalorimeter `main`.
+  compatibility, but current k4RecCalorimeter uses a newer metadata API. The
+  script records a narrowly scoped April compatibility patch and builds only
+  the five IDEA components it exercises. This does not replace an unmodified
+  full build/test on a release supported by current component `main`.
+- The focused compatibility export, output validator, steering generator, and
+  syntax checks have been smoke-tested locally, but the full ten-build,
+  multi-event acceptance matrix still needs to run and its retained artifacts
+  need to be attached to the staging PRs.
 
 Use the script in three passes:
 
-1. Run `--quick` against the exact k4geo SHAs as a build, payload, and wiring
+1. Run `--quick` against all exact k4geo and k4RecCalorimeter SHAs with a fresh
+   workflow root as a build, payload, reconstruction-contract, and wiring
    check. A quick run has low statistics and is not performance acceptance.
 2. Run the full default event/repetition matrix with `--keep-workdir`, exact
    SHA arguments, and a fresh `--workflow-root`. Preserve `metrics.tsv`, logs,
-   resolved refs, comparison output, and final plots for the PR evidence.
-3. Run the missing charged-ancestor/ObjectID checks and native tests
-   separately. Then use the clean key4hep-sim integration gate in plan step 4
-   for the k4RecCalorimeter and FCC-config contracts that this script does not
-   establish.
-
-Before the final acceptance run, improve the script so it rejects a dirty
-acceptance `--workflow-root`, records the workflow gitlink SHAs in the report,
-checks full-tree rather than plugin-only PR scope, and adds the missing
-charged-ancestor and relation-bound validations. These are evidence-quality
-changes; the existing script remains useful for development and smoke runs.
+   component/workflow refs, compatibility patches, reconstruction JSON
+   summaries, comparison output, and final plots for the PR evidence.
+3. Run native and focused edge-case tests separately, then use the clean
+   key4hep-sim integration gate in plan step 4 for the exact final gitlink
+   graph and FCC-config contract.
 
 1. Preserve and isolate the old worktrees.
    - Save binary-capable diffs for FCC-config, k4geo, k4RecCalorimeter, and the
@@ -753,29 +762,23 @@ The highest priority is independent validation of the HEP-KBFI staging PRs.
 Do not open official Key4HEP PRs from the combined integration branches before
 the focused changes pass their own tests.
 
-`scripts/validate_k4geo_changes.sh` now also builds an isolated pre-PR-#620
-variant by restoring only the two keyed-lookup source files from the fix's
-parent onto current `main`. Its dedicated fixed-seed 50 GeV pion comparison
-requires exact typed EDM4hep payload equality as a compact equivalence check.
-The script now additionally generates five fixed-seed 365 GeV qq events once
-and simulates the identical HepMC stream with the isolated pre-fix, current
-main, and combined-PR variants. It requires exact typed pre-fix/current output
-equality, verifies that the combined branch changes only the intended DRC
-truth payload and closes its photon counts, then reconstructs the combined
-output with GGTF disabled. The 10x processing-time gate and final overlaid
-physics/computing plots use the representative pre-fix/current qq comparison
-rather than the sparse gun sample. The plotter has smoke-tested successfully
-against existing real pre-fix/current ROOT outputs; the full five-build and
-five-event qq validation run still needs execution to obtain the final
-measurements and plots. As detailed above, that run is k4geo evidence; its
-reconstruction step becomes dependency-graph evidence only when supplied a
-fresh, clean key4hep-sim workflow root at the exact recorded gitlinks.
+`scripts/validate_k4geo_changes.sh` now covers the focused k4geo and
+k4RecCalorimeter branch matrices in one reproducible run. It builds the
+isolated pre-PR-#620 k4geo control, generates one fixed-seed 365 GeV qq stream,
+simulates it once with the combined geometry branch, and reconstructs that
+identical file with all five reconstruction variants plus both reversed-input
+controls. The companion PODIO validator has passed one event from an existing
+real IDEA reconstruction, and the focused April compatibility export compiles
+and installs. The full default matrix still needs execution to obtain the
+final measurements, JSON summaries, logs, and plots. It becomes
+dependency-graph evidence only when supplied a fresh, clean key4hep-sim
+workflow root at the exact recorded gitlinks.
 
-1. Validate k4geo #1 independently in both fast and standard optical transport:
-   verify parent relations, per-hit and event-level photon-count closure, empty
-   events, and unchanged non-truth payloads. Validate k4geo #2 separately with
-   an output-equivalence check and a small serialization timing comparison.
-2. Validate each k4RecCalorimeter PR separately:
+1. Run the expanded harness first in `--quick` mode and then with the full
+   default matrix, using exact SHA arguments and a fresh recursive workflow
+   root. Retain its component/workflow ref tables, compatibility patches,
+   metrics, logs, JSON summaries, comparison output, and plots.
+2. Supplement the matrix with focused k4RecCalorimeter tests:
    - #1 with copied and non-copied cells, repeated `cellID` inputs,
      `minCellEnergy`, weight closure, and runtime scaling;
    - #2 with one-to-one digi/sim link checks, empty inputs, and collection-name
@@ -783,45 +786,48 @@ fresh, clean key4hep-sim workflow root at the exact recorded gitlinks.
    - #3 with reversed input order, duplicate physical cells, energy/error
      closure, named shape-parameter metadata, and ordinary single-input
      calorimeters.
-3. Validate FCC-config #1 with a simulation comparison showing that the fast
+3. Run the native component tests on releases supported by the current
+   repositories, and add a standard-optical hadron case for k4geo #1. Keep the
+   campaign-stack compatibility result separate from this unmodified build.
+4. Validate FCC-config #1 with a simulation comparison showing that the fast
    model is active and preserves the expected detector output. Validate
    FCC-config #2 only after installing the independently tested component
    branches; exercise both no-GGTF and opt-in modes and compare required output
    collections.
-4. Run a full 100-event reconstruction of `idea-100/work/IDEA_sim.root` with
+5. Run a full 100-event reconstruction of `idea-100/work/IDEA_sim.root` with
    the default no-GGTF steering. Record per-event Chrono timings and sampled
    peak RSS, compare the MLPF-required collections with the GGTF-enabled file,
    and replace the old 13--15 hour production estimate.
-5. Record the independent results in each staging PR and ensure fork CI is
+6. Record the independent results in each staging PR and ensure fork CI is
    green. Then open upstream PRs against `key4hep/k4geo`,
    `HEP-FCC/k4RecCalorimeter`, and `HEP-FCC/FCC-config` in dependency order.
    After merges, update the integration branches and key4hep-sim submodule pins.
-6. Repair the simulation/reconstruction heartbeat so it works inside the
+7. Repair the simulation/reconstruction heartbeat so it works inside the
    Key4HEP container without the failing `ps`/`libsystemd.so.0` dependency.
    Confirm that a test job emits one real `[progress]` record per configured
    interval to both the Slurm log and persistent stage log.
-7. Resubmit a small IDEA generation test with the new 10 GB request. Verify
+8. Resubmit a small IDEA generation test with the new 10 GB request. Verify
    `ReqMem=10000M`, follow peak RSS and event-save cadence, and determine
    whether the prior event-2 stall clears. Do not infer that 10 GB is adequate
    solely because the job remains in Slurm's `RUNNING` state.
-8. Define and validate the physics calibration for the two IDEA readout
+9. Define and validate the physics calibration for the two IDEA readout
    components. Study Cherenkov, scintillation, their ratio, and an appropriate
    combined estimator on gun samples before treating combined cluster response
    as particle energy.
-9. Repeat detailed truth checks on representative corrected events, including
+10. Repeat detailed truth checks on representative corrected events, including
    photons, charged hadrons, and neutral hadrons. Verify that recovered links
    follow detector cell IDs and deposited-energy contributors, not merely that
    link counts and particle coverage increased.
-10. Change IDEA cluster target construction so the highest-weight or
+11. Change IDEA cluster target construction so the highest-weight or
    highest-associated-energy fragment is the representative, while every
    associated fragment retains the same `particle_number`.
-11. Add an IDEA-aware validation metric that compares particle truth energy
+12. Add an IDEA-aware validation metric that compares particle truth energy
    with a calibrated sum of all associated topological-cluster fragments. The
    new R2 gate checks representation integrity, not physics response.
-12. Add explicit feature names for dual-readout channels if changing the common
+13. Add explicit feature names for dual-readout channels if changing the common
    tensor schema becomes acceptable. The current `energy_ecal`/`energy_hcal`
    mapping is backward-compatible but requires IDEA-specific interpretation.
-13. Run a true one-event electron-gun job with the latest patched local module
+14. Run a true one-event electron-gun job with the latest patched local module
    as a minimal repeatable runtime and association check,
    making sure `NEV=1` is exported in the effective environment:
 
@@ -833,7 +839,7 @@ fresh, clean key4hep-sim workflow root at the exact recorded gitlinks.
 
    Use it to measure the separate-channel response and validate the new
    shape-parameter contract on a simple known-energy shower.
-14. Once the dual-readout calibration and aggregate-cluster metric are defined,
+15. Once the dual-readout calibration and aggregate-cluster metric are defined,
    decide whether the completed 10-event sample is sufficient for an initial
    production benchmark or whether a larger sample is needed before enabling
    Snakemake production.
