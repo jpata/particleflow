@@ -9,6 +9,9 @@ set -Eeuo pipefail
 
 readonly DEFAULT_REPOSITORY_URL="https://github.com/HEP-KBFI/k4geo.git"
 readonly DEFAULT_RECCALO_REPOSITORY_URL="https://github.com/HEP-KBFI/k4RecCalorimeter.git"
+readonly DEFAULT_WORKFLOW_REPOSITORY_URL="https://github.com/HEP-KBFI/key4hep-sim.git"
+readonly DEFAULT_WORKFLOW_REF="a3a3fd2928a0e7ad420fdc87b9d0240b5bf85a6f"
+readonly DEFAULT_SCRATCH_ROOT="/scratch/persistent/joosep"
 readonly DEFAULT_KEY4HEP_RELEASE="2026-04-08"
 validation_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 readonly validation_script_dir
@@ -17,6 +20,10 @@ repository=""
 repository_url="${DEFAULT_REPOSITORY_URL}"
 reccalo_repository=""
 reccalo_repository_url="${DEFAULT_RECCALO_REPOSITORY_URL}"
+workflow_repository_url="${DEFAULT_WORKFLOW_REPOSITORY_URL}"
+workflow_ref="${DEFAULT_WORKFLOW_REF}"
+workflow_root=""
+scratch_root="${DEFAULT_SCRATCH_ROOT}"
 key4hep_release="${DEFAULT_KEY4HEP_RELEASE}"
 main_ref="main"
 truth_ref="idea-cherenkov-truth"
@@ -43,7 +50,6 @@ include_pions=1
 keep_workdir=0
 workdir=""
 current_log=""
-workflow_root="${validation_script_dir}/../mlpf/data/key4hep/gen"
 allow_dirty_workflow_root=0
 
 usage() {
@@ -57,19 +63,27 @@ calorimeter-hit lookup for physics-equivalence and speedup validation. Fixed-
 seed 365 GeV qq events are generated once, simulated with the k4geo variants,
 then reconstructed with baseline, three focused k4RecCalorimeter branches,
 their combined branch, and reversed dual-readout input order. The source
-repositories and caller's environment are never modified.
-Temporary data are deleted on exit by default.
+repositories and caller's environment are never modified. By default every
+checkout is cloned cleanly below /scratch/persistent/joosep.
+Validation data are deleted on exit unless --keep-workdir is specified.
 
 Options:
   --repo PATH                 Read refs from an existing local k4geo clone.
                               No fetch, checkout, or worktree is performed.
-  --repository-url URL        Clone this repository into the temporary area
+  --repository-url URL        Clone this repository into the scratch workdir
                               when --repo is not given.
   --reccalo-repo PATH         Read refs from an existing local
                               k4RecCalorimeter clone without modifying it.
   --reccalo-repository-url URL
                               Clone this k4RecCalorimeter repository when
                               --reccalo-repo is not given.
+  --scratch-root PATH         Create the unique validation work directory
+                              below PATH (default: /scratch/persistent/joosep).
+  --workflow-repository-url URL
+                              Clone this key4hep-sim repository when
+                              --workflow-root is not given.
+  --workflow-ref REF          Clean key4hep-sim commit or branch to check out
+                              recursively (default: a3a3fd2).
   --release NAME              Key4HEP release (default: 2026-04-08).
   --main-ref REF              Baseline ref (default: main).
   --truth-ref REF             Cherenkov-truth PR ref.
@@ -94,9 +108,8 @@ Options:
   --qq-events N               Events in the qq simulation and reconstruction
                               validation (default: 5).
   --qq-seed N                 Generator and DDSim seed for qq (default: 424242).
-  --workflow-root PATH        key4hep-sim gen directory containing CLDConfig
-                              and the IDEA integration (default: the checkout
-                              adjacent to this script).
+  --workflow-root PATH        Use an existing key4hep-sim checkout instead of
+                              making the default clean recursive clone.
   --allow-dirty-workflow-root permit a dirty workflow root for development
                               smoke tests; forbidden by default.
   --minimum-speedup N         Required processing-time speedup (default: 10).
@@ -108,7 +121,7 @@ Options:
                               repetition, and no additional pion cases.
                               Physics checks remain active; statistical
                               performance gates are reported but not enforced.
-  --keep-workdir              Keep the temporary directory and print its path.
+  --keep-workdir              Keep the scratch work directory and print it.
   -h, --help                  Show this help.
 
 Default refs in HEP-KBFI/k4geo:
@@ -125,8 +138,8 @@ Default refs in HEP-KBFI/k4RecCalorimeter:
   idea-dual-readout-clusters   PR #3, channel-preserving clusters
   idea-mlpf-integration        all three changes combined
 
-The script requires CVMFS, git, cmake, a C++ compiler, a clean key4hep-sim
-workflow root, and enough temporary space for ten component builds plus
+The script requires CVMFS, git, cmake, a C++ compiler, and enough scratch
+space for a recursive workflow clone, ten component builds, and
 sequential detector outputs. The April-2026 stack lacks the metadata API used
 by current k4RecCalorimeter main, so a narrowly scoped, recorded compatibility
 shim is enabled automatically for release 2026-04-08. It never invokes Slurm,
@@ -169,6 +182,21 @@ while (($#)); do
     --reccalo-repository-url)
       (($# >= 2)) || die "--reccalo-repository-url requires a URL"
       reccalo_repository_url=$2
+      shift 2
+      ;;
+    --scratch-root)
+      (($# >= 2)) || die "--scratch-root requires a path"
+      scratch_root=$2
+      shift 2
+      ;;
+    --workflow-repository-url)
+      (($# >= 2)) || die "--workflow-repository-url requires a URL"
+      workflow_repository_url=$2
+      shift 2
+      ;;
+    --workflow-ref)
+      (($# >= 2)) || die "--workflow-ref requires a ref"
+      workflow_ref=$2
       shift 2
       ;;
     --release)
@@ -345,19 +373,25 @@ done
 setup_script="/cvmfs/sw.hsf.org/key4hep/setup.sh"
 [[ -r "${setup_script}" ]] || die "Key4HEP setup script is not readable: ${setup_script}"
 
-workdir=$(mktemp -d "${TMPDIR:-/tmp}/key4hep-component-validation.XXXXXXXX")
-[[ -n "${workdir}" && -d "${workdir}" ]] || die "failed to create temporary directory"
+mkdir -p "${scratch_root}" || die "cannot create scratch root: ${scratch_root}"
+scratch_root=$(realpath "${scratch_root}")
+[[ -d "${scratch_root}" && -w "${scratch_root}" ]] || \
+  die "scratch root is not a writable directory: ${scratch_root}"
+workdir=$(mktemp -d "${scratch_root}/key4hep-component-validation.XXXXXXXX")
+[[ -n "${workdir}" && -d "${workdir}" ]] || die "failed to create scratch work directory"
 
 cleanup() {
   local status=$?
   if ((keep_workdir)); then
-    printf '\nTemporary validation data kept at: %s\n' "${workdir}" >&2
-  elif [[ "${workdir}" == "${TMPDIR:-/tmp}"/key4hep-component-validation.* && -d "${workdir}" ]]; then
+    printf '\nValidation data kept at: %s\n' "${workdir}" >&2
+  elif [[ "${workdir}" == "${scratch_root}"/key4hep-component-validation.* && -d "${workdir}" ]]; then
     rm -rf -- "${workdir}"
   fi
   exit "${status}"
 }
 trap cleanup EXIT
+mkdir -p "${workdir}/tmp"
+export TMPDIR="${workdir}/tmp"
 
 # The Key4HEP setup script probes optional unset variables and is not nounset-safe.
 set +u
@@ -368,7 +402,36 @@ for command_name in ddsim k4run k4_local_repo python3 c++ podio-dump; do
   command -v "${command_name}" >/dev/null 2>&1 || die "${command_name} is unavailable after loading Key4HEP ${key4hep_release}"
 done
 
-[[ -d "${workflow_root}" ]] || die "workflow root does not exist: ${workflow_root}"
+resolve_ref_in() {
+  local target_repository=$1
+  local requested=$2
+  if git -C "${target_repository}" rev-parse --verify --quiet "${requested}^{commit}" >/dev/null; then
+    git -C "${target_repository}" rev-parse "${requested}^{commit}"
+  elif git -C "${target_repository}" rev-parse --verify --quiet "origin/${requested}^{commit}" >/dev/null; then
+    git -C "${target_repository}" rev-parse "origin/${requested}^{commit}"
+  else
+    die "cannot resolve ref '${requested}' in ${target_repository}"
+  fi
+}
+
+if [[ -z "${workflow_root}" ]]; then
+  workflow_root="${workdir}/key4hep-sim"
+  current_log="${workdir}/workflow-clone.log"
+  printf 'Cloning clean workflow %s at %s...\n' "${workflow_repository_url}" "${workflow_ref}"
+  git clone --quiet --no-checkout "${workflow_repository_url}" "${workflow_root}" \
+    >"${current_log}" 2>&1 || die "key4hep-sim clone failed"
+  workflow_sha=$(resolve_ref_in "${workflow_root}" "${workflow_ref}")
+  git -C "${workflow_root}" checkout --quiet --detach "${workflow_sha}" \
+    >>"${current_log}" 2>&1 || die "key4hep-sim checkout failed"
+  git -C "${workflow_root}" submodule sync --recursive \
+    >>"${current_log}" 2>&1 || die "key4hep-sim submodule sync failed"
+  git -C "${workflow_root}" submodule update --init --recursive \
+    >>"${current_log}" 2>&1 || die "key4hep-sim recursive submodule checkout failed"
+  current_log=""
+else
+  [[ -d "${workflow_root}" ]] || die "workflow root does not exist: ${workflow_root}"
+  printf 'Using existing workflow checkout read-only: %s\n' "${workflow_root}"
+fi
 workflow_root=$(realpath "${workflow_root}")
 readonly workflow_root
 readonly cld_config_dir="${workflow_root}/cld/CLDConfig"
@@ -388,19 +451,47 @@ if git -C "${workflow_root}" rev-parse --git-dir >/dev/null 2>&1; then
     die "workflow root is dirty; use a fresh key4hep-sim clone or --allow-dirty-workflow-root for a non-acceptance smoke test"
   fi
   printf '.\t%s\t%s\n' "$(git -C "${workflow_root}" rev-parse HEAD)" "$(if [[ -n "${workflow_status}" ]]; then printf dirty; else printf clean; fi)" >>"${workflow_refs}"
-  for dependency in cld/CLDConfig idea/FCC-config; do
-    [[ -e "${workflow_root}/${dependency}" ]] || die "missing workflow dependency: ${dependency}"
+
+  workflow_submodules="${workdir}/workflow_submodules.txt"
+  git -C "${workflow_root}" submodule status --recursive >"${workflow_submodules}" || \
+    die "cannot inspect recursive workflow submodules"
+  while IFS= read -r submodule_line; do
+    [[ -n "${submodule_line}" ]] || continue
+    submodule_marker=${submodule_line:0:1}
+    read -r dependency_sha dependency _ <<<"${submodule_line:1}"
+    case "${submodule_marker}" in
+      " ") dependency_ref_status=recorded ;;
+      "+")
+        ((allow_dirty_workflow_root)) || \
+          die "workflow submodule ${dependency} is not at its recorded commit (+${dependency_sha})"
+        dependency_ref_status=mismatched
+        ;;
+      "-") die "workflow submodule ${dependency} is not initialized" ;;
+      "U") die "workflow submodule ${dependency} has merge conflicts" ;;
+      *) die "unknown workflow submodule state for ${dependency}: ${submodule_marker}" ;;
+    esac
+    [[ -d "${workflow_root}/${dependency}" ]] || die "missing workflow dependency: ${dependency}"
     dependency_status=$(git -C "${workflow_root}/${dependency}" status --porcelain --untracked-files=normal)
     if [[ -n "${dependency_status}" && "${allow_dirty_workflow_root}" -eq 0 ]]; then
       die "workflow dependency ${dependency} is dirty"
     fi
-    printf '%s\t%s\t%s\n' "${dependency}" "$(git -C "${workflow_root}/${dependency}" rev-parse HEAD)" \
-      "$(if [[ -n "${dependency_status}" ]]; then printf dirty; else printf clean; fi)" >>"${workflow_refs}"
-  done
+    if [[ -n "${dependency_status}" ]]; then
+      dependency_worktree_status=dirty
+    else
+      dependency_worktree_status=clean
+    fi
+    printf '%s\t%s\t%s,%s\n' "${dependency}" "${dependency_sha}" \
+      "${dependency_ref_status}" "${dependency_worktree_status}" >>"${workflow_refs}"
+  done <"${workflow_submodules}"
 else
   ((allow_dirty_workflow_root)) || die "workflow root is not a git checkout; pass --allow-dirty-workflow-root only for development"
   printf '.\tunknown\tnon-git\n' >>"${workflow_refs}"
 fi
+
+for required_dependency in cld/CLDConfig idea/FCC-config; do
+  [[ -d "${workflow_root}/${required_dependency}" ]] || \
+    die "required workflow submodule is not initialized: ${required_dependency}"
+done
 printf 'Workflow refs:\n'
 column -t -s $'\t' "${workflow_refs}" 2>/dev/null || cat "${workflow_refs}"
 
@@ -421,18 +512,6 @@ else
   git clone --quiet "${repository_url}" "${repository}" >"${current_log}" 2>&1 || die "git clone failed"
   current_log=""
 fi
-
-resolve_ref_in() {
-  local target_repository=$1
-  local requested=$2
-  if git -C "${target_repository}" rev-parse --verify --quiet "${requested}^{commit}" >/dev/null; then
-    git -C "${target_repository}" rev-parse "${requested}^{commit}"
-  elif git -C "${target_repository}" rev-parse --verify --quiet "origin/${requested}^{commit}" >/dev/null; then
-    git -C "${target_repository}" rev-parse "origin/${requested}^{commit}"
-  else
-    die "cannot resolve ref '${requested}' in ${target_repository}"
-  fi
-}
 
 declare -A variant_sha
 declare -A source_dir

@@ -604,8 +604,10 @@ It already provides the following useful isolation and evidence:
 - verifies the exact full-tree file scope of all focused branches, verifies
   exact composition of the three k4RecCalorimeter changes, and verifies that
   the upstream keyed-hit fix can be reversed in isolation;
-- rejects a dirty workflow root by default and records the key4hep-sim,
-  CLDConfig, and FCC-config checkout commits and cleanliness state;
+- creates a unique work directory under `/scratch/persistent/joosep`, clones
+  key4hep-sim `a3a3fd2` there by default, initializes every recursive
+  submodule at its recorded commit, and records the complete workflow graph
+  and cleanliness state;
 - runs identical fixed-seed CLIC, CLD, IDEA-standard, and IDEA-fast gun cases
   across `main`, both focused branches, and the combined branch;
 - requires exact typed EDM4hep equality for PR #2 and for detectors unaffected
@@ -639,9 +641,10 @@ microbenchmark, not a claim of a 10x application-level improvement.
 
 The following gaps remain:
 
-- Default `--workflow-root` points at the adjacent dirty old-base checkout, so
-  an acceptance invocation will deliberately reject it. Point
-  `--workflow-root` at a fresh recursive key4hep-sim clone; use
+- The default clean workflow commit still contains temporary integration
+  gitlinks. Override it with `--workflow-ref` after those pins move to stable
+  component commits. `--workflow-root` remains available for an existing
+  checkout, but it is recursively audited and rejected if dirty; use
   `--allow-dirty-workflow-root` only for explicitly non-acceptance development
   runs.
 - Default branch names are moving refs. An acceptance run must pass the exact
@@ -667,11 +670,12 @@ The following gaps remain:
 
 Use the script in three passes:
 
-1. Run `--quick` against all exact k4geo and k4RecCalorimeter SHAs with a fresh
-   workflow root as a build, payload, reconstruction-contract, and wiring
-   check. A quick run has low statistics and is not performance acceptance.
+1. Run `--quick` against all exact k4geo and k4RecCalorimeter SHAs. The script
+   makes a fresh recursive workflow clone under persistent scratch by default;
+   pass the exact workflow SHA with `--workflow-ref`. This is a build, payload,
+   reconstruction-contract, and wiring check, not performance acceptance.
 2. Run the full default event/repetition matrix with `--keep-workdir`, exact
-   SHA arguments, and a fresh `--workflow-root`. Preserve `metrics.tsv`, logs,
+   SHA arguments and workflow SHA. Preserve `metrics.tsv`, logs,
    component/workflow refs, compatibility patches, reconstruction JSON
    summaries, comparison output, and final plots for the PR evidence.
 3. Run native and focused edge-case tests separately, then use the clean
@@ -775,8 +779,9 @@ dependency-graph evidence only when supplied a fresh, clean key4hep-sim
 workflow root at the exact recorded gitlinks.
 
 1. Run the expanded harness first in `--quick` mode and then with the full
-   default matrix, using exact SHA arguments and a fresh recursive workflow
-   root. Retain its component/workflow ref tables, compatibility patches,
+   default matrix, using exact component and workflow SHA arguments. Let the
+   script create its clean recursive scratch checkout. Retain its
+   component/workflow ref tables, compatibility patches,
    metrics, logs, JSON summaries, comparison output, and plots.
 2. Supplement the matrix with focused k4RecCalorimeter tests:
    - #1 with copied and non-copied cells, repeated `cellID` inputs,
