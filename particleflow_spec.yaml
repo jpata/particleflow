@@ -517,14 +517,7 @@ models:
   pyg-idea-pipeline-v1:
     <<: *defaults
     dataset: idea
-    gpu_batch_multiplier: 1
-    num_steps: 200
-    ntrain: 10
-    nvalid: 10
-    ntest: 10
-    checkpoint_freq: 50
-    val_freq: 50
-    num_workers: 0
+    gpu_batch_multiplier: 32
 
     hyperparameters:
       batch_size: 1
@@ -534,15 +527,21 @@ models:
       type: "attention"
       input_encoding: "split"
       attention:
-        num_convs: 1
-        head_dim: 8
-        num_heads: 2
+        num_convs: 3
+        head_dim: 16
+        num_heads: 16
 
     train_datasets:
       physical:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
+            version: "0.1.0"
+            splits: ["1"]
+          - name: "idea_edm_ttbar_pf"
+            version: "0.1.0"
+            splits: ["1"]
+          - name: "idea_edm_ww_fullhad_pf"
             version: "0.1.0"
             splits: ["1"]
 
@@ -553,9 +552,21 @@ models:
           - name: "idea_edm_qq_pf"
             version: "0.1.0"
             splits: ["1"]
+          - name: "idea_edm_ttbar_pf"
+            version: "0.1.0"
+            splits: ["1"]
+          - name: "idea_edm_ww_fullhad_pf"
+            version: "0.1.0"
+            splits: ["1"]
 
     test_datasets:
       - name: "idea_edm_qq_pf"
+        version: "0.1.0"
+        splits: ["1"]
+      - name: "idea_edm_ttbar_pf"
+        version: "0.1.0"
+        splits: ["1"]
+      - name: "idea_edm_ww_fullhad_pf"
         version: "0.1.0"
         splits: ["1"]
 
