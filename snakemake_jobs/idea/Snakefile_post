@@ -18,7 +18,25 @@ os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
 
 rule all:
     input:
+        "snakemake_jobs/idea/post/post_ttbar_all.done",
+        "snakemake_jobs/idea/post/post_ww_fullhad_all.done",
         "snakemake_jobs/idea/post/post_qq_all.done"
+
+rule post_ttbar_all:
+    input:
+        lambda wildcards: expand("snakemake_jobs/idea/post/post_ttbar_{seed}.done", seed=glob_wildcards("snakemake_jobs/idea/gen/gen_ttbar_{seed}.done").seed) if glob_wildcards("snakemake_jobs/idea/gen/gen_ttbar_{seed}.done").seed else expand("snakemake_jobs/idea/post/post_ttbar_{seed}.done", seed=range(300000, 300100, 1))
+    output:
+        "snakemake_jobs/idea/post/post_ttbar_all.done"
+    shell:
+        "touch {output}"
+
+rule post_ww_fullhad_all:
+    input:
+        lambda wildcards: expand("snakemake_jobs/idea/post/post_ww_fullhad_{seed}.done", seed=glob_wildcards("snakemake_jobs/idea/gen/gen_ww_fullhad_{seed}.done").seed) if glob_wildcards("snakemake_jobs/idea/gen/gen_ww_fullhad_{seed}.done").seed else expand("snakemake_jobs/idea/post/post_ww_fullhad_{seed}.done", seed=range(400000, 400100, 1))
+    output:
+        "snakemake_jobs/idea/post/post_ww_fullhad_all.done"
+    shell:
+        "touch {output}"
 
 rule post_qq_all:
     input:
@@ -30,7 +48,7 @@ rule post_qq_all:
 
 rule post:
     input:
-        "snakemake_jobs/idea/post/post_qq_all.done"
+        "snakemake_jobs/idea/post/post_ttbar_all.done", "snakemake_jobs/idea/post/post_ww_fullhad_all.done", "snakemake_jobs/idea/post/post_qq_all.done"
     output:
         "snakemake_jobs/idea/post/all.done"
     shell:

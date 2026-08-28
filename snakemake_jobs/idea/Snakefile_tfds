@@ -18,6 +18,8 @@ os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
 
 rule all:
     input:
+        expand('snakemake_jobs/idea/tfds/tfds_ttbar_tfds_{config}.done', config=[1]),
+        expand('snakemake_jobs/idea/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1]),
         expand('snakemake_jobs/idea/tfds/tfds_qq_tfds_{config}.done', config=[1])
 
 rule tfds_task:
@@ -34,7 +36,7 @@ rule tfds_task:
 
 rule tfds:
     input:
-        expand('snakemake_jobs/idea/tfds/tfds_qq_tfds_{config}.done', config=[1])
+        expand('snakemake_jobs/idea/tfds/tfds_ttbar_tfds_{config}.done', config=[1]), expand('snakemake_jobs/idea/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1]), expand('snakemake_jobs/idea/tfds/tfds_qq_tfds_{config}.done', config=[1])
     output:
         "snakemake_jobs/idea/tfds/all.done"
     shell:

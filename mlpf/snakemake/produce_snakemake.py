@@ -243,7 +243,7 @@ def main():
             f"export OUTDIR={gen_base_dir}/"
             + f" && export CONFIG_DIR={config_dir}"
             + (f" && export CMSSWDIR={cmssw_dir}" if cmssw_dir else "")
-            + f" && export WORKDIR={scratch_root}/{process_name}_$seed"
+            + f' && export WORKDIR="{scratch_root}/{process_name}_${{seed}}_${{SLURM_JOB_ID:-manual-$$}}"'
             + f" && export NEV={events_per_job}"
             + (f" && export PROGRESS_INTERVAL={progress_interval}" if progress_interval is not None else "")
         )

@@ -127,6 +127,8 @@ def get_class_names(sample_name):
 # overline results in misalignment
 EVALUATION_DATASET_NAMES = {
     "idea_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$ (proxy tracks)",
+    "idea_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$ (proxy tracks)",
+    "idea_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$ (proxy tracks)",
     "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "cld_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
     "cld_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
@@ -316,15 +318,11 @@ def cms_label(ax):
 
 
 def clic_label(ax):
-    return experiment_label(
-        ax, experiment="Key4HEP-CLICdp", tag1="Sim.", tag2="ee (380 GeV)", x1=0.42
-    )
+    return experiment_label(ax, experiment="Key4HEP-CLICdp", tag1="Sim.", tag2="ee (380 GeV)", x1=0.42)
 
 
 def cld_label(ax):
-    return experiment_label(
-        ax, experiment="Key4HEP-CLD", tag1="Sim.", tag2="ee (365 GeV)", x1=0.35
-    )
+    return experiment_label(ax, experiment="Key4HEP-CLD", tag1="Sim.", tag2="ee (365 GeV)", x1=0.35)
 
 
 def idea_label(ax):
@@ -444,9 +442,7 @@ def load_eval_data(path, max_events=None):
     for typ in ["target", "cand", "pred"]:
         if typ + "_pt" in yvals:
             # Compute phi, px, py, pz
-            yvals[typ + "_phi"] = np.arctan2(
-                yvals[typ + "_sin_phi"], yvals[typ + "_cos_phi"]
-            )
+            yvals[typ + "_phi"] = np.arctan2(yvals[typ + "_sin_phi"], yvals[typ + "_cos_phi"])
             yvals[typ + "_px"] = yvals[typ + "_pt"] * yvals[typ + "_cos_phi"]
             yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
             yvals[typ + "_pz"] = yvals[typ + "_pt"] * np.sinh(yvals[typ + "_eta"])
@@ -461,9 +457,7 @@ def load_eval_data(path, max_events=None):
 
     for typ in ["target", "cand", "pred"]:
         for val in ["pt", "eta", "sin_phi", "cos_phi", "energy"]:
-            yvals["{}_{}".format(typ, val)] = yvals["{}_{}".format(typ, val)] * (
-                yvals["{}_cls_id".format(typ)] != 0
-            )
+            yvals["{}_{}".format(typ, val)] = yvals["{}_{}".format(typ, val)] * (yvals["{}_cls_id".format(typ)] != 0)
 
     yvals.update(compute_jet_ratio(data, yvals))
     yvals["gen_met"] = data["genmet"]
@@ -486,23 +480,18 @@ def compute_jet_ratio(data, yvals):
         for val in ["pt", "eta"]:
             ret[f"jet_{match1}_to_{match2}_{match1}{val}"] = awkward.to_numpy(
                 awkward.flatten(
-                    yvals[f"jets_{match1}_{val}"][
-                        data["matched_jets"][f"{match1}_to_{match2}"][match1]
-                    ],
+                    yvals[f"jets_{match1}_{val}"][data["matched_jets"][f"{match1}_to_{match2}"][match1]],
                     axis=1,
                 )
             )
             ret[f"jet_{match1}_to_{match2}_{match2}{val}"] = awkward.to_numpy(
                 awkward.flatten(
-                    yvals[f"jets_{match2}_{val}"][
-                        data["matched_jets"][f"{match1}_to_{match2}"][match2]
-                    ],
+                    yvals[f"jets_{match2}_{val}"][data["matched_jets"][f"{match1}_to_{match2}"][match2]],
                     axis=1,
                 )
             )
             ret[f"jet_ratio_{match1}_to_{match2}_{val}"] = (
-                ret[f"jet_{match1}_to_{match2}_{match2}{val}"]
-                / ret[f"jet_{match1}_to_{match2}_{match1}{val}"]
+                ret[f"jet_{match1}_to_{match2}_{match2}{val}"] / ret[f"jet_{match1}_to_{match2}_{match1}{val}"]
             )
     return ret
 
@@ -522,15 +511,9 @@ def compute_met_and_ratio(yvals):
 
     gen_met = yvals["gen_met"]
 
-    target_met = awkward.to_numpy(
-        np.sqrt(np.sum(target_px, axis=1) ** 2 + np.sum(target_py, axis=1) ** 2)
-    )
-    pred_met = awkward.to_numpy(
-        np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2)
-    )
-    cand_met = awkward.to_numpy(
-        np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2)
-    )
+    target_met = awkward.to_numpy(np.sqrt(np.sum(target_px, axis=1) ** 2 + np.sum(target_py, axis=1) ** 2))
+    pred_met = awkward.to_numpy(np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2))
+    cand_met = awkward.to_numpy(np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2))
 
     met_ratio_target = awkward.to_numpy(target_met / gen_met)
     met_ratio_pred = awkward.to_numpy(pred_met / gen_met)
@@ -563,27 +546,9 @@ def compute_3dmomentum_and_ratio(yvals):
     cand_py = yvals["cand_py"][msk_cand]
     cand_pz = yvals["cand_pz"][msk_cand]
 
-    target_mom = awkward.to_numpy(
-        np.sqrt(
-            np.sum(target_px, axis=1) ** 2
-            + np.sum(target_py, axis=1) ** 2
-            + np.sum(target_pz, axis=1) ** 2
-        )
-    )
-    pred_mom = awkward.to_numpy(
-        np.sqrt(
-            np.sum(pred_px, axis=1) ** 2
-            + np.sum(pred_py, axis=1) ** 2
-            + np.sum(pred_pz, axis=1) ** 2
-        )
-    )
-    cand_mom = awkward.to_numpy(
-        np.sqrt(
-            np.sum(cand_px, axis=1) ** 2
-            + np.sum(cand_py, axis=1) ** 2
-            + np.sum(cand_pz, axis=1) ** 2
-        )
-    )
+    target_mom = awkward.to_numpy(np.sqrt(np.sum(target_px, axis=1) ** 2 + np.sum(target_py, axis=1) ** 2 + np.sum(target_pz, axis=1) ** 2))
+    pred_mom = awkward.to_numpy(np.sqrt(np.sum(pred_px, axis=1) ** 2 + np.sum(pred_py, axis=1) ** 2 + np.sum(pred_pz, axis=1) ** 2))
+    cand_mom = awkward.to_numpy(np.sqrt(np.sum(cand_px, axis=1) ** 2 + np.sum(cand_py, axis=1) ** 2 + np.sum(cand_pz, axis=1) ** 2))
 
     mom_ratio_pred = awkward.to_numpy(pred_mom / target_mom)
     mom_ratio_cand = awkward.to_numpy(cand_mom / target_mom)
@@ -607,9 +572,7 @@ def save_img(outfile, epoch=None, cp_dir=None, comet_experiment=None):
             comet_experiment.log_image(image_path, step=epoch - 1)
 
 
-def plot_jets(
-    yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None, dataset=None
-):
+def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None, dataset=None):
 
     plt.figure()
     b = np.logspace(1, 3, 100)
@@ -803,8 +766,7 @@ def plot_jet_ratio(
     ret_dict["jet_ratio_gen_to_target_pt"] = {
         "med": p[0],
         "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_target_pt"])
-        / awkward.count(yvals["jets_gen_pt"]),
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_target_pt"]) / awkward.count(yvals["jets_gen_pt"]),
     }
     plt.hist(
         yvals["jet_ratio_gen_to_target_pt"],
@@ -818,8 +780,7 @@ def plot_jet_ratio(
     ret_dict["jet_ratio_gen_to_cand_pt"] = {
         "med": p[0],
         "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_cand_pt"])
-        / awkward.count(yvals["jets_gen_pt"]),
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_cand_pt"]) / awkward.count(yvals["jets_gen_pt"]),
     }
     plt.hist(
         yvals["jet_ratio_gen_to_cand_pt"],
@@ -833,8 +794,7 @@ def plot_jet_ratio(
     ret_dict["jet_ratio_gen_to_pred_pt"] = {
         "med": p[0],
         "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_pt"])
-        / awkward.count(yvals["jets_gen_pt"]),
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_pt"]) / awkward.count(yvals["jets_gen_pt"]),
     }
     plt.hist(
         yvals["jet_ratio_gen_to_pred_pt"],
@@ -848,8 +808,7 @@ def plot_jet_ratio(
     ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = {
         "med": p[0],
         "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"])
-        / awkward.count(yvals["jets_gen_pt"]),
+        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"]) / awkward.count(yvals["jets_gen_pt"]),
     }
     plt.hist(
         yvals["jet_ratio_gen_to_pred_nopu_pt"],
@@ -889,8 +848,7 @@ def plot_jet_ratio(
     ret_dict["jet_ratio_target_to_cand_pt"] = {
         "med": p[0],
         "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_target_to_cand_pt"])
-        / awkward.count(yvals["jets_target_pt"]),
+        "match_frac": awkward.count(yvals["jet_ratio_target_to_cand_pt"]) / awkward.count(yvals["jets_target_pt"]),
     }
     plt.plot([], [])
     plt.hist(
@@ -904,8 +862,7 @@ def plot_jet_ratio(
     ret_dict["jet_ratio_target_to_pred_pt"] = {
         "med": p[0],
         "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_target_to_pred_pt"])
-        / awkward.count(yvals["jets_target_pt"]),
+        "match_frac": awkward.count(yvals["jet_ratio_target_to_pred_pt"]) / awkward.count(yvals["jets_target_pt"]),
     }
     plt.hist(
         yvals["jet_ratio_target_to_pred_pt"],
@@ -1180,9 +1137,7 @@ def compute_distances(distribution_1, distribution_2, ratio):
     return {"wd": wd, "p25": p25, "p50": p50, "p75": p75, "iqr": iqr}
 
 
-def plot_rocs(
-    yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None
-):
+def plot_rocs(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None):
     ncls = len(yvals["gen_cls"][0, 0])
     plt.figure()
     for icls in range(ncls):
@@ -1226,12 +1181,8 @@ def plot_num_elements(X, epoch=None, cp_dir=None, comet_experiment=None, title=N
     )
 
 
-def plot_sum_energy(
-    yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None
-):
-    cls_ids = np.unique(
-        awkward.values_astype(awkward.flatten(yvals["gen_cls_id"]), np.int64)
-    )
+def plot_sum_energy(yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+    cls_ids = np.unique(awkward.values_astype(awkward.flatten(yvals["gen_cls_id"]), np.int64))
 
     for cls_id in cls_ids:
         if cls_id == 0:
@@ -1242,12 +1193,8 @@ def plot_sum_energy(
             clname = class_names[cls_id]
 
         sum_gen_energy = awkward.to_numpy(awkward.sum(yvals["gen_energy"][msk], axis=1))
-        sum_cand_energy = awkward.to_numpy(
-            awkward.sum(yvals["cand_energy"][msk], axis=1)
-        )
-        sum_pred_energy = awkward.to_numpy(
-            awkward.sum(yvals["pred_energy"][msk], axis=1)
-        )
+        sum_cand_energy = awkward.to_numpy(awkward.sum(yvals["cand_energy"][msk], axis=1))
+        sum_pred_energy = awkward.to_numpy(awkward.sum(yvals["pred_energy"][msk], axis=1))
 
         mean = np.mean(sum_gen_energy)
         std = np.std(sum_gen_energy)
@@ -1350,12 +1297,8 @@ def plot_sum_energy(
         )
 
 
-def plot_particle_multiplicity(
-    X, yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None
-):
-    cls_ids = np.unique(
-        awkward.values_astype(awkward.flatten(yvals["gen_cls_id"]), np.int64)
-    )
+def plot_particle_multiplicity(X, yvals, class_names, epoch=None, cp_dir=None, comet_experiment=None, title=None):
+    cls_ids = np.unique(awkward.values_astype(awkward.flatten(yvals["gen_cls_id"]), np.int64))
 
     for cls_id in cls_ids:
         if cls_id == 0:
@@ -1414,38 +1357,24 @@ def plot_particle_response(
             (4, "cos_phi"),
             (5, "energy"),
         ]:
-            elem_x = awkward.to_numpy(
-                awkward.flatten(X[:, :, idx_elem_feature][msk_target & msk_typ])
-            )
-            target_x = awkward.to_numpy(
-                awkward.flatten(yvals["target_" + val][msk_target & msk_typ])
-            )
+            elem_x = awkward.to_numpy(awkward.flatten(X[:, :, idx_elem_feature][msk_target & msk_typ]))
+            target_x = awkward.to_numpy(awkward.flatten(yvals["target_" + val][msk_target & msk_typ]))
             ratio_elem_target = elem_x / target_x
 
             # cases where targets and PF candidates exist
-            target_x = awkward.to_numpy(
-                awkward.flatten(yvals["target_" + val][msk_target & msk_cand & msk_typ])
-            )
-            cand_x = awkward.to_numpy(
-                awkward.flatten(yvals["cand_" + val][msk_target & msk_cand & msk_typ])
-            )
+            target_x = awkward.to_numpy(awkward.flatten(yvals["target_" + val][msk_target & msk_cand & msk_typ]))
+            cand_x = awkward.to_numpy(awkward.flatten(yvals["cand_" + val][msk_target & msk_cand & msk_typ]))
             ratio_cand_target = cand_x / target_x
 
             # cases where targets and MLPF candidates exist
-            target_x = awkward.to_numpy(
-                awkward.flatten(yvals["target_" + val][msk_target & msk_pred & msk_typ])
-            )
-            pred_x = awkward.to_numpy(
-                awkward.flatten(yvals["pred_" + val][msk_target & msk_pred & msk_typ])
-            )
+            target_x = awkward.to_numpy(awkward.flatten(yvals["target_" + val][msk_target & msk_pred & msk_typ]))
+            pred_x = awkward.to_numpy(awkward.flatten(yvals["pred_" + val][msk_target & msk_pred & msk_typ]))
             ratio_pred_target = pred_x / target_x
 
             plt.figure()
             ax = plt.axes()
             b = np.linspace(0, 5, 100)
-            plt.hist(
-                ratio_elem_target, bins=b, label="PFElements", histtype="step", lw=2
-            )
+            plt.hist(ratio_elem_target, bins=b, label="PFElements", histtype="step", lw=2)
             plt.hist(ratio_cand_target, bins=b, label="PF", histtype="step", lw=2)
             plt.hist(ratio_pred_target, bins=b, label="MLPF", histtype="step", lw=2)
             plt.legend(loc="best")
@@ -1478,27 +1407,15 @@ def plot_particle_ratio(
 
     cand_pt = awkward.to_numpy(awkward.flatten(yvals["cand_pt"][msk_target & msk_cand]))
     pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_pt"][msk_target & msk_pred]))
-    target_cand_pt = awkward.to_numpy(
-        awkward.flatten(yvals["target_pt"][msk_target & msk_cand])
-    )
-    target_pred_pt = awkward.to_numpy(
-        awkward.flatten(yvals["target_pt"][msk_target & msk_pred])
-    )
+    target_cand_pt = awkward.to_numpy(awkward.flatten(yvals["target_pt"][msk_target & msk_cand]))
+    target_pred_pt = awkward.to_numpy(awkward.flatten(yvals["target_pt"][msk_target & msk_pred]))
     ratio_cand_pt = cand_pt / target_cand_pt
     ratio_pred_pt = pred_pt / target_pred_pt
 
-    cand_e = awkward.to_numpy(
-        awkward.flatten(yvals["cand_energy"][msk_target & msk_cand])
-    )
-    pred_e = awkward.to_numpy(
-        awkward.flatten(yvals["pred_energy"][msk_target & msk_pred])
-    )
-    target_cand_e = awkward.to_numpy(
-        awkward.flatten(yvals["target_energy"][msk_target & msk_cand])
-    )
-    target_pred_e = awkward.to_numpy(
-        awkward.flatten(yvals["target_energy"][msk_target & msk_pred])
-    )
+    cand_e = awkward.to_numpy(awkward.flatten(yvals["cand_energy"][msk_target & msk_cand]))
+    pred_e = awkward.to_numpy(awkward.flatten(yvals["pred_energy"][msk_target & msk_pred]))
+    target_cand_e = awkward.to_numpy(awkward.flatten(yvals["target_energy"][msk_target & msk_cand]))
+    target_pred_e = awkward.to_numpy(awkward.flatten(yvals["target_energy"][msk_target & msk_pred]))
     ratio_cand_e = cand_e / target_cand_e
     ratio_pred_e = pred_e / target_pred_e
 
@@ -1514,9 +1431,7 @@ def plot_particle_ratio(
         ax = plt.axes()
         b = np.linspace(0, 3, 100)
         plt.plot([], [])
-        plt.hist(
-            ratio_cand_pt[target_cls_id1 == cls_id], bins=b, label="PF", histtype="step"
-        )
+        plt.hist(ratio_cand_pt[target_cls_id1 == cls_id], bins=b, label="PF", histtype="step")
         plt.hist(
             ratio_pred_pt[target_cls_id2 == cls_id],
             bins=b,
@@ -1541,9 +1456,7 @@ def plot_particle_ratio(
         ax = plt.axes()
         b = np.linspace(0, 3, 100)
         plt.plot([], [])
-        plt.hist(
-            ratio_cand_e[target_cls_id1 == cls_id], bins=b, label="PF", histtype="step"
-        )
+        plt.hist(ratio_cand_e[target_cls_id1 == cls_id], bins=b, label="PF", histtype="step")
         plt.hist(
             ratio_pred_e[target_cls_id2 == cls_id],
             bins=b,
@@ -1577,19 +1490,9 @@ def plot_elements(
     uniq_elems = np.unique(awkward.flatten(X[:, :, 0]))
     for elem in uniq_elems:
         elem = int(elem)
-        msk_elem = (
-            (X[:, :, 0] == elem)
-            & (yvals["target_cls_id"] != 0)
-            & (yvals["pred_cls_id"] != 0)
-        )
-        ratio_target = np.log(
-            awkward.to_numpy(
-                awkward.flatten((yvals["target_pt"] / X[:, :, 1])[msk_elem])
-            )
-        )
-        ratio_pred = np.log(
-            awkward.to_numpy(awkward.flatten((yvals["pred_pt"] / X[:, :, 1])[msk_elem]))
-        )
+        msk_elem = (X[:, :, 0] == elem) & (yvals["target_cls_id"] != 0) & (yvals["pred_cls_id"] != 0)
+        ratio_target = np.log(awkward.to_numpy(awkward.flatten((yvals["target_pt"] / X[:, :, 1])[msk_elem])))
+        ratio_pred = np.log(awkward.to_numpy(awkward.flatten((yvals["pred_pt"] / X[:, :, 1])[msk_elem])))
         ratio_target[np.isnan(ratio_target)] = 0
         ratio_pred[np.isnan(ratio_pred)] = 0
         ratio_target[np.isinf(ratio_target)] = 0
@@ -1653,9 +1556,7 @@ def plot_particles(
     pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_pt"][msk_pred], axis=1))
 
     msk_target = yvals["target_cls_id"] != 0
-    target_pt = awkward.to_numpy(
-        awkward.flatten(yvals["target_pt"][msk_target], axis=1)
-    )
+    target_pt = awkward.to_numpy(awkward.flatten(yvals["target_pt"][msk_target], axis=1))
 
     b = np.logspace(-2, 4, 100)
     plt.figure()
@@ -1742,9 +1643,7 @@ def plot_particles(
     pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_eta"][msk_pred], axis=1))
 
     msk_target = yvals["target_cls_id"] != 0
-    target_pt = awkward.to_numpy(
-        awkward.flatten(yvals["target_eta"][msk_target], axis=1)
-    )
+    target_pt = awkward.to_numpy(awkward.flatten(yvals["target_eta"][msk_target], axis=1))
 
     b = np.linspace(-8, 8, 100)
     plt.figure()
@@ -1787,12 +1686,8 @@ def plot_particles(
     msk_pred = yvals["pred_cls_id"] != 0
     msk_target = yvals["target_cls_id"] != 0
 
-    cand_pt = awkward.to_numpy(
-        awkward.flatten(yvals["cand_pt"][msk_cand & msk_target], axis=1)
-    )
-    target_pt = awkward.to_numpy(
-        awkward.flatten(yvals["target_pt"][msk_cand & msk_target], axis=1)
-    )
+    cand_pt = awkward.to_numpy(awkward.flatten(yvals["cand_pt"][msk_cand & msk_target], axis=1))
+    target_pt = awkward.to_numpy(awkward.flatten(yvals["target_pt"][msk_cand & msk_target], axis=1))
     b = np.logspace(-1, 2, 100)
     plt.figure()
     ax = plt.axes()
@@ -1812,12 +1707,8 @@ def plot_particles(
         comet_experiment=comet_experiment,
     )
 
-    pred_pt = awkward.to_numpy(
-        awkward.flatten(yvals["pred_pt"][msk_pred & msk_target], axis=1)
-    )
-    target_pt = awkward.to_numpy(
-        awkward.flatten(yvals["target_pt"][msk_pred & msk_target], axis=1)
-    )
+    pred_pt = awkward.to_numpy(awkward.flatten(yvals["pred_pt"][msk_pred & msk_target], axis=1))
+    target_pt = awkward.to_numpy(awkward.flatten(yvals["target_pt"][msk_pred & msk_target], axis=1))
     b = np.logspace(-1, 2, 100)
     plt.figure()
     ax = plt.axes()
@@ -1948,9 +1839,7 @@ def plot_jet_response_binned_vstarget(
     plt.figure()
     ax = plt.gca()
     plt.plot([], [])
-    plt.plot(
-        x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF"
-    )
+    plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(
         x_vals,
         (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1],
@@ -2046,9 +1935,7 @@ def plot_jet_response_binned(
             bins=b,
             histtype="step",
             lw=1,
-            label="Target ({:.4f}, {:.4f}, {:.4f})".format(
-                target_p25, target_p50, target_p75
-            ),
+            label="Target ({:.4f}, {:.4f}, {:.4f})".format(target_p25, target_p50, target_p75),
         )
         plt.hist(
             pf_subsample,
@@ -2113,9 +2000,7 @@ def plot_jet_response_binned(
         marker="o",
         label="Target",
     )
-    plt.plot(
-        x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF"
-    )
+    plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(
         x_vals,
         (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1],
@@ -2259,9 +2144,7 @@ def plot_jet_response_binned_eta(
         marker="o",
         label="Target",
     )
-    plt.plot(
-        x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF"
-    )
+    plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(
         x_vals,
         (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1],
@@ -2401,9 +2284,7 @@ def plot_met_response_binned(
         marker="o",
         label="Target",
     )
-    plt.plot(
-        x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF"
-    )
+    plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(
         x_vals,
         (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1],
@@ -2426,9 +2307,7 @@ def plot_met_response_binned(
     )
 
 
-def plot_3dmomentum_response_binned(
-    yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None
-):
+def plot_3dmomentum_response_binned(yvals, epoch=None, cp_dir=None, comet_experiment=None, title=None):
     genmet = yvals["gen_mom"]
 
     pf_response = yvals["ratio_cand"]
@@ -2497,9 +2376,7 @@ def plot_3dmomentum_response_binned(
 
     # Plot median and IQR as a function of gen pt
     plt.figure()
-    plt.plot(
-        x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF"
-    )
+    plt.plot(x_vals, (pf_vals[:, 2] - pf_vals[:, 0]) / pf_vals[:, 1], marker="o", label="PF")
     plt.plot(
         x_vals,
         (mlpf_vals[:, 2] - mlpf_vals[:, 0]) / mlpf_vals[:, 1],
@@ -2519,16 +2396,10 @@ def plot_3dmomentum_response_binned(
     )
 
 
-def plot_pu_fraction(
-    yvals, epoch=None, cp_dir=None, dataset=None, sample=None, comet_experiment=None
-):
+def plot_pu_fraction(yvals, epoch=None, cp_dir=None, dataset=None, sample=None, comet_experiment=None):
     bins = np.linspace(0, 1, 100)
     neutural = (yvals["target_cls_id"] == 4) | (yvals["target_cls_id"] == 5)
-    charged = (
-        (yvals["target_cls_id"] == 1)
-        | (yvals["target_cls_id"] == 2)
-        | (yvals["target_cls_id"] == 3)
-    )
+    charged = (yvals["target_cls_id"] == 1) | (yvals["target_cls_id"] == 2) | (yvals["target_cls_id"] == 3)
     hf = (yvals["target_cls_id"] == 6) | (yvals["target_cls_id"] == 7)
     types = [neutural, charged, hf]
     for type_, name in zip(types, ["n", "c", "h"]):

@@ -17,7 +17,6 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 start_seed=$1
 for (( i=0; i<1; i++ )); do
     seed=$((start_seed + i))
-
     if [ ! -f /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/post/p8_ee_ttbar_ecm365/reco_p8_ee_ttbar_ecm365_${seed}.parquet ]; then
         if [ -f /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/p8_ee_ttbar_ecm365/root/reco_p8_ee_ttbar_ecm365_${seed}.root ]; then
             echo "Postprocessing /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/p8_ee_ttbar_ecm365/root/reco_p8_ee_ttbar_ecm365_${seed}.root"

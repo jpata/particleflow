@@ -99,10 +99,7 @@ def _event_domain_labels(batch):
         return None
     source_ids = batch.source_id.detach().to("cpu").long().view(-1)
     input_type_ids = batch.input_type_id.detach().to("cpu").long().view(-1)
-    return [
-        _domain_label(source_id.item(), input_type_id.item())
-        for source_id, input_type_id in zip(source_ids, input_type_ids)
-    ]
+    return [_domain_label(source_id.item(), input_type_id.item()) for source_id, input_type_id in zip(source_ids, input_type_ids)]
 
 
 def _log_batch_composition(batch, tensorboard_writer, step, prefix):
@@ -110,30 +107,18 @@ def _log_batch_composition(batch, tensorboard_writer, step, prefix):
         return
 
     valid_counts = batch.mask.sum(dim=1).detach().to("cpu")
-    tensorboard_writer.add_scalar(
-        f"{prefix}/valid_elements_mean", valid_counts.float().mean().item(), step
-    )
-    tensorboard_writer.add_scalar(
-        f"{prefix}/valid_elements_max", valid_counts.max().item(), step
-    )
+    tensorboard_writer.add_scalar(f"{prefix}/valid_elements_mean", valid_counts.float().mean().item(), step)
+    tensorboard_writer.add_scalar(f"{prefix}/valid_elements_max", valid_counts.max().item(), step)
 
     if batch.ytarget is not None:
-        target_counts = (
-            ((batch.ytarget[..., 0] != 0) & batch.mask).sum(dim=1).detach().to("cpu")
-        )
-        tensorboard_writer.add_scalar(
-            f"{prefix}/target_particles_mean", target_counts.float().mean().item(), step
-        )
-        tensorboard_writer.add_scalar(
-            f"{prefix}/target_particles_max", target_counts.max().item(), step
-        )
+        target_counts = ((batch.ytarget[..., 0] != 0) & batch.mask).sum(dim=1).detach().to("cpu")
+        tensorboard_writer.add_scalar(f"{prefix}/target_particles_mean", target_counts.float().mean().item(), step)
+        tensorboard_writer.add_scalar(f"{prefix}/target_particles_max", target_counts.max().item(), step)
 
     domain_labels = _event_domain_labels(batch)
     if domain_labels is not None:
         for label in sorted(set(domain_labels)):
-            tensorboard_writer.add_scalar(
-                f"{prefix}/events/{label}", domain_labels.count(label), step
-            )
+            tensorboard_writer.add_scalar(f"{prefix}/events/{label}", domain_labels.count(label), step)
 
     elemtypes = batch.X[..., 0][batch.mask].detach().to("cpu").long()
     for elemtype in torch.unique(elemtypes).tolist():
@@ -153,14 +138,10 @@ def _add_accumulator(accum, key, value, count=1.0):
             torch.zeros((), device=value.device, dtype=torch.float32),
         ]
     accum[key][0] += value.detach().to(torch.float32)
-    accum[key][1] += torch.as_tensor(
-        float(count), device=value.device, dtype=torch.float32
-    )
+    accum[key][1] += torch.as_tensor(float(count), device=value.device, dtype=torch.float32)
 
 
-def _accumulate_domain_losses_and_stats(
-    batch, ytarget, ypred, regression_weights, accum
-):
+def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weights, accum):
     domain_labels = _event_domain_labels(batch)
     if domain_labels is None:
         return
@@ -215,9 +196,7 @@ def _accumulate_domain_losses_and_stats(
 
         for feature in ("pt", "energy"):
             target = particle_targets[feature][is_particle].to(torch.float32)
-            prediction = torch.nan_to_num(
-                particle_predictions[feature][is_particle].to(torch.float32)
-            )
+            prediction = torch.nan_to_num(particle_predictions[feature][is_particle].to(torch.float32))
             residual = prediction - target
             count = float(target.numel())
             _add_accumulator(
@@ -341,12 +320,8 @@ def train_step(
 
     batch = batch.to(rank, non_blocking=True)
 
-    with torch.autocast(
-        device_type=device_type, dtype=dtype, enabled=device_type == "cuda"
-    ):
-        loss_opt, loss, _, _, _ = model_step(
-            batch, model, mlpf_loss, regression_weights
-        )
+    with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
+        loss_opt, loss, _, _, _ = model_step(batch, model, mlpf_loss, regression_weights)
 
     optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler)
 
@@ -360,13 +335,9 @@ def train_step(
     if tensorboard_writer is not None:
         log_open_files_to_tensorboard(tensorboard_writer, step)
         log_gpu_utilization_to_tensorboard(tensorboard_writer, step)
-        log_step_to_tensorboard(
-            batch, loss["Total"], lr_schedule, tensorboard_writer, step
-        )
+        log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
         log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
-        _log_batch_composition(
-            batch, tensorboard_writer, step, "diagnostic/train_batch"
-        )
+        _log_batch_composition(batch, tensorboard_writer, step, "diagnostic/train_batch")
         if step % tensorboard_step_freq == 0:
             log_gradients_to_tensorboard(model, tensorboard_writer, step)
             log_residuals_to_tensorboard(model, tensorboard_writer, step)
@@ -374,9 +345,7 @@ def train_step(
 
     if comet_experiment is not None and (step % comet_step_freq == 0):
         comet_experiment.log_metrics(loss, prefix="train", step=step)
-        comet_experiment.log_metric(
-            "learning_rate", lr_schedule.get_last_lr(), step=step
-        )
+        comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
     # Average losses across steps
     num_steps = torch.tensor(1.0, device=rank, dtype=torch.float32)
@@ -387,9 +356,7 @@ def train_step(
         _logger.debug(f"train_step {loss_name}={step_loss[loss_name]}")
         if world_size > 1:
             torch.distributed.all_reduce(step_loss[loss_name])
-        step_loss[loss_name] = (
-            step_loss[loss_name].cpu().item() / num_steps.cpu().item()
-        )
+        step_loss[loss_name] = step_loss[loss_name].cpu().item() / num_steps.cpu().item()
 
     if world_size > 1:
         dist.barrier()
@@ -415,13 +382,8 @@ def compute_particle_quality_metrics(batch, ypred_particles, ytarget):
         cls_id_true = ytarget["cls_id"][ev_idx][mask_ev]
         is_true_part = cls_id_true > 0
         if is_true_part.any():
-            pt_true = (
-                torch.exp(ytarget["pt"][ev_idx][mask_ev]) * batch.X[ev_idx, mask_ev, 1]
-            )[is_true_part]
-            e_true = (
-                torch.exp(ytarget["energy"][ev_idx][mask_ev])
-                * batch.X[ev_idx, mask_ev, 5]
-            )[is_true_part]
+            pt_true = (torch.exp(ytarget["pt"][ev_idx][mask_ev]) * batch.X[ev_idx, mask_ev, 1])[is_true_part]
+            e_true = (torch.exp(ytarget["energy"][ev_idx][mask_ev]) * batch.X[ev_idx, mask_ev, 5])[is_true_part]
             sum_pt_true = pt_true.sum().item()
             sum_e_true = e_true.sum().item()
             n_true = is_true_part.sum().item()
@@ -490,25 +452,13 @@ def print_event_table(batch, ytarget, ypred_particles, config):
     pred_cls = ypred_particles["cls_id"][0].cpu().numpy()
     pred_pt = ypred_particles["pt"][0].cpu().numpy()
     pred_eta = ypred_particles["eta"][0].cpu().numpy()
-    pred_phi = (
-        ypred_particles["phi"][0].cpu().numpy()
-        if "phi" in ypred_particles
-        else np.zeros_like(pred_pt)
-    )
+    pred_phi = ypred_particles["phi"][0].cpu().numpy() if "phi" in ypred_particles else np.zeros_like(pred_pt)
     pred_energy = ypred_particles["energy"][0].cpu().numpy()
-    pred_beta = (
-        ypred_particles["oc_beta"][0, :, 0].cpu().numpy()
-        if "oc_beta" in ypred_particles
-        else np.zeros_like(pred_pt)
-    )
+    pred_beta = ypred_particles["oc_beta"][0, :, 0].cpu().numpy() if "oc_beta" in ypred_particles else np.zeros_like(pred_pt)
 
     # Class names mapping
-    dataset_name = (
-        config.dataset.value if hasattr(config.dataset, "value") else config.dataset
-    )
-    class_names = CLASS_LABELS.get(
-        dataset_name, ["none", "chhad", "nhad", "gamma", "ele", "mu"]
-    )
+    dataset_name = config.dataset.value if hasattr(config.dataset, "value") else config.dataset
+    class_names = CLASS_LABELS.get(dataset_name, ["none", "chhad", "nhad", "gamma", "ele", "mu"])
 
     rows = []
     for idx in valid_indices:
@@ -618,9 +568,7 @@ def evaluate(
     for ival, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
 
-        with torch.autocast(
-            device_type=device_type, dtype=dtype, enabled=device_type == "cuda"
-        ):
+        with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
                 _, loss, ypred_raw, ypred, ytarget = model_step(
                     batch,
@@ -635,10 +583,7 @@ def evaluate(
                 if ival == 0 and (rank == 0 or rank == "cpu"):
                     print_event_table(batch, ytarget, ypred_particles, config)
 
-                if (
-                    config.validation_diagnostics_batches > 0
-                    and ival < config.validation_diagnostics_batches
-                ):
+                if config.validation_diagnostics_batches > 0 and ival < config.validation_diagnostics_batches:
                     _accumulate_domain_losses_and_stats(
                         batch,
                         ytarget,
@@ -649,9 +594,7 @@ def evaluate(
 
         # Save validation plots for first batch
         if (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
-            validation_plots(
-                batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir
-            )
+            validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
 
         # Accumulate losses
         for loss_name in loss:
@@ -667,9 +610,7 @@ def evaluate(
     for loss_name in eval_loss:
         if world_size > 1:
             torch.distributed.all_reduce(eval_loss[loss_name])
-        eval_loss[loss_name] = (
-            eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
-        )
+        eval_loss[loss_name] = eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
 
     eval_loss.update(_finalize_diagnostics(diagnostic_accum, world_size))
 
@@ -721,16 +662,12 @@ def _log_and_checkpoint_step(
                 "valid_loader_state_dict": valid_loader.state_dict(),
             }
 
-            checkpoint_path = (
-                Path(checkpoint_dir) / f"checkpoint-{step:02d}.pth"
-            ).resolve()
+            checkpoint_path = (Path(checkpoint_dir) / f"checkpoint-{step:02d}.pth").resolve()
             _logger.info("saving checkpoint {}".format(checkpoint_path))
             save_checkpoint(checkpoint_path, model, optimizer, extra_state)
 
             # Clean up old checkpoints, keeping the last num_patience
-            checkpoints = sorted(
-                Path(checkpoint_dir).glob("checkpoint-*.pth"), key=os.path.getmtime
-            )
+            checkpoints = sorted(Path(checkpoint_dir).glob("checkpoint-*.pth"), key=os.path.getmtime)
             for i in range(len(checkpoints) - num_patience):
                 _logger.info("removing old checkpoint {}".format(checkpoints[i]))
                 os.remove(checkpoints[i])
@@ -787,17 +724,13 @@ def _run_validation_cycle(
     total_time = time.time() - t0_initial
 
     # Update learning rate scheduler that depends on validation loss
-    if lr_schedule and isinstance(
-        lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau
-    ):
+    if lr_schedule and isinstance(lr_schedule, torch.optim.lr_scheduler.ReduceLROnPlateau):
         lr_schedule.step(losses_valid["Total"])
 
     # Log validation metrics to CometML
     if comet_experiment:
         comet_experiment.log_metrics(losses_valid, prefix="step_valid_loss", step=step)
-        comet_experiment.log_metric(
-            "learning_rate", lr_schedule.get_last_lr(), step=step
-        )
+        comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
 
     # All subsequent actions are only done on the main process
     if (rank == 0) or (rank == "cpu"):
@@ -852,16 +785,12 @@ def _run_validation_cycle(
     if (rank == 0) or (rank == "cpu"):
         log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
         for sample in config.enabled_test_datasets:
-            plot_metrics = make_plots(
-                outdir, sample, config.dataset, testdir_name, config.ntest
-            )
+            plot_metrics = make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
             plot_metrics_sample[sample] = plot_metrics
             # Log key jet metrics to TensorBoard and CometML
             for k in ["med", "iqr", "match_frac"]:
                 metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{k}"
-                metric_value = plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][
-                    k
-                ]
+                metric_value = plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k]
                 tensorboard_writer_valid.add_scalar(metric_name, metric_value, step)
                 if comet_experiment:
                     comet_experiment.log_metric(metric_name, metric_value, step=step)
@@ -898,18 +827,10 @@ def _run_validation_cycle(
                 for sample in plot_metrics_sample.keys():
                     for metric in ["iqr", "match_frac"]:
                         metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{metric}"
-                        metrics[metric_name] = plot_metrics_sample[sample]["jet_ratio"][
-                            "jet_ratio_target_to_pred_pt"
-                        ][metric]
-                    metrics[
-                        f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/combined"
-                    ] = (
-                        metrics[
-                            f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/iqr"
-                        ]
-                        - metrics[
-                            f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/match_frac"
-                        ]
+                        metrics[metric_name] = plot_metrics_sample[sample]["jet_ratio"]["jet_ratio_target_to_pred_pt"][metric]
+                    metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/combined"] = (
+                        metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/iqr"]
+                        - metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/match_frac"]
                     )
                 save_checkpoint(
                     Path(temp_checkpoint_dir) / "checkpoint.pth",
@@ -956,9 +877,7 @@ def train_all_steps(
     valid_sampler=None,
 ):
     """Main training loop that handles all steps and validation"""
-    _logger.info(
-        f"Starting training from step {start_step} to {num_steps} on rank {rank} of {world_size}"
-    )
+    _logger.info(f"Starting training from step {start_step} to {num_steps} on rank {rank} of {world_size}")
     assert len(train_loader) > 0
 
     # Per-worker setup
@@ -1032,12 +951,8 @@ def train_all_steps(
         train_time = time.time() - step_start_time
 
         if tensorboard_writer_train is not None:
-            tensorboard_writer_train.add_scalar(
-                "step/time_data_load", data_load_time, step
-            )
-            tensorboard_writer_train.add_scalar(
-                "step/time_model_forward", model_forward_time, step
-            )
+            tensorboard_writer_train.add_scalar("step/time_data_load", data_load_time, step)
+            tensorboard_writer_train.add_scalar("step/time_model_forward", model_forward_time, step)
 
         # Log a brief training status periodically on the main process
         if step % config.tensorboard_step_freq == 0:
@@ -1109,15 +1024,11 @@ def train_all_steps(
 
         # Check for early stopping
         if stale_steps > patience:
-            _logger.info(
-                f"Stopping early due to stale steps: {stale_steps} > {patience}"
-            )
+            _logger.info(f"Stopping early due to stale steps: {stale_steps} > {patience}")
             break
 
     # End of training loop
-    _logger.info(
-        f"Training completed. Total time on device {rank}: {(time.time() - t0_initial)/60:.3f}min"
-    )
+    _logger.info(f"Training completed. Total time on device {rank}: {(time.time() - t0_initial)/60:.3f}min")
 
     # Clean up TensorBoard writers
     if (rank == 0) or (rank == "cpu"):
@@ -1125,9 +1036,7 @@ def train_all_steps(
         tensorboard_writer_valid.close()
 
 
-def run_test(
-    rank, world_size, config: MLPFConfig, outdir, model, sample, testdir_name, dtype
-):
+def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdir_name, dtype):
     batch_size = config.test_dataset[sample].batch_size * config.gpu_batch_multiplier
     version = config.test_dataset[sample].version
 
@@ -1204,9 +1113,7 @@ def run_test(
     jetdef, jet_ptcut, jet_match_dr = get_jet_config(config.dataset)
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
-    with torch.autocast(
-        device_type=device_type, dtype=dtype, enabled=device_type == "cuda"
-    ):
+    with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
         run_predictions(
             world_size,
             rank,
@@ -1242,9 +1149,7 @@ def run(
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
-        dist.init_process_group(
-            "nccl", rank=int(rank), world_size=world_size
-        )  # (nccl should be faster than gloo)
+        dist.init_process_group("nccl", rank=int(rank), world_size=world_size)  # (nccl should be faster than gloo)
 
     checkpoint_dir = Path(outdir) / "checkpoints"
     if (rank == 0) | (rank == "cpu"):
@@ -1292,9 +1197,7 @@ def run(
                 _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
                 strict = False
             else:
-                _logger.warning(
-                    "Use option --relaxed-load if you insist to ignore the missing parameters"
-                )
+                _logger.warning("Use option --relaxed-load if you insist to ignore the missing parameters")
                 raise KeyError
 
         _logger.info("Loaded model weights from {}".format(config.load), color="bold")
@@ -1311,9 +1214,7 @@ def run(
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         _logger.info("Configured model for SyncBatchNorm rank={}".format(rank))
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
-        _logger.info(
-            "Configured model for DistributedDataParallel rank={}".format(rank)
-        )
+        _logger.info("Configured model for DistributedDataParallel rank={}".format(rank))
 
     trainable_params, nontrainable_params, table = count_parameters(model)
     _logger.info(str(table))
@@ -1330,25 +1231,17 @@ def run(
             _logger.info(f"Model directory {outdir}", color="bold")
 
         if config.comet:
-            comet_experiment = create_comet_experiment(
-                config.comet_name, comet_offline=config.comet_offline, outdir=outdir
-            )
+            comet_experiment = create_comet_experiment(config.comet_name, comet_offline=config.comet_offline, outdir=outdir)
             if comet_experiment is not None:
                 comet_experiment.set_name(f"rank_{rank}_{Path(outdir).name}")
                 comet_experiment.log_parameter("run_id", Path(outdir).name)
                 comet_experiment.log_parameter("world_size", world_size)
                 comet_experiment.log_parameter("rank", rank)
-                comet_experiment.log_parameters(
-                    config.model_dump(mode="json"), prefix="config:"
-                )
+                comet_experiment.log_parameters(config.model_dump(mode="json"), prefix="config:")
                 comet_experiment.set_model_graph(model)
                 comet_experiment.log_parameter(trainable_params, "trainable_params")
-                comet_experiment.log_parameter(
-                    nontrainable_params, "nontrainable_params"
-                )
-                comet_experiment.log_parameter(
-                    trainable_params + nontrainable_params, "total_trainable_params"
-                )
+                comet_experiment.log_parameter(nontrainable_params, "nontrainable_params")
+                comet_experiment.log_parameter(trainable_params + nontrainable_params, "total_trainable_params")
                 comet_experiment.log_code("mlpf/model/training.py")
                 comet_experiment.log_code("mlpf/model/mlpf.py")
                 comet_experiment.log_code("mlpf/model/utils.py")
@@ -1376,20 +1269,12 @@ def run(
             valid_loader = loaders["valid"]
             if not config.sampler_from_scratch:
                 if "train_loader_state_dict" in checkpoint["extra_state"]:
-                    train_loader.load_state_dict(
-                        checkpoint["extra_state"]["train_loader_state_dict"]
-                    )
+                    train_loader.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
                 if "valid_loader_state_dict" in checkpoint["extra_state"]:
-                    valid_loader.load_state_dict(
-                        checkpoint["extra_state"]["valid_loader_state_dict"]
-                    )
+                    valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
 
         for split in loaders.keys():
-            _logger.info(
-                "loader split={} rank={} len={}".format(
-                    split, rank, len(loaders[split])
-                )
-            )
+            _logger.info("loader split={} rank={} len={}".format(split, rank, len(loaders[split])))
 
         train_all_steps(
             rank,
@@ -1420,9 +1305,7 @@ def run(
         _logger.info("Entering test step block (train=False, test=True)")
         testdir_name = "_test"
         for sample in config.enabled_test_datasets:
-            run_test(
-                rank, world_size, config, outdir, model, sample, testdir_name, dtype
-            )
+            run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
 
         if (rank == 0) or (rank == "cpu"):
             for sample in config.enabled_test_datasets:
@@ -1434,9 +1317,7 @@ def run(
 
 
 # Run either single GPU or single-node multi-GPU using pytorch DDP
-def device_agnostic_run(
-    config: MLPFConfig, world_size, outdir, loglevel: int = logging.INFO
-):
+def device_agnostic_run(config: MLPFConfig, world_size, outdir, loglevel: int = logging.INFO):
     if config.train:
         logfile = f"{outdir}/train.log"
     else:

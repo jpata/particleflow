@@ -41,9 +41,7 @@ def make_oracle_candidates(ytarget: np.ndarray) -> np.ndarray:
     return np.array(ytarget, dtype=np.float32, copy=True)
 
 
-def repair_jet_indices(
-    ytarget: np.ndarray, num_target_jets: int
-) -> tuple[np.ndarray, int]:
+def repair_jet_indices(ytarget: np.ndarray, num_target_jets: int) -> tuple[np.ndarray, int]:
     """Set invalid representative jet indices to the schema value ``-1``."""
     ret = np.array(ytarget, dtype=np.float32, copy=True)
     if not len(ret):
@@ -62,9 +60,7 @@ def _map_pid_to_class_index(values: np.ndarray) -> np.ndarray:
     if unknown:
         raise ValueError(f"Unsupported IDEA target PID classes: {unknown}")
     if len(mapped):
-        mapped[:, 0] = np.asarray(
-            [lookup[int(pid)] for pid in mapped[:, 0]], dtype=np.float32
-        )
+        mapped[:, 0] = np.asarray([lookup[int(pid)] for pid in mapped[:, 0]], dtype=np.float32)
     return mapped
 
 
@@ -79,9 +75,7 @@ def prepare_data_idea(filename: str | Path, event_indices=None):
     data = ak.from_parquet(filename)
     num_events = len(data["X_track"])
     indices = range(num_events) if event_indices is None else event_indices
-    has_candidates = all(
-        field in data.fields for field in ("ycand_track", "ycand_cluster")
-    )
+    has_candidates = all(field in data.fields for field in ("ycand_track", "ycand_cluster"))
     examples = []
 
     for event_index in indices:
@@ -129,9 +123,7 @@ def prepare_data_idea(filename: str | Path, event_indices=None):
             ("targetjets", targetjets),
         ):
             if not np.all(np.isfinite(value)):
-                raise ValueError(
-                    f"IDEA event {event_index} contains non-finite values in {name}"
-                )
+                raise ValueError(f"IDEA event {event_index} contains non-finite values in {name}")
 
         examples.append(
             {
@@ -147,15 +139,11 @@ def prepare_data_idea(filename: str | Path, event_indices=None):
     return examples
 
 
-def find_idea_parquets(manual_dir: str | Path) -> list[Path]:
-    """Find production-style or direct IDEA parquet inputs."""
+def find_idea_parquets(manual_dir: str | Path, process_name: str = "p8_ee_qq_ecm365") -> list[Path]:
+    """Find one process' production-style or direct IDEA parquet inputs."""
     manual_dir = Path(manual_dir)
-    process_dir = manual_dir / "p8_ee_qq_ecm365"
-    files = (
-        sorted(process_dir.glob("*.parquet"))
-        if process_dir.is_dir()
-        else sorted(manual_dir.glob("*.parquet"))
-    )
+    process_dir = manual_dir / process_name
+    files = sorted(process_dir.glob("*.parquet")) if process_dir.is_dir() else sorted(manual_dir.glob("*.parquet"))
     if not files:
         raise FileNotFoundError(f"No IDEA parquet files found under {manual_dir}")
     return files
@@ -166,13 +154,9 @@ def split_event_references(files, train_fraction: float = 0.8, seed: int = SPLIT
     references = []
     for filename in files:
         data = ak.from_parquet(filename, columns=["X_track"])
-        references.extend(
-            (str(filename), event_index) for event_index in range(len(data["X_track"]))
-        )
+        references.extend((str(filename), event_index) for event_index in range(len(data["X_track"])))
     if len(references) < 2:
-        raise ValueError(
-            "At least two IDEA events are required for train/test splitting"
-        )
+        raise ValueError("At least two IDEA events are required for train/test splitting")
     random.Random(seed).shuffle(references)
     boundary = min(max(int(train_fraction * len(references)), 1), len(references) - 1)
     return {"train": references[:boundary], "test": references[boundary:]}

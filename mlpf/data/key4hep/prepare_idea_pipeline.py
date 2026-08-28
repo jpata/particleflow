@@ -13,29 +13,19 @@ from mlpf.heptfds.edm4hep_utils.utils_idea import (
 )
 
 
-def prepare_pipeline_file(
-    input_path: str | Path, output_path: str | Path
-) -> dict[str, int]:
+def prepare_pipeline_file(input_path: str | Path, output_path: str | Path) -> dict[str, int]:
     input_path = Path(input_path)
     output_path = Path(output_path)
     data = ak.from_parquet(input_path)
-    fields = {
-        field: data[field]
-        for field in data.fields
-        if field not in {"ycand_track", "ycand_cluster"}
-    }
+    fields = {field: data[field] for field in data.fields if field not in {"ycand_track", "ycand_cluster"}}
     target_tracks = []
     target_clusters = []
     repaired = 0
 
     for event_index in range(len(data["X_track"])):
         num_jets = len(data["targetjet"][event_index])
-        tracks, n_track = repair_jet_indices(
-            data["ytarget_track"][event_index], num_jets
-        )
-        clusters, n_cluster = repair_jet_indices(
-            data["ytarget_cluster"][event_index], num_jets
-        )
+        tracks, n_track = repair_jet_indices(data["ytarget_track"][event_index], num_jets)
+        clusters, n_cluster = repair_jet_indices(data["ytarget_cluster"][event_index], num_jets)
         target_tracks.append(tracks)
         target_clusters.append(clusters)
         repaired += n_track + n_cluster
@@ -63,9 +53,7 @@ def main():
     parser.add_argument("output", help="Output pipeline-validation parquet")
     args = parser.parse_args()
     summary = prepare_pipeline_file(args.input, args.output)
-    print(
-        f"wrote {summary['events']} events to {args.output}; repaired jet_idx={summary['repaired_jet_indices']}"
-    )
+    print(f"wrote {summary['events']} events to {args.output}; repaired jet_idx={summary['repaired_jet_indices']}")
 
 
 if __name__ == "__main__":

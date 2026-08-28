@@ -442,6 +442,14 @@ productions:
       args: {}
 
     tfds_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/idea_pf_edm4hep/ttbar"
+        version: "0.1.0"
+        config_ids: [1]
+      ww_fullhad:
+        builder_path: "mlpf/heptfds/idea_pf_edm4hep/ww_fullhad"
+        version: "0.1.0"
+        config_ids: [1]
       qq:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/qq"
         version: "0.1.0"

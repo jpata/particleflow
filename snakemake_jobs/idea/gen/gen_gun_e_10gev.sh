@@ -18,7 +18,7 @@ for (( i=0; i<1; i++ )); do
     seed=$((start_seed + i))
     if [ ! -f /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/gun_e_10gev/root/reco_gun_e_10gev_${seed}.root ]; then
         echo "Generating /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/gun_e_10gev/root/reco_gun_e_10gev_${seed}.root"
-        export OUTDIR=/local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/ && export CONFIG_DIR=/home/joosep/particleflow-dev/mlpf/data/key4hep/gen/idea && export WORKDIR=/scratch/local/joosep/gun_e_10gev_$seed && export NEV=100 && export PROGRESS_INTERVAL=60
+        export OUTDIR=/local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/ && export CONFIG_DIR=/home/joosep/particleflow-dev/mlpf/data/key4hep/gen/idea && export WORKDIR="/scratch/local/joosep/gun_e_10gev_${seed}_${SLURM_JOB_ID:-manual-$$}" && export NEV=100 && export PROGRESS_INTERVAL=60
         bash mlpf/data/key4hep/gen/idea/run_sim.sh gun_e_10gev $seed nopu
     else
         echo "Skipping /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/gen/gun_e_10gev/root/reco_gun_e_10gev_${seed}.root, already exists"

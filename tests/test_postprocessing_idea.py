@@ -35,13 +35,9 @@ def test_dual_readout_cluster_shape_parameters_are_split_by_channel():
             "TopoClusterAll.shapeParameters_end": [3, 6],
         }
     )
-    prop_data = {
-        "_TopoClusterAll_shapeParameters": [ak.Array([0.1, 2.0, 3.0, 0.2, 5.0, 7.0])]
-    }
+    prop_data = {"_TopoClusterAll_shapeParameters": [ak.Array([0.1, 2.0, 3.0, 0.2, 5.0, 7.0])]}
 
-    cherenkov, scintillation = pp._idea_dual_readout_cluster_energies(
-        prop_data, clusters, 0
-    )
+    cherenkov, scintillation = pp._idea_dual_readout_cluster_energies(prop_data, clusters, 0)
 
     np.testing.assert_allclose(cherenkov, [2.0, 5.0])
     np.testing.assert_allclose(scintillation, [3.0, 7.0])
@@ -56,9 +52,7 @@ def test_legacy_idea_clusters_leave_channel_energies_empty():
     )
     prop_data = {"_TopoClusterAll_shapeParameters": [ak.Array([0.1, 0.2])]}
 
-    cherenkov, scintillation = pp._idea_dual_readout_cluster_energies(
-        prop_data, clusters, 0
-    )
+    cherenkov, scintillation = pp._idea_dual_readout_cluster_energies(prop_data, clusters, 0)
 
     np.testing.assert_array_equal(cherenkov, [0.0, 0.0])
     np.testing.assert_array_equal(scintillation, [0.0, 0.0])

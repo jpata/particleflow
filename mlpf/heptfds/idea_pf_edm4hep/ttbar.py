@@ -1,4 +1,4 @@
-"""IDEA qq track/cluster dataset using temporary truth-seeded tracks."""
+"""IDEA ttbar track/cluster dataset using temporary truth-seeded tracks."""
 
 from pathlib import Path
 import os
@@ -18,17 +18,17 @@ from mlpf.heptfds.edm4hep_utils.utils_idea import (
 )
 
 _DESCRIPTION = """
-IDEA_o1_v03 ee -> qq at 365 GeV, for MLPF pipeline validation.
+IDEA_o1_v03 ee -> ttbar at 365 GeV, for MLPF pipeline validation.
 Tracks are truth-seeded proxies and ycand is a target oracle. Neither should
 be interpreted as reconstructed-physics performance.
 """
 
 
-class IdeaEdmQqPf(tfds.core.GeneratorBasedBuilder):
+class IdeaEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.1.0"))
     RELEASE_NOTES = {"0.1.0": "Initial pipeline-validation dataset with explicit proxy provenance."}
     BUILDER_CONFIGS = [tfds.core.BuilderConfig(name="1")]
-    MANUAL_DOWNLOAD_INSTRUCTIONS = "Point --manual_dir at a directory containing the IDEA parquet file."
+    MANUAL_DOWNLOAD_INSTRUCTIONS = "Point --manual_dir at a directory containing the IDEA parquet files."
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
@@ -64,7 +64,7 @@ class IdeaEdmQqPf(tfds.core.GeneratorBasedBuilder):
         )
 
     def _split_generators(self, dl_manager):
-        files = find_idea_parquets(Path(dl_manager.manual_dir), process_name="p8_ee_qq_ecm365")
+        files = find_idea_parquets(Path(dl_manager.manual_dir), process_name="p8_ee_ttbar_ecm365")
         return {name: self._generate_examples(refs) for name, refs in split_event_references(files).items()}
 
     def _generate_examples(self, references):

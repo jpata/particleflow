@@ -12,15 +12,14 @@ from mlpf.data.key4hep.prepare_idea_pipeline import prepare_pipeline_file
 from mlpf.heptfds.edm4hep_utils.utils_idea import (
     CANDIDATE_SOURCE,
     TRACK_SOURCE,
+    find_idea_parquets,
     make_oracle_candidates,
     prepare_data_idea,
     repair_jet_indices,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-IDEA_100_PARQUET = (
-    REPOSITORY_ROOT / "idea-100/postprocessing/reco_p8_ee_qq_ecm365_424242.parquet"
-)
+IDEA_100_PARQUET = REPOSITORY_ROOT / "idea-100/postprocessing/reco_p8_ee_qq_ecm365_424242.parquet"
 
 
 def test_oracle_candidate_is_an_independent_copy():
@@ -90,21 +89,37 @@ def test_current_idea_100_parquet_loads_into_mlpf_contract():
         num_jets = len(example["targetjets"])
         representatives = example["ytarget"][:, 0] > 0
         jet_indices = example["ytarget"][representatives, 12]
-        assert np.all(
-            (jet_indices == -1) | ((jet_indices >= 0) & (jet_indices < num_jets))
-        )
+        assert np.all((jet_indices == -1) | ((jet_indices >= 0) & (jet_indices < num_jets)))
 
 
 def test_real_spec_builds_idea_pipeline_config():
-    config = MLPFConfig.from_spec(
-        REPOSITORY_ROOT / "particleflow_spec.yaml", "pyg-idea-pipeline-v1", "idea"
-    )
+    config = MLPFConfig.from_spec(REPOSITORY_ROOT / "particleflow_spec.yaml", "pyg-idea-pipeline-v1", "idea")
 
     assert config.dataset is Dataset.IDEA
     assert config.input_dim == 17
     assert config.num_classes == 6
     assert config.ntrain == 10
     assert "idea_edm_qq_pf" in config.test_dataset
+
+
+def test_idea_tfds_mapping_excludes_validation_gun():
+    with (REPOSITORY_ROOT / "particleflow_spec.yaml").open() as handle:
+        mapping = yaml.safe_load(handle)["productions"]["idea"]["tfds_mapping"]
+
+    assert set(mapping) == {"ttbar", "ww_fullhad", "qq"}
+
+
+def test_idea_parquet_discovery_selects_requested_process(tmp_path):
+    qq_dir = tmp_path / "p8_ee_qq_ecm365"
+    ttbar_dir = tmp_path / "p8_ee_ttbar_ecm365"
+    qq_dir.mkdir()
+    ttbar_dir.mkdir()
+    qq_file = qq_dir / "qq.parquet"
+    ttbar_file = ttbar_dir / "ttbar.parquet"
+    qq_file.touch()
+    ttbar_file.touch()
+
+    assert find_idea_parquets(tmp_path, "p8_ee_ttbar_ecm365") == [ttbar_file]
 
 
 def test_idea_test_campaign_has_exactly_100_jobs_per_sample():

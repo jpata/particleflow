@@ -26,9 +26,7 @@ try:
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     _logger.info(f"Initial RLIMIT_NOFILE: soft={soft}, hard={hard}")
     if soft < hard:
-        _logger.info(
-            f"Attempting to set RLIMIT_NOFILE soft limit to hard limit: {hard}"
-        )
+        _logger.info(f"Attempting to set RLIMIT_NOFILE soft limit to hard limit: {hard}")
         resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         _logger.info(f"New RLIMIT_NOFILE: soft={soft}, hard={hard}")
@@ -55,12 +53,7 @@ class TFDSDataSource:
         # getitems requires a list
         records = self.ds.data_source.__getitems__(item)
 
-        ret = [
-            self.ds.dataset_info.features.deserialize_example_np(
-                record, decoders=self.ds.decoders
-            )
-            for record in records
-        ]
+        ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
         assert len(ret) == 1
         ret = ret[0]
         ds_name = self.ds.dataset_info.name
@@ -68,15 +61,11 @@ class TFDSDataSource:
         ret["input_type_id"] = np.int64(dataset_input_type_id(ds_name))
 
         Xshape = ret["X"].shape
-        _logger.debug(
-            f"Getting item={item}, ds={ds_name}:{self.ds.dataset_info.config_name}, X={Xshape}"
-        )
+        _logger.debug(f"Getting item={item}, ds={ds_name}:{self.ds.dataset_info.config_name}, X={Xshape}")
 
         if self.feature_dim is not None:
             if ret["X"].shape[1] > self.feature_dim:
-                raise ValueError(
-                    f"Input feature dimension {ret['X'].shape[1]} exceeds configured feature_dim={self.feature_dim}"
-                )
+                raise ValueError(f"Input feature dimension {ret['X'].shape[1]} exceeds configured feature_dim={self.feature_dim}")
             if ret["X"].shape[1] < self.feature_dim:
                 ret["X"] = np.pad(
                     ret["X"],
@@ -102,72 +91,40 @@ class TFDSDataSource:
                     if key_to_pad in ret:  # Ensure key exists
                         array_to_pad = ret[key_to_pad]
                         pad_width = ((0, num_to_pad), (0, 0))  # Pad only the first axis
-                        ret[key_to_pad] = np.pad(
-                            array_to_pad, pad_width, mode="constant", constant_values=0
-                        )
+                        ret[key_to_pad] = np.pad(array_to_pad, pad_width, mode="constant", constant_values=0)
 
         if ds_name.startswith("cms_"):
             # track, target label neutral hadron -> reconstruct as charged hadron
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 1) & (ret["ytarget"][:, 0] == 2)
-            ] = 1
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 1) & (ret["ytarget"][:, 0] == 2)] = 1
 
             # track, target label photon -> reconstruct as charged hadron
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 1) & (ret["ytarget"][:, 0] == 5)
-            ] = 1
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 1) & (ret["ytarget"][:, 0] == 5)] = 1
 
             # ECAL cluster, target label charged hadron -> reconstruct as photon
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 4) & (ret["ytarget"][:, 0] == 1)
-            ] = 5
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 4) & (ret["ytarget"][:, 0] == 1)] = 5
 
             # HCAL cluster, target label charged hadron -> reconstruct as neutral hadron
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 5) & (ret["ytarget"][:, 0] == 1)
-            ] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 5) & (ret["ytarget"][:, 0] == 1)] = 2
 
             # ECAL cluster, target label electron -> reconstruct as photon
             # ret["ytarget"][:, 0][(ret["X"][:, 0]==4) & (ret["ytarget"][:, 0] == 6)] = 5
 
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 5) & (ret["ytarget"][:, 0] == 6)
-            ] = 2
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 4) & (ret["ytarget"][:, 0] == 7)
-            ] = 5
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 5) & (ret["ytarget"][:, 0] == 7)
-            ] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 5) & (ret["ytarget"][:, 0] == 6)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 4) & (ret["ytarget"][:, 0] == 7)] = 5
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 5) & (ret["ytarget"][:, 0] == 7)] = 2
 
             # HFEM cluster, reconstruct as HFEM
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 8) & (ret["ytarget"][:, 0] != 0)
-            ] = 4
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 8) & (ret["ytarget"][:, 0] != 0)] = 4
 
             # HFHAD cluster, reconstruct as HFHAD
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 9) & (ret["ytarget"][:, 0] != 0)
-            ] = 3
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 9) & (ret["ytarget"][:, 0] != 0)] = 3
 
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 10) & (ret["ytarget"][:, 0] == 1)
-            ] = 2
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 11) & (ret["ytarget"][:, 0] == 1)
-            ] = 2
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 10) & (ret["ytarget"][:, 0] == 6)
-            ] = 2
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 11) & (ret["ytarget"][:, 0] == 6)
-            ] = 2
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 10) & (ret["ytarget"][:, 0] == 7)
-            ] = 2
-            ret["ytarget"][:, 0][
-                (ret["X"][:, 0] == 11) & (ret["ytarget"][:, 0] == 7)
-            ] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 10) & (ret["ytarget"][:, 0] == 1)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 11) & (ret["ytarget"][:, 0] == 1)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 10) & (ret["ytarget"][:, 0] == 6)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 11) & (ret["ytarget"][:, 0] == 6)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 10) & (ret["ytarget"][:, 0] == 7)] = 2
+            ret["ytarget"][:, 0][(ret["X"][:, 0] == 11) & (ret["ytarget"][:, 0] == 7)] = 2
 
             # set pt for HO which would otherwise be 0
             msk_ho = ret["X"][:, 0] == 10
@@ -198,9 +155,7 @@ class TFDSDataSource:
         return len(self.ds)
 
     def __repr__(self):
-        return "TFDSDataSource(ds={}, pad_to_multiple={})".format(
-            self.ds.__repr__(), self.pad_to_multiple
-        )
+        return "TFDSDataSource(ds={}, pad_to_multiple={})".format(self.ds.__repr__(), self.pad_to_multiple)
 
 
 class PFDataset:
@@ -229,16 +184,12 @@ class PFDataset:
             builder = tfds.builder(name, data_dir=data_dir)
         except Exception as e:
             _logger.error(
-                "Could not find dataset {} in {}, please check that you have downloaded the correct version of the dataset".format(
-                    name, data_dir
-                )
+                "Could not find dataset {} in {}, please check that you have downloaded the correct version of the dataset".format(name, data_dir)
             )
             _logger.error(e)
             sys.exit(1)
 
-        _logger.debug(
-            f"PFDataset opening dataset {name} in {builder.data_path} for split {split}"
-        )
+        _logger.debug(f"PFDataset opening dataset {name} in {builder.data_path} for split {split}")
         self.ds = TFDSDataSource(
             builder.as_data_source(split=split),
             sort=sort,
@@ -275,9 +226,7 @@ class PFBatch:
         attrs = {}
         for attr in self.attrs:
             this_attr = getattr(self, attr)
-            attrs[attr] = (
-                this_attr.to(device, **kwargs) if this_attr is not None else None
-            )
+            attrs[attr] = this_attr.to(device, **kwargs) if this_attr is not None else None
         return PFBatch(**attrs)
 
 
@@ -286,9 +235,7 @@ class Collater:
     def __init__(self, per_particle_keys_to_get, per_event_keys_to_get, **kwargs):
         super(Collater, self).__init__(**kwargs)
         self.per_particle_keys_to_get = per_particle_keys_to_get  # these quantities are a variable-length tensor per each event
-        self.per_event_keys_to_get = (
-            per_event_keys_to_get  # these quantities are one value (scalar) per event
-        )
+        self.per_event_keys_to_get = per_event_keys_to_get  # these quantities are one value (scalar) per event
 
     def __call__(self, inputs):
         ret = {}
@@ -296,10 +243,7 @@ class Collater:
         # per-particle quantities need to be padded across events of different size
         for key_to_get in self.per_particle_keys_to_get:
             ret[key_to_get] = torch.nn.utils.rnn.pad_sequence(
-                [
-                    torch.as_tensor(inp[key_to_get], dtype=torch.float32)
-                    for inp in inputs
-                ],
+                [torch.as_tensor(inp[key_to_get], dtype=torch.float32) for inp in inputs],
                 batch_first=True,
             )
 
@@ -307,9 +251,7 @@ class Collater:
         for key_to_get in self.per_event_keys_to_get:
             if not all(key_to_get in inp for inp in inputs):
                 continue
-            ret[key_to_get] = torch.stack(
-                [torch.as_tensor(inp[key_to_get]) for inp in inputs]
-            )
+            ret[key_to_get] = torch.stack([torch.as_tensor(inp[key_to_get]) for inp in inputs])
         return PFBatch(**ret)
 
 
@@ -377,11 +319,7 @@ def _build_interleaved_shard_indices(concat_dataset, shuffle=True, seed=0):
             indices.append(shard_indices_lists[shard_idx][pos])
             positions[shard_idx] += 1
 
-        active_shards = [
-            idx
-            for idx in active_shards
-            if positions[idx] < len(shard_indices_lists[idx])
-        ]
+        active_shards = [idx for idx in active_shards if positions[idx] < len(shard_indices_lists[idx])]
 
     return indices
 
@@ -403,27 +341,19 @@ class InterleavedShardSampler(torch.utils.data.Sampler):
         self.epoch = epoch
 
     def __iter__(self):
-        return iter(
-            _build_interleaved_shard_indices(
-                self.concat_dataset, shuffle=self.shuffle, seed=self.seed + self.epoch
-            )
-        )
+        return iter(_build_interleaved_shard_indices(self.concat_dataset, shuffle=self.shuffle, seed=self.seed + self.epoch))
 
     def __len__(self):
         return len(self.concat_dataset)
 
 
-class DistributedShardConsecutiveSampler(
-    torch.utils.data.distributed.DistributedSampler
-):
+class DistributedShardConsecutiveSampler(torch.utils.data.distributed.DistributedSampler):
     """
     A distributed version of ShardConsecutiveSampler.
     Each rank handles a subset of shards, ensuring that each node only opens its subset of shards.
     """
 
-    def __init__(
-        self, dataset, world_size=None, rank=None, shuffle=True, seed=0, drop_last=False
-    ):
+    def __init__(self, dataset, world_size=None, rank=None, shuffle=True, seed=0, drop_last=False):
         super().__init__(
             dataset,
             num_replicas=world_size,
@@ -467,9 +397,7 @@ class DistributedShardConsecutiveSampler(
             else:
                 import math
 
-                all_indices += (
-                    all_indices * math.ceil(padding_size / len(all_indices))
-                )[:padding_size]
+                all_indices += (all_indices * math.ceil(padding_size / len(all_indices)))[:padding_size]
         else:
             all_indices = all_indices[: self.total_size]
 
@@ -477,9 +405,7 @@ class DistributedShardConsecutiveSampler(
 
         # 5. Each rank handles its own subset of indices consecutively.
         # This keeps each node working on a small number of shards.
-        indices = all_indices[
-            self.rank * self.num_samples : (self.rank + 1) * self.num_samples
-        ]
+        indices = all_indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
         assert len(indices) == self.num_samples
 
         return iter(indices)
@@ -488,9 +414,7 @@ class DistributedShardConsecutiveSampler(
 class DistributedInterleavedShardSampler(torch.utils.data.Sampler):
     """Distributed version of InterleavedShardSampler."""
 
-    def __init__(
-        self, dataset, world_size=None, rank=None, shuffle=True, seed=0, drop_last=False
-    ):
+    def __init__(self, dataset, world_size=None, rank=None, shuffle=True, seed=0, drop_last=False):
         self.dataset = dataset
         self.num_replicas = world_size
         self.rank = rank
@@ -500,9 +424,7 @@ class DistributedInterleavedShardSampler(torch.utils.data.Sampler):
         self.epoch = 0
 
         if self.drop_last and len(self.dataset) % self.num_replicas != 0:
-            self.num_samples = math.ceil(
-                (len(self.dataset) - self.num_replicas) / self.num_replicas
-            )
+            self.num_samples = math.ceil((len(self.dataset) - self.num_replicas) / self.num_replicas)
         else:
             self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
         self.total_size = self.num_samples * self.num_replicas
@@ -511,18 +433,14 @@ class DistributedInterleavedShardSampler(torch.utils.data.Sampler):
         self.epoch = epoch
 
     def __iter__(self):
-        indices = _build_interleaved_shard_indices(
-            self.dataset, shuffle=self.shuffle, seed=self.seed + self.epoch
-        )
+        indices = _build_interleaved_shard_indices(self.dataset, shuffle=self.shuffle, seed=self.seed + self.epoch)
 
         if not self.drop_last:
             padding_size = self.total_size - len(indices)
             if padding_size <= len(indices):
                 indices += indices[:padding_size]
             else:
-                indices += (indices * math.ceil(padding_size / len(indices)))[
-                    :padding_size
-                ]
+                indices += (indices * math.ceil(padding_size / len(indices)))[:padding_size]
         else:
             indices = indices[: self.total_size]
 
@@ -554,9 +472,7 @@ class ResumableSampler(torch.utils.data.Sampler):
 
     def load_state_dict(self, state_dict):
         self.start_index = state_dict["start_index"]
-        _logger.info(
-            f"ResumableSampler {self.name} loading state: start_index={self.start_index}"
-        )
+        _logger.info(f"ResumableSampler {self.name} loading state: start_index={self.start_index}")
 
     def reset(self):
         _logger.info(f"ResumableSampler {self.name} resetting")
@@ -571,9 +487,7 @@ class InterleavedIterator(object):
     """Will combine DataLoaders of different lengths and batch sizes."""
 
     def __init__(self, data_loaders):
-        _logger.info(
-            f"Creating InterleavedIterator with {len(data_loaders)} data loaders."
-        )
+        _logger.info(f"Creating InterleavedIterator with {len(data_loaders)} data loaders.")
         self.data_loaders = data_loaders
         self.data_loaders_iter = [iter(dl) for dl in data_loaders]
         dl_lens = [len(dl) for dl in data_loaders]
@@ -594,9 +508,7 @@ class InterleavedIterator(object):
         self._len = None
         self.name = ""
 
-        _logger.debug(
-            f"InterleavedIterator at {self.cur_index}/{len(self.loader_ds_indices)}"
-        )
+        _logger.debug(f"InterleavedIterator at {self.cur_index}/{len(self.loader_ds_indices)}")
 
     def reset(self):
         _logger.debug(f"Resetting InterleavedIterator {self.name} state")
@@ -609,24 +521,16 @@ class InterleavedIterator(object):
 
     def __iter__(self):
         # Only reset if the iterator is exhausted
-        _logger.debug(
-            f"Resetting InterleavedIterator {self.name}: {self.cur_index}/{len(self.loader_ds_indices)}"
-        )
+        _logger.debug(f"Resetting InterleavedIterator {self.name}: {self.cur_index}/{len(self.loader_ds_indices)}")
         if self.cur_index >= len(self.loader_ds_indices):
-            _logger.debug(
-                f"Resetting exhausted InterleavedIterator {self.name}, {self.cur_index}>={len(self.loader_ds_indices)}."
-            )
+            _logger.debug(f"Resetting exhausted InterleavedIterator {self.name}, {self.cur_index}>={len(self.loader_ds_indices)}.")
             self.reset()
         return self
 
     def __next__(self):
-        _logger.debug(
-            f"InterleavedIterator {self.name}.__next__ {self.cur_index}/{len(self.loader_ds_indices)}"
-        )
+        _logger.debug(f"InterleavedIterator {self.name}.__next__ {self.cur_index}/{len(self.loader_ds_indices)}")
         if self.cur_index >= len(self.loader_ds_indices):
-            _logger.debug(
-                f"InterleavedIterator {self.name}.__next__ raising StopIteration"
-            )
+            _logger.debug(f"InterleavedIterator {self.name}.__next__ raising StopIteration")
             raise StopIteration
 
         iloader = self.loader_ds_indices[self.cur_index]
@@ -671,9 +575,7 @@ class InterleavedIterator(object):
 
         for i, loader in enumerate(self.data_loaders):
             start_index = self.batches_yielded_per_loader[i] * loader.batch_size
-            _logger.info(
-                f"InterleavedIterator {self.name} advancing sampler {i} to {start_index}"
-            )
+            _logger.info(f"InterleavedIterator {self.name} advancing sampler {i} to {start_index}")
             loader.sampler.load_state_dict({"start_index": start_index})
 
         # create fresh iterators from the original dataloaders
@@ -699,9 +601,7 @@ class EndlessIterator(object):
             return next(self.iterator)
         except StopIteration:
             self.epoch += 1
-            _logger.info(
-                f"EndlessIterator {self.name} caught StopIteration, advancing epoch to {self.epoch}"
-            )
+            _logger.info(f"EndlessIterator {self.name} caught StopIteration, advancing epoch to {self.epoch}")
             for sampler in self.samplers:
                 sampler.set_epoch(self.epoch)
             self.iterator = iter(self.data_loader)
@@ -736,9 +636,7 @@ def set_worker_sharing_strategy(worker_id: int) -> None:
         pass
 
 
-def get_interleaved_dataloaders(
-    world_size, rank, config: MLPFConfig, use_cuda, use_ray, shuffle_train=True
-):
+def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, use_ray, shuffle_train=True):
     loaders = {}
     samplers = {}
     # build train, valid dataset and dataloaders
@@ -755,9 +653,7 @@ def get_interleaved_dataloaders(
             for sample_name, sample in physical_ds.samples.items():
                 version = sample.version
                 split_configs = sample.splits
-                _logger.info(
-                    f"sample={sample_name} split={split} split_configs={split_configs}"
-                )
+                _logger.info(f"sample={sample_name} split={split} split_configs={split_configs}")
 
                 nevents = None
                 n_split_val = getattr(config, f"n{split}")
@@ -779,9 +675,7 @@ def get_interleaved_dataloaders(
                     ).ds
 
                     if (rank == 0) or (rank == "cpu"):
-                        _logger.info(
-                            f"{split}_dataset: {sample_name}, {len(ds)}", color="blue"
-                        )
+                        _logger.info(f"{split}_dataset: {sample_name}, {len(ds)}", color="blue")
 
                     dataset.append(ds)
             dataset = torch.utils.data.ConcatDataset(dataset)
@@ -790,17 +684,11 @@ def get_interleaved_dataloaders(
             if shuffle_train:
                 shuffle = split == "train"
             sampler_mode = DatasetSamplerMode(config.sampler_mode)
-            _logger.info(
-                f"{split}_dataset sampler_mode={sampler_mode.value} shuffle={shuffle}"
-            )
+            _logger.info(f"{split}_dataset sampler_mode={sampler_mode.value} shuffle={shuffle}")
             if world_size > 1 and sampler_mode == DatasetSamplerMode.INTERLEAVED_SHARDS:
-                sampler = DistributedInterleavedShardSampler(
-                    dataset, world_size=world_size, rank=rank, shuffle=shuffle
-                )
+                sampler = DistributedInterleavedShardSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle)
             elif world_size > 1:
-                sampler = DistributedShardConsecutiveSampler(
-                    dataset, world_size=world_size, rank=rank, shuffle=shuffle
-                )
+                sampler = DistributedShardConsecutiveSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle)
             elif sampler_mode == DatasetSamplerMode.INTERLEAVED_SHARDS:
                 sampler = InterleavedShardSampler(dataset, shuffle=shuffle)
             else:
@@ -821,9 +709,7 @@ def get_interleaved_dataloaders(
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(
-                    ["X", "ytarget"], ["genmet", "source_id", "input_type_id"]
-                ),
+                collate_fn=Collater(["X", "ytarget"], ["genmet", "source_id", "input_type_id"]),
                 sampler=sampler,
                 num_workers=config.num_workers,
                 # pin_memory=use_cuda,
@@ -837,9 +723,7 @@ def get_interleaved_dataloaders(
 
         loaders[split] = InterleavedIterator(loaders[split])
         if split == "train":
-            loaders[split] = EndlessIterator(
-                loaders[split], samplers[split], world_size
-            )
+            loaders[split] = EndlessIterator(loaders[split], samplers[split], world_size)
         loaders[split].name = f"{type_}:{split}"
 
     return loaders, samplers
