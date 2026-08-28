@@ -472,12 +472,21 @@ validation inside HEP-KBFI before opening PRs against the official repositories.
 - `HEP-KBFI/key4hep-sim`:
   - [#2 Add IDEA simulation and reconstruction workflow](https://github.com/HEP-KBFI/key4hep-sim/pull/2)
 
-All eight staging PRs target `main` and currently have clean, mergeable GitHub
-status. No fork CI checks had appeared at the initial status check. The source
-repositories also contain `idea-mlpf-integration` branches that combine the
-focused commits. `key4hep-sim` #2 pins those exact integration commits as
-submodules; those pins are temporary and must move to `main` after the focused
-changes merge.
+All eight staging PRs target `main`. At the initial status check they were
+clean and mergeable, with no fork CI checks. Mergeability and CI state must be
+checked again before merging. The remote refs were rechecked on 2026-08-28:
+
+- `HEP-KBFI/k4geo`: `main` at `3bb16be`, integration at `73238dd`, PR #1 at
+  `1e8c0ec`, and PR #2 at `165c4fb`;
+- `HEP-KBFI/k4RecCalorimeter`: `main` at `1df2985`, integration at `155e699`,
+  PR #1 at `c73f9e5`, PR #2 at `2ba6569`, and PR #3 at `528c600`; and
+- `HEP-KBFI/key4hep-sim`: `main` at `5be058e`, IDEA workflow/PR #2 at
+  `a3a3fd2`.
+
+The `idea-mlpf-integration` branches combine the focused commits.
+`key4hep-sim` #2 pins those exact integration commits as submodules; those
+pins are temporary and must move to stable official or fork `main` commits
+after the focused changes merge.
 
 Initial branch validation completed during PR preparation:
 
@@ -511,15 +520,15 @@ build/install trees must not be pushed.
 
 ### Parent particleflow PR and submodule state
 
-Checked on 2026-08-25:
+Checked on 2026-08-28:
 
 - [`particleflow` PR #495](https://github.com/jpata/particleflow/pull/495),
-  `Add IDEA simulation and MLPF pipeline integration`, is open and mergeable
-  at `9e2546b`, but GitHub reports it as unstable. There are no reviews or
-  comments. The pre-commit job fails because Black reformats 11 changed Python
-  files; the CMS, CLD, and CLIC CI jobs were still running at the latest
-  check. Run `pre-commit run --all-files`, commit its formatting changes, and
-  rerun the focused IDEA tests before treating the parent PR as ready.
+  `Add IDEA simulation and MLPF pipeline integration`, still has remote branch
+  head `9e2546b`. Local commit `85b68e4` applies the outstanding Black changes,
+  adds the current validation/production work, and passes the full pre-commit
+  suite plus the focused IDEA tests (`12 passed`). The local branch is one
+  commit ahead of its remote and must be pushed before CI can validate this
+  state.
 - The parent branch already updates `mlpf/data/key4hep/gen`. The pointer moves
   from `5be058e` on `origin/main`, through `511bcea` in the first IDEA commit,
   to `a3a3fd2` at the current PR head. Commit `a3a3fd2` is the head of
@@ -527,20 +536,36 @@ Checked on 2026-08-25:
 - The local `gen` checkout is still detached at `511bcea` with dirty IDEA
   content, so the parent worktree reports the submodule as modified even
   though the committed PR pointer is already `a3a3fd2`. Do not stage that
-  dirty checkout as the next parent update. First preserve or verify the
-  nested FCC-config, k4geo, and k4RecCalorimeter worktrees, then restore the
-  state recorded by the parent branch from the repository root with:
+  dirty checkout as the next parent update. The state was compared with the
+  HEP-KBFI integration refs on 2026-08-28:
+
+  - `idea/run_sim.sh` and both untracked build scripts match the corresponding
+    files in `a3a3fd2`;
+  - the local README has a material campaign-description difference from
+    `a3a3fd2`;
+  - the dirty FCC-config worktree matches its recorded HEP-KBFI integration
+    commit `b317ae0`; and
+  - the k4geo and k4RecCalorimeter worktrees contain material detector and
+    reconstruction changes on older release bases. They are predecessors of
+    the rebased HEP-KBFI integration branches, not pre-commit-only changes and
+    not byte-identical substitutes for `73238dd` and `155e699`.
+
+  Preserve patches from the old-base worktrees if they are still useful as
+  historical evidence, but perform integration validation in fresh clones at
+  the published refs. After preservation, restore the state recorded by the
+  parent branch from the repository root with:
 
   ```bash
   git submodule sync --recursive mlpf/data/key4hep/gen
   git submodule update --init --recursive mlpf/data/key4hep/gen
   ```
 
-- `key4hep-sim` #2 is open, clean, and mergeable at `a3a3fd2`, with no checks,
-  reviews, or comments. Its nested FCC-config, k4geo, and k4RecCalorimeter
-  gitlinks intentionally point at temporary combined integration branches.
-  This is suitable for review and validation, but it is not the final
-  publication state.
+- `key4hep-sim` #2 remains at `a3a3fd2`; at the last GitHub status check it was
+  open, clean, and mergeable, with no checks, reviews, or comments. Recheck
+  that status before acting on it. Its nested FCC-config, k4geo, and
+  k4RecCalorimeter gitlinks intentionally point at temporary combined
+  integration branches. This is suitable for review and validation, but it is
+  not the final publication state.
 - Finalize the dependency graph in two stages. First validate and merge the
   focused component PRs, then add a focused commit to `key4hep-sim` #2 that
   moves all three nested gitlinks to stable official or fork `main` commits.
@@ -554,6 +579,91 @@ Checked on 2026-08-25:
   test and still needs the full 100-event run listed below. Keep that
   distinction explicit in the PR description unless the outstanding run is
   completed first.
+
+### k4geo and k4RecCalorimeter integration action plan
+
+Use fresh clones or worktrees for every acceptance run. The dirty nested
+checkouts under `mlpf/data/key4hep/gen/idea` are old-base development evidence;
+they must not be used as the source of a new parent gitlink or as proof that
+the rebased PR heads pass.
+
+1. Preserve and isolate the old worktrees.
+   - Save binary-capable diffs for FCC-config, k4geo, k4RecCalorimeter, and the
+     outer key4hep-sim checkout outside the repositories.
+   - Record each checkout's base commit and status with the patch. Do not copy
+     local build/install trees or generated ROOT/Parquet output.
+   - Create clean validation clones at the exact HEP-KBFI `main`, focused-PR,
+     and integration refs listed above. Keep one shared fixed-seed input set so
+     every branch sees identical events.
+
+2. Establish the k4geo baseline separately from the two proposed changes.
+   - Build `3bb16be` first and confirm the supported Key4HEP environment. The
+     keyed fiber-hit lookup already merged upstream in k4geo PR #620 is part of
+     this baseline; its large speedup is not an acceptance claim for either
+     HEP-KBFI PR.
+   - Validate PR #1 (`1e8c0ec`) in fast and standard optical transport. Require
+     valid charged-parent relations, per-hit and event-level Cherenkov photon
+     closure, valid MCParticle indices, empty-event handling, and unchanged
+     non-DRC payloads.
+   - Validate PR #2 (`165c4fb`) against the same input. Require typed EDM4hep
+     output equivalence and no timing or memory regression; report any small
+     dense-map lookup improvement separately from the upstream PR #620 gain.
+   - Build the combined integration ref `73238dd` and require both independent
+     contracts to hold together. Run the existing five-event qq validation
+     only after the smaller focused tests pass.
+
+3. Validate the three k4RecCalorimeter PRs independently.
+   - First build `1df2985` and each PR head with a Key4HEP release supported by
+     current k4RecCalorimeter `main`. Treat the known April-2026 metadata-API
+     build failure as a release-compatibility issue, not as a failure of the
+     new topocluster event logic. Test the campaign's pinned `2026-04-08` stack
+     separately on the compatibility integration path.
+   - PR #1 (`c73f9e5`): test copied and non-copied cluster cells, repeated
+     `cellID` values, multiple input link collections, `minCellEnergy`, empty
+     inputs, normalized weights, and approximately linear runtime scaling.
+   - PR #2 (`2ba6569`): test one-to-one optical digi/sim associations, valid
+     relation endpoints, configurable collection names, zero-hit events, and
+     exact photon-count closure when fed the k4geo PR #1 output.
+   - PR #3 (`528c600`): test reversed input order, duplicate physical cells,
+     Cherenkov/scintillation and total-energy closure, error propagation,
+     shape-parameter metadata, copied-cell output, and ordinary single-input
+     calorimeters.
+   - Build `155e699` only after all three focused contracts pass. Repeat the
+     combined tests to catch cross-PR assumptions, especially the flow from
+     optical links through cell-ID truth links into dual-readout clusters.
+
+4. Run a clean end-to-end integration gate.
+   - Pin clean k4geo `73238dd` and k4RecCalorimeter `155e699` checkouts with the
+     matching FCC-config integration commit; do not overlay files from the
+     dirty old-base trees.
+   - Run one fixed-seed electron gun and at least one representative qq event
+     with GGTF disabled. Require successful finalization, no ERROR/FATAL log
+     entries, the MLPF-required collections, valid relation endpoints, photon
+     and channel-energy closure, and reconstruction timings consistent with
+     the corrected implementation.
+   - Repeat from a fresh recursive `key4hep-sim` clone at `a3a3fd2`. This is
+     the acceptance test for the exact dependency graph, not just for local
+     source directories.
+
+5. Publish in dependency order and replace temporary pins.
+   - Attach the focused test commands, release/container identity, compact
+     results, and artifact checksums to each HEP-KBFI PR. Recheck mergeability
+     and CI immediately before merging.
+   - Open or merge the two official k4geo PRs and the three official
+     k4RecCalorimeter PRs once their individual evidence is complete. The two
+     repositories can progress in parallel, but FCC-config must wait for
+     stable component refs.
+   - Rebase the integration branches onto the resulting stable official or
+     fork `main` commits, rerun the small end-to-end gate, and update
+     `key4hep-sim` #2's three nested gitlinks in one focused commit.
+   - Validate a fresh recursive clone of that final graph, merge
+     `key4hep-sim` #2, then update the particleflow `gen` gitlink in a separate
+     parent commit.
+
+The integration is ready to advance only when every focused PR has independent
+evidence, the combined graph passes from a fresh clone, no temporary
+integration gitlinks remain, and the exact tested commit IDs are recorded in
+the PRs and this file.
 
 ## Immediate next steps
 
