@@ -483,6 +483,14 @@ checked again before merging. The remote refs were rechecked on 2026-08-28:
 - `HEP-KBFI/key4hep-sim`: `main` at `5be058e`, IDEA workflow/PR #2 at
   `a3a3fd2`.
 
+The April-stack preservation branches were created and pushed on 2026-08-28:
+
+- `HEP-KBFI/k4geo:key4hep-2026-04-08-mlpf` at `b313130`;
+- `HEP-KBFI/k4RecCalorimeter:key4hep-2026-04-08-mlpf` at `25016a3`;
+- `HEP-KBFI/FCC-config:key4hep-2026-04-08-mlpf` at `cdc8b78`; and
+- `HEP-KBFI/key4hep-sim:key4hep-2026-04-08-mlpf` at `c09ebd3`, pinning the
+  three commits above.
+
 The `idea-mlpf-integration` branches combine the focused commits.
 `key4hep-sim` #2 pins those exact integration commits as submodules; those
 pins are temporary and must move to stable official or fork `main` commits
@@ -528,52 +536,31 @@ Checked on 2026-08-28:
   `Add IDEA simulation and MLPF pipeline integration`, still has remote branch
   head `9e2546b`. Local commit `85b68e4` applies the outstanding Black changes,
   adds the current validation/production work, and passes the full pre-commit
-  suite plus the focused IDEA tests (`12 passed`). The local branch is one
-  commit ahead of its remote and must be pushed before CI can validate this
-  state.
-- The parent branch already updates `mlpf/data/key4hep/gen`. The pointer moves
-  from `5be058e` on `origin/main`, through `511bcea` in the first IDEA commit,
-  to `a3a3fd2` at the current PR head. Commit `a3a3fd2` is the head of
-  [`HEP-KBFI/key4hep-sim` PR #2](https://github.com/HEP-KBFI/key4hep-sim/pull/2).
-- The local `gen` checkout is still detached at `511bcea` with dirty IDEA
-  content, so the parent worktree reports the submodule as modified even
-  though the committed PR pointer is already `a3a3fd2`. Do not stage that
-  dirty checkout as the next parent update. The state was compared with the
-  HEP-KBFI integration refs on 2026-08-28:
-
-  - `idea/run_sim.sh` and both untracked build scripts match the corresponding
-    files in `a3a3fd2`;
-  - the local README has a material campaign-description difference from
-    `a3a3fd2`;
-  - the dirty FCC-config worktree matches its recorded HEP-KBFI integration
-    commit `b317ae0`; and
-  - the k4geo and k4RecCalorimeter worktrees contain material detector and
-    reconstruction changes on older release bases. They are predecessors of
-    the rebased HEP-KBFI integration branches, not pre-commit-only changes and
-    not byte-identical substitutes for `73238dd` and `155e699`.
-
-  Preserve patches from the old-base worktrees if they are still useful as
-  historical evidence, but perform integration validation in fresh clones at
-  the published refs. After preservation, restore the state recorded by the
-  parent branch from the repository root with:
-
-  ```bash
-  git submodule sync --recursive mlpf/data/key4hep/gen
-  git submodule update --init --recursive mlpf/data/key4hep/gen
-  ```
-
-- `key4hep-sim` #2 remains at `a3a3fd2`; at the last GitHub status check it was
-  open, clean, and mergeable, with no checks, reviews, or comments. Recheck
-  that status before acting on it. Its nested FCC-config, k4geo, and
-  k4RecCalorimeter gitlinks intentionally point at temporary combined
-  integration branches. This is suitable for review and validation, but it is
-  not the final publication state.
+  suite plus the focused IDEA tests (`12 passed`). The local branch contains
+  several additional unpushed commits and must be pushed before CI can
+  validate this state.
+- The formerly dirty old-base IDEA worktrees are now preserved as clean
+  `key4hep-2026-04-08-mlpf` branches in the four HEP-KBFI repositories. The
+  k4geo and k4RecCalorimeter branches build and install against the pinned
+  stack, FCC-config passes Python compilation, and the outer workflow scripts
+  pass `bash -n`. All four remote heads were verified after pushing.
+- The parent `mlpf/data/key4hep/gen` gitlink now advances from `a3a3fd2` to
+  `c09ebd3`. The nested checkout is clean and on the corresponding tracking
+  branch; its FCC-config, k4geo, and k4RecCalorimeter gitlinks resolve to the
+  release-specific branches above.
+- The release-specific branches preserve the deployable April campaign graph;
+  they do not replace the focused, current-main staging PRs. Continue using
+  `73238dd` and `155e699` plus their focused branches for upstream acceptance
+  evidence, and use `c09ebd3` for exact April-stack production reproduction.
+- `key4hep-sim` #2 remains separately at `a3a3fd2`; at the last GitHub status
+  check it was open, clean, and mergeable, with no checks, reviews, or
+  comments. Recheck that status before acting on it.
 - Finalize the dependency graph in two stages. First validate and merge the
   focused component PRs, then add a focused commit to `key4hep-sim` #2 that
   moves all three nested gitlinks to stable official or fork `main` commits.
   Validate that exact graph from a fresh recursive clone, merge `key4hep-sim`
   #2, and finally update the parent `mlpf/data/key4hep/gen` pointer from
-  `a3a3fd2` to the resulting stable `key4hep-sim/main` commit in a standalone
+  `c09ebd3` to the resulting stable `key4hep-sim/main` commit in a standalone
   parent commit.
 - The parent PR description says that a 100-event IDEA workflow completed.
   The completed sample validates the earlier GGTF-enabled path, while the
@@ -584,10 +571,10 @@ Checked on 2026-08-28:
 
 ### k4geo and k4RecCalorimeter integration action plan
 
-Use fresh clones or worktrees for every acceptance run. The dirty nested
-checkouts under `mlpf/data/key4hep/gen/idea` are old-base development evidence;
-they must not be used as the source of a new parent gitlink or as proof that
-the rebased PR heads pass.
+Use fresh clones or worktrees for every acceptance run. The nested checkouts
+under `mlpf/data/key4hep/gen/idea` now reproduce the clean release-specific
+branches, but they remain old-base campaign artifacts and are not proof that
+the rebased focused PR heads pass.
 
 #### Role of `validate_k4geo_changes.sh`
 
@@ -605,7 +592,7 @@ It already provides the following useful isolation and evidence:
   exact composition of the three k4RecCalorimeter changes, and verifies that
   the upstream keyed-hit fix can be reversed in isolation;
 - creates a unique work directory under `/scratch/persistent/joosep`, clones
-  key4hep-sim `a3a3fd2` there by default, initializes every recursive
+  key4hep-sim `c09ebd3` there by default, initializes every recursive
   submodule at its recorded commit, and records the complete workflow graph
   and cleanliness state;
 - runs identical fixed-seed CLIC, CLD, IDEA-standard, and IDEA-fast gun cases
@@ -682,11 +669,11 @@ Use the script in three passes:
    key4hep-sim integration gate in plan step 4 for the exact final gitlink
    graph and FCC-config contract.
 
-1. Preserve and isolate the old worktrees.
-   - Save binary-capable diffs for FCC-config, k4geo, k4RecCalorimeter, and the
-     outer key4hep-sim checkout outside the repositories.
-   - Record each checkout's base commit and status with the patch. Do not copy
-     local build/install trees or generated ROOT/Parquet output.
+1. Preserve and isolate the old worktrees. Completed on 2026-08-28.
+   - The four clean `key4hep-2026-04-08-mlpf` branches preserve FCC-config,
+     k4geo, k4RecCalorimeter, and the outer key4hep-sim dependency graph.
+   - Local build/install trees and generated ROOT/Parquet output remain
+     excluded from every commit.
    - Create clean validation clones at the exact HEP-KBFI `main`, focused-PR,
      and integration refs listed above. Keep one shared fixed-seed input set so
      every branch sees identical events.
@@ -730,13 +717,13 @@ Use the script in three passes:
 4. Run a clean end-to-end integration gate.
    - Pin clean k4geo `73238dd` and k4RecCalorimeter `155e699` checkouts with the
      matching FCC-config integration commit; do not overlay files from the
-     dirty old-base trees.
+     release-specific old-base branches.
    - Run one fixed-seed electron gun and at least one representative qq event
      with GGTF disabled. Require successful finalization, no ERROR/FATAL log
      entries, the MLPF-required collections, valid relation endpoints, photon
      and channel-energy closure, and reconstruction timings consistent with
      the corrected implementation.
-   - Repeat from a fresh recursive `key4hep-sim` clone at `a3a3fd2`. This is
+   - Repeat from a fresh recursive `key4hep-sim` clone at `c09ebd3`. This is
      the acceptance test for the exact dependency graph, not just for local
      source directories.
 

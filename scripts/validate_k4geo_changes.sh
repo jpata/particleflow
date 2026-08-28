@@ -10,7 +10,7 @@ set -Eeuo pipefail
 readonly DEFAULT_REPOSITORY_URL="https://github.com/HEP-KBFI/k4geo.git"
 readonly DEFAULT_RECCALO_REPOSITORY_URL="https://github.com/HEP-KBFI/k4RecCalorimeter.git"
 readonly DEFAULT_WORKFLOW_REPOSITORY_URL="https://github.com/HEP-KBFI/key4hep-sim.git"
-readonly DEFAULT_WORKFLOW_REF="a3a3fd2928a0e7ad420fdc87b9d0240b5bf85a6f"
+readonly DEFAULT_WORKFLOW_REF="c09ebd35314f9a782e1dbe8503df29f1d4897b8a"
 readonly DEFAULT_SCRATCH_ROOT="/scratch/persistent/joosep"
 readonly DEFAULT_KEY4HEP_RELEASE="2026-04-08"
 validation_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -83,7 +83,7 @@ Options:
                               Clone this key4hep-sim repository when
                               --workflow-root is not given.
   --workflow-ref REF          Clean key4hep-sim commit or branch to check out
-                              recursively (default: a3a3fd2).
+                              recursively (default: c09ebd3).
   --release NAME              Key4HEP release (default: 2026-04-08).
   --main-ref REF              Baseline ref (default: main).
   --truth-ref REF             Cherenkov-truth PR ref.
