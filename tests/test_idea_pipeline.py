@@ -126,10 +126,11 @@ def test_idea_test_campaign_has_exactly_100_jobs_per_sample():
     with (REPOSITORY_ROOT / "particleflow_spec.yaml").open() as handle:
         samples = yaml.safe_load(handle)["productions"]["idea"]["samples"]
 
-    assert set(samples) == {"gun_e_10gev", "ttbar", "ww_fullhad", "qq"}
+    expected_samples = {"gun_e_10gev", "gun_mu_10gev", "gun_pi_10gev", "ttbar", "ww_fullhad", "qq"}
+    assert set(samples) == expected_samples
     for sample in samples.values():
         start, stop = sample["seed_range"]
         assert stop - start == 100
 
-    for sample_name in ("gun_e_10gev", "ttbar", "ww_fullhad", "qq"):
+    for sample_name in expected_samples:
         assert samples[sample_name]["events_per_job"] == 100

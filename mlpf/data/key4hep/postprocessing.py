@@ -1681,6 +1681,18 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         gp_to_cluster = _idea_relation(prop_data, "ClusterMCParticleLinks", local_iev)
         # Propagate reconstructed-object links from generator descendants to
         # their status-1 ancestor, matching the existing target convention.
+        #
+        # FIXME(IDEA target semantics): this is physically appropriate for
+        # calorimeter shower fragments, but not for choosing a representative
+        # track.  A charged secondary from an interaction or decay can have a
+        # different charge and unrelated momentum, yet the argmax/first-object
+        # logic below can label it with the ancestor's charge and four-momentum.
+        # Keep descendant tracks as supporting elements owned by the ancestor
+        # (shared particle_number), but select particle representatives only
+        # from direct status-1 track links, falling back to a cluster or object
+        # query when no direct track exists.  This requires separate ownership
+        # and representative relations plus a loss that uses supporting-element
+        # membership instead of treating every non-representative as noise.
         gp_to_cluster, gp_to_track = add_daughters_to_status1(gen, gp_to_cluster, gp_to_track)
 
         n_gp, n_track, n_cluster = (

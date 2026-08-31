@@ -233,6 +233,24 @@ productions:
     slurm_runtime: "48h"
 
     samples:
+      # Single-particle samples for detector validation and calibration only.
+      # Keep these out of tfds_mapping/tfds_hit_mapping so they cannot enter
+      # either CLD training pipeline.
+      gun_e_10gev:
+        process_name: "gun_e_10gev"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [424242, 424342]
+        events_per_job: 100
+      gun_mu_10gev:
+        process_name: "gun_mu_10gev"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [600000, 600100]
+        events_per_job: 100
+      gun_pi_10gev:
+        process_name: "gun_pi_10gev"
+        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
+        seed_range: [700000, 700100]
+        events_per_job: 100
       zz:
         process_name: "p8_ee_ZZ_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
@@ -420,6 +438,16 @@ productions:
         process_name: "gun_e_10gev"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
         seed_range: [424242, 424342]
+        events_per_job: 100
+      gun_mu_10gev:
+        process_name: "gun_mu_10gev"
+        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
+        seed_range: [600000, 600100]
+        events_per_job: 100
+      gun_pi_10gev:
+        process_name: "gun_pi_10gev"
+        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
+        seed_range: [700000, 700100]
         events_per_job: 100
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
