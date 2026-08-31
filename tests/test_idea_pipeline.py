@@ -98,7 +98,9 @@ def test_real_spec_builds_idea_pipeline_config():
     assert config.dataset is Dataset.IDEA
     assert config.input_dim == 17
     assert config.num_classes == 6
-    assert config.ntrain == 10
+    assert config.ntrain is None
+    assert config.nvalid is None
+    assert config.ntest == 100
     assert "idea_edm_qq_pf" in config.test_dataset
 
 
