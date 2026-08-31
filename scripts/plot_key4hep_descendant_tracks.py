@@ -145,10 +145,7 @@ def analyze_detector(detector: Detector, max_files: int) -> tuple[dict[str, Any]
         tree = uproot.open(root_path, handler=uproot.source.file.MemmapSource)["events"]
         raw = tree.arrays(list(names.values()), library="ak", how=dict)
         if len(post["X_track"]) != tree.num_entries:
-            raise ValueError(
-                f"Event-count mismatch for {parquet_path.name}: "
-                f"post={len(post['X_track'])}, ROOT={tree.num_entries}"
-            )
+            raise ValueError(f"Event-count mismatch for {parquet_path.name}: " f"post={len(post['X_track'])}, ROOT={tree.num_entries}")
         used_seeds.append(int(_seed(parquet_path)))
 
         for event in range(tree.num_entries):
@@ -204,10 +201,7 @@ def analyze_detector(detector: Detector, max_files: int) -> tuple[dict[str, Any]
                 # omega has the charge sign for the positive solenoidal fields used here.
                 samples[f"{label}_charge_match"].append((np.sign(xx[charged, 13]) == np.sign(yy[charged, 1])).astype(float))
 
-    arrays = {
-        key: np.concatenate(value) if value else np.empty(0, dtype=np.float64)
-        for key, value in samples.items()
-    }
+    arrays = {key: np.concatenate(value) if value else np.empty(0, dtype=np.float64) for key, value in samples.items()}
     summary: dict[str, Any] = {
         "detector": detector.name,
         "process": f"p8_ee_qq, sqrt(s)={detector.energy}",
@@ -305,10 +299,7 @@ def main() -> None:
     make_plot(results, args.output)
     summary_path = args.output.with_suffix(".json")
     summary_path.write_text(json.dumps([summary for summary, _ in results], indent=2) + "\n")
-    print(
-        f"Wrote {args.output}, {args.output.with_suffix('.pdf')}, "
-        f"{args.output.with_suffix('.svg')}, and {summary_path}"
-    )
+    print(f"Wrote {args.output}, {args.output.with_suffix('.pdf')}, " f"{args.output.with_suffix('.svg')}, and {summary_path}")
 
 
 if __name__ == "__main__":

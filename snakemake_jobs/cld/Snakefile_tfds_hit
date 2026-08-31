@@ -18,10 +18,7 @@ os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
 
 rule all:
     input:
-        expand('snakemake_jobs/cld/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        expand('snakemake_jobs/cld/tfds_hit/tfds_hit_ww_fullhad_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        expand('snakemake_jobs/cld/tfds_hit/tfds_hit_zz_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        expand('snakemake_jobs/cld/tfds_hit/tfds_hit_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        
 
 rule tfds_hit_task:
     input:
@@ -31,14 +28,6 @@ rule tfds_hit_task:
     resources:
         tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
-        "/scratch/persistent/joosep/singularity/particleflow-20260330-cd2f54.sif"
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:
         "snakemake_jobs/cld/tfds_hit/tfds_hit_{wildcards.sample}.sh {wildcards.config} && touch {output}"
-
-rule tfds_hit:
-    input:
-        expand('snakemake_jobs/cld/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/cld/tfds_hit/tfds_hit_ww_fullhad_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/cld/tfds_hit/tfds_hit_zz_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/cld/tfds_hit/tfds_hit_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-    output:
-        "snakemake_jobs/cld/tfds_hit/all.done"
-    shell:
-        "touch {output}"
