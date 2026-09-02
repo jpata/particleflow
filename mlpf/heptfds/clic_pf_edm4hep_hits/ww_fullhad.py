@@ -25,10 +25,11 @@ FIXME
 
 
 class ClicEdmWwFullhadHits(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.1"))
     RELEASE_NOTES = {
         "3.1.0": "Hit-level version with separated tracker and calorimeter hits",
         "3.2.0": "add particle_number to Y_FEATURES",
+        "3.2.1": "Corrected tracker hit elemtype, updated target and truth definitions, and fixed energy accounting",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.

@@ -21,7 +21,7 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.1"))
     RELEASE_NOTES = {
         "1.3.0": "Update stats to ~1M events",
         "1.4.0": "Fix ycand matching",
@@ -33,6 +33,7 @@ class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
         "3.0.0": "New generation with v1.2.4_key4hep_2025-05-29_CLIC_819e4e",
         "3.1.0": "New generation with v1.2.5_key4hep_2025-05-29 500k events",
         "3.2.0": "add particle_number to Y_FEATURES",
+        "3.2.1": "Updated target and truth definitions and corrected postprocessing energy accounting",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.
