@@ -137,6 +137,9 @@ class EDM4HEP:
         time: Any
         subdetector: Any
         type: Any
+        system: Any
+        side: Any
+        layer: Any
 
         @classmethod
         def get_names(cls):
@@ -622,6 +625,8 @@ class AttentionConfig(BaseModel):
     dropout_conv_id_mha: float = 0.0
     dropout_conv_id_ff: float = 0.0
     use_pre_layernorm: bool = True
+    use_jagged_attention: bool = False  # ensures attention is correct on variable-length sequences without a padding mask
+    use_flash_attn_varlen: bool = False  # bypass PyTorch jagged SDPA and use flash_attn_varlen_func
     export_onnx_fused: bool = False
     save_attention: bool = False
 
@@ -697,6 +702,26 @@ class BackboneConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: BackboneMode = BackboneMode.SHARED
     num_convs: Optional[int] = None
+    num_tracker_layers: Optional[int] = Field(default=None, ge=0)
+    num_calo_layers: Optional[int] = Field(default=None, ge=0)
+    num_common_layers: Optional[int] = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_detector_layer_counts(self):
+        counts = (self.num_tracker_layers, self.num_calo_layers, self.num_common_layers)
+        if any(count is not None for count in counts) and not all(count is not None for count in counts):
+            raise ValueError("num_tracker_layers, num_calo_layers, and num_common_layers must be configured together")
+        return self
+
+
+class HitFeatureEngineeringConfig(BaseModel):
+    """Forward-pass feature blocks for hit-level datasets."""
+
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+    geometry: bool = True
+    tracker_neighborhood: bool = False
+    calorimeter_neighborhood: bool = True
 
 
 class ModelArchitectureConfig(BaseModel):
@@ -713,6 +738,7 @@ class ModelArchitectureConfig(BaseModel):
     trainable: str = "all"
     task_queries: bool = True
     backbone: Optional[BackboneConfig] = None
+    hit_feature_engineering: HitFeatureEngineeringConfig = Field(default_factory=HitFeatureEngineeringConfig)
 
     # Nested configs
     gnnlsh: Optional[GNNLSHConfig] = None
@@ -722,14 +748,21 @@ class ModelArchitectureConfig(BaseModel):
     heptv2: Optional[HEPTv2Config] = None
 
 
-class RegressionLossWeights(BaseModel):
+class TaskLossWeights(BaseModel):
+    """Configuration for one-time task-loss weight calibration."""
+
     model_config = ConfigDict(extra="forbid")
 
-    pt: float = Field(default=1.0, ge=0.0)
-    eta: float = Field(default=1e-2, ge=0.0)
-    sin_phi: float = Field(default=1e-2, ge=0.0)
-    cos_phi: float = Field(default=1e-2, ge=0.0)
-    energy: float = Field(default=1.0, ge=0.0)
+    calibration_steps: int = Field(default=100, ge=1)
+    epsilon: float = Field(default=1e-8, gt=0.0)
+    min_weight: float = Field(default=1e-2, gt=0.0)
+    max_weight: float = Field(default=1e3, gt=0.0)
+
+    @model_validator(mode="after")
+    def validate_weight_bounds(self):
+        if self.min_weight > self.max_weight:
+            raise ValueError("task loss min_weight must not exceed max_weight")
+        return self
 
 
 class DatasetSample(BaseModel):
@@ -783,6 +816,7 @@ class MLPFConfig(BaseModel):
     val_freq: int = 10000
     num_workers: int = 8
     prefetch_factor: int = 2
+    max_open_readers: Optional[int] = 64  # cap on open array_record shard readers per worker; excess are closed to bound FD usage
     gpu_batch_multiplier: int = 1
     dtype: str = "float32"
     lr: float = 0.0001
@@ -790,7 +824,7 @@ class MLPFConfig(BaseModel):
     optimizer: OptimizerType = OptimizerType.ADAMW
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
-    regression_loss_weights: RegressionLossWeights = Field(default_factory=RegressionLossWeights)
+    task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
     validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
 
@@ -1058,12 +1092,7 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical": {
                                 "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {
-                                    "cld_edm_ttbar_pf": {
-                                        "splits": ["10"],
-                                        "version": "3.2.0",
-                                    }
-                                },
+                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.2.1"}},
                             }
                         }
                 if "test_dataset" in config_dict and "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
@@ -1075,12 +1104,7 @@ class MLPFConfig(BaseModel):
                         config_dict[ds][ds_name] = {
                             "physical": {
                                 "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {
-                                    "clic_edm_ttbar_pf": {
-                                        "splits": ["10"],
-                                        "version": "3.2.0",
-                                    }
-                                },
+                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.2.1"}},
                             }
                         }
                 if "test_dataset" in config_dict and "clic_edm_ttbar_pf" in config_dict["test_dataset"]:

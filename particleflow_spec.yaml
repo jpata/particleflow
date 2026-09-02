@@ -309,37 +309,37 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ww_fullhad"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       zz:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/zz"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/qq"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     tfds_hit_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ttbar"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ww_fullhad"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       zz:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/zz"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/qq"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # CLIC Production
@@ -363,17 +363,17 @@ productions:
       ttbar:
         process_name: "p8_ee_ttbar_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [300000, 305010]
+        seed_range: [300000, 310010]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [400000, 405010]
+        seed_range: [400000, 410010]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [500000, 505010]
+        seed_range: [500000, 510010]
         events_per_job: 100
 
     postprocessing:
@@ -383,29 +383,29 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/ttbar"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/ww_fullhad"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/qq"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     tfds_hit_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/ttbar"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/ww_fullhad"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/qq"
-        version: "3.2.0"
+        version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # IDEA full simulation and the reconstruction currently provided by FCC-config.
@@ -497,7 +497,7 @@ models:
     mem_per_gpu_mb: 40000
     slurm_partition: "${project.gpu_partition}"
     slurm_runtime: "168h"
-    optimizer: adamw
+    optimizer: lamb
     lr_schedule: cosinedecay
     dtype: bfloat16
     load: null
@@ -514,12 +514,13 @@ models:
     patience: 10000
     checkpoint_freq: 10000
     val_freq: 10000
-    regression_loss_weights:
-      pt: 1.0
-      eta: 0.01
-      sin_phi: 0.01
-      cos_phi: 0.01
-      energy: 1.0
+    # Average the initial unweighted task losses, then freeze weights that give
+    # each task the same contribution as the binary-classification loss.
+    task_loss_weights:
+      calibration_steps: 100
+      epsilon: 1.0e-8
+      min_weight: 1.0e-2
+      max_weight: 1.0e3
 
     raytune:
       local_dir:  # absolute path to store raytune results, e.g. "/scratch/local/user/raytune_results"
@@ -705,13 +706,13 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -719,24 +720,24 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "cld_edm_ttbar_pf"
-        version: "3.2.0"
+        version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_ww_fullhad_pf"
-        version: "3.2.0"
+        version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_qq_pf"
-        version: "3.2.0"
+        version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-cld-hits-v1:
@@ -762,39 +763,39 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_hits"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-              #          - name: "cld_edm_ww_fullhad_hits"
-              #            version: "3.2.0"
-              #            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-              #          - name: "cld_edm_qq_hits"
-              #            version: "3.2.0"
-              #            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_hits"
+            version: "3.2.1"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_hits"
+            version: "3.2.1"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
       physical:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_hits"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-              #          - name: "cld_edm_ww_fullhad_hits"
-              #            version: "3.2.0"
-              #            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-              #          - name: "cld_edm_qq_hits"
-              #            version: "3.2.0"
-              #            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_hits"
+            version: "3.2.1"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_hits"
+            version: "3.2.1"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "cld_edm_ttbar_hits"
-        version: "3.2.0"
+        version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          #      - name: "cld_edm_ww_fullhad_hits"
-          #        version: "3.2.0"
-          #        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          #      - name: "cld_edm_qq_hits"
-          #        version: "3.2.0"
-          #        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_ww_fullhad_hits"
+        version: "3.2.1"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_qq_hits"
+        version: "3.2.1"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # CLIC Model
   pyg-clic-v1:
@@ -820,13 +821,13 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -834,24 +835,24 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "clic_edm_ttbar_pf"
-        version: "3.2.0"
+        version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_ww_fullhad_pf"
-        version: "3.2.0"
+        version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_qq_pf"
-        version: "3.2.0"
+        version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-clic-hits-v1:
@@ -877,13 +878,13 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_hits"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_hits"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_hits"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -891,22 +892,22 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_hits"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_hits"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_hits"
-            version: "3.2.0"
+            version: "3.2.1"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "clic_edm_ttbar_hits"
-        version: "3.2.0"
+        version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_ww_fullhad_hits"
-        version: "3.2.0"
+        version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_qq_hits"
-        version: "3.2.0"
+        version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]

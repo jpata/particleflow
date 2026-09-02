@@ -18,13 +18,13 @@ os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
 
 rule all:
     input:
-        expand('snakemake_jobs/clic/gen/gen_ttbar_{seed}.done', seed=range(300000, 305010, 1)),
-        expand('snakemake_jobs/clic/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 405010, 1)),
-        expand('snakemake_jobs/clic/gen/gen_qq_{seed}.done', seed=range(500000, 505010, 1))
+        expand('snakemake_jobs/clic/gen/gen_ttbar_{seed}.done', seed=range(300000, 310010, 1)),
+        expand('snakemake_jobs/clic/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 410010, 1)),
+        expand('snakemake_jobs/clic/gen/gen_qq_{seed}.done', seed=range(500000, 510010, 1))
 
 rule gen:
     input:
-        expand('snakemake_jobs/clic/gen/gen_ttbar_{seed}.done', seed=range(300000, 305010, 1)), expand('snakemake_jobs/clic/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 405010, 1)), expand('snakemake_jobs/clic/gen/gen_qq_{seed}.done', seed=range(500000, 505010, 1))
+        expand('snakemake_jobs/clic/gen/gen_ttbar_{seed}.done', seed=range(300000, 310010, 1)), expand('snakemake_jobs/clic/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 410010, 1)), expand('snakemake_jobs/clic/gen/gen_qq_{seed}.done', seed=range(500000, 510010, 1))
     output:
         "snakemake_jobs/clic/gen/all.done"
     shell:

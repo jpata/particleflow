@@ -35,7 +35,7 @@ except Exception as e:
 
 
 class TFDSDataSource:
-    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None):
+    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None, max_open_readers=None):
         self.ds = ds
         tmp = self.ds.dataset_info
         self.ds.dataset_info = SimpleNamespace()
@@ -45,6 +45,26 @@ class TFDSDataSource:
         self.sort = sort
         self.pad_to_multiple = pad_to_multiple
         self.feature_dim = feature_dim
+        self.max_open_readers = max_open_readers
+
+    def _close_extra_readers(self):
+        # ArrayRecordDataSource caches one reader per shard file forever, so the
+        # number of open file descriptors grows with the number of distinct shards
+        # touched. Cap the number of concurrently open readers and close the rest;
+        # reads are positional and stateless, so closing and reopening is safe.
+        if not self.max_open_readers:
+            return
+        readers = getattr(self.ds.data_source, "_readers", None)
+        if readers is None:
+            return
+        open_indices = [idx for idx, reader in enumerate(readers) if reader is not None]
+        if len(open_indices) > self.max_open_readers:
+            for idx in open_indices[: len(open_indices) - self.max_open_readers]:
+                try:
+                    readers[idx].close()
+                except Exception:
+                    pass
+                readers[idx] = None
 
     def __getitem__(self, item):
         if isinstance(item, int):
@@ -52,6 +72,7 @@ class TFDSDataSource:
         assert len(item) == 1
         # getitems requires a list
         records = self.ds.data_source.__getitems__(item)
+        self._close_extra_readers()
 
         ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
         assert len(ret) == 1
@@ -161,16 +182,7 @@ class TFDSDataSource:
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(
-        self,
-        data_dir,
-        name,
-        split,
-        num_samples=None,
-        sort=False,
-        pad_to_multiple=512,
-        feature_dim=None,
-    ):
+    def __init__(self, data_dir, name, split, num_samples=None, sort=False, pad_to_multiple=512, feature_dim=None, max_open_readers=None):
         """
         Args
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
@@ -195,6 +207,7 @@ class PFDataset:
             sort=sort,
             pad_to_multiple=pad_to_multiple,
             feature_dim=feature_dim,
+            max_open_readers=max_open_readers,
         )
 
         if num_samples and num_samples < len(self.ds):
@@ -672,6 +685,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                         sort=config.sort_data,
                         pad_to_multiple=config.pad_to_multiple_elements,
                         feature_dim=config.input_dim,
+                        max_open_readers=config.max_open_readers,
                     ).ds
 
                     if (rank == 0) or (rank == "cpu"):

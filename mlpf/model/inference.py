@@ -2,7 +2,6 @@ import os
 import time
 from pathlib import Path
 import sys
-import gc
 
 import awkward
 import fastjet
@@ -178,10 +177,8 @@ def run_predictions(world_size, rank, model, loader, sample, outpath, jetdef, je
     _logger.info(f"Time taken to make predictions on device {rank} is: {time_total_min:.2f} min")
 
 
-def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None):
+def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None, baseline_yvals=None):
     """Uses the predictions stored as .parquet files from run_predictions to make plots."""
-    import matplotlib.pyplot as plt
-
     ds_name = dataset.value
 
     ret_dict = {}
@@ -206,6 +203,7 @@ def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None):
         cp_dir=plots_path,
         sample=sample,
         dataset=ds_name,
+        baseline_yvals=baseline_yvals,
     )
     _logger.info("Plotted jets")
 
@@ -214,83 +212,87 @@ def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None):
         cp_dir=plots_path,
         sample=sample,
         dataset=ds_name,
+        baseline_yvals=baseline_yvals,
     )
     _logger.info("Plotted jet ratio")
 
     return ret_dict
 
-    # commented out to save memory and make the validation runtime faster
-    # _logger.info("Plotted jet ratio")
-    # plot_jet_ratio(
-    #     yvals,
-    #     cp_dir=plots_path,
-    #     bins=np.linspace(0.5, 1.5, 500),
-    #     logy=True,
-    #     file_modifier="_bins_0p5_1p5",
-    #     dataset=dataset,
-    #     sample=sample,
-    # )
-    # _logger.info("Plotted jet ratio with bins 0.5-1.5")
-    # plot_jet_ratio(
-    #     yvals,
-    #     cp_dir=plots_path,
-    #     bins=np.linspace(0, 2, 500),
-    #     logy=True,
-    #     file_modifier="_bins_0_2",
-    #     dataset=dataset,
-    #     sample=sample,
-    # )
-    # _logger.info("Plotted jet ratio with bins 0-2")
-    # plot_jet_response_binned(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
-    # _logger.info("Plotted binned jet response")
-    # plot_jet_response_binned_vstarget(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
-    # _logger.info("Plotted binned jet response vs target")
-    # plot_jet_response_binned_eta(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
-    # _logger.info("Plotted binned jet response vs eta")
-    # plot_jet_response_binned_separate(yvals, cp_dir=plots_path, title=title)
 
-    # met_data = compute_met_and_ratio(yvals)
-    # _logger.info("Computed MET and ratio")
-    # plot_met(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
-    # _logger.info("Plotted MET")
-    # plot_met_ratio(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
-    # _logger.info("Plotted MET ratio")
-    # plot_met_ratio(met_data, cp_dir=plots_path, bins=np.linspace(0, 20, 100), logy=True, dataset=dataset, sample=sample)
-    # _logger.info("Plotted MET ratio with bins 0-20")
-    # plot_met_ratio(
-    #     met_data,
-    #     cp_dir=plots_path,
-    #     bins=np.linspace(0, 2, 500),
-    #     logy=False,
-    #     file_modifier="_bins_0_2",
-    #     dataset=dataset,
-    #     sample=sample,
-    # )
-    # _logger.info("Plotted MET ratio with bins 0-2")
-    # plot_met_ratio(
-    #     met_data,
-    #     cp_dir=plots_path,
-    #     bins=np.linspace(0, 5, 500),
-    #     logy=False,
-    #     file_modifier="_bins_0_5",
-    #     dataset=dataset,
-    #     sample=sample,
-    # )
-    # _logger.info("Plotted MET ratio with bins 0-5")
-    # plot_met_response_binned(met_data, cp_dir=plots_path, dataset=dataset, sample=sample)
-    # _logger.info("Plotted binned MET response")
+def load_pf_baseline(data_dir, sample, dataset, version="3.2.0", splits=("1",), num_events=None):
+    """Load conventional PF candidates and compute their jet-level plotting values."""
+    from mlpf.jet_utils import get_jet_config
+    from mlpf.model.PFDataset import PFDataset
 
-    # plot_particles(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
-    # _logger.info("Plotted particles")
-    # plot_particle_ratio(yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
-    # _logger.info("Plotted particle ratio")
-    # plot_particle_response(X, yvals, class_names, cp_dir=plots_path, dataset=dataset, sample=sample)
-    # _logger.info("Plotted particle response")
-    # plot_pu_fraction(yvals, cp_dir=plots_path, dataset=dataset, sample=sample)
-    # _logger.info("Plotted PU fraction")
+    jetdef, jet_ptcut, jet_match_dr = get_jet_config(dataset)
+    samples_per_split = None if num_events is None else max(1, num_events // len(splits))
+    datasets = [
+        PFDataset(
+            data_dir,
+            f"{sample}/{split}:{version}",
+            "test",
+            num_samples=samples_per_split,
+            pad_to_multiple=None,
+        ).ds
+        for split in splits
+    ]
+    source = torch.utils.data.ConcatDataset(datasets)
+    nevents = len(source) if num_events is None else min(num_events, len(source))
 
-    del X, yvals
-    plt.close("all")
-    gc.collect()
+    cand_components = {name: [] for name in ["px", "py", "pz", "E"]}
+    target_components = {name: [] for name in ["px", "py", "pz", "E"]}
+    gen_components = {name: [] for name in ["px", "py", "pz", "E"]}
 
-    return ret_dict
+    def append_particles(values, components, pt_override=None, energy_override=None):
+        mask = values[:, 0] != 0
+        pt = values[:, 2] if pt_override is None else pt_override
+        energy = values[:, 6] if energy_override is None else energy_override
+        eta = values[:, 3]
+        phi = np.arctan2(values[:, 4], values[:, 5])
+        components["px"].append((pt * np.cos(phi))[mask])
+        components["py"].append((pt * np.sin(phi))[mask])
+        components["pz"].append((pt * np.sinh(eta))[mask])
+        components["E"].append(energy[mask])
+
+    for index in range(nevents):
+        event = source[index]
+        append_particles(event["ycand"], cand_components)
+        append_particles(
+            event["ytarget"],
+            target_components,
+            pt_override=event["ytarget_pt_orig"],
+            energy_override=event["ytarget_e_orig"],
+        )
+
+        genjets = event["genjets"]
+        mask = genjets[:, 0] > jet_ptcut
+        pt, eta, phi, energy = (genjets[:, i] for i in range(4))
+        gen_components["px"].append((pt * np.cos(phi))[mask])
+        gen_components["py"].append((pt * np.sin(phi))[mask])
+        gen_components["pz"].append((pt * np.sinh(eta))[mask])
+        gen_components["E"].append(energy[mask])
+
+    def vectors(components):
+        return awkward.zip({name: awkward.Array(values) for name, values in components.items()})
+
+    jets_coll = {"gen": vector.awk(vectors(gen_components))}
+    for name, components in [("cand", cand_components), ("target", target_components)]:
+        clustered = fastjet.ClusterSequence(vectors(components), jetdef).inclusive_jets(min_pt=jet_ptcut)
+        jets_coll[name] = vector.awk(awkward.zip({"px": clustered.px, "py": clustered.py, "pz": clustered.pz, "E": clustered.E}))
+
+    matched = {
+        "gen_to_cand": match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr),
+        "target_to_cand": match_two_jet_collections(jets_coll, "target", "cand", jet_match_dr),
+    }
+    yvals = {}
+    for name in ["gen", "target", "cand"]:
+        for value in ["pt", "eta"]:
+            yvals[f"jets_{name}_{value}"] = getattr(jets_coll[name], value)
+
+    for left, right in [("gen", "cand"), ("target", "cand")]:
+        indices = matched[f"{left}_to_{right}"]
+        left_pt = awkward.flatten(jets_coll[left].pt[indices[left]], axis=1)
+        right_pt = awkward.flatten(jets_coll[right].pt[indices[right]], axis=1)
+        yvals[f"jet_ratio_{left}_to_{right}_pt"] = awkward.to_numpy(right_pt / left_pt)
+
+    return yvals

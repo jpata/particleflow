@@ -1,6 +1,7 @@
 from typing import Optional
 
 import torch
+import torch.distributed as dist
 from torch.nn import functional as F
 from torch import Tensor, nn
 
@@ -8,6 +9,99 @@ from mlpf.logger import _logger
 
 
 REGRESSION_FEATURES = ("pt", "eta", "sin_phi", "cos_phi", "energy")
+LOSS_TASKS = (
+    "Classification_binary",
+    "Classification",
+    "Regression_pt",
+    "Regression_eta",
+    "Regression_sin_phi",
+    "Regression_cos_phi",
+    "Regression_energy",
+)
+
+
+class CalibratedTaskLossWeights(nn.Module):
+    """Calibrate task weights from early losses once, then keep them fixed."""
+
+    def __init__(self, calibration_steps=100, epsilon=1e-8, min_weight=1e-2, max_weight=1e3):
+        super().__init__()
+        self.tasks = LOSS_TASKS
+        self.calibration_steps = calibration_steps
+        self.epsilon = epsilon
+        self.min_weight = min_weight
+        self.max_weight = max_weight
+        self.reference_task_index = self.tasks.index("Classification_binary")
+
+        # These buffers make both a completed and a partially completed
+        # calibration exactly resumable from a checkpoint.
+        self.register_buffer("weights", torch.ones(len(self.tasks)))
+        self.register_buffer("loss_sums", torch.zeros(len(self.tasks), dtype=torch.float64))
+        self.register_buffer("calibration_count", torch.tensor(0, dtype=torch.long))
+        self.register_buffer("calibration_observations", torch.tensor(0, dtype=torch.long))
+        self.register_buffer("calibrated", torch.tensor(False, dtype=torch.bool))
+
+    def current_weights(self):
+        return dict(zip(self.tasks, self.weights))
+
+    @torch.no_grad()
+    def _record_calibration_losses(self, losses):
+        if self.calibrated:
+            return
+
+        batch_losses = torch.stack([losses[task].detach() for task in self.tasks]).to(dtype=self.loss_sums.dtype)
+        observations = 1
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(batch_losses, op=dist.ReduceOp.SUM)
+            observations = dist.get_world_size()
+
+        # Reducing every calibration batch keeps these buffers identical on all
+        # ranks, including when DDP broadcasts model buffers before a forward.
+        self.loss_sums.add_(batch_losses)
+        self.calibration_count.add_(1)
+        self.calibration_observations.add_(observations)
+        if self.calibration_count.item() < self.calibration_steps:
+            return
+
+        mean_losses = self.loss_sums / self.calibration_observations
+        if not torch.isfinite(mean_losses).all():
+            raise RuntimeError(f"Non-finite task losses during weight calibration: {mean_losses}")
+
+        reference_loss = mean_losses[self.reference_task_index]
+        calibrated_weights = reference_loss / mean_losses.clamp_min(self.epsilon)
+        calibrated_weights.clamp_(min=self.min_weight, max=self.max_weight)
+        self.weights.copy_(calibrated_weights.to(dtype=self.weights.dtype))
+        self.calibrated.fill_(True)
+
+        task_means = {task: value.item() for task, value in zip(self.tasks, mean_losses)}
+        task_weights = {task: value.item() for task, value in self.current_weights().items()}
+        _logger.info(
+            f"Calibrated fixed task weights after {self.calibration_count.item()} steps "
+            f"({self.calibration_observations.item()} rank-batches); they will apply from the next training step: "
+            f"losses={task_means}, weights={task_weights}"
+        )
+
+    def forward(self, losses):
+        # Clone so the last calibration batch is still optimized with unit
+        # weights; calibrated weights take effect on the following step.
+        applied_weights = self.weights.clone()
+        weighted_losses = []
+        diagnostics = {
+            "weight": {},
+            "weighted_loss": {},
+        }
+        for task, weight in zip(self.tasks, applied_weights):
+            weighted_loss = weight * losses[task]
+            diagnostics["weight"][task] = weight
+            diagnostics["weighted_loss"][task] = weighted_loss
+            weighted_losses.append(weighted_loss)
+
+        if self.training:
+            self._record_calibration_losses(losses)
+        return sum(weighted_losses), diagnostics
+
+
+def make_task_loss_weighter(task_loss_weights):
+    return CalibratedTaskLossWeights(**task_loss_weights)
 
 
 def _mask_no_target_regression(y, ypred):
@@ -70,8 +164,10 @@ def regression_loss(y, ypred, input_pt, regression_weights):
         prediction = torch.nan_to_num(ypred[feature])
         per_element = weight * F.mse_loss(prediction, y[feature], reduction="none")
         per_element = torch.where(is_particle, per_element, torch.zeros_like(per_element))
-        if feature in {"pt", "energy"}:
-            per_element = per_element * sqrt_target_pt
+        # Weight per-particle losses by sqrt(pt) for all kinematic targets so
+        # high-pt particles (which dominate jet axes) drive eta/phi learning
+        # too, not just pt/energy.
+        per_element = per_element * sqrt_target_pt
         losses[f"Regression_{feature}"] = per_element.sum() / num_particles
 
     return losses
@@ -107,11 +203,17 @@ def event_loss(y, ypred, batch, regression_weights):
     return particle_loss(particle_targets, particle_predictions, input_pt, regression_weights)
 
 
-def mlpf_loss(y, ypred, batch, regression_weights):
+def mlpf_loss(y, ypred, batch, regression_weights, task_loss_weighter=None):
     """Compute the standard MLPF objective for a batch of events."""
-    loss = event_loss(y, ypred, batch, regression_weights)
+    if task_loss_weighter is None:
+        loss = event_loss(y, ypred, batch, regression_weights)
+        loss_opt = sum(loss.values())
+        task_loss_diagnostics = None
+    else:
+        unweighted_regression_weights = {feature: 1.0 for feature in REGRESSION_FEATURES}
+        loss = event_loss(y, ypred, batch, unweighted_regression_weights)
+        loss_opt, task_loss_diagnostics = task_loss_weighter(loss)
 
-    loss_opt = sum(loss.values())
     loss["Total"] = loss_opt
     if torch.isnan(loss_opt):
         _logger.error(ypred)
@@ -122,7 +224,13 @@ def mlpf_loss(y, ypred, batch, regression_weights):
     for k in loss.keys():
         loss[k] = loss[k].detach()
 
-    return loss_opt, loss
+    if task_loss_diagnostics is not None:
+        task_loss_diagnostics = {
+            diagnostic_name: {task: value.detach() for task, value in diagnostic_values.items()}
+            for diagnostic_name, diagnostic_values in task_loss_diagnostics.items()
+        }
+
+    return loss_opt, loss, task_loss_diagnostics
 
 
 # from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
