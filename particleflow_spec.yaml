@@ -546,19 +546,23 @@ models:
   pyg-idea-pipeline-v1:
     <<: *defaults
     dataset: idea
-    gpu_batch_multiplier: 32
+    gpu_batch_multiplier: 16
+    pad_to_multiple_elements: 100
 
     hyperparameters:
       batch_size: 1
       lr: 0.0005
 
     architecture:
-      type: "attention"
+      type: "heptv2"
       input_encoding: "split"
-      attention:
+      heptv2:
         num_convs: 3
-        head_dim: 16
+        embedding_dim: 256
+        width: 256
         num_heads: 16
+        dropout_ff: 0.0
+        block_size: 100
 
     train_datasets:
       physical:
