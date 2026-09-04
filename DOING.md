@@ -304,6 +304,8 @@ Compare elementwise and set prediction using:
 - [x] Add a local ttbar launcher for paired elementwise and set-output training.
 - [x] Add reusable seeded comparison scenarios with local, Tallinn, LUMI, and
       Flatiron hardware profiles.
+- [x] Keep partial validation batches in distributed runs so small `nvalid`
+      samples do not produce zero per-rank batches.
 - [ ] Run a short CLD-hits training comparison against the elementwise baseline.
 - [x] Document initial correctness, timing, memory, and scaling measurements here;
       add physics accuracy after training.

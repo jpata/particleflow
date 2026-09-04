@@ -17,10 +17,10 @@ training:
   parameters:
     lr: 0.001
     num_steps: 20000
-    val_freq: 2000
-    checkpoint_freq: 2000
-    nvalid: 100
-    ntest: 100
+    val_freq: 1000
+    checkpoint_freq: 1000
+    nvalid: 512
+    ntest: 512
     sampler_mode: interleaved-shards
     validation_diagnostics_batches: 4
     pad_to_multiple_elements: 128

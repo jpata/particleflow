@@ -754,7 +754,11 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                 prefetch_factor=config.prefetch_factor,
                 # pin_memory=use_cuda,
                 # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
-                drop_last=True,
+                # Training uses fixed-size batches, but a bounded validation
+                # sample can be smaller than one per-rank batch (for example,
+                # nvalid=100 with 8 ranks and batch_size=64). Keep that partial
+                # validation batch so every rank participates in evaluation.
+                drop_last=split == "train",
                 worker_init_fn=set_worker_sharing_strategy,
                 generator=loader_generator,
                 persistent_workers=config.num_workers > 0,
