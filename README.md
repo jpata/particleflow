@@ -3,6 +3,8 @@
 **ML-based particle flow (MLPF)** focuses on developing full event reconstruction for particle detectors using computationally scalable and flexible machine learning models. The project aims to improve particle flow reconstruction across various detector environments, including CMS, as well as future detectors via Key4HEP.
 We build on existing, open-source simulation software by the experimental collaborations.
 
+Read the [user documentation](docs/index.md) for the physics overview, installation and workflow guides, current capabilities, publications, and roadmap.
+
 <p float="left">
   <img src="images/diagram.svg" alt="High-level overview" width="800"/>
 </p>
