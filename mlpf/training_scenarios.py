@@ -40,9 +40,7 @@ class ScenarioVariant(BaseModel):
     def reject_derived_overrides(self):
         invalid = DERIVED_KEYS.intersection(self.overrides)
         if invalid:
-            raise ValueError(
-                f"Variant overrides must not set derived keys: {sorted(invalid)}"
-            )
+            raise ValueError(f"Variant overrides must not set derived keys: {sorted(invalid)}")
         return self
 
 
@@ -56,9 +54,7 @@ class ScenarioTraining(BaseModel):
     def reject_derived_parameters(self):
         invalid = DERIVED_KEYS.intersection(self.parameters)
         if invalid:
-            raise ValueError(
-                f"Scenario parameters must not set derived keys: {sorted(invalid)}"
-            )
+            raise ValueError(f"Scenario parameters must not set derived keys: {sorted(invalid)}")
         return self
 
 
@@ -72,9 +68,7 @@ class TrainingScenario(BaseModel):
     seeds: list[int] = Field(min_length=1)
     training: ScenarioTraining
     common_overrides: dict[str, Any] = Field(default_factory=dict)
-    allowed_variant_differences: list[str] = Field(
-        default_factory=lambda: ["model.output_mode", "model.set_decoder"]
-    )
+    allowed_variant_differences: list[str] = Field(default_factory=lambda: ["model.output_mode", "model.set_decoder"])
 
     @model_validator(mode="after")
     def validate_scenario(self):
@@ -86,9 +80,7 @@ class TrainingScenario(BaseModel):
             raise ValueError("Scenario seeds must be non-negative")
         invalid = DERIVED_KEYS.intersection(self.common_overrides)
         if invalid:
-            raise ValueError(
-                f"Common overrides must not set derived keys: {sorted(invalid)}"
-            )
+            raise ValueError(f"Common overrides must not set derived keys: {sorted(invalid)}")
         return self
 
 
@@ -132,10 +124,7 @@ class PlatformProfile(BaseModel):
     def validate_runtime_overrides(self):
         invalid = set(self.runtime_overrides).difference(PLATFORM_OVERRIDE_KEYS)
         if invalid:
-            raise ValueError(
-                "Platform profiles may only set runtime-specific overrides; "
-                f"invalid keys: {sorted(invalid)}"
-            )
+            raise ValueError("Platform profiles may only set runtime-specific overrides; " f"invalid keys: {sorted(invalid)}")
         return self
 
 
@@ -166,13 +155,8 @@ def load_training_scenario(path):
 def load_platform_profile(path):
     profile = PlatformProfile.model_validate(_read_yaml(path))
     profile.data_dir = os.path.expandvars(os.path.expanduser(profile.data_dir))
-    profile.experiments_dir = os.path.expandvars(
-        os.path.expanduser(profile.experiments_dir)
-    )
-    profile.environment = {
-        key: os.path.expandvars(os.path.expanduser(value))
-        for key, value in profile.environment.items()
-    }
+    profile.experiments_dir = os.path.expandvars(os.path.expanduser(profile.experiments_dir))
+    profile.environment = {key: os.path.expandvars(os.path.expanduser(value)) for key, value in profile.environment.items()}
     return profile
 
 
@@ -229,8 +213,7 @@ def _training_batch_size(config):
     batch_sizes = {dataset.batch_size for dataset in physical_datasets}
     if len(batch_sizes) != 1:
         raise ValueError(
-            "Automatic global-batch resolution requires every physical training dataset "
-            f"to use the same batch size, got {sorted(batch_sizes)}"
+            "Automatic global-batch resolution requires every physical training dataset " f"to use the same batch size, got {sorted(batch_sizes)}"
         )
     return next(iter(batch_sizes))
 
@@ -256,16 +239,12 @@ def resolve_scenario_job(
     extra_overrides=None,
 ):
     if variant_name not in scenario.variants:
-        raise ValueError(
-            f"Unknown variant {variant_name!r}; choose from {sorted(scenario.variants)}"
-        )
+        raise ValueError(f"Unknown variant {variant_name!r}; choose from {sorted(scenario.variants)}")
     variant = scenario.variants[variant_name]
     extra_overrides = extra_overrides or {}
     invalid = DERIVED_KEYS.intersection(extra_overrides)
     if invalid:
-        raise ValueError(
-            f"Use the dedicated runner options for derived settings, not --set: {sorted(invalid)}"
-        )
+        raise ValueError(f"Use the dedicated runner options for derived settings, not --set: {sorted(invalid)}")
     settings = _merge_settings(scenario, platform, variant, extra_overrides)
     settings["seed"] = seed
     selected_spec = str(spec_file or scenario.spec_file)
@@ -279,19 +258,14 @@ def resolve_scenario_job(
             extra_args=_settings_as_extra_args(settings),
         )
 
-    target_global_batch = (
-        global_batch_size
-        if global_batch_size is not None
-        else scenario.training.global_batch_size
-    )
+    target_global_batch = global_batch_size if global_batch_size is not None else scenario.training.global_batch_size
     if target_global_batch <= 0:
         raise ValueError("global_batch_size must be positive")
     dataset_batch_size = _training_batch_size(config)
     divisor = platform.gpus * dataset_batch_size
     if target_global_batch % divisor:
         raise ValueError(
-            f"global_batch_size={target_global_batch} is not divisible by "
-            f"gpus={platform.gpus} * dataset_batch_size={dataset_batch_size}"
+            f"global_batch_size={target_global_batch} is not divisible by " f"gpus={platform.gpus} * dataset_batch_size={dataset_batch_size}"
         )
     multiplier = target_global_batch // divisor
     settings["gpu_batch_multiplier"] = multiplier
@@ -331,9 +305,7 @@ def _flatten(value, prefix=""):
 
 
 def _difference_allowed(path, allowed_paths):
-    return any(
-        path == allowed or path.startswith(f"{allowed}.") for allowed in allowed_paths
-    )
+    return any(path == allowed or path.startswith(f"{allowed}.") for allowed in allowed_paths)
 
 
 def validate_variant_invariants(jobs, allowed_paths):
@@ -345,17 +317,11 @@ def validate_variant_invariants(jobs, allowed_paths):
         differences = {
             path: (reference.get(path), candidate.get(path))
             for path in sorted(set(reference) | set(candidate))
-            if reference.get(path) != candidate.get(path)
-            and not _difference_allowed(path, allowed_paths)
+            if reference.get(path) != candidate.get(path) and not _difference_allowed(path, allowed_paths)
         }
         if differences:
-            details = ", ".join(
-                f"{path}: {values[0]!r} != {values[1]!r}"
-                for path, values in differences.items()
-            )
-            raise ValueError(
-                f"Scenario variants differ outside allowed fields: {details}"
-            )
+            details = ", ".join(f"{path}: {values[0]!r} != {values[1]!r}" for path, values in differences.items())
+            raise ValueError(f"Scenario variants differ outside allowed fields: {details}")
 
 
 def resolve_scenario_jobs(
@@ -442,9 +408,7 @@ def _experiment_path(platform, job, timestamp=None):
 
 
 def run_scenario_job(job, scenario, platform, spec_file, *, dry_run=False):
-    experiment_dir = _experiment_path(
-        platform, job, timestamp="TIMESTAMP" if dry_run else None
-    )
+    experiment_dir = _experiment_path(platform, job, timestamp="TIMESTAMP" if dry_run else None)
     command = _pipeline_command(job, scenario, platform, spec_file, experiment_dir)
     print(shlex.join(command), flush=True)
     if dry_run:
@@ -480,9 +444,7 @@ def _parse_set_overrides(values):
 def _validate_slurm_allocation(platform):
     allocated = os.environ.get("SLURM_GPUS_PER_NODE")
     if allocated and allocated.isdigit() and int(allocated) != platform.gpus:
-        raise ValueError(
-            f"Platform profile requests {platform.gpus} GPUs but Slurm allocated {allocated}"
-        )
+        raise ValueError(f"Platform profile requests {platform.gpus} GPUs but Slurm allocated {allocated}")
 
 
 def main(argv=None):

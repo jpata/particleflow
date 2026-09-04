@@ -39,12 +39,8 @@ def validation_particle_collections(batch, predictions, output_mode):
             # Legacy/custom collaters may omit the cached absolute values. The
             # elementwise targets store log(target/input), so reconstruct them
             # without requiring the input dataset to be regenerated.
-            targets["pt"] = torch.exp(targets["pt"].clamp(-20.0, 20.0)) * batch.X[
-                ..., 1
-            ].to(torch.float32)
-            targets["energy"] = torch.exp(
-                targets["energy"].clamp(-20.0, 20.0)
-            ) * batch.X[..., 5].to(torch.float32)
+            targets["pt"] = torch.exp(targets["pt"].clamp(-20.0, 20.0)) * batch.X[..., 1].to(torch.float32)
+            targets["energy"] = torch.exp(targets["energy"].clamp(-20.0, 20.0)) * batch.X[..., 5].to(torch.float32)
         target_mask = batch.mask.bool() & (targets["cls_id"] != 0)
         prediction_mask = batch.mask.bool() & (predictions["cls_id"] != 0)
 
@@ -104,12 +100,8 @@ def _clean_kinematics(collection, mask):
     }
     for name, (minimum, maximum) in limits.items():
         value = collection[name][mask].detach().to(device="cpu", dtype=torch.float32)
-        selected[name] = torch.nan_to_num(
-            value, nan=0.0, posinf=maximum, neginf=minimum
-        ).clamp(minimum, maximum)
-    selected["cls_id"] = (
-        collection["cls_id"][mask].detach().to(device="cpu", dtype=torch.long)
-    )
+        selected[name] = torch.nan_to_num(value, nan=0.0, posinf=maximum, neginf=minimum).clamp(minimum, maximum)
+    selected["cls_id"] = collection["cls_id"][mask].detach().to(device="cpu", dtype=torch.long)
     selected["phi"] = torch.atan2(selected["sin_phi"], selected["cos_phi"])
     return selected
 
@@ -119,14 +111,8 @@ def _pairwise_geometry(targets, predictions):
     delta_phi = predictions["phi"][:, None] - targets["phi"][None, :]
     delta_phi = torch.remainder(delta_phi + math.pi, 2.0 * math.pi) - math.pi
     delta_r = torch.sqrt(delta_eta.square() + delta_phi.square())
-    log_pt_ratio = torch.abs(
-        torch.log(predictions["pt"].clamp_min(1.0e-8))[:, None]
-        - torch.log(targets["pt"].clamp_min(1.0e-8))[None, :]
-    )
-    relative_pt = (
-        torch.abs(predictions["pt"][:, None] - targets["pt"][None, :])
-        / targets["pt"].clamp_min(1.0e-8)[None, :]
-    )
+    log_pt_ratio = torch.abs(torch.log(predictions["pt"].clamp_min(1.0e-8))[:, None] - torch.log(targets["pt"].clamp_min(1.0e-8))[None, :])
+    relative_pt = torch.abs(predictions["pt"][:, None] - targets["pt"][None, :]) / targets["pt"].clamp_min(1.0e-8)[None, :]
     return delta_eta, delta_phi, delta_r, log_pt_ratio, relative_pt
 
 
@@ -142,26 +128,14 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
     matched_target_indices = torch.empty(0, dtype=torch.long)
     delta_eta = delta_phi = delta_r = log_pt_ratio = pairwise_relative_pt = None
     if num_targets and num_predictions:
-        delta_eta, delta_phi, delta_r, log_pt_ratio, pairwise_relative_pt = (
-            _pairwise_geometry(targets, predictions)
-        )
+        delta_eta, delta_phi, delta_r, log_pt_ratio, pairwise_relative_pt = _pairwise_geometry(targets, predictions)
         cost = (delta_r / MATCH_DR).square() + (log_pt_ratio / MATCH_LOG_PT).square()
         prediction_indices, target_indices = linear_sum_assignment(cost.numpy())
-        matched_prediction_indices = torch.as_tensor(
-            prediction_indices, dtype=torch.long
-        )
+        matched_prediction_indices = torch.as_tensor(prediction_indices, dtype=torch.long)
         matched_target_indices = torch.as_tensor(target_indices, dtype=torch.long)
 
-    matched_dr = (
-        delta_r[matched_prediction_indices, matched_target_indices]
-        if delta_r is not None
-        else torch.empty(0)
-    )
-    relative_pt = (
-        pairwise_relative_pt[matched_prediction_indices, matched_target_indices]
-        if pairwise_relative_pt is not None
-        else torch.empty(0)
-    )
+    matched_dr = delta_r[matched_prediction_indices, matched_target_indices] if delta_r is not None else torch.empty(0)
+    relative_pt = pairwise_relative_pt[matched_prediction_indices, matched_target_indices] if pairwise_relative_pt is not None else torch.empty(0)
     accepted = (matched_dr < MATCH_DR) & (relative_pt < MATCH_REL_PT)
     num_accepted = int(accepted.sum())
 
@@ -195,9 +169,7 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
     _add(metrics, "matching/f1", 2 * num_accepted, num_targets + num_predictions)
 
     if delta_r is not None:
-        close_to_any_target = (
-            (delta_r < MATCH_DR) & (pairwise_relative_pt < MATCH_REL_PT)
-        ).any(dim=1)
+        close_to_any_target = ((delta_r < MATCH_DR) & (pairwise_relative_pt < MATCH_REL_PT)).any(dim=1)
         num_duplicates = max(int(close_to_any_target.sum()) - num_accepted, 0)
     else:
         num_duplicates = 0
@@ -210,33 +182,22 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
         accepted_prediction_pt = predictions["pt"][accepted_prediction_indices]
         accepted_target_energy = targets["energy"][accepted_target_indices]
         accepted_prediction_energy = predictions["energy"][accepted_prediction_indices]
-        accepted_relative_pt = torch.abs(
-            accepted_prediction_pt - accepted_target_pt
-        ) / accepted_target_pt.clamp_min(1.0e-8)
-        accepted_relative_energy = torch.abs(
-            accepted_prediction_energy - accepted_target_energy
-        ) / accepted_target_energy.clamp_min(1.0e-8)
-        pid_correct = (
-            predictions["cls_id"][accepted_prediction_indices]
-            == targets["cls_id"][accepted_target_indices]
-        )
+        accepted_relative_pt = torch.abs(accepted_prediction_pt - accepted_target_pt) / accepted_target_pt.clamp_min(1.0e-8)
+        accepted_relative_energy = torch.abs(accepted_prediction_energy - accepted_target_energy) / accepted_target_energy.clamp_min(1.0e-8)
+        pid_correct = predictions["cls_id"][accepted_prediction_indices] == targets["cls_id"][accepted_target_indices]
 
         _add(metrics, "matched/pid_accuracy", pid_correct.sum(), num_accepted)
         _add(metrics, "matched/delta_r_mean", matched_dr[accepted].sum(), num_accepted)
         _add(
             metrics,
             "matched/delta_eta_abs_mean",
-            delta_eta[matched_prediction_indices, matched_target_indices][accepted]
-            .abs()
-            .sum(),
+            delta_eta[matched_prediction_indices, matched_target_indices][accepted].abs().sum(),
             num_accepted,
         )
         _add(
             metrics,
             "matched/delta_phi_abs_mean",
-            delta_phi[matched_prediction_indices, matched_target_indices][accepted]
-            .abs()
-            .sum(),
+            delta_phi[matched_prediction_indices, matched_target_indices][accepted].abs().sum(),
             num_accepted,
         )
         _add(
@@ -284,9 +245,7 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
     pt_denominator = target_scalar_pt.clamp_min(1.0e-8)
     energy_residual = (prediction_energy - target_energy) / energy_denominator
     scalar_pt_residual = (prediction_scalar_pt - target_scalar_pt) / pt_denominator
-    _add(
-        metrics, "event/energy_response_mean", prediction_energy / energy_denominator, 1
-    )
+    _add(metrics, "event/energy_response_mean", prediction_energy / energy_denominator, 1)
     _add(metrics, "event/energy_relative_abs_error", energy_residual.abs(), 1)
     _add(
         metrics,
@@ -296,20 +255,10 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
     )
     _add(metrics, "event/scalar_pt_relative_abs_error", scalar_pt_residual.abs(), 1)
 
-    target_px = (
-        targets["pt"].to(torch.float64) * torch.cos(targets["phi"].to(torch.float64))
-    ).sum()
-    target_py = (
-        targets["pt"].to(torch.float64) * torch.sin(targets["phi"].to(torch.float64))
-    ).sum()
-    prediction_px = (
-        predictions["pt"].to(torch.float64)
-        * torch.cos(predictions["phi"].to(torch.float64))
-    ).sum()
-    prediction_py = (
-        predictions["pt"].to(torch.float64)
-        * torch.sin(predictions["phi"].to(torch.float64))
-    ).sum()
+    target_px = (targets["pt"].to(torch.float64) * torch.cos(targets["phi"].to(torch.float64))).sum()
+    target_py = (targets["pt"].to(torch.float64) * torch.sin(targets["phi"].to(torch.float64))).sum()
+    prediction_px = (predictions["pt"].to(torch.float64) * torch.cos(predictions["phi"].to(torch.float64))).sum()
+    prediction_py = (predictions["pt"].to(torch.float64) * torch.sin(predictions["phi"].to(torch.float64))).sum()
     vector_pt_error = torch.hypot(prediction_px - target_px, prediction_py - target_py)
     target_met = torch.hypot(target_px, target_py)
     prediction_met = torch.hypot(prediction_px, prediction_py)
@@ -317,9 +266,7 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
     _add(metrics, "event/met_abs_error", torch.abs(prediction_met - target_met), 1)
 
 
-def compute_validation_particle_metrics(
-    targets, target_mask, predictions, prediction_mask, num_classes
-):
+def compute_validation_particle_metrics(targets, target_mask, predictions, prediction_mask, num_classes):
     """Compute additive, scheme-independent particle metrics for one batch."""
 
     metrics = _empty_metrics(num_classes)
@@ -332,7 +279,5 @@ def compute_validation_particle_metrics(
             {name: value[event_idx] for name, value in predictions.items()},
             prediction_mask[event_idx],
         )
-        _accumulate_event_metrics(
-            metrics, event_targets, event_predictions, num_classes
-        )
+        _accumulate_event_metrics(metrics, event_targets, event_predictions, num_classes)
     return {name: tuple(values) for name, values in metrics.items()}

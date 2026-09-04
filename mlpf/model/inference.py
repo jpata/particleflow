@@ -56,9 +56,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         ytarget = unpack_target(batch.ytarget_set.to(torch.float32), model_module)
         ytarget["pt"] = torch.exp(ytarget["pt"])
         ytarget["energy"] = torch.exp(ytarget["energy"])
-        ytarget["momentum"] = torch.stack(
-            [ytarget["pt"], ytarget["eta"], ytarget["sin_phi"], ytarget["cos_phi"], ytarget["energy"]], dim=-1
-        )
+        ytarget["momentum"] = torch.stack([ytarget["pt"], ytarget["eta"], ytarget["sin_phi"], ytarget["cos_phi"], ytarget["energy"]], dim=-1)
         ytarget["p4"] = torch.stack([ytarget["pt"], ytarget["eta"], ytarget["phi"], ytarget["energy"]], dim=-1)
     else:
         batch.ytarget[..., 2] = batch.ytarget_pt_orig
@@ -98,10 +96,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     for flat_arr, typ in [(ytarget, "target"), (ycand, "cand"), (ypred, "pred")]:
         collection_mask = collection_masks[typ]
         counts = collection_mask.sum(dim=1).cpu().numpy()
-        values = {
-            key: value[collection_mask].detach().cpu().float().contiguous().numpy()
-            for key, value in flat_arr.items()
-        }
+        values = {key: value[collection_mask].detach().cpu().float().contiguous().numpy() for key, value in flat_arr.items()}
         awk_arr = awkward.Array(values)
         awkvals[typ] = awkward.unflatten(awk_arr, counts)
     Xs = awkward.unflatten(awkward.from_numpy(X), input_counts)

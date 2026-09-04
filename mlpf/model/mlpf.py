@@ -1469,7 +1469,9 @@ class MLPF(nn.Module):
         )
         _logger.info("output_mode={}".format(self.output_mode.value))
         _logger.info("set_decoder parameters: {}".format(count_parameters(self.set_decoder) if self.set_decoder is not None else 0))
-        _logger.info("nn_binary_particle parameters: {}".format(count_parameters(self.nn_binary_particle) if self.nn_binary_particle is not None else 0))
+        _logger.info(
+            "nn_binary_particle parameters: {}".format(count_parameters(self.nn_binary_particle) if self.nn_binary_particle is not None else 0)
+        )
         _logger.info("nn_pid parameters: {}".format(count_parameters(self.nn_pid) if self.nn_pid is not None else 0))
         _logger.info("nn_pt parameters: {}".format(count_parameters(self.nn_pt) if self.nn_pt is not None else 0))
         _logger.info("nn_eta parameters: {}".format(count_parameters(self.nn_eta) if self.nn_eta is not None else 0))

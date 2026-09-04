@@ -16,13 +16,9 @@ class ParticleSetDecoderLayer(nn.Module):
         super().__init__()
         self.query_norm = nn.LayerNorm(embedding_dim)
         self.memory_norm = nn.LayerNorm(embedding_dim)
-        self.cross_attention = nn.MultiheadAttention(
-            embedding_dim, num_heads, dropout=dropout, batch_first=True
-        )
+        self.cross_attention = nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout, batch_first=True)
         self.self_norm = nn.LayerNorm(embedding_dim)
-        self.self_attention = nn.MultiheadAttention(
-            embedding_dim, num_heads, dropout=dropout, batch_first=True
-        )
+        self.self_attention = nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout, batch_first=True)
         self.ffn_norm = nn.LayerNorm(embedding_dim)
         self.ffn = nn.Sequential(
             nn.Linear(embedding_dim, ffn_dim),
@@ -37,13 +33,9 @@ class ParticleSetDecoderLayer(nn.Module):
         normalized_memory = self.memory_norm(memory)
         cross_outputs = []
         for event_idx in range(memory.shape[0]):
-            event_memory = normalized_memory[
-                event_idx : event_idx + 1, memory_mask[event_idx]
-            ]
+            event_memory = normalized_memory[event_idx : event_idx + 1, memory_mask[event_idx]]
             if event_memory.shape[1] == 0:
-                cross_outputs.append(
-                    torch.zeros_like(cross_queries[event_idx : event_idx + 1])
-                )
+                cross_outputs.append(torch.zeros_like(cross_queries[event_idx : event_idx + 1]))
                 continue
             event_output, _ = self.cross_attention(
                 cross_queries[event_idx : event_idx + 1],
@@ -55,9 +47,7 @@ class ParticleSetDecoderLayer(nn.Module):
         slots = slots + torch.cat(cross_outputs, dim=0)
 
         normalized_slots = self.self_norm(slots)
-        self_output, _ = self.self_attention(
-            normalized_slots, normalized_slots, normalized_slots, need_weights=False
-        )
+        self_output, _ = self.self_attention(normalized_slots, normalized_slots, normalized_slots, need_weights=False)
         slots = slots + self_output
         return slots + self.ffn(self.ffn_norm(slots))
 
@@ -68,19 +58,14 @@ class ParticleSetDecoder(nn.Module):
     def __init__(self, embedding_dim, num_classes, config):
         super().__init__()
         if embedding_dim % config.num_heads != 0:
-            raise ValueError(
-                f"Set decoder embedding_dim={embedding_dim} must be divisible by num_heads={config.num_heads}"
-            )
+            raise ValueError(f"Set decoder embedding_dim={embedding_dim} must be divisible by num_heads={config.num_heads}")
 
         self.num_slots = config.num_slots
         self.queries = nn.Parameter(torch.empty(1, config.num_slots, embedding_dim))
         nn.init.trunc_normal_(self.queries, std=0.02)
         ffn_dim = int(config.ffn_multiplier * embedding_dim)
         self.layers = nn.ModuleList(
-            ParticleSetDecoderLayer(
-                embedding_dim, config.num_heads, ffn_dim, config.dropout
-            )
-            for _ in range(config.num_layers)
+            ParticleSetDecoderLayer(embedding_dim, config.num_heads, ffn_dim, config.dropout) for _ in range(config.num_layers)
         )
         self.output_norm = nn.LayerNorm(embedding_dim)
         self.presence_head = nn.Linear(embedding_dim, 2)
@@ -97,8 +82,6 @@ class ParticleSetDecoder(nn.Module):
         pid = self.pid_head(slots)
         momentum = self.momentum_head(slots)
         phi_direction = F.normalize(momentum[..., 2:4], dim=-1, eps=1e-6)
-        momentum = torch.cat(
-            [momentum[..., :2], phi_direction, momentum[..., 4:5]], dim=-1
-        )
+        momentum = torch.cat([momentum[..., :2], phi_direction, momentum[..., 4:5]], dim=-1)
         pileup = torch.zeros_like(presence)
         return presence, pid, momentum, pileup

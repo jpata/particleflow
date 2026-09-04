@@ -8,9 +8,7 @@ from mlpf.model.set_losses import hungarian_match, set_event_loss
 from mlpf.model.utils import unpack_predictions, unpack_target
 
 
-REGRESSION_WEIGHTS = {
-    feature: 1.0 for feature in ("pt", "eta", "sin_phi", "cos_phi", "energy")
-}
+REGRESSION_WEIGHTS = {feature: 1.0 for feature in ("pt", "eta", "sin_phi", "cos_phi", "energy")}
 
 
 def make_config(num_slots=4):
@@ -124,9 +122,7 @@ def test_set_model_output_axis_is_num_slots():
     assert pid.shape == (2, 4, config.num_classes)
     assert momentum.shape == (2, 4, 5)
     assert pileup.shape == (2, 4, 2)
-    torch.testing.assert_close(
-        torch.linalg.vector_norm(momentum[..., 2:4], dim=-1), torch.ones(2, 4)
-    )
+    torch.testing.assert_close(torch.linalg.vector_norm(momentum[..., 2:4], dim=-1), torch.ones(2, 4))
 
 
 def test_attention_set_model_has_no_unused_elementwise_parameters():
@@ -141,9 +137,7 @@ def test_attention_set_model_has_no_unused_elementwise_parameters():
 
     assert model.classification_norm is None
     assert model.regression_norm is None
-    assert [
-        name for name, parameter in model.named_parameters() if parameter.grad is None
-    ] == []
+    assert [name for name, parameter in model.named_parameters() if parameter.grad is None] == []
 
 
 def test_hungarian_match_finds_permuted_particles():
@@ -151,9 +145,7 @@ def test_hungarian_match_finds_permuted_particles():
     targets = unpack_target(ytarget_tensor, None)
     predictions = {
         "cls_binary": torch.tensor([[[-5.0, 5.0], [-5.0, 5.0]]]),
-        "cls_id_onehot": torch.tensor(
-            [[[-5.0, -5.0, 5.0, -5.0, -5.0, -5.0], [-5.0, 5.0, -5.0, -5.0, -5.0, -5.0]]]
-        ),
+        "cls_id_onehot": torch.tensor([[[-5.0, -5.0, 5.0, -5.0, -5.0, -5.0], [-5.0, 5.0, -5.0, -5.0, -5.0, -5.0]]]),
         "pt": targets["pt"].flip(1),
         "eta": targets["eta"].flip(1),
         "sin_phi": targets["sin_phi"].flip(1),
@@ -182,17 +174,13 @@ def test_set_loss_is_target_permutation_invariant():
         "energy": torch.randn(1, 4, requires_grad=True),
     }
     targets = unpack_target(target_tensor, None)
-    losses, _ = set_event_loss(
-        targets, predictions, batch.target_mask, REGRESSION_WEIGHTS
-    )
+    losses, _ = set_event_loss(targets, predictions, batch.target_mask, REGRESSION_WEIGHTS)
 
     permutation = torch.tensor([1, 0])
     permuted_tensor = target_tensor[:, permutation]
     permuted_targets = unpack_target(permuted_tensor, None)
     permuted_mask = permuted_tensor[..., 0] != 0
-    permuted_losses, _ = set_event_loss(
-        permuted_targets, predictions, permuted_mask, REGRESSION_WEIGHTS
-    )
+    permuted_losses, _ = set_event_loss(permuted_targets, predictions, permuted_mask, REGRESSION_WEIGHTS)
 
     for key in losses:
         torch.testing.assert_close(losses[key], permuted_losses[key])
@@ -231,9 +219,7 @@ def test_set_loss_supports_an_event_without_targets():
         "energy": torch.randn(1, 4, requires_grad=True),
     }
 
-    losses, matches = set_event_loss(
-        targets, predictions, batch.target_mask, REGRESSION_WEIGHTS
-    )
+    losses, matches = set_event_loss(targets, predictions, batch.target_mask, REGRESSION_WEIGHTS)
     loss = sum(losses.values())
     loss.backward()
 
@@ -270,9 +256,7 @@ def test_set_model_10k_inputs_forward_backward():
     raw_predictions = model(batch.X, batch.mask)
     predictions = unpack_predictions(raw_predictions)
     targets = unpack_target(batch.ytarget_set, model)
-    losses, _ = set_event_loss(
-        targets, predictions, batch.target_mask, REGRESSION_WEIGHTS
-    )
+    losses, _ = set_event_loss(targets, predictions, batch.target_mask, REGRESSION_WEIGHTS)
     loss = sum(losses.values())
     loss.backward()
 

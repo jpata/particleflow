@@ -721,13 +721,9 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             sampler_mode = DatasetSamplerMode(config.sampler_mode)
             _logger.info(f"{split}_dataset sampler_mode={sampler_mode.value} shuffle={shuffle}")
             if world_size > 1 and sampler_mode == DatasetSamplerMode.INTERLEAVED_SHARDS:
-                sampler = DistributedInterleavedShardSampler(
-                    dataset, world_size=world_size, rank=rank, shuffle=shuffle, seed=config.seed
-                )
+                sampler = DistributedInterleavedShardSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle, seed=config.seed)
             elif world_size > 1:
-                sampler = DistributedShardConsecutiveSampler(
-                    dataset, world_size=world_size, rank=rank, shuffle=shuffle, seed=config.seed
-                )
+                sampler = DistributedShardConsecutiveSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle, seed=config.seed)
             elif sampler_mode == DatasetSamplerMode.INTERLEAVED_SHARDS:
                 sampler = InterleavedShardSampler(dataset, shuffle=shuffle, seed=config.seed)
             else:

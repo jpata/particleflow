@@ -23,14 +23,10 @@ def _pairwise_matching_cost(target, prediction, weights):
 
     target_cls = target["cls_id"].long()
     presence_cost = -F.log_softmax(prediction["cls_binary"].float(), dim=-1)[:, 1:2]
-    pid_cost = -F.log_softmax(prediction["cls_id_onehot"].float(), dim=-1)[
-        :, target_cls
-    ]
+    pid_cost = -F.log_softmax(prediction["cls_id_onehot"].float(), dim=-1)[:, target_cls]
 
     def l1_cost(feature):
-        return torch.abs(
-            prediction[feature].float()[:, None] - target[feature].float()[None, :]
-        )
+        return torch.abs(prediction[feature].float()[:, None] - target[feature].float()[None, :])
 
     pred_direction = F.normalize(
         torch.stack([prediction["sin_phi"], prediction["cos_phi"]], dim=-1).float(),
@@ -64,20 +60,14 @@ def hungarian_match(targets, predictions, target_mask, weights=None):
         valid = target_mask[event_idx].bool()
         num_targets = int(valid.sum().item())
         if num_targets > num_slots:
-            raise ValueError(
-                f"Event {event_idx} has {num_targets} targets but the decoder has only {num_slots} slots"
-            )
+            raise ValueError(f"Event {event_idx} has {num_targets} targets but the decoder has only {num_slots} slots")
         if num_targets == 0:
-            empty = torch.empty(
-                0, dtype=torch.long, device=predictions["cls_binary"].device
-            )
+            empty = torch.empty(0, dtype=torch.long, device=predictions["cls_binary"].device)
             matches.append((empty, empty))
             continue
 
         event_targets = {key: value[event_idx][valid] for key, value in targets.items()}
-        event_predictions = {
-            key: value[event_idx] for key, value in predictions.items()
-        }
+        event_predictions = {key: value[event_idx] for key, value in predictions.items()}
         cost = _pairwise_matching_cost(event_targets, event_predictions, weights)
         slot_indices, target_indices = linear_sum_assignment(cost.float().cpu().numpy())
         matches.append(
@@ -101,9 +91,7 @@ def set_event_loss(
 
     matches = hungarian_match(targets, predictions, target_mask, matcher_weights)
     device = predictions["cls_binary"].device
-    presence_targets = torch.zeros(
-        predictions["cls_binary"].shape[:2], dtype=torch.long, device=device
-    )
+    presence_targets = torch.zeros(predictions["cls_binary"].shape[:2], dtype=torch.long, device=device)
 
     matched_predictions = {key: [] for key in ("cls_id_onehot", *REGRESSION_FEATURES)}
     matched_targets = {key: [] for key in ("cls_id", *REGRESSION_FEATURES)}
@@ -115,13 +103,9 @@ def set_event_loss(
         for key in matched_predictions:
             matched_predictions[key].append(predictions[key][event_idx, slot_indices])
         for key in matched_targets:
-            matched_targets[key].append(
-                targets[key][event_idx, valid_targets][target_indices]
-            )
+            matched_targets[key].append(targets[key][event_idx, valid_targets][target_indices])
 
-    presence_class_weights = predictions["cls_binary"].new_tensor(
-        [no_object_weight, 1.0]
-    )
+    presence_class_weights = predictions["cls_binary"].new_tensor([no_object_weight, 1.0])
     losses = {
         "Classification_binary": 10.0
         * F.cross_entropy(
@@ -143,27 +127,15 @@ def set_event_loss(
             losses[f"Regression_{feature}"] = zero
         return losses, matches
 
-    matched_predictions = {
-        key: torch.cat(value, dim=0) for key, value in matched_predictions.items()
-    }
-    matched_targets = {
-        key: torch.cat(value, dim=0) for key, value in matched_targets.items()
-    }
-    losses["Classification"] = F.cross_entropy(
-        matched_predictions["cls_id_onehot"], matched_targets["cls_id"]
-    )
+    matched_predictions = {key: torch.cat(value, dim=0) for key, value in matched_predictions.items()}
+    matched_targets = {key: torch.cat(value, dim=0) for key, value in matched_targets.items()}
+    losses["Classification"] = F.cross_entropy(matched_predictions["cls_id_onehot"], matched_targets["cls_id"])
 
-    sqrt_target_pt = torch.sqrt(
-        torch.exp(matched_targets["pt"].float()).clamp_min(1e-6)
-    )
+    sqrt_target_pt = torch.sqrt(torch.exp(matched_targets["pt"].float()).clamp_min(1e-6))
     for feature in REGRESSION_FEATURES:
         prediction = torch.nan_to_num(matched_predictions[feature].float())
-        per_particle = regression_weights[feature] * F.mse_loss(
-            prediction, matched_targets[feature].float(), reduction="none"
-        )
-        losses[f"Regression_{feature}"] = (
-            per_particle * sqrt_target_pt
-        ).sum() / num_matched
+        per_particle = regression_weights[feature] * F.mse_loss(prediction, matched_targets[feature].float(), reduction="none")
+        losses[f"Regression_{feature}"] = (per_particle * sqrt_target_pt).sum() / num_matched
     return losses, matches
 
 
@@ -179,15 +151,9 @@ def set_mlpf_loss(
     """Compute the set-prediction objective with the standard task names."""
 
     if batch.target_mask is None:
-        raise ValueError(
-            "Set prediction requires batch.ytarget_set and batch.target_mask"
-        )
+        raise ValueError("Set prediction requires batch.ytarget_set and batch.target_mask")
 
-    effective_regression_weights = (
-        regression_weights
-        if task_loss_weighter is None
-        else {feature: 1.0 for feature in REGRESSION_FEATURES}
-    )
+    effective_regression_weights = regression_weights if task_loss_weighter is None else {feature: 1.0 for feature in REGRESSION_FEATURES}
     losses, _ = set_event_loss(
         targets,
         predictions,
@@ -213,8 +179,5 @@ def set_mlpf_loss(
 
     detached_losses = {key: value.detach() for key, value in losses.items()}
     if diagnostics is not None:
-        diagnostics = {
-            name: {task: value.detach() for task, value in values.items()}
-            for name, values in diagnostics.items()
-        }
+        diagnostics = {name: {task: value.detach() for task, value in values.items()} for name, values in diagnostics.items()}
     return loss_opt, detached_losses, diagnostics

@@ -343,14 +343,10 @@ def model_step(batch, model, loss_fn, regression_weights):
     model_module = model.module if hasattr(model, "module") else model
     if model_module.output_mode == OutputMode.SET:
         ytarget = unpack_target(batch.ytarget_set, model_module)
-        loss_opt, losses_detached, task_loss_diagnostics = set_mlpf_loss(
-            ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model)
-        )
+        loss_opt, losses_detached, task_loss_diagnostics = set_mlpf_loss(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
     else:
         ytarget = unpack_target(batch.ytarget, model_module)
-        loss_opt, losses_detached, task_loss_diagnostics = loss_fn(
-            ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model)
-        )
+        loss_opt, losses_detached, task_loss_diagnostics = loss_fn(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
     return loss_opt, losses_detached, task_loss_diagnostics, ypred_raw, ypred, ytarget
 
 
@@ -459,14 +455,10 @@ def train_step(
         model_module = model.module if hasattr(model, "module") else model
         if model_module.output_mode == OutputMode.SET:
             ytarget = unpack_target(batch.ytarget_set, model_module)
-            loss_opt, loss, task_loss_diagnostics = set_mlpf_loss(
-                ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model)
-            )
+            loss_opt, loss, task_loss_diagnostics = set_mlpf_loss(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
         else:
             ytarget = unpack_target(batch.ytarget, model_module)
-            loss_opt, loss, task_loss_diagnostics = mlpf_loss(
-                ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model)
-            )
+            loss_opt, loss, task_loss_diagnostics = mlpf_loss(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
     phase_start = _record_phase_time_if_enabled(diagnostics.get("time", {}), "loss", phase_start, device_type, log_this_step)
     if log_this_step:
         _collect_step_memory(rank, "after_loss", diagnostics)
@@ -798,12 +790,7 @@ def evaluate(
                     )
 
         # Save validation plots for first batch
-        if (
-            model_module.output_mode == OutputMode.ELEMENTWISE
-            and (rank == 0 or rank == "cpu")
-            and ival == 0
-            and config.make_plots
-        ):
+        if model_module.output_mode == OutputMode.ELEMENTWISE and (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
             validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
 
         # Accumulate losses

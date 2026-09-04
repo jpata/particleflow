@@ -156,6 +156,4 @@ def test_experiments_are_grouped_under_the_scenario_directory():
 
     path = _experiment_path(platform, job, timestamp="TIMESTAMP")
 
-    assert path == Path(
-        "experiments/cld_hits_output_comparison/elementwise_seed12345_TIMESTAMP"
-    )
+    assert path == Path("experiments/cld_hits_output_comparison/elementwise_seed12345_TIMESTAMP")

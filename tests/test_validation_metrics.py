@@ -82,15 +82,11 @@ def test_common_particle_metrics_are_prediction_permutation_invariant():
         energy=[24.0, 12.0],
     )
     masks = (torch.ones(1, 2, dtype=torch.bool),) * 2
-    original = compute_validation_particle_metrics(
-        targets, masks[0], predictions, masks[1], num_classes=6
-    )
+    original = compute_validation_particle_metrics(targets, masks[0], predictions, masks[1], num_classes=6)
 
     permutation = torch.tensor([1, 0])
     permuted = {name: value[:, permutation] for name, value in predictions.items()}
-    reordered = compute_validation_particle_metrics(
-        targets, masks[0], permuted, masks[1], num_classes=6
-    )
+    reordered = compute_validation_particle_metrics(targets, masks[0], permuted, masks[1], num_classes=6)
 
     assert original == reordered
 
@@ -120,19 +116,11 @@ def test_validation_collections_restore_same_physical_targets_for_both_modes():
         energy=[12.0, 24.0, 0.0],
     )
 
-    element_collections = validation_particle_collections(
-        element_batch, predictions, OutputMode.ELEMENTWISE
-    )
-    set_collections = validation_particle_collections(
-        set_batch, predictions, OutputMode.SET
-    )
+    element_collections = validation_particle_collections(element_batch, predictions, OutputMode.ELEMENTWISE)
+    set_collections = validation_particle_collections(set_batch, predictions, OutputMode.SET)
 
-    torch.testing.assert_close(
-        element_collections[0]["pt"][:, :2], set_collections[0]["pt"]
-    )
-    torch.testing.assert_close(
-        element_collections[0]["energy"][:, :2], set_collections[0]["energy"]
-    )
+    torch.testing.assert_close(element_collections[0]["pt"][:, :2], set_collections[0]["pt"])
+    torch.testing.assert_close(element_collections[0]["energy"][:, :2], set_collections[0]["energy"])
     assert element_collections[1].sum() == set_collections[1].sum() == 2
     assert element_collections[3].sum() == set_collections[3].sum() == 2
 
@@ -156,9 +144,7 @@ def test_elementwise_validation_reconstructs_targets_without_cached_values():
         energy=[12.0, 18.0],
     )
 
-    targets, _, _, _ = validation_particle_collections(
-        batch, predictions, OutputMode.ELEMENTWISE
-    )
+    targets, _, _, _ = validation_particle_collections(batch, predictions, OutputMode.ELEMENTWISE)
 
     torch.testing.assert_close(targets["pt"], torch.tensor([[10.0, 8.0]]))
     torch.testing.assert_close(targets["energy"], torch.tensor([[12.0, 18.0]]))
