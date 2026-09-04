@@ -44,9 +44,11 @@ def test_comparison_scenario_resolves_both_output_modes_with_same_seed():
 @pytest.mark.parametrize(
     ("profile_name", "expected_multiplier"),
     [
-        ("flatiron_h100.yaml", 16),
-        ("flatiron_a100.yaml", 32),
-        ("flatiron_b200.yaml", 16),
+        ("flatiron_h100.yaml", 64),
+        ("flatiron_a100.yaml", 128),
+        ("flatiron_b200.yaml", 64),
+        ("tallinn_l40.yaml", 256),
+        ("lumi_mi250x.yaml", 64),
     ],
 )
 def test_platform_profiles_preserve_global_batch(profile_name, expected_multiplier):
@@ -59,9 +61,9 @@ def test_platform_profiles_preserve_global_batch(profile_name, expected_multipli
         spec_file=ROOT / "particleflow_spec.yaml",
     )
 
-    assert {job.global_batch_size for job in jobs} == {128}
+    assert {job.global_batch_size for job in jobs} == {512}
     assert {job.gpu_batch_multiplier for job in jobs} == {expected_multiplier}
-    assert {job.per_gpu_batch_size for job in jobs} == {128 // platform.gpus}
+    assert {job.per_gpu_batch_size for job in jobs} == {512 // platform.gpus}
 
 
 def test_variant_invariant_check_rejects_unapproved_difference():

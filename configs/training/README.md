@@ -32,9 +32,9 @@ Additional arguments are forwarded to the generic scenario runner, such as
 With multiple variants or seeds, jobs are ordered by seed and then by variant. A
 Slurm array can select one job using `--task-index $SLURM_ARRAY_TASK_ID`.
 `--seed N` replaces the scenario seed list, including when a task index is used.
-The local and Flatiron shell launchers expose this as the `SEED` environment
-variable. Without an override, seeds come from the scenario file and are recorded
-in both the resolved configuration and run manifest.
+The site shell launchers expose this as the `SEED` environment variable. Without an
+override, seeds come from the scenario file and are recorded in both the resolved
+configuration and run manifest.
 
 List the available scenarios and accelerators, then submit using the Flatiron
 picker:
@@ -48,6 +48,23 @@ scripts/flatiron/train_scenario.sh cld_hits_output_comparison h100
 The picker reads Slurm resources from the selected platform profile and derives
 the array size from the scenario's variants and seeds. Use `--seed N` to submit
 one comparison pair with an explicit seed.
+
+Tallinn and LUMI use the same interface with site-specific profiles and workers:
+
+```bash
+scripts/tallinn/train_scenario.sh --list
+scripts/tallinn/train_scenario.sh cld_hits_output_comparison l40 --dry-run
+scripts/tallinn/train_scenario.sh cld_hits_output_comparison l40
+
+scripts/lumi/train_scenario.sh --list
+scripts/lumi/train_scenario.sh cld_hits_output_comparison mi250x --dry-run
+scripts/lumi/train_scenario.sh cld_hits_output_comparison mi250x
+```
+
+The Tallinn worker runs the repository's `uv` environment directly. The LUMI
+submitter uses `particleflow-env` (override its interpreter with
+`PYTHON_EXECUTABLE`) and the worker executes that environment in the standard
+PyTorch ROCm container (override the image with `IMG`).
 
 Use repeated `--set KEY=VALUE` options only for explicit one-off overrides. Every
 resolved run writes `scenario-manifest.json` containing the scenario, platform,

@@ -302,8 +302,8 @@ Compare elementwise and set prediction using:
 - [ ] Extend the benchmark script with set-mode timing and memory measurements.
 - [x] Run a small CLD-hits overfit test and confirm that loss and matching converge.
 - [x] Add a local ttbar launcher for paired elementwise and set-output training.
-- [x] Add reusable seeded comparison scenarios with local and Flatiron hardware
-      profiles.
+- [x] Add reusable seeded comparison scenarios with local, Tallinn, LUMI, and
+      Flatiron hardware profiles.
 - [ ] Run a short CLD-hits training comparison against the elementwise baseline.
 - [x] Document initial correctness, timing, memory, and scaling measurements here;
       add physics accuracy after training.

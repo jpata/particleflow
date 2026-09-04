@@ -9,7 +9,7 @@ import shlex
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -96,11 +96,25 @@ class SlurmProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     partition: str = "gpu"
-    constraint: str
+    constraint: str | None = None
+    account: str | None = None
     time: str = "12:00:00"
     nodes: int = Field(default=1, gt=0)
     tasks_per_node: int = Field(default=1, gt=0)
     cpus_per_task: int = Field(default=64, gt=0)
+    gpu_request: Literal["gpus-per-node", "gpus-per-task", "gres"] = "gpus-per-node"
+    gpu_type: str | None = None
+    memory: str | None = None
+    memory_per_gpu: str | None = None
+    no_requeue: bool = False
+
+    @model_validator(mode="after")
+    def validate_resources(self):
+        if self.gpu_type is not None and self.gpu_request != "gres":
+            raise ValueError("gpu_type is only valid with gpu_request='gres'")
+        if self.memory is not None and self.memory_per_gpu is not None:
+            raise ValueError("Set only one of memory and memory_per_gpu")
+        return self
 
 
 class PlatformProfile(BaseModel):
