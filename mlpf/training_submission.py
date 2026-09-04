@@ -105,6 +105,8 @@ def build_slurm_submission(
         str(worker),
         str(Path(scenario_path).resolve()),
         str(Path(profile_path).resolve()),
+        "--repo-root",
+        str(repo_root),
     ]
     if seed is not None:
         command.extend(["--seed", str(seed)])

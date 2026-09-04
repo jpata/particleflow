@@ -34,6 +34,7 @@ def test_h100_submission_is_derived_from_scenario_and_profile():
     assert command[command.index("--gpus-per-node") + 1] == "8"
     assert command[command.index("--constraint") + 1] == "h100"
     assert command[command.index("--array") + 1] == "0-1"
+    assert command[command.index("--repo-root") + 1] == str(ROOT)
     assert command[-2:] == ["--seed", "2468"]
 
 

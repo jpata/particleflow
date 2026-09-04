@@ -7,6 +7,7 @@ shift 2
 
 TASK_INDEX=${SLURM_ARRAY_TASK_ID:-0}
 SEED_OVERRIDE=${SEED:-}
+REPO_ROOT=${MLPF_REPO_ROOT:-${SLURM_SUBMIT_DIR:-$PWD}}
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --task-index)
@@ -17,6 +18,10 @@ while [[ $# -gt 0 ]]; do
       SEED_OVERRIDE=${2:?--seed requires a value}
       shift 2
       ;;
+    --repo-root)
+      REPO_ROOT=${2:?--repo-root requires a value}
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1" >&2
       exit 2
@@ -24,8 +29,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-REPO_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
+if [[ ! -f "$REPO_ROOT/scripts/training/run_scenario.py" ]]; then
+  echo "Invalid repository root '$REPO_ROOT': scripts/training/run_scenario.py is missing" >&2
+  exit 2
+fi
 cd "$REPO_ROOT"
 
 module --force purge
