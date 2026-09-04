@@ -20,6 +20,16 @@ uv run --project .. jupyter-book start
 
 Generated output is written below `docs/_build/` and is not committed.
 
+## Publishing
+
+The public site is published at `https://jpata.github.io/particleflow/` with the workflow in `.github/workflows/docs.yml`.
+
+The workflow builds the documentation for every pull request that changes the documentation, README, or workflow. It deploys only from `main`. The build uses `BASE_URL=/particleflow` so that links and assets work below the repository's GitHub Pages path.
+
+To enable the first deployment, a repository maintainer must select **Settings -> Pages -> Build and deployment -> GitHub Actions**. The workflow then uploads `docs/_build/html` as a Pages artifact and deploys it through the `github-pages` environment.
+
+Do not commit the generated HTML and do not maintain a separate `gh-pages` branch. Pull requests contain only the source files; the deployed site is always built from the merged source on `main`.
+
 ## Writing style
 
 - Start from the user's goal, then introduce the responsible command or code.
