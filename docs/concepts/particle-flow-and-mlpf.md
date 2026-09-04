@@ -10,7 +10,15 @@ A collision produces particles that pass through a detector. The detector does n
 
 Particle-flow reconstruction combines these signals into one list of reconstructed particles. Each particle has a type, such as charged hadron, neutral hadron, photon, electron, or muon, and an estimated momentum and energy.
 
-The difficult part is deciding which detector signals came from the same particle and which came from nearby particles. The number of signals and particles also changes from event to event. Good particle reconstruction matters because jets, missing transverse momentum, and many later analysis quantities are built from this particle list. This role of particle flow is described in the [first MLPF paper](https://doi.org/10.1140/epjc/s10052-021-09158-w) and in the [CMS implementation study](https://doi.org/10.1088/1742-6596/2438/1/012100).
+The difficult part is deciding which detector signals came from the same particle and which came from nearby particles. The number of signals and particles also changes from event to event. Good particle reconstruction matters because jets, missing transverse momentum, and many later analysis quantities are built from this particle list.
+
+## Where particle flow came from
+
+Particle flow did not begin as one standard algorithm with a single name. A widely cited early implementation was the “energy-flow” reconstruction used by ALEPH at the LEP electron-positron collider. It combined tracking and calorimeter measurements to build charged and neutral reconstructed objects. The approach and its detector performance are described in the [1995 ALEPH detector paper](https://doi.org/10.1016/0168-9002(95)00138-7).
+
+The idea was developed further for future linear colliders. A [2001 study by Brient and Videau](https://arxiv.org/abs/hep-ex/0202004) argued for measuring charged particles, photons, and neutral hadrons with the detector subsystem best suited to each one. This motivated highly granular calorimeters that can separate nearby particle showers. [PandoraPFA](https://doi.org/10.1016/j.nima.2009.09.009) later provided a detailed algorithm and a systematic study of this approach for linear-collider detectors.
+
+CMS adapted particle flow to the more crowded environment of a proton-proton collider. Its [particle-flow reconstruction paper](https://doi.org/10.1088/1748-0221/12/10/P10003) explains how tracks, calorimeter clusters, and muon information are linked into a global event description. These earlier algorithms provide the physics starting point for MLPF.
 
 ## What MLPF changes
 
@@ -32,6 +40,16 @@ MLPF is intended to learn correlations across the whole event while running effi
 - The CLD study showed that a model trained for one detector can be fine-tuned for another detector with less training data.
 
 These findings are specific to their published setups. The [publications page](../science/publications.md) summarizes each result and links the matching archived code and data where available.
+
+## Related machine-learning approaches
+
+MLPF is one of several ways to formulate learned particle reconstruction. The approaches below solve closely related problems, but they differ in their detector inputs and in how they decide how many particles to produce.
+
+- [Object condensation](https://doi.org/10.1140/epjc/s10052-020-08461-2) learns a space in which detector inputs belonging to the same object collect around a representative point. It does not require a fixed number or ordering of output objects. A later [high-granularity calorimeter study](https://arxiv.org/abs/2106.01832) used object condensation with a graph neural network to cluster detector hits and predict particle-shower properties in one model.
+- [HGPflow](https://doi.org/10.1140/epjc/s10052-023-11677-7) treats detector inputs as nodes and reconstructed particles as hyperedges that can collect information from several nodes. Its learned incidence matrix describes how detector measurements contribute to particles. The first study focused on particles inside individual jets; a [later full-event study](https://doi.org/10.1140/epjc/s10052-025-14443-z) applied the method to proton-proton and electron-positron collisions.
+- [HitPF](https://arxiv.org/abs/2603.04084) works directly from charged-particle tracks and calorimeter and muon hits, without a separate hand-designed calorimeter clustering stage. It combines a geometric-algebra transformer with object-condensation-based clustering, followed by particle identification and energy regression.
+
+These references provide context for the wider ML reconstruction field. They do not imply that the complete HGPflow, HitPF, or object-condensation models are implemented as options in this repository.
 
 ## From detector signals to physics quantities
 
