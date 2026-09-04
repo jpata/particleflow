@@ -20,6 +20,23 @@ uv run --project .. jupyter-book start
 
 Generated output is written below `docs/_build/` and is not committed.
 
+## Update DOI metadata
+
+MyST enriches `https://doi.org/...` links with citation metadata. The metadata is stored in `docs/myst.doi.bib` so that documentation builds do not depend on the DOI service being available in CI.
+
+After adding, changing, or removing a DOI link, regenerate the local bibliography from the repository root:
+
+```bash
+cd docs
+uv run --project .. jupyter-book build --doi-bib
+```
+
+Commit the updated `myst.doi.bib` together with the documentation change. The file is generated, so do not edit it by hand. Run the strict HTML build afterward to check both the bibliography and the rendered links:
+
+```bash
+uv run --project .. jupyter-book build --html --strict
+```
+
 ## Publishing
 
 The public site is published at `https://jpata.github.io/particleflow/` with the workflow in `.github/workflows/docs.yml`.
