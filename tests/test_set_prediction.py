@@ -41,6 +41,33 @@ def make_config(num_slots=4):
     )
 
 
+def make_attention_config(num_slots=4):
+    return MLPFConfig.model_validate(
+        {
+            "dataset": "cld_hits",
+            "data_dir": "/tmp",
+            "model": {
+                "type": "attention",
+                "output_mode": "set",
+                "input_encoding": "joint",
+                "attention": {
+                    "num_convs": 1,
+                    "num_heads": 2,
+                    "head_dim": 8,
+                    "use_pre_layernorm": True,
+                },
+                "set_decoder": {
+                    "num_slots": num_slots,
+                    "num_layers": 1,
+                    "num_heads": 2,
+                },
+                "hit_feature_engineering": {"enabled": False},
+            },
+            "conv_type": "attention",
+        }
+    )
+
+
 def make_target_tensor(batch_size=1, num_targets=2):
     target = torch.zeros(batch_size, num_targets, 14)
     phi = torch.linspace(-torch.pi, torch.pi, num_targets + 1)[:-1]
@@ -100,6 +127,23 @@ def test_set_model_output_axis_is_num_slots():
     torch.testing.assert_close(
         torch.linalg.vector_norm(momentum[..., 2:4], dim=-1), torch.ones(2, 4)
     )
+
+
+def test_attention_set_model_has_no_unused_elementwise_parameters():
+    config = make_attention_config()
+    model = MLPF(config)
+    X = torch.randn(2, 8, config.input_dim)
+    X[..., 0] = 1
+    mask = torch.ones(2, 8, dtype=torch.bool)
+
+    predictions = model(X, mask)
+    sum(prediction.square().mean() for prediction in predictions).backward()
+
+    assert model.classification_norm is None
+    assert model.regression_norm is None
+    assert [
+        name for name, parameter in model.named_parameters() if parameter.grad is None
+    ] == []
 
 
 def test_hungarian_match_finds_permuted_particles():
@@ -197,6 +241,7 @@ def test_set_loss_supports_an_event_without_targets():
     assert matches[0][0].numel() == 0
     assert losses["Classification"] == 0
     assert losses["Regression_pt"] == 0
+    assert all(prediction.grad is not None for prediction in predictions.values())
 
 
 def test_predict_particles_restores_absolute_set_kinematics():
@@ -225,7 +270,9 @@ def test_set_model_10k_inputs_forward_backward():
     raw_predictions = model(batch.X, batch.mask)
     predictions = unpack_predictions(raw_predictions)
     targets = unpack_target(batch.ytarget_set, model)
-    losses, _ = set_event_loss(targets, predictions, batch.target_mask, REGRESSION_WEIGHTS)
+    losses, _ = set_event_loss(
+        targets, predictions, batch.target_mask, REGRESSION_WEIGHTS
+    )
     loss = sum(losses.values())
     loss.backward()
 

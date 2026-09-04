@@ -133,7 +133,11 @@ def set_event_loss(
 
     num_matched = int(presence_targets.sum().item())
     if num_matched == 0:
-        zero = predictions["cls_binary"].sum() * 0.0
+        # Keep every set-output head in the autograd graph even for a batch with
+        # no target particles. This produces zero gradients for PID and momentum
+        # rather than making their parameters unused under DDP.
+        output_keys = ("cls_binary", "cls_id_onehot", *REGRESSION_FEATURES)
+        zero = sum(predictions[key].sum() * 0.0 for key in output_keys)
         losses["Classification"] = zero
         for feature in REGRESSION_FEATURES:
             losses[f"Regression_{feature}"] = zero

@@ -13,7 +13,7 @@ seeds: [12345]
 
 training:
   # Kept fixed across hardware profiles. The runner derives the per-GPU batch.
-  global_batch_size: 128
+  global_batch_size: 512
   parameters:
     lr: 0.001
     num_steps: 20000

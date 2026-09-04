@@ -1384,8 +1384,9 @@ class MLPF(nn.Module):
 
         _logger.info("Initializing output DNNs")
         t0 = time.time()
-        self.classification_norm = torch.nn.LayerNorm(decoding_dim) if self.use_pre_layernorm else None
-        self.regression_norm = torch.nn.LayerNorm(decoding_dim) if self.use_pre_layernorm else None
+        use_elementwise_output_norms = self.use_pre_layernorm and self.output_mode == OutputMode.ELEMENTWISE
+        self.classification_norm = torch.nn.LayerNorm(decoding_dim) if use_elementwise_output_norms else None
+        self.regression_norm = torch.nn.LayerNorm(decoding_dim) if use_elementwise_output_norms else None
 
         if self.task_queries and not self.use_split_backbone and self.output_mode == OutputMode.ELEMENTWISE:
             self.classification_query = nn.Parameter(torch.zeros(1, 1, decoding_dim), requires_grad=True)
