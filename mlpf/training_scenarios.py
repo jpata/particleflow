@@ -423,8 +423,8 @@ def _git_revision():
 
 def _experiment_path(platform, job, timestamp=None):
     timestamp = timestamp or datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    name = f"{job.scenario_name}_{job.variant_name}_seed{job.seed}_{timestamp}"
-    return Path(platform.experiments_dir) / name
+    experiment_name = f"{job.variant_name}_seed{job.seed}_{timestamp}"
+    return Path(platform.experiments_dir) / job.scenario_name / experiment_name
 
 
 def run_scenario_job(job, scenario, platform, spec_file, *, dry_run=False):

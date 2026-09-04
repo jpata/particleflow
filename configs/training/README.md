@@ -51,4 +51,5 @@ one comparison pair with an explicit seed.
 
 Use repeated `--set KEY=VALUE` options only for explicit one-off overrides. Every
 resolved run writes `scenario-manifest.json` containing the scenario, platform,
-seed, final configuration, command, and git revision.
+seed, final configuration, command, and git revision. Runs are grouped as
+`<experiments_dir>/<scenario_name>/<variant>_seed<seed>_<timestamp>/`.

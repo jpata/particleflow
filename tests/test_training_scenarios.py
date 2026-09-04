@@ -7,6 +7,7 @@ from mlpf.training_scenarios import (
     PlatformProfile,
     ScenarioVariant,
     ScenarioTraining,
+    _experiment_path,
     load_platform_profile,
     load_training_scenario,
     resolve_scenario_jobs,
@@ -139,3 +140,20 @@ def test_cli_seed_replaces_scenario_seed_for_task_selection(capsys):
     command = capsys.readouterr().out
     assert "--seed 17" in command
     assert "--model-name pyg-cld-hits-set-v1" in command
+
+
+def test_experiments_are_grouped_under_the_scenario_directory():
+    scenario = load_training_scenario(SCENARIO)
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+    job = resolve_scenario_jobs(
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=8,
+    )[0]
+
+    path = _experiment_path(platform, job, timestamp="TIMESTAMP")
+
+    assert path == Path(
+        "experiments/cld_hits_output_comparison/elementwise_seed12345_TIMESTAMP"
+    )
