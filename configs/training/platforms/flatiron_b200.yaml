@@ -1,0 +1,16 @@
+name: flatiron_b200
+gpus: 8
+data_dir: /mnt/ceph/users/${USER}/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
+experiments_dir: /mnt/home/${USER}/particleflow/experiments
+runtime_overrides:
+  dtype: bfloat16
+  num_workers: 8
+  prefetch_factor: 2
+  model.attention.use_flash_attn_varlen: false
+slurm:
+  partition: gpu
+  constraint: b200
+  time: "12:00:00"
+  nodes: 1
+  tasks_per_node: 1
+  cpus_per_task: 64

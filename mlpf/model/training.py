@@ -32,6 +32,7 @@ Key Functions:
 
 import os
 import os.path as osp
+import random
 import time
 import logging
 from pathlib import Path
@@ -93,6 +94,16 @@ from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
 
 UNIT_REGRESSION_WEIGHTS = {feature: 1.0 for feature in REGRESSION_FEATURES}
+
+
+def seed_everything(seed):
+    """Seed Python, NumPy, and PyTorch RNGs for the current process."""
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def _domain_label(source_id, input_type_id):
@@ -1297,7 +1308,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
 
     if world_size > 1:
-        sampler = torch.utils.data.distributed.DistributedSampler(ds, shuffle=False)
+        sampler = torch.utils.data.distributed.DistributedSampler(ds, shuffle=False, seed=config.seed)
     else:
         sampler = torch.utils.data.SequentialSampler(ds)
 
@@ -1309,6 +1320,9 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     if sample.startswith("cms_") and version and Version(version) >= Version("2.8.0"):
         vals_for_test += ["pythia"]
 
+    test_loader_generator = torch.Generator()
+    rank_index = int(rank) if isinstance(rank, int) else 0
+    test_loader_generator.manual_seed(config.seed + 10_000 * rank_index + 2000)
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
@@ -1316,6 +1330,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         sampler=sampler,
         num_workers=config.num_workers,
         prefetch_factor=config.prefetch_factor,
+        generator=test_loader_generator,
         # pin_memory=use_cuda,
         # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
     )
@@ -1352,6 +1367,12 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     _configLogger("mlpf", rank, filename=f"{logfile}.{rank}", loglevel=loglevel)
 
     use_cuda = rank != "cpu"
+    rank_index = int(rank) if isinstance(rank, int) else 0
+
+    # All ranks initialize the same model. After DDP synchronizes parameters,
+    # use rank-specific streams for stochastic layers and data workers.
+    seed_everything(config.seed)
+    _logger.info(f"Initializing model with seed={config.seed}; process seed={config.seed + rank_index}")
 
     dtype = getattr(torch, config.dtype)
     _logger.info("configured dtype={} for autocast".format(dtype))
@@ -1444,6 +1465,8 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
         _logger.info("Configured model for SyncBatchNorm rank={}".format(rank))
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
         _logger.info("Configured model for DistributedDataParallel rank={}".format(rank))
+
+    seed_everything(config.seed + rank_index)
 
     trainable_params, nontrainable_params, table = count_parameters(model)
     _logger.info(str(table))

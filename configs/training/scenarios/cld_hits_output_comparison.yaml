@@ -1,0 +1,41 @@
+name: cld_hits_output_comparison
+spec_file: particleflow_spec.yaml
+production_name: cld
+
+variants:
+  elementwise:
+    model_name: pyg-cld-hits-v1
+  set:
+    model_name: pyg-cld-hits-set-v1
+
+# Add seeds here and expand the Slurm array to 2 * len(seeds) tasks.
+seeds: [12345]
+
+training:
+  # Kept fixed across hardware profiles. The runner derives the per-GPU batch.
+  global_batch_size: 128
+  parameters:
+    lr: 0.001
+    num_steps: 20000
+    val_freq: 2000
+    checkpoint_freq: 2000
+    nvalid: 100
+    ntest: 100
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+
+common_overrides:
+  model.task_queries: false
+  # Preserve the six-layer detector-aware attention backbone used by the
+  # existing Flatiron H100 training, independent of the accelerator profile.
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.backbone.num_tracker_layers: 2
+  model.backbone.num_calo_layers: 2
+  model.backbone.num_common_layers: 2
+
+allowed_variant_differences:
+  - model.output_mode
+  - model.set_decoder

@@ -721,13 +721,17 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             sampler_mode = DatasetSamplerMode(config.sampler_mode)
             _logger.info(f"{split}_dataset sampler_mode={sampler_mode.value} shuffle={shuffle}")
             if world_size > 1 and sampler_mode == DatasetSamplerMode.INTERLEAVED_SHARDS:
-                sampler = DistributedInterleavedShardSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle)
+                sampler = DistributedInterleavedShardSampler(
+                    dataset, world_size=world_size, rank=rank, shuffle=shuffle, seed=config.seed
+                )
             elif world_size > 1:
-                sampler = DistributedShardConsecutiveSampler(dataset, world_size=world_size, rank=rank, shuffle=shuffle)
+                sampler = DistributedShardConsecutiveSampler(
+                    dataset, world_size=world_size, rank=rank, shuffle=shuffle, seed=config.seed
+                )
             elif sampler_mode == DatasetSamplerMode.INTERLEAVED_SHARDS:
-                sampler = InterleavedShardSampler(dataset, shuffle=shuffle)
+                sampler = InterleavedShardSampler(dataset, shuffle=shuffle, seed=config.seed)
             else:
-                sampler = ShardConsecutiveSampler(dataset, shuffle=shuffle)
+                sampler = ShardConsecutiveSampler(dataset, shuffle=shuffle, seed=config.seed)
 
             sampler = ResumableSampler(sampler)
             sampler.name = f"{type_}:{split}"
@@ -737,6 +741,10 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             per_particle_keys = ["X", "ytarget"]
             if config.model.output_mode == OutputMode.SET:
                 per_particle_keys.append("ytarget_set")
+            loader_generator = torch.Generator()
+            rank_index = int(rank) if isinstance(rank, int) else 0
+            split_offset = 0 if split == "train" else 1000
+            loader_generator.manual_seed(config.seed + 10_000 * rank_index + split_offset + len(loaders[split]))
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
@@ -748,6 +756,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                 # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
                 worker_init_fn=set_worker_sharing_strategy,
+                generator=loader_generator,
                 persistent_workers=config.num_workers > 0,
             )
 

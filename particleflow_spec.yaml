@@ -407,6 +407,7 @@ models:
     optimizer: lamb
     lr_schedule: cosinedecay
     dtype: bfloat16
+    seed: 12345
     load: null
     num_steps: 100000
     comet: false

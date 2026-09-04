@@ -691,6 +691,7 @@ class MLPFConfig(BaseModel):
     elemtypes_nonzero: Optional[List[int]] = None
 
     # Training parameters
+    seed: int = Field(default=12345, ge=0)
     num_steps: int = 100000
     patience: int = 10000
     checkpoint_freq: int = 10000

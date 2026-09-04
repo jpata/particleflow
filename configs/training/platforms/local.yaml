@@ -1,0 +1,11 @@
+name: local
+gpus: 1
+data_dir: /mnt/work/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
+experiments_dir: experiments
+environment:
+  PF_SITE: local
+runtime_overrides:
+  dtype: bfloat16
+  num_workers: 8
+  prefetch_factor: 4
+  model.attention.use_flash_attn_varlen: false
