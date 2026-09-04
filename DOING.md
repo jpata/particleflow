@@ -32,7 +32,7 @@ Relevant references:
 - For the first model, use a fixed bank of learned particle queries and a small
   cross-attention decoder. Dynamic queries, sectorization, and explicitly sparse
   cross-attention are follow-up optimizations.
-- Use a scalable existing encoder (initially HEPTv2) for large hit collections. A
+- Use a scalable existing encoder (currently packed attention) for large hit collections. A
   dense all-to-all hit encoder is not acceptable for the 10k-hit use case.
 - Use permutation-invariant Hungarian matching between predicted slots and compact
   target particles. This output-to-target matching does not associate targets with
@@ -124,7 +124,7 @@ Add an output mode orthogonal to the encoder type, conceptually:
 
 ```yaml
 architecture:
-  type: heptv2
+  type: attention
   output_mode: set
   set_decoder:
     num_slots: 256
@@ -251,56 +251,83 @@ Compare elementwise and set prediction using:
 
 ### Data and batching
 
-- [ ] Add an `output_mode` or equivalent argument to the data-loading path.
-- [ ] Extract `ytarget_set` before legacy relative-target transformations.
-- [ ] Add uniqueness and consistency checks using `particle_number`.
-- [ ] Define and test the absolute set-target transformation and its inverse.
-- [ ] Add `ytarget_set` and `target_mask` to `PFBatch`.
-- [ ] Pad input and target collections independently in `Collater`.
-- [ ] Verify compact target counts, PIDs, and summed energy against legacy nonzero
+- [x] Add an `output_mode` or equivalent argument to the data-loading path.
+- [x] Extract `ytarget_set` before legacy relative-target transformations.
+- [x] Add uniqueness and consistency checks using `particle_number`.
+- [x] Define and test the absolute set-target transformation and its inverse.
+- [x] Add `ytarget_set` and `target_mask` to `PFBatch`.
+- [x] Pad input and target collections independently in `Collater`.
+- [x] Verify compact target counts, PIDs, and summed energy against legacy nonzero
       target rows on existing CLD/CLIC hit samples.
 
 ### Configuration and model
 
-- [ ] Add `output_mode` configuration with backward-compatible defaults.
-- [ ] Add a validated `SetDecoderConfig`.
-- [ ] Add a hit-dataset set-mode example to `particleflow_spec.yaml`.
-- [ ] Refactor/reuse the backbone encoder without changing legacy forward behavior.
-- [ ] Implement learned fixed queries and two decoder layers.
+- [x] Add `output_mode` configuration with backward-compatible defaults.
+- [x] Add a validated `SetDecoderConfig`.
+- [x] Add a hit-dataset set-mode example to `particleflow_spec.yaml`.
+- [x] Refactor/reuse the backbone encoder without changing legacy forward behavior.
+- [x] Implement learned fixed queries and two decoder layers.
 - [ ] Implement memory-efficient packed cross-attention plus a CPU test fallback.
-- [ ] Implement presence, PID, and absolute-momentum heads.
-- [ ] Assert and log target-slot overflow instead of truncating.
+- [x] Implement presence, PID, and absolute-momentum heads.
+- [x] Assert target-slot overflow instead of truncating; add aggregate logging later.
 
 ### Matching and loss
 
-- [ ] Implement per-event Hungarian matching.
-- [ ] Implement configurable matching costs with cyclic phi handling.
-- [ ] Implement matched presence, PID, and regression losses.
-- [ ] Decide and test event/particle normalization and no-particle weighting.
-- [ ] Integrate or replace calibrated task-loss weighting for set mode.
+- [x] Implement per-event Hungarian matching.
+- [x] Implement matching costs with cyclic phi handling; expose them in model configuration later.
+- [x] Implement matched presence, PID, and regression losses.
+- [x] Decide and test event/particle normalization and no-particle weighting.
+- [x] Integrate calibrated task-loss weighting for set mode.
 - [ ] Log target count, active-slot count, matched cost, and unmatched-slot statistics.
 
 ### Training and inference
 
-- [ ] Route training and validation by output mode.
+- [x] Route training and validation loss calculation by output mode.
+- [x] Log scheme-independent particle matching, count, PID, kinematic, and event
+      closure metrics during validation.
 - [ ] Update validation diagnostics for independent axes.
-- [ ] Update `predict_particles` for set outputs and absolute inverse transforms.
-- [ ] Update parquet inference serialization to use separate input, target, and
+- [x] Update `predict_particles` for set outputs and absolute inverse transforms.
+- [x] Update parquet inference serialization to use separate input, target, and
       prediction counts.
 - [ ] Update particle, jet, and MET metrics for set outputs.
 - [ ] Add an explicit error or support path for set-mode ONNX export.
 
 ### Testing and performance
 
-- [ ] Add compact-target extraction and batching tests.
-- [ ] Add matcher and target-permutation tests.
-- [ ] Add decoder masking, shape, and numerical-stability tests.
-- [ ] Add legacy regression tests.
-- [ ] Add a 10k-hit forward/backward integration test.
+- [x] Add compact-target extraction and batching tests.
+- [x] Add matcher and target-permutation tests.
+- [x] Add decoder masking, shape, and numerical-stability tests.
+- [x] Run the existing legacy model and loss regression tests.
+- [x] Add a 10k-hit forward/backward integration test.
 - [ ] Extend the benchmark script with set-mode timing and memory measurements.
-- [ ] Run a small CLD-hits overfit test and confirm that loss and matching converge.
+- [x] Run a small CLD-hits overfit test and confirm that loss and matching converge.
+- [x] Add a local ttbar launcher for paired elementwise and set-output training.
 - [ ] Run a short CLD-hits training comparison against the elementwise baseline.
-- [ ] Document observed accuracy, throughput, memory, and scaling results here.
+- [x] Document initial correctness, timing, memory, and scaling measurements here;
+      add physics accuracy after training.
+
+## Initial implementation measurements
+
+Measurements from 2026-09-04 using the existing CLD `cld_edm_ttbar_hits/1:3.2.1`
+dataset:
+
+- The first 50 events contain 4,388--13,219 valid hits and 33--148 compact target
+  particles. Compact target counts matched the number of nonzero legacy target rows
+  in every event.
+- A real event with 6,423 valid hits, 52 targets, and 256 slots completed the full
+  four-layer HEPTv2 forward pass, Hungarian loss, and backward pass on an NVIDIA
+  GeForce RTX 5060 Ti. Peak allocated GPU memory was approximately 0.70 GB.
+- A real event with 13,219 valid hits, 135 targets, and 256 slots completed the same
+  path with approximately 1.39 GB peak allocated GPU memory.
+- A 20-step single-event AdamW overfit check with the full HEPTv2 encoder reduced the
+  uncalibrated total loss from 41.04 to 16.49, confirming end-to-end gradients through
+  the encoder, decoder, and matched loss.
+- The current comparison recipes use a three-layer packed attention backbone. Both
+  elementwise and set modes completed a GPU forward-pass smoke test on the 6,423-hit
+  event, using approximately 0.10 GB and 0.08 GB of allocated GPU memory respectively.
+- `uv run pytest -q tests` passed 241 tests with 3 skips. Running pytest from the
+  repository root without restricting collection still encounters two unrelated
+  pre-existing collection errors under `baselines/HEPTv2` and `scripts/legacy`.
 
 ## Follow-up work after the initial baseline
 

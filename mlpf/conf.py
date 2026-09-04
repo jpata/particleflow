@@ -39,6 +39,11 @@ class BackboneMode(Enum):
     SPLIT = "split"
 
 
+class OutputMode(Enum):
+    ELEMENTWISE = "elementwise"
+    SET = "set"
+
+
 class DatasetSamplerMode(Enum):
     SHARD_CONSECUTIVE = "shard-consecutive"
     INTERLEAVED_SHARDS = "interleaved-shards"
@@ -586,6 +591,18 @@ class HitFeatureEngineeringConfig(BaseModel):
     calorimeter_neighborhood: bool = True
 
 
+class SetDecoderConfig(BaseModel):
+    """Configuration for permutation-invariant particle-set prediction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    num_slots: int = Field(default=256, gt=0)
+    num_layers: int = Field(default=2, gt=0)
+    num_heads: int = Field(default=8, gt=0)
+    ffn_multiplier: float = Field(default=4.0, gt=0.0)
+    dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
+
+
 class ModelArchitectureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -599,8 +616,10 @@ class ModelArchitectureConfig(BaseModel):
     energy_mode: RegressionMode = RegressionMode.DIRECT_ELEMTYPE_SPLIT
     trainable: str = "all"
     task_queries: bool = True
+    output_mode: OutputMode = OutputMode.ELEMENTWISE
     backbone: Optional[BackboneConfig] = None
     hit_feature_engineering: HitFeatureEngineeringConfig = Field(default_factory=HitFeatureEngineeringConfig)
+    set_decoder: Optional[SetDecoderConfig] = None
 
     # Nested configs
     gnnlsh: Optional[GNNLSHConfig] = None
@@ -741,6 +760,13 @@ class MLPFConfig(BaseModel):
                 self.num_classes = len(CLASS_LABELS[self.dataset.value])
             if self.elemtypes_nonzero is None:
                 self.elemtypes_nonzero = ELEM_TYPES_NONZERO[self.dataset.value]
+        if self.model.output_mode == OutputMode.SET:
+            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS):
+                raise ValueError("model.output_mode='set' is currently supported only for CLD/CLIC hit datasets")
+            if self.model.set_decoder is None:
+                self.model.set_decoder = SetDecoderConfig()
+            if self.model.backbone.mode != BackboneMode.SHARED:
+                raise ValueError("model.output_mode='set' currently requires model.backbone.mode='shared'")
         return self
 
     def flatten_config(self, prefix=""):

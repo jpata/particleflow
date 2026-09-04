@@ -10,7 +10,7 @@ import torch
 import torch.utils.data
 
 from mlpf.logger import _logger
-from mlpf.conf import DatasetSamplerMode, MLPFConfig, dataset_input_type_id, dataset_source_id
+from mlpf.conf import DatasetSamplerMode, MLPFConfig, OutputMode, Y_FEATURES, dataset_input_type_id, dataset_source_id
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
@@ -30,7 +30,7 @@ except Exception as e:
 
 
 class TFDSDataSource:
-    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None, max_open_readers=None):
+    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None, max_open_readers=None, build_target_set=False):
         self.ds = ds
         tmp = self.ds.dataset_info
         self.ds.dataset_info = SimpleNamespace()
@@ -41,6 +41,7 @@ class TFDSDataSource:
         self.pad_to_multiple = pad_to_multiple
         self.feature_dim = feature_dim
         self.max_open_readers = max_open_readers
+        self.build_target_set = build_target_set
 
     def _close_extra_readers(self):
         # ArrayRecordDataSource caches one reader per shard file forever, so the
@@ -143,6 +144,29 @@ class TFDSDataSource:
             e = ret["X"][:, 5][msk_ho]
             ret["X"][:, 1][msk_ho] = np.sqrt(e**2 - (np.tanh(eta) * e) ** 2)
 
+        if self.build_target_set:
+            # Existing hit datasets store one full target row on an exclusive
+            # representative hit for every particle. Other related hits contain
+            # only particle_number, so nonzero class rows form the compact set.
+            target_rows = ret["ytarget"][:, 0] != 0
+            ytarget_set = ret["ytarget"][target_rows].copy()
+
+            particle_number_idx = Y_FEATURES.index("particle_number")
+            if ytarget_set.shape[1] > particle_number_idx and len(ytarget_set) > 0:
+                particle_numbers = ytarget_set[:, particle_number_idx]
+                # Some old datasets predate particle_number. If it is present,
+                # require the representative rows to be one-per-particle.
+                if np.any(particle_numbers != 0):
+                    if np.any(particle_numbers == 0) or len(np.unique(particle_numbers)) != len(particle_numbers):
+                        raise ValueError("Full ytarget rows must have unique, nonzero particle_number values in set mode")
+
+            # Set outputs have no input-object anchor. Train pt and energy in
+            # absolute log space instead of using the legacy log(target/input).
+            if len(ytarget_set) > 0:
+                ytarget_set[:, 2] = np.log(np.clip(ytarget_set[:, 2], 1e-8, None))
+                ytarget_set[:, 6] = np.log(np.clip(ytarget_set[:, 6], 1e-8, None))
+            ret["ytarget_set"] = ytarget_set
+
         # transform pt -> log(pt / elem pt), same for energy
         # where target does not exist, set to 0
         with np.errstate(divide="ignore"):
@@ -172,7 +196,18 @@ class TFDSDataSource:
 class PFDataset:
     """Builds a DataSource from tensorflow datasets."""
 
-    def __init__(self, data_dir, name, split, num_samples=None, sort=False, pad_to_multiple=512, feature_dim=None, max_open_readers=None):
+    def __init__(
+        self,
+        data_dir,
+        name,
+        split,
+        num_samples=None,
+        sort=False,
+        pad_to_multiple=512,
+        feature_dim=None,
+        max_open_readers=None,
+        build_target_set=False,
+    ):
         """
         Args
             data_dir: path to tensorflow_datasets (e.g. `../data/tensorflow_datasets/`)
@@ -198,6 +233,7 @@ class PFDataset:
             pad_to_multiple=pad_to_multiple,
             feature_dim=feature_dim,
             max_open_readers=max_open_readers,
+            build_target_set=build_target_set,
         )
 
         if num_samples and num_samples < len(self.ds):
@@ -214,6 +250,7 @@ class PFBatch:
         # write out the possible attributes here explicitly
         self.X = kwargs["X"]
         self.ytarget = kwargs.get("ytarget")
+        self.ytarget_set = kwargs.get("ytarget_set")
         self.ytarget_pt_orig = kwargs.get("ytarget_pt_orig", None)
         self.ytarget_e_orig = kwargs.get("ytarget_e_orig", None)
         self.pythia = kwargs.get("pythia", None)
@@ -224,6 +261,7 @@ class PFBatch:
         self.source_id = kwargs.get("source_id", None)
         self.input_type_id = kwargs.get("input_type_id", None)
         self.mask = self.X[:, :, 0] != 0
+        self.target_mask = self.ytarget_set[:, :, 0] != 0 if self.ytarget_set is not None else None
 
     def to(self, device, **kwargs):
         attrs = {}
@@ -668,6 +706,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                         pad_to_multiple=config.pad_to_multiple_elements,
                         feature_dim=config.input_dim,
                         max_open_readers=config.max_open_readers,
+                        build_target_set=config.model.output_mode == OutputMode.SET,
                     ).ds
 
                     if (rank == 0) or (rank == "cpu"):
@@ -695,10 +734,13 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
 
             # build dataloaders
             batch_size = physical_ds.batch_size * config.gpu_batch_multiplier
+            per_particle_keys = ["X", "ytarget"]
+            if config.model.output_mode == OutputMode.SET:
+                per_particle_keys.append("ytarget_set")
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(["X", "ytarget"], ["genmet", "source_id", "input_type_id"]),
+                collate_fn=Collater(per_particle_keys, ["genmet", "source_id", "input_type_id"]),
                 sampler=sampler,
                 num_workers=config.num_workers,
                 prefetch_factor=config.prefetch_factor,

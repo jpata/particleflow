@@ -16,6 +16,7 @@ except ImportError:
 
 from mlpf.model.hept import HEPTLayer, trunc_normal_
 from mlpf.model.heptv2 import HEPTv2Layer
+from mlpf.model.set_decoder import ParticleSetDecoder
 
 try:
     from flash_attn import flash_attn_varlen_func as _flash_attn_varlen_func
@@ -28,6 +29,7 @@ from mlpf.conf import (
     AttentionType,
     BackboneMode,
     ModelType,
+    OutputMode,
     InputEncoding,
     LearnedRepresentationMode,
     RegressionMode,
@@ -1136,6 +1138,7 @@ class MLPF(nn.Module):
         super(MLPF, self).__init__()
 
         self.config = config.model
+        self.output_mode = OutputMode(self.config.output_mode)
         self.is_hit_dataset = config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS)
         self.raw_input_dim = config.input_dim
         hit_feature_config = config.model.hit_feature_engineering
@@ -1384,7 +1387,7 @@ class MLPF(nn.Module):
         self.classification_norm = torch.nn.LayerNorm(decoding_dim) if self.use_pre_layernorm else None
         self.regression_norm = torch.nn.LayerNorm(decoding_dim) if self.use_pre_layernorm else None
 
-        if self.task_queries and not self.use_split_backbone:
+        if self.task_queries and not self.use_split_backbone and self.output_mode == OutputMode.ELEMENTWISE:
             self.classification_query = nn.Parameter(torch.zeros(1, 1, decoding_dim), requires_grad=True)
             self.regression_query = nn.Parameter(torch.zeros(1, 1, decoding_dim), requires_grad=True)
             trunc_normal_(self.classification_query, std=0.02)
@@ -1422,14 +1425,25 @@ class MLPF(nn.Module):
             self.classification_readout = None
             self.regression_readout = None
 
-        self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, head_dropout_ff)
-        self.nn_pid = ffn(decoding_dim, self.num_classes, width, self.act, head_dropout_ff)
+        self.set_decoder = None
+        self.nn_binary_particle = None
+        self.nn_pid = None
+        self.nn_pt = None
+        self.nn_eta = None
+        self.nn_sin_phi = None
+        self.nn_cos_phi = None
+        self.nn_energy = None
+        if self.output_mode == OutputMode.SET:
+            self.set_decoder = ParticleSetDecoder(decoding_dim, self.num_classes, self.config.set_decoder)
+        else:
+            self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, head_dropout_ff)
+            self.nn_pid = ffn(decoding_dim, self.num_classes, width, self.act, head_dropout_ff)
 
-        self.nn_pt = RegressionOutput(pt_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
-        self.nn_eta = RegressionOutput(eta_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
-        self.nn_sin_phi = RegressionOutput(sin_phi_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
-        self.nn_cos_phi = RegressionOutput(cos_phi_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
-        self.nn_energy = RegressionOutput(energy_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
+            self.nn_pt = RegressionOutput(pt_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
+            self.nn_eta = RegressionOutput(eta_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
+            self.nn_sin_phi = RegressionOutput(sin_phi_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
+            self.nn_cos_phi = RegressionOutput(cos_phi_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
+            self.nn_energy = RegressionOutput(energy_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
         _logger.info("Output DNNs initialization took {:.2f}s".format(time.time() - t0))
 
         _logger.info("backbone_mode={}".format(self.backbone_mode))
@@ -1452,13 +1466,15 @@ class MLPF(nn.Module):
         _logger.info(
             "regression_readout parameters: {}".format(count_parameters(self.regression_readout) if self.regression_readout is not None else 0)
         )
-        _logger.info("nn_binary_particle parameters: {}".format(count_parameters(self.nn_binary_particle)))
-        _logger.info("nn_pid parameters: {}".format(count_parameters(self.nn_pid)))
-        _logger.info("nn_pt parameters: {}".format(count_parameters(self.nn_pt)))
-        _logger.info("nn_eta parameters: {}".format(count_parameters(self.nn_eta)))
-        _logger.info("nn_sin_phi parameters: {}".format(count_parameters(self.nn_sin_phi)))
-        _logger.info("nn_cos_phi parameters: {}".format(count_parameters(self.nn_cos_phi)))
-        _logger.info("nn_energy parameters: {}".format(count_parameters(self.nn_energy)))
+        _logger.info("output_mode={}".format(self.output_mode.value))
+        _logger.info("set_decoder parameters: {}".format(count_parameters(self.set_decoder) if self.set_decoder is not None else 0))
+        _logger.info("nn_binary_particle parameters: {}".format(count_parameters(self.nn_binary_particle) if self.nn_binary_particle is not None else 0))
+        _logger.info("nn_pid parameters: {}".format(count_parameters(self.nn_pid) if self.nn_pid is not None else 0))
+        _logger.info("nn_pt parameters: {}".format(count_parameters(self.nn_pt) if self.nn_pt is not None else 0))
+        _logger.info("nn_eta parameters: {}".format(count_parameters(self.nn_eta) if self.nn_eta is not None else 0))
+        _logger.info("nn_sin_phi parameters: {}".format(count_parameters(self.nn_sin_phi) if self.nn_sin_phi is not None else 0))
+        _logger.info("nn_cos_phi parameters: {}".format(count_parameters(self.nn_cos_phi) if self.nn_cos_phi is not None else 0))
+        _logger.info("nn_energy parameters: {}".format(count_parameters(self.nn_energy) if self.nn_energy is not None else 0))
         _logger.info("Total MLPF parameters: {}".format(count_parameters(self)))
         _logger.info("MLPF __init__ done")
 
@@ -1758,6 +1774,9 @@ class MLPF(nn.Module):
 
     # @torch.compile
     def forward(self, X_features, mask):
+        if self.output_mode == OutputMode.SET:
+            return self.set_decoder(self.encode_backbone(X_features, mask), mask)
+
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_split_backbone:
             x_id = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
@@ -1819,14 +1838,18 @@ class MLPF(nn.Module):
         from mlpf.model.utils import unpack_predictions
 
         ypred_raw = self.forward(X_features, mask)
-        ypred_raw = tuple([y.to(torch.float32) for y in ypred_raw])
+        ypred_raw = [y.to(torch.float32) for y in ypred_raw]
 
-        # transform log (pt/elempt) -> pt
-        ypred_raw[2][..., 0] = torch.exp(ypred_raw[2][..., 0]) * X_features[..., 1]
-        # transform log (E/elemE) -> E
-        ypred_raw[2][..., 4] = torch.exp(ypred_raw[2][..., 4]) * X_features[..., 5]
+        if self.output_mode == OutputMode.SET:
+            ypred_raw[2][..., 0] = torch.exp(ypred_raw[2][..., 0].clamp(-20.0, 20.0))
+            ypred_raw[2][..., 4] = torch.exp(ypred_raw[2][..., 4].clamp(-20.0, 20.0))
+        else:
+            # transform log (pt/elempt) -> pt
+            ypred_raw[2][..., 0] = torch.exp(ypred_raw[2][..., 0]) * X_features[..., 1]
+            # transform log (E/elemE) -> E
+            ypred_raw[2][..., 4] = torch.exp(ypred_raw[2][..., 4]) * X_features[..., 5]
 
-        ypred = unpack_predictions(ypred_raw)
+        ypred = unpack_predictions(tuple(ypred_raw))
         ypred["ispu"] = torch.softmax(ypred["ispu"], axis=-1)[:, :, -1]
 
         # By default, use standard argmax

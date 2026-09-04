@@ -5,54 +5,52 @@ export PF_SITE=local
 
 SPEC_FILE=${SPEC_FILE:-particleflow_spec.yaml}
 USE_LOCAL_AVAILABLE_SPEC=${USE_LOCAL_AVAILABLE_SPEC:-true}
-LOCAL_SPEC_FILE=${LOCAL_SPEC_FILE:-/tmp/particleflow_local_available_spec.yaml}
-TARGETS=${TARGETS:-cld-hits}
-DATA_CONFIG=${DATA_CONFIG:-1}
+LOCAL_SPEC_FILE=${LOCAL_SPEC_FILE:-/tmp/particleflow_local_ttbar_comparison_spec.yaml}
+OUTPUT_MODES=${OUTPUT_MODES:-elementwise,set}
+HIT_VERSION=${HIT_VERSION:-3.2.1}
+HIT_SPLITS=${HIT_SPLITS:-1}
+DATA_CONFIG=${DATA_CONFIG:-${HIT_SPLITS// /,}}
 
 NUM_STEPS=${NUM_STEPS:-2000}
-VAL_FREQ=${VAL_FREQ:-1000}
-CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-1000}
-GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-4}
+VAL_FREQ=${VAL_FREQ:-200}
+CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-200}
+NVALID=${NVALID:-100}
+NTEST=${NTEST:-100}
+GPU_BATCH_MULTIPLIER=${GPU_BATCH_MULTIPLIER:-8}
 NUM_WORKERS=${NUM_WORKERS:-8}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-4}
 VALIDATION_DIAGNOSTICS_BATCHES=${VALIDATION_DIAGNOSTICS_BATCHES:-4}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
-NUM_TRACKER_LAYERS=${NUM_TRACKER_LAYERS:-2}
-NUM_CALO_LAYERS=${NUM_CALO_LAYERS:-2}
-NUM_COMMON_LAYERS=${NUM_COMMON_LAYERS:-2}
+PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-128}
 
-IFS=',' read -r -a TARGET_LIST <<< "$TARGETS"
+IFS=',' read -r -a OUTPUT_MODE_LIST <<< "$OUTPUT_MODES"
+read -r -a HIT_SPLIT_LIST <<< "$HIT_SPLITS"
 
 if [[ "$USE_LOCAL_AVAILABLE_SPEC" == "true" ]]; then
-  uv run python3 scripts/local/make_local_available_spec.py "$SPEC_FILE" "$LOCAL_SPEC_FILE"
+  uv run python3 scripts/local/make_local_available_spec.py \
+    "$SPEC_FILE" "$LOCAL_SPEC_FILE" \
+    --hit-version "$HIT_VERSION" \
+    --hit-splits "${HIT_SPLIT_LIST[@]}"
   SPEC_FILE="$LOCAL_SPEC_FILE"
 fi
 
-set_target() {
-  local target=$1
-  case "$target" in
-    cld-hits)
+PRODUCTION_NAME=cld
+DATA_DIR=${DATA_DIR:-$(uv run python3 scripts/get_param.py "$SPEC_FILE" productions."$PRODUCTION_NAME".workspace_dir)/tfds/}
+
+set_output_mode() {
+  local output_mode=$1
+  case "$output_mode" in
+    elementwise)
       MODEL_NAME=pyg-cld-hits-v1
-      PRODUCTION_NAME=cld
       ;;
-    clic-hits)
-      MODEL_NAME=pyg-clic-hits-v1
-      PRODUCTION_NAME=clic
-      ;;
-    cld-pf)
-      MODEL_NAME=pyg-cld-v1
-      PRODUCTION_NAME=cld
-      ;;
-    clic-pf)
-      MODEL_NAME=pyg-clic-v1
-      PRODUCTION_NAME=clic
+    set)
+      MODEL_NAME=pyg-cld-hits-set-v1
       ;;
     *)
-      echo "Unknown target '$target'. Valid targets: cld-hits, clic-hits, cld-pf, clic-pf" >&2
+      echo "Unknown output mode '$output_mode'. Valid modes: elementwise, set" >&2
       exit 1
       ;;
   esac
-  DATA_DIR=$(python3 scripts/get_param.py "$SPEC_FILE" productions."$PRODUCTION_NAME".workspace_dir)/tfds/
 }
 
 make_common_args() {
@@ -68,37 +66,27 @@ make_common_args() {
     --val_freq "$VAL_FREQ"
     --checkpoint_freq "$CHECKPOINT_FREQ"
     --num_steps "$NUM_STEPS"
+    --nvalid "$NVALID"
+    --ntest "$NTEST"
     --num_workers "$NUM_WORKERS"
     --prefetch_factor "$PREFETCH_FACTOR"
     --sampler_mode interleaved-shards
     --validation_diagnostics_batches "$VALIDATION_DIAGNOSTICS_BATCHES"
     --make_plots
-    --model.attention.use_jagged_attention false
-    --pad_to_multiple_elements 100
+    --pad_to_multiple_elements "$PAD_TO_MULTIPLE_ELEMENTS"
   )
 }
 
-run_detector_scenario() {
-  local target=$1
-  if [[ "$target" != "cld-hits" && "$target" != "clic-hits" ]]; then
-    echo "Detector-specific training is only valid for cld-hits and clic-hits" >&2
-    exit 1
-  fi
-  local num_detector_layers=$((NUM_TRACKER_LAYERS + NUM_CALO_LAYERS + NUM_COMMON_LAYERS))
+run_comparison_training() {
+  local output_mode=$1
+  echo "Starting CLD ttbar hit training with output_mode=$output_mode model=$MODEL_NAME"
   uv run python3 mlpf/pipeline.py \
-    --prefix "${target}_detector-backbone_" \
-    "${COMMON_ARGS[@]}" \
-    --model.backbone.mode shared \
-    --model.backbone.num_convs "$num_detector_layers" \
-    --model.backbone.num_tracker_layers "$NUM_TRACKER_LAYERS" \
-    --model.backbone.num_calo_layers "$NUM_CALO_LAYERS" \
-    --model.backbone.num_common_layers "$NUM_COMMON_LAYERS" \
-    --model.attention.use_jagged_attention true \
-    --model.task_queries false
+    --prefix "ttbar-${output_mode}_" \
+    "${COMMON_ARGS[@]}"
 }
 
-for target in "${TARGET_LIST[@]}"; do
-  set_target "$target"
+for output_mode in "${OUTPUT_MODE_LIST[@]}"; do
+  set_output_mode "$output_mode"
   make_common_args
-  run_detector_scenario "$target"
+  run_comparison_training "$output_mode"
 done

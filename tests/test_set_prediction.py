@@ -1,0 +1,234 @@
+import pytest
+import torch
+
+from mlpf.conf import MLPFConfig
+from mlpf.model.PFDataset import PFBatch
+from mlpf.model.mlpf import MLPF
+from mlpf.model.set_losses import hungarian_match, set_event_loss
+from mlpf.model.utils import unpack_predictions, unpack_target
+
+
+REGRESSION_WEIGHTS = {
+    feature: 1.0 for feature in ("pt", "eta", "sin_phi", "cos_phi", "energy")
+}
+
+
+def make_config(num_slots=4):
+    return MLPFConfig.model_validate(
+        {
+            "dataset": "cld_hits",
+            "data_dir": "/tmp",
+            "model": {
+                "type": "heptv2",
+                "output_mode": "set",
+                "input_encoding": "joint",
+                "heptv2": {
+                    "num_convs": 0,
+                    "num_heads": 2,
+                    "embedding_dim": 16,
+                    "width": 16,
+                    "block_size": 8,
+                },
+                "set_decoder": {
+                    "num_slots": num_slots,
+                    "num_layers": 2,
+                    "num_heads": 2,
+                },
+                "hit_feature_engineering": {"enabled": False},
+            },
+            "conv_type": "heptv2",
+        }
+    )
+
+
+def make_target_tensor(batch_size=1, num_targets=2):
+    target = torch.zeros(batch_size, num_targets, 14)
+    phi = torch.linspace(-torch.pi, torch.pi, num_targets + 1)[:-1]
+    pt = torch.linspace(1.0, 20.0, num_targets)
+    target[..., 0] = (torch.arange(num_targets) % 5) + 1
+    target[..., 2] = torch.log(pt)
+    target[..., 3] = torch.linspace(-2.0, 2.0, num_targets)
+    target[..., 4] = torch.sin(phi)
+    target[..., 5] = torch.cos(phi)
+    target[..., 6] = torch.log(pt + 2.0)
+    target[..., 13] = torch.arange(1, num_targets + 1)
+    return target
+
+
+def test_set_config_populates_decoder_defaults():
+    config = MLPFConfig.model_validate(
+        {
+            "dataset": "cld_hits",
+            "data_dir": "/tmp",
+            "model": {"type": "heptv2", "output_mode": "set", "heptv2": {}},
+            "conv_type": "heptv2",
+        }
+    )
+
+    assert config.model.set_decoder is not None
+    assert config.model.set_decoder.num_slots == 256
+
+
+def test_set_config_rejects_non_hit_datasets():
+    with pytest.raises(ValueError, match="supported only for CLD/CLIC hit datasets"):
+        MLPFConfig.model_validate(
+            {
+                "dataset": "cld",
+                "data_dir": "/tmp",
+                "model": {"type": "heptv2", "output_mode": "set", "heptv2": {}},
+                "conv_type": "heptv2",
+            }
+        )
+
+
+def test_set_model_output_axis_is_num_slots():
+    config = make_config(num_slots=4)
+    model = MLPF(config)
+    X = torch.randn(2, 11, config.input_dim)
+    X[..., 0] = 1
+    X[..., 1] = X[..., 1].abs() + 0.1
+    X[..., 5] = X[..., 5].abs() + 0.1
+    mask = torch.ones(2, 11, dtype=torch.bool)
+    mask[1, 7:] = False
+
+    presence, pid, momentum, pileup = model(X, mask)
+
+    assert presence.shape == (2, 4, 2)
+    assert pid.shape == (2, 4, config.num_classes)
+    assert momentum.shape == (2, 4, 5)
+    assert pileup.shape == (2, 4, 2)
+    torch.testing.assert_close(
+        torch.linalg.vector_norm(momentum[..., 2:4], dim=-1), torch.ones(2, 4)
+    )
+
+
+def test_hungarian_match_finds_permuted_particles():
+    ytarget_tensor = make_target_tensor()
+    targets = unpack_target(ytarget_tensor, None)
+    predictions = {
+        "cls_binary": torch.tensor([[[-5.0, 5.0], [-5.0, 5.0]]]),
+        "cls_id_onehot": torch.tensor(
+            [[[-5.0, -5.0, 5.0, -5.0, -5.0, -5.0], [-5.0, 5.0, -5.0, -5.0, -5.0, -5.0]]]
+        ),
+        "pt": targets["pt"].flip(1),
+        "eta": targets["eta"].flip(1),
+        "sin_phi": targets["sin_phi"].flip(1),
+        "cos_phi": targets["cos_phi"].flip(1),
+        "energy": targets["energy"].flip(1),
+    }
+
+    matches = hungarian_match(targets, predictions, torch.ones(1, 2, dtype=torch.bool))
+
+    slot_indices, target_indices = matches[0]
+    assert slot_indices.tolist() == [0, 1]
+    assert target_indices.tolist() == [1, 0]
+
+
+def test_set_loss_is_target_permutation_invariant():
+    torch.manual_seed(3)
+    target_tensor = make_target_tensor()
+    batch = PFBatch(X=torch.ones(1, 5, 15), ytarget_set=target_tensor)
+    predictions = {
+        "cls_binary": torch.randn(1, 4, 2, requires_grad=True),
+        "cls_id_onehot": torch.randn(1, 4, 6, requires_grad=True),
+        "pt": torch.randn(1, 4, requires_grad=True),
+        "eta": torch.randn(1, 4, requires_grad=True),
+        "sin_phi": torch.randn(1, 4, requires_grad=True),
+        "cos_phi": torch.randn(1, 4, requires_grad=True),
+        "energy": torch.randn(1, 4, requires_grad=True),
+    }
+    targets = unpack_target(target_tensor, None)
+    losses, _ = set_event_loss(
+        targets, predictions, batch.target_mask, REGRESSION_WEIGHTS
+    )
+
+    permutation = torch.tensor([1, 0])
+    permuted_tensor = target_tensor[:, permutation]
+    permuted_targets = unpack_target(permuted_tensor, None)
+    permuted_mask = permuted_tensor[..., 0] != 0
+    permuted_losses, _ = set_event_loss(
+        permuted_targets, predictions, permuted_mask, REGRESSION_WEIGHTS
+    )
+
+    for key in losses:
+        torch.testing.assert_close(losses[key], permuted_losses[key])
+    sum(losses.values()).backward()
+    assert predictions["cls_binary"].grad is not None
+
+
+def test_set_loss_rejects_target_overflow():
+    targets_tensor = make_target_tensor(num_targets=2)
+    targets = unpack_target(targets_tensor, None)
+    predictions = {
+        "cls_binary": torch.zeros(1, 1, 2),
+        "cls_id_onehot": torch.zeros(1, 1, 6),
+        "pt": torch.zeros(1, 1),
+        "eta": torch.zeros(1, 1),
+        "sin_phi": torch.zeros(1, 1),
+        "cos_phi": torch.ones(1, 1),
+        "energy": torch.zeros(1, 1),
+    }
+
+    with pytest.raises(ValueError, match="2 targets.*1 slots"):
+        hungarian_match(targets, predictions, torch.ones(1, 2, dtype=torch.bool))
+
+
+def test_set_loss_supports_an_event_without_targets():
+    target_tensor = torch.zeros(1, 0, 14)
+    batch = PFBatch(X=torch.ones(1, 3, 15), ytarget_set=target_tensor)
+    targets = unpack_target(target_tensor, None)
+    predictions = {
+        "cls_binary": torch.randn(1, 4, 2, requires_grad=True),
+        "cls_id_onehot": torch.randn(1, 4, 6, requires_grad=True),
+        "pt": torch.randn(1, 4, requires_grad=True),
+        "eta": torch.randn(1, 4, requires_grad=True),
+        "sin_phi": torch.randn(1, 4, requires_grad=True),
+        "cos_phi": torch.randn(1, 4, requires_grad=True),
+        "energy": torch.randn(1, 4, requires_grad=True),
+    }
+
+    losses, matches = set_event_loss(
+        targets, predictions, batch.target_mask, REGRESSION_WEIGHTS
+    )
+    loss = sum(losses.values())
+    loss.backward()
+
+    assert torch.isfinite(loss)
+    assert matches[0][0].numel() == 0
+    assert losses["Classification"] == 0
+    assert losses["Regression_pt"] == 0
+
+
+def test_predict_particles_restores_absolute_set_kinematics():
+    model = MLPF(make_config(num_slots=3)).eval()
+    X = torch.ones(1, 6, 15)
+    with torch.no_grad():
+        prediction = model.predict_particles(X, torch.ones(1, 6, dtype=torch.bool))
+
+    assert prediction["pt"].shape == (1, 3)
+    assert prediction["energy"].shape == (1, 3)
+    assert torch.all(prediction["pt"] >= 0)
+    assert torch.all(prediction["energy"] >= 0)
+
+
+def test_set_model_10k_inputs_forward_backward():
+    torch.manual_seed(7)
+    config = make_config(num_slots=256)
+    model = MLPF(config)
+    X = torch.randn(1, 10_000, config.input_dim)
+    X[..., 0] = 1
+    X[..., 1] = X[..., 1].abs() + 0.1
+    X[..., 5] = X[..., 5].abs() + 0.1
+    target_tensor = make_target_tensor(num_targets=100)
+    batch = PFBatch(X=X, ytarget_set=target_tensor)
+
+    raw_predictions = model(batch.X, batch.mask)
+    predictions = unpack_predictions(raw_predictions)
+    targets = unpack_target(batch.ytarget_set, model)
+    losses, _ = set_event_loss(targets, predictions, batch.target_mask, REGRESSION_WEIGHTS)
+    loss = sum(losses.values())
+    loss.backward()
+
+    assert torch.isfinite(loss)
+    assert model.set_decoder.queries.grad is not None
+    assert torch.isfinite(model.set_decoder.queries.grad).all()
