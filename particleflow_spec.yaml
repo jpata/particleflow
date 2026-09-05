@@ -407,6 +407,7 @@ models:
     optimizer: lamb
     lr_schedule: cosinedecay
     dtype: bfloat16
+    seed: 12345
     load: null
     num_steps: 100000
     comet: false
@@ -589,22 +590,25 @@ models:
         version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
-  pyg-cld-hits-v1:
+  pyg-cld-hits-v1: &pyg_cld_hits_v1
     <<: *defaults
     dataset: cld_hits
-    gpu_batch_multiplier: 12
+    gpu_batch_multiplier: 1
+    pad_to_multiple_elements: 128
 
     hyperparameters:
       batch_size: 1
       lr: 0.0001
 
-    architecture:
+    architecture: &pyg_cld_hits_architecture
       type: "attention"
       input_encoding: "split"
+      output_mode: "elementwise"
       attention:
         num_convs: 3
         head_dim: 16
         num_heads: 16
+        use_jagged_attention: true
 
     # Dataset Selection
     train_datasets:
@@ -645,6 +649,25 @@ models:
       - name: "cld_edm_qq_hits"
         version: "3.2.1"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  pyg-cld-hits-set-v1:
+    <<: *pyg_cld_hits_v1
+    gpu_batch_multiplier: 1
+    pad_to_multiple_elements: 128
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0001
+
+    architecture:
+      <<: *pyg_cld_hits_architecture
+      output_mode: "set"
+      set_decoder:
+        num_slots: 256
+        num_layers: 2
+        num_heads: 8
+        ffn_multiplier: 4.0
+        dropout: 0.0
 
   # CLIC Model
   pyg-clic-v1:

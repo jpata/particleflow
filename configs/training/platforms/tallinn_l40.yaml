@@ -1,0 +1,20 @@
+name: tallinn_l40
+gpus: 2
+data_dir: /local/${USER}/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
+experiments_dir: /home/${USER}/particleflow/experiments
+environment:
+  PF_SITE: tallinn
+runtime_overrides:
+  dtype: bfloat16
+  num_workers: 4
+  prefetch_factor: 2
+  model.attention.use_flash_attn_varlen: false
+slurm:
+  partition: gpu
+  time: "24:00:00"
+  nodes: 1
+  tasks_per_node: 1
+  cpus_per_task: 8
+  gpu_request: gres
+  gpu_type: l40
+  memory_per_gpu: 80G

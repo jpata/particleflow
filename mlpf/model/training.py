@@ -32,6 +32,7 @@ Key Functions:
 
 import os
 import os.path as osp
+import random
 import time
 import logging
 from pathlib import Path
@@ -86,11 +87,23 @@ from mlpf.model.losses import (
     mlpf_loss,
     particle_loss,
 )
+from mlpf.model.set_losses import SetMatcherWeights, set_mlpf_loss
+from mlpf.model.validation_metrics import compute_validation_particle_metrics, validation_particle_collections
 from mlpf.utils import create_comet_experiment
-from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, SOURCE_LABELS
+from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
 
 UNIT_REGRESSION_WEIGHTS = {feature: 1.0 for feature in REGRESSION_FEATURES}
+
+
+def seed_everything(seed):
+    """Seed Python, NumPy, and PyTorch RNGs for the current process."""
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def _domain_label(source_id, input_type_id):
@@ -115,8 +128,10 @@ def _log_batch_composition(batch, tensorboard_writer, step, prefix):
     tensorboard_writer.add_scalar(f"{prefix}/valid_elements_mean", valid_counts.float().mean().item(), step)
     tensorboard_writer.add_scalar(f"{prefix}/valid_elements_max", valid_counts.max().item(), step)
 
-    if batch.ytarget is not None:
-        target_counts = ((batch.ytarget[..., 0] != 0) & batch.mask).sum(dim=1).detach().to("cpu")
+    target_values = batch.ytarget_set if batch.target_mask is not None else batch.ytarget
+    target_valid = batch.target_mask if batch.target_mask is not None else batch.mask
+    if target_values is not None:
+        target_counts = ((target_values[..., 0] != 0) & target_valid).sum(dim=1).detach().to("cpu")
         tensorboard_writer.add_scalar(f"{prefix}/target_particles_mean", target_counts.float().mean().item(), step)
         tensorboard_writer.add_scalar(f"{prefix}/target_particles_max", target_counts.max().item(), step)
 
@@ -131,7 +146,7 @@ def _log_batch_composition(batch, tensorboard_writer, step, prefix):
 
 
 def _add_accumulator(accum, key, value, count=1.0):
-    if count <= 0:
+    if count < 0:
         return
     if key not in accum:
         accum[key] = [torch.zeros((), device=value.device, dtype=torch.float32), torch.zeros((), device=value.device, dtype=torch.float32)]
@@ -203,10 +218,31 @@ def _get_task_loss_weighter(model):
     return getattr(model_module, "task_loss_weighter", None)
 
 
+def _set_loss_kwargs(model_module):
+    config = model_module.config.set_decoder
+    auxiliary_predictions = [unpack_predictions(prediction) for prediction in model_module.set_decoder.auxiliary_outputs]
+    return {
+        "matcher_weights": SetMatcherWeights(**config.matcher.model_dump()),
+        "no_object_weight": config.no_object_weight,
+        "cardinality_loss_weight": config.cardinality_loss_weight,
+        "auxiliary_predictions": auxiliary_predictions,
+        "auxiliary_loss_weight": config.auxiliary_loss_weight,
+    }
+
+
 def _format_task_diagnostic(task_diagnostic):
     if not task_diagnostic:
         return ""
     return " | ".join(f"{name}: {value:.4f}" for name, value in sorted(task_diagnostic.items()))
+
+
+def _log_validation_results_to_tensorboard(tensorboard_writer, validation_results, step):
+    for name, value in validation_results.items():
+        if name.startswith("metrics/"):
+            tag = f"validation/{name.removeprefix('metrics/')}"
+        else:
+            tag = f"step/loss_{name}"
+        tensorboard_writer.add_scalar(tag, value, step)
 
 
 def _format_compact_diagnostic(values, keys):
@@ -316,9 +352,20 @@ def model_step(batch, model, loss_fn, regression_weights):
     _logger.debug(f"model_step X={batch.X.shape}")
     ypred_raw = model(batch.X, batch.mask)
     ypred = unpack_predictions(ypred_raw)
-    ytarget = unpack_target(batch.ytarget, model)
-
-    loss_opt, losses_detached, task_loss_diagnostics = loss_fn(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
+    model_module = model.module if hasattr(model, "module") else model
+    if model_module.output_mode == OutputMode.SET:
+        ytarget = unpack_target(batch.ytarget_set, model_module)
+        loss_opt, losses_detached, task_loss_diagnostics = set_mlpf_loss(
+            ytarget,
+            ypred,
+            batch,
+            regression_weights,
+            _get_task_loss_weighter(model),
+            **_set_loss_kwargs(model_module),
+        )
+    else:
+        ytarget = unpack_target(batch.ytarget, model_module)
+        loss_opt, losses_detached, task_loss_diagnostics = loss_fn(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
     return loss_opt, losses_detached, task_loss_diagnostics, ypred_raw, ypred, ytarget
 
 
@@ -424,8 +471,20 @@ def train_step(
     phase_start = time.perf_counter()
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
         ypred = unpack_predictions(ypred_raw)
-        ytarget = unpack_target(batch.ytarget, model)
-        loss_opt, loss, task_loss_diagnostics = mlpf_loss(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
+        model_module = model.module if hasattr(model, "module") else model
+        if model_module.output_mode == OutputMode.SET:
+            ytarget = unpack_target(batch.ytarget_set, model_module)
+            loss_opt, loss, task_loss_diagnostics = set_mlpf_loss(
+                ytarget,
+                ypred,
+                batch,
+                regression_weights,
+                _get_task_loss_weighter(model),
+                **_set_loss_kwargs(model_module),
+            )
+        else:
+            ytarget = unpack_target(batch.ytarget, model_module)
+            loss_opt, loss, task_loss_diagnostics = mlpf_loss(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
     phase_start = _record_phase_time_if_enabled(diagnostics.get("time", {}), "loss", phase_start, device_type, log_this_step)
     if log_this_step:
         _collect_step_memory(rank, "after_loss", diagnostics)
@@ -723,11 +782,31 @@ def evaluate(
 
                 model_module = model.module if hasattr(model, "module") else model
                 ypred_particles = model_module.predict_particles(batch.X, batch.mask)
+                metric_collections = validation_particle_collections(
+                    batch,
+                    ypred_particles,
+                    model_module.output_mode,
+                )
+                particle_metrics = compute_validation_particle_metrics(
+                    *metric_collections,
+                    num_classes=config.num_classes,
+                )
+                for metric_name, (metric_total, metric_count) in particle_metrics.items():
+                    _add_accumulator(
+                        diagnostic_accum,
+                        f"metrics/particle/{metric_name}",
+                        torch.as_tensor(metric_total, device=batch.X.device),
+                        count=metric_count,
+                    )
 
-                if ival == 0 and (rank == 0 or rank == "cpu"):
+                if model_module.output_mode == OutputMode.ELEMENTWISE and ival == 0 and (rank == 0 or rank == "cpu"):
                     print_event_table(batch, ytarget, ypred_particles, config)
 
-                if config.validation_diagnostics_batches > 0 and ival < config.validation_diagnostics_batches:
+                if (
+                    model_module.output_mode == OutputMode.ELEMENTWISE
+                    and config.validation_diagnostics_batches > 0
+                    and ival < config.validation_diagnostics_batches
+                ):
                     _accumulate_domain_losses_and_stats(
                         batch,
                         ytarget,
@@ -737,7 +816,7 @@ def evaluate(
                     )
 
         # Save validation plots for first batch
-        if (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
+        if model_module.output_mode == OutputMode.ELEMENTWISE and (rank == 0 or rank == "cpu") and ival == 0 and config.make_plots:
             validation_plots(batch, ypred_raw, ytarget, ypred, tensorboard_writer, step, outdir)
 
         # Accumulate losses
@@ -911,8 +990,7 @@ def _run_validation_cycle(
             stale_steps += 1
 
         # Log validation losses to TensorBoard
-        for loss, value in losses_valid.items():
-            tensorboard_writer_valid.add_scalar(f"step/loss_{loss}", value, step)
+        _log_validation_results_to_tensorboard(tensorboard_writer_valid, losses_valid, step)
 
         # Save step statistics to a JSON file
         history_path = Path(outdir) / "history"
@@ -1234,6 +1312,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
             pad_to_multiple=config.pad_to_multiple_elements,
             feature_dim=config.input_dim,
             max_open_readers=config.max_open_readers,
+            build_target_set=config.model.output_mode == OutputMode.SET,
         ).ds
         dataset.append(ds)
     ds = torch.utils.data.ConcatDataset(dataset)
@@ -1242,16 +1321,21 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         _logger.info(f"test_dataset: {sample}, {len(ds)}", color="blue")
 
     if world_size > 1:
-        sampler = torch.utils.data.distributed.DistributedSampler(ds, shuffle=False)
+        sampler = torch.utils.data.distributed.DistributedSampler(ds, shuffle=False, seed=config.seed)
     else:
         sampler = torch.utils.data.SequentialSampler(ds)
 
     vals_for_test = ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"]
+    if config.model.output_mode == OutputMode.SET:
+        vals_for_test.append("ytarget_set")
 
     # pythia branch was introduced for cms in version 2.8.0
     if sample.startswith("cms_") and version and Version(version) >= Version("2.8.0"):
         vals_for_test += ["pythia"]
 
+    test_loader_generator = torch.Generator()
+    rank_index = int(rank) if isinstance(rank, int) else 0
+    test_loader_generator.manual_seed(config.seed + 10_000 * rank_index + 2000)
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
@@ -1259,6 +1343,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         sampler=sampler,
         num_workers=config.num_workers,
         prefetch_factor=config.prefetch_factor,
+        generator=test_loader_generator,
         # pin_memory=use_cuda,
         # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
     )
@@ -1295,6 +1380,12 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
     _configLogger("mlpf", rank, filename=f"{logfile}.{rank}", loglevel=loglevel)
 
     use_cuda = rank != "cpu"
+    rank_index = int(rank) if isinstance(rank, int) else 0
+
+    # All ranks initialize the same model. After DDP synchronizes parameters,
+    # use rank-specific streams for stochastic layers and data workers.
+    seed_everything(config.seed)
+    _logger.info(f"Initializing model with seed={config.seed}; process seed={config.seed + rank_index}")
 
     dtype = getattr(torch, config.dtype)
     _logger.info("configured dtype={} for autocast".format(dtype))
@@ -1387,6 +1478,8 @@ def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfi
         _logger.info("Configured model for SyncBatchNorm rank={}".format(rank))
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
         _logger.info("Configured model for DistributedDataParallel rank={}".format(rank))
+
+    seed_everything(config.seed + rank_index)
 
     trainable_params, nontrainable_params, table = count_parameters(model)
     _logger.info(str(table))

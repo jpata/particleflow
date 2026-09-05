@@ -26,6 +26,67 @@ class TestDataloaderRestoration(unittest.TestCase):
         shutil.rmtree(self.tempdir)
 
     @patch("mlpf.model.PFDataset.PFDataset")
+    def test_validation_keeps_partial_per_rank_batch(self, MockPFDataset):
+        """A small nvalid must still produce a batch on every distributed rank."""
+        mock_pf_instance = MockPFDataset.return_value
+        mock_pf_instance.ds = MockDictDataset(
+            size=100,
+            keys=("X", "ytarget", "genmet"),
+            shapes=((1, 2), (1, 2), (1,)),
+        )
+
+        config = MLPFConfig.model_validate(
+            {
+                "dataset": "cms",
+                "data_dir": "/tmp/dummy_data",
+                "model": {"type": "attention", "attention": {"num_convs": 2}},
+                "conv_type": "attention",
+                "train_dataset": {
+                    "cms": {
+                        "physical": {
+                            "batch_size": 1,
+                            "samples": {"sample1": {"version": "1.0.0", "splits": ["split1"]}},
+                        }
+                    }
+                },
+                "valid_dataset": {
+                    "cms": {
+                        "physical": {
+                            "batch_size": 1,
+                            "samples": {"sample1": {"version": "1.0.0", "splits": ["split1"]}},
+                        }
+                    }
+                },
+                "ntrain": 100,
+                "nvalid": 100,
+                "num_workers": 1,
+                "prefetch_factor": 2,
+                "sort_data": False,
+                "pad_to_multiple_elements": None,
+                "gpu_batch_multiplier": 64,
+                "sampler_mode": "interleaved-shards",
+            }
+        )
+
+        loaders, _ = get_interleaved_dataloaders(
+            world_size=8,
+            rank=2,
+            config=config,
+            use_cuda=False,
+            use_ray=False,
+            shuffle_train=False,
+        )
+
+        train_data_loader = loaders["train"].data_loader.data_loaders[0]
+        valid_loader = loaders["valid"]
+        valid_data_loader = valid_loader.data_loaders[0]
+
+        self.assertTrue(train_data_loader.drop_last)
+        self.assertFalse(valid_data_loader.drop_last)
+        self.assertEqual(len(valid_loader), 1)
+        self.assertEqual(next(iter(valid_loader)).X.shape[0], 13)
+
+    @patch("mlpf.model.PFDataset.PFDataset")
     def test_restoration(self, MockPFDataset):
         """Ensures that the dataloader state is correctly saved and restored."""
         # Configure the mock PFDataset to return our mock torch dataset

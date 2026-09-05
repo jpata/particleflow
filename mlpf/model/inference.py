@@ -32,6 +32,7 @@ from mlpf.plotting.plot_utils import (
 
 from mlpf.logger import _logger
 from mlpf.model.utils import unpack_target
+from mlpf.conf import OutputMode
 
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
@@ -51,10 +52,16 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
 
     ypred = model_module.predict_particles(batch.X, batch.mask)
 
-    batch.ytarget[..., 2] = batch.ytarget_pt_orig
-    batch.ytarget[..., 6] = batch.ytarget_e_orig
-
-    ytarget = unpack_target(batch.ytarget.to(torch.float32), model_module)
+    if model_module.output_mode == OutputMode.SET:
+        ytarget = unpack_target(batch.ytarget_set.to(torch.float32), model_module)
+        ytarget["pt"] = torch.exp(ytarget["pt"])
+        ytarget["energy"] = torch.exp(ytarget["energy"])
+        ytarget["momentum"] = torch.stack([ytarget["pt"], ytarget["eta"], ytarget["sin_phi"], ytarget["cos_phi"], ytarget["energy"]], dim=-1)
+        ytarget["p4"] = torch.stack([ytarget["pt"], ytarget["eta"], ytarget["phi"], ytarget["energy"]], dim=-1)
+    else:
+        batch.ytarget[..., 2] = batch.ytarget_pt_orig
+        batch.ytarget[..., 6] = batch.ytarget_e_orig
+        ytarget = unpack_target(batch.ytarget.to(torch.float32), model_module)
     ycand = unpack_target(batch.ycand.to(torch.float32), model_module)
 
     genjets_msk = batch.genjets[:, :, 0].cpu() > jet_ptcut
@@ -74,23 +81,25 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     jets_coll = {}
     jets_coll["gen"] = genjets
 
-    # now cluster jets
-    # first, flatten events across batch dim with padding mask
+    # Flatten each independently padded collection with its own mask.
     X = batch.X[batch.mask].cpu().float().contiguous().numpy()
-    for k, v in ytarget.items():
-        ytarget[k] = v[batch.mask].detach().cpu().float().contiguous().numpy()
-    for k, v in ycand.items():
-        ycand[k] = v[batch.mask].detach().cpu().float().contiguous().numpy()
-    for k, v in ypred.items():
-        ypred[k] = v[batch.mask].detach().cpu().float().contiguous().numpy()
+    input_counts = torch.sum(batch.mask, axis=1).cpu().numpy()
+    if model_module.output_mode == OutputMode.SET:
+        target_mask = batch.target_mask.bool()
+        prediction_mask = ypred["cls_id"] != 0
+    else:
+        target_mask = batch.mask.bool()
+        prediction_mask = batch.mask.bool()
 
-    # second, create awkward arrays according to the counts of not padded elements
-    counts = torch.sum(batch.mask, axis=1).cpu().numpy()
+    collection_masks = {"target": target_mask, "cand": batch.mask.bool(), "pred": prediction_mask}
     awkvals = {}
     for flat_arr, typ in [(ytarget, "target"), (ycand, "cand"), (ypred, "pred")]:
-        awk_arr = awkward.Array({k: flat_arr[k] for k in flat_arr.keys()})
+        collection_mask = collection_masks[typ]
+        counts = collection_mask.sum(dim=1).cpu().numpy()
+        values = {key: value[collection_mask].detach().cpu().float().contiguous().numpy() for key, value in flat_arr.items()}
+        awk_arr = awkward.Array(values)
         awkvals[typ] = awkward.unflatten(awk_arr, counts)
-    Xs = awkward.unflatten(awkward.from_numpy(X), counts)
+    Xs = awkward.unflatten(awkward.from_numpy(X), input_counts)
 
     # now cluster jets
     for typ, ydata in zip(
