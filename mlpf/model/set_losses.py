@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 import torch
@@ -12,10 +13,12 @@ from mlpf.model.losses import LOSS_TASKS, REGRESSION_FEATURES
 class SetMatcherWeights:
     presence: float = 1.0
     pid: float = 1.0
+    geometry: float = 1.0
     pt: float = 1.0
-    eta: float = 1.0
-    phi: float = 1.0
-    energy: float = 1.0
+    energy: float = 0.0
+    dr_scale: float = 0.1
+    log_pt_scale: float = math.log(2.0)
+    log_energy_scale: float = math.log(2.0)
 
 
 def _pairwise_matching_cost(target, prediction, weights):
@@ -25,28 +28,22 @@ def _pairwise_matching_cost(target, prediction, weights):
     presence_cost = -F.log_softmax(prediction["cls_binary"].float(), dim=-1)[:, 1:2]
     pid_cost = -F.log_softmax(prediction["cls_id_onehot"].float(), dim=-1)[:, target_cls]
 
-    def l1_cost(feature):
-        return torch.abs(prediction[feature].float()[:, None] - target[feature].float()[None, :])
+    pred_phi = torch.atan2(prediction["sin_phi"].float(), prediction["cos_phi"].float())
+    target_phi = torch.atan2(target["sin_phi"].float(), target["cos_phi"].float())
+    delta_phi = pred_phi[:, None] - target_phi[None, :]
+    delta_phi = torch.atan2(torch.sin(delta_phi), torch.cos(delta_phi))
+    delta_eta = prediction["eta"].float()[:, None] - target["eta"].float()[None, :]
+    delta_r = torch.sqrt(delta_eta.square() + delta_phi.square() + 1e-12)
 
-    pred_direction = F.normalize(
-        torch.stack([prediction["sin_phi"], prediction["cos_phi"]], dim=-1).float(),
-        dim=-1,
-        eps=1e-6,
-    )
-    target_direction = F.normalize(
-        torch.stack([target["sin_phi"], target["cos_phi"]], dim=-1).float(),
-        dim=-1,
-        eps=1e-6,
-    )
-    phi_cost = 1.0 - pred_direction @ target_direction.transpose(0, 1)
+    log_pt_cost = torch.abs(prediction["pt"].float()[:, None] - target["pt"].float()[None, :])
+    log_energy_cost = torch.abs(prediction["energy"].float()[:, None] - target["energy"].float()[None, :])
 
     return (
         weights.presence * presence_cost
         + weights.pid * pid_cost
-        + weights.pt * l1_cost("pt")
-        + weights.eta * l1_cost("eta")
-        + weights.phi * phi_cost
-        + weights.energy * l1_cost("energy")
+        + weights.geometry * delta_r / weights.dr_scale
+        + weights.pt * log_pt_cost / weights.log_pt_scale
+        + weights.energy * log_energy_cost / weights.log_energy_scale
     ).detach()
 
 
@@ -85,11 +82,14 @@ def set_event_loss(
     target_mask,
     regression_weights,
     matcher_weights=None,
-    no_object_weight=0.1,
+    no_object_weight=1.0,
+    cardinality_loss_weight=0.0,
+    matches=None,
 ):
     """Permutation-invariant particle-set loss for a padded event batch."""
 
-    matches = hungarian_match(targets, predictions, target_mask, matcher_weights)
+    if matches is None:
+        matches = hungarian_match(targets, predictions, target_mask, matcher_weights)
     device = predictions["cls_binary"].device
     presence_targets = torch.zeros(predictions["cls_binary"].shape[:2], dtype=torch.long, device=device)
 
@@ -107,13 +107,16 @@ def set_event_loss(
 
     presence_class_weights = predictions["cls_binary"].new_tensor([no_object_weight, 1.0])
     losses = {
-        "Classification_binary": 10.0
-        * F.cross_entropy(
+        "Classification_binary": F.cross_entropy(
             predictions["cls_binary"].reshape(-1, 2),
             presence_targets.reshape(-1),
             weight=presence_class_weights,
         )
     }
+    if cardinality_loss_weight > 0:
+        predicted_count = F.softmax(predictions["cls_binary"].float(), dim=-1)[..., 1].sum(dim=1)
+        target_count = target_mask.sum(dim=1).to(dtype=predicted_count.dtype)
+        losses["Cardinality"] = cardinality_loss_weight * F.smooth_l1_loss(predicted_count, target_count)
 
     num_matched = int(presence_targets.sum().item())
     if num_matched == 0:
@@ -146,7 +149,10 @@ def set_mlpf_loss(
     regression_weights,
     task_loss_weighter=None,
     matcher_weights=None,
-    no_object_weight=0.1,
+    no_object_weight=1.0,
+    cardinality_loss_weight=0.0,
+    auxiliary_predictions=None,
+    auxiliary_loss_weight=0.0,
 ):
     """Compute the set-prediction objective with the standard task names."""
 
@@ -154,22 +160,43 @@ def set_mlpf_loss(
         raise ValueError("Set prediction requires batch.ytarget_set and batch.target_mask")
 
     effective_regression_weights = regression_weights if task_loss_weighter is None else {feature: 1.0 for feature in REGRESSION_FEATURES}
-    losses, _ = set_event_loss(
+    losses, matches = set_event_loss(
         targets,
         predictions,
         batch.target_mask,
         effective_regression_weights,
         matcher_weights=matcher_weights,
         no_object_weight=no_object_weight,
+        cardinality_loss_weight=cardinality_loss_weight,
     )
+    task_losses = {task: losses[task] for task in LOSS_TASKS}
     if task_loss_weighter is None:
-        loss_opt = sum(losses.values())
+        loss_opt = sum(task_losses.values())
         diagnostics = None
     else:
         # Keep the same task names so the existing one-time calibration can be
         # evaluated for set mode rather than introducing a second mechanism.
-        assert tuple(losses) == LOSS_TASKS
-        loss_opt, diagnostics = task_loss_weighter(losses)
+        loss_opt, diagnostics = task_loss_weighter(task_losses)
+
+    if "Cardinality" in losses:
+        loss_opt = loss_opt + losses["Cardinality"]
+
+    if auxiliary_predictions and auxiliary_loss_weight > 0:
+        auxiliary_losses = []
+        for auxiliary_prediction in auxiliary_predictions:
+            layer_losses, _ = set_event_loss(
+                targets,
+                auxiliary_prediction,
+                batch.target_mask,
+                effective_regression_weights,
+                matcher_weights=matcher_weights,
+                no_object_weight=no_object_weight,
+                cardinality_loss_weight=cardinality_loss_weight,
+                matches=matches,
+            )
+            auxiliary_losses.append(sum(layer_losses.values()))
+        losses["Auxiliary"] = auxiliary_loss_weight * torch.stack(auxiliary_losses).mean()
+        loss_opt = loss_opt + losses["Auxiliary"]
 
     losses["Total"] = loss_opt
     if not torch.isfinite(loss_opt):

@@ -7,6 +7,31 @@ variants:
     model_name: pyg-cld-hits-v1
   set:
     model_name: pyg-cld-hits-set-v1
+    overrides:
+      # Start slots from energetic detector inputs so their initial direction is
+      # physical, then refine within a local eta-phi neighborhood.
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.num_layers: 4
+
+      # Treat no-object suppression as a first-class objective and supervise
+      # every refinement layer, not only the final decoder output.
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+
+      # Match in the same variables emphasized by particle/jet evaluation.
+      # A delta-R of 0.1 and a factor-two pT error each cost one unit.
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
 
 # Add seeds here and expand the Slurm array to 2 * len(seeds) tasks.
 seeds: [12345]

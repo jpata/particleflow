@@ -44,6 +44,11 @@ class OutputMode(Enum):
     SET = "set"
 
 
+class SetQueryInit(Enum):
+    LEARNED = "learned"
+    INPUT_CONDITIONED = "input-conditioned"
+
+
 class DatasetSamplerMode(Enum):
     SHARD_CONSECUTIVE = "shard-consecutive"
     INTERLEAVED_SHARDS = "interleaved-shards"
@@ -591,6 +596,21 @@ class HitFeatureEngineeringConfig(BaseModel):
     calorimeter_neighborhood: bool = True
 
 
+class SetMatcherConfig(BaseModel):
+    """Dimensionless costs used by set-output Hungarian matching."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    presence: float = Field(default=1.0, ge=0.0)
+    pid: float = Field(default=1.0, ge=0.0)
+    geometry: float = Field(default=1.0, ge=0.0)
+    pt: float = Field(default=1.0, ge=0.0)
+    energy: float = Field(default=0.0, ge=0.0)
+    dr_scale: float = Field(default=0.1, gt=0.0)
+    log_pt_scale: float = Field(default=0.6931471805599453, gt=0.0)
+    log_energy_scale: float = Field(default=0.6931471805599453, gt=0.0)
+
+
 class SetDecoderConfig(BaseModel):
     """Configuration for permutation-invariant particle-set prediction."""
 
@@ -601,6 +621,20 @@ class SetDecoderConfig(BaseModel):
     num_heads: int = Field(default=8, gt=0)
     ffn_multiplier: float = Field(default=4.0, gt=0.0)
     dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
+    query_init: SetQueryInit = SetQueryInit.LEARNED
+    local_attention_radius: Optional[float] = Field(default=None, gt=0.0)
+    tracker_query_fraction: float = Field(default=0.5, ge=0.0, le=1.0)
+    presence_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
+    no_object_weight: float = Field(default=1.0, gt=0.0)
+    cardinality_loss_weight: float = Field(default=0.0, ge=0.0)
+    auxiliary_loss_weight: float = Field(default=0.0, ge=0.0)
+    matcher: SetMatcherConfig = Field(default_factory=SetMatcherConfig)
+
+    @model_validator(mode="after")
+    def validate_query_locality(self):
+        if self.local_attention_radius is not None and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder local_attention_radius requires query_init='input-conditioned'")
+        return self
 
 
 class ModelArchitectureConfig(BaseModel):

@@ -267,6 +267,8 @@ Compare elementwise and set prediction using:
 - [x] Add a hit-dataset set-mode example to `particleflow_spec.yaml`.
 - [x] Refactor/reuse the backbone encoder without changing legacy forward behavior.
 - [x] Implement learned fixed queries and two decoder layers.
+- [x] Add detector-seeded, input-conditioned queries with local eta-phi
+      cross-attention and iterative direction refinement.
 - [ ] Implement memory-efficient packed cross-attention plus a CPU test fallback.
 - [x] Implement presence, PID, and absolute-momentum heads.
 - [x] Assert target-slot overflow instead of truncating; add aggregate logging later.
@@ -274,9 +276,12 @@ Compare elementwise and set prediction using:
 ### Matching and loss
 
 - [x] Implement per-event Hungarian matching.
-- [x] Implement matching costs with cyclic phi handling; expose them in model configuration later.
+- [x] Implement configurable, dimensionless matching costs using delta-R and
+      relative log-momentum scales.
 - [x] Implement matched presence, PID, and regression losses.
 - [x] Decide and test event/particle normalization and no-particle weighting.
+- [x] Add configurable no-object weighting, cardinality supervision, and
+      auxiliary losses for intermediate decoder layers.
 - [x] Integrate calibrated task-loss weighting for set mode.
 - [ ] Log target count, active-slot count, matched cost, and unmatched-slot statistics.
 
@@ -287,6 +292,8 @@ Compare elementwise and set prediction using:
       closure metrics during validation.
 - [ ] Update validation diagnostics for independent axes.
 - [x] Update `predict_particles` for set outputs and absolute inverse transforms.
+- [x] Decouple set-slot presence selection from PID and expose the inference
+      probability threshold in configuration.
 - [x] Update parquet inference serialization to use separate input, target, and
       prediction counts.
 - [ ] Update particle, jet, and MET metrics for set outputs.

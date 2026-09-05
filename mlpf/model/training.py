@@ -87,7 +87,7 @@ from mlpf.model.losses import (
     mlpf_loss,
     particle_loss,
 )
-from mlpf.model.set_losses import set_mlpf_loss
+from mlpf.model.set_losses import SetMatcherWeights, set_mlpf_loss
 from mlpf.model.validation_metrics import compute_validation_particle_metrics, validation_particle_collections
 from mlpf.utils import create_comet_experiment
 from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
@@ -218,6 +218,18 @@ def _get_task_loss_weighter(model):
     return getattr(model_module, "task_loss_weighter", None)
 
 
+def _set_loss_kwargs(model_module):
+    config = model_module.config.set_decoder
+    auxiliary_predictions = [unpack_predictions(prediction) for prediction in model_module.set_decoder.auxiliary_outputs]
+    return {
+        "matcher_weights": SetMatcherWeights(**config.matcher.model_dump()),
+        "no_object_weight": config.no_object_weight,
+        "cardinality_loss_weight": config.cardinality_loss_weight,
+        "auxiliary_predictions": auxiliary_predictions,
+        "auxiliary_loss_weight": config.auxiliary_loss_weight,
+    }
+
+
 def _format_task_diagnostic(task_diagnostic):
     if not task_diagnostic:
         return ""
@@ -343,7 +355,14 @@ def model_step(batch, model, loss_fn, regression_weights):
     model_module = model.module if hasattr(model, "module") else model
     if model_module.output_mode == OutputMode.SET:
         ytarget = unpack_target(batch.ytarget_set, model_module)
-        loss_opt, losses_detached, task_loss_diagnostics = set_mlpf_loss(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
+        loss_opt, losses_detached, task_loss_diagnostics = set_mlpf_loss(
+            ytarget,
+            ypred,
+            batch,
+            regression_weights,
+            _get_task_loss_weighter(model),
+            **_set_loss_kwargs(model_module),
+        )
     else:
         ytarget = unpack_target(batch.ytarget, model_module)
         loss_opt, losses_detached, task_loss_diagnostics = loss_fn(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
@@ -455,7 +474,14 @@ def train_step(
         model_module = model.module if hasattr(model, "module") else model
         if model_module.output_mode == OutputMode.SET:
             ytarget = unpack_target(batch.ytarget_set, model_module)
-            loss_opt, loss, task_loss_diagnostics = set_mlpf_loss(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
+            loss_opt, loss, task_loss_diagnostics = set_mlpf_loss(
+                ytarget,
+                ypred,
+                batch,
+                regression_weights,
+                _get_task_loss_weighter(model),
+                **_set_loss_kwargs(model_module),
+            )
         else:
             ytarget = unpack_target(batch.ytarget, model_module)
             loss_opt, loss, task_loss_diagnostics = mlpf_loss(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))

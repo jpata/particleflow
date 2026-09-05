@@ -11,7 +11,7 @@ from mlpf.model.utils import unpack_predictions, unpack_target
 REGRESSION_WEIGHTS = {feature: 1.0 for feature in ("pt", "eta", "sin_phi", "cos_phi", "energy")}
 
 
-def make_config(num_slots=4):
+def make_config(num_slots=4, **set_decoder_overrides):
     return MLPFConfig.model_validate(
         {
             "dataset": "cld_hits",
@@ -31,6 +31,7 @@ def make_config(num_slots=4):
                     "num_slots": num_slots,
                     "num_layers": 2,
                     "num_heads": 2,
+                    **set_decoder_overrides,
                 },
                 "hit_feature_engineering": {"enabled": False},
             },
@@ -92,6 +93,13 @@ def test_set_config_populates_decoder_defaults():
 
     assert config.model.set_decoder is not None
     assert config.model.set_decoder.num_slots == 256
+    assert config.model.set_decoder.no_object_weight == 1.0
+    assert config.model.set_decoder.matcher.dr_scale == 0.1
+
+
+def test_set_config_rejects_local_attention_for_global_queries():
+    with pytest.raises(ValueError, match="local_attention_radius requires"):
+        make_config(local_attention_radius=0.4)
 
 
 def test_set_config_rejects_non_hit_datasets():
@@ -123,6 +131,60 @@ def test_set_model_output_axis_is_num_slots():
     assert momentum.shape == (2, 4, 5)
     assert pileup.shape == (2, 4, 2)
     torch.testing.assert_close(torch.linalg.vector_norm(momentum[..., 2:4], dim=-1), torch.ones(2, 4))
+
+
+def test_input_conditioned_set_decoder_forward_backward():
+    config = make_config(
+        num_slots=6,
+        query_init="input-conditioned",
+        local_attention_radius=0.4,
+        tracker_query_fraction=0.5,
+        num_layers=3,
+        auxiliary_loss_weight=0.25,
+    )
+    model = MLPF(config)
+    X = torch.randn(2, 12, config.input_dim)
+    X[..., 0] = torch.tensor([1, 2] * 6)
+    X[..., 1] = X[..., 1].abs() + 0.1
+    X[..., 5] = X[..., 5].abs() + 0.1
+    mask = torch.ones(2, 12, dtype=torch.bool)
+    mask[1, 9:] = False
+
+    predictions = model(X, mask)
+    assert predictions[2].shape == (2, 6, 5)
+    assert len(model.set_decoder.auxiliary_outputs) == 2
+    assert all(torch.isfinite(output).all() for prediction in predictions for output in [prediction])
+
+    auxiliary = [output for prediction in model.set_decoder.auxiliary_outputs for output in prediction]
+    sum(output.square().mean() for output in [*predictions, *auxiliary]).backward()
+    assert [name for name, parameter in model.named_parameters() if parameter.grad is None] == []
+
+
+def test_model_step_applies_configured_cardinality_and_auxiliary_losses():
+    from mlpf.model.training import model_step
+
+    config = make_config(
+        num_slots=6,
+        query_init="input-conditioned",
+        local_attention_radius=0.4,
+        num_layers=3,
+        cardinality_loss_weight=0.05,
+        auxiliary_loss_weight=0.25,
+    )
+    model = MLPF(config)
+    X = torch.randn(1, 10, config.input_dim)
+    X[..., 0] = torch.tensor([1, 2] * 5)
+    X[..., 1] = X[..., 1].abs() + 0.1
+    X[..., 5] = X[..., 5].abs() + 0.1
+    batch = PFBatch(X=X, ytarget_set=make_target_tensor(num_targets=2))
+
+    loss, losses, _, _, _, _ = model_step(batch, model, None, REGRESSION_WEIGHTS)
+    loss.backward()
+
+    assert torch.isfinite(loss)
+    assert losses["Cardinality"] > 0
+    assert losses["Auxiliary"] > 0
+    assert model.set_decoder.reference_delta_heads[0].weight.grad is not None
 
 
 def test_attention_set_model_has_no_unused_elementwise_parameters():
@@ -230,6 +292,38 @@ def test_set_loss_supports_an_event_without_targets():
     assert all(prediction.grad is not None for prediction in predictions.values())
 
 
+def test_cardinality_loss_penalizes_excess_present_slots():
+    target_tensor = make_target_tensor(num_targets=2)
+    targets = unpack_target(target_tensor, None)
+    target_mask = torch.ones(1, 2, dtype=torch.bool)
+    predictions = {
+        "cls_binary": torch.tensor([[[0.0, 5.0], [0.0, 5.0], [5.0, 0.0], [5.0, 0.0]]]),
+        "cls_id_onehot": torch.zeros(1, 4, 6),
+        "pt": torch.zeros(1, 4),
+        "eta": torch.zeros(1, 4),
+        "sin_phi": torch.zeros(1, 4),
+        "cos_phi": torch.ones(1, 4),
+        "energy": torch.zeros(1, 4),
+    }
+    calibrated_losses, _ = set_event_loss(
+        targets,
+        predictions,
+        target_mask,
+        REGRESSION_WEIGHTS,
+        cardinality_loss_weight=1.0,
+    )
+    predictions["cls_binary"] = torch.tensor([[[0.0, 5.0]] * 4])
+    excess_losses, _ = set_event_loss(
+        targets,
+        predictions,
+        target_mask,
+        REGRESSION_WEIGHTS,
+        cardinality_loss_weight=1.0,
+    )
+
+    assert calibrated_losses["Cardinality"] < excess_losses["Cardinality"]
+
+
 def test_predict_particles_restores_absolute_set_kinematics():
     model = MLPF(make_config(num_slots=3)).eval()
     X = torch.ones(1, 6, 15)
@@ -240,6 +334,23 @@ def test_predict_particles_restores_absolute_set_kinematics():
     assert prediction["energy"].shape == (1, 3)
     assert torch.all(prediction["pt"] >= 0)
     assert torch.all(prediction["energy"] >= 0)
+
+
+def test_set_presence_threshold_controls_inference_selection():
+    model = MLPF(make_config(num_slots=2, presence_threshold=0.9)).eval()
+    presence = torch.tensor([[[0.0, 2.0], [0.0, 4.0]]])
+    pid = torch.full((1, 2, model.num_classes), -5.0)
+    pid[0, 0, 2] = 5.0
+    pid[0, 1, 3] = 5.0
+    momentum = torch.zeros(1, 2, 5)
+    momentum[..., 3] = 1.0
+    model.forward = lambda _features, _mask: (presence, pid, momentum, torch.zeros_like(presence))
+
+    prediction = model.predict_particles(torch.ones(1, 3, 15), torch.ones(1, 3, dtype=torch.bool))
+
+    assert prediction["cls_id"].tolist() == [[0, 3]]
+    assert prediction["pt"][0, 0] == 0
+    assert prediction["pt"][0, 1] > 0
 
 
 def test_set_model_10k_inputs_forward_backward():

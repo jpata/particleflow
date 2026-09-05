@@ -1778,7 +1778,7 @@ class MLPF(nn.Module):
     # @torch.compile
     def forward(self, X_features, mask):
         if self.output_mode == OutputMode.SET:
-            return self.set_decoder(self.encode_backbone(X_features, mask), mask)
+            return self.set_decoder(self.encode_backbone(X_features, mask), mask, X_features)
 
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_split_backbone:
@@ -1855,16 +1855,23 @@ class MLPF(nn.Module):
         ypred = unpack_predictions(tuple(ypred_raw))
         ypred["ispu"] = torch.softmax(ypred["ispu"], axis=-1)[:, :, -1]
 
-        # By default, use standard argmax
-        pred_cls = torch.argmax(ypred_raw[0], axis=-1)
+        if self.output_mode == OutputMode.SET:
+            presence_probability = torch.softmax(ypred_raw[0], dim=-1)[..., 1]
+            active = presence_probability >= self.config.set_decoder.presence_threshold
+            # A present set slot must represent a physical PID. The no-particle
+            # class is owned exclusively by the presence head.
+            physical_pid = torch.argmax(ypred_raw[1][..., 1:], dim=-1) + 1
+            ypred["cls_id"] = torch.where(active, physical_pid, torch.zeros_like(physical_pid))
+        else:
+            active = torch.argmax(ypred_raw[0], dim=-1).bool()
 
         # Zero out predictions for non-particles
-        ypred["cls_id"][pred_cls == 0] = 0
-        ypred["pt"][pred_cls == 0] = 0
-        ypred["energy"][pred_cls == 0] = 0
-        ypred["eta"][pred_cls == 0] = 0
-        ypred["sin_phi"][pred_cls == 0] = 0
-        ypred["cos_phi"][pred_cls == 0] = 0
+        ypred["cls_id"][~active] = 0
+        ypred["pt"][~active] = 0
+        ypred["energy"][~active] = 0
+        ypred["eta"][~active] = 0
+        ypred["sin_phi"][~active] = 0
+        ypred["cos_phi"][~active] = 0
 
         return ypred
 
