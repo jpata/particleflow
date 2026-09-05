@@ -56,3 +56,4 @@ onnx_validation/
 particleflow.egg-info/
 
 build
+/docs/_build/
