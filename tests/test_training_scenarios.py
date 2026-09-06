@@ -17,6 +17,7 @@ from mlpf.training_scenarios import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = ROOT / "configs/training/scenarios/cld_hits_output_comparison.yaml"
+BACKBONE_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -41,12 +42,30 @@ def test_comparison_scenario_resolves_both_output_modes_with_same_seed():
     assert all(job.resolved_config.seed == 12345 for job in jobs)
 
 
+def test_backbone_comparison_scenario_keeps_elementwise_output_and_depth_fixed():
+    scenario = load_training_scenario(BACKBONE_SCENARIO)
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+
+    jobs = resolve_scenario_jobs(
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=8,
+    )
+
+    assert [job.variant_name for job in jobs] == ["attention", "heptv2"]
+    assert [job.resolved_config.model.type.value for job in jobs] == ["attention", "heptv2"]
+    assert {job.resolved_config.model.output_mode.value for job in jobs} == {"elementwise"}
+    assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
+    assert jobs[1].resolved_config.model.heptv2.block_size == 128
+
+
 @pytest.mark.parametrize(
     ("profile_name", "expected_multiplier"),
     [
         ("flatiron_h100.yaml", 64),
         ("flatiron_a100.yaml", 128),
-        ("flatiron_b200.yaml", 64),
+        ("flatiron_h200.yaml", 64),
         ("tallinn_l40.yaml", 256),
         ("lumi_mi250x.yaml", 64),
     ],

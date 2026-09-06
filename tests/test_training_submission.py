@@ -16,7 +16,8 @@ def test_picker_discovers_scenarios_and_accelerators():
     scenarios, accelerators = available_choices(ROOT)
 
     assert "cld_hits_output_comparison" in scenarios
-    assert {"a100", "b200", "h100"}.issubset(accelerators)
+    assert "cld_hits_backbone_comparison" in scenarios
+    assert {"a100", "h100", "h200"}.issubset(accelerators)
 
 
 def test_h100_submission_is_derived_from_scenario_and_profile():

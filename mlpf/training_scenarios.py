@@ -175,6 +175,8 @@ def _temporary_environment(values):
 
 
 def _serialize_cli_value(value):
+    if value is None:
+        return "null"
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, list):
