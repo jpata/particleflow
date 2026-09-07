@@ -227,6 +227,10 @@ def _set_loss_kwargs(model_module):
         "cardinality_loss_weight": config.cardinality_loss_weight,
         "auxiliary_predictions": auxiliary_predictions,
         "auxiliary_loss_weight": config.auxiliary_loss_weight,
+        "query_embeddings": model_module.set_decoder.query_origin_query_embeddings,
+        "memory_embeddings": model_module.set_decoder.query_origin_memory_embeddings,
+        "query_origin_loss_weight": config.query_origin_loss_weight,
+        "query_origin_temperature": config.query_origin_temperature,
     }
 
 

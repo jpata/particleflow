@@ -4,7 +4,7 @@ import torch
 from mlpf.conf import MLPFConfig
 from mlpf.model.PFDataset import PFBatch
 from mlpf.model.mlpf import MLPF
-from mlpf.model.set_losses import hungarian_match, set_event_loss
+from mlpf.model.set_losses import hungarian_match, query_origin_contrastive_loss, set_event_loss
 from mlpf.model.utils import unpack_predictions, unpack_target
 
 
@@ -94,6 +94,8 @@ def test_set_config_populates_decoder_defaults():
     assert config.model.set_decoder is not None
     assert config.model.set_decoder.num_slots == 256
     assert config.model.set_decoder.no_object_weight == 1.0
+    assert config.model.set_decoder.query_origin_loss_weight == 0.0
+    assert config.model.set_decoder.query_origin_temperature == 0.1
     assert config.model.set_decoder.matcher.dr_scale == 0.1
 
 
@@ -185,6 +187,75 @@ def test_model_step_applies_configured_cardinality_and_auxiliary_losses():
     assert losses["Cardinality"] > 0
     assert losses["Auxiliary"] > 0
     assert model.set_decoder.reference_delta_heads[0].weight.grad is not None
+
+
+def test_query_origin_loss_is_number_invariant_and_penalizes_duplicate_queries():
+    memory = torch.tensor([[[1.0, 0.0], [1.0, 0.0], [0.0, 1.0], [0.0, 1.0]]], requires_grad=True)
+    aligned_queries = torch.tensor([[[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]]], requires_grad=True)
+    duplicate_queries = aligned_queries.detach().clone()
+    duplicate_queries[0, 2] = torch.tensor([1.0, 0.0])
+    hit_numbers = torch.tensor([[11, 11, 29, 29]])
+    target_numbers = torch.tensor([[11, 0, 29]])
+    input_mask = torch.ones(1, 4, dtype=torch.bool)
+    target_mask = torch.tensor([[True, False, True]])
+    matches = [(torch.tensor([0, 1]), torch.tensor([0, 1]))]
+
+    aligned_loss = query_origin_contrastive_loss(
+        aligned_queries,
+        memory,
+        hit_numbers,
+        target_numbers,
+        input_mask,
+        target_mask,
+        matches,
+    )
+    duplicate_loss = query_origin_contrastive_loss(
+        duplicate_queries,
+        memory,
+        hit_numbers,
+        target_numbers,
+        input_mask,
+        target_mask,
+        matches,
+    )
+    renumbered_loss = query_origin_contrastive_loss(
+        aligned_queries,
+        memory,
+        torch.tensor([[103, 103, 7, 7]]),
+        torch.tensor([[103, 0, 7]]),
+        input_mask,
+        target_mask,
+        matches,
+    )
+
+    assert aligned_loss < duplicate_loss
+    torch.testing.assert_close(aligned_loss, renumbered_loss)
+    aligned_loss.backward()
+    assert torch.isfinite(aligned_queries.grad).all()
+    assert torch.isfinite(memory.grad).all()
+
+
+def test_model_step_applies_query_origin_loss():
+    from mlpf.model.training import model_step
+
+    config = make_config(num_slots=4, query_origin_loss_weight=0.1)
+    model = MLPF(config)
+    X = torch.randn(1, 8, config.input_dim)
+    X[..., 0] = 1
+    X[..., 1] = X[..., 1].abs() + 0.1
+    X[..., 5] = X[..., 5].abs() + 0.1
+    ytarget = torch.zeros(1, 8, 14)
+    ytarget[0, :4, 13] = 1
+    ytarget[0, 4:, 13] = 2
+    batch = PFBatch(X=X, ytarget=ytarget, ytarget_set=make_target_tensor(num_targets=2))
+
+    loss, losses, _, _, _, _ = model_step(batch, model, None, REGRESSION_WEIGHTS)
+    loss.backward()
+
+    assert torch.isfinite(loss)
+    assert losses["Query_origin"] > 0
+    assert model.set_decoder.queries.grad is not None
+    assert torch.isfinite(model.set_decoder.queries.grad).all()
 
 
 def test_attention_set_model_has_no_unused_elementwise_parameters():
