@@ -7,9 +7,18 @@ variants:
     model_name: pyg-cld-v1
   elementwise_hits:
     model_name: pyg-cld-hits-v1
+    overrides:
+      # Only hit inputs have tracker/calo detector partitions. Keep the same
+      # six-layer budget while specializing two layers per detector branch.
+      model.backbone.num_tracker_layers: 2
+      model.backbone.num_calo_layers: 2
+      model.backbone.num_common_layers: 2
   set_hits:
     model_name: pyg-cld-hits-set-v1
     overrides:
+      model.backbone.num_tracker_layers: 2
+      model.backbone.num_calo_layers: 2
+      model.backbone.num_common_layers: 2
       # Start slots from energetic detector inputs so their initial direction is
       # physical, then refine within a local eta-phi neighborhood.
       model.set_decoder.query_init: input-conditioned
@@ -52,9 +61,6 @@ common_overrides:
   model.task_queries: false
   model.backbone.mode: shared
   model.backbone.num_convs: 6
-  model.backbone.num_tracker_layers: 2
-  model.backbone.num_calo_layers: 2
-  model.backbone.num_common_layers: 2
   model.attention.use_jagged_attention: true
 
 allowed_variant_differences:
@@ -69,6 +75,11 @@ allowed_variant_differences:
   - hyperparameters.lr
   # Hit elementwise training uses focal presence classification; PF keeps CE.
   - model.binary_classification_focal_gamma
+  # Detector-specific branches are meaningful only for raw hit inputs. The PF
+  # model uses all six layers as common layers.
+  - model.backbone.num_tracker_layers
+  - model.backbone.num_calo_layers
+  - model.backbone.num_common_layers
   # Only the set-based hit variant has a set decoder.
   - model.output_mode
   - model.set_decoder

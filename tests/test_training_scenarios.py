@@ -77,6 +77,15 @@ def test_pf_hits_comparison_scenario_resolves_three_40k_variants():
     assert [job.resolved_config.dataset.value for job in jobs] == ["cld", "cld_hits", "cld_hits"]
     assert [job.resolved_config.model.output_mode.value for job in jobs] == ["elementwise", "elementwise", "set"]
     assert [job.resolved_config.model.binary_classification_focal_gamma for job in jobs] == [None, 2.0, 2.0]
+    assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
+    assert [
+        (
+            job.resolved_config.model.backbone.num_tracker_layers,
+            job.resolved_config.model.backbone.num_calo_layers,
+            job.resolved_config.model.backbone.num_common_layers,
+        )
+        for job in jobs
+    ] == [(None, None, None), (2, 2, 2), (2, 2, 2)]
     assert {job.resolved_config.num_steps for job in jobs} == {40000}
     assert {job.resolved_config.val_freq for job in jobs} == {5000}
     assert {job.resolved_config.checkpoint_freq for job in jobs} == {5000}
