@@ -21,13 +21,6 @@ variants:
       model.set_decoder.no_object_weight: 1.0
       model.set_decoder.cardinality_loss_weight: 0.05
       model.set_decoder.auxiliary_loss_weight: 0.25
-      # Align each matched query with the pooled encoder hits carrying the same
-      # event-local particle_number. The symmetric direction makes all other
-      # slots negatives, discouraging multiple queries for one particle.
-      # A random 55-particle/256-query assignment has an unweighted loss near
-      # five, so 0.02 starts this term at roughly 0.1 in the total objective.
-      model.set_decoder.query_origin_loss_weight: 0.02
-      model.set_decoder.query_origin_temperature: 0.1
 
       # Match in the same variables emphasized by particle/jet evaluation.
       # A delta-R of 0.1 and a factor-two pT error each cost one unit.

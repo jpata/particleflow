@@ -96,7 +96,6 @@ class ParticleSetDecoder(nn.Module):
         self.local_attention_radius = config.local_attention_radius
         self.tracker_query_fraction = config.tracker_query_fraction
         self.use_auxiliary_losses = config.auxiliary_loss_weight > 0
-        self.use_query_origin_loss = config.query_origin_loss_weight > 0
         self.queries = nn.Parameter(torch.empty(1, config.num_slots, embedding_dim))
         nn.init.trunc_normal_(self.queries, std=0.02)
         ffn_dim = int(config.ffn_multiplier * embedding_dim)
@@ -127,8 +126,6 @@ class ParticleSetDecoder(nn.Module):
         # Populated on every forward pass. The main four-tensor return signature
         # remains unchanged for inference and elementwise compatibility.
         self.auxiliary_outputs = []
-        self.query_origin_query_embeddings = None
-        self.query_origin_memory_embeddings = None
 
     @staticmethod
     def _take_topk(scores, candidates, count):
@@ -217,8 +214,6 @@ class ParticleSetDecoder(nn.Module):
         return presence, pid, momentum, pileup
 
     def forward(self, memory, memory_mask, input_features=None):
-        self.query_origin_query_embeddings = None
-        self.query_origin_memory_embeddings = None
         memory_mask = memory_mask.bool()
         references = reference_mask = memory_positions = None
         if self.query_init == "input-conditioned":
@@ -261,10 +256,4 @@ class ParticleSetDecoder(nn.Module):
                 outputs.append(self._predict(slots, references))
 
         self.auxiliary_outputs = outputs[:-1] if self.use_auxiliary_losses else []
-        if self.use_query_origin_loss:
-            # Keep references to the existing activations rather than materializing
-            # a query-by-hit ownership tensor. The loss pools hits by truth particle
-            # in O(num_hits * embedding_dim) time and memory.
-            self.query_origin_query_embeddings = slots
-            self.query_origin_memory_embeddings = memory
         return outputs[-1]
