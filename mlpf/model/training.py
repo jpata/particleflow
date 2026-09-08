@@ -94,6 +94,23 @@ from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
 
 UNIT_REGRESSION_WEIGHTS = {feature: 1.0 for feature in REGRESSION_FEATURES}
+JET_VALIDATION_METRICS = (
+    "med",
+    "iqr",
+    "num_reference_jets",
+    "num_candidate_jets",
+    "num_angular_matches",
+    "num_response_qualified_matches",
+    "response_rel_pt_cut",
+    "angular_recall",
+    "angular_precision",
+    "angular_f1",
+    "angular_fake_rate",
+    "response_qualified_recall",
+    "response_qualified_precision",
+    "response_qualified_f1",
+    "match_frac",
+)
 
 
 def seed_everything(seed):
@@ -154,7 +171,7 @@ def _add_accumulator(accum, key, value, count=1.0):
     accum[key][1] += torch.as_tensor(float(count), device=value.device, dtype=torch.float32)
 
 
-def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weights, accum):
+def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weights, accum, *, binary_focal_gamma=None):
     domain_labels = _event_domain_labels(batch)
     if domain_labels is None:
         return
@@ -175,7 +192,13 @@ def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weight
             "cls_id_onehot": ypred["cls_id_onehot"][valid],
             **{feature: ypred[feature][valid] for feature in REGRESSION_FEATURES},
         }
-        losses = particle_loss(particle_targets, particle_predictions, batch.X[..., 1][valid], regression_weights)
+        losses = particle_loss(
+            particle_targets,
+            particle_predictions,
+            batch.X[..., 1][valid],
+            regression_weights,
+            binary_focal_gamma=binary_focal_gamma,
+        )
         for loss_name, loss_value in losses.items():
             _add_accumulator(accum, f"diagnostic/loss/{label}/{loss_name}", loss_value)
 
@@ -365,7 +388,14 @@ def model_step(batch, model, loss_fn, regression_weights):
         )
     else:
         ytarget = unpack_target(batch.ytarget, model_module)
-        loss_opt, losses_detached, task_loss_diagnostics = loss_fn(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
+        loss_opt, losses_detached, task_loss_diagnostics = loss_fn(
+            ytarget,
+            ypred,
+            batch,
+            regression_weights,
+            _get_task_loss_weighter(model),
+            binary_focal_gamma=model_module.config.binary_classification_focal_gamma,
+        )
     return loss_opt, losses_detached, task_loss_diagnostics, ypred_raw, ypred, ytarget
 
 
@@ -484,7 +514,14 @@ def train_step(
             )
         else:
             ytarget = unpack_target(batch.ytarget, model_module)
-            loss_opt, loss, task_loss_diagnostics = mlpf_loss(ytarget, ypred, batch, regression_weights, _get_task_loss_weighter(model))
+            loss_opt, loss, task_loss_diagnostics = mlpf_loss(
+                ytarget,
+                ypred,
+                batch,
+                regression_weights,
+                _get_task_loss_weighter(model),
+                binary_focal_gamma=model_module.config.binary_classification_focal_gamma,
+            )
     phase_start = _record_phase_time_if_enabled(diagnostics.get("time", {}), "loss", phase_start, device_type, log_this_step)
     if log_this_step:
         _collect_step_memory(rank, "after_loss", diagnostics)
@@ -813,6 +850,7 @@ def evaluate(
                         ypred,
                         UNIT_REGRESSION_WEIGHTS,
                         diagnostic_accum,
+                        binary_focal_gamma=model_module.config.binary_classification_focal_gamma,
                     )
 
         # Save validation plots for first batch
@@ -1035,7 +1073,7 @@ def _run_validation_cycle(
             plot_metrics = make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
             plot_metrics_sample[sample] = plot_metrics
             # Log key jet metrics to TensorBoard and CometML
-            for k in ["med", "iqr", "match_frac"]:
+            for k in JET_VALIDATION_METRICS:
                 metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{k}"
                 metric_value = plot_metrics["jet_ratio"]["jet_ratio_target_to_pred_pt"][k]
                 tensorboard_writer_valid.add_scalar(metric_name, metric_value, step)
@@ -1072,12 +1110,12 @@ def _run_validation_cycle(
                     "valid_loader_state_dict": valid_loader.state_dict(),
                 }
                 for sample in plot_metrics_sample.keys():
-                    for metric in ["iqr", "match_frac"]:
+                    for metric in JET_VALIDATION_METRICS:
                         metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{metric}"
                         metrics[metric_name] = plot_metrics_sample[sample]["jet_ratio"]["jet_ratio_target_to_pred_pt"][metric]
                     metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/combined"] = (
                         metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/iqr"]
-                        - metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/match_frac"]
+                        - metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/response_qualified_f1"]
                     )
                 save_checkpoint(Path(temp_checkpoint_dir) / "checkpoint.pth", model, optimizer, extra_state)
                 ray.train.report(metrics, checkpoint=ray.train.Checkpoint.from_directory(temp_checkpoint_dir))

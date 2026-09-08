@@ -426,6 +426,7 @@ JET_CONFIG = {
         "r": 0.4,
         "ptcut": 3.0,
         "match_dr": 0.1,
+        "match_rel_pt": 0.5,
     },
     Dataset.CLIC.value: {
         "algo": "ee_genkt_algorithm",
@@ -433,6 +434,7 @@ JET_CONFIG = {
         "p": -1.0,
         "ptcut": 5.0,
         "match_dr": 0.1,
+        "match_rel_pt": 0.5,
     },
     Dataset.CLD.value: {
         "algo": "ee_genkt_algorithm",
@@ -440,6 +442,7 @@ JET_CONFIG = {
         "p": -1.0,
         "ptcut": 5.0,
         "match_dr": 0.1,
+        "match_rel_pt": 0.5,
     },
     Dataset.CLIC_HITS.value: {
         "algo": "ee_genkt_algorithm",
@@ -447,6 +450,7 @@ JET_CONFIG = {
         "p": -1.0,
         "ptcut": 5.0,
         "match_dr": 0.1,
+        "match_rel_pt": 0.5,
     },
     Dataset.CLD_HITS.value: {
         "algo": "ee_genkt_algorithm",
@@ -454,6 +458,7 @@ JET_CONFIG = {
         "p": -1.0,
         "ptcut": 5.0,
         "match_dr": 0.1,
+        "match_rel_pt": 0.5,
     },
 }
 
@@ -651,6 +656,9 @@ class ModelArchitectureConfig(BaseModel):
     trainable: str = "all"
     task_queries: bool = True
     output_mode: OutputMode = OutputMode.ELEMENTWISE
+    # None keeps the standard binary cross-entropy. A non-negative value uses
+    # focal loss with this gamma for the elementwise particle-presence head.
+    binary_classification_focal_gamma: Optional[float] = Field(default=None, ge=0.0)
     backbone: Optional[BackboneConfig] = None
     hit_feature_engineering: HitFeatureEngineeringConfig = Field(default_factory=HitFeatureEngineeringConfig)
     set_decoder: Optional[SetDecoderConfig] = None

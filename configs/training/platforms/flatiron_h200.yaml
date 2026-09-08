@@ -10,7 +10,7 @@ runtime_overrides:
 slurm:
   partition: gpuxl
   constraint: h200
-  time: "12:00:00"
+  time: "48:00:00"
   nodes: 1
   tasks_per_node: 1
   cpus_per_task: 64

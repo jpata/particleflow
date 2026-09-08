@@ -18,6 +18,7 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = ROOT / "configs/training/scenarios/cld_hits_output_comparison.yaml"
 BACKBONE_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
+PF_HITS_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_hits_comparison.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -58,6 +59,30 @@ def test_backbone_comparison_scenario_keeps_elementwise_output_and_depth_fixed()
     assert {job.resolved_config.model.output_mode.value for job in jobs} == {"elementwise"}
     assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
     assert jobs[1].resolved_config.model.heptv2.block_size == 128
+
+
+def test_pf_hits_comparison_scenario_resolves_three_40k_variants():
+    scenario = load_training_scenario(PF_HITS_SCENARIO)
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+
+    jobs = resolve_scenario_jobs(
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=8,
+    )
+
+    assert [job.variant_name for job in jobs] == ["pf", "elementwise_hits", "set_hits"]
+    assert [job.model_name for job in jobs] == ["pyg-cld-v1", "pyg-cld-hits-v1", "pyg-cld-hits-set-v1"]
+    assert [job.resolved_config.dataset.value for job in jobs] == ["cld", "cld_hits", "cld_hits"]
+    assert [job.resolved_config.model.output_mode.value for job in jobs] == ["elementwise", "elementwise", "set"]
+    assert [job.resolved_config.model.binary_classification_focal_gamma for job in jobs] == [None, 2.0, 2.0]
+    assert {job.resolved_config.num_steps for job in jobs} == {40000}
+    assert {job.resolved_config.val_freq for job in jobs} == {5000}
+    assert {job.resolved_config.checkpoint_freq for job in jobs} == {5000}
+    assert {job.resolved_config.lr for job in jobs} == {0.001}
+    assert {job.global_batch_size for job in jobs} == {8}
+    assert {job.seed for job in jobs} == {12345}
 
 
 @pytest.mark.parametrize(

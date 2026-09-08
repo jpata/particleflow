@@ -5,7 +5,15 @@ Spec: Validates 'mlpf_loss' with 'LossType.STANDARD'. Tests classification (PID)
 import math
 
 import torch
-from mlpf.model.losses import REGRESSION_FEATURES, event_loss, mlpf_loss, particle_loss, regression_loss
+from mlpf.model.losses import (
+    FocalLoss,
+    REGRESSION_FEATURES,
+    classification_loss,
+    event_loss,
+    mlpf_loss,
+    particle_loss,
+    regression_loss,
+)
 from mlpf.model.PFDataset import PFBatch
 
 
@@ -46,6 +54,22 @@ def get_mock_data(batch_size=2, seq_len=10, num_classes=6):
         "momentum": torch.randn(batch_size, seq_len, 5),
     }
     return batch, y, ypred
+
+
+def test_binary_particle_classification_can_use_focal_loss():
+    y = {"cls_id": torch.tensor([0, 0, 0, 1])}
+    logits = torch.tensor([[5.0, -5.0], [4.0, -4.0], [3.0, -3.0], [0.5, -0.5]])
+    ypred = {
+        "cls_binary": logits,
+        "cls_id_onehot": torch.zeros(4, 2),
+    }
+
+    focal = classification_loss(y, ypred, binary_focal_gamma=2.0)["Classification_binary"]
+    expected = 10.0 * FocalLoss(gamma=2.0)(logits, (y["cls_id"] != 0).long())
+    cross_entropy = classification_loss(y, ypred)["Classification_binary"]
+
+    torch.testing.assert_close(focal, expected)
+    assert focal < cross_entropy
 
 
 def test_mlpf_loss_standard():

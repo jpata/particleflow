@@ -604,6 +604,7 @@ models:
       type: "attention"
       input_encoding: "split"
       output_mode: "elementwise"
+      binary_classification_focal_gamma: 2.0
       attention:
         num_convs: 3
         head_dim: 16
@@ -739,6 +740,7 @@ models:
     architecture:
       type: "attention"
       input_encoding: "split"
+      binary_classification_focal_gamma: 2.0
       attention:
         num_convs: 3
         head_dim: 16

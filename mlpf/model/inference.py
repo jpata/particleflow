@@ -32,7 +32,7 @@ from mlpf.plotting.plot_utils import (
 
 from mlpf.logger import _logger
 from mlpf.model.utils import unpack_target
-from mlpf.conf import OutputMode
+from mlpf.conf import JET_CONFIG, OutputMode
 
 
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
@@ -222,6 +222,7 @@ def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None, base
         sample=sample,
         dataset=ds_name,
         baseline_yvals=baseline_yvals,
+        response_rel_pt_cut=JET_CONFIG[ds_name]["match_rel_pt"],
     )
     _logger.info("Plotted jet ratio")
 

@@ -17,6 +17,7 @@ def test_picker_discovers_scenarios_and_accelerators():
 
     assert "cld_hits_output_comparison" in scenarios
     assert "cld_hits_backbone_comparison" in scenarios
+    assert "cld_pf_hits_comparison" in scenarios
     assert {"a100", "h100", "h200"}.issubset(accelerators)
 
 
