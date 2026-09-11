@@ -14,13 +14,15 @@ def set_ttbar_only(model_config, dataset_key, sample_name, version, splits):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Restrict CLD/CLIC models to locally available ttbar datasets.")
+    parser = argparse.ArgumentParser(description="Restrict CLD/CLIC/IDEA models to locally available ttbar datasets.")
     parser.add_argument("input_spec", type=Path)
     parser.add_argument("output_spec", type=Path)
     parser.add_argument("--hit-version", default="3.2.1")
     parser.add_argument("--hit-splits", nargs="+", default=["1"])
     parser.add_argument("--pf-version", default="3.2.0")
     parser.add_argument("--pf-splits", nargs="+", default=[str(i) for i in range(1, 11)])
+    parser.add_argument("--idea-version", default="0.1.0")
+    parser.add_argument("--idea-splits", nargs="+", default=["1"])
     args = parser.parse_args()
 
     input_spec = args.input_spec
@@ -36,6 +38,7 @@ def main():
         "pyg-clic-hits-set-v1": ("clic_hits", "clic_edm_ttbar_hits", args.hit_version, args.hit_splits),
         "pyg-cld-v1": ("cld", "cld_edm_ttbar_pf", args.pf_version, args.pf_splits),
         "pyg-clic-v1": ("clic", "clic_edm_ttbar_pf", args.pf_version, args.pf_splits),
+        "pyg-idea-pipeline-v1": ("idea", "idea_edm_ttbar_pf", args.idea_version, args.idea_splits),
     }
     for model_name, (dataset_key, sample_name, version, splits) in local_datasets.items():
         if model_name in spec["models"]:

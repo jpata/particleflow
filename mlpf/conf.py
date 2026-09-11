@@ -581,6 +581,7 @@ JET_CONFIG = {
         "p": -1.0,
         "ptcut": 5.0,
         "match_dr": 0.1,
+        "match_rel_pt": 0.5,
     },
     Dataset.CLIC_HITS.value: {
         "algo": "ee_genkt_algorithm",

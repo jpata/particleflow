@@ -769,9 +769,12 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                 collate_fn=Collater(per_particle_keys, ["genmet", "source_id", "input_type_id"]),
                 sampler=sampler,
                 num_workers=config.num_workers,
+                # Training uses fixed-size batches, but a bounded validation
+                # sample can be smaller than one per-rank batch (for example,
+                # nvalid=100 with 8 ranks and batch_size=64). Keep that partial
+                # validation batch so every rank participates in evaluation.
                 drop_last=split == "train",
                 generator=loader_generator,
-                drop_last=True,
                 **worker_kwargs,
             )
 

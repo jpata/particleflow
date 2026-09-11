@@ -11,7 +11,7 @@ export TEMPDIR=/scratch/local/joosep/tmp
 export TEMP=/scratch/local/joosep/tmp
 export TMP=/scratch/local/joosep/tmp
 mkdir -p $TMPDIR
-cd /home/joosep/particleflow-dev
+cd /home/joosep/particleflow
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export TFDS_DATA_DIR=/local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/tfds
