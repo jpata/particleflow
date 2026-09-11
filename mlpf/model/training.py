@@ -1444,7 +1444,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     test_loader_generator = torch.Generator()
     rank_index = int(rank) if isinstance(rank, int) else 0
     test_loader_generator.manual_seed(config.seed + 10_000 * rank_index + 2000)
-    
+
     worker_kwargs = {}
     if config.num_workers > 0:
         worker_kwargs = {
@@ -1452,7 +1452,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
             "worker_init_fn": set_worker_sharing_strategy,
             "persistent_workers": True,
         }
-        
+
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,

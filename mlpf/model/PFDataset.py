@@ -754,7 +754,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             rank_index = int(rank) if isinstance(rank, int) else 0
             split_offset = 0 if split == "train" else 1000
             loader_generator.manual_seed(config.seed + 10_000 * rank_index + split_offset + len(loaders[split]))
-            
+
             worker_kwargs = {}
             if config.num_workers > 0:
                 worker_kwargs = {
@@ -762,7 +762,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                     "worker_init_fn": set_worker_sharing_strategy,
                     "persistent_workers": True,
                 }
-                
+
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
