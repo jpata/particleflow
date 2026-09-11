@@ -57,10 +57,4 @@ particleflow.egg-info/
 
 build
 
-# Local IDEA validation artifacts
-/SimpleGatrIDEAv3o1.onnx
-/cdb.log
-/\.keras/
-/idea-100/
-/k4geo-validation.*/
-/reports/
+/docs/_build/
