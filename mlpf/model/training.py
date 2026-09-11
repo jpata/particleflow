@@ -1447,10 +1447,12 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
 
     worker_kwargs = {}
     if config.num_workers > 0:
+        # This loader is consumed once and then discarded. Persistent workers
+        # would only defer their shutdown to DataLoader destruction, which can
+        # race with multiprocessing queue cleanup in multi-GPU runs.
         worker_kwargs = {
             "prefetch_factor": config.prefetch_factor,
             "worker_init_fn": set_worker_sharing_strategy,
-            "persistent_workers": True,
         }
 
     test_loader = torch.utils.data.DataLoader(
