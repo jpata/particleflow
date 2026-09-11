@@ -79,7 +79,12 @@ from mlpf.model.monitoring import (
 from mlpf.model.inference import make_plots, run_predictions
 from mlpf.model.plots import validation_plots
 from mlpf.model.mlpf import MLPF, configure_model_trainable
-from mlpf.model.PFDataset import Collater, PFDataset, get_interleaved_dataloaders
+from mlpf.model.PFDataset import (
+    Collater,
+    PFDataset,
+    get_interleaved_dataloaders,
+    set_worker_sharing_strategy,
+)
 from mlpf.model.losses import (
     REGRESSION_FEATURES,
     make_task_loss_weighter,
@@ -127,14 +132,21 @@ def _log_batch_composition(batch, tensorboard_writer, step, prefix):
 
     elemtypes = batch.X[..., 0][batch.mask].detach().to("cpu").long()
     for elemtype in torch.unique(elemtypes).tolist():
-        tensorboard_writer.add_scalar(f"{prefix}/elements/elemtype_{int(elemtype)}", (elemtypes == elemtype).sum().item(), step)
+        tensorboard_writer.add_scalar(
+            f"{prefix}/elements/elemtype_{int(elemtype)}",
+            (elemtypes == elemtype).sum().item(),
+            step,
+        )
 
 
 def _add_accumulator(accum, key, value, count=1.0):
     if count <= 0:
         return
     if key not in accum:
-        accum[key] = [torch.zeros((), device=value.device, dtype=torch.float32), torch.zeros((), device=value.device, dtype=torch.float32)]
+        accum[key] = [
+            torch.zeros((), device=value.device, dtype=torch.float32),
+            torch.zeros((), device=value.device, dtype=torch.float32),
+        ]
     accum[key][0] += value.detach().to(torch.float32)
     accum[key][1] += torch.as_tensor(float(count), device=value.device, dtype=torch.float32)
 
@@ -146,7 +158,11 @@ def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weight
 
     valid_base = batch.mask.bool()
     for label in sorted(set(domain_labels)):
-        event_mask = torch.tensor([event_label == label for event_label in domain_labels], device=batch.X.device, dtype=torch.bool)
+        event_mask = torch.tensor(
+            [event_label == label for event_label in domain_labels],
+            device=batch.X.device,
+            dtype=torch.bool,
+        )
         valid = valid_base & event_mask.unsqueeze(-1)
         if not valid.any():
             continue
@@ -160,14 +176,31 @@ def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weight
             "cls_id_onehot": ypred["cls_id_onehot"][valid],
             **{feature: ypred[feature][valid] for feature in REGRESSION_FEATURES},
         }
-        losses = particle_loss(particle_targets, particle_predictions, batch.X[..., 1][valid], regression_weights)
+        losses = particle_loss(
+            particle_targets,
+            particle_predictions,
+            batch.X[..., 1][valid],
+            regression_weights,
+        )
         for loss_name, loss_value in losses.items():
             _add_accumulator(accum, f"diagnostic/loss/{label}/{loss_name}", loss_value)
 
         is_particle = particle_targets["cls_id"] != 0
-        _add_accumulator(accum, f"diagnostic/composition/{label}/events", torch.as_tensor(float(event_mask.sum()), device=batch.X.device))
-        _add_accumulator(accum, f"diagnostic/composition/{label}/valid_elements", torch.as_tensor(float(valid.sum()), device=batch.X.device))
-        _add_accumulator(accum, f"diagnostic/composition/{label}/target_particles", torch.as_tensor(float(is_particle.sum()), device=batch.X.device))
+        _add_accumulator(
+            accum,
+            f"diagnostic/composition/{label}/events",
+            torch.as_tensor(float(event_mask.sum()), device=batch.X.device),
+        )
+        _add_accumulator(
+            accum,
+            f"diagnostic/composition/{label}/valid_elements",
+            torch.as_tensor(float(valid.sum()), device=batch.X.device),
+        )
+        _add_accumulator(
+            accum,
+            f"diagnostic/composition/{label}/target_particles",
+            torch.as_tensor(float(is_particle.sum()), device=batch.X.device),
+        )
         if not is_particle.any():
             continue
 
@@ -176,11 +209,36 @@ def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weight
             prediction = torch.nan_to_num(particle_predictions[feature][is_particle].to(torch.float32))
             residual = prediction - target
             count = float(target.numel())
-            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_target_mean", target.sum(), count=count)
-            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_pred_mean", prediction.sum(), count=count)
-            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_residual_mean", residual.sum(), count=count)
-            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_residual_abs_mean", residual.abs().sum(), count=count)
-            _add_accumulator(accum, f"diagnostic/regression/{label}/{feature}_residual_rms", (residual**2).sum(), count=count)
+            _add_accumulator(
+                accum,
+                f"diagnostic/regression/{label}/{feature}_target_mean",
+                target.sum(),
+                count=count,
+            )
+            _add_accumulator(
+                accum,
+                f"diagnostic/regression/{label}/{feature}_pred_mean",
+                prediction.sum(),
+                count=count,
+            )
+            _add_accumulator(
+                accum,
+                f"diagnostic/regression/{label}/{feature}_residual_mean",
+                residual.sum(),
+                count=count,
+            )
+            _add_accumulator(
+                accum,
+                f"diagnostic/regression/{label}/{feature}_residual_abs_mean",
+                residual.abs().sum(),
+                count=count,
+            )
+            _add_accumulator(
+                accum,
+                f"diagnostic/regression/{label}/{feature}_residual_rms",
+                (residual**2).sum(),
+                count=count,
+            )
 
 
 def _finalize_diagnostics(accum, world_size):
@@ -707,7 +765,11 @@ def evaluate(
     assert len(valid_loader) > 0
     iterator = enumerate(valid_loader)
     if is_interactive:
-        iterator = tqdm.tqdm(iterator, total=len(valid_loader), desc=f"Step {step} eval loop on rank={rank}")
+        iterator = tqdm.tqdm(
+            iterator,
+            total=len(valid_loader),
+            desc=f"Step {step} eval loop on rank={rank}",
+        )
 
     for ival, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
@@ -1001,8 +1063,16 @@ def _run_validation_cycle(
                         metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/iqr"]
                         - metrics[f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/match_frac"]
                     )
-                save_checkpoint(Path(temp_checkpoint_dir) / "checkpoint.pth", model, optimizer, extra_state)
-                ray.train.report(metrics, checkpoint=ray.train.Checkpoint.from_directory(temp_checkpoint_dir))
+                save_checkpoint(
+                    Path(temp_checkpoint_dir) / "checkpoint.pth",
+                    model,
+                    optimizer,
+                    extra_state,
+                )
+                ray.train.report(
+                    metrics,
+                    checkpoint=ray.train.Checkpoint.from_directory(temp_checkpoint_dir),
+                )
         else:
             ray.train.report(metrics)
 
@@ -1068,7 +1138,12 @@ def train_all_steps(
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
     iterator = range(start_step, num_steps + 1)
     if is_interactive:
-        iterator = tqdm.tqdm(iterator, initial=start_step, total=num_steps, desc=f"Training on rank={rank}")
+        iterator = tqdm.tqdm(
+            iterator,
+            initial=start_step,
+            total=num_steps,
+            desc=f"Training on rank={rank}",
+        )
 
     # loop over the dataset
     for step in iterator:
@@ -1246,21 +1321,36 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     else:
         sampler = torch.utils.data.SequentialSampler(ds)
 
-    vals_for_test = ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"]
+    vals_for_test = [
+        "X",
+        "ytarget",
+        "ytarget_pt_orig",
+        "ytarget_e_orig",
+        "ycand",
+        "genjets",
+        "targetjets",
+    ]
 
     # pythia branch was introduced for cms in version 2.8.0
     if sample.startswith("cms_") and version and Version(version) >= Version("2.8.0"):
         vals_for_test += ["pythia"]
 
+    worker_kwargs = {}
+    if config.num_workers > 0:
+        worker_kwargs = {
+            "prefetch_factor": config.prefetch_factor,
+            "worker_init_fn": set_worker_sharing_strategy,
+            "persistent_workers": True,
+        }
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
         collate_fn=Collater(vals_for_test, ["genmet"]),
         sampler=sampler,
         num_workers=config.num_workers,
-        prefetch_factor=config.prefetch_factor,
         # pin_memory=use_cuda,
         # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
+        **worker_kwargs,
     )
 
     if not osp.isdir(f"{outdir}/preds{testdir_name}/{sample}"):
@@ -1290,7 +1380,14 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         dist.barrier()  # block until all workers finished executing run_predictions()
 
 
-def run(rank: int | str, world_size: int, config: MLPFConfig, outdir: str, logfile: str, loglevel: int = logging.INFO):
+def run(
+    rank: int | str,
+    world_size: int,
+    config: MLPFConfig,
+    outdir: str,
+    logfile: str,
+    loglevel: int = logging.INFO,
+):
     # per-rank log
     _configLogger("mlpf", rank, filename=f"{logfile}.{rank}", loglevel=loglevel)
 
@@ -1503,7 +1600,10 @@ def device_agnostic_run(config: MLPFConfig, world_size, outdir, loglevel: int = 
 
         torch.cuda.empty_cache()
         if world_size > 1:
-            _logger.info(f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus", color="purple")
+            _logger.info(
+                f"Will use torch.nn.parallel.DistributedDataParallel() and {world_size} gpus",
+                color="purple",
+            )
             for rank in range(world_size):
                 _logger.info(torch.cuda.get_device_name(rank), color="purple")
 
@@ -1516,7 +1616,10 @@ def device_agnostic_run(config: MLPFConfig, world_size, outdir, loglevel: int = 
             )
         elif world_size == 1:
             rank = 0
-            _logger.info(f"Will use single-gpu: {torch.cuda.get_device_name(rank)}", color="purple")
+            _logger.info(
+                f"Will use single-gpu: {torch.cuda.get_device_name(rank)}",
+                color="purple",
+            )
             _logger.info(f"Calling run(rank={rank}, world_size={world_size}, ...)")
             run(rank, world_size, config, outdir, logfile, loglevel)
 

@@ -11,13 +11,12 @@ export TEMPDIR=/scratch/local/joosep/tmp
 export TEMP=/scratch/local/joosep/tmp
 export TMP=/scratch/local/joosep/tmp
 mkdir -p $TMPDIR
-cd /home/joosep/particleflow
+cd /home/joosep/particleflow-dev
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
 start_seed=$1
 for (( i=0; i<1; i++ )); do
     seed=$((start_seed + i))
-    
     if [ ! -f /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/post/p8_ee_qq_ecm365/reco_p8_ee_qq_ecm365_${seed}.parquet ]; then
         if [ -f /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/gen/p8_ee_qq_ecm365/root/reco_p8_ee_qq_ecm365_${seed}.root ]; then
             echo "Postprocessing /local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/gen/p8_ee_qq_ecm365/root/reco_p8_ee_qq_ecm365_${seed}.root"

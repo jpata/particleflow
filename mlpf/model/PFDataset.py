@@ -10,7 +10,12 @@ import torch
 import torch.utils.data
 
 from mlpf.logger import _logger
-from mlpf.conf import DatasetSamplerMode, MLPFConfig, dataset_input_type_id, dataset_source_id
+from mlpf.conf import (
+    DatasetSamplerMode,
+    MLPFConfig,
+    dataset_input_type_id,
+    dataset_source_id,
+)
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
@@ -83,7 +88,12 @@ class TFDSDataSource:
             if ret["X"].shape[1] > self.feature_dim:
                 raise ValueError(f"Input feature dimension {ret['X'].shape[1]} exceeds configured feature_dim={self.feature_dim}")
             if ret["X"].shape[1] < self.feature_dim:
-                ret["X"] = np.pad(ret["X"], ((0, 0), (0, self.feature_dim - ret["X"].shape[1])), mode="constant", constant_values=0)
+                ret["X"] = np.pad(
+                    ret["X"],
+                    ((0, 0), (0, self.feature_dim - ret["X"].shape[1])),
+                    mode="constant",
+                    constant_values=0,
+                )
 
         # sort the elements in each event in pT descending order
         # the transformer is permutation-covariant, but this can be helpful for other types of models
@@ -246,7 +256,8 @@ class Collater:
         # per-particle quantities need to be padded across events of different size
         for key_to_get in self.per_particle_keys_to_get:
             ret[key_to_get] = torch.nn.utils.rnn.pad_sequence(
-                [torch.as_tensor(inp[key_to_get], dtype=torch.float32) for inp in inputs], batch_first=True
+                [torch.as_tensor(inp[key_to_get], dtype=torch.float32) for inp in inputs],
+                batch_first=True,
             )
 
         # per-event quantities can be stacked across events
@@ -356,7 +367,14 @@ class DistributedShardConsecutiveSampler(torch.utils.data.distributed.Distribute
     """
 
     def __init__(self, dataset, world_size=None, rank=None, shuffle=True, seed=0, drop_last=False):
-        super().__init__(dataset, num_replicas=world_size, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last)
+        super().__init__(
+            dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=shuffle,
+            seed=seed,
+            drop_last=drop_last,
+        )
 
     def __iter__(self):
         rng = random.Random(self.seed + self.epoch)
@@ -695,18 +713,23 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
 
             # build dataloaders
             batch_size = physical_ds.batch_size * config.gpu_batch_multiplier
+            worker_kwargs = {}
+            if config.num_workers > 0:
+                worker_kwargs = {
+                    "prefetch_factor": config.prefetch_factor,
+                    "worker_init_fn": set_worker_sharing_strategy,
+                    "persistent_workers": True,
+                }
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
                 collate_fn=Collater(["X", "ytarget"], ["genmet", "source_id", "input_type_id"]),
                 sampler=sampler,
                 num_workers=config.num_workers,
-                prefetch_factor=config.prefetch_factor,
                 # pin_memory=use_cuda,
                 # pin_memory_device="cuda:{}".format(rank) if use_cuda else "",
                 drop_last=True,
-                worker_init_fn=set_worker_sharing_strategy,
-                persistent_workers=config.num_workers > 0,
+                **worker_kwargs,
             )
 
             loaders[split].append(loader)

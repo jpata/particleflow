@@ -79,6 +79,8 @@ all = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakem
 
 gen = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_gen --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} gen \"$@\"' --", depends-on = ["snakefile"], description = "Generate samples" }
 
+gen_idea = { cmd = "PROD=idea pixi run gen", description = "Generate IDEA_o1_v03 samples" }
+
 post = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_post --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} post \"$@\"' --", depends-on = ["snakefile"], description = "Post-process samples" }
 
 tfds = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds \"$@\"' --", depends-on = ["snakefile"], description = "Create TFDS datasets" }
