@@ -1,0 +1,41 @@
+version: 1
+
+project:
+  title: MLPF documentation
+  description: User guide for machine-learned particle-flow reconstruction
+  keywords:
+    - particle flow
+    - machine learning
+    - particle physics
+    - event reconstruction
+  github: jpata/particleflow
+  toc:
+    - file: index.md
+    - title: Getting started
+      children:
+        - file: getting-started/installation.md
+        - file: getting-started/choose-a-workflow.md
+        - file: getting-started/quickstart.md
+    - title: Concepts
+      children:
+        - file: concepts/particle-flow-and-mlpf.md
+    - title: Science and project status
+      children:
+        - file: science/publications.md
+        - file: science/capabilities.md
+        - file: science/roadmap.md
+    - title: Development
+      children:
+        - file: map.md
+        - file: development/documentation.md
+
+site:
+  template: book-theme
+  title: MLPF documentation
+  options:
+    folders: true
+  actions:
+    - title: GitHub repository
+      url: https://github.com/jpata/particleflow
+    - title: Datasets and models
+      url: https://huggingface.co/jpata

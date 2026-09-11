@@ -1,0 +1,44 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        expand('snakemake_jobs/idea/gen/gen_gun_e_10gev_{seed}.done', seed=range(424242, 424342, 1)),
+        expand('snakemake_jobs/idea/gen/gen_gun_mu_10gev_{seed}.done', seed=range(600000, 600100, 1)),
+        expand('snakemake_jobs/idea/gen/gen_gun_pi_10gev_{seed}.done', seed=range(700000, 700100, 1)),
+        expand('snakemake_jobs/idea/gen/gen_ttbar_{seed}.done', seed=range(300000, 300100, 1)),
+        expand('snakemake_jobs/idea/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 400100, 1)),
+        expand('snakemake_jobs/idea/gen/gen_qq_{seed}.done', seed=range(500000, 500100, 1))
+
+rule gen:
+    input:
+        expand('snakemake_jobs/idea/gen/gen_gun_e_10gev_{seed}.done', seed=range(424242, 424342, 1)), expand('snakemake_jobs/idea/gen/gen_gun_mu_10gev_{seed}.done', seed=range(600000, 600100, 1)), expand('snakemake_jobs/idea/gen/gen_gun_pi_10gev_{seed}.done', seed=range(700000, 700100, 1)), expand('snakemake_jobs/idea/gen/gen_ttbar_{seed}.done', seed=range(300000, 300100, 1)), expand('snakemake_jobs/idea/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 400100, 1)), expand('snakemake_jobs/idea/gen/gen_qq_{seed}.done', seed=range(500000, 500100, 1))
+    output:
+        "snakemake_jobs/idea/gen/all.done"
+    shell:
+        "touch {output}"
+
+rule gen_task:
+    output:
+        "snakemake_jobs/idea/gen/gen_{sample}_{seed}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    shell:
+        "snakemake_jobs/idea/gen/gen_{wildcards.sample}.sh {wildcards.seed} && touch {output}"

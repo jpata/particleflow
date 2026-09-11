@@ -3,6 +3,8 @@
 **ML-based particle flow (MLPF)** focuses on developing full event reconstruction for particle detectors using computationally scalable and flexible machine learning models. The project aims to improve particle flow reconstruction across various detector environments, including CMS, as well as future detectors via Key4HEP.
 We build on existing, open-source simulation software by the experimental collaborations.
 
+Read the [user documentation](https://jpata.github.io/particleflow/) for the physics overview, installation and workflow guides, current capabilities, publications, and roadmap. The Markdown source is in [`docs/`](docs/index.md).
+
 <p float="left">
   <img src="images/diagram.svg" alt="High-level overview" width="800"/>
 </p>
@@ -40,9 +42,29 @@ This will download the requested files into `data/tfds/tensorflow_datasets/cld/c
 
 ### **Dataset Upload**
 
-To upload a generated dataset to the Hugging Face Hub:
+The upload script has separate commands for TFDS, ROOT, and Parquet data. Preview any
+selection with `--dry-run`; completed files are skipped when their Hub path and size
+match the local file.
+
 ```bash
-uv run python3 scripts/upload_hf.py --repo jpata/particleflow --spec particleflow_spec.yaml clic 1
+# Upload TFDS split 1 for one version
+uv run python3 scripts/upload_hf.py tfds clic 1 --version 3.2.1 --dry-run
+
+# Upload the first two ROOT files from every configured CLIC sample
+uv run python3 scripts/upload_hf.py root clic --num-files 2 --dry-run
+
+# Upload only Parquet files corresponding to ROOT files already on the Hub
+uv run python3 scripts/upload_hf.py parquet clic --dry-run
+```
+
+Remove `--dry-run` after checking the selection. Use repeatable `--sample NAME` or
+`--dataset NAME` options to narrow an upload. For a campaign not present in
+`particleflow_spec.yaml`, provide its workspace explicitly, for example:
+
+```bash
+uv run python3 scripts/upload_hf.py parquet idea \
+  --workspace-dir /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9 \
+  --dry-run
 ```
 
 ### **Training**

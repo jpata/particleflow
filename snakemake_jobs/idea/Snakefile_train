@@ -1,0 +1,34 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        "snakemake_jobs/idea/train/train_pyg-idea-pipeline-v1_idea.done"
+
+rule train_pyg_idea_pipeline_v1:
+    input:
+        "snakemake_jobs/idea/tfds/all.done"
+    output:
+        "snakemake_jobs/idea/train/train_pyg-idea-pipeline-v1_idea.done"
+    threads: 16
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=40000, slurm_partition="gpu", runtime=10080, slurm_account="hepusers", gres="gpu:l40:1", cpus_per_task=16, threads=16
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/idea/train/train_pyg-idea-pipeline-v1_idea.sh && touch {output}"
