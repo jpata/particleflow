@@ -722,9 +722,7 @@ def plot_jet_ratio(
 
     ret_dict = {}
     p = med_iqr(yvals["jet_ratio_gen_to_target_pt"])
-    ret_dict["jet_ratio_gen_to_target_pt"] = jet_response_metrics(
-        yvals, "gen", "target", response_rel_pt_cut
-    )
+    ret_dict["jet_ratio_gen_to_target_pt"] = jet_response_metrics(yvals, "gen", "target", response_rel_pt_cut)
     plt.hist(
         yvals["jet_ratio_gen_to_target_pt"],
         bins=bins,
@@ -734,9 +732,7 @@ def plot_jet_ratio(
     )
 
     p = med_iqr(baseline_yvals["jet_ratio_gen_to_cand_pt"])
-    ret_dict["jet_ratio_gen_to_cand_pt"] = jet_response_metrics(
-        baseline_yvals, "gen", "cand", response_rel_pt_cut
-    )
+    ret_dict["jet_ratio_gen_to_cand_pt"] = jet_response_metrics(baseline_yvals, "gen", "cand", response_rel_pt_cut)
     plt.hist(
         baseline_yvals["jet_ratio_gen_to_cand_pt"],
         bins=bins,
@@ -746,9 +742,7 @@ def plot_jet_ratio(
     )
 
     p = med_iqr(yvals["jet_ratio_gen_to_pred_pt"])
-    ret_dict["jet_ratio_gen_to_pred_pt"] = jet_response_metrics(
-        yvals, "gen", "pred", response_rel_pt_cut
-    )
+    ret_dict["jet_ratio_gen_to_pred_pt"] = jet_response_metrics(yvals, "gen", "pred", response_rel_pt_cut)
     plt.hist(
         yvals["jet_ratio_gen_to_pred_pt"],
         bins=bins,
@@ -758,9 +752,7 @@ def plot_jet_ratio(
     )
 
     p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
-    ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = jet_response_metrics(
-        yvals, "gen", "pred_nopu", response_rel_pt_cut
-    )
+    ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = jet_response_metrics(yvals, "gen", "pred_nopu", response_rel_pt_cut)
     plt.hist(
         yvals["jet_ratio_gen_to_pred_nopu_pt"],
         bins=bins,
@@ -796,9 +788,7 @@ def plot_jet_ratio(
     ax = plt.axes()
 
     p = med_iqr(baseline_yvals["jet_ratio_target_to_cand_pt"])
-    ret_dict["jet_ratio_target_to_cand_pt"] = jet_response_metrics(
-        baseline_yvals, "target", "cand", response_rel_pt_cut
-    )
+    ret_dict["jet_ratio_target_to_cand_pt"] = jet_response_metrics(baseline_yvals, "target", "cand", response_rel_pt_cut)
     plt.plot([], [])
     plt.hist(
         baseline_yvals["jet_ratio_target_to_cand_pt"],
@@ -808,9 +798,7 @@ def plot_jet_ratio(
         label="PF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
     p = med_iqr(yvals["jet_ratio_target_to_pred_pt"])
-    ret_dict["jet_ratio_target_to_pred_pt"] = jet_response_metrics(
-        yvals, "target", "pred", response_rel_pt_cut
-    )
+    ret_dict["jet_ratio_target_to_pred_pt"] = jet_response_metrics(yvals, "target", "pred", response_rel_pt_cut)
     plt.hist(
         yvals["jet_ratio_target_to_pred_pt"],
         bins=bins,
