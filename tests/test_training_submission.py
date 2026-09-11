@@ -18,7 +18,18 @@ def test_picker_discovers_scenarios_and_accelerators():
     assert "cld_hits_output_comparison" in scenarios
     assert "cld_hits_backbone_comparison" in scenarios
     assert "cld_pf_hits_comparison" in scenarios
+    assert "clic_cld_pf_set_hits_comparison" in scenarios
     assert {"a100", "h100", "h200"}.issubset(accelerators)
+
+
+def test_multi_production_scenario_submits_one_array_task_per_variant():
+    scenario = resolve_scenario_path("clic_cld_pf_set_hits_comparison", ROOT)
+    profile = resolve_flatiron_profile_path("h100", ROOT)
+
+    command, jobs = build_slurm_submission(scenario, profile, ROOT)
+
+    assert [job.production_name for job in jobs] == ["cld", "cld", "clic", "clic"]
+    assert command[command.index("--array") + 1] == "0-3"
 
 
 def test_h100_submission_is_derived_from_scenario_and_profile():

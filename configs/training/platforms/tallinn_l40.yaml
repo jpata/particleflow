@@ -1,6 +1,8 @@
 name: tallinn_l40
 gpus: 2
-data_dir: /local/${USER}/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
+data_dir:
+  cld: /local/${USER}/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
+  clic: /local/${USER}/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds
 experiments_dir: /home/${USER}/particleflow/experiments
 environment:
   PF_SITE: tallinn

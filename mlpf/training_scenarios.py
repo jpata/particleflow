@@ -34,6 +34,8 @@ class ScenarioVariant(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model_name: str
+    # Defaults to the scenario-level production; set it to compare detectors.
+    production_name: str | None = None
     overrides: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -83,6 +85,9 @@ class TrainingScenario(BaseModel):
             raise ValueError(f"Common overrides must not set derived keys: {sorted(invalid)}")
         return self
 
+    def variant_production(self, variant_name):
+        return self.variants[variant_name].production_name or self.production_name
+
 
 class SlurmProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -114,7 +119,9 @@ class PlatformProfile(BaseModel):
 
     name: str
     gpus: int = Field(gt=0)
-    data_dir: str
+    # Either one TFDS directory shared by every production, or a mapping from
+    # production name to that production's TFDS directory.
+    data_dir: str | dict[str, str]
     experiments_dir: str
     environment: dict[str, str] = Field(default_factory=dict)
     runtime_overrides: dict[str, Any] = Field(default_factory=dict)
@@ -125,7 +132,18 @@ class PlatformProfile(BaseModel):
         invalid = set(self.runtime_overrides).difference(PLATFORM_OVERRIDE_KEYS)
         if invalid:
             raise ValueError("Platform profiles may only set runtime-specific overrides; " f"invalid keys: {sorted(invalid)}")
+        if isinstance(self.data_dir, dict) and not self.data_dir:
+            raise ValueError("Platform data_dir mapping must name at least one production")
         return self
+
+    def data_dir_for(self, production_name):
+        if isinstance(self.data_dir, str):
+            return self.data_dir
+        if production_name not in self.data_dir:
+            raise ValueError(
+                f"Platform profile {self.name!r} has no data_dir for production {production_name!r}; " f"available: {sorted(self.data_dir)}"
+            )
+        return self.data_dir[production_name]
 
 
 class ResolvedScenarioJob(BaseModel):
@@ -135,6 +153,8 @@ class ResolvedScenarioJob(BaseModel):
     platform_name: str
     variant_name: str
     model_name: str
+    production_name: str
+    data_dir: str
     seed: int
     global_batch_size: int
     per_gpu_batch_size: int
@@ -154,7 +174,10 @@ def load_training_scenario(path):
 
 def load_platform_profile(path):
     profile = PlatformProfile.model_validate(_read_yaml(path))
-    profile.data_dir = os.path.expandvars(os.path.expanduser(profile.data_dir))
+    if isinstance(profile.data_dir, str):
+        profile.data_dir = os.path.expandvars(os.path.expanduser(profile.data_dir))
+    else:
+        profile.data_dir = {key: os.path.expandvars(os.path.expanduser(value)) for key, value in profile.data_dir.items()}
     profile.experiments_dir = os.path.expandvars(os.path.expanduser(profile.experiments_dir))
     profile.environment = {key: os.path.expandvars(os.path.expanduser(value)) for key, value in profile.environment.items()}
     return profile
@@ -193,12 +216,12 @@ def _settings_as_extra_args(settings):
     return args
 
 
-def _config_args(profile, settings):
+def _config_args(profile, settings, data_dir):
     return SimpleNamespace(
         train=True,
         test=True,
         pipeline=False,
-        data_dir=profile.data_dir,
+        data_dir=data_dir,
         gpus=profile.gpus,
         compile=settings.get("compile"),
         comet=settings.get("comet"),
@@ -250,13 +273,15 @@ def resolve_scenario_job(
     settings = _merge_settings(scenario, platform, variant, extra_overrides)
     settings["seed"] = seed
     selected_spec = str(spec_file or scenario.spec_file)
+    production_name = scenario.variant_production(variant_name)
+    data_dir = platform.data_dir_for(production_name)
 
     with _temporary_environment(platform.environment):
         config = MLPFConfig.from_spec(
             selected_spec,
             variant.model_name,
-            scenario.production_name,
-            args=_config_args(platform, settings),
+            production_name,
+            args=_config_args(platform, settings, data_dir),
             extra_args=_settings_as_extra_args(settings),
         )
 
@@ -276,8 +301,8 @@ def resolve_scenario_job(
         config = MLPFConfig.from_spec(
             selected_spec,
             variant.model_name,
-            scenario.production_name,
-            args=_config_args(platform, settings),
+            production_name,
+            args=_config_args(platform, settings, data_dir),
             extra_args=_settings_as_extra_args(settings),
         )
 
@@ -286,6 +311,8 @@ def resolve_scenario_job(
         platform_name=platform.name,
         variant_name=variant_name,
         model_name=variant.model_name,
+        production_name=production_name,
+        data_dir=data_dir,
         seed=seed,
         global_batch_size=target_global_batch,
         per_gpu_batch_size=dataset_batch_size * multiplier,
@@ -366,9 +393,9 @@ def _pipeline_command(job, scenario, platform, spec_file, experiment_dir):
         "--model-name",
         job.model_name,
         "--production-name",
-        scenario.production_name,
+        job.production_name,
         "--data-dir",
-        platform.data_dir,
+        job.data_dir,
         "--experiment-dir",
         str(experiment_dir),
         "train",

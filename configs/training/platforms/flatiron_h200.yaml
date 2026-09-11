@@ -1,6 +1,8 @@
 name: flatiron_h200
 gpus: 8
-data_dir: /mnt/ceph/users/${USER}/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
+data_dir:
+  cld: /mnt/ceph/users/${USER}/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
+  clic: /mnt/ceph/users/${USER}/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds
 experiments_dir: /mnt/home/${USER}/particleflow/experiments
 runtime_overrides:
   dtype: bfloat16

@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = ROOT / "configs/training/scenarios/cld_hits_output_comparison.yaml"
 BACKBONE_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
 PF_HITS_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_hits_comparison.yaml"
+CLIC_CLD_SCENARIO = ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comparison.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -92,6 +93,94 @@ def test_pf_hits_comparison_scenario_resolves_three_40k_variants():
     assert {job.resolved_config.lr for job in jobs} == {0.001}
     assert {job.global_batch_size for job in jobs} == {8}
     assert {job.seed for job in jobs} == {12345}
+
+
+def test_clic_cld_scenario_resolves_pf_and_set_hits_per_detector():
+    scenario = load_training_scenario(CLIC_CLD_SCENARIO)
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+
+    jobs = resolve_scenario_jobs(
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=8,
+    )
+
+    assert [job.variant_name for job in jobs] == ["cld_pf", "cld_set_hits", "clic_pf", "clic_set_hits"]
+    assert [job.model_name for job in jobs] == ["pyg-cld-v1", "pyg-cld-hits-set-v1", "pyg-clic-v1", "pyg-clic-hits-set-v1"]
+    assert [job.production_name for job in jobs] == ["cld", "cld", "clic", "clic"]
+    assert [job.data_dir for job in jobs] == [
+        platform.data_dir["cld"],
+        platform.data_dir["cld"],
+        platform.data_dir["clic"],
+        platform.data_dir["clic"],
+    ]
+    assert [job.resolved_config.data_dir for job in jobs] == [job.data_dir for job in jobs]
+    assert [job.resolved_config.dataset.value for job in jobs] == ["cld", "cld_hits", "clic", "clic_hits"]
+    assert [job.resolved_config.model.output_mode.value for job in jobs] == ["elementwise", "set", "elementwise", "set"]
+    # The set-based hit models run twice the backbone depth of the PF models.
+    assert [job.resolved_config.model.backbone.num_convs for job in jobs] == [6, 12, 6, 12]
+    assert [
+        (
+            job.resolved_config.model.backbone.num_tracker_layers,
+            job.resolved_config.model.backbone.num_calo_layers,
+            job.resolved_config.model.backbone.num_common_layers,
+        )
+        for job in jobs
+    ] == [(None, None, None), (4, 4, 4), (None, None, None), (4, 4, 4)]
+    assert {job.resolved_config.model.set_decoder.num_layers for job in jobs if job.resolved_config.model.set_decoder} == {8}
+    assert {job.resolved_config.num_steps for job in jobs} == {50000}
+    assert {job.resolved_config.val_freq for job in jobs} == {5000}
+    assert {job.resolved_config.lr for job in jobs} == {0.001}
+    assert {job.seed for job in jobs} == {12345}
+
+
+def test_platform_data_dir_mapping_requires_the_variant_production():
+    scenario = load_training_scenario(CLIC_CLD_SCENARIO)
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+    platform.data_dir = {"cld": platform.data_dir["cld"]}
+
+    with pytest.raises(ValueError, match="no data_dir for production 'clic'"):
+        resolve_scenario_jobs(
+            scenario,
+            platform,
+            spec_file=ROOT / "particleflow_spec.yaml",
+            global_batch_size=8,
+        )
+
+    platform.data_dir = "/tmp/shared_tfds"
+    jobs = resolve_scenario_jobs(
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=8,
+    )
+    assert {job.data_dir for job in jobs} == {"/tmp/shared_tfds"}
+
+
+def test_cli_dry_run_uses_per_production_data_dir(capsys):
+    from mlpf.training_scenarios import main
+
+    main(
+        [
+            "--scenario",
+            str(CLIC_CLD_SCENARIO),
+            "--platform",
+            str(PLATFORMS / "local.yaml"),
+            "--spec-file",
+            str(ROOT / "particleflow_spec.yaml"),
+            "--global-batch-size",
+            "8",
+            "--variant",
+            "clic_set_hits",
+            "--dry-run",
+        ]
+    )
+
+    command = capsys.readouterr().out
+    assert "--production-name clic" in command
+    assert "--data-dir /mnt/work/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds" in command
+    assert "--model.backbone.num_convs 12" in command
 
 
 @pytest.mark.parametrize(

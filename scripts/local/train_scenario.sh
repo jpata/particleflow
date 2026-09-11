@@ -44,7 +44,6 @@ export PF_SITE=local
 
 PLATFORM_FILE=${PLATFORM_FILE:-configs/training/platforms/local.yaml}
 SPEC_FILE=${SPEC_FILE:-$(uv run python3 scripts/get_param.py "$SCENARIO_FILE" spec_file particleflow_spec.yaml)}
-PRODUCTION_NAME=$(uv run python3 scripts/get_param.py "$SCENARIO_FILE" production_name)
 USE_LOCAL_AVAILABLE_SPEC=${USE_LOCAL_AVAILABLE_SPEC:-true}
 LOCAL_SPEC_FILE=${LOCAL_SPEC_FILE:-/tmp/particleflow_local_available_spec.yaml}
 SEED=${SEED:-}
@@ -66,6 +65,9 @@ PREFETCH_FACTOR=${PREFETCH_FACTOR:-4}
 VALIDATION_DIAGNOSTICS_BATCHES=${VALIDATION_DIAGNOSTICS_BATCHES:-4}
 EXPERIMENTS_DIR=${EXPERIMENTS_DIR:-experiments}
 PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-128}
+# The platform profile maps each production (cld, clic) to its TFDS directory.
+# Set DATA_DIR to force one directory for every variant instead.
+DATA_DIR=${DATA_DIR:-}
 
 read -r -a HIT_SPLIT_LIST <<< "$HIT_SPLITS"
 if [[ "$USE_LOCAL_AVAILABLE_SPEC" == "true" ]]; then
@@ -76,14 +78,11 @@ if [[ "$USE_LOCAL_AVAILABLE_SPEC" == "true" ]]; then
   SPEC_FILE="$LOCAL_SPEC_FILE"
 fi
 
-DATA_DIR=${DATA_DIR:-$(uv run python3 scripts/get_param.py "$SPEC_FILE" productions."$PRODUCTION_NAME".workspace_dir)/tfds/}
-
 RUN_ARGS=(
   --scenario "$SCENARIO_FILE"
   --platform "$PLATFORM_FILE"
   --spec-file "$SPEC_FILE"
   --global-batch-size "$GLOBAL_BATCH_SIZE"
-  --data-dir "$DATA_DIR"
   --experiments-dir "$EXPERIMENTS_DIR"
   --set "data_config=$DATA_CONFIG"
   --set "num_steps=$NUM_STEPS"
@@ -96,6 +95,9 @@ RUN_ARGS=(
   --set "validation_diagnostics_batches=$VALIDATION_DIAGNOSTICS_BATCHES"
   --set "pad_to_multiple_elements=$PAD_TO_MULTIPLE_ELEMENTS"
 )
+if [[ -n "$DATA_DIR" ]]; then
+  RUN_ARGS+=(--data-dir "$DATA_DIR")
+fi
 if [[ -n "$SEED" ]]; then
   RUN_ARGS+=(--seed "$SEED")
 fi
