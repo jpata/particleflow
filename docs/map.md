@@ -9,7 +9,7 @@ The project uses a hierarchical configuration system.
 - **`particleflow_spec.yaml`**: The single source of truth for the entire project. It defines machine-specific paths (sites), data production scenarios, and model architectures.
 - **`mlpf/conf.py`**: Defines the Pydantic models for the configuration, ensuring type safety, path resolution, and model-type schemas including `attention`, `gnnlsh`, `litept`, `hept`, and `heptv2`.
 - **`mlpf/pipeline.py`**: Implements hierarchical configuration resolution: base defaults in `mlpf/conf.py` are overridden by scenario-specific values in `particleflow_spec.yaml`, which can further be overridden via command-line arguments (e.g., `--model.num_convs 6`).
-- **`configs/`**: Site-specific Pixi environment configurations (`local/`, `lxplus/`, `tallinn/`). The root `pixi.toml` is a symlink into this directory.
+- **`configs/`**: Site-specific Pixi environment configurations (`local/`, `lxplus/`, `tallinn/`) and reusable training scenarios/platform profiles under `configs/training/`. The root `pixi.toml` is a symlink into this directory.
 - **`pixi.toml` / `pixi.lock` / `uv.lock` / `uv.singularity`**: Project environment, container definitions, and task management. Defines common tasks like `gen`, `post`, `train`, and `validation`.
 - **`envs/`**: Isolated virtual environment specifications (e.g., `ort-cpu`, `ort-gpu`) for specific runtimes like ONNX.
 - **`validation_cms.yaml` / `validation_key4hep.yaml`**: Specification files for validation scenarios.
@@ -22,6 +22,7 @@ Complex data production and training pipelines are managed using Snakemake or si
   - **`produce_cms_validation_snakemake.py`**: Orchestrates validation workflows specifically for CMS.
   - **`produce_validation_snakemake.py`**: Orchestrates validation workflows for Key4Hep detectors (CLD, CLIC).
 - **`mlpf/pipeline.py`**: The main CLI for training, testing, and hyperparameter optimization. Supports standard and Ray-based execution.
+- **`scripts/training/run_scenario.py`**: Resolves a generic scientific training scenario against a hardware profile, validates comparison invariants and global batch size, and launches reproducible seeded jobs.
 
 ## 3. Data Production & Preprocessing
 - **`mlpf/data/`**: Simulator-specific code for generating and preprocessing data.

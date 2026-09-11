@@ -13,6 +13,8 @@ import tqdm
 import sys
 import vector
 
+from mlpf.jet_utils import jet_matching_metrics
+
 SAMPLE_LABEL_CMS = {
     "TTbar_14TeV_TuneCUETP8M1_cfi": r"$\mathrm{t}\bar{\mathrm{t}}$+PU events",
     "ZTT_All_hadronic_14TeV_TuneCUETP8M1_cfi": r"$Z\rightarrow \tau \tau$+PU events",
@@ -256,6 +258,24 @@ def med_iqr(arr):
     return p50, p75 - p25
 
 
+def jet_response_metrics(yvals, reference, candidate, response_rel_pt_cut=0.5):
+    """Return response resolution and auditable one-to-one matching metrics."""
+
+    response_ratios = yvals[f"jet_ratio_{reference}_to_{candidate}_pt"]
+    median, iqr = med_iqr(response_ratios)
+    metrics = {
+        "med": median,
+        "iqr": iqr,
+        **jet_matching_metrics(
+            response_ratios,
+            awkward.count(yvals[f"jets_{reference}_pt"], axis=None),
+            awkward.count(yvals[f"jets_{candidate}_pt"], axis=None),
+            response_rel_pt_cut=response_rel_pt_cut,
+        ),
+    }
+    return metrics
+
+
 def get_eff(df, pid):
     v0 = np.sum(df == pid)
     return v0 / len(df), np.sqrt(v0) / len(df)
@@ -342,7 +362,6 @@ EXPERIMENT_LABELS = {
     "idea": idea_label,
     "clic_hits": clic_label,
     "cld_hits": cld_label,
-    "clic_hits": clic_label,
 }
 
 
@@ -757,6 +776,7 @@ def plot_jet_ratio(
     dataset=None,
     sample=None,
     baseline_yvals=None,
+    response_rel_pt_cut=0.5,
 ):
     baseline_yvals = baseline_yvals if baseline_yvals is not None else yvals
     plt.figure()
@@ -767,11 +787,7 @@ def plot_jet_ratio(
 
     ret_dict = {}
     p = med_iqr(yvals["jet_ratio_gen_to_target_pt"])
-    ret_dict["jet_ratio_gen_to_target_pt"] = {
-        "med": p[0],
-        "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_target_pt"]) / awkward.count(yvals["jets_gen_pt"]),
-    }
+    ret_dict["jet_ratio_gen_to_target_pt"] = jet_response_metrics(yvals, "gen", "target", response_rel_pt_cut)
     plt.hist(
         yvals["jet_ratio_gen_to_target_pt"],
         bins=bins,
@@ -781,11 +797,7 @@ def plot_jet_ratio(
     )
 
     p = med_iqr(baseline_yvals["jet_ratio_gen_to_cand_pt"])
-    ret_dict["jet_ratio_gen_to_cand_pt"] = {
-        "med": p[0],
-        "iqr": p[1],
-        "match_frac": awkward.count(baseline_yvals["jet_ratio_gen_to_cand_pt"]) / awkward.count(baseline_yvals["jets_gen_pt"]),
-    }
+    ret_dict["jet_ratio_gen_to_cand_pt"] = jet_response_metrics(baseline_yvals, "gen", "cand", response_rel_pt_cut)
     plt.hist(
         baseline_yvals["jet_ratio_gen_to_cand_pt"],
         bins=bins,
@@ -795,11 +807,7 @@ def plot_jet_ratio(
     )
 
     p = med_iqr(yvals["jet_ratio_gen_to_pred_pt"])
-    ret_dict["jet_ratio_gen_to_pred_pt"] = {
-        "med": p[0],
-        "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_pt"]) / awkward.count(yvals["jets_gen_pt"]),
-    }
+    ret_dict["jet_ratio_gen_to_pred_pt"] = jet_response_metrics(yvals, "gen", "pred", response_rel_pt_cut)
     plt.hist(
         yvals["jet_ratio_gen_to_pred_pt"],
         bins=bins,
@@ -809,11 +817,7 @@ def plot_jet_ratio(
     )
 
     p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
-    ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = {
-        "med": p[0],
-        "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_gen_to_pred_nopu_pt"]) / awkward.count(yvals["jets_gen_pt"]),
-    }
+    ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = jet_response_metrics(yvals, "gen", "pred_nopu", response_rel_pt_cut)
     plt.hist(
         yvals["jet_ratio_gen_to_pred_nopu_pt"],
         bins=bins,
@@ -849,11 +853,7 @@ def plot_jet_ratio(
     ax = plt.axes()
 
     p = med_iqr(baseline_yvals["jet_ratio_target_to_cand_pt"])
-    ret_dict["jet_ratio_target_to_cand_pt"] = {
-        "med": p[0],
-        "iqr": p[1],
-        "match_frac": awkward.count(baseline_yvals["jet_ratio_target_to_cand_pt"]) / awkward.count(baseline_yvals["jets_target_pt"]),
-    }
+    ret_dict["jet_ratio_target_to_cand_pt"] = jet_response_metrics(baseline_yvals, "target", "cand", response_rel_pt_cut)
     plt.plot([], [])
     plt.hist(
         baseline_yvals["jet_ratio_target_to_cand_pt"],
@@ -863,11 +863,7 @@ def plot_jet_ratio(
         label="PF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
     p = med_iqr(yvals["jet_ratio_target_to_pred_pt"])
-    ret_dict["jet_ratio_target_to_pred_pt"] = {
-        "med": p[0],
-        "iqr": p[1],
-        "match_frac": awkward.count(yvals["jet_ratio_target_to_pred_pt"]) / awkward.count(yvals["jets_target_pt"]),
-    }
+    ret_dict["jet_ratio_target_to_pred_pt"] = jet_response_metrics(yvals, "target", "pred", response_rel_pt_cut)
     plt.hist(
         yvals["jet_ratio_target_to_pred_pt"],
         bins=bins,

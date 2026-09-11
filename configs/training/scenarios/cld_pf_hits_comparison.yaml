@@ -1,0 +1,85 @@
+name: cld_pf_hits_comparison
+spec_file: particleflow_spec.yaml
+production_name: cld
+
+variants:
+  pf:
+    model_name: pyg-cld-v1
+  elementwise_hits:
+    model_name: pyg-cld-hits-v1
+    overrides:
+      # Only hit inputs have tracker/calo detector partitions. Keep the same
+      # six-layer budget while specializing two layers per detector branch.
+      model.backbone.num_tracker_layers: 2
+      model.backbone.num_calo_layers: 2
+      model.backbone.num_common_layers: 2
+  set_hits:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      model.backbone.num_tracker_layers: 2
+      model.backbone.num_calo_layers: 2
+      model.backbone.num_common_layers: 2
+      # Start slots from energetic detector inputs so their initial direction is
+      # physical, then refine within a local eta-phi neighborhood.
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.num_layers: 4
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+
+# Add seeds here; launchers derive the three jobs per seed automatically.
+seeds: [12345]
+
+training:
+  # Kept fixed across hardware profiles. The runner derives the per-GPU batch.
+  global_batch_size: 512
+  parameters:
+    lr: 0.001
+    num_steps: 40000
+    val_freq: 5000
+    checkpoint_freq: 5000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+
+common_overrides:
+  # Hold the trainable architecture fixed apart from the output formulation.
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.attention.use_jagged_attention: true
+
+allowed_variant_differences:
+  # The PF run reads tracks/clusters while the hit runs read detector hits.
+  - dataset
+  - enabled_test_datasets
+  - input_dim
+  - train_dataset
+  - valid_dataset
+  - test_dataset
+  # This is the model-spec default; training.parameters.lr overrides it equally.
+  - hyperparameters.lr
+  # Hit elementwise training uses focal presence classification; PF keeps CE.
+  - model.binary_classification_focal_gamma
+  # Detector-specific branches are meaningful only for raw hit inputs. The PF
+  # model uses all six layers as common layers.
+  - model.backbone.num_tracker_layers
+  - model.backbone.num_calo_layers
+  - model.backbone.num_common_layers
+  # Only the set-based hit variant has a set decoder.
+  - model.output_mode
+  - model.set_decoder
