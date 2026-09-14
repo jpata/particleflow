@@ -7,6 +7,7 @@ shift 2
 
 TASK_INDEX=${SLURM_ARRAY_TASK_ID:-0}
 SEED_OVERRIDE=${SEED:-}
+CONTINUE_RUN=0
 REPO_ROOT=${MLPF_REPO_ROOT:-${SLURM_SUBMIT_DIR:-$PWD}}
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -21,6 +22,10 @@ while [[ $# -gt 0 ]]; do
     --repo-root)
       REPO_ROOT=${2:?--repo-root requires a value}
       shift 2
+      ;;
+    --continue)
+      CONTINUE_RUN=1
+      shift
       ;;
     *)
       echo "Unknown argument: $1" >&2
@@ -62,6 +67,9 @@ RUN_ARGS=(
 )
 if [[ -n "$SEED_OVERRIDE" ]]; then
   RUN_ARGS+=(--seed "$SEED_OVERRIDE")
+fi
+if [[ "$CONTINUE_RUN" == 1 ]]; then
+  RUN_ARGS+=(--continue)
 fi
 
 singularity exec \

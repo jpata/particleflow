@@ -5,6 +5,7 @@ import contextlib
 import datetime
 import json
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -42,7 +43,9 @@ class ScenarioVariant(BaseModel):
     def reject_derived_overrides(self):
         invalid = DERIVED_KEYS.intersection(self.overrides)
         if invalid:
-            raise ValueError(f"Variant overrides must not set derived keys: {sorted(invalid)}")
+            raise ValueError(
+                f"Variant overrides must not set derived keys: {sorted(invalid)}"
+            )
         return self
 
 
@@ -56,7 +59,9 @@ class ScenarioTraining(BaseModel):
     def reject_derived_parameters(self):
         invalid = DERIVED_KEYS.intersection(self.parameters)
         if invalid:
-            raise ValueError(f"Scenario parameters must not set derived keys: {sorted(invalid)}")
+            raise ValueError(
+                f"Scenario parameters must not set derived keys: {sorted(invalid)}"
+            )
         return self
 
 
@@ -70,7 +75,9 @@ class TrainingScenario(BaseModel):
     seeds: list[int] = Field(min_length=1)
     training: ScenarioTraining
     common_overrides: dict[str, Any] = Field(default_factory=dict)
-    allowed_variant_differences: list[str] = Field(default_factory=lambda: ["model.output_mode", "model.set_decoder"])
+    allowed_variant_differences: list[str] = Field(
+        default_factory=lambda: ["model.output_mode", "model.set_decoder"]
+    )
 
     @model_validator(mode="after")
     def validate_scenario(self):
@@ -82,7 +89,9 @@ class TrainingScenario(BaseModel):
             raise ValueError("Scenario seeds must be non-negative")
         invalid = DERIVED_KEYS.intersection(self.common_overrides)
         if invalid:
-            raise ValueError(f"Common overrides must not set derived keys: {sorted(invalid)}")
+            raise ValueError(
+                f"Common overrides must not set derived keys: {sorted(invalid)}"
+            )
         return self
 
     def variant_production(self, variant_name):
@@ -131,9 +140,14 @@ class PlatformProfile(BaseModel):
     def validate_runtime_overrides(self):
         invalid = set(self.runtime_overrides).difference(PLATFORM_OVERRIDE_KEYS)
         if invalid:
-            raise ValueError("Platform profiles may only set runtime-specific overrides; " f"invalid keys: {sorted(invalid)}")
+            raise ValueError(
+                "Platform profiles may only set runtime-specific overrides; "
+                f"invalid keys: {sorted(invalid)}"
+            )
         if isinstance(self.data_dir, dict) and not self.data_dir:
-            raise ValueError("Platform data_dir mapping must name at least one production")
+            raise ValueError(
+                "Platform data_dir mapping must name at least one production"
+            )
         return self
 
     def data_dir_for(self, production_name):
@@ -141,7 +155,8 @@ class PlatformProfile(BaseModel):
             return self.data_dir
         if production_name not in self.data_dir:
             raise ValueError(
-                f"Platform profile {self.name!r} has no data_dir for production {production_name!r}; " f"available: {sorted(self.data_dir)}"
+                f"Platform profile {self.name!r} has no data_dir for production {production_name!r}; "
+                f"available: {sorted(self.data_dir)}"
             )
         return self.data_dir[production_name]
 
@@ -163,6 +178,14 @@ class ResolvedScenarioJob(BaseModel):
     resolved_config: MLPFConfig
 
 
+class ScenarioContinuation(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    experiment_dir: Path
+    checkpoint: Path | None
+    step: int = 0
+
+
 def _read_yaml(path):
     with Path(path).open() as handle:
         return yaml.safe_load(handle)
@@ -177,9 +200,17 @@ def load_platform_profile(path):
     if isinstance(profile.data_dir, str):
         profile.data_dir = os.path.expandvars(os.path.expanduser(profile.data_dir))
     else:
-        profile.data_dir = {key: os.path.expandvars(os.path.expanduser(value)) for key, value in profile.data_dir.items()}
-    profile.experiments_dir = os.path.expandvars(os.path.expanduser(profile.experiments_dir))
-    profile.environment = {key: os.path.expandvars(os.path.expanduser(value)) for key, value in profile.environment.items()}
+        profile.data_dir = {
+            key: os.path.expandvars(os.path.expanduser(value))
+            for key, value in profile.data_dir.items()
+        }
+    profile.experiments_dir = os.path.expandvars(
+        os.path.expanduser(profile.experiments_dir)
+    )
+    profile.environment = {
+        key: os.path.expandvars(os.path.expanduser(value))
+        for key, value in profile.environment.items()
+    }
     return profile
 
 
@@ -238,7 +269,8 @@ def _training_batch_size(config):
     batch_sizes = {dataset.batch_size for dataset in physical_datasets}
     if len(batch_sizes) != 1:
         raise ValueError(
-            "Automatic global-batch resolution requires every physical training dataset " f"to use the same batch size, got {sorted(batch_sizes)}"
+            "Automatic global-batch resolution requires every physical training dataset "
+            f"to use the same batch size, got {sorted(batch_sizes)}"
         )
     return next(iter(batch_sizes))
 
@@ -264,12 +296,16 @@ def resolve_scenario_job(
     extra_overrides=None,
 ):
     if variant_name not in scenario.variants:
-        raise ValueError(f"Unknown variant {variant_name!r}; choose from {sorted(scenario.variants)}")
+        raise ValueError(
+            f"Unknown variant {variant_name!r}; choose from {sorted(scenario.variants)}"
+        )
     variant = scenario.variants[variant_name]
     extra_overrides = extra_overrides or {}
     invalid = DERIVED_KEYS.intersection(extra_overrides)
     if invalid:
-        raise ValueError(f"Use the dedicated runner options for derived settings, not --set: {sorted(invalid)}")
+        raise ValueError(
+            f"Use the dedicated runner options for derived settings, not --set: {sorted(invalid)}"
+        )
     settings = _merge_settings(scenario, platform, variant, extra_overrides)
     settings["seed"] = seed
     selected_spec = str(spec_file or scenario.spec_file)
@@ -285,14 +321,19 @@ def resolve_scenario_job(
             extra_args=_settings_as_extra_args(settings),
         )
 
-    target_global_batch = global_batch_size if global_batch_size is not None else scenario.training.global_batch_size
+    target_global_batch = (
+        global_batch_size
+        if global_batch_size is not None
+        else scenario.training.global_batch_size
+    )
     if target_global_batch <= 0:
         raise ValueError("global_batch_size must be positive")
     dataset_batch_size = _training_batch_size(config)
     divisor = platform.gpus * dataset_batch_size
     if target_global_batch % divisor:
         raise ValueError(
-            f"global_batch_size={target_global_batch} is not divisible by " f"gpus={platform.gpus} * dataset_batch_size={dataset_batch_size}"
+            f"global_batch_size={target_global_batch} is not divisible by "
+            f"gpus={platform.gpus} * dataset_batch_size={dataset_batch_size}"
         )
     multiplier = target_global_batch // divisor
     settings["gpu_batch_multiplier"] = multiplier
@@ -334,7 +375,9 @@ def _flatten(value, prefix=""):
 
 
 def _difference_allowed(path, allowed_paths):
-    return any(path == allowed or path.startswith(f"{allowed}.") for allowed in allowed_paths)
+    return any(
+        path == allowed or path.startswith(f"{allowed}.") for allowed in allowed_paths
+    )
 
 
 def validate_variant_invariants(jobs, allowed_paths):
@@ -346,11 +389,17 @@ def validate_variant_invariants(jobs, allowed_paths):
         differences = {
             path: (reference.get(path), candidate.get(path))
             for path in sorted(set(reference) | set(candidate))
-            if reference.get(path) != candidate.get(path) and not _difference_allowed(path, allowed_paths)
+            if reference.get(path) != candidate.get(path)
+            and not _difference_allowed(path, allowed_paths)
         }
         if differences:
-            details = ", ".join(f"{path}: {values[0]!r} != {values[1]!r}" for path, values in differences.items())
-            raise ValueError(f"Scenario variants differ outside allowed fields: {details}")
+            details = ", ".join(
+                f"{path}: {values[0]!r} != {values[1]!r}"
+                for path, values in differences.items()
+            )
+            raise ValueError(
+                f"Scenario variants differ outside allowed fields: {details}"
+            )
 
 
 def resolve_scenario_jobs(
@@ -436,23 +485,101 @@ def _experiment_path(platform, job, timestamp=None):
     return Path(platform.experiments_dir) / job.scenario_name / experiment_name
 
 
-def run_scenario_job(job, scenario, platform, spec_file, *, dry_run=False):
-    experiment_dir = _experiment_path(platform, job, timestamp="TIMESTAMP" if dry_run else None)
+def _checkpoint_step(path):
+    match = re.fullmatch(r"checkpoint-(\d+)(?:-.*)?\.pth", Path(path).name)
+    return int(match.group(1)) if match else None
+
+
+def find_scenario_continuation(job, platform):
+    """Find the most advanced compatible run for one scenario job."""
+    scenario_dir = Path(platform.experiments_dir) / job.scenario_name
+    desired_config = job.resolved_config.model_dump(mode="json")
+    candidates = []
+    for manifest_path in scenario_dir.glob("*/scenario-manifest.json"):
+        try:
+            with manifest_path.open() as handle:
+                manifest = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            continue
+        saved_job = manifest.get("job", {})
+        if (
+            saved_job.get("scenario_name") != job.scenario_name
+            or saved_job.get("platform_name") != job.platform_name
+            or saved_job.get("variant_name") != job.variant_name
+            or saved_job.get("seed") != job.seed
+            or manifest.get("resolved_config") != desired_config
+        ):
+            continue
+
+        experiment_dir = manifest_path.parent
+        checkpoints = []
+        for checkpoint_path in (experiment_dir / "checkpoints").glob(
+            "checkpoint-*.pth"
+        ):
+            step = _checkpoint_step(checkpoint_path)
+            if step is not None:
+                checkpoints.append((step, checkpoint_path))
+        step, checkpoint = max(checkpoints, default=(0, None), key=lambda item: item[0])
+        candidates.append(
+            (step, manifest_path.stat().st_mtime, experiment_dir, checkpoint)
+        )
+
+    if not candidates:
+        return None
+    step, _, experiment_dir, checkpoint = max(
+        candidates, key=lambda item: (item[0], item[1])
+    )
+    return ScenarioContinuation(
+        experiment_dir=experiment_dir, checkpoint=checkpoint, step=step
+    )
+
+
+def run_scenario_job(
+    job, scenario, platform, spec_file, *, dry_run=False, continue_run=False
+):
+    continuation = find_scenario_continuation(job, platform) if continue_run else None
+    if continue_run and continuation is None:
+        raise ValueError(
+            f"No compatible prior run found for {job.variant_name} seed {job.seed}"
+        )
+    experiment_dir = (
+        continuation.experiment_dir
+        if continuation is not None
+        else _experiment_path(platform, job, timestamp="TIMESTAMP" if dry_run else None)
+    )
+    if continuation is not None and continuation.checkpoint is not None:
+        job.settings["load"] = str(continuation.checkpoint)
     command = _pipeline_command(job, scenario, platform, spec_file, experiment_dir)
     print(shlex.join(command), flush=True)
     if dry_run:
         return
 
-    experiment_dir.mkdir(parents=True, exist_ok=False)
-    manifest = {
-        "scenario": scenario.model_dump(mode="json"),
-        "platform": platform.model_dump(mode="json"),
-        "job": job.model_dump(mode="json", exclude={"resolved_config"}),
-        "resolved_config": job.resolved_config.model_dump(mode="json"),
-        "command": command,
-        "git_revision": _git_revision(),
-    }
-    with (experiment_dir / "scenario-manifest.json").open("w") as handle:
+    manifest_path = experiment_dir / "scenario-manifest.json"
+    if continuation is None:
+        experiment_dir.mkdir(parents=True, exist_ok=False)
+        manifest = {
+            "scenario": scenario.model_dump(mode="json"),
+            "platform": platform.model_dump(mode="json"),
+            "job": job.model_dump(mode="json", exclude={"resolved_config"}),
+            "resolved_config": job.resolved_config.model_dump(mode="json"),
+            "command": command,
+            "git_revision": _git_revision(),
+        }
+    else:
+        with manifest_path.open() as handle:
+            manifest = json.load(handle)
+        manifest.setdefault("continuations", []).append(
+            {
+                "checkpoint": str(continuation.checkpoint)
+                if continuation.checkpoint
+                else None,
+                "step": continuation.step,
+                "command": command,
+                "git_revision": _git_revision(),
+                "submitted_at": datetime.datetime.now().isoformat(),
+            }
+        )
+    with manifest_path.open("w") as handle:
         json.dump(manifest, handle, indent=2)
 
     environment = os.environ.copy()
@@ -473,7 +600,9 @@ def _parse_set_overrides(values):
 def _validate_slurm_allocation(platform):
     allocated = os.environ.get("SLURM_GPUS_PER_NODE")
     if allocated and allocated.isdigit() and int(allocated) != platform.gpus:
-        raise ValueError(f"Platform profile requests {platform.gpus} GPUs but Slurm allocated {allocated}")
+        raise ValueError(
+            f"Platform profile requests {platform.gpus} GPUs but Slurm allocated {allocated}"
+        )
 
 
 def main(argv=None):
@@ -490,6 +619,12 @@ def main(argv=None):
     parser.add_argument("--experiments-dir")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--continue",
+        dest="continue_run",
+        action="store_true",
+        help="Resume this unfinished scenario job",
+    )
     args = parser.parse_args(argv)
 
     scenario = load_training_scenario(args.scenario)
@@ -524,7 +659,26 @@ def main(argv=None):
             raise ValueError("No jobs matched the requested variant")
 
     for job in jobs:
-        run_scenario_job(job, scenario, platform, spec_file, dry_run=args.dry_run)
+        if args.continue_run:
+            continuation = find_scenario_continuation(job, platform)
+            if continuation is None:
+                raise ValueError(
+                    f"No compatible prior run found for {job.variant_name} seed {job.seed}"
+                )
+            target_step = job.resolved_config.num_steps
+            if continuation.step >= target_step:
+                print(
+                    f"Skipping completed job {job.variant_name} seed {job.seed}: step {continuation.step}/{target_step}"
+                )
+                continue
+        run_scenario_job(
+            job,
+            scenario,
+            platform,
+            spec_file,
+            dry_run=args.dry_run,
+            continue_run=args.continue_run,
+        )
 
 
 if __name__ == "__main__":

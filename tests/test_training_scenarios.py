@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from mlpf.training_scenarios import (
     ScenarioVariant,
     ScenarioTraining,
     _experiment_path,
+    find_scenario_continuation,
     load_platform_profile,
     load_training_scenario,
     resolve_scenario_jobs,
@@ -17,9 +19,13 @@ from mlpf.training_scenarios import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = ROOT / "configs/training/scenarios/cld_hits_output_comparison.yaml"
-BACKBONE_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
+BACKBONE_SCENARIO = (
+    ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
+)
 PF_HITS_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_hits_comparison.yaml"
-CLIC_CLD_SCENARIO = ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comparison.yaml"
+CLIC_CLD_SCENARIO = (
+    ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comparison.yaml"
+)
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -56,8 +62,13 @@ def test_backbone_comparison_scenario_keeps_elementwise_output_and_depth_fixed()
     )
 
     assert [job.variant_name for job in jobs] == ["attention", "heptv2"]
-    assert [job.resolved_config.model.type.value for job in jobs] == ["attention", "heptv2"]
-    assert {job.resolved_config.model.output_mode.value for job in jobs} == {"elementwise"}
+    assert [job.resolved_config.model.type.value for job in jobs] == [
+        "attention",
+        "heptv2",
+    ]
+    assert {job.resolved_config.model.output_mode.value for job in jobs} == {
+        "elementwise"
+    }
     assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
     assert jobs[1].resolved_config.model.heptv2.block_size == 128
 
@@ -74,10 +85,24 @@ def test_pf_hits_comparison_scenario_resolves_three_40k_variants():
     )
 
     assert [job.variant_name for job in jobs] == ["pf", "elementwise_hits", "set_hits"]
-    assert [job.model_name for job in jobs] == ["pyg-cld-v1", "pyg-cld-hits-v1", "pyg-cld-hits-set-v1"]
-    assert [job.resolved_config.dataset.value for job in jobs] == ["cld", "cld_hits", "cld_hits"]
-    assert [job.resolved_config.model.output_mode.value for job in jobs] == ["elementwise", "elementwise", "set"]
-    assert [job.resolved_config.model.binary_classification_focal_gamma for job in jobs] == [None, 2.0, 2.0]
+    assert [job.model_name for job in jobs] == [
+        "pyg-cld-v1",
+        "pyg-cld-hits-v1",
+        "pyg-cld-hits-set-v1",
+    ]
+    assert [job.resolved_config.dataset.value for job in jobs] == [
+        "cld",
+        "cld_hits",
+        "cld_hits",
+    ]
+    assert [job.resolved_config.model.output_mode.value for job in jobs] == [
+        "elementwise",
+        "elementwise",
+        "set",
+    ]
+    assert [
+        job.resolved_config.model.binary_classification_focal_gamma for job in jobs
+    ] == [None, 2.0, 2.0]
     assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
     assert [
         (
@@ -106,8 +131,18 @@ def test_clic_cld_scenario_resolves_pf_and_set_hits_per_detector():
         global_batch_size=8,
     )
 
-    assert [job.variant_name for job in jobs] == ["cld_pf", "cld_set_hits", "clic_pf", "clic_set_hits"]
-    assert [job.model_name for job in jobs] == ["pyg-cld-v1", "pyg-cld-hits-set-v1", "pyg-clic-v1", "pyg-clic-hits-set-v1"]
+    assert [job.variant_name for job in jobs] == [
+        "cld_pf",
+        "cld_set_hits",
+        "clic_pf",
+        "clic_set_hits",
+    ]
+    assert [job.model_name for job in jobs] == [
+        "pyg-cld-v1",
+        "pyg-cld-hits-set-v1",
+        "pyg-clic-v1",
+        "pyg-clic-hits-set-v1",
+    ]
     assert [job.production_name for job in jobs] == ["cld", "cld", "clic", "clic"]
     assert [job.data_dir for job in jobs] == [
         platform.data_dir["cld"],
@@ -115,11 +150,28 @@ def test_clic_cld_scenario_resolves_pf_and_set_hits_per_detector():
         platform.data_dir["clic"],
         platform.data_dir["clic"],
     ]
-    assert [job.resolved_config.data_dir for job in jobs] == [job.data_dir for job in jobs]
-    assert [job.resolved_config.dataset.value for job in jobs] == ["cld", "cld_hits", "clic", "clic_hits"]
-    assert [job.resolved_config.model.output_mode.value for job in jobs] == ["elementwise", "set", "elementwise", "set"]
+    assert [job.resolved_config.data_dir for job in jobs] == [
+        job.data_dir for job in jobs
+    ]
+    assert [job.resolved_config.dataset.value for job in jobs] == [
+        "cld",
+        "cld_hits",
+        "clic",
+        "clic_hits",
+    ]
+    assert [job.resolved_config.model.output_mode.value for job in jobs] == [
+        "elementwise",
+        "set",
+        "elementwise",
+        "set",
+    ]
     # The set-based hit models run twice the backbone depth of the PF models.
-    assert [job.resolved_config.model.backbone.num_convs for job in jobs] == [6, 12, 6, 12]
+    assert [job.resolved_config.model.backbone.num_convs for job in jobs] == [
+        6,
+        12,
+        6,
+        12,
+    ]
     assert [
         (
             job.resolved_config.model.backbone.num_tracker_layers,
@@ -128,7 +180,11 @@ def test_clic_cld_scenario_resolves_pf_and_set_hits_per_detector():
         )
         for job in jobs
     ] == [(None, None, None), (4, 4, 4), (None, None, None), (4, 4, 4)]
-    assert {job.resolved_config.model.set_decoder.num_layers for job in jobs if job.resolved_config.model.set_decoder} == {8}
+    assert {
+        job.resolved_config.model.set_decoder.num_layers
+        for job in jobs
+        if job.resolved_config.model.set_decoder
+    } == {8}
     assert {job.resolved_config.num_steps for job in jobs} == {50000}
     assert {job.resolved_config.val_freq for job in jobs} == {5000}
     assert {job.resolved_config.lr for job in jobs} == {0.001}
@@ -298,4 +354,36 @@ def test_experiments_are_grouped_under_the_scenario_directory():
 
     path = _experiment_path(platform, job, timestamp="TIMESTAMP")
 
-    assert path == Path("experiments/cld_hits_output_comparison/elementwise_seed12345_TIMESTAMP")
+    assert path == Path(
+        "experiments/cld_hits_output_comparison/elementwise_seed12345_TIMESTAMP"
+    )
+
+
+def test_continuation_chooses_most_advanced_compatible_checkpoint(tmp_path):
+    scenario = load_training_scenario(SCENARIO)
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+    platform.experiments_dir = str(tmp_path)
+    job = resolve_scenario_jobs(
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=8,
+    )[0]
+
+    for suffix, step in [("older", 10000), ("newer", 5000), ("best", 15000)]:
+        run_dir = (
+            tmp_path / scenario.name / f"{job.variant_name}_seed{job.seed}_{suffix}"
+        )
+        (run_dir / "checkpoints").mkdir(parents=True)
+        manifest = {
+            "job": job.model_dump(mode="json", exclude={"resolved_config"}),
+            "resolved_config": job.resolved_config.model_dump(mode="json"),
+        }
+        (run_dir / "scenario-manifest.json").write_text(json.dumps(manifest))
+        (run_dir / "checkpoints" / f"checkpoint-{step}.pth").touch()
+
+    continuation = find_scenario_continuation(job, platform)
+
+    assert continuation.step == 15000
+    assert continuation.checkpoint.name == "checkpoint-15000.pth"
+    assert continuation.experiment_dir.name.endswith("_best")

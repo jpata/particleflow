@@ -1,4 +1,7 @@
+import json
 from pathlib import Path
+
+import yaml
 
 from mlpf.training_submission import (
     available_choices,
@@ -6,6 +9,11 @@ from mlpf.training_submission import (
     resolve_flatiron_profile_path,
     resolve_platform_profile_path,
     resolve_scenario_path,
+)
+from mlpf.training_scenarios import (
+    load_platform_profile,
+    load_training_scenario,
+    resolve_scenario_jobs,
 )
 
 
@@ -109,3 +117,53 @@ def test_picker_discovers_site_specific_accelerators():
 
     assert tallinn_accelerators == ["l40"]
     assert lumi_accelerators == ["mi250x"]
+
+
+def _write_scenario_run(experiments_dir, scenario, profile, job, step):
+    run_dir = (
+        experiments_dir / scenario.name / f"{job.variant_name}_seed{job.seed}_test"
+    )
+    checkpoint_dir = run_dir / "checkpoints"
+    checkpoint_dir.mkdir(parents=True)
+    manifest = {
+        "job": job.model_dump(mode="json", exclude={"resolved_config"}),
+        "resolved_config": job.resolved_config.model_dump(mode="json"),
+    }
+    (run_dir / "scenario-manifest.json").write_text(json.dumps(manifest))
+    (checkpoint_dir / f"checkpoint-{step}.pth").touch()
+
+
+def test_continue_submission_selects_only_unfinished_original_array_indices(tmp_path):
+    scenario_path = resolve_scenario_path("clic_cld_pf_set_hits_comparison", ROOT)
+    original_profile_path = resolve_flatiron_profile_path("h100", ROOT)
+    profile_data = yaml.safe_load(original_profile_path.read_text())
+    profile_data["experiments_dir"] = str(tmp_path / "experiments")
+    profile_path = tmp_path / "flatiron_h100.yaml"
+    profile_path.write_text(yaml.safe_dump(profile_data))
+
+    scenario = load_training_scenario(scenario_path)
+    profile = load_platform_profile(profile_path)
+    jobs = resolve_scenario_jobs(scenario, profile, spec_file=ROOT / scenario.spec_file)
+    for index, job in enumerate(jobs):
+        _write_scenario_run(
+            Path(profile.experiments_dir),
+            scenario,
+            profile,
+            job,
+            40000 if index in {1, 3} else 50000,
+        )
+
+    command, selected_jobs = build_slurm_submission(
+        scenario_path,
+        profile_path,
+        ROOT,
+        worker=ROOT / "scripts/flatiron/run_uv_scenario.sh",
+        continue_run=True,
+    )
+
+    assert [job.variant_name for job in selected_jobs] == [
+        "cld_set_hits",
+        "clic_set_hits",
+    ]
+    assert command[command.index("--array") + 1] == "1,3"
+    assert command[-1] == "--continue"
