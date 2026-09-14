@@ -455,7 +455,12 @@ class HEPTv2Layer(nn.Module):
         self.w_k = nn.Linear(embedding_dim, embedding_dim, bias=False)
         self.w_v = nn.Linear(embedding_dim, embedding_dim, bias=False)
 
+        # HEPTv2 hashes detector coordinates directly and no longer uses the
+        # learned relative-position projection from HEPT v1.  Keep the frozen
+        # tensors in the state dict for compatibility with existing HEPTv2
+        # checkpoints and optimizer parameter groups.
         self.w_rpe = nn.Linear(self.num_w_per_dist * (self.coords_dim - 1), self.num_heads * self.dim_per_head)
+        self.w_rpe.requires_grad_(False)
 
         self.pe_func = PELearned(input_channel=self.coords_dim, h_dim=embedding_dim) if pe_type == "learned" else None
 
@@ -552,7 +557,6 @@ class HEPTv2Layer(nn.Module):
             k,
             v,
             coords=coords,
-            w_rpe=self.w_rpe,
             regions_h=regions_h,
             region_indices=region_indices,
             raw_size=raw_size,

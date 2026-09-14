@@ -88,6 +88,26 @@ def test_hept_layer_backward_has_finite_gradients(layer_cls):
     assert all(torch.isfinite(grad).all() for grad in grads)
 
 
+def test_heptv2_layer_backward_reaches_all_trainable_parameters():
+    torch.manual_seed(2)
+    layer = _make_layer(HEPTv2Layer)
+    layer.train()
+
+    batch_size, seq_len, embedding_dim = 2, 16, 32
+    x = torch.randn(batch_size, seq_len, embedding_dim, requires_grad=True)
+    mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+    mask[0, 10:] = False
+    mask[1, 14:] = False
+    features = _make_x_features(batch_size, seq_len)
+
+    layer(x, mask, features)[mask].pow(2).mean().backward()
+
+    missing_gradients = [name for name, param in layer.named_parameters() if param.requires_grad and param.grad is None]
+    assert missing_gradients == []
+    assert not layer.w_rpe.weight.requires_grad
+    assert not layer.w_rpe.bias.requires_grad
+
+
 @pytest.mark.parametrize("layer_cls", [HEPTLayer, HEPTv2Layer])
 def test_hept_layer_mask_edge_cases_keep_at_least_one_valid_token(layer_cls):
     torch.manual_seed(3)

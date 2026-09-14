@@ -112,6 +112,71 @@ class TestTFDSDataSource(unittest.TestCase):
         self.assertEqual(ret["ytarget"].shape[0], 4)
         self.assertEqual(ret["X"][1, 0], 0)  # Padded with zero
 
+    def test_compact_set_target_extraction(self):
+        ytarget = np.zeros((4, 14), dtype=np.float32)
+        ytarget[0, [0, 2, 5, 6, 13]] = [1, 20.0, 1.0, 40.0, 1]
+        ytarget[1, 13] = 1  # related hit carrying only particle_number
+        ytarget[2, [0, 2, 5, 6, 13]] = [2, 5.0, 1.0, 8.0, 2]
+        data = {
+            "X": np.array(
+                [
+                    [1, 10.0, 0.0, 0.0, 1.0, 10.0],
+                    [1, 8.0, 0.0, 0.0, 1.0, 8.0],
+                    [2, 4.0, 0.0, 0.0, 1.0, 4.0],
+                    [2, 1.0, 0.0, 0.0, 1.0, 1.0],
+                ],
+                dtype=np.float32,
+            ),
+            "ytarget": ytarget,
+            "ycand": np.zeros_like(ytarget),
+        }
+        ds = TFDSDataSource(MockTFDS([data], name="cld_hits"), sort=False, build_target_set=True)
+
+        ret = ds[0]
+
+        self.assertEqual(ret["ytarget_set"].shape, (2, 14))
+        np.testing.assert_array_equal(ret["ytarget_set"][:, 0], [1, 2])
+        np.testing.assert_array_equal(ret["ytarget_set"][:, 13], [1, 2])
+        np.testing.assert_allclose(ret["ytarget_set"][:, 2], np.log([20.0, 5.0]))
+        np.testing.assert_allclose(ret["ytarget_set"][:, 6], np.log([40.0, 8.0]))
+        self.assertAlmostEqual(ret["ytarget"][0, 2], np.log(2.0))
+
+    def test_compact_set_target_rejects_duplicate_particle_numbers(self):
+        ytarget = np.zeros((2, 14), dtype=np.float32)
+        ytarget[:, 0] = [1, 2]
+        ytarget[:, 2] = [1.0, 2.0]
+        ytarget[:, 6] = [1.0, 2.0]
+        ytarget[:, 13] = 1
+        data = {
+            "X": np.array([[1, 1, 0, 0, 1, 1], [2, 2, 0, 0, 1, 2]], dtype=np.float32),
+            "ytarget": ytarget,
+            "ycand": np.zeros_like(ytarget),
+        }
+        ds = TFDSDataSource(MockTFDS([data], name="cld_hits"), sort=False, build_target_set=True)
+
+        with self.assertRaisesRegex(ValueError, "unique, nonzero particle_number"):
+            ds[0]
+
+
+def test_collater_pads_inputs_and_set_targets_independently():
+    collater = Collater(["X", "ytarget", "ytarget_set"], [])
+    item1 = {
+        "X": np.ones((4, 2), dtype=np.float32),
+        "ytarget": np.ones((4, 2), dtype=np.float32),
+        "ytarget_set": np.ones((2, 2), dtype=np.float32),
+    }
+    item2 = {
+        "X": np.ones((2, 2), dtype=np.float32),
+        "ytarget": np.ones((2, 2), dtype=np.float32),
+        "ytarget_set": np.ones((1, 2), dtype=np.float32),
+    }
+
+    batch = collater([item1, item2])
+
+    assert batch.X.shape == (2, 4, 2)
+    assert batch.ytarget_set.shape == (2, 2, 2)
+    torch.testing.assert_close(batch.target_mask, torch.tensor([[True, True], [True, False]]))
+
 
 if __name__ == "__main__":
     unittest.main()
