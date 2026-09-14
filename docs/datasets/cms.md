@@ -1,12 +1,12 @@
 # CMS data production
 
-This page records only the CMS-specific choices. Use the shared [generation procedure](generate.md) for site selection, dry runs, restart behavior, TFDS verification, and publication.
+This page covers the CMS-specific choices. Use the shared [generation procedure](generate.md) for site selection, dry runs, restart behavior, TFDS verification, and publication.
 
 ## Environment and representation
 
-The `cms_run3` production recipe uses CMSSW 15.0.5 with `el8_amd64_gcc12` and a CMSSW RHEL 8 container. Its MLPF inputs are reconstructed tracks and calorimeter clusters; there is no CMS hit-input TFDS recipe in the current specification.
+The `cms_run3` production recipe uses CMSSW 15.0.5 with `el8_amd64_gcc12` and a CMSSW RHEL 8 container. Its current TFDS recipe uses reconstructed tracks and calorimeter clusters as MLPF inputs.
 
-The configured model is `pyg-cms-v1`, and the configured TFDS schema version is 3.2.0. CMS validation remains CMSSW- and site-dependent; the fact that a production recipe exists does not make arbitrary CMS inputs compatible.
+The configured model is `pyg-cms-v1`, and the configured TFDS schema version is 3.2.0. Compatibility requires the CMSSW collections and schema expected by this site-dependent production path.
 
 ## Configured samples
 
@@ -19,7 +19,7 @@ The configured model is `pyg-cms-v1`, and the configured TFDS schema version is 
 | `cms_pf_qcd_nopu` | QCD multijet production | no pileup |
 | `cms_pf_ztt_nopu` | hadronic tau pairs | no pileup |
 
-The exact CMSSW process names, seed ranges, events per job, and output subdirectories live under `productions.cms_run3.samples` in `particleflow_spec.yaml`. Review them rather than copying values from an older campaign.
+The exact CMSSW process names, seed ranges, events per job, and output subdirectories live under `productions.cms_run3.samples` in `particleflow_spec.yaml`. Use those current values when configuring a campaign.
 
 ## CMS path through the common workflow
 
@@ -40,14 +40,14 @@ Generation writes PF ntuples below:
 
 ## Checks before TFDS
 
-There is currently no CMS equivalent of the strict Key4HEP `validate_parquet.py` gate because the intermediate format and detector relationships differ. Before a production build:
+CMS uses a compressed-pickle intermediate format and detector-specific integrity checks. Before a production build:
 
 1. inspect generation and postprocessing logs for every selected seed;
 2. verify that the expected `.pkl.bz2` output exists and opens;
 3. run `scripts/local_test_cms.sh` in a disposable checkout to exercise CMS postprocessing, TFDS decoding, short training, checkpoint loading, and ONNX comparison;
 4. open one event from each produced TFDS dataset using the check in [Download a dataset](download.md).
 
-These checks establish software and schema integrity, not CMS physics performance. Jet/MET validation, collision-data commissioning, calibrations, and luminosity selections belong to the future CMS validation guide.
+These checks establish software and schema integrity. CMS physics performance requires the jet/MET validation, collision-data commissioning, calibrations, and luminosity selections planned for the CMS validation guide.
 
 ## CMS target information
 

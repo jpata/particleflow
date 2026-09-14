@@ -1,6 +1,6 @@
 # Current capabilities
 
-This page describes the development branch as of 14 September 2026. It summarizes implemented paths, not the performance of any particular checkpoint.
+This page describes the development branch as of 14 September 2026. It summarizes implemented paths. Checkpoint performance belongs to the corresponding validation results.
 
 ## Detector and input support
 
@@ -56,13 +56,13 @@ The repository can check four different questions:
 3. **Physics behavior:** How do particles, jets, and missing momentum compare with reference targets and rule-based reconstruction?
 4. **Deployment behavior:** Does an ONNX export agree numerically with PyTorch, and what runtime and memory does it use?
 
-A local smoke test covers only a small part of the first two questions. Published physics claims require the larger validation setup described in the corresponding [paper](publications.md).
+A local smoke test covers basic dataset integrity and model behavior. Published physics claims require the larger validation setup described in the corresponding [paper](publications.md).
 
 ## Known boundaries
 
-- Site configurations are not equally mature. Tallinn is the reference full-production setup; LXPlus and local execution need environment-specific review.
+- Tallinn is the reference full-production setup. LXPlus and local execution require additional environment-specific review.
 - Hit-level events are substantially larger than track/cluster events and require more memory and tuning.
 - CMS validation depends on CMSSW and can require experiment data, calibrations, and site services.
-- A checkpoint is only meaningful with its saved model configuration and a compatible dataset schema.
-- Open research branches and roadmap items are not part of the supported interface until they are merged and documented.
-- IDEA 0.1.0 validates the software path with proxy tracks and an oracle reference; it is not a physics-ready reconstruction dataset.
+- A reproducible checkpoint includes its saved model configuration and a compatible dataset schema.
+- The supported interface consists of merged, documented workflows. Open research branches and roadmap items describe development directions.
+- IDEA 0.1.0 is a software-pipeline validation dataset built with proxy tracks and an oracle reference.

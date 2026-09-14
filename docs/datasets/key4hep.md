@@ -10,7 +10,7 @@ Both recipes use the Key4HEP AlmaLinux 9 container configured in `particleflow_s
 git submodule update --init --recursive
 ```
 
-CLD uses the detector configuration under `mlpf/data/key4hep/gen/cld/CLDConfig`. CLIC uses `mlpf/data/key4hep/gen/clic` and its detector software. The generated file must contain the EDM4hep collections expected by `mlpf/data/key4hep/postprocessing.py`; an arbitrary EDM4hep file is not sufficient.
+CLD uses the detector configuration under `mlpf/data/key4hep/gen/cld/CLDConfig`. CLIC uses `mlpf/data/key4hep/gen/clic` and its detector software. Generate files with the EDM4hep collections expected by `mlpf/data/key4hep/postprocessing.py`.
 
 ## Training samples
 
@@ -19,9 +19,9 @@ CLD uses the detector configuration under `mlpf/data/key4hep/gen/cld/CLDConfig`.
 | CLD | 365 GeV | `ttbar`, fully hadronic `WW`, inclusive `qq`, and `ZZ` |
 | CLICdet | 380 GeV | `ttbar`, fully hadronic `WW`, and inclusive `qq` |
 
-CLD also configures particle-gun and additional 91/240/365 GeV samples for detector studies. They are intentionally absent from `tfds_mapping` and `tfds_hit_mapping`, so the production workflow does not silently add them to training data.
+CLD also configures particle-gun and additional 91/240/365 GeV samples for detector studies. The `tfds_mapping` and `tfds_hit_mapping` entries restrict training-data production to the samples in the table.
 
-Track/cluster and hit builders use version 3.2.1 and configuration partitions 1--10. The default model recipes train on `ttbar`, `WW`, and `qq`; CLD `ZZ` builders exist but are not selected by those defaults.
+Track/cluster and hit builders use version 3.2.1 and configuration partitions 1--10. The default model recipes select `ttbar`, `WW`, and `qq`; CLD `ZZ` is available through an additional builder.
 
 ## Detector commands and paths
 
@@ -56,7 +56,7 @@ uv run python tests/validate_parquet.py \
 
 For CLIC, change the process to `p8_ee_ttbar_ecm380` and `--detector clic`. Passing a directory validates every `.parquet` file directly inside it and gives each file a separate plot/report directory.
 
-The validator checks schema, detector-object relationships, energy accounting, target assignment, hit geometry, and baseline/truth consistency. A zero exit code is the gate for TFDS creation. Review `validation_report.json` and plots as well; limiting to 20 events is suitable for a quick gate, not campaign-level closure.
+The validator checks schema, detector-object relationships, energy accounting, target assignment, hit geometry, and baseline/truth consistency. A zero exit code is the gate for TFDS creation. Review `validation_report.json` and plots as well. A 20-event limit provides a quick gate; campaign-level closure uses a statistically representative sample.
 
 ## Build the representations
 
@@ -65,8 +65,8 @@ After validation:
 ```bash
 PROD=cld pixi run tfds
 
-# Only when the study requires detector hits
+# For studies requiring detector hits
 PROD=cld pixi run tfds_hit
 ```
 
-Read one event from every resulting dataset/configuration using the method in [Download a dataset](download.md). The standalone EDM4hep evaluator consumes ROOT files and checkpoints later in the workflow; it does not replace validation of the training Parquet and TFDS artifacts.
+Read one event from every resulting dataset/configuration using the method in [Download a dataset](download.md). Validate the training Parquet and TFDS artifacts at this stage. The standalone EDM4hep evaluator consumes ROOT files and checkpoints later for model evaluation.

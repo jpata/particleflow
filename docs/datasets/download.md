@@ -4,7 +4,7 @@ This guide downloads one published CLD dataset configuration and verifies that T
 
 ## Prerequisites
 
-Complete the [main environment installation](../getting-started/installation.md). The commands below run from the repository root and use the Hugging Face CLI supplied by that environment. No Hugging Face account is required for public files.
+Complete the [main environment installation](../getting-started/installation.md). The commands below run from the repository root and use the Hugging Face CLI supplied by that environment. Public files support anonymous downloads.
 
 Choose a destination with enough free space. TFDS shards can be large, especially for hit inputs. The Hub dry run below currently reports 39 files totalling approximately 1.3 GB for this example. Treat that as a point-in-time value: the CLI's own report is authoritative for the revision you download.
 
@@ -35,7 +35,7 @@ The command preserves the Hub layout. The resulting TFDS data root is:
 data/tfds/tensorflow_datasets/cld
 ```
 
-Do not pass `data/tfds`, the dataset directory itself, or the version directory as `--data-dir`.
+Use this detector-level directory as `--data-dir`; it is the directory that directly contains dataset-name directories.
 
 ## Verify metadata and one event
 
@@ -51,7 +51,7 @@ Success prints `cld_edm_ttbar_pf/1/3.2.1` and metadata for the `train` and `test
 uv run python -c 'import tensorflow_datasets as tfds; b = tfds.builder("cld_edm_ttbar_pf/1:3.2.1", data_dir="data/tfds/tensorflow_datasets/cld"); e = b.as_data_source(split="train")[0]; print({k: getattr(v, "shape", None) for k, v in e.items()})'
 ```
 
-Success prints shapes for `X`, `ytarget`, `ycand`, `genmet`, `genjets`, and `targetjets`. This checks file discovery and decoding, not the dataset's physics quality.
+Success prints shapes for `X`, `ytarget`, `ycand`, `genmet`, `genjets`, and `targetjets`. This check covers file discovery and decoding. Dataset validation and the detector-specific physics workflow establish data and physics quality.
 
 ## Download a different selection
 
@@ -75,13 +75,13 @@ The MLPF training command receives one of those detector directories as `--data-
 ## Common failures
 
 `Dataset ... not found`
-: Check the `--data-dir` level and confirm that the dataset/configuration/version directory exists. Do not silently fall back to another version.
+: Check the `--data-dir` level and confirm that the dataset/configuration/version directory exists. Keep the required version explicit.
 
 Missing configuration or version on the Hub
-: The recipe may describe data that has not been published. Inspect the [live repository tree](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets), select an explicitly compatible version, or [produce the dataset locally](generate.md).
+: Publication availability can lag behind the recipe. Inspect the [live repository tree](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets), select an explicitly compatible version, or [produce the dataset locally](generate.md).
 
 Download much larger than expected
 : Stop the command and tighten `--include`. A wildcard such as `cld_edm_*` selects several datasets, and omitting the version selects all published versions.
 
 Authentication or rate-limit error
-: Public downloads normally need no token. If the Hub asks for authentication, run `uv run hf auth login` and retry; do not commit the token or cache.
+: Public downloads support anonymous access. If the Hub asks for authentication, run `uv run hf auth login` and retry. Store the token and cache outside version control.
