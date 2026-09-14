@@ -2,7 +2,7 @@
 
 MLPF reconstructs the particles produced in a collision from detector measurements. It uses a neural network to combine information from tracking detectors and calorimeters and produces a list of particle candidates for the full event. The project supports studies with the CMS detector and with the CLD and CLIC future-detector concepts.
 
-This documentation describes the current development version of the repository. A result reported in a paper belongs to the code, data, detector setup, and model used in that study; it is not automatically a performance claim for the current branch.
+This documentation describes the current development version of the repository. Each published performance result belongs to the code, data, detector setup, and model used in that study. Performance claims for the current branch require a current validation result.
 
 ## Where should I start?
 
@@ -13,6 +13,10 @@ This documentation describes the current development version of the repository. 
 | Choose between evaluation, training, and data production | [Choose a workflow](getting-started/choose-a-workflow.md) |
 | Download a prepared training dataset | [Dataset download](datasets/download.md) |
 | Produce a dataset from simulation | [Dataset generation](datasets/generate.md) |
+| Train or continue a model | [Train a model](training/train.md) |
+| Evaluate a published CLD or CLIC model | [Key4HEP evaluation](validation/key4hep.md) |
+| Choose the right validation check | [Validation overview](validation/overview.md) |
+| Export and compare an ONNX model | [ONNX validation](validation/onnx.md) |
 | See which detectors and features are implemented | [Current capabilities](science/capabilities.md) |
 | Read the scientific results | [Publications](science/publications.md) |
 | Understand planned work | [Roadmap](science/roadmap.md) |
@@ -42,7 +46,9 @@ particle predictions
 particle, jet, missing-momentum, and deployment validation
 ```
 
-The full workflow is available for CMS, CLD, and CLIC. New users normally do not need to generate detector simulation: published datasets and model checkpoints are available from the [MLPF Hugging Face repositories](https://huggingface.co/jpata).
+The full workflow is available for CMS, CLD, and CLIC. Published datasets and model checkpoints from the [MLPF Hugging Face repositories](https://huggingface.co/jpata) provide the shortest starting path.
+
+For a first hands-on use, download the published CLD dataset and follow the [short training path](training/train.md). For an existing checkpoint, start with the [standalone Key4HEP evaluator](validation/key4hep.md).
 
 ## Support levels
 
@@ -50,8 +56,8 @@ The documentation uses four labels:
 
 - **Supported**: there is a maintained configuration and a tested path in this repository.
 - **Research workflow**: the implementation is usable, but it needs more detector, model, or computing knowledge.
-- **Partial**: only part of the end-to-end workflow is implemented.
-- **Planned**: the work is proposed or under development and is not a current capability.
+- **Partial**: an identified subset of the end-to-end workflow is implemented.
+- **Planned**: the work describes a proposed or developing future capability.
 
 See [Current capabilities](science/capabilities.md) for the detailed matrix.
 

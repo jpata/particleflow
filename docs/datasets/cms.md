@@ -47,7 +47,7 @@ CMS uses a compressed-pickle intermediate format and detector-specific integrity
 2. verify that the expected `.pkl.bz2` output exists and opens;
 3. run `scripts/local_test_cms.sh` in a disposable checkout to exercise CMS postprocessing, TFDS decoding, short training, checkpoint loading, and ONNX comparison.
 
-These checks establish software and schema integrity. CMS physics performance requires the jet/MET validation, collision-data commissioning, calibrations, and luminosity selections planned for the CMS validation guide.
+These checks establish software and schema integrity. CMS physics performance requires the jet/MET validation, collision-data commissioning, calibrations, and luminosity selections described in the [CMS validation guide](../validation/cms.md).
 
 After the checks pass, build the six configured TFDS families:
 

@@ -6,12 +6,12 @@ The shortest route depends on the artifact you already have.
 |---|---|---|
 | Check the installation | A clean checkout | Run one [quickstart](quickstart.md) smoke test |
 | Understand the method | Nothing | Read [Particle flow and MLPF](../concepts/particle-flow-and-mlpf.md) |
-| Evaluate a published model | A compatible checkpoint and ROOT file | Download the model and use the detector-specific standalone evaluator |
-| Train a model | A prepared TFDS dataset | [Download and verify a dataset](../datasets/download.md), then run `mlpf ... train` |
+| Evaluate a published model | A compatible checkpoint and ROOT file | [Run the Key4HEP standalone evaluator](../validation/key4hep.md) |
+| Train a model | A prepared TFDS dataset | [Download and verify a dataset](../datasets/download.md), then [train a model](../training/train.md) |
 | Reproduce a dataset | Generator configuration and detector software | Follow [dataset generation](../datasets/generate.md) |
-| Validate CMS reconstruction | CMSSW output | Use the CMS validation workflow |
-| Validate CLD or CLIC reconstruction | EDM4hep ROOT plus a checkpoint | Use the Key4HEP standalone evaluator |
-| Compare deployment formats | A checkpoint, `model_kwargs.pkl`, and TFDS | Run PyTorch-to-ONNX numerical and timing validation |
+| Validate CMS reconstruction | CMSSW output | Use the [CMS validation workflow](../validation/cms.md) |
+| Validate CLD or CLIC reconstruction | EDM4hep ROOT plus a checkpoint | Use the [Key4HEP validation workflow](../validation/key4hep.md) |
+| Compare deployment formats | A checkpoint, `model_kwargs.pkl`, and TFDS | Run [PyTorch-to-ONNX validation](../validation/onnx.md) |
 
 ## Three levels of use
 
@@ -23,7 +23,7 @@ Use the [dataset catalog](../datasets/catalog.md) to choose a compatible detecto
 
 ### 2. Run a local smoke workflow
 
-The scripts in `scripts/local_test_*.sh` download two small input files, build a small dataset, and run a short CPU training. They check that the software components fit together. They do not establish physics performance.
+The scripts in `scripts/local_test_*.sh` download two small input files, build a small dataset, and run a short CPU training. They establish that the software components fit together. Physics performance requires the dedicated validation workflows.
 
 ### 3. Produce data at scale
 

@@ -1,20 +1,22 @@
 # Download a dataset
 
-This guide downloads one published CLD dataset configuration and verifies that TensorFlow Datasets (TFDS) can open it. Choose another compatible name and version from the [dataset catalog](catalog.md).
+This guide downloads configuration 1 of the three CLD track-and-cluster datasets used by the standard model recipe and verifies that TensorFlow Datasets (TFDS) can open them. Choose another compatible selection from the [dataset catalog](catalog.md).
 
 ## Prerequisites
 
 Complete the [main environment installation](../getting-started/installation.md). The commands below run from the repository root and use the Hugging Face CLI supplied by that environment. Public files support anonymous downloads.
 
-Choose a destination with enough free space. TFDS shards can be large, especially for hit inputs. The Hub dry run below currently reports 39 files totalling approximately 1.3 GB for this example. Treat that as a point-in-time value: the CLI's own report is authoritative for the revision you download.
+Choose a destination with enough free space. TFDS shards can be large, especially for hit inputs. The Hub dry run below currently reports 80 files totalling approximately 2.9 GB for this example. Treat that as a point-in-time value: the CLI's own report is authoritative for the revision you download.
 
-## Download one configuration
+## Download the three training datasets
 
 First preview the exact selection:
 
 ```bash
 uv run hf download jpata/particleflow \
   --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/3.2.1/*" \
+  --include "tensorflow_datasets/cld/cld_edm_ww_fullhad_pf/1/3.2.1/*" \
+  --include "tensorflow_datasets/cld/cld_edm_qq_pf/1/3.2.1/*" \
   --local-dir data/tfds \
   --repo-type dataset \
   --dry-run
@@ -25,6 +27,8 @@ Remove `--dry-run` to download it:
 ```bash
 uv run hf download jpata/particleflow \
   --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/3.2.1/*" \
+  --include "tensorflow_datasets/cld/cld_edm_ww_fullhad_pf/1/3.2.1/*" \
+  --include "tensorflow_datasets/cld/cld_edm_qq_pf/1/3.2.1/*" \
   --local-dir data/tfds \
   --repo-type dataset
 ```
@@ -39,22 +43,22 @@ Use this detector-level directory as `--data-dir`; it is the directory that dire
 
 ## Verify metadata and one event
 
-Open the exact dataset/configuration/version and print its registered splits:
+Open each exact dataset/configuration/version and print its registered splits:
 
 ```bash
 uv run python - <<'PY'
 import tensorflow_datasets as tfds
 
-builder = tfds.builder(
-    "cld_edm_ttbar_pf/1:3.2.1",
-    data_dir="data/tfds/tensorflow_datasets/cld",
-)
-print(builder.info.full_name)
-print(builder.info.splits)
+for name in ("cld_edm_ttbar_pf", "cld_edm_ww_fullhad_pf", "cld_edm_qq_pf"):
+    builder = tfds.builder(
+        f"{name}/1:3.2.1",
+        data_dir="data/tfds/tensorflow_datasets/cld",
+    )
+    print(builder.info.full_name, builder.info.splits)
 PY
 ```
 
-Success prints `cld_edm_ttbar_pf/1/3.2.1` and metadata for the `train` and `test` splits. The published metadata currently records 90,000 training and 10,000 test events in configuration 1. Then read one event through the same random-access path used by MLPF:
+Success prints the full names of all three datasets and metadata for their `train` and `test` splits. The published `ttbar` metadata currently records 90,000 training and 10,000 test events in configuration 1. Then read one `ttbar` event through the same random-access path used by MLPF:
 
 ```bash
 uv run python - <<'PY'
@@ -73,7 +77,7 @@ Success prints shapes for `X`, `ytarget`, `ycand`, `genmet`, `genjets`, and `tar
 
 ## Download a different selection
 
-Change all four coupled fields together:
+Change all four coupled fields together. A training recipe may require several dataset names, as the standard CLD recipe does:
 
 1. Hub detector directory, such as `cld` or `clic`;
 2. dataset name, such as `clic_edm_qq_pf`;
@@ -88,7 +92,7 @@ data/tfds/tensorflow_datasets/
 └── clic/
 ```
 
-Pass one of those detector directories to MLPF as `--data-dir`. The successful event read above confirms that the downloaded dataset is ready for training or evaluation.
+Pass one of those detector directories to MLPF as `--data-dir`. The successful event read above confirms that the downloaded dataset is ready for the [short CLD training example](../training/train.md) or evaluation.
 
 ## Common failures
 

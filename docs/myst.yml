@@ -27,6 +27,21 @@ project:
         - file: datasets/cms.md
         - file: datasets/key4hep.md
         - file: datasets/hit-based.md
+    - title: Training
+      children:
+        - file: training/train.md
+        - file: training/resume-and-fine-tune.md
+        - file: training/distributed-training-and-hpo.md
+    - title: Validation
+      children:
+        - file: validation/overview.md
+        - file: validation/dataset-validation.md
+        - file: validation/key4hep.md
+        - file: validation/cms.md
+        - file: validation/onnx.md
+    - title: Reference
+      children:
+        - file: reference/artifacts-and-directories.md
     - title: Science and project status
       children:
         - file: science/publications.md
