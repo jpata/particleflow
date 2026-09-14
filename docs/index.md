@@ -11,6 +11,8 @@ This documentation describes the current development version of the repository. 
 | Understand particle flow and MLPF | [Particle flow and MLPF](concepts/particle-flow-and-mlpf.md) |
 | Check that the repository works | [Quickstart](getting-started/quickstart.md) |
 | Choose between evaluation, training, and data production | [Choose a workflow](getting-started/choose-a-workflow.md) |
+| Download a prepared training dataset | [Dataset download](datasets/download.md) |
+| Produce a dataset from simulation | [Dataset generation](datasets/generate.md) |
 | See which detectors and features are implemented | [Current capabilities](science/capabilities.md) |
 | Read the scientific results | [Publications](science/publications.md) |
 | Understand planned work | [Roadmap](science/roadmap.md) |
