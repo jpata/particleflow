@@ -30,42 +30,7 @@ apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif
 
 ### **Datasets**
 
-If you wish to train on pre-made datasets, you can download them from the [Hugging Face Hub](https://huggingface.co/datasets/jpata/particleflow).
-To download a specific dataset and split (e.g., CLD, PF setup, configuration split 1):
-```bash
-uv run hf download jpata/particleflow \
-  --include "tensorflow_datasets/cld/cld_edm_*_pf/1/*" \
-  --local-dir data/tfds \
-  --repo-type dataset
-```
-This will download the requested files into `data/tfds/tensorflow_datasets/cld/cld_edm_*_pf/1/`.
-
-### **Dataset Upload**
-
-The upload script has separate commands for TFDS, ROOT, and Parquet data. Preview any
-selection with `--dry-run`; completed files are skipped when their Hub path and size
-match the local file.
-
-```bash
-# Upload TFDS split 1 for one version
-uv run python3 scripts/upload_hf.py tfds clic 1 --version 3.2.1 --dry-run
-
-# Upload the first two ROOT files from every configured CLIC sample
-uv run python3 scripts/upload_hf.py root clic --num-files 2 --dry-run
-
-# Upload only Parquet files corresponding to ROOT files already on the Hub
-uv run python3 scripts/upload_hf.py parquet clic --dry-run
-```
-
-Remove `--dry-run` after checking the selection. Use repeatable `--sample NAME` or
-`--dataset NAME` options to narrow an upload. For a campaign not present in
-`particleflow_spec.yaml`, provide its workspace explicitly, for example:
-
-```bash
-uv run python3 scripts/upload_hf.py parquet idea \
-  --workspace-dir /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9 \
-  --dry-run
-```
+See the user documentation to [choose a dataset](https://jpata.github.io/particleflow/datasets/catalog), [download and verify published TFDS data](https://jpata.github.io/particleflow/datasets/download), or [produce and publish a dataset](https://jpata.github.io/particleflow/datasets/generate).
 
 ### **Training**
 
@@ -118,32 +83,9 @@ uv run python3 mlpf/standalone_eval/key4hep/evaluator.py \
 ```
 The input ROOT file should be in the [EDM4hep format](https://github.com/key4hep/EDM4hep).
 
-## **End-to-end workflow: dataset generation and model training**
+## **End-to-end workflow**
 
-The full data generation, model training, and validation workflow are managed using [Pixi](https://pixi.sh/) for environment and [Snakemake](https://snakemake.readthedocs.io/) for job orchestration. Apptainer images are used to provide the software for the steps for different detetors.
-
-```bash
-#ensure all gen configs are downloaded
-git submodule update --init --recursive
-
-# install pixi, restart your shell or source your .bashrc after this. only do once.
-curl -fsSL https://pixi.sh/install.sh | bash
-
-# copy the configuration for your site. only do once.
-ln -s configs/{local,tallinn,lxplus}/pixi.toml pixi.toml
-
-# initalize the orhcestrator python environment. only do this once.
-pixi run init
-
-# generate the snakefile (will overwrite the defaults)
-PROD={cms_run3,clic,cld} pixi run snakefile
-
-# run the steps (this will take many days and thousands of jobs), so run inside screen or tmux
-PROD={cms_run3,clic,cld} pixi run gen
-PROD={cms_run3,clic,cld} pixi run post
-PROD={cms_run3,clic,cld} pixi run tfds
-PROD={cms_run3,clic,cld} pixi run train
-```
+The [dataset-generation guide](https://jpata.github.io/particleflow/datasets/generate) documents the Pixi/Snakemake pipeline from detector simulation through validated TFDS output. Training and validation guides are being developed under [issue #500](https://github.com/jpata/particleflow/issues/500).
 
 ---
 

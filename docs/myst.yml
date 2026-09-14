@@ -19,6 +19,14 @@ project:
     - title: Concepts
       children:
         - file: concepts/particle-flow-and-mlpf.md
+    - title: Datasets
+      children:
+        - file: datasets/catalog.md
+        - file: datasets/download.md
+        - file: datasets/generate.md
+        - file: datasets/cms.md
+        - file: datasets/key4hep.md
+        - file: datasets/hit-based.md
     - title: Science and project status
       children:
         - file: science/publications.md

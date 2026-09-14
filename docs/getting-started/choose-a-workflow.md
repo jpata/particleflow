@@ -7,8 +7,8 @@ The shortest route depends on the artifact you already have.
 | Check the installation | A clean checkout | Run one [quickstart](quickstart.md) smoke test |
 | Understand the method | Nothing | Read [Particle flow and MLPF](../concepts/particle-flow-and-mlpf.md) |
 | Evaluate a published model | A compatible checkpoint and ROOT file | Download the model and use the detector-specific standalone evaluator |
-| Train a model | A prepared TFDS dataset | Download one dataset split, then run `mlpf ... train` |
-| Reproduce a dataset | Generator configuration and detector software | Run simulation, postprocessing, validation, then TFDS conversion |
+| Train a model | A prepared TFDS dataset | [Download and verify a dataset](../datasets/download.md), then run `mlpf ... train` |
+| Reproduce a dataset | Generator configuration and detector software | Follow [dataset generation](../datasets/generate.md) |
 | Validate CMS reconstruction | CMSSW output | Use the CMS validation workflow |
 | Validate CLD or CLIC reconstruction | EDM4hep ROOT plus a checkpoint | Use the Key4HEP standalone evaluator |
 | Compare deployment formats | A checkpoint, `model_kwargs.pkl`, and TFDS | Run PyTorch-to-ONNX numerical and timing validation |
@@ -19,6 +19,8 @@ The shortest route depends on the artifact you already have.
 
 This is the recommended starting point. Download a dataset or checkpoint and avoid detector simulation. It is the quickest route to model evaluation and training experiments.
 
+Use the [dataset catalog](../datasets/catalog.md) to choose a compatible detector, input representation, version, and model recipe.
+
 ### 2. Run a local smoke workflow
 
 The scripts in `scripts/local_test_*.sh` download two small input files, build a small dataset, and run a short CPU training. They check that the software components fit together. They do not establish physics performance.
@@ -26,6 +28,8 @@ The scripts in `scripts/local_test_*.sh` download two small input files, build a
 ### 3. Produce data at scale
 
 The Pixi and Snakemake workflow covers simulation, postprocessing, TFDS creation, training, and validation. A full campaign can use many batch jobs and substantial storage. It requires a reviewed site configuration and detector software access.
+
+The [generation guide](../datasets/generate.md) explains the shared stages. The [CMS](../datasets/cms.md) and [Key4HEP](../datasets/key4hep.md) pages document only the detector-specific differences.
 
 ## Detector choice
 

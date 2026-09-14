@@ -1,6 +1,6 @@
 # Current capabilities
 
-This page describes the development branch as of 4 September 2026. It summarizes implemented paths, not the performance of any particular checkpoint.
+This page describes the development branch as of 14 September 2026. It summarizes implemented paths, not the performance of any particular checkpoint.
 
 ## Detector and input support
 
@@ -12,7 +12,7 @@ This page describes the development branch as of 4 September 2026. It summarizes
 | CLD | Electron-positron | Tracker and calorimeter hits | 3.2.1 | **Research workflow** |
 | CLICdet | Electron-positron | Tracker and calorimeter hits | 3.2.1 | **Research workflow** |
 | MAIA | Muon-collider detector study | Postprocessing only | — | **Partial** |
-| IDEA | Electron-positron detector concept | Work in progress | — | **Planned** |
+| IDEA | Electron-positron detector concept | Truth-seeded proxy tracks for pipeline validation | 0.1.0 | **Partial** |
 
 The version numbers above come from the default recipes in `particleflow_spec.yaml`. Dataset, code, and checkpoint versions are separate and must be checked together.
 
@@ -65,3 +65,4 @@ A local smoke test covers only a small part of the first two questions. Publishe
 - CMS validation depends on CMSSW and can require experiment data, calibrations, and site services.
 - A checkpoint is only meaningful with its saved model configuration and a compatible dataset schema.
 - Open research branches and roadmap items are not part of the supported interface until they are merged and documented.
+- IDEA 0.1.0 validates the software path with proxy tracks and an oracle reference; it is not a physics-ready reconstruction dataset.
