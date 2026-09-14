@@ -34,19 +34,7 @@ See the user documentation to [choose a dataset](https://jpata.github.io/particl
 
 ### **Training**
 
-Run the training on the downloaded data configuration split
-```
-uv run \
-    python mlpf/pipeline.py \
-    --spec-file particleflow_spec.yaml \
-    --production cld \
-    --model-name pyg-cld-v1 \
-    --data-dir data/tfds/tensorflow_datasets/cld \
-    train \
-    --data_config 1 \
-    --gpu_batch_multiplier 4 \
-    --gpus 1
-```
+The [training guide](https://jpata.github.io/particleflow/training/train) provides a verified CPU check, a bounded GPU example, expected outputs, and checkpoint continuation.
 
 ### **Model Upload**
 
@@ -57,35 +45,11 @@ uv run python3 scripts/upload_model_hf.py experiments/pyg-clic-hits-v1_clic_2026
 
 ### **Model Download & Evaluation**
 
-To download a specific model (e.g., CLD, cluster-based, version v3.1.0) and run evaluation on a sample ROOT file:
-
-1. Download the model files from the Hugging Face Hub:
-```bash
-uv run hf download jpata/particleflow \
-  --include "cld/clusters/v3.1.0/pyg-cld-v1_cld_20260328_101206_533260/*" \
-  --local-dir models \
-  --repo-type model
-```
-
-2. Run the evaluation script:
-```bash
-
-mkdir -p local_test_data/cld/p8_ee_ttbar_ecm365/root
-cd local_test_data/cld/p8_ee_ttbar_ecm365/root
-wget -q --no-check-certificate -nc https://jpata.web.cern.ch/jpata/mlpf/cld/v1.2.3_key4hep_2025-05-29_CLD_f1e8f9/gen/root/reco_p8_ee_ttbar_ecm365_300000.root
-cd ../../..
-
-uv run python3 mlpf/standalone_eval/key4hep/evaluator.py \
-  --input local_test_data/cld/p8_ee_ttbar_ecm365/root/reco_p8_ee_ttbar_ecm365_300000.root \
-  --checkpoint models/cld/clusters/v3.1.0/pyg-cld-v1_cld_20260328_101206_533260/checkpoints/best_weights.pth \
-  --detector cld \
-  --outpath eval_results.parquet
-```
-The input ROOT file should be in the [EDM4hep format](https://github.com/key4hep/EDM4hep).
+The [Key4HEP evaluation guide](https://jpata.github.io/particleflow/validation/key4hep) downloads a published checkpoint and runs it on an example EDM4hep ROOT file. The [validation overview](https://jpata.github.io/particleflow/validation/overview) explains which checks are needed before interpreting physics performance.
 
 ## **End-to-end workflow**
 
-The [dataset-generation guide](https://jpata.github.io/particleflow/datasets/generate) documents the Pixi/Snakemake pipeline from detector simulation through validated TFDS output. Training and validation guides are being developed under [issue #500](https://github.com/jpata/particleflow/issues/500).
+The [dataset-generation guide](https://jpata.github.io/particleflow/datasets/generate) documents the Pixi/Snakemake pipeline from detector simulation through validated TFDS output. Training, evaluation, physics validation, and ONNX validation are covered in the [user documentation](https://jpata.github.io/particleflow/).
 
 ---
 
@@ -114,4 +78,4 @@ You are welcome to reuse the code in accordance with the [LICENSE](https://githu
 
 **Contact**
 
-For collaboration ideas that do not fit into the categories above, please [get in touch via GitHub Discussions](https://github.com/jpata/particleflow/discussions/categories/general).
+For other collaboration ideas, please [get in touch via GitHub Discussions](https://github.com/jpata/particleflow/discussions/categories/general).
