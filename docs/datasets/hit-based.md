@@ -13,9 +13,9 @@ Hit-based inputs are a research workflow for CLD and CLIC. The track-and-cluster
 | Baseline candidates | Stored in `ycand` | `ycand` is a zero-filled placeholder |
 | Operational status | Supported default | Research workflow |
 
-Both representations are derived from the same validated Key4HEP Parquet files. Reuse those files to build the hit TFDS.
+Both representations are derived from the same validated Key4HEP Parquet files. The hit builder combines tracker and calorimeter hits into the input array `X`. The feature metadata identifies each element's type and geometry, and `ytarget` contains the corresponding particle target for each input row. Generator missing momentum and generator/target jets remain event-level fields.
 
-The [catalog](catalog.md) is the single inventory of available hit datasets, versions, and compatible model recipes. The hit builder concatenates tracker and calorimeter hits into `X`, with the element type and geometry encoded in the feature metadata. Targets are aligned with those input elements. The builder retains events with usable inputs and targets. Generator missing momentum and generator/target jets remain event-level fields.
+The [catalog](catalog.md) lists the available hit datasets, versions, and model recipes.
 
 ## Production and validation
 
@@ -25,10 +25,19 @@ Follow [CLD and CLIC production](key4hep.md) through strict Parquet validation, 
 PROD=cld pixi run tfds_hit
 ```
 
-Verify the exact TFDS name, configuration, and version. For example, after downloading or producing CLD `ttbar` configuration 1:
+Verify the exact TFDS name, configuration, and version. For example, after producing CLD `ttbar` configuration 1:
 
 ```bash
-uv run python -c 'import tensorflow_datasets as tfds; b = tfds.builder("cld_edm_ttbar_hits/1:3.2.1", data_dir="/path/to/cld-workspace/tfds"); e = b.as_data_source(split="train")[0]; print(b.info.full_name, e["X"].shape, e["ytarget"].shape)'
+uv run python - <<'PY'
+import tensorflow_datasets as tfds
+
+builder = tfds.builder(
+    "cld_edm_ttbar_hits/1:3.2.1",
+    data_dir="/path/to/cld-workspace/tfds",
+)
+event = builder.as_data_source(split="train")[0]
+print(builder.info.full_name, event["X"].shape, event["ytarget"].shape)
+PY
 ```
 
 Success requires the same number of input and target rows. The hit-geometry and hit-representation gates in the Parquet validation report establish the corresponding detector relationships.
@@ -46,7 +55,3 @@ Before a large run:
 5. scale workers, open-reader limits, padding, and batch accumulation from that measurement.
 
 Start with the smaller `gpu_batch_multiplier` values in the checked-in hit recipe for the matching detector, then tune them from measured memory use.
-
-## Mixed representations
-
-The repository can interleave dataset sources for research studies. PF-object and hit inputs have different feature semantics and memory behavior, so combining them requires advanced configuration: pin every source version, use an architecture/configuration that explicitly supports the input dimensions, and validate per-source sampling and losses. Establish scientific equivalence through an explicit comparison of the target definitions.

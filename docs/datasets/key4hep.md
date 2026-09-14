@@ -40,7 +40,7 @@ For either detector, the path evolves as:
     -> <workspace>/tfds/<dataset>/<configuration>/<version>/
 ```
 
-The shared postprocessor writes both track/cluster and lower-level hit fields to Parquet. `pixi run tfds` selects the former, while `pixi run tfds_hit` selects the latter; the two outputs have different dataset names and model recipes.
+The shared postprocessor writes track/cluster and lower-level hit fields to Parquet. `pixi run tfds` builds track/cluster datasets. `pixi run tfds_hit` builds hit datasets with separate names and model recipes.
 
 ## Validate postprocessing
 

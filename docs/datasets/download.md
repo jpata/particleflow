@@ -42,13 +42,31 @@ Use this detector-level directory as `--data-dir`; it is the directory that dire
 Open the exact dataset/configuration/version and print its registered splits:
 
 ```bash
-uv run python -c 'import tensorflow_datasets as tfds; b = tfds.builder("cld_edm_ttbar_pf/1:3.2.1", data_dir="data/tfds/tensorflow_datasets/cld"); print(b.info.full_name); print(b.info.splits)'
+uv run python - <<'PY'
+import tensorflow_datasets as tfds
+
+builder = tfds.builder(
+    "cld_edm_ttbar_pf/1:3.2.1",
+    data_dir="data/tfds/tensorflow_datasets/cld",
+)
+print(builder.info.full_name)
+print(builder.info.splits)
+PY
 ```
 
 Success prints `cld_edm_ttbar_pf/1/3.2.1` and metadata for the `train` and `test` splits. The published metadata currently records 90,000 training and 10,000 test events in configuration 1. Then read one event through the same random-access path used by MLPF:
 
 ```bash
-uv run python -c 'import tensorflow_datasets as tfds; b = tfds.builder("cld_edm_ttbar_pf/1:3.2.1", data_dir="data/tfds/tensorflow_datasets/cld"); e = b.as_data_source(split="train")[0]; print({k: getattr(v, "shape", None) for k, v in e.items()})'
+uv run python - <<'PY'
+import tensorflow_datasets as tfds
+
+builder = tfds.builder(
+    "cld_edm_ttbar_pf/1:3.2.1",
+    data_dir="data/tfds/tensorflow_datasets/cld",
+)
+event = builder.as_data_source(split="train")[0]
+print({name: getattr(value, "shape", None) for name, value in event.items()})
+PY
 ```
 
 Success prints shapes for `X`, `ytarget`, `ycand`, `genmet`, `genjets`, and `targetjets`. This check covers file discovery and decoding. Dataset validation and the detector-specific physics workflow establish data and physics quality.
@@ -70,7 +88,7 @@ data/tfds/tensorflow_datasets/
 └── clic/
 ```
 
-The MLPF training command receives one of those detector directories as `--data-dir`. The future training guide will cover model selection and command-line overrides; this page stops after proving that the data can be read.
+Pass one of those detector directories to MLPF as `--data-dir`. The successful event read above confirms that the downloaded dataset is ready for training or evaluation.
 
 ## Common failures
 

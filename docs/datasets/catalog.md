@@ -1,19 +1,21 @@
 # Dataset catalog
 
-Use this page to select a dataset. For installation commands, see [Download a dataset](download.md); for producing new data, see [Generate a dataset](generate.md).
+Use this page to choose a detector, input representation, dataset name, and compatible model recipe. The [download guide](download.md) covers published data, while the [generation guide](generate.md) covers custom data production.
 
-The tables describe the recipes on the current development branch. Dataset versions are schema and production versions; they are independent of the Python package version and model-checkpoint version. Always record all three in derived work.
+## Choose an input representation
+
+Track-and-cluster datasets (`*_pf`) are the supported default and contain substantially fewer input elements per event. Choose a hit dataset (`*_hits`) for studies that need tracker and calorimeter hits. Hit datasets use dedicated model recipes and require more memory; see [Hit-based datasets](hit-based.md).
 
 ## Current recipes
 
-The canonical inventory is `productions.*.tfds_mapping`, `productions.*.tfds_hit_mapping`, and `models.*_datasets` in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml). The summary below should change with that file.
+The table describes the recipes on the current development branch. Dataset versions identify the data schema and production. The Python package and model checkpoints have their own versions, so record all three in derived work.
 
 | Detector | Input representation | Dataset names | Recipe version | Compatible model recipe |
 |---|---|---|---|---|
 | CMS Run 3, pileup | Tracks and calorimeter clusters | `cms_pf_ttbar`, `cms_pf_qcd`, `cms_pf_ztt` | 3.2.0 | `pyg-cms-v1` |
 | CMS Run 3, no pileup | Tracks and calorimeter clusters | `cms_pf_ttbar_nopu`, `cms_pf_qcd_nopu`, `cms_pf_ztt_nopu` | 3.2.0 | `pyg-cms-v1` |
-| CLD, 365 GeV | Tracks and calorimeter clusters | `cld_edm_ttbar_pf`, `cld_edm_ww_fullhad_pf`, `cld_edm_qq_pf`, `cld_edm_zz_pf` | 3.2.1 | `pyg-cld-v1` (the default recipe excludes `zz`) |
-| CLD, 365 GeV | Tracker and calorimeter hits | `cld_edm_ttbar_hits`, `cld_edm_ww_fullhad_hits`, `cld_edm_qq_hits`, `cld_edm_zz_hits` | 3.2.1 | `pyg-cld-hits-v1` (the default recipe excludes `zz`) |
+| CLD, 365 GeV | Tracks and calorimeter clusters | `cld_edm_ttbar_pf`, `cld_edm_ww_fullhad_pf`, `cld_edm_qq_pf`, `cld_edm_zz_pf` | 3.2.1 | `pyg-cld-v1` (defaults: `ttbar`, `WW`, `qq`) |
+| CLD, 365 GeV | Tracker and calorimeter hits | `cld_edm_ttbar_hits`, `cld_edm_ww_fullhad_hits`, `cld_edm_qq_hits`, `cld_edm_zz_hits` | 3.2.1 | `pyg-cld-hits-v1` (defaults: `ttbar`, `WW`, `qq`) |
 | CLICdet, 380 GeV | Tracks and calorimeter clusters | `clic_edm_ttbar_pf`, `clic_edm_ww_fullhad_pf`, `clic_edm_qq_pf` | 3.2.1 | `pyg-clic-v1` |
 | CLICdet, 380 GeV | Tracker and calorimeter hits | `clic_edm_ttbar_hits`, `clic_edm_ww_fullhad_hits`, `clic_edm_qq_hits` | 3.2.1 | `pyg-clic-hits-v1` |
 
@@ -41,10 +43,6 @@ Pass the detector-level directory containing the dataset-name directories as `--
 
 As checked on 14 September 2026, the [public Hugging Face dataset repository](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) contains configuration `1` of the CLD and CLIC datasets above at their current recipe versions. It also contains older versions and the experimental IDEA datasets. CMS 3.2.0 is currently available through the configured local production workflow.
 
-Treat the live Hub tree as the source of truth for publication availability. Treat `particleflow_spec.yaml` as the source of truth for what the current code expects. A usable dataset has a detector, name, configuration, and version that match in both contexts.
-
-## Which representation should I use?
-
-The track-and-cluster (`*_pf`) datasets provide the supported default path with substantially smaller events. Studies of lower-level detector inputs use the dedicated hit datasets, model recipes, and memory guidance in [Hit-based datasets](hit-based.md).
+Treat the live Hub tree as the source of truth for publication availability. The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects. A usable dataset has a detector, name, configuration, and version that match in both contexts.
 
 For detector-software and sample details, see [CMS data](cms.md) or [CLD and CLIC data](key4hep.md). For scientific provenance and citations, use the [publication map](../science/publications.md) and the dataset record associated with the version you consume.

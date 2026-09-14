@@ -2,7 +2,7 @@
 
 Use this workflow to create a custom or unpublished dataset. New users should normally [download a prepared dataset](download.md), because detector production is site dependent and can require days, many batch jobs, and hundreds of GB or more.
 
-This page owns the shared Pixi/Snakemake procedure. Read [CMS data production](cms.md) or [CLD and CLIC production](key4hep.md) before launching a detector-specific campaign. For a two-file software check, use the [quickstart](../getting-started/quickstart.md) instead.
+This guide covers the shared Pixi/Snakemake procedure. Read [CMS data production](cms.md) or [CLD and CLIC production](key4hep.md) before launching a detector-specific campaign. For a two-file software check, use the [quickstart](../getting-started/quickstart.md).
 
 ## Stages and gates
 
@@ -14,6 +14,17 @@ This page owns the shared Pixi/Snakemake procedure. Read [CMS data production](c
 | TFDS, hits | `pixi run tfds_hit` | Key4HEP Parquet containing hit fields | Versioned hit TFDS below `tfds/` | Metadata/event read plus hit validation passes |
 
 Dataset-integrity gates establish the quality of upstream events before a long training run. Training and physics validation then answer downstream model and performance questions.
+
+The resolved `productions.<name>.workspace_dir` contains:
+
+```text
+<workspace>/
+├── gen/    # detector simulation ROOT/EDM output
+├── post/   # postprocessed pickle or Parquet
+└── tfds/   # dataset-name/configuration/version directories
+```
+
+Workflow definitions, job scripts, logs, and `.done` markers are written under `snakemake_jobs/<production>/` in the repository.
 
 ## Select and review a site
 
@@ -65,25 +76,18 @@ BATCH=1/100 PROD=cld pixi run gen -- --dry-run --printshellcmds
 
 After checking the selected jobs, resource requests, output paths, and container mounts, remove `--dry-run`. `BATCH=1/100` partitions the top-level `all` input set. The dry-run output shows the exact event and job selection for the limited launch.
 
-## Run one stage at a time
+## Generate and postprocess data
 
 ```bash
 PROD=cld pixi run gen
 PROD=cld pixi run post
-PROD=cld pixi run tfds
-```
-
-For CLD or CLIC hit inputs, validate the Parquet files and then build the additional representation:
-
-```bash
-PROD=cld pixi run tfds_hit
 ```
 
 Assign one production per command and validate each campaign separately. Brace syntax such as `PROD={cms_run3,cld,clic}` creates one literal, invalid production value.
 
 Generated scripts skip final data files that already exist, and Snakemake records completion with `.done` sentinels below `snakemake_jobs/<production>/`. A failed invocation can normally be rerun. Before deleting a sentinel, compare it with the corresponding data file and log; removing markers indiscriminately can repeat expensive work.
 
-## Validate the products
+## Validate postprocessed data
 
 For a CLD or CLIC Parquet file:
 
@@ -97,20 +101,21 @@ uv run python tests/validate_parquet.py \
 
 Strict mode is the default and exits nonzero on a failed gate. It writes `validation_report.json` plus diagnostic plots. Use the matching `clic` detector and process path for CLIC. CMS postprocessing emits compressed pickle and uses the [CMS-specific checks](cms.md).
 
-After TFDS creation, adapt the metadata and single-event checks in [Download a dataset](download.md) to the workspace's `tfds/` directory and the exact configured version.
+## Build and verify TFDS
 
-## Workspace layout
+Build the track-and-cluster representation after the intermediate-data checks pass:
 
-The resolved `productions.<name>.workspace_dir` contains:
-
-```text
-<workspace>/
-├── gen/    # detector simulation ROOT/EDM output
-├── post/   # postprocessed pickle or Parquet
-└── tfds/   # dataset-name/configuration/version directories
+```bash
+PROD=cld pixi run tfds
 ```
 
-Generated workflow definitions, job scripts, logs, and `.done` markers remain in the repository under `snakemake_jobs/<production>/`. The detector pages describe the extra directory level used by CMS and the process directories used by Key4HEP.
+For a CLD or CLIC hit study, the same validated Parquet files supply the hit representation:
+
+```bash
+PROD=cld pixi run tfds_hit
+```
+
+Adapt the metadata and single-event checks in [Download a dataset](download.md) to the workspace's `tfds/` directory and exact configured version. A successful read is the final dataset-production gate.
 
 ## Publish selected outputs
 

@@ -23,11 +23,12 @@ The exact CMSSW process names, seed ranges, events per job, and output subdirect
 
 ## CMS path through the common workflow
 
+Generate and postprocess the configured CMS samples:
+
 ```bash
 PROD=cms_run3 pixi run gen -- --dry-run --printshellcmds
 PROD=cms_run3 pixi run gen
 PROD=cms_run3 pixi run post
-PROD=cms_run3 pixi run tfds
 ```
 
 Generation writes PF ntuples below:
@@ -40,14 +41,21 @@ Generation writes PF ntuples below:
 
 ## Checks before TFDS
 
-CMS uses a compressed-pickle intermediate format and detector-specific integrity checks. Before a production build:
+CMS uses a compressed-pickle intermediate format and detector-specific integrity checks. Before committing resources to a production-scale campaign:
 
 1. inspect generation and postprocessing logs for every selected seed;
 2. verify that the expected `.pkl.bz2` output exists and opens;
-3. run `scripts/local_test_cms.sh` in a disposable checkout to exercise CMS postprocessing, TFDS decoding, short training, checkpoint loading, and ONNX comparison;
-4. open one event from each produced TFDS dataset using the check in [Download a dataset](download.md).
+3. run `scripts/local_test_cms.sh` in a disposable checkout to exercise CMS postprocessing, TFDS decoding, short training, checkpoint loading, and ONNX comparison.
 
 These checks establish software and schema integrity. CMS physics performance requires the jet/MET validation, collision-data commissioning, calibrations, and luminosity selections planned for the CMS validation guide.
+
+After the checks pass, build the six configured TFDS families:
+
+```bash
+PROD=cms_run3 pixi run tfds
+```
+
+Open one event from each dataset/configuration using the procedure in [Download a dataset](download.md).
 
 ## CMS target information
 
