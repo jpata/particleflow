@@ -1,8 +1,10 @@
 import json
+import shlex
 from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 
 from mlpf.training_scenarios import (
     PlatformProfile,
@@ -200,29 +202,77 @@ def test_platform_data_dir_mapping_requires_the_variant_production():
     assert {job.data_dir for job in jobs} == {"/tmp/shared_tfds"}
 
 
-def test_cli_dry_run_uses_per_production_data_dir(capsys):
+def test_cli_dry_run_routes_selected_variant_to_its_production_data(tmp_path, capsys):
     from mlpf.training_scenarios import main
+
+    first_data = tmp_path / "first-production"
+    selected_data = tmp_path / "selected-production"
+    scenario_path = tmp_path / "scenario.yaml"
+    platform_path = tmp_path / "platform.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "production-routing",
+                "production_name": "cld",
+                "variants": {
+                    "first": {"model_name": "pyg-cld-v1"},
+                    "selected": {
+                        "model_name": "pyg-clic-v1",
+                        "production_name": "clic",
+                    },
+                },
+                "seeds": [1],
+                "training": {"global_batch_size": 8},
+                # Detector productions legitimately differ throughout their
+                # resolved data and model configuration. This test is about
+                # CLI selection and routing, not cross-detector invariants.
+                "allowed_variant_differences": [
+                    "data_dir",
+                    "dataset",
+                    "enabled_test_datasets",
+                    "input_dim",
+                    "train_dataset",
+                    "valid_dataset",
+                    "test_dataset",
+                    "model",
+                ],
+            }
+        )
+    )
+    platform_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "test-local",
+                "gpus": 1,
+                "data_dir": {
+                    "cld": str(first_data),
+                    "clic": str(selected_data),
+                },
+                "experiments_dir": str(tmp_path / "experiments"),
+            }
+        )
+    )
 
     main(
         [
             "--scenario",
-            str(CLIC_CLD_SCENARIO),
+            str(scenario_path),
             "--platform",
-            str(PLATFORMS / "local.yaml"),
+            str(platform_path),
             "--spec-file",
             str(ROOT / "particleflow_spec.yaml"),
             "--global-batch-size",
             "8",
             "--variant",
-            "clic_set_hits",
+            "selected",
             "--dry-run",
         ]
     )
 
-    command = capsys.readouterr().out
-    assert "--production-name clic" in command
-    assert "--data-dir /mnt/work/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds" in command
-    assert "--model.backbone.num_convs 12" in command
+    command = shlex.split(capsys.readouterr().out)
+    assert command[command.index("--production-name") + 1] == "clic"
+    assert command[command.index("--data-dir") + 1] == str(selected_data)
+    assert str(first_data) not in command
 
 
 @pytest.mark.parametrize(
