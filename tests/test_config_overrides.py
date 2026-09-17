@@ -4,10 +4,11 @@ Spec: Validates the 'MLPFConfig' class and its 'from_spec' method. Tests configu
 
 import unittest
 import argparse
+from dataclasses import FrozenInstanceError
 import yaml
 import tempfile
 import os
-from mlpf.conf import MLPFConfig, ModelType, Dataset
+from mlpf.conf import AttentionType, MLPFConfig, ModelType, Dataset, _PIPELINE_DATASETS
 
 
 class TestConfigOverrides(unittest.TestCase):
@@ -50,6 +51,10 @@ class TestConfigOverrides(unittest.TestCase):
 
     def tearDown(self):
         os.unlink(self.temp_spec.name)
+
+    def write_spec(self):
+        with open(self.temp_spec.name, "w") as handle:
+            yaml.safe_dump(self.spec, handle)
 
     def test_build_config_from_spec(self):
         config_obj = MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod")
@@ -98,6 +103,7 @@ class TestConfigOverrides(unittest.TestCase):
     def test_override_config_convenience_flags(self):
         args = argparse.Namespace()
         args.num_convs = 5
+        args.attention_type = "simple"
         args.train = True
         args.test_datasets = []
 
@@ -105,6 +111,92 @@ class TestConfigOverrides(unittest.TestCase):
         config = config_obj.model_dump()
 
         self.assertEqual(config["model"]["gnnlsh"]["num_convs"], 5)
+        self.assertEqual(config["model"]["attention"]["attention_type"], AttentionType.SIMPLE)
+
+    def test_data_config_filters_splits_and_preserves_batch_sizes(self):
+        datasets = self.spec["models"]["test_model"]
+        for key in ["train_datasets", "validation_datasets"]:
+            datasets[key]["physical_pu"]["batch_size"] = 8
+            datasets[key]["physical_pu"]["samples"][0].update({"splits": ["1", "2"], "batch_size": 3})
+        datasets["test_datasets"][0].update({"splits": ["1", "2"], "batch_size": 5})
+        self.write_spec()
+
+        config = MLPFConfig.from_spec(
+            self.temp_spec.name,
+            "test_model",
+            "test_prod",
+            args=argparse.Namespace(data_config=" 2, missing ", test_datasets=[]),
+        )
+
+        self.assertEqual(config.data_config, ["2", "missing"])
+        train_sample = config.train_dataset["cms"]["physical_pu"].samples["cms_pf_ttbar"]
+        self.assertEqual(config.train_dataset["cms"]["physical_pu"].batch_size, 8)
+        self.assertEqual(train_sample.batch_size, 3)
+        self.assertEqual(train_sample.splits, ["2"])
+        self.assertEqual(config.valid_dataset["cms"]["physical_pu"].samples["cms_pf_ttbar"].splits, ["2"])
+        self.assertEqual(config.test_dataset["cms_pf_ttbar"].batch_size, 5)
+        self.assertEqual(config.test_dataset["cms_pf_ttbar"].splits, ["2"])
+
+    def test_scalar_data_config_and_explicit_test_selection(self):
+        self.spec["models"]["test_model"]["train_datasets"]["physical_pu"]["samples"][0]["splits"] = ["1", "2"]
+        self.write_spec()
+
+        config = MLPFConfig.from_spec(
+            self.temp_spec.name,
+            "test_model",
+            "test_prod",
+            args=argparse.Namespace(data_config=2, test_datasets=["selected_elsewhere"]),
+        )
+
+        self.assertEqual(config.data_config, ["2"])
+        self.assertEqual(config.enabled_test_datasets, ["selected_elsewhere"])
+
+    def test_nested_paths_are_resolved_after_overrides(self):
+        self.spec["models"]["test_model"]["raytune"] = {"storage_path": "${project.workspace_dir}/ray"}
+        self.write_spec()
+
+        config = MLPFConfig.from_spec(
+            self.temp_spec.name,
+            "test_model",
+            "test_prod",
+            extra_args=["--load", "${project.workspace_dir}/checkpoint.pt"],
+        )
+
+        self.assertEqual(config.raytune["storage_path"], "/tmp/particleflow/ray")
+        self.assertEqual(config.load, "/tmp/particleflow/checkpoint.pt")
+
+    def test_cld_pipeline_overrides(self):
+        model = self.spec["models"]["test_model"]
+        model["dataset"] = "cld"
+        model["train_datasets"] = {"physical": {"batch_size": 7, "samples": [{"name": "cld_edm_ttbar_pf", "version": "1.0.0", "splits": ["1"]}]}}
+        model["validation_datasets"] = model["train_datasets"]
+        model["test_datasets"] = [{"name": "cld_edm_ttbar_pf", "version": "1.0.0"}]
+        self.spec["productions"]["test_prod"]["type"] = "cld"
+        self.write_spec()
+
+        config = MLPFConfig.from_spec(
+            self.temp_spec.name,
+            "test_model",
+            "test_prod",
+            args=argparse.Namespace(pipeline=True, test_datasets=[]),
+        )
+
+        self.assertEqual(config.gpu_batch_multiplier, 8)
+        self.assertEqual(config.train_dataset["cld"]["physical"].batch_size, 7)
+        self.assertEqual(config.train_dataset["cld"]["physical"].samples["cld_edm_ttbar_pf"].splits, ["10"])
+        self.assertEqual(config.valid_dataset["cld"]["physical"].samples["cld_edm_ttbar_pf"].version, "3.2.1")
+        self.assertEqual(config.test_dataset["cld_edm_ttbar_pf"].splits, ["10"])
+
+    def test_pipeline_dataset_overrides_are_immutable_named_records(self):
+        cld_override = _PIPELINE_DATASETS["cld"]
+
+        self.assertEqual(cld_override.physical_name, "physical")
+        self.assertEqual(cld_override.sample_name, "cld_edm_ttbar_pf")
+        self.assertEqual(cld_override.version, "3.2.1")
+        self.assertEqual(cld_override.gpu_batch_multiplier, 8)
+        self.assertIsNone(_PIPELINE_DATASETS["cms"].gpu_batch_multiplier)
+        with self.assertRaises(FrozenInstanceError):
+            cld_override.version = "changed"
 
     def test_pipeline_overrides(self):
         args = argparse.Namespace()
@@ -141,6 +233,10 @@ class TestConfigOverrides(unittest.TestCase):
 
         with self.assertRaises(Exception):
             MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args, extra_args=extra_args)
+
+    def test_invalid_production_name(self):
+        with self.assertRaisesRegex(ValueError, "Production missing not found in spec"):
+            MLPFConfig.from_spec(self.temp_spec.name, "test_model", "missing")
 
 
 if __name__ == "__main__":

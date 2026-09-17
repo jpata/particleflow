@@ -8,6 +8,7 @@ from enum import Enum
 from mlpf.utils import (
     resolve_path,
     load_spec,
+    parse_extra_args,
     set_nested_dict,
     _resolve_paths_recursive,
 )
@@ -847,6 +848,165 @@ class TestDatasetEntry(BaseModel):
     batch_size: int = 1
 
 
+_MODEL_DATASET_KEYS = {"architecture", "train_datasets", "validation_datasets", "test_datasets"}
+_ACTION_FLAGS = ("train", "test", "compile", "make_plots", "gpus", "load")
+_BACKBONE_TYPES = ("gnnlsh", "attention", "litept", "hept", "heptv2")
+
+
+@dataclass(frozen=True, slots=True)
+class _PipelineDatasetOverride:
+    physical_name: str
+    sample_name: str
+    version: str
+    gpu_batch_multiplier: Optional[int] = None
+
+
+_PIPELINE_DATASETS = {
+    "cms": _PipelineDatasetOverride("physical_pu", "cms_pf_ttbar", "3.2.0"),
+    "cld": _PipelineDatasetOverride("physical", "cld_edm_ttbar_pf", "3.2.1", gpu_batch_multiplier=8),
+    "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.2.1"),
+}
+
+
+def _build_base_config(spec, model_config, production_config):
+    config = {}
+    for key, value in spec["models"].get("defaults", {}).items():
+        config[key] = resolve_path(value, spec) if isinstance(value, str) else value
+    for key, value in model_config.items():
+        if key not in _MODEL_DATASET_KEYS:
+            config[key] = resolve_path(value, spec) if isinstance(value, str) else value
+    config.update(model_config.get("hyperparameters", {}))
+
+    config["model"] = model_config["architecture"]
+    config["conv_type"] = config["model"]["type"]
+    config["dataset"] = Dataset(model_config.get("dataset", production_config.get("type")))
+    config["data_dir"] = os.path.join(resolve_path(production_config["workspace_dir"], spec), "tfds")
+
+    dataset_name = config["dataset"].value
+    config["input_dim"] = len(X_FEATURES[dataset_name])
+    config["num_classes"] = len(CLASS_LABELS[dataset_name])
+    config["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[dataset_name]
+    return config, dataset_name
+
+
+def _apply_namespace_overrides(config, args, valid_fields):
+    if not args:
+        return
+    for name, value in vars(args).items():
+        if value is not None and (name in config or name in valid_fields):
+            config[name] = value
+    for name in _ACTION_FLAGS:
+        if hasattr(args, name) and getattr(args, name) is not None:
+            config[name] = getattr(args, name)
+
+    if getattr(args, "attention_type", None) is not None:
+        set_nested_dict(config, "model.attention.attention_type", args.attention_type)
+    if getattr(args, "num_convs", None) is not None:
+        for model_type in _BACKBONE_TYPES:
+            if model_type in config["model"]:
+                set_nested_dict(config, f"model.{model_type}.num_convs", args.num_convs)
+        set_nested_dict(config, "model.backbone.num_convs", args.num_convs)
+
+
+def _apply_extra_arg_overrides(config, extra_args):
+    if not extra_args:
+        return
+    for key, value in parse_extra_args(extra_args).items():
+        set_nested_dict(config, key, value)
+
+    index = 0
+    while index < len(extra_args):
+        arg = extra_args[index]
+        if arg.startswith("--"):
+            has_value = index + 1 < len(extra_args) and not extra_args[index + 1].startswith("--") and "=" not in extra_args[index + 1]
+            index += 2 if has_value else 1
+        elif "=" in arg:
+            index += 1
+        else:
+            raise ValueError(f"Could not parse extra argument: {arg}")
+
+
+def _normalize_data_config(config):
+    value = config.get("data_config")
+    if value is None:
+        return
+    if isinstance(value, str):
+        value = value.split(",")
+    elif not isinstance(value, list):
+        value = [value]
+    config["data_config"] = [str(item).strip() for item in value]
+
+
+def _filter_splits(splits, data_config):
+    if not data_config:
+        return splits
+    return [split for split in splits if split in data_config]
+
+
+def _build_physical_dataset_config(dataset_input, dataset_name, config):
+    dataset_config = {dataset_name: {}}
+    for physical_name, physical_config in dataset_input.items():
+        samples = {}
+        for sample in physical_config["samples"]:
+            entry = {
+                "version": sample.get("version"),
+                "splits": _filter_splits(sample.get("splits"), config.get("data_config")),
+            }
+            if "batch_size" in sample:
+                entry["batch_size"] = sample["batch_size"]
+            samples[sample["name"]] = entry
+        dataset_config[dataset_name][physical_name] = {
+            "batch_size": physical_config.get("batch_size", config.get("batch_size", 1)),
+            "samples": samples,
+        }
+    return dataset_config
+
+
+def _build_test_dataset_config(dataset_input, data_config):
+    datasets = {}
+    for sample in dataset_input:
+        datasets[sample["name"]] = {
+            "version": sample.get("version"),
+            "splits": _filter_splits(sample.get("splits", ["test"]), data_config),
+            "batch_size": sample.get("batch_size", 1),
+        }
+    return datasets
+
+
+def _build_dataset_configs(config, model_config, dataset_name):
+    if "train_datasets" in model_config:
+        config["train_dataset"] = _build_physical_dataset_config(model_config["train_datasets"], dataset_name, config)
+    if "validation_datasets" in model_config:
+        config["valid_dataset"] = _build_physical_dataset_config(model_config["validation_datasets"], dataset_name, config)
+    if "test_datasets" in model_config:
+        config["test_dataset"] = _build_test_dataset_config(model_config["test_datasets"], config.get("data_config"))
+
+
+def _apply_pipeline_overrides(config, dataset_name):
+    model = config["model"]
+    model.setdefault("gnnlsh", {}).update(num_convs=1, width=32, embedding_dim=32)
+    model.setdefault("attention", {}).update(num_convs=1, num_heads=2, head_dim=2)
+
+    override = _PIPELINE_DATASETS.get(dataset_name)
+    if override is None:
+        return
+    if override.gpu_batch_multiplier is not None:
+        config["gpu_batch_multiplier"] = override.gpu_batch_multiplier
+
+    for config_name in ("train_dataset", "valid_dataset"):
+        if config_name in config:
+            batch_size = config[config_name][dataset_name][override.physical_name]["batch_size"]
+            config[config_name][dataset_name] = {
+                override.physical_name: {
+                    "batch_size": batch_size,
+                    "samples": {override.sample_name: {"splits": ["10"], "version": override.version}},
+                }
+            }
+    if override.sample_name in config.get("test_dataset", {}):
+        config["test_dataset"] = {override.sample_name: config["test_dataset"][override.sample_name]}
+        config["test_dataset"][override.sample_name]["splits"] = ["10"]
+
+
 class MLPFConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -984,211 +1144,19 @@ class MLPFConfig(BaseModel):
         if production_name not in spec["productions"]:
             raise ValueError(f"Production {production_name} not found in spec")
 
-        model_config_raw = spec["models"][model_name]
-        prod_config_raw = spec["productions"][production_name]
+        model_config = spec["models"][model_name]
+        production_config = spec["productions"][production_name]
+        config_dict, dataset_name = _build_base_config(spec, model_config, production_config)
+        _apply_namespace_overrides(config_dict, args, MLPFConfig.model_fields)
+        _apply_extra_arg_overrides(config_dict, extra_args)
+        _normalize_data_config(config_dict)
+        _build_dataset_configs(config_dict, model_config, dataset_name)
+        if getattr(args, "pipeline", False):
+            _apply_pipeline_overrides(config_dict, dataset_name)
 
-        # Initialize config dict
-        config_dict = {}
-
-        # 1. Merge defaults
-        if "defaults" in spec["models"]:
-            for k, v in spec["models"]["defaults"].items():
-                if isinstance(v, str):
-                    v = resolve_path(v, spec)
-                config_dict[k] = v
-
-        # 2. Merge model config
-        for k, v in model_config_raw.items():
-            if k not in [
-                "architecture",
-                "train_datasets",
-                "validation_datasets",
-                "test_datasets",
-            ]:
-                if isinstance(v, str):
-                    v = resolve_path(v, spec)
-                config_dict[k] = v
-
-        if "hyperparameters" in model_config_raw:
-            for k, v in model_config_raw["hyperparameters"].items():
-                config_dict[k] = v
-
-        # 3. Model Architecture
-        config_dict["model"] = model_config_raw["architecture"]
-        config_dict["conv_type"] = config_dict["model"]["type"]
-
-        # 4. Dataset and Production
-        config_dict["dataset"] = Dataset(model_config_raw.get("dataset", prod_config_raw.get("type")))
-        workspace_dir = resolve_path(prod_config_raw["workspace_dir"], spec)
-        config_dict["data_dir"] = os.path.join(workspace_dir, "tfds")
-
-        # Set model dimensions
-        ds_name = config_dict["dataset"].value
-        config_dict["input_dim"] = len(X_FEATURES[ds_name])
-        config_dict["num_classes"] = len(CLASS_LABELS[ds_name])
-        config_dict["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[ds_name]
-
-        # 5. Apply Argparse overrides
-        if args:
-            for arg in vars(args):
-                val = getattr(args, arg)
-                if val is not None:
-                    # Direct override if key exists in config_dict or is a valid field in MLPFConfig
-                    if arg in config_dict or arg in MLPFConfig.model_fields:
-                        config_dict[arg] = val
-
-            # Action flags
-            for flag in ["train", "test", "compile", "make_plots", "gpus", "load"]:
-                if hasattr(args, flag) and getattr(args, flag) is not None:
-                    config_dict[flag] = getattr(args, flag)
-
-            # Special mapping cases (convenience flags)
-            if hasattr(args, "attention_type") and args.attention_type is not None:
-                set_nested_dict(config_dict, "model.attention.attention_type", args.attention_type)
-
-            if hasattr(args, "num_convs") and args.num_convs is not None:
-                for m in ["gnnlsh", "attention", "litept", "hept", "heptv2"]:
-                    if m in config_dict["model"]:
-                        set_nested_dict(config_dict, f"model.{m}.num_convs", args.num_convs)
-                set_nested_dict(config_dict, "model.backbone.num_convs", args.num_convs)
-
-        # 6. Apply Dot-notation overrides (extra_args)
-        if extra_args:
-            from mlpf.utils import parse_extra_args
-
-            overrides = parse_extra_args(extra_args)
-            for key, value in overrides.items():
-                set_nested_dict(config_dict, key, value)
-
-            # Check for leftover extra arguments that could not be parsed as overrides
-            i = 0
-            while i < len(extra_args):
-                arg = extra_args[i]
-                if arg.startswith("--"):
-                    if i + 1 < len(extra_args) and not extra_args[i + 1].startswith("--") and "=" not in extra_args[i + 1]:
-                        i += 2
-                    else:
-                        i += 1
-                elif "=" in arg:
-                    i += 1
-                else:
-                    raise ValueError(f"Could not parse extra argument: {arg}")
-
-        # Normalize data_config if present
-        if "data_config" in config_dict and config_dict["data_config"] is not None:
-            dc = config_dict["data_config"]
-            if isinstance(dc, str):
-                dc = dc.split(",")
-            elif not isinstance(dc, list):
-                dc = [dc]
-            config_dict["data_config"] = [str(s).strip() for s in dc]
-
-        # 9. Build dataset configuration
-        def build_dataset_config_dict(dataset_input):
-            ds_config = {}
-            ds_config[ds_name] = {}
-            data_config = config_dict.get("data_config")
-            for phys_key, phys_val in dataset_input.items():
-                ds_config[ds_name][phys_key] = {
-                    "batch_size": phys_val.get("batch_size", config_dict.get("batch_size", 1)),
-                    "samples": {},
-                }
-                target_dict = ds_config[ds_name][phys_key]["samples"]
-                for ds_item in phys_val["samples"]:
-                    name = ds_item["name"]
-                    splits = ds_item.get("splits")
-                    if data_config:
-                        splits = [s for s in splits if s in data_config]
-                    entry = {"version": ds_item.get("version"), "splits": splits}
-                    if "batch_size" in ds_item:
-                        entry["batch_size"] = ds_item["batch_size"]
-                    target_dict[name] = entry
-            return ds_config
-
-        if "train_datasets" in model_config_raw:
-            config_dict["train_dataset"] = build_dataset_config_dict(model_config_raw["train_datasets"])
-        if "validation_datasets" in model_config_raw:
-            config_dict["valid_dataset"] = build_dataset_config_dict(model_config_raw["validation_datasets"])
-        if "test_datasets" in model_config_raw:
-            config_dict["test_dataset"] = {}
-            data_config = config_dict.get("data_config")
-            for ds_item in model_config_raw.get("test_datasets", []):
-                name = ds_item["name"]
-                splits = ds_item.get("splits", ["test"])
-                if data_config:
-                    splits = [s for s in splits if s in data_config]
-                config_dict["test_dataset"][name] = {
-                    "version": ds_item.get("version"),
-                    "splits": splits,
-                    "batch_size": ds_item.get("batch_size", 1),
-                }
-
-        # 7. Pipeline Overrides
-        if args and hasattr(args, "pipeline") and args.pipeline:
-            # Replicate pipeline-specific overrides
-            if "gnnlsh" not in config_dict["model"]:
-                config_dict["model"]["gnnlsh"] = {}
-            config_dict["model"]["gnnlsh"]["num_convs"] = 1
-            config_dict["model"]["gnnlsh"]["width"] = 32
-            config_dict["model"]["gnnlsh"]["embedding_dim"] = 32
-
-            if "attention" not in config_dict["model"]:
-                config_dict["model"]["attention"] = {}
-            config_dict["model"]["attention"]["num_convs"] = 1
-            config_dict["model"]["attention"]["num_heads"] = 2
-            config_dict["model"]["attention"]["head_dim"] = 2
-
-            if ds_name == "cms":
-                for ds in ["train_dataset", "valid_dataset"]:
-                    if ds in config_dict:
-                        config_dict[ds][ds_name] = {
-                            "physical_pu": {
-                                "batch_size": config_dict[ds][ds_name]["physical_pu"]["batch_size"],
-                                "samples": {
-                                    "cms_pf_ttbar": {
-                                        "splits": ["10"],
-                                        "version": "3.2.0",
-                                    }
-                                },
-                            }
-                        }
-                if "test_dataset" in config_dict and "cms_pf_ttbar" in config_dict["test_dataset"]:
-                    config_dict["test_dataset"] = {"cms_pf_ttbar": config_dict["test_dataset"]["cms_pf_ttbar"]}
-                    config_dict["test_dataset"]["cms_pf_ttbar"]["splits"] = ["10"]
-            elif ds_name == "cld":
-                config_dict["gpu_batch_multiplier"] = 8
-                for ds in ["train_dataset", "valid_dataset"]:
-                    if ds in config_dict:
-                        config_dict[ds][ds_name] = {
-                            "physical": {
-                                "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"cld_edm_ttbar_pf": {"splits": ["10"], "version": "3.2.1"}},
-                            }
-                        }
-                if "test_dataset" in config_dict and "cld_edm_ttbar_pf" in config_dict["test_dataset"]:
-                    config_dict["test_dataset"] = {"cld_edm_ttbar_pf": config_dict["test_dataset"]["cld_edm_ttbar_pf"]}
-                    config_dict["test_dataset"]["cld_edm_ttbar_pf"]["splits"] = ["10"]
-            elif ds_name == "clic":
-                for ds in ["train_dataset", "valid_dataset"]:
-                    if ds in config_dict:
-                        config_dict[ds][ds_name] = {
-                            "physical": {
-                                "batch_size": config_dict[ds][ds_name]["physical"]["batch_size"],
-                                "samples": {"clic_edm_ttbar_pf": {"splits": ["10"], "version": "3.2.1"}},
-                            }
-                        }
-                if "test_dataset" in config_dict and "clic_edm_ttbar_pf" in config_dict["test_dataset"]:
-                    config_dict["test_dataset"] = {"clic_edm_ttbar_pf": config_dict["test_dataset"]["clic_edm_ttbar_pf"]}
-                    config_dict["test_dataset"]["clic_edm_ttbar_pf"]["splits"] = ["10"]
-
-        # Post-dataset adjustments
         if "test_dataset" in config_dict:
             config_dict["enabled_test_datasets"] = list(config_dict["test_dataset"].keys())
-        if args and hasattr(args, "test_datasets") and args.test_datasets:
+        if getattr(args, "test_datasets", None):
             config_dict["enabled_test_datasets"] = args.test_datasets
-
-        # 9. Resolve any remaining ${...} path references in nested structures
         config_dict = _resolve_paths_recursive(config_dict, spec)
-
-        # 10. Validate with Pydantic
         return MLPFConfig.model_validate(config_dict)

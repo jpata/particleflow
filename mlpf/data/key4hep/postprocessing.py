@@ -2,7 +2,7 @@ import os
 
 from mlpf.conf import EDM4HEP, ParticleFeatures as GenFeatures
 
-# noqa: to prevent https://stackoverflow.com/questions/52026652/openblas-blas-thread-init-pthread-create-resource-temporarily-unavailable
+# Set these before importing numerical libraries to avoid OpenBLAS thread-init failures.
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"

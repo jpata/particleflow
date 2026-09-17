@@ -1492,7 +1492,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         dist.barrier()  # block until all workers finished executing run_predictions()
 
 
-def run(
+def run(  # noqa: C901
     rank: int | str,
     world_size: int,
     config: MLPFConfig,

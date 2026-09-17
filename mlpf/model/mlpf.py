@@ -1131,7 +1131,7 @@ class RegressionOutput(nn.Module):
 
 
 class MLPF(nn.Module):
-    def __init__(
+    def __init__(  # noqa: C901
         self,
         config: MLPFConfig,
     ):

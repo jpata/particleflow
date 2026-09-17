@@ -124,3 +124,14 @@ exclude = ["tests*", "notebooks*", "images*", "docs*", "scripts*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.yaml"]
+
+[tool.ruff]
+# Detector configuration is maintained in a separate repository and is checked
+# by that project rather than by particleflow's first-party quality gates.
+extend-exclude = ["mlpf/data/key4hep/gen"]
+target-version = "py311"
+
+[tool.ruff.lint.mccabe]
+# This is a transitional ceiling for new code. Existing functions above the
+# limit have targeted C901 suppressions at their definitions.
+max-complexity = 25

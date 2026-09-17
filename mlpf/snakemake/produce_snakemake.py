@@ -77,7 +77,7 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
     return ", ".join([f"{k}={v}" for k, v in res.items()])
 
 
-def main():
+def main():  # noqa: C901
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
     parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
