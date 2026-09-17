@@ -67,9 +67,9 @@ def test_local_spec_accepts_pf_version_and_split_overrides(tmp_path):
 def test_local_training_launcher_forwards_pf_overrides_without_global_split_override():
     launcher = TRAIN_SCENARIO_SCRIPT.read_text()
 
-    assert 'PF_VERSION=${PF_VERSION:-3.2.1}' in launcher
-    assert 'PF_SPLITS=${PF_SPLITS:-1}' in launcher
+    assert "PF_VERSION=${PF_VERSION:-3.2.1}" in launcher
+    assert "PF_SPLITS=${PF_SPLITS:-1}" in launcher
     assert '--pf-version "$PF_VERSION"' in launcher
     assert '--pf-splits "${PF_SPLIT_LIST[@]}"' in launcher
-    assert 'DATA_CONFIG=${DATA_CONFIG:-}' in launcher
+    assert "DATA_CONFIG=${DATA_CONFIG:-}" in launcher
     assert 'if [[ -n "$DATA_CONFIG" ]]' in launcher
