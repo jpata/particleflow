@@ -165,9 +165,7 @@ def _detector_config(tree, detector: str = "auto") -> DetectorConfig:
     if "ECALOther" in tree:
         return DETECTORS["clic"]
     matches = [
-        config
-        for config in DETECTORS.values()
-        if config.key != "clic" and config.track_collection in tree and config.cluster_collection in tree
+        config for config in DETECTORS.values() if config.key != "clic" and config.track_collection in tree and config.cluster_collection in tree
     ]
     if len(matches) != 1:
         found = ", ".join(config.key for config in matches) or "none"
@@ -447,9 +445,7 @@ def render_event(
                 if target_only and abs(particle_charge) >= 0.5 and transverse_momentum > 1e-6:
                     # Helical propagation in the detector's axial solenoidal
                     # field. Radius is in mm for pT in GeV and B in tesla.
-                    signed_radius = (
-                        transverse_momentum * 1000.0 / (0.3 * config.magnetic_field_tesla * particle_charge)
-                    )
+                    signed_radius = transverse_momentum * 1000.0 / (0.3 * config.magnetic_field_tesla * particle_charge)
                     tan_lambda = vz / transverse_momentum
                     transverse_arc = length / np.sqrt(1.0 + tan_lambda * tan_lambda)
                     arc = np.linspace(0.0, transverse_arc, 36)
@@ -548,10 +544,7 @@ def main() -> None:
     production_suffixes = [_production_suffix(root_file) for root_file, _ in inputs]
     numeric_suffixes = [suffix for suffix in production_suffixes if suffix is not None]
     if len(inputs) > 1 and len(numeric_suffixes) == len(inputs) and len(set(numeric_suffixes)) != 1:
-        raise ValueError(
-            "comparison inputs must have the same trailing numerical suffix "
-            f"(got: {', '.join(numeric_suffixes)})"
-        )
+        raise ValueError("comparison inputs must have the same trailing numerical suffix " f"(got: {', '.join(numeric_suffixes)})")
     comparison_limit = max(config.plot_limit for _, config in inputs) if len(inputs) > 1 else None
 
     for event in args.events:

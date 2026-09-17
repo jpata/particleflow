@@ -45,13 +45,8 @@ def resolve_flatiron_profile_path(reference, repo_root):
 
 
 def available_choices(repo_root, site="flatiron"):
-    scenarios = sorted(
-        path.stem for path in (repo_root / "configs/training/scenarios").glob("*.yaml")
-    )
-    accelerators = sorted(
-        path.stem.removeprefix(f"{site}_")
-        for path in (repo_root / "configs/training/platforms").glob(f"{site}_*.yaml")
-    )
+    scenarios = sorted(path.stem for path in (repo_root / "configs/training/scenarios").glob("*.yaml"))
+    accelerators = sorted(path.stem.removeprefix(f"{site}_") for path in (repo_root / "configs/training/platforms").glob(f"{site}_*.yaml"))
     return scenarios, accelerators
 
 
@@ -94,9 +89,7 @@ def build_slurm_submission(
         scenario.seeds = [seed]
     profile = load_platform_profile(profile_path)
     if profile.slurm is None:
-        raise ValueError(
-            f"Platform profile {profile.name!r} has no Slurm configuration"
-        )
+        raise ValueError(f"Platform profile {profile.name!r} has no Slurm configuration")
 
     spec_file = Path(scenario.spec_file)
     if not spec_file.is_absolute():
@@ -111,31 +104,21 @@ def build_slurm_submission(
         for index, job in enumerate(jobs):
             continuation = find_scenario_continuation(job, profile)
             if continuation is None:
-                print(
-                    f"Skipping {job.variant_name} seed {job.seed}: no compatible prior run"
-                )
+                print(f"Skipping {job.variant_name} seed {job.seed}: no compatible prior run")
                 continue
             target_step = job.resolved_config.num_steps
             if continuation.step >= target_step:
-                print(
-                    f"Skipping {job.variant_name} seed {job.seed}: complete at step {continuation.step}/{target_step}"
-                )
+                print(f"Skipping {job.variant_name} seed {job.seed}: complete at step {continuation.step}/{target_step}")
                 continue
-            source = (
-                continuation.checkpoint.name if continuation.checkpoint else "start"
-            )
-            print(
-                f"Continuing {job.variant_name} seed {job.seed}: step {continuation.step}/{target_step} from {source}"
-            )
+            source = continuation.checkpoint.name if continuation.checkpoint else "start"
+            print(f"Continuing {job.variant_name} seed {job.seed}: step {continuation.step}/{target_step} from {source}")
             selected_indices.append(index)
         if not selected_indices:
             raise ValueError("No unfinished compatible scenario jobs found")
 
     slurm = profile.slurm
     logs_dir = repo_root / "logs_slurm"
-    worker = (
-        Path(worker) if worker is not None else _worker_for_site(repo_root, "flatiron")
-    )
+    worker = Path(worker) if worker is not None else _worker_for_site(repo_root, "flatiron")
     command = [
         "sbatch",
         "--time",
@@ -163,9 +146,7 @@ def build_slurm_submission(
     command.extend(
         [
             "--array",
-            ",".join(str(index) for index in selected_indices)
-            if continue_run
-            else f"0-{len(jobs) - 1}",
+            ",".join(str(index) for index in selected_indices) if continue_run else f"0-{len(jobs) - 1}",
             "--job-name",
             scenario.name,
             "--output",
@@ -202,9 +183,7 @@ def main(argv=None, *, site="flatiron"):
         action="store_true",
         help="Print the sbatch command without submitting",
     )
-    parser.add_argument(
-        "--list", action="store_true", help="List available scenarios and accelerators"
-    )
+    parser.add_argument("--list", action="store_true", help="List available scenarios and accelerators")
     parser.add_argument(
         "--continue",
         dest="continue_run",
@@ -233,8 +212,7 @@ def main(argv=None, *, site="flatiron"):
         continue_run=args.continue_run,
     )
     print(
-        f"Submitting {len(jobs)} jobs for {args.scenario} on {args.accelerator}:\n"
-        + shlex.join(command),
+        f"Submitting {len(jobs)} jobs for {args.scenario} on {args.accelerator}:\n" + shlex.join(command),
         flush=True,
     )
     if args.dry_run:

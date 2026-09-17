@@ -19,13 +19,9 @@ from mlpf.training_scenarios import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = ROOT / "configs/training/scenarios/cld_hits_output_comparison.yaml"
-BACKBONE_SCENARIO = (
-    ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
-)
+BACKBONE_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
 PF_HITS_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_hits_comparison.yaml"
-CLIC_CLD_SCENARIO = (
-    ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comparison.yaml"
-)
+CLIC_CLD_SCENARIO = ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comparison.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -66,9 +62,7 @@ def test_backbone_comparison_scenario_keeps_elementwise_output_and_depth_fixed()
         "attention",
         "heptv2",
     ]
-    assert {job.resolved_config.model.output_mode.value for job in jobs} == {
-        "elementwise"
-    }
+    assert {job.resolved_config.model.output_mode.value for job in jobs} == {"elementwise"}
     assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
     assert jobs[1].resolved_config.model.heptv2.block_size == 128
 
@@ -100,9 +94,7 @@ def test_pf_hits_comparison_scenario_resolves_three_40k_variants():
         "elementwise",
         "set",
     ]
-    assert [
-        job.resolved_config.model.binary_classification_focal_gamma for job in jobs
-    ] == [None, 2.0, 2.0]
+    assert [job.resolved_config.model.binary_classification_focal_gamma for job in jobs] == [None, 2.0, 2.0]
     assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
     assert [
         (
@@ -150,9 +142,7 @@ def test_clic_cld_scenario_resolves_pf_and_set_hits_per_detector():
         platform.data_dir["clic"],
         platform.data_dir["clic"],
     ]
-    assert [job.resolved_config.data_dir for job in jobs] == [
-        job.data_dir for job in jobs
-    ]
+    assert [job.resolved_config.data_dir for job in jobs] == [job.data_dir for job in jobs]
     assert [job.resolved_config.dataset.value for job in jobs] == [
         "cld",
         "cld_hits",
@@ -180,11 +170,7 @@ def test_clic_cld_scenario_resolves_pf_and_set_hits_per_detector():
         )
         for job in jobs
     ] == [(None, None, None), (4, 4, 4), (None, None, None), (4, 4, 4)]
-    assert {
-        job.resolved_config.model.set_decoder.num_layers
-        for job in jobs
-        if job.resolved_config.model.set_decoder
-    } == {8}
+    assert {job.resolved_config.model.set_decoder.num_layers for job in jobs if job.resolved_config.model.set_decoder} == {8}
     assert {job.resolved_config.num_steps for job in jobs} == {50000}
     assert {job.resolved_config.val_freq for job in jobs} == {5000}
     assert {job.resolved_config.lr for job in jobs} == {0.001}
@@ -354,9 +340,7 @@ def test_experiments_are_grouped_under_the_scenario_directory():
 
     path = _experiment_path(platform, job, timestamp="TIMESTAMP")
 
-    assert path == Path(
-        "experiments/cld_hits_output_comparison/elementwise_seed12345_TIMESTAMP"
-    )
+    assert path == Path("experiments/cld_hits_output_comparison/elementwise_seed12345_TIMESTAMP")
 
 
 def test_continuation_chooses_most_advanced_compatible_checkpoint(tmp_path):
@@ -371,9 +355,7 @@ def test_continuation_chooses_most_advanced_compatible_checkpoint(tmp_path):
     )[0]
 
     for suffix, step in [("older", 10000), ("newer", 5000), ("best", 15000)]:
-        run_dir = (
-            tmp_path / scenario.name / f"{job.variant_name}_seed{job.seed}_{suffix}"
-        )
+        run_dir = tmp_path / scenario.name / f"{job.variant_name}_seed{job.seed}_{suffix}"
         (run_dir / "checkpoints").mkdir(parents=True)
         manifest = {
             "job": job.model_dump(mode="json", exclude={"resolved_config"}),

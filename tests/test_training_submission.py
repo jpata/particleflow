@@ -120,9 +120,7 @@ def test_picker_discovers_site_specific_accelerators():
 
 
 def _write_scenario_run(experiments_dir, scenario, profile, job, step):
-    run_dir = (
-        experiments_dir / scenario.name / f"{job.variant_name}_seed{job.seed}_test"
-    )
+    run_dir = experiments_dir / scenario.name / f"{job.variant_name}_seed{job.seed}_test"
     checkpoint_dir = run_dir / "checkpoints"
     checkpoint_dir.mkdir(parents=True)
     manifest = {
