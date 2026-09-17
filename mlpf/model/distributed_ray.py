@@ -13,7 +13,7 @@ from mlpf.model.mlpf import MLPF
 from mlpf.logger import _logger, _configLogger
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.utils import create_comet_experiment
-from mlpf.model.training import train_all_steps, get_optimizer
+from mlpf.model.training import get_optimizer, seed_everything, train_all_steps
 from mlpf.conf import MLPFConfig
 
 from mlpf.model.utils import (
@@ -277,12 +277,14 @@ def train_ray_trial(config, args, outdir=None):
     world_size = ray.train.get_context().get_world_size()
 
     mlpf_config = MLPFConfig.model_validate(config)
+    seed_everything(mlpf_config.seed)
     model = MLPF(mlpf_config)
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # optimizer should be created after distributing the model to devices with ray.train.torch.prepare_model(model)
     model = ray.train.torch.prepare_model(model)
+    seed_everything(mlpf_config.seed + world_rank)
     optimizer = get_optimizer(model, mlpf_config)
 
     trainable_params, nontrainable_params, table = count_parameters(model)

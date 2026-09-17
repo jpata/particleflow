@@ -1,7 +1,12 @@
 import torch
 
 from mlpf.model.PFDataset import PFBatch
-from mlpf.model.training import _accumulate_domain_losses_and_stats, _event_domain_labels, _finalize_diagnostics
+from mlpf.model.training import (
+    _accumulate_domain_losses_and_stats,
+    _event_domain_labels,
+    _finalize_diagnostics,
+    _log_validation_results_to_tensorboard,
+)
 
 
 def make_batch():
@@ -78,3 +83,29 @@ def test_domain_loss_and_regression_diagnostics_are_grouped():
         assert metrics[f"diagnostic/regression/{label}/energy_residual_mean"] == -0.5
         assert metrics[f"diagnostic/regression/{label}/pt_residual_rms"] == 0.25
         assert metrics[f"diagnostic/regression/{label}/energy_residual_rms"] == 0.5
+
+
+def test_common_validation_metrics_use_scheme_independent_tensorboard_tags():
+    class RecordingWriter:
+        def __init__(self):
+            self.scalars = []
+
+        def add_scalar(self, tag, value, step):
+            self.scalars.append((tag, value, step))
+
+    writer = RecordingWriter()
+    _log_validation_results_to_tensorboard(
+        writer,
+        {
+            "Total": 3.0,
+            "metrics/particle/matching/f1": 0.75,
+            "metrics/particle/count/mae": 2.0,
+        },
+        step=100,
+    )
+
+    assert writer.scalars == [
+        ("step/loss_Total", 3.0, 100),
+        ("validation/particle/matching/f1", 0.75, 100),
+        ("validation/particle/count/mae", 2.0, 100),
+    ]

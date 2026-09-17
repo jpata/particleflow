@@ -1,0 +1,95 @@
+name: clic_cld_pf_set_hits_comparison
+spec_file: particleflow_spec.yaml
+# Scenario-level default; the CLIC variants override it below.
+production_name: cld
+
+# Four jobs per seed: the learned PF model on tracks/clusters and the set-based
+# model on raw detector hits, each for CLD and for CLIC.
+variants:
+  cld_pf:
+    model_name: pyg-cld-v1
+  cld_set_hits:
+    model_name: pyg-cld-hits-set-v1
+    overrides: &set_hits_overrides
+      # Twice the elementwise backbone depth of the PF model (12 layers instead
+      # of 6): four layers per detector branch plus four common layers.
+      model.backbone.num_convs: 12
+      model.backbone.num_tracker_layers: 4
+      model.backbone.num_calo_layers: 4
+      model.backbone.num_common_layers: 4
+      # Start slots from energetic detector inputs so their initial direction is
+      # physical, then refine within a local eta-phi neighborhood. The decoder is
+      # also twice as deep as in cld_pf_hits_comparison (8 layers instead of 4).
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.num_layers: 8
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+  clic_pf:
+    model_name: pyg-clic-v1
+    production_name: clic
+  clic_set_hits:
+    model_name: pyg-clic-hits-set-v1
+    production_name: clic
+    overrides: *set_hits_overrides
+
+# Add seeds here; launchers derive the four jobs per seed automatically.
+seeds: [12345]
+
+training:
+  # Kept fixed across hardware profiles. The runner derives the per-GPU batch.
+  global_batch_size: 512
+  parameters:
+    lr: 0.001
+    num_steps: 50000
+    val_freq: 5000
+    checkpoint_freq: 5000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+
+common_overrides:
+  # Hold the trainable architecture fixed apart from the output formulation and
+  # the deliberately deeper hit backbone above.
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.attention.use_jagged_attention: true
+
+allowed_variant_differences:
+  # The PF runs read tracks/clusters while the hit runs read detector hits, and
+  # the CLD and CLIC productions live in different TFDS directories.
+  - data_dir
+  - dataset
+  - enabled_test_datasets
+  - input_dim
+  - train_dataset
+  - valid_dataset
+  - test_dataset
+  # This is the model-spec default; training.parameters.lr overrides it equally.
+  - hyperparameters.lr
+  # Hit set training uses focal presence classification; PF keeps CE.
+  - model.binary_classification_focal_gamma
+  # The set-based hit models run a 2x deeper backbone with detector-specific
+  # branches. The PF models use all six layers as common layers.
+  - model.backbone.num_convs
+  - model.backbone.num_tracker_layers
+  - model.backbone.num_calo_layers
+  - model.backbone.num_common_layers
+  # Only the set-based hit variants have a set decoder.
+  - model.output_mode
+  - model.set_decoder

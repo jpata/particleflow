@@ -1,0 +1,27 @@
+name: lumi_mi250x
+gpus: 8
+data_dir: /scratch/project_465001293/${USER}/tensorflow_datasets
+experiments_dir: /scratch/project_465001293/${USER}/particleflow/experiments
+environment:
+  MIOPEN_USER_DB_PATH: /tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
+  MIOPEN_CUSTOM_CACHE_DIR: /tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
+  ROCM_PATH: /opt/rocm
+  KERAS_BACKEND: torch
+  NCCL_SOCKET_IFNAME: hsn
+  NCCL_NET_GDR_LEVEL: "3"
+runtime_overrides:
+  compile: true
+  dtype: bfloat16
+  num_workers: 2
+  prefetch_factor: 2
+  model.attention.use_flash_attn_varlen: true
+slurm:
+  partition: standard-g
+  account: project_465001293
+  time: "1-00:00:00"
+  nodes: 1
+  tasks_per_node: 1
+  cpus_per_task: 32
+  gpu_request: gpus-per-task
+  memory: 450G
+  no_requeue: true

@@ -134,13 +134,16 @@ def sliced_wasserstein_loss(y_pred, y_true, num_projections=200):
     return ret
 
 
-def classification_loss(y, ypred):
+def classification_loss(y, ypred, binary_focal_gamma=None):
     """Compute per-element particle-presence and particle-ID losses."""
     cls_id = y["cls_id"]
     num_elements = cls_id.numel()
     is_particle = cls_id != 0
 
-    binary = 10.0 * F.cross_entropy(ypred["cls_binary"], is_particle.long())
+    if binary_focal_gamma is None:
+        binary = 10.0 * F.cross_entropy(ypred["cls_binary"], is_particle.long())
+    else:
+        binary = 10.0 * FocalLoss(gamma=binary_focal_gamma)(ypred["cls_binary"], is_particle.long())
 
     pid_per_element = FocalLoss(gamma=2.0, reduction="none")(ypred["cls_id_onehot"], cls_id)
     pid_per_element = torch.where(is_particle, pid_per_element, torch.zeros_like(pid_per_element))
@@ -173,14 +176,14 @@ def regression_loss(y, ypred, input_pt, regression_weights):
     return losses
 
 
-def particle_loss(y, ypred, input_pt, regression_weights):
+def particle_loss(y, ypred, input_pt, regression_weights, *, binary_focal_gamma=None):
     """Compute classification and regression losses over flattened particles."""
-    losses = classification_loss(y, ypred)
+    losses = classification_loss(y, ypred, binary_focal_gamma=binary_focal_gamma)
     losses.update(regression_loss(y, ypred, input_pt, regression_weights))
     return losses
 
 
-def event_loss(y, ypred, batch, regression_weights):
+def event_loss(y, ypred, batch, regression_weights, *, binary_focal_gamma=None):
     """Compute losses for complete padded event batches.
 
     The standard loss currently contains only independent particle terms.
@@ -200,18 +203,24 @@ def event_loss(y, ypred, batch, regression_weights):
     }
     input_pt = batch.X[..., 1][valid]
 
-    return particle_loss(particle_targets, particle_predictions, input_pt, regression_weights)
+    return particle_loss(
+        particle_targets,
+        particle_predictions,
+        input_pt,
+        regression_weights,
+        binary_focal_gamma=binary_focal_gamma,
+    )
 
 
-def mlpf_loss(y, ypred, batch, regression_weights, task_loss_weighter=None):
+def mlpf_loss(y, ypred, batch, regression_weights, task_loss_weighter=None, *, binary_focal_gamma=None):
     """Compute the standard MLPF objective for a batch of events."""
     if task_loss_weighter is None:
-        loss = event_loss(y, ypred, batch, regression_weights)
+        loss = event_loss(y, ypred, batch, regression_weights, binary_focal_gamma=binary_focal_gamma)
         loss_opt = sum(loss.values())
         task_loss_diagnostics = None
     else:
         unweighted_regression_weights = {feature: 1.0 for feature in REGRESSION_FEATURES}
-        loss = event_loss(y, ypred, batch, unweighted_regression_weights)
+        loss = event_loss(y, ypred, batch, unweighted_regression_weights, binary_focal_gamma=binary_focal_gamma)
         loss_opt, task_loss_diagnostics = task_loss_weighter(loss)
 
     loss["Total"] = loss_opt

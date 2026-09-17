@@ -3,6 +3,7 @@ import numpy as np
 import numba
 import awkward
 import vector
+from scipy.optimize import linear_sum_assignment
 
 
 @numba.njit
@@ -18,34 +19,83 @@ def deltar(eta1, phi1, eta2, phi2):
     return np.sqrt(deta**2 + dphi**2)
 
 
-@numba.njit
 def _match_jets_event(j1_eta, j1_phi, j2_eta, j2_phi, deltaR_cut):
-    jet_inds_1 = np.empty(len(j1_eta), dtype=np.int64)
-    jet_inds_2 = np.empty(len(j1_eta), dtype=np.int64)
-    num_matches = 0
+    """Return a maximum-cardinality, minimum-deltaR one-to-one assignment."""
 
-    # loop over the first jet collection
-    for ij1 in range(len(j1_eta)):
-        # compute deltaR from this jet to all jets in the other collection
-        min_idx_dr = -1
-        min_dr = np.inf
+    if deltaR_cut <= 0:
+        raise ValueError("deltaR_cut must be positive")
 
-        # loop over the other jet collection
-        for ij2 in range(len(j2_eta)):
-            # Workaround for https://github.com/scikit-hep/vector/issues/303
-            # dr = j1[ij1].deltaR(j2[ij2])
-            dr = deltar(j1_eta[ij1], j1_phi[ij1], j2_eta[ij2], j2_phi[ij2])
-            if dr < min_dr:
-                min_idx_dr = ij2
-                min_dr = dr
+    num_jets_1 = len(j1_eta)
+    num_jets_2 = len(j2_eta)
+    if num_jets_1 == 0 or num_jets_2 == 0:
+        empty = np.empty(0, dtype=np.int64)
+        return empty, empty
 
-        # has to be closer than the deltaR_cut
-        if min_idx_dr >= 0 and min_dr < deltaR_cut:
-            jet_inds_1[num_matches] = ij1
-            jet_inds_2[num_matches] = min_idx_dr
-            num_matches += 1
+    delta_eta = j1_eta[:, None] - j2_eta[None, :]
+    delta_phi = j1_phi[:, None] - j2_phi[None, :]
+    delta_phi = np.arctan2(np.sin(delta_phi), np.cos(delta_phi))
+    delta_r = np.sqrt(delta_eta**2 + delta_phi**2)
+    valid = np.isfinite(delta_r) & (delta_r < deltaR_cut)
 
-    return jet_inds_1[:num_matches], jet_inds_2[:num_matches]
+    # Give every jet in the first collection its own dummy unmatched column.
+    # The unmatched cost dominates the sum of all valid normalized distances,
+    # so the assignment first maximizes cardinality and then minimizes deltaR.
+    max_pairs = min(num_jets_1, num_jets_2)
+    unmatched_cost = float(max_pairs + 1)
+    invalid_cost = unmatched_cost * float(num_jets_1 + 1)
+    cost = np.full((num_jets_1, num_jets_2 + num_jets_1), invalid_cost, dtype=np.float64)
+    cost[:, :num_jets_2] = np.where(valid, delta_r / deltaR_cut, invalid_cost)
+    cost[np.arange(num_jets_1), num_jets_2 + np.arange(num_jets_1)] = unmatched_cost
+
+    jet_inds_1, columns = linear_sum_assignment(cost)
+    real_match = columns < num_jets_2
+    jet_inds_1 = jet_inds_1[real_match]
+    jet_inds_2 = columns[real_match]
+    accepted = valid[jet_inds_1, jet_inds_2]
+    return jet_inds_1[accepted], jet_inds_2[accepted]
+
+
+def jet_matching_metrics(response_ratios, num_reference_jets, num_candidate_jets, response_rel_pt_cut=0.5):
+    """Summarize unique angular matches and response-qualified matches.
+
+    ``response_ratios`` contains candidate/reference pT for the angularly
+    matched pairs returned by :func:`match_jets`. A response-qualified match
+    additionally satisfies ``abs(candidate/reference - 1) < response_rel_pt_cut``.
+    """
+
+    if response_rel_pt_cut <= 0:
+        raise ValueError("response_rel_pt_cut must be positive")
+
+    ratios = np.asarray(response_ratios, dtype=np.float64).reshape(-1)
+    num_reference_jets = int(num_reference_jets)
+    num_candidate_jets = int(num_candidate_jets)
+    num_angular_matches = len(ratios)
+    if num_angular_matches > min(num_reference_jets, num_candidate_jets):
+        raise ValueError("one-to-one angular matches cannot exceed either jet collection")
+
+    num_response_matches = int(np.sum(np.isfinite(ratios) & (np.abs(ratios - 1.0) < response_rel_pt_cut)))
+
+    def fraction(numerator, denominator):
+        return float(numerator / denominator) if denominator else float("nan")
+
+    metrics = {
+        "num_reference_jets": num_reference_jets,
+        "num_candidate_jets": num_candidate_jets,
+        "num_angular_matches": num_angular_matches,
+        "num_response_qualified_matches": num_response_matches,
+        "response_rel_pt_cut": float(response_rel_pt_cut),
+        "angular_recall": fraction(num_angular_matches, num_reference_jets),
+        "angular_precision": fraction(num_angular_matches, num_candidate_jets),
+        "angular_f1": fraction(2 * num_angular_matches, num_reference_jets + num_candidate_jets),
+        "angular_fake_rate": fraction(num_candidate_jets - num_angular_matches, num_candidate_jets),
+        "response_qualified_recall": fraction(num_response_matches, num_reference_jets),
+        "response_qualified_precision": fraction(num_response_matches, num_candidate_jets),
+        "response_qualified_f1": fraction(2 * num_response_matches, num_reference_jets + num_candidate_jets),
+    }
+    # Keep the historical key readable by existing dashboards. Its semantics
+    # are now the one-to-one angular recall rather than target-wise nearest-neighbor recall.
+    metrics["match_frac"] = metrics["angular_recall"]
+    return metrics
 
 
 def match_jets(jets1, jets2, deltaR_cut):

@@ -1,0 +1,46 @@
+name: cld_hits_backbone_comparison
+spec_file: particleflow_spec.yaml
+production_name: cld
+
+variants:
+  attention:
+    model_name: pyg-cld-hits-v1
+  heptv2:
+    model_name: pyg-cld-hits-v1
+    overrides:
+      model.type: heptv2
+      model.attention: null
+      # Match the input padding used by the attention run so HEPTv2 can form
+      # complete hash-attention buckets without changing the training samples.
+      model.heptv2.block_size: 128
+
+# Add seeds here and expand the Slurm array to 2 * len(seeds) tasks.
+seeds: [12345]
+
+training:
+  # Kept fixed across hardware profiles. The runner derives the per-GPU batch.
+  global_batch_size: 512
+  parameters:
+    lr: 0.001
+    num_steps: 20000
+    val_freq: 2000
+    checkpoint_freq: 2000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+
+common_overrides:
+  # Keep the output head and depth fixed so only the backbone family changes.
+  model.output_mode: elementwise
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+
+allowed_variant_differences:
+  - conv_type
+  - model.type
+  - model.attention
+  - model.heptv2
