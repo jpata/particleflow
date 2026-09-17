@@ -1,8 +1,41 @@
 import math
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
+from typing import overload
 
 import torch
 from torch import nn
 from torch.nn import functional as F
+
+
+PredictionTensors = tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+
+
+@dataclass(frozen=True)
+class ParticleSetDecoderOutput(Sequence[torch.Tensor]):
+    """Primary predictions plus optional intermediate decoder predictions.
+
+    The sequence interface preserves the existing four-tensor model output API,
+    while auxiliary predictions remain explicit data from the same forward pass.
+    """
+
+    predictions: PredictionTensors
+    auxiliary_predictions: tuple[PredictionTensors, ...] = ()
+
+    @overload
+    def __getitem__(self, index: int) -> torch.Tensor: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> tuple[torch.Tensor, ...]: ...
+
+    def __getitem__(self, index: int | slice) -> torch.Tensor | tuple[torch.Tensor, ...]:
+        return self.predictions[index]
+
+    def __iter__(self) -> Iterator[torch.Tensor]:
+        return iter(self.predictions)
+
+    def __len__(self) -> int:
+        return len(self.predictions)
 
 
 def _wrapped_delta_phi(left, right):
@@ -122,10 +155,6 @@ class ParticleSetDecoder(nn.Module):
             self.reference_delta_heads = None
             self.scale_head = None
             self.momentum_head = nn.Linear(embedding_dim, 5)
-
-        # Populated on every forward pass. The main four-tensor return signature
-        # remains unchanged for inference and elementwise compatibility.
-        self.auxiliary_outputs = []
 
     @staticmethod
     def _take_topk(scores, candidates, count):
@@ -255,5 +284,8 @@ class ParticleSetDecoder(nn.Module):
             if self.use_auxiliary_losses or is_final_layer:
                 outputs.append(self._predict(slots, references))
 
-        self.auxiliary_outputs = outputs[:-1] if self.use_auxiliary_losses else []
-        return outputs[-1]
+        auxiliary_predictions = tuple(outputs[:-1]) if self.use_auxiliary_losses else ()
+        return ParticleSetDecoderOutput(
+            predictions=outputs[-1],
+            auxiliary_predictions=auxiliary_predictions,
+        )

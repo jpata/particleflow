@@ -152,12 +152,40 @@ def test_input_conditioned_set_decoder_forward_backward():
 
     predictions = model(X, mask)
     assert predictions[2].shape == (2, 6, 5)
-    assert len(model.set_decoder.auxiliary_outputs) == 2
+    assert len(predictions.auxiliary_predictions) == 2
+    assert not hasattr(model.set_decoder, "auxiliary_outputs")
     assert all(torch.isfinite(output).all() for prediction in predictions for output in [prediction])
 
-    auxiliary = [output for prediction in model.set_decoder.auxiliary_outputs for output in prediction]
+    auxiliary = [output for prediction in predictions.auxiliary_predictions for output in prediction]
     sum(output.square().mean() for output in [*predictions, *auxiliary]).backward()
     assert [name for name, parameter in model.named_parameters() if parameter.grad is None] == []
+
+
+def test_auxiliary_outputs_belong_to_their_forward_pass():
+    config = make_config(num_layers=3, auxiliary_loss_weight=0.25)
+    model = MLPF(config)
+    mask = torch.ones(1, 8, dtype=torch.bool)
+    first_input = torch.randn(1, 8, config.input_dim)
+    second_input = torch.randn(1, 8, config.input_dim)
+    for features in (first_input, second_input):
+        features[..., 0] = 1
+        features[..., 1] = features[..., 1].abs() + 0.1
+        features[..., 5] = features[..., 5].abs() + 0.1
+
+    first_output = model(first_input, mask)
+    second_output = model(second_input, mask)
+
+    assert len(first_output.auxiliary_predictions) == 2
+    assert len(second_output.auxiliary_predictions) == 2
+    assert first_output.auxiliary_predictions is not second_output.auxiliary_predictions
+    assert any(
+        not torch.equal(first, second)
+        for first_layer, second_layer in zip(
+            first_output.auxiliary_predictions,
+            second_output.auxiliary_predictions,
+        )
+        for first, second in zip(first_layer, second_layer)
+    )
 
 
 def test_model_step_applies_configured_cardinality_and_auxiliary_losses():
