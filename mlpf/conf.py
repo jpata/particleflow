@@ -552,54 +552,65 @@ X_FEATURES = {
     Dataset.CLD_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
+
+@dataclass(frozen=True, slots=True)
+class JetConfig:
+    algorithm: str
+    radius: float
+    pt_cut: float
+    match_dr: float
+    match_rel_pt: float
+    p: Optional[float] = None
+
+
 JET_CONFIG = {
-    Dataset.CMS.value: {
-        "algo": "antikt_algorithm",
-        "r": 0.4,
-        "ptcut": 3.0,
-        "match_dr": 0.1,
-        "match_rel_pt": 0.5,
-    },
-    Dataset.CLIC.value: {
-        "algo": "ee_genkt_algorithm",
-        "r": 0.4,
-        "p": -1.0,
-        "ptcut": 5.0,
-        "match_dr": 0.1,
-        "match_rel_pt": 0.5,
-    },
-    Dataset.CLD.value: {
-        "algo": "ee_genkt_algorithm",
-        "r": 0.4,
-        "p": -1.0,
-        "ptcut": 5.0,
-        "match_dr": 0.1,
-        "match_rel_pt": 0.5,
-    },
-    Dataset.IDEA.value: {
-        "algo": "ee_genkt_algorithm",
-        "r": 0.4,
-        "p": -1.0,
-        "ptcut": 5.0,
-        "match_dr": 0.1,
-        "match_rel_pt": 0.5,
-    },
-    Dataset.CLIC_HITS.value: {
-        "algo": "ee_genkt_algorithm",
-        "r": 0.4,
-        "p": -1.0,
-        "ptcut": 5.0,
-        "match_dr": 0.1,
-        "match_rel_pt": 0.5,
-    },
-    Dataset.CLD_HITS.value: {
-        "algo": "ee_genkt_algorithm",
-        "r": 0.4,
-        "p": -1.0,
-        "ptcut": 5.0,
-        "match_dr": 0.1,
-        "match_rel_pt": 0.5,
-    },
+    Dataset.CMS.value: JetConfig(
+        algorithm="antikt_algorithm",
+        radius=0.4,
+        pt_cut=3.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
+    Dataset.CLIC.value: JetConfig(
+        algorithm="ee_genkt_algorithm",
+        radius=0.4,
+        p=-1.0,
+        pt_cut=5.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
+    Dataset.CLD.value: JetConfig(
+        algorithm="ee_genkt_algorithm",
+        radius=0.4,
+        p=-1.0,
+        pt_cut=5.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
+    Dataset.IDEA.value: JetConfig(
+        algorithm="ee_genkt_algorithm",
+        radius=0.4,
+        p=-1.0,
+        pt_cut=5.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
+    Dataset.CLIC_HITS.value: JetConfig(
+        algorithm="ee_genkt_algorithm",
+        radius=0.4,
+        p=-1.0,
+        pt_cut=5.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
+    Dataset.CLD_HITS.value: JetConfig(
+        algorithm="ee_genkt_algorithm",
+        radius=0.4,
+        p=-1.0,
+        pt_cut=5.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
 }
 
 Y_FEATURES = ParticleFeatures.get_names()

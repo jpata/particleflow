@@ -152,14 +152,14 @@ def main():
     # Jet clustering
     print("Clustering jets...")
     jet_config = JET_CONFIG[Dataset(args.detector).value]
-    algo = getattr(fastjet, jet_config["algo"])
-    if "p" in jet_config:
-        jetdef = fastjet.JetDefinition(algo, jet_config["r"], jet_config["p"])
+    algo = getattr(fastjet, jet_config.algorithm)
+    if jet_config.p is not None:
+        jetdef = fastjet.JetDefinition(algo, jet_config.radius, jet_config.p)
     else:
-        jetdef = fastjet.JetDefinition(algo, jet_config["r"])
+        jetdef = fastjet.JetDefinition(algo, jet_config.radius)
 
-    jet_ptcut = jet_config["ptcut"]
-    jet_match_dr = jet_config["match_dr"]
+    jet_ptcut = jet_config.pt_cut
+    jet_match_dr = jet_config.match_dr
 
     # Prep vectors for clustering
     true_p4 = vector.awk(ak.zip({"pt": ds.true_pt, "eta": ds.true_eta, "phi": ds.true_phi, "energy": ds.true_energy}))

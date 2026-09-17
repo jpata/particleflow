@@ -1,13 +1,64 @@
+from dataclasses import FrozenInstanceError
+import sys
+from types import SimpleNamespace
+
 import awkward as ak
 import numpy as np
 import pytest
 
-from mlpf.jet_utils import jet_matching_metrics, match_jets
+from mlpf.conf import Dataset, JET_CONFIG, JetConfig
+from mlpf.jet_utils import get_jet_config, jet_matching_metrics, match_jets
 from mlpf.plotting.plot_utils import jet_response_metrics
 
 
 def make_jets(eta_events, phi_events):
     return ak.zip({"eta": eta_events, "phi": phi_events})
+
+
+def test_jet_configs_are_immutable_named_records():
+    cms = JET_CONFIG[Dataset.CMS.value]
+    clic = JET_CONFIG[Dataset.CLIC.value]
+
+    assert isinstance(cms, JetConfig)
+    assert set(JET_CONFIG) == {dataset.value for dataset in Dataset}
+    assert cms.algorithm == "antikt_algorithm"
+    assert cms.p is None
+    assert cms.pt_cut == 3.0
+    assert clic.algorithm == "ee_genkt_algorithm"
+    assert clic.p == -1.0
+    assert clic.match_rel_pt == 0.5
+    with pytest.raises(FrozenInstanceError):
+        cms.radius = 0.8
+
+
+@pytest.mark.parametrize(
+    ("dataset", "expected_algorithm", "expected_arguments", "expected_ptcut"),
+    [
+        (Dataset.CMS, "antikt", (0.4,), 3.0),
+        (Dataset.CLD, "ee_genkt", (0.4, -1.0), 5.0),
+    ],
+)
+def test_get_jet_config_builds_expected_definition(monkeypatch, dataset, expected_algorithm, expected_arguments, expected_ptcut):
+    definitions = []
+
+    def jet_definition(algorithm, *arguments):
+        definition = (algorithm, arguments)
+        definitions.append(definition)
+        return definition
+
+    fake_fastjet = SimpleNamespace(
+        antikt_algorithm="antikt",
+        ee_genkt_algorithm="ee_genkt",
+        JetDefinition=jet_definition,
+    )
+    monkeypatch.setitem(sys.modules, "fastjet", fake_fastjet)
+
+    definition, ptcut, match_dr = get_jet_config(dataset)
+
+    assert definition == (expected_algorithm, expected_arguments)
+    assert definitions == [definition]
+    assert ptcut == expected_ptcut
+    assert match_dr == 0.1
 
 
 def test_match_jets_is_one_to_one_and_maximizes_angular_matches():
