@@ -294,9 +294,9 @@ def _get_task_loss_weighter(model):
     return getattr(model_module, "task_loss_weighter", None)
 
 
-def _set_loss_kwargs(model_module):
+def _set_loss_kwargs(model_module, raw_predictions):
     config = model_module.config.set_decoder
-    auxiliary_predictions = [unpack_predictions(prediction) for prediction in model_module.set_decoder.auxiliary_outputs]
+    auxiliary_predictions = [unpack_predictions(prediction) for prediction in raw_predictions.auxiliary_predictions]
     return {
         "matcher_weights": SetMatcherWeights(**config.matcher.model_dump()),
         "no_object_weight": config.no_object_weight,
@@ -437,7 +437,7 @@ def model_step(batch, model, loss_fn, regression_weights):
             batch,
             regression_weights,
             _get_task_loss_weighter(model),
-            **_set_loss_kwargs(model_module),
+            **_set_loss_kwargs(model_module, ypred_raw),
         )
     else:
         ytarget = unpack_target(batch.ytarget, model_module)
@@ -563,7 +563,7 @@ def train_step(
                 batch,
                 regression_weights,
                 _get_task_loss_weighter(model),
-                **_set_loss_kwargs(model_module),
+                **_set_loss_kwargs(model_module, ypred_raw),
             )
         else:
             ytarget = unpack_target(batch.ytarget, model_module)

@@ -49,7 +49,9 @@ LOCAL_SPEC_FILE=${LOCAL_SPEC_FILE:-/tmp/particleflow_local_available_spec.yaml}
 SEED=${SEED:-}
 HIT_VERSION=${HIT_VERSION:-3.2.1}
 HIT_SPLITS=${HIT_SPLITS:-1}
-DATA_CONFIG=${DATA_CONFIG:-${HIT_SPLITS// /,}}
+PF_VERSION=${PF_VERSION:-3.2.1}
+PF_SPLITS=${PF_SPLITS:-1}
+DATA_CONFIG=${DATA_CONFIG:-}
 
 # Local defaults intentionally shorten the generic comparison scenario. Every
 # value remains overridable through the existing environment interface or by
@@ -70,11 +72,14 @@ PAD_TO_MULTIPLE_ELEMENTS=${PAD_TO_MULTIPLE_ELEMENTS:-128}
 DATA_DIR=${DATA_DIR:-}
 
 read -r -a HIT_SPLIT_LIST <<< "$HIT_SPLITS"
+read -r -a PF_SPLIT_LIST <<< "$PF_SPLITS"
 if [[ "$USE_LOCAL_AVAILABLE_SPEC" == "true" ]]; then
   uv run python3 scripts/local/make_local_available_spec.py \
     "$SPEC_FILE" "$LOCAL_SPEC_FILE" \
     --hit-version "$HIT_VERSION" \
-    --hit-splits "${HIT_SPLIT_LIST[@]}"
+    --hit-splits "${HIT_SPLIT_LIST[@]}" \
+    --pf-version "$PF_VERSION" \
+    --pf-splits "${PF_SPLIT_LIST[@]}"
   SPEC_FILE="$LOCAL_SPEC_FILE"
 fi
 
@@ -84,7 +89,6 @@ RUN_ARGS=(
   --spec-file "$SPEC_FILE"
   --global-batch-size "$GLOBAL_BATCH_SIZE"
   --experiments-dir "$EXPERIMENTS_DIR"
-  --set "data_config=$DATA_CONFIG"
   --set "num_steps=$NUM_STEPS"
   --set "val_freq=$VAL_FREQ"
   --set "checkpoint_freq=$CHECKPOINT_FREQ"
@@ -95,6 +99,9 @@ RUN_ARGS=(
   --set "validation_diagnostics_batches=$VALIDATION_DIAGNOSTICS_BATCHES"
   --set "pad_to_multiple_elements=$PAD_TO_MULTIPLE_ELEMENTS"
 )
+if [[ -n "$DATA_CONFIG" ]]; then
+  RUN_ARGS+=(--set "data_config=$DATA_CONFIG")
+fi
 if [[ -n "$DATA_DIR" ]]; then
   RUN_ARGS+=(--data-dir "$DATA_DIR")
 fi
