@@ -222,7 +222,7 @@ def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None, base
         sample=sample,
         dataset=ds_name,
         baseline_yvals=baseline_yvals,
-        response_rel_pt_cut=JET_CONFIG[ds_name]["match_rel_pt"],
+        response_rel_pt_cut=JET_CONFIG[ds_name].match_rel_pt,
     )
     _logger.info("Plotted jet ratio")
 

@@ -48,3 +48,12 @@ repos:
     # E402 due to logging.basicConfig in pipeline.py
     args: ['--max-line-length=180',
            '--extend-ignore=E203,E402,W605,E501']
+
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.12.10
+  hooks:
+  - id: ruff-check
+    name: check first-party cyclomatic complexity
+    args: [--select=C901]
+    files: ^mlpf/.*\.py$
+    exclude: ^mlpf/data/key4hep/gen/

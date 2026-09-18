@@ -264,7 +264,7 @@ def find_representative_elements(g, elem_to_cp, cp_to_elem, elem_type, pid_type=
             unused_elems.append(elem)
 
 
-def prepare_normalized_table(g, iev):
+def prepare_normalized_table(g, iev):  # noqa: C901
     # for GSF, keep only links from electrons, because CMSSW expects to reconstruct
     # only electrons from GSF (and vice versa, only GSF should give rise to electrons)
     elem_gsf = [n for n in g.nodes if n[0] == "elem" and g.nodes[n]["typ"] == 6]
@@ -482,7 +482,7 @@ def prepare_normalized_table(g, iev):
 #   cp->tp->elem *
 #   pfcand->elem
 # Then, the intermediate sc/tp from edges marked with * are collapsed , such that only cp->elem remains
-def make_graph(ev, iev):
+def make_graph(ev, iev):  # noqa: C901
     element_type = ev["element_type"][iev]
     element_pt = ev["element_pt"][iev]
     element_e = ev["element_energy"][iev]

@@ -20,6 +20,14 @@ uv run ./scripts/local_test_cld.sh
 uv run ./scripts/local_test_cms.sh
 ```
 
+Before opening a pull request, run the lightweight quality checks with
+`uv run pre-commit run --all-files`. The cyclomatic-complexity check covers the
+first-party `mlpf/` package (not the vendored detector configuration under
+`mlpf/data/key4hep/gen/`) and rejects new functions above the transitional
+complexity ceiling. Prefer small, single-purpose helpers when generating or
+refactoring code; a local `# noqa: C901` should be a reviewed exception, not an
+automatic workaround.
+
 Alternatively, you can use a prepared container:
 ```
 apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cld.sh

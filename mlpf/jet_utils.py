@@ -180,11 +180,11 @@ def get_jet_config(dataset):
         raise Exception(f"jet configuration for dataset {ds_name} not implemented")
 
     config = JET_CONFIG[ds_name]
-    algo = getattr(fastjet, config["algo"])
+    algo = getattr(fastjet, config.algorithm)
 
-    if "p" in config:
-        jetdef = fastjet.JetDefinition(algo, config["r"], config["p"])
+    if config.p is not None:
+        jetdef = fastjet.JetDefinition(algo, config.radius, config.p)
     else:
-        jetdef = fastjet.JetDefinition(algo, config["r"])
+        jetdef = fastjet.JetDefinition(algo, config.radius)
 
-    return jetdef, config["ptcut"], config["match_dr"]
+    return jetdef, config.pt_cut, config.match_dr

@@ -48,7 +48,7 @@ jet_fiducial_cuts = {
 @click.option("--sample-name", required=True, type=str, help="Sample name (e.g., QCD_PU_13p6)")
 @click.option("--fiducial-cuts", default="inclusive", type=click.Choice(jet_fiducial_cuts.keys()))
 @click.option("--tev", default=13.6, type=float, help="Center of mass energy in TeV for plotting.")
-def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_dir, jet_type, sample_name, fiducial_cuts, tev):
+def make_plots(input_pf_parquet, input_mlpf_parquet, corrections_file, output_dir, jet_type, sample_name, fiducial_cuts, tev):  # noqa: C901
     """Applies corrections and generates validation plots."""
 
     output_dir = str(Path(output_dir, sample_name, jet_type, fiducial_cuts))
