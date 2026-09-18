@@ -20,12 +20,16 @@ import uproot
 
 
 PARTICLE_STYLES = {
-    11: ("electron", "#17becf"),
-    13: ("muon", "#9467bd"),
-    22: ("photon", "#e6b800"),
-    130: ("neutral hadron", "#ff7f0e"),
-    211: ("charged hadron", "#e377c2"),
+    11: ("electron", "#17becf", r"$e$"),
+    13: ("muon", "#9467bd", r"$\mu$"),
+    15: ("tau", "#8b5cf6", r"$\tau$"),
+    12: ("neutrino", "#64748b", r"$\nu$"),
+    22: ("photon", "#e6b800", r"$\gamma$"),
+    130: ("neutral hadron", "#ff7f0e", r"$K^0$"),
+    211: ("charged hadron", "#e377c2", r"$\pi$"),
 }
+
+CM_TO_INCH = 1.0 / 2.54
 
 
 def _production_suffix(root_file: str | Path) -> str | None:
@@ -242,17 +246,36 @@ def _hit_positions(tree, event: int, collections: tuple[str, ...]) -> dict[str, 
 
 
 def _association_groups(
-    tree, event: int, object_collection: str, relation_collection: str, id_to_name: dict[int, str]
+    tree,
+    event: int,
+    object_collection: str,
+    relation_collection: str,
+    id_to_name: dict[int, str],
 ) -> list[list[tuple[str, int]]]:
-    begin = _event(tree, f"{object_collection}/{object_collection}.{relation_collection}_begin", event).astype(int)
-    end = _event(tree, f"{object_collection}/{object_collection}.{relation_collection}_end", event).astype(int)
+    begin = _event(
+        tree,
+        f"{object_collection}/{object_collection}.{relation_collection}_begin",
+        event,
+    ).astype(int)
+    end = _event(
+        tree,
+        f"{object_collection}/{object_collection}.{relation_collection}_end",
+        event,
+    ).astype(int)
     relation = f"_{object_collection}_{relation_collection}"
     indices = _event(tree, f"{relation}/{relation}.index", event).astype(int)
     collection_ids = _event(tree, f"{relation}/{relation}.collectionID", event).astype(int)
     return [[(id_to_name.get(int(collection_ids[i]), ""), int(indices[i])) for i in range(first, last)] for first, last in zip(begin, end)]
 
 
-def _particle_display_length(px: float, py: float, pz: float, energy: float, neutral: bool, config: DetectorConfig) -> float:
+def _particle_display_length(
+    px: float,
+    py: float,
+    pz: float,
+    energy: float,
+    neutral: bool,
+    config: DetectorConfig,
+) -> float:
     """Length of a generator-particle guide line in the detector envelope.
 
     Neutral particles reach the first calorimeter surface (approximated by a
@@ -286,7 +309,11 @@ def render_debug_plots(root_file: str | Path, event: int, output_dir: str | Path
     tracker_positions = _hit_positions(tree, event, tracker_collections)
     track_groups = _association_groups(tree, event, config.track_collection, "trackerHits", id_to_name)
     track_paths = _track_paths(tree, event, config)
-    track_indices = sorted(range(min(len(track_groups), len(track_paths))), key=lambda i: len(track_groups[i]), reverse=True)[:9]
+    track_indices = sorted(
+        range(min(len(track_groups), len(track_paths))),
+        key=lambda i: len(track_groups[i]),
+        reverse=True,
+    )[:9]
     fig, axes = plt.subplots(3, 3, figsize=(9, 9), constrained_layout=True)
     for ax, track_index in zip(axes.flat, track_indices):
         x, _, z = track_paths[track_index]
@@ -296,14 +323,28 @@ def render_debug_plots(root_file: str | Path, event: int, output_dir: str | Path
             if collection in tracker_positions and 0 <= index < len(tracker_positions[collection][0]):
                 hit_x.append(tracker_positions[collection][0][index])
                 hit_z.append(tracker_positions[collection][2][index])
-        ax.scatter(hit_x, hit_z, color="#dc2626", s=12, label="Associated tracker hit", zorder=3)
+        ax.scatter(
+            hit_x,
+            hit_z,
+            color="#dc2626",
+            s=12,
+            label="Associated tracker hit",
+            zorder=3,
+        )
         ax.set_title(f"track {track_index}: {len(hit_x)} hits", fontsize=10)
-        ax.set(xlim=(-config.track_radius, config.track_radius), ylim=(-config.track_half_z, config.track_half_z), aspect="equal")
+        ax.set(
+            xlim=(-config.track_radius, config.track_radius),
+            ylim=(-config.track_half_z, config.track_half_z),
+            aspect="equal",
+        )
         ax.tick_params(labelsize=7)
     for ax in axes.flat[len(track_indices) :]:
         ax.axis("off")
     axes.flat[0].legend(fontsize=8, loc="best")
-    fig.suptitle(f"{config.title} event {event}: tracks and associated tracker hits (x–z)", fontsize=14)
+    fig.suptitle(
+        f"{config.title} event {event}: tracks and associated tracker hits (x–z)",
+        fontsize=14,
+    )
     track_output = output_dir / f"{config.key}_event_{event}_debug_tracks.png"
     fig.savefig(track_output, dpi=160, facecolor="white")
     plt.close(fig)
@@ -334,13 +375,23 @@ def render_debug_plots(root_file: str | Path, event: int, output_dir: str | Path
             label="Cluster",
             zorder=3,
         )
-        ax.set_title(f"cluster {cluster_index}: E={cluster_energy[cluster_index]:.1f} GeV, {len(hit_x)} hits", fontsize=9)
-        ax.set(xlim=(-config.plot_limit, config.plot_limit), ylim=(-config.plot_limit, config.plot_limit), aspect="equal")
+        ax.set_title(
+            f"cluster {cluster_index}: E={cluster_energy[cluster_index]:.1f} GeV, {len(hit_x)} hits",
+            fontsize=9,
+        )
+        ax.set(
+            xlim=(-config.plot_limit, config.plot_limit),
+            ylim=(-config.plot_limit, config.plot_limit),
+            aspect="equal",
+        )
         ax.tick_params(labelsize=7)
     for ax in axes.flat[len(cluster_indices) :]:
         ax.axis("off")
     axes.flat[0].legend(fontsize=8, loc="best")
-    fig.suptitle(f"{config.title} event {event}: clusters and associated calorimeter hits (x–y)", fontsize=14)
+    fig.suptitle(
+        f"{config.title} event {event}: clusters and associated calorimeter hits (x–y)",
+        fontsize=14,
+    )
     cluster_output = output_dir / f"{config.key}_event_{event}_debug_clusters.png"
     fig.savefig(cluster_output, dpi=160, facecolor="white")
     plt.close(fig)
@@ -356,6 +407,8 @@ def render_event(
     plot_limit: float | None = None,
     show_particles: bool = True,
     target_only: bool = False,
+    compact: bool = False,
+    icon_size_cm: float = 1.0,
 ) -> str:
     """Render one CLD, CLIC, or IDEA event in the transverse x-y plane."""
     tree = _open_root(root_file)["events"]
@@ -364,7 +417,16 @@ def render_event(
     config = _detector_config(tree, detector)
     display_limit = config.plot_limit if plot_limit is None else plot_limit
 
-    fig, ax = plt.subplots(figsize=(8, 8), constrained_layout=True)
+    if compact and icon_size_cm <= 0:
+        raise ValueError("icon_size_cm must be positive")
+    compact_scale = icon_size_cm if compact else 1.0
+    figsize = (compact_scale * CM_TO_INCH, compact_scale * CM_TO_INCH) if compact else (8, 8)
+    fig, ax = plt.subplots(figsize=figsize, constrained_layout=not compact)
+    if compact:
+        # Fill the exact physical-size canvas. Matplotlib scatter sizes are
+        # areas in pt^2, hence the squared scale below; line widths scale
+        # linearly. This preserves the visual proportions at every output size.
+        fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     shown_labels: set[str] = set()
     rng = np.random.default_rng(event)
 
@@ -384,12 +446,28 @@ def render_event(
                 idx = np.sort(rng.choice(len(x), max_hits, replace=False))
                 x, y, z = x[idx], y[idx], z[idx]
             sx, sy = project(x, y, z)
-            ax.scatter(sx, sy, s=4.0, color=color, alpha=0.5, edgecolors="none", rasterized=True, label=label if label not in shown_labels else None)
+            ax.scatter(
+                sx,
+                sy,
+                s=0.14 * compact_scale**2 if compact else 4.0,
+                color=color,
+                alpha=0.62 if compact else 0.5,
+                edgecolors="none",
+                rasterized=not compact,
+                label=label if not compact and label not in shown_labels else None,
+            )
             shown_labels.add(label)
 
         tx, ty, tz = _track_trajectories(tree, event, config)
         sx, sy = project(tx, ty, tz)
-        ax.plot(sx, sy, color="#111827", linewidth=0.9, alpha=0.82, label=config.track_label)
+        ax.plot(
+            sx,
+            sy,
+            color="#111827",
+            linewidth=0.20 * compact_scale if compact else 0.9,
+            alpha=0.9 if compact else 0.82,
+            label=None if compact else config.track_label,
+        )
 
         cluster = config.cluster_collection
         cx = _event(tree, f"{cluster}/{cluster}.position.x", event)
@@ -401,16 +479,17 @@ def render_event(
             sx,
             sy,
             s=np.clip(
-                config.cluster_size_base + config.cluster_size_scale * np.sqrt(np.maximum(energy, 0)),
-                config.cluster_size_base,
-                config.cluster_size_max,
+                (0.5 * compact_scale**2 if compact else config.cluster_size_base)
+                + (0.12 * compact_scale**2 if compact else config.cluster_size_scale) * np.sqrt(np.maximum(energy, 0)),
+                0.5 * compact_scale**2 if compact else config.cluster_size_base,
+                1.6 * compact_scale**2 if compact else config.cluster_size_max,
             ),
             c=energy,
             cmap="viridis",
             alpha=config.cluster_alpha,
             edgecolors="none",
-            rasterized=True,
-            label="Calorimeter clusters",
+            rasterized=not compact,
+            label=None if compact else "Calorimeter clusters",
         )
 
     if show_particles or target_only:
@@ -425,14 +504,26 @@ def render_event(
         # Visible status-1 particles are a compact proxy for the MLPF target
         # population. The full postprocessing additionally accounts for
         # detector association and merging; neutrinos are never visible.
-        keep = (status == 1) & ~np.isin(pdg, [12, 14, 16])
+        neutrino = np.isin(pdg, [12, 14, 16])
+        keep = (status == 1) & (~neutrino | (compact & target_only))
         px, py, pz, pdg, charge, particle_energy = (v[keep] for v in (px, py, pz, pdg, charge, particle_energy))
-        particle_kind = np.where(np.isin(pdg, [11, 13, 22]), pdg, np.where(np.abs(charge) > 0, 211, 130))
-        for code, (name, color) in PARTICLE_STYLES.items():
+        particle_kind = np.select(
+            [pdg == 11, pdg == 13, pdg == 15, neutrino[keep], pdg == 22],
+            [11, 13, 15, 12, 22],
+            default=np.where(np.abs(charge) > 0, 211, 130),
+        )
+        compact_label_positions: list[tuple[float, float]] = []
+        for code, (name, color, symbol) in PARTICLE_STYLES.items():
             selected = particle_kind == code
             particle_x, particle_y, particle_z = [], [], []
             endpoint_x, endpoint_y, endpoint_z, endpoint_energy = [], [], [], []
-            for vx, vy, vz, particle_e, particle_charge in zip(px[selected], py[selected], pz[selected], particle_energy[selected], charge[selected]):
+            for vx, vy, vz, particle_e, particle_charge in zip(
+                px[selected],
+                py[selected],
+                pz[selected],
+                particle_energy[selected],
+                charge[selected],
+            ):
                 norm = np.sqrt(vx * vx + vy * vy + vz * vz)
                 if norm == 0:
                     continue
@@ -467,46 +558,153 @@ def render_event(
                 endpoint_z.append(path_z[-1])
                 endpoint_energy.append(particle_e)
             if particle_x:
-                sx, sy = project(np.asarray(particle_x), np.asarray(particle_y), np.asarray(particle_z))
+                sx, sy = project(
+                    np.asarray(particle_x),
+                    np.asarray(particle_y),
+                    np.asarray(particle_z),
+                )
                 ax.plot(
                     sx,
                     sy,
                     color=color,
-                    linewidth=1.25 if target_only else 0.85,
+                    linewidth=(0.20 * compact_scale if compact else (1.25 if target_only else 0.85)),
                     linestyle="-" if target_only else "--",
                     alpha=0.78 if target_only else 0.62,
-                    label=name if target_only else f"Particle: {name}",
+                    label=(None if compact else (name if target_only else f"Particle: {name}")),
                 )
                 if target_only:
-                    ex, ey = project(np.asarray(endpoint_x), np.asarray(endpoint_y), np.asarray(endpoint_z))
+                    ex, ey = project(
+                        np.asarray(endpoint_x),
+                        np.asarray(endpoint_y),
+                        np.asarray(endpoint_z),
+                    )
                     ax.scatter(
                         ex,
                         ey,
-                        s=np.clip(5 + 1.5 * np.sqrt(np.asarray(endpoint_energy)), 5, 22),
+                        s=(
+                            np.clip(
+                                0.35 + 0.09 * np.sqrt(np.asarray(endpoint_energy)),
+                                0.35,
+                                1.4,
+                            )
+                            * compact_scale**2
+                            if compact
+                            else np.clip(
+                                5 + 1.5 * np.sqrt(np.asarray(endpoint_energy)),
+                                5,
+                                22,
+                            )
+                        ),
                         color=color,
                         alpha=0.85,
                         edgecolors="none",
+                        rasterized=not compact,
                     )
+                    if compact and len(ex):
+                        # Label one representative trace per particle type.
+                        # Prefer an energetic endpoint, but among the leading
+                        # candidates choose the one furthest from labels that
+                        # have already been placed.
+                        endpoint_energy_array = np.asarray(endpoint_energy)
+                        candidates = np.argsort(endpoint_energy_array)[-8:]
+                        radial_distance = np.hypot(ex[candidates], ey[candidates])
+                        if compact_label_positions:
+                            previous = np.asarray(compact_label_positions)
+                            separation = np.asarray(
+                                [
+                                    np.min(
+                                        np.hypot(
+                                            previous[:, 0] - ex[index],
+                                            previous[:, 1] - ey[index],
+                                        )
+                                    )
+                                    for index in candidates
+                                ]
+                            )
+                            label_index = int(candidates[np.argmax(separation + 0.5 * radial_distance)])
+                        else:
+                            label_index = int(candidates[np.argmax(radial_distance)])
+                        compact_label_positions.append((ex[label_index], ey[label_index]))
+                        radial_norm = max(np.hypot(ex[label_index], ey[label_index]), 1.0)
+                        offset = 0.7 * compact_scale
+                        ax.annotate(
+                            symbol,
+                            (ex[label_index], ey[label_index]),
+                            xytext=(
+                                offset * ex[label_index] / radial_norm,
+                                offset * ey[label_index] / radial_norm,
+                            ),
+                            textcoords="offset points",
+                            color=color,
+                            fontsize=1.25 * compact_scale,
+                            alpha=0.58,
+                            ha="center",
+                            va="center",
+                            annotation_clip=True,
+                        )
 
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlim(-display_limit, display_limit)
     ax.set_ylim(-display_limit, display_limit)
-    seed = _production_suffix(root_file)
-    seed_label = f" — seed {seed}" if seed is not None else ""
-    title_suffix = " — visible status-1 target proxy" if target_only else ""
-    ax.set_title(f"{config.title}{seed_label} — event {event}{title_suffix}", fontsize=15)
-    ax.legend(loc="upper left", fontsize=7.5, ncol=2, frameon=True, framealpha=0.9)
-    # Fixed camera-orientation marker: the beam axis is perpendicular to the
-    # image, +x points left and +y points up. The circled dot denotes +z out of
-    # the screen (toward the viewer).
-    axis_origin = (0.91, 0.10)
-    ax.annotate("", xy=(0.82, 0.10), xytext=axis_origin, xycoords="axes fraction", arrowprops={"arrowstyle": "->", "color": "#475569", "lw": 1.2})
-    ax.annotate("", xy=(0.91, 0.19), xytext=axis_origin, xycoords="axes fraction", arrowprops={"arrowstyle": "->", "color": "#475569", "lw": 1.2})
-    ax.text(0.805, 0.085, "+x", transform=ax.transAxes, fontsize=8, color="#475569", ha="right", va="top")
-    ax.text(0.925, 0.195, "+y", transform=ax.transAxes, fontsize=8, color="#475569", ha="left", va="bottom")
-    ax.text(0.91, 0.065, r"$\odot\ +z$", transform=ax.transAxes, fontsize=8, color="#475569", ha="center", va="top")
+    if not compact:
+        seed = _production_suffix(root_file)
+        seed_label = f" — seed {seed}" if seed is not None else ""
+        title_suffix = " — visible status-1 target proxy" if target_only else ""
+        ax.set_title(f"{config.title}{seed_label} — event {event}{title_suffix}", fontsize=15)
+        ax.legend(loc="upper left", fontsize=7.5, ncol=2, frameon=True, framealpha=0.9)
+        # Fixed camera-orientation marker: the beam axis is perpendicular to
+        # the image, +x points left and +y points up. The circled dot denotes
+        # +z out of the screen (toward the viewer).
+        axis_origin = (0.91, 0.10)
+        ax.annotate(
+            "",
+            xy=(0.82, 0.10),
+            xytext=axis_origin,
+            xycoords="axes fraction",
+            arrowprops={"arrowstyle": "->", "color": "#475569", "lw": 1.2},
+        )
+        ax.annotate(
+            "",
+            xy=(0.91, 0.19),
+            xytext=axis_origin,
+            xycoords="axes fraction",
+            arrowprops={"arrowstyle": "->", "color": "#475569", "lw": 1.2},
+        )
+        ax.text(
+            0.805,
+            0.085,
+            "+x",
+            transform=ax.transAxes,
+            fontsize=8,
+            color="#475569",
+            ha="right",
+            va="top",
+        )
+        ax.text(
+            0.925,
+            0.195,
+            "+y",
+            transform=ax.transAxes,
+            fontsize=8,
+            color="#475569",
+            ha="left",
+            va="bottom",
+        )
+        ax.text(
+            0.91,
+            0.065,
+            r"$\odot\ +z$",
+            transform=ax.transAxes,
+            fontsize=8,
+            color="#475569",
+            ha="center",
+            va="top",
+        )
     ax.axis("off")
-    fig.savefig(output, dpi=150, facecolor="white", bbox_inches="tight", pad_inches=0.02)
+    if compact:
+        fig.savefig(output, format="svg", transparent=True)
+    else:
+        fig.savefig(output, dpi=150, facecolor="white", bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
     return config.key
 
@@ -530,10 +728,32 @@ def main() -> None:
     parser.add_argument("--events", type=int, nargs="+", default=[0])
     parser.add_argument("--output-dir", type=Path, default=Path("event_displays"))
     parser.add_argument("--detector", choices=("auto", *DETECTORS), default="auto")
-    parser.add_argument("--max-hits", type=int, default=800, help="maximum displayed hits per collection")
-    parser.add_argument("--no-particles", action="store_true", help="omit stable generator-particle guide lines")
-    parser.add_argument("--target-only", action="store_true", help="render only visible status-1 MC particles as a target proxy")
-    parser.add_argument("--debug", action="store_true", help="also render track/hit and cluster/hit association checks")
+    parser.add_argument(
+        "--max-hits",
+        type=int,
+        default=800,
+        help="maximum displayed hits per collection",
+    )
+    parser.add_argument(
+        "--no-particles",
+        action="store_true",
+        help="omit stable generator-particle guide lines",
+    )
+    parser.add_argument(
+        "--target-only",
+        action="store_true",
+        help="render only visible status-1 MC particles as a target proxy",
+    )
+    parser.add_argument(
+        "--compact-svg",
+        action="store_true",
+        help="write exact 1 x 1 cm, 2 x 2 cm, and 5 x 5 cm vector icons; combine with --target-only for target particles",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="also render track/hit and cluster/hit association checks",
+    )
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     inputs = []
@@ -550,24 +770,44 @@ def main() -> None:
     for event in args.events:
         event_images = []
         for root_file, config in inputs:
-            suffix = "_targets" if args.target_only else ""
-            output = args.output_dir / f"{config.key}_event_{event}{suffix}.png"
-            detector = render_event(
-                root_file,
-                event,
-                output,
-                args.max_hits,
-                args.detector,
-                comparison_limit,
-                show_particles=not args.no_particles,
-                target_only=args.target_only,
-            )
-            event_images.append((output, detector))
-            print(output)
+            if args.compact_svg:
+                for icon_size_cm in (1.0, 2.0, 5.0):
+                    size_label = f"{icon_size_cm:g}x{icon_size_cm:g}cm"
+                    content_label = "_targets" if args.target_only else ""
+                    output = args.output_dir / f"{config.key}_event_{event}{content_label}_{size_label}.svg"
+                    detector = render_event(
+                        root_file,
+                        event,
+                        output,
+                        args.max_hits,
+                        args.detector,
+                        comparison_limit,
+                        show_particles=False,
+                        target_only=args.target_only,
+                        compact=True,
+                        icon_size_cm=icon_size_cm,
+                    )
+                    print(output)
+            else:
+                suffix = "_targets" if args.target_only else ""
+                extension = ".png"
+                output = args.output_dir / f"{config.key}_event_{event}{suffix}{extension}"
+                detector = render_event(
+                    root_file,
+                    event,
+                    output,
+                    args.max_hits,
+                    args.detector,
+                    comparison_limit,
+                    show_particles=not args.no_particles,
+                    target_only=args.target_only,
+                )
+                event_images.append((output, detector))
+                print(output)
             if args.debug:
                 for debug_output in render_debug_plots(root_file, event, args.output_dir, args.detector):
                     print(debug_output)
-        if len(event_images) > 1:
+        if len(event_images) > 1 and not args.compact_svg:
             detectors = "_vs_".join(detector for _, detector in event_images)
             comparison_output = args.output_dir / f"{detectors}_event_{event}.png"
             render_comparison(event_images, event, comparison_output)
