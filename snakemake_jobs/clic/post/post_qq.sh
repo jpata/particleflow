@@ -17,7 +17,6 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 start_seed=$1
 for (( i=0; i<1; i++ )); do
     seed=$((start_seed + i))
-    
     if [ ! -f /local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/post/p8_ee_qq_ecm380/reco_p8_ee_qq_ecm380_${seed}.parquet ]; then
         if [ -f /local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/gen/p8_ee_qq_ecm380/root/reco_p8_ee_qq_ecm380_${seed}.root ]; then
             echo "Postprocessing /local/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/gen/p8_ee_qq_ecm380/root/reco_p8_ee_qq_ecm380_${seed}.root"

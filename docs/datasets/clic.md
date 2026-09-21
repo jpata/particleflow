@@ -9,7 +9,8 @@ samples are `ttbar`, fully hadronic `WW`, and inclusive `qq`.
 | Detector hits | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | `pyg-clic-hits-v1` |
 
 Both representations use dataset version 3.2.1 and configuration partitions
-1--10.
+1--10. The full corpus contains about one million events per sample, or three
+million events in total.
 
 ## Event view
 
