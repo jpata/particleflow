@@ -281,3 +281,74 @@ def compute_validation_particle_metrics(targets, target_mask, predictions, predi
         )
         _accumulate_event_metrics(metrics, event_targets, event_predictions, num_classes)
     return {name: tuple(values) for name, values in metrics.items()}
+
+
+def compute_set_slot_metrics(targets, target_mask, predictions, presence_threshold):
+    """Return a small set of threshold/representation diagnostics for set output.
+
+    Unlike the standard particle metrics, matching here is angular-only.  Running
+    it once with all slots and once with threshold-selected slots separates slot
+    formation from the presence decision.  Regression errors are conditioned on
+    an accepted all-slot angular match so missing particles cannot improve them.
+    """
+
+    metrics = {
+        "angular_recall_selected_dr0p10": [0.0, 0.0],
+        "angular_recall_all_dr0p10": [0.0, 0.0],
+        "all_angular_matched/pt_abs_log_error": [0.0, 0.0],
+        "all_angular_matched/energy_abs_log_error": [0.0, 0.0],
+        "soft_count_bias_mean": [0.0, 0.0],
+    }
+    presence_probability = torch.softmax(predictions["cls_binary"].float(), dim=-1)[..., 1]
+
+    for event_idx in range(target_mask.shape[0]):
+        event_targets = _clean_kinematics(
+            {name: value[event_idx] for name, value in targets.items()},
+            target_mask[event_idx],
+        )
+        event_predictions = _clean_kinematics(
+            {name: value[event_idx] for name, value in predictions.items()},
+            torch.ones_like(presence_probability[event_idx], dtype=torch.bool),
+        )
+        num_targets = len(event_targets["pt"])
+        _add(metrics, "soft_count_bias_mean", presence_probability[event_idx].sum().cpu() - num_targets, 1)
+
+        if num_targets == 0:
+            continue
+
+        _, _, delta_r, _, _ = _pairwise_geometry(event_targets, event_predictions)
+
+        def angular_matches(slot_mask):
+            slot_indices = torch.nonzero(slot_mask, as_tuple=False).squeeze(1).cpu()
+            if len(slot_indices) == 0:
+                return slot_indices, torch.empty(0, dtype=torch.long)
+            local_slot_indices, target_indices = linear_sum_assignment(delta_r[slot_indices].numpy())
+            slot_indices = slot_indices[torch.as_tensor(local_slot_indices, dtype=torch.long)]
+            target_indices = torch.as_tensor(target_indices, dtype=torch.long)
+            accepted = delta_r[slot_indices, target_indices] < MATCH_DR
+            return slot_indices[accepted], target_indices[accepted]
+
+        selected_slots, _ = angular_matches(presence_probability[event_idx].cpu() >= presence_threshold)
+        all_slots, all_targets = angular_matches(torch.ones_like(presence_probability[event_idx], dtype=torch.bool))
+        _add(metrics, "angular_recall_selected_dr0p10", len(selected_slots), num_targets)
+        _add(metrics, "angular_recall_all_dr0p10", len(all_slots), num_targets)
+
+        if len(all_slots):
+            target_pt = event_targets["pt"][all_targets].clamp_min(1.0e-8)
+            target_energy = event_targets["energy"][all_targets].clamp_min(1.0e-8)
+            prediction_pt = event_predictions["pt"][all_slots].clamp_min(1.0e-8)
+            prediction_energy = event_predictions["energy"][all_slots].clamp_min(1.0e-8)
+            _add(
+                metrics,
+                "all_angular_matched/pt_abs_log_error",
+                torch.abs(torch.log(prediction_pt) - torch.log(target_pt)).sum(),
+                len(all_slots),
+            )
+            _add(
+                metrics,
+                "all_angular_matched/energy_abs_log_error",
+                torch.abs(torch.log(prediction_energy) - torch.log(target_energy)).sum(),
+                len(all_slots),
+            )
+
+    return {name: tuple(values) for name, values in metrics.items()}

@@ -93,7 +93,7 @@ from mlpf.model.losses import (
     particle_loss,
 )
 from mlpf.model.set_losses import SetMatcherWeights, set_mlpf_loss
-from mlpf.model.validation_metrics import compute_validation_particle_metrics, validation_particle_collections
+from mlpf.model.validation_metrics import compute_set_slot_metrics, compute_validation_particle_metrics, validation_particle_collections
 from mlpf.utils import create_comet_experiment
 from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
@@ -892,6 +892,26 @@ def evaluate(
                         torch.as_tensor(metric_total, device=batch.X.device),
                         count=metric_count,
                     )
+
+                if model_module.output_mode == OutputMode.SET:
+                    slot_fields = ("cls_binary", "cls_id_onehot", "pt", "eta", "sin_phi", "cos_phi", "energy")
+                    raw_slots = {name: ypred[name].detach().to(torch.float32) for name in slot_fields}
+                    raw_slots["pt"] = torch.exp(raw_slots["pt"].clamp(-20.0, 20.0))
+                    raw_slots["energy"] = torch.exp(raw_slots["energy"].clamp(-20.0, 20.0))
+                    raw_slots["cls_id"] = torch.argmax(raw_slots["cls_id_onehot"][..., 1:], dim=-1) + 1
+                    slot_metrics = compute_set_slot_metrics(
+                        metric_collections[0],
+                        metric_collections[1],
+                        raw_slots,
+                        model_module.config.set_decoder.presence_threshold,
+                    )
+                    for metric_name, (metric_total, metric_count) in slot_metrics.items():
+                        _add_accumulator(
+                            diagnostic_accum,
+                            f"metrics/set_slot/{metric_name}",
+                            torch.as_tensor(metric_total, device=batch.X.device),
+                            count=metric_count,
+                        )
 
                 if model_module.output_mode == OutputMode.ELEMENTWISE and ival == 0 and (rank == 0 or rank == "cpu"):
                     print_event_table(batch, ytarget, ypred_particles, config)
