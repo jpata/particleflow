@@ -41,7 +41,10 @@ jobs:
           node-version: "24.x"
 
       - name: Install Jupyter Book
-        run: python -m pip install --disable-pip-version-check jupyter-book==2.1.2
+        # 2.1.6 keeps strict structural checks separate from live external-link
+        # checks. Do not add --check-links to the CI build: DOI metadata is
+        # checked in and external archives must not gate documentation deploys.
+        run: python -m pip install --disable-pip-version-check jupyter-book==2.1.6
 
       - name: Build documentation
         working-directory: docs

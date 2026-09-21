@@ -31,7 +31,7 @@ dependencies = [
     "fastjet",
     "fsspec",
     "jupyter",
-    "jupyter-book",
+    "jupyter-book>=2.1.6",
     "keras",
     "keras-tuner",
     "matplotlib",
