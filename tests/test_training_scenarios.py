@@ -24,6 +24,7 @@ SCENARIO = ROOT / "configs/training/scenarios/cld_hits_output_comparison.yaml"
 BACKBONE_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
 PF_HITS_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_hits_comparison.yaml"
 CLIC_CLD_SCENARIO = ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comparison.yaml"
+SET_IMPROVEMENT_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_improvement_comparison.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -157,12 +158,12 @@ def test_clic_cld_scenario_resolves_pf_and_set_hits_per_detector():
         "elementwise",
         "set",
     ]
-    # The set-based hit models run twice the backbone depth of the PF models.
+    # The hit models split the same six-layer budget across detector branches.
     assert [job.resolved_config.model.backbone.num_convs for job in jobs] == [
         6,
-        12,
         6,
-        12,
+        6,
+        6,
     ]
     assert [
         (
@@ -171,11 +172,48 @@ def test_clic_cld_scenario_resolves_pf_and_set_hits_per_detector():
             job.resolved_config.model.backbone.num_common_layers,
         )
         for job in jobs
-    ] == [(None, None, None), (4, 4, 4), (None, None, None), (4, 4, 4)]
+    ] == [(None, None, None), (2, 2, 2), (None, None, None), (2, 2, 2)]
     assert {job.resolved_config.model.set_decoder.num_layers for job in jobs if job.resolved_config.model.set_decoder} == {8}
     assert {job.resolved_config.num_steps for job in jobs} == {50000}
     assert {job.resolved_config.val_freq for job in jobs} == {5000}
     assert {job.resolved_config.lr for job in jobs} == {0.001}
+    assert {job.seed for job in jobs} == {12345}
+
+
+def test_set_improvement_scenario_resolves_four_isolated_cld_variants():
+    scenario = load_training_scenario(SET_IMPROVEMENT_SCENARIO)
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+
+    jobs = resolve_scenario_jobs(
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=8,
+    )
+
+    assert [job.variant_name for job in jobs] == [
+        "control_8layer_local",
+        "decoder4_local",
+        "decoder8_global",
+        "decoder8_kinematic_match",
+    ]
+    assert {job.model_name for job in jobs} == {"pyg-cld-hits-set-v1"}
+    assert {job.resolved_config.dataset.value for job in jobs} == {"cld_hits"}
+    assert {job.resolved_config.model.output_mode.value for job in jobs} == {"set"}
+    assert {
+        (
+            job.resolved_config.model.backbone.num_tracker_layers,
+            job.resolved_config.model.backbone.num_calo_layers,
+            job.resolved_config.model.backbone.num_common_layers,
+        )
+        for job in jobs
+    } == {(2, 2, 2)}
+    assert [job.resolved_config.model.set_decoder.num_layers for job in jobs] == [8, 4, 8, 8]
+    assert [job.resolved_config.model.set_decoder.local_attention_radius for job in jobs] == [0.4, 0.4, None, 0.4]
+    assert [job.resolved_config.model.set_decoder.matcher.energy for job in jobs] == [0.0, 0.0, 0.0, 1.0]
+    assert [job.resolved_config.model.set_decoder.matcher.presence for job in jobs] == [1.0, 1.0, 1.0, 0.0]
+    assert [job.resolved_config.model.set_decoder.matcher.pid for job in jobs] == [1.0, 1.0, 1.0, 0.0]
+    assert {job.resolved_config.num_steps for job in jobs} == {50000}
     assert {job.seed for job in jobs} == {12345}
 
 
