@@ -26,6 +26,8 @@ project:
         - file: datasets/generate.md
         - file: datasets/cms.md
         - file: datasets/key4hep.md
+        - file: datasets/cld.md
+        - file: datasets/clic.md
         - file: datasets/hit-based.md
     - title: Training
       children:

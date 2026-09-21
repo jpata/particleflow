@@ -409,6 +409,7 @@ def render_event(
     target_only: bool = False,
     compact: bool = False,
     icon_size_cm: float = 1.0,
+    input_view: str = "combined",
 ) -> str:
     """Render one CLD, CLIC, or IDEA event in the transverse x-y plane."""
     tree = _open_root(root_file)["events"]
@@ -419,6 +420,8 @@ def render_event(
 
     if compact and icon_size_cm <= 0:
         raise ValueError("icon_size_cm must be positive")
+    if input_view not in {"combined", "pf", "hits"}:
+        raise ValueError(f"unknown input view: {input_view}")
     compact_scale = icon_size_cm if compact else 1.0
     figsize = (compact_scale * CM_TO_INCH, compact_scale * CM_TO_INCH) if compact else (8, 8)
     fig, ax = plt.subplots(figsize=figsize, constrained_layout=not compact)
@@ -435,7 +438,7 @@ def render_event(
         del z
         return -np.asarray(x), np.asarray(y)
 
-    if not target_only:
+    if not target_only and input_view in {"combined", "hits"}:
         for collection, label, color in config.hit_collections:
             if collection not in tree:
                 continue
@@ -458,6 +461,7 @@ def render_event(
             )
             shown_labels.add(label)
 
+    if not target_only and input_view in {"combined", "pf"}:
         tx, ty, tz = _track_trajectories(tree, event, config)
         sx, sy = project(tx, ty, tz)
         ax.plot(
@@ -750,11 +754,26 @@ def main() -> None:
         help="write exact 1 x 1 cm, 2 x 2 cm, and 5 x 5 cm vector icons; combine with --target-only for target particles",
     )
     parser.add_argument(
+        "--compact-sizes",
+        type=float,
+        nargs="+",
+        default=(1.0, 2.0, 5.0),
+        help="compact SVG side lengths in cm (default: 1 2 5)",
+    )
+    parser.add_argument(
+        "--input-view",
+        choices=("combined", "pf", "hits"),
+        default="combined",
+        help="detector content to render: all collections, tracks/clusters, or raw hits",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="also render track/hit and cluster/hit association checks",
     )
     args = parser.parse_args()
+    if args.target_only and args.input_view != "combined":
+        parser.error("--input-view cannot be combined with --target-only")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     inputs = []
     for root_file in args.root_files:
@@ -771,9 +790,13 @@ def main() -> None:
         event_images = []
         for root_file, config in inputs:
             if args.compact_svg:
-                for icon_size_cm in (1.0, 2.0, 5.0):
+                for icon_size_cm in args.compact_sizes:
                     size_label = f"{icon_size_cm:g}x{icon_size_cm:g}cm"
-                    content_label = "_targets" if args.target_only else ""
+                    content_label = (
+                        "_targets"
+                        if args.target_only
+                        else ("" if args.input_view == "combined" else f"_{args.input_view}")
+                    )
                     output = args.output_dir / f"{config.key}_event_{event}{content_label}_{size_label}.svg"
                     detector = render_event(
                         root_file,
@@ -786,6 +809,7 @@ def main() -> None:
                         target_only=args.target_only,
                         compact=True,
                         icon_size_cm=icon_size_cm,
+                        input_view=args.input_view,
                     )
                     print(output)
             else:
@@ -801,6 +825,7 @@ def main() -> None:
                     comparison_limit,
                     show_particles=not args.no_particles,
                     target_only=args.target_only,
+                    input_view=args.input_view,
                 )
                 event_images.append((output, detector))
                 print(output)

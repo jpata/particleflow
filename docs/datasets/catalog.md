@@ -45,4 +45,4 @@ As checked on 14 September 2026, the [public Hugging Face dataset repository](ht
 
 Treat the live Hub tree as the source of truth for publication availability. The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects. A usable dataset has a detector, name, configuration, and version that match in both contexts.
 
-For detector-software and sample details, see [CMS data](cms.md) or [CLD and CLIC data](key4hep.md). For scientific provenance and citations, use the [publication map](../science/publications.md) and the dataset record associated with the version you consume.
+For detector-software and sample details, see [CMS](cms.md), [CLD](cld.md), or [CLICdet](clic.md). For scientific provenance and citations, use the [publication map](../science/publications.md) and the dataset record associated with the version you consume.

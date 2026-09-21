@@ -108,6 +108,11 @@ uv run python scripts/visualize_key4hep.py \
   --output-dir notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays
 ```
 
+Use `--input-view pf` for tracks and calorimeter clusters only, or
+`--input-view hits` for raw detector hits only. The default `combined` view
+contains both representations. Pass `--compact-sizes 5` when only the 5 cm
+version is needed.
+
 ## Decoder-depth diagnostic
 
 The layer diagnostic from `20260911_set_hits_diagnostics` was rerun on the new

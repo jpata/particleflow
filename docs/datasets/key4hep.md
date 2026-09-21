@@ -1,6 +1,6 @@
-# CLD and CLIC data production
+# Shared Key4HEP data production
 
-CLD and CLIC share the Key4HEP/EDM4hep production and postprocessing path. This page records their detector-specific inputs and samples; use [Generate a dataset](generate.md) for the common execution procedure.
+[CLD](cld.md) and [CLICdet](clic.md) share the Key4HEP/EDM4hep production and postprocessing path. This page records the common workflow; use [Generate a dataset](generate.md) for the full execution procedure.
 
 ## Requirements
 
@@ -22,28 +22,6 @@ CLD uses the detector configuration under `mlpf/data/key4hep/gen/cld/CLDConfig`.
 CLD also configures particle-gun and additional 91/240/365 GeV samples for detector studies. The `tfds_mapping` and `tfds_hit_mapping` entries restrict training-data production to the samples in the table.
 
 Track/cluster and hit builders use version 3.2.1 and configuration partitions 1--10. The default model recipes select `ttbar`, `WW`, and `qq`; CLD `ZZ` is available through an additional builder.
-
-## Particle targets
-
-The compact transverse-plane displays below show the status-1
-generator-particle population as a visual guide to the reconstruction-target
-taxonomy in a representative event. Charged particles follow helices in the
-nominal solenoidal field (2 T for CLD and 4 T for CLIC); photons, neutrinos, and
-neutral hadrons follow straight trajectories. Endpoint size increases with
-particle energy. One representative trajectory per available type carries a
-subtle label: $e$, $\mu$, $\tau$, $\nu$, $\gamma$, $\pi$, or $K^0$. Here $\pi$
-and $K^0$ denote the charged- and neutral-hadron target classes rather than an
-exclusive particle-identification claim.
-
-| CLD, 365 GeV | CLICdet, 380 GeV |
-|:---:|:---:|
-| ![Transverse display of the CLD target-particle proxy.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/cld_event_5_targets_5x5cm.svg) | ![Transverse display of the CLIC target-particle proxy.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/clic_event_5_targets_5x5cm.svg) |
-
-These images are illustrative, not a validation result. Neutrinos are shown
-for generator-level context but are not reconstructable targets. The actual
-`ytarget` construction also applies detector associations, acceptance, and
-target merging in the Key4HEP postprocessor. Inspect the versioned Parquet and
-TFDS schemas when an analysis depends on those details.
 
 ## Detector commands and paths
 
