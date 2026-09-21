@@ -792,11 +792,7 @@ def main() -> None:
             if args.compact_svg:
                 for icon_size_cm in args.compact_sizes:
                     size_label = f"{icon_size_cm:g}x{icon_size_cm:g}cm"
-                    content_label = (
-                        "_targets"
-                        if args.target_only
-                        else ("" if args.input_view == "combined" else f"_{args.input_view}")
-                    )
+                    content_label = "_targets" if args.target_only else ("" if args.input_view == "combined" else f"_{args.input_view}")
                     output = args.output_dir / f"{config.key}_event_{event}{content_label}_{size_label}.svg"
                     detector = render_event(
                         root_file,
