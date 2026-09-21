@@ -15,11 +15,29 @@ Hit-based inputs are a research workflow for CLD and CLIC. The track-and-cluster
 
 Both representations are derived from the same validated Key4HEP Parquet files. The hit builder combines tracker and calorimeter hits into the input array `X`. The feature metadata identifies each element's type and geometry, and `ytarget` contains the corresponding particle target for each input row. Generator missing momentum and generator/target jets remain event-level fields.
 
+## Event views
+
+Raw detector hits and target particles for the same representative `ttbar`
+event are shown in the transverse plane. Tracker hits are red, ECAL hits blue,
+HCAL hits green, and muon-system hits orange.
+
+### CLD
+
+| Raw hits | Target particles |
+|:---:|:---:|
+| ![CLD tracker, calorimeter, and muon-system hits.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/cld_event_5_hits_5x5cm.svg) | ![CLD target particles.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/cld_event_5_targets_5x5cm.svg) |
+
+### CLICdet
+
+| Raw hits | Target particles |
+|:---:|:---:|
+| ![CLIC tracker, calorimeter, and muon-system hits.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/clic_event_5_hits_5x5cm.svg) | ![CLIC target particles.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/clic_event_5_targets_5x5cm.svg) |
+
 The [catalog](catalog.md) lists the available hit datasets, versions, and model recipes.
 
 ## Production and validation
 
-Follow [CLD and CLIC production](key4hep.md) through strict Parquet validation, then build the hit representation:
+Follow [shared Key4HEP production](key4hep.md) through strict Parquet validation, then build the hit representation:
 
 ```bash
 PROD=cld pixi run tfds_hit

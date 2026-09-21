@@ -31,10 +31,19 @@ cd docs
 uv run --project .. jupyter-book build --doi-bib
 ```
 
-Commit the updated `myst.doi.bib` together with the documentation change. The file is generated, so do not edit it by hand. Run the strict HTML build afterward to check both the bibliography and the rendered links:
+Commit the updated `myst.doi.bib` together with the documentation change. The file is generated, so do not edit it by hand. Run the strict HTML build afterward to check the bibliography and rendered site:
 
 ```bash
 uv run --project .. jupyter-book build --html --strict
+```
+
+The CI build deliberately omits `--check-links`. Jupyter Book 2.1.6 keeps
+strict document validation separate from live external-link checks, so
+temporary failures at DOI registries, archives, and publication servers do not
+block documentation builds. To audit external links manually, run:
+
+```bash
+uv run --project .. jupyter-book build --html --strict --check-links
 ```
 
 ## Publishing
