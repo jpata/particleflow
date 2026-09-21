@@ -10,7 +10,8 @@ recipe uses the first three.
 | Detector hits | `cld_edm_{ttbar,ww_fullhad,qq,zz}_hits` | `pyg-cld-hits-v1` |
 
 Both representations use dataset version 3.2.1 and configuration partitions
-1--10.
+1--10. The corpus contains about one million events for each standard sample
+and half a million `ZZ` events, or 3.5 million events in total.
 
 ## Event view
 

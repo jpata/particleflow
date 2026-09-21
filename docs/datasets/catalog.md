@@ -19,7 +19,7 @@ The table describes the recipes on the current development branch. Dataset versi
 | CLICdet, 380 GeV | Tracks and calorimeter clusters | `clic_edm_ttbar_pf`, `clic_edm_ww_fullhad_pf`, `clic_edm_qq_pf` | 3.2.1 | `pyg-clic-v1` |
 | CLICdet, 380 GeV | Tracker and calorimeter hits | `clic_edm_ttbar_hits`, `clic_edm_ww_fullhad_hits`, `clic_edm_qq_hits` | 3.2.1 | `pyg-clic-hits-v1` |
 
-IDEA `0.1.0` datasets support pipeline validation with truth-seeded proxy tracks and an oracle reference. The table focuses on the supported training and research workflows. The IDEA dataset's scope is recorded in [Current capabilities](../science/capabilities.md).
+IDEA `0.1.0` datasets support pipeline validation with truth-seeded proxy tracks and an oracle reference. They contain about 10,000 events per sample, or 30,000 events across `ttbar`, fully hadronic `WW`, and inclusive `qq`. The table focuses on the supported training and research workflows. The IDEA dataset's scope is recorded in [Current capabilities](../science/capabilities.md).
 
 ## Configuration partitions and event splits
 
