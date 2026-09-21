@@ -1,6 +1,6 @@
-# CLD and CLIC data production
+# Shared Key4HEP data production
 
-CLD and CLIC share the Key4HEP/EDM4hep production and postprocessing path. This page records their detector-specific inputs and samples; use [Generate a dataset](generate.md) for the common execution procedure.
+[CLD](cld.md) and [CLICdet](clic.md) share the Key4HEP/EDM4hep production and postprocessing path. This page records the common workflow; use [Generate a dataset](generate.md) for the full execution procedure.
 
 ## Requirements
 
