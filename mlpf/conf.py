@@ -21,6 +21,8 @@ class Dataset(Enum):
     IDEA = "idea"
     CLIC_HITS = "clic_hits"
     CLD_HITS = "cld_hits"
+    COLLIDERML = "colliderml"
+    COLLIDERML_HITS = "colliderml_hits"
 
 
 class ModelType(Enum):
@@ -67,6 +69,7 @@ SOURCE_IDS = {
     Dataset.CLIC.value: 2,
     Dataset.CLD.value: 3,
     Dataset.IDEA.value: 4,
+    Dataset.COLLIDERML.value: 5,
 }
 SOURCE_LABELS = {source_id: source_name for source_name, source_id in SOURCE_IDS.items()}
 
@@ -277,6 +280,16 @@ class EDM4HEP:
                 "VETrackerHits",
             ],
         ),
+        # OpenDataDetector as released by ColliderML release 1; not EDM4hep geometry, but the
+        # registry is the single place the B-field comes from for downstream tools, so the
+        # entry is included here for the colliderml detector option as well. hit_collections
+        # is unused for ColliderML (we read a release parquet that already contains raw
+        # positions/energies).
+        "colliderml": Detector(
+            name="colliderml",
+            b_field=3.0,
+            hit_collections=[],
+        ),
     }
 
 
@@ -331,6 +344,8 @@ ELEM_TYPES = {
     Dataset.IDEA.value: [0, 1, 2],  # 1 - truth-seeded proxy track, 2 - cluster
     Dataset.CLIC_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
     Dataset.CLD_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
+    Dataset.COLLIDERML.value: [0, 1, 2],  # 1 - track, 2 - cluster
+    Dataset.COLLIDERML_HITS.value: [0, 1, 2],  # 1 - track, 2 - calorimeter hit
 }
 
 # Some element types are defined, but do not exist in the dataset at all or should be excluded for physics reasons
@@ -341,6 +356,8 @@ ELEM_TYPES_NONZERO = {
     Dataset.IDEA.value: [1, 2],
     Dataset.CLIC_HITS.value: [1, 2],
     Dataset.CLD_HITS.value: [1, 2],
+    Dataset.COLLIDERML.value: [1, 2],
+    Dataset.COLLIDERML_HITS.value: [1, 2],
 }
 
 CLASS_LABELS = {
@@ -360,6 +377,8 @@ CLASS_LABELS = {
     Dataset.IDEA.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLIC_HITS.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLD_HITS.value: [0, 211, 130, 22, 11, 13],
+    Dataset.COLLIDERML.value: [0, 211, 130, 22, 11, 13],
+    Dataset.COLLIDERML_HITS.value: [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
@@ -414,6 +433,8 @@ CLASS_NAMES_LATEX = {
         r"$e^\pm$",
         r"$\mu^\pm$",
     ],
+    Dataset.COLLIDERML.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    Dataset.COLLIDERML_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
     Dataset.CMS.value: [
@@ -432,6 +453,8 @@ CLASS_NAMES = {
     Dataset.IDEA.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLIC_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLD_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.COLLIDERML.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.COLLIDERML_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
     Dataset.CMS.value: [
@@ -485,6 +508,8 @@ CLASS_NAMES_CAPITALIZED = {
         "Electron",
         "Muon",
     ],
+    Dataset.COLLIDERML.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    Dataset.COLLIDERML_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
 X_FEATURES = {
@@ -550,6 +575,40 @@ X_FEATURES = {
     Dataset.IDEA.value: get_edm4hep_x_features(),
     Dataset.CLIC_HITS.value: EDM4HEP.HitFeatures.get_names(),
     Dataset.CLD_HITS.value: EDM4HEP.HitFeatures.get_names(),
+    Dataset.COLLIDERML.value: [
+        "type | elemtype",
+        "pt | et",
+        "eta | eta",
+        "sin_phi | sin_phi",
+        "cos_phi | cos_phi",
+        "p | energy",
+        "d0 | position.x",
+        "z0 | position.y",
+        "theta | position.z",
+        "qop | iTheta",
+        "tanLambda | energy_ecal",
+        "Null | energy_hcal",
+        "Null | energy_other",
+        "n_meas | num_hits",
+        "Null | sigma_x",
+        "Null | sigma_y",
+        "Null | sigma_z",
+    ],
+    Dataset.COLLIDERML_HITS.value: [
+        "type | elemtype",
+        "pt | et",
+        "eta | eta",
+        "sin_phi | sin_phi",
+        "cos_phi | cos_phi",
+        "p | energy",
+        "d0 | position.x",
+        "z0 | position.y",
+        "theta | position.z",
+        "qop | region",
+        "tanLambda | sigma_x",
+        "Null | sigma_y",
+        "Null | sigma_z",
+    ],
 }
 
 
@@ -611,7 +670,22 @@ JET_CONFIG = {
         match_dr=0.1,
         match_rel_pt=0.5,
     ),
+    Dataset.COLLIDERML.value: JetConfig(
+        algorithm="antikt_algorithm",
+        radius=0.4,
+        pt_cut=3.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
+    Dataset.COLLIDERML_HITS.value: JetConfig(
+        algorithm="antikt_algorithm",
+        radius=0.4,
+        pt_cut=3.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
 }
+
 
 Y_FEATURES = ParticleFeatures.get_names()
 
@@ -876,6 +950,8 @@ _PIPELINE_DATASETS = {
     "cms": _PipelineDatasetOverride("physical_pu", "cms_pf_ttbar", "3.2.0"),
     "cld": _PipelineDatasetOverride("physical", "cld_edm_ttbar_pf", "3.2.1", gpu_batch_multiplier=8),
     "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.2.1"),
+    "colliderml": _PipelineDatasetOverride("physical", "colliderml_ttbar_nopu_pf", "1.0.0", gpu_batch_multiplier=8),
+    "colliderml_hits": _PipelineDatasetOverride("physical", "colliderml_ttbar_hits", "1.0.0", gpu_batch_multiplier=8),
 }
 
 
