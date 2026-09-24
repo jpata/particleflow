@@ -334,6 +334,12 @@ class ParquetValidator:
                 ],
             )
             return False
+        # The detector registry says whether a key4hep scenario *configures* hit collections;
+        # ColliderML carries its hit tables in the parquet itself, so also treat present
+        # hit fields as "has hits". (key4hep behavior unchanged: their hit-level productions
+        # have both the registry entry and the fields.)
+        if not self.has_configured_hits and "X_hit_calo" in self.data.fields:
+            self.has_configured_hits = True
         self.nev = 0
         for f in ALL_FIELDS:
             if f in self.data.fields:
@@ -505,10 +511,14 @@ class ParquetValidator:
         # reshape also handles intentionally empty hit collections, whose
         # inner dimension is not retained by Awkward/Parquet.
         n_hit_features = len(EDM4HEP.HitFeatures.get_names())
-        n_trk_hits = np.array(
-            [int(np.sum(self.ev("X_hit_tracker", i).reshape(-1, n_hit_features)[:, X_ELEMTYPE] != 0)) for i in range(self.nev_used)]
-        )
-        n_calo_hits = np.array([int(np.sum(self.ev("X_hit_calo", i).reshape(-1, n_hit_features)[:, X_ELEMTYPE] != 0)) for i in range(self.nev_used)])
+
+        def _norm_empty(a):
+            # only zero-row events lose their column width in the parquet readback; non-empty
+            # hit tables keep their native width (key4hep 15-wide vs ColliderML 12-wide)
+            return a.reshape(-1, n_hit_features) if a.size == 0 else a
+
+        n_trk_hits = np.array([int(np.sum(_norm_empty(self.ev("X_hit_tracker", i))[:, X_ELEMTYPE] != 0)) for i in range(self.nev_used)])
+        n_calo_hits = np.array([int(np.sum(_norm_empty(self.ev("X_hit_calo", i))[:, X_ELEMTYPE] != 0)) for i in range(self.nev_used)])
         ok = (n_trk_hits > 0).all() and (n_calo_hits > 0).all()
         gate = self.add_gate(
             "H2",
@@ -677,13 +687,23 @@ class ParquetValidator:
         iev = 0
         pos_trk = pn_trk = pos_cl = pn_cl = None
 
-        x = self.ev("X_hit_tracker", iev).reshape(-1, len(EDM4HEP.HitFeatures.get_names()))
-        y = self.ev("ytarget_hit_tracker", iev).reshape(-1, 14)
+        # reshape only when the event is empty: the parquet readback drops the column width
+        # for zero-row events, while non-empty tables keep their native width (which differs
+        # between key4hep EDM4hep hit layouts and ColliderML's).
+        def _hit_ev_pair(fx, fy):
+            x, y = self.ev(fx, iev), self.ev(fy, iev)
+            if x.size == 0:
+                return (
+                    np.zeros((0, len(EDM4HEP.HitFeatures.get_names())), dtype=np.float32),
+                    np.zeros((0, 14), dtype=np.float32),
+                )
+            return x, y
+
+        x, y = _hit_ev_pair("X_hit_tracker", "ytarget_hit_tracker")
         mask = x[:, X_ELEMTYPE] != 0
         pos_trk_h, pn_trk_h = x[mask, 6:9], y[mask, PN]
 
-        x = self.ev("X_hit_calo", iev).reshape(-1, len(EDM4HEP.HitFeatures.get_names()))
-        y = self.ev("ytarget_hit_calo", iev).reshape(-1, 14)
+        x, y = _hit_ev_pair("X_hit_calo", "ytarget_hit_calo")
         mask = x[:, X_ELEMTYPE] != 0
         pos_calo_h, pn_calo_h = x[mask, 6:9], y[mask, PN]
 
