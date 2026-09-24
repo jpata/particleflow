@@ -27,12 +27,18 @@ from pathlib import Path
 import awkward as ak
 import matplotlib
 
-matplotlib.use("Agg")
+# Headless CLI/CI runs need a non-interactive backend; but in a notebook pyplot is
+# already live with the inline backend by the time this module is imported, and calling
+# use("Agg") at that point would clobber it (silently disabling inline rendering for the
+# rest of the session). Force Agg only when no backend is active yet.
+if "matplotlib.pyplot" not in sys.modules:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
 from mlpf.conf import EDM4HEP
+from mlpf.data.target_building import visible_energy_deposit, visible_energy_fraction
 
 # ---------------------------------------------------------------------------
 # feature layout (see mlpf/conf.py)
@@ -114,8 +120,8 @@ THRESHOLDS = {
     "r2_frac_range": (0.0, 1.5, 0.95),  # >=95% of deposit fractions in [0, 1.5]
     "r2_p99": 3.0,  # 99th percentile of deposit fractions
     "r2_min_measurements": 100,
-    "m1_visible_energy_fraction": 0.10,  # mirrors mlpf/data/key4hep/postprocessing.py
-    "m1_visible_energy_deposit": 0.5,  # mirrors mlpf/data/key4hep/postprocessing.py
+    "m1_visible_energy_fraction": visible_energy_fraction,  # single-source: mlpf/data/target_building.py
+    "m1_visible_energy_deposit": visible_energy_deposit,  # single-source: mlpf/data/target_building.py
     "m1_min_muons": 10,
     "m1_min_lowfrac_frac": 0.10,  # >=10% of target muons must be MIP-like (frac < 0.1)
     "e1_endpoint_mask": 0x0F000000,  # EDM4hep bits 24-27 (simulator endpoint flags)
@@ -126,8 +132,10 @@ THRESHOLDS = {
 # jet matching radius for the response gate (matches JET_CONFIG.match_dr in mlpf/conf.py)
 JET_MATCH_DR = 0.1
 
-# plotting extent used by the 3D PN visualization
+# plotting extent used by the 3D PN visualization (default; ColliderML's ODD geometry is
+# bigger — HCAL barrel r ≈ 2.5-3 m, endcaps |z| ≈ 4 m — so it gets a wider window)
 VIS_RANGE = 2500.0  # mm
+VIS_RANGE_COLLIDERML = 4500.0  # mm
 
 
 def _deltaphi(phi1: float, phi2: float) -> float:
@@ -189,15 +197,28 @@ class GateResult:
 
 
 class ParquetValidator:
-    """Validates one parquet file and writes one plot per gate."""
+    """Validates one parquet file and writes one plot per gate.
 
-    def __init__(self, input_path, detector, max_events, plots_dir):
+    By default every gate plot is saved as a PNG into `plots_dir` (and a
+    validation_report.json alongside it). For notebook use, pass `show_plots=True`
+    to render each plot inline via plt.show() instead, and `save_plots=False` to
+    skip all disk output; the gate results stay available in `self.gates` and
+    `self.summary()`."""
+
+    def __init__(self, input_path, detector, max_events, plots_dir, save_plots=True, show_plots=False):
         self.input_path = Path(input_path)
         self.detector = detector
+        # The B-field is used only by gate H3 (tracker-hit circle fits, pT = 0.0003*B*r).
+        # ColliderML has no tracker-hit targets (ytarget_hit_tracker is all zero), so H3
+        # finds no particles to fit and reports empty; the colliderml entry in
+        # EDM4HEP.DETECTORS exists mainly so this line reads the B-field uniformly.
         self.bfield = EDM4HEP.DETECTORS[detector].b_field
         self.has_configured_hits = bool(EDM4HEP.DETECTORS[detector].hit_collections)
+        self.vis_range = VIS_RANGE_COLLIDERML if detector.startswith("colliderml") else VIS_RANGE
         self.max_events = max_events
         self.plots_dir = Path(plots_dir)
+        self.show_plots = show_plots
+        self.save_plots = save_plots
         self.data = None
         self.nev = 0
         self.nev_used = 0
@@ -232,9 +253,13 @@ class ParquetValidator:
             ),
         )
         fname = f"gate_{gate.gate_id}.png"
-        fig.savefig(self.plots_dir / fname, dpi=120, bbox_inches="tight")
-        plt.close(fig)
-        gate.plot = fname
+        if self.save_plots:
+            fig.savefig(self.plots_dir / fname, dpi=120, bbox_inches="tight")
+            gate.plot = fname
+        if self.show_plots:
+            plt.show()
+        else:
+            plt.close(fig)
 
     def text_plot(self, gate, lines):
         fig = plt.figure(figsize=(9, 4))
@@ -253,7 +278,20 @@ class ParquetValidator:
         fig, ax = plt.subplots(figsize=(9, 5))
         if shade is not None:
             ax.axvspan(shade[0], shade[1], color="green", alpha=0.12)
-        ax.hist(data, bins=bins, alpha=0.75, color="#4c72b0", log=log)
+        arr = np.asarray(data, dtype=float)
+        # Degenerate inputs directly produce collapsed or missing auto ranges: an array where
+        # every value is identical (e.g. jet-response arrays that are exactly 1.0 on
+        # colliderml's synthetic test data), or an empty one (colliderml's H3 circle-fit gate,
+        # which has no tracker-hit targets to fit). Give such data an explicit bin range so the
+        # gate still gets a readable plot.
+        if arr.size == 0:
+            ax.bar([0], [0])
+        elif float(np.ptp(arr)) < 1e-12:
+            v = float(arr[0])
+            lo, hi = v - 0.5, v + 0.5
+            ax.hist(arr, bins=np.linspace(lo, hi, bins + 1), alpha=0.75, color="#4c72b0", log=log)
+        else:
+            ax.hist(arr, bins=bins, alpha=0.75, color="#4c72b0", log=log)
         for x, c in vlines:
             ax.axvline(x, color=c, ls="--", lw=1.2)
         ax.set_xlabel(xlabel)
@@ -261,8 +299,17 @@ class ParquetValidator:
         self.finish_plot(fig, gate)
 
     def ev(self, field, iev):
-        """Event-level numpy view of a var*var field."""
-        return np.asarray(ak.to_numpy(self.data[field][iev]))
+        """Event-level numpy view of a var*var field. Shape is either (N, F) or (0, F) for a
+        fully-empty event; scalar arrays (e.g. genmet with one scalar per event) come back as
+        1-D and callers pick the scalar directly. NOTE: per-event getitem on option-typed
+        columns is slow (~0.3 s per event slice) — gates that need all events should slice the
+        column once instead of calling this per event (see gate S3's ak.num vectorization)."""
+        a = np.asarray(ak.to_numpy(self.data[field][iev]))
+        if a.ndim == 1 and a.size == 0:
+            # zero-length 1-D fields (e.g. X_hit_tracker on an event with no tracker hits) come
+            # back without a width; callers that slice columns want (0, 0) rather than a scalar.
+            return np.zeros((0, 0), dtype=np.float32)
+        return a
 
     # ------------------------------------------------------------------ load
     def load(self):
@@ -345,11 +392,7 @@ class ParquetValidator:
         # S3: shape consistency X vs ytarget
         mismatches = {}
         for xf, yf in X_Y_PAIRS:
-            n = 0
-            for i in range(self.nev):
-                if len(self.data[xf][i]) != len(self.data[yf][i]):
-                    n += 1
-            mismatches[(xf, yf)] = n
+            mismatches[(xf, yf)] = int(np.count_nonzero(ak.to_numpy(ak.num(self.data[xf], axis=1)) != ak.to_numpy(ak.num(self.data[yf], axis=1))))
         total_mismatch = sum(mismatches.values())
         gate = self.add_gate(
             "S3",
@@ -561,7 +604,7 @@ class ParquetValidator:
             if np.any(pns > 0):
                 n_assigned += 1
             if len(positions):
-                in_range_frac.append(np.mean(np.max(np.abs(positions), axis=1) <= VIS_RANGE))
+                in_range_frac.append(np.mean(np.max(np.abs(positions), axis=1) <= self.vis_range))
                 assigned_frac.append(np.mean(pns > 0))
         in_range_frac = np.array(in_range_frac)
         assigned_frac = np.array(assigned_frac)
@@ -582,12 +625,27 @@ class ParquetValidator:
             "visualization",
             "PN visualization data sanity",
             "Finite element positions, at least one particle assignment (PN>0) per "
-            "event, and most elements inside the plotted volume (+/-2500 mm) and "
+            f"event, and most elements inside the plotted volume (+/-{self.vis_range:.0f} mm) and "
             "assigned to a particle.",
             observed,
             status,
         )
         self._pn_visualization_plot(gate)
+
+    def _track_display_positions(self, x, mask):
+        """Display positions (x, y, z) of track elements, detector-dependent.
+
+        key4hep X carries radiusOfInnermostHit (col 10) and Z0 (col 14). The ColliderML
+        clustered view has neither, so tracks are extrapolated from the perigee parameters
+        to a fixed display radius.
+        """
+        if self.detector.startswith("colliderml"):
+            R_DISPLAY = 300.0  # mm, fixed display radius inside the tracker volume
+            theta = np.clip(x[mask, 8], 1e-3, np.pi - 1e-3)
+            z = np.clip(x[mask, 7] + R_DISPLAY / np.tan(theta), -self.vis_range, self.vis_range)
+            return np.stack([R_DISPLAY * x[mask, 4], R_DISPLAY * x[mask, 3], z], axis=1)
+        # track position: innermost radius (10), sin_phi (3), cos_phi (4), Z0 (14)
+        return np.stack([x[mask, 10] * x[mask, 4], x[mask, 10] * x[mask, 3], x[mask, 14]], axis=1)
 
     def _event_positions_pn(self, iev):
         """Concatenated element positions (x, y, z) and particle numbers for one event."""
@@ -608,17 +666,7 @@ class ParquetValidator:
             y = self.ev("ytarget_track", iev)
             if len(x):
                 mask = x[:, X_ELEMTYPE] != 0
-                # track position: innermost radius (10), sin_phi (3), cos_phi (4), Z0 (14)
-                positions.append(
-                    np.stack(
-                        [
-                            x[mask, 10] * x[mask, 4],
-                            x[mask, 10] * x[mask, 3],
-                            x[mask, 14],
-                        ],
-                        axis=1,
-                    )
-                )
+                positions.append(self._track_display_positions(x, mask))
                 pns.append(y[mask, PN])
         positions = np.concatenate(positions) if positions else np.empty((0, 3))
         pns = np.concatenate(pns) if pns else np.empty(0)
@@ -627,7 +675,6 @@ class ParquetValidator:
     def _pn_visualization_plot(self, gate):
         """3D visualization of hits, tracks and clusters colored by particle number."""
         iev = 0
-        pos_trk_h = pn_trk_h = pos_calo_h = pn_calo_h = None
         pos_trk = pn_trk = pos_cl = pn_cl = None
 
         x = self.ev("X_hit_tracker", iev).reshape(-1, len(EDM4HEP.HitFeatures.get_names()))
@@ -644,10 +691,7 @@ class ParquetValidator:
             x = self.ev("X_track", iev)
             y = self.ev("ytarget_track", iev)
             mask = x[:, X_ELEMTYPE] != 0
-            pos_trk = np.stack(
-                [x[mask, 10] * x[mask, 4], x[mask, 10] * x[mask, 3], x[mask, 14]],
-                axis=1,
-            )
+            pos_trk = self._track_display_positions(x, mask)
             pn_trk = y[mask, PN]
 
             x = self.ev("X_cluster", iev)
@@ -752,9 +796,9 @@ class ParquetValidator:
         ax2.view_init(elev=20, azim=45)
 
         for ax in [ax1, ax2]:
-            ax.set_xlim(-VIS_RANGE, VIS_RANGE)
-            ax.set_ylim(-VIS_RANGE, VIS_RANGE)
-            ax.set_zlim(-VIS_RANGE, VIS_RANGE)
+            ax.set_xlim(-self.vis_range, self.vis_range)
+            ax.set_ylim(-self.vis_range, self.vis_range)
+            ax.set_zlim(-self.vis_range, self.vis_range)
 
         self.finish_plot(fig, gate)
 
@@ -1183,7 +1227,14 @@ class ParquetValidator:
         else:
             # R2: deposited-energy fraction of target representatives
             fracs = []
-            for f in ["ytarget_track", "ytarget_cluster"]:
+            # ColliderML tracks carry no calo deposit, so the check there runs on
+            # cluster reps + the hit-level calo table; key4hep keeps track+cluster reps.
+            if self.detector.startswith("colliderml"):
+                r2_fields = ["ytarget_cluster", "ytarget_hit_calo"]
+            else:
+                r2_fields = ["ytarget_track", "ytarget_cluster"]
+            fracs = []
+            for f in r2_fields:
                 for i in range(self.nev_used):
                     y = self.ev(f, i)
                     if len(y) == 0:
@@ -1746,10 +1797,14 @@ class ParquetValidator:
             bbox=dict(boxstyle="round", facecolor=colors.get(combined, "#ffffff"), alpha=0.85),
         )
 
-        out_file = str(self.plots_dir / "gate_H3_H4.png")
-        fig.savefig(out_file, dpi=120, bbox_inches="tight")
-        plt.close(fig)
-        print(f"Saved gate plot to {out_file}")
+        if self.save_plots:
+            out_file = str(self.plots_dir / "gate_H3_H4.png")
+            fig.savefig(out_file, dpi=120, bbox_inches="tight")
+            print(f"Saved gate plot to {out_file}")
+        if self.show_plots:
+            plt.show()
+        else:
+            plt.close(fig)
         return {"track": track_results, "calo": calo_results}
 
     # --------------------------------------------------------------- reporting
@@ -1779,8 +1834,9 @@ class ParquetValidator:
             "plots": plots,
             "gates": [asdict(g) for g in self.gates],
         }
-        with open(json_path, "w") as f:
-            json.dump(report, f, indent=2)
+        if json_path is not None:
+            with open(json_path, "w") as f:
+                json.dump(report, f, indent=2)
 
         print(f"\n=== Validation report: {self.input_path} ===")
         print(f"detector={self.detector} bfield={self.bfield} events_used={self.nev_used}")
@@ -1790,14 +1846,18 @@ class ParquetValidator:
             print(f"{g.gate_id:<4} {g.category:<15} {g.status:<6} {g.observed}")
         print("-" * 90)
         print(f"PASS={n_pass} FAIL={n_fail} WARN={n_warn} SKIP={n_skip} overall={overall}")
-        print(f"plots: {self.plots_dir}")
-        print(f"report: {json_path}")
+        if self.save_plots:
+            print(f"plots: {self.plots_dir}")
+        if json_path is not None:
+            print(f"report: {json_path}")
         return n_fail == 0
 
     def run(self):
-        self.plots_dir.mkdir(parents=True, exist_ok=True)
+        if self.save_plots:
+            self.plots_dir.mkdir(parents=True, exist_ok=True)
+        report_path = self.plots_dir / "validation_report.json" if self.save_plots else None
         if not self.load():
-            return self.write_report(self.plots_dir / "validation_report.json")
+            return self.write_report(report_path)
         self.gate_schema()
         if self.nev > 0:
             self.gate_hits()
@@ -1808,7 +1868,7 @@ class ParquetValidator:
             self.gate_target_definition()
             self.gate_baseline_pf()
             self.gate_truth()
-        return self.write_report(self.plots_dir / "validation_report.json")
+        return self.write_report(report_path)
 
 
 def main():
