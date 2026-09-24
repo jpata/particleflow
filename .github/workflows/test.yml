@@ -8,6 +8,41 @@ on:
   workflow_dispatch:
 
 jobs:
+  units:
+    runs-on: ubuntu-latest
+    container:
+      image: pytorch/pytorch:2.9.1-cuda13.0-cudnn9-runtime
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y wget gcc g++ build-essential curl
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Install dependencies
+        run: uv pip install --system .
+
+      - name: Sync ONNX environment
+        run: uv sync --project envs/ort-cpu
+
+      - name: Run unit tests
+        run: |
+          export PYTHONPATH=$(pwd)
+          export KERAS_BACKEND=torch
+          uv run python -m pytest --cache-clear tests
+
   test:
     runs-on: ubuntu-latest
     container:
@@ -15,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [cms, cld, clic]
+        target: [cms, cld, clic, colliderml]
 
     steps:
       - name: Checkout repository
