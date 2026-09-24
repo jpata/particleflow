@@ -162,25 +162,10 @@ def _event_record_one(
     cluster_to_gp_exclusive = assign_to_recoobj(n_cluster, clst_to_gp_excl_map, used_gps)
     assert np.all(used_gps == 1), "every selected truth particle must own a track or a cluster"
 
-    # Exclusive gp_to_cluster deposit: for each target particle, sum the calibrated energies of
-    # its *attributed* hits that live in clusters the allocator exclusively assigned to it.
-    # Mirrors key4hep's gp_to_cluster = (gp_to_hit * calohit_to_cluster).sum(axis=1), restricted
-    # to owned clusters — which is the number the R2 gate audits. The inclusive deposit remains
-    # the visibility-masking input upstream.
-    cluster_of_calo_hit = np.asarray(hit_to_cluster[1], dtype=np.int64)
-    owned_by = cluster_to_gp_exclusive  # per cluster: owning cleaned-gp row, or -1
-    gp_to_cluster_excl = np.zeros(n_gp, dtype=np.float64)
-    # NOTE: the gp indexes here are in the *post-cleaning* space, matching n_gp/gps_canonical.
-    gpth_clean = gpdata_cleaned.genparticle_to_hit
-    if len(gpth_clean[0]):
-        hits_attr = np.asarray(gpth_clean[1], dtype=np.int64)
-        gps_attr = np.asarray(gpth_clean[0], dtype=np.int64)
-        w_attr = np.asarray(gpth_clean[2], dtype=np.float64)
-        owner_of_attr_hit = owned_by[cluster_of_calo_hit[hits_attr]]
-        m_excl = (owner_of_attr_hit >= 0) & (owner_of_attr_hit == gps_attr)
-        np.add.at(gp_to_cluster_excl, gps_attr[m_excl], w_attr[m_excl])
-    gp_to_cluster_excl = gp_to_cluster_excl.astype(np.float32)
-
+    # gp_to_cluster follows the key4hep semantic: the particle's total attributed calibrated
+    # deposit (key4hep computes (gp_to_hit * calohit_to_cluster).sum(axis=1); here every hit
+    # lives in exactly one cluster, so the row sum is just the total — which truth.py already
+    # carries as gen_features["gp_to_cluster"]).
     gps_canonical = np.zeros((n_gp, len(particle_feature_order)), dtype=np.float32)
     for igp in range(n_gp):
         p = np.abs(float(gpdata_cleaned.gen_features["PDG"][igp]))
@@ -209,15 +194,15 @@ def _event_record_one(
                 float(gpdata_cleaned.gen_features["generatorStatus"][igp]),
                 float(gpdata_cleaned.gen_features["simulatorStatus"][igp]),
                 float(gpdata_cleaned.gen_features["gp_to_track"][igp]),
-                float(gp_to_cluster_excl[igp]),
+                float(gpdata_cleaned.gen_features["gp_to_cluster"][igp]),
                 float(gpdata_cleaned.gen_features["jet_idx"][igp]),
                 float(gpdata_cleaned.gen_features["particle_number"][igp]),
             ],
             dtype=np.float32,
         )
     # gp_to_track carries the max track-hit fraction owned (key4hep SiTracksMCTruthLink
-    # analogue); gp_to_cluster is now the calibrated energy deposited in the cluster this
-    # particle exclusively owns, so downstream code does not need to recompute the exclusive sum.
+    # analogue); gp_to_cluster carries the total calibrated deposit attributed to this particle
+    # (key4hep parity).
 
     PN_IDX = particle_feature_order.index("particle_number")
 

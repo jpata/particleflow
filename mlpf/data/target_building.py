@@ -117,8 +117,10 @@ def filter_adj(adj: SparseMatrixCOO, all_to_filtered: Dict[int, int]) -> SparseM
     return np.array(i0s_new), np.array(i1s_new), np.array(ws_new)
 
 
-# Per-particle visibility thresholds shared by all target builders (#463); moved verbatim from
-# mlpf/data/key4hep/postprocessing.py
+# Reference visibility thresholds, matching the key4hep values (#463). The absolute term is a
+# detector-dependent scale — it must sit below the MIP peak, which is ~2 GeV on CLD but ~4 GeV
+# on MAIA — so other detectors may need a different value; note that key4hep/postprocessing.py
+# currently keeps its own inline copy of these two constants.
 visible_energy_fraction = 0.10
 visible_energy_deposit = 0.5  # GeV
 
