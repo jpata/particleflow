@@ -28,7 +28,8 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`mlpf/data/`**: Simulator-specific code for generating and preprocessing data.
   - **`cms/`**: Scripts for CMSSW-based generation (`genjob_pu.sh`), postprocessing (`postprocessing2.py`), validation (`valjob.sh`, `valjob_data.sh`), and plotting (`plot_cms.py`).
   - **`key4hep/`**: Scripts for Key4Hep-based generation (`gen/`) and postprocessing (`postprocessing.py`).
-- **`mlpf/heptfds/`**: TFDS (TensorFlow Datasets) builders for various datasets (CMS, CLD, CLIC), including support for both cluster-based and raw hits-based data (`cld_pf_edm4hep_hits`, `clic_pf_edm4hep_hits`). Shared EDM4Hep utilities in `edm4hep_utils/`.
+- **`mlpf/heptfds/`**: TFDS (TensorFlow Datasets) builders for various datasets (CMS, CLD, CLIC), including support for both cluster-based and raw hits-based data (`cld_pf_edm4hep_hits`, `clic_pf_edm4hep_hits`). Shared EDM4Hep utilities in `edm4hep_utils/`. ColliderML support: `colliderml_pf/ttbar.py` (clustered view)
+  + shared conversion in `colliderml_utils/utils.py` reading the MLPF-format parquet written by `mlpf/data/colliderml/postprocessing.py`.
 
 ## 4. Machine Learning Core (`mlpf/model/`)
 - **`mlpf.py`**: Implementation of the MLPF model, featuring multi-head attention and configurable sub-networks. Supports fused attention, simplified math attention for ONNX export, and HEPT/HEPTv2/LitePT layers that consume detector coordinates.
@@ -45,7 +46,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`distributed_ray.py`**: Integration with Ray for distributed training and HPO.
 
 ## 5. Validation, Plotting & Monitoring
-- **`mlpf/standalone_eval/key4hep/`**: Standalone tools for evaluating model checkpoints and generating performance plots on ROOT files for Key4Hep detectors.
+- **`mlpf/standalone_eval/key4hep/`**: Standalone tools for evaluating model checkpoints and generating performance plots on ROOT files for Key4Hep detectors. Note the ColliderML validator is the shared `tests/validate_parquet.py` (it knows how to handle the `colliderml` detector name).
 - **`mlpf/plotting/`**: Comprehensive suite of plotting tools.
   - **`plot_validation.py` / `plot_met_validation.py`**: Standard validation plots for jets and MET.
   - **`corrections.py`**: Derivation of jet energy corrections.

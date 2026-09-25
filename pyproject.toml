@@ -84,6 +84,7 @@ dependencies = [
     "timm",
     "colorhash",
     "flash-attn; sys_platform == 'linux'",
+    "colliderml>=0.4.2",
 ]
 
 [project.scripts]

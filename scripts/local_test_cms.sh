@@ -5,9 +5,7 @@ export PWD=`pwd`
 export PYTHONPATH=`pwd`
 export KERAS_BACKEND=torch
 
-# Quick unit tests
-rm -Rf .pytest_cache
-uv run python -m pytest --cache-clear tests
+# Unit tests run in the once-per-run 'units' CI job (.github/workflows/test.yml), not here.
 
 # 1. Fetch test data
 ./scripts/fetch_test_data_cms.sh
