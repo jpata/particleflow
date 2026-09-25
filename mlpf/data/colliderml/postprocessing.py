@@ -570,24 +570,7 @@ def main():
         help="merge threshold; None uses DEFAULT_MERGE_FRAC (0.25) for bfs_merge and 0.0 for the others",
     )
     parser.add_argument("--num-events", type=int, default=-1, help="cap number of events per shard (for tests)")
-    parser.add_argument(
-        "--tfds",
-        action="store_true",
-        help="after converting (or confirming present) every shard in --shards, run the TFDS build for the "
-        "dataset of the given --sample. TFDS itself is skip-aware: an already-prepared config under "
-        "--tfds-data-dir is reused, otherwise the build resumes from scratch. Skipped if any shard still "
-        "needs to be produced by this invocation (so a resumable partial run cannot trigger a build "
-        "on incomplete parquet).",
-    )
-    parser.add_argument(
-        "--tfds-data-dir",
-        type=str,
-        default=None,
-        help="TFDS data directory for the --tfds step (required when --tfds is set)",
-    )
     args = parser.parse_args()
-    if args.tfds and not args.tfds_data_dir:
-        parser.error("--tfds requires --tfds-data-dir")
 
     shard_ids = args.shards.split(":")
     a, b = int(shard_ids[0]), int(shard_ids[1])
@@ -630,46 +613,6 @@ def main():
             merge_frac=merge_frac,
         )
     print(f"all {n_files} shards accounted for ({n_done} already present, {n_files - n_done} newly converted)")
-
-    if args.tfds:
-        # refuse to build from an incomplete parquet set: an interrupted earlier run leaves the range
-        # half-converted and would produce a silently truncated TFDS dataset.
-        missing = [p.stem + ".parquet" for p in pa if not _parquet_usable(Path(args.outpath) / (p.stem + ".parquet"))]
-        if missing:
-            raise RuntimeError(
-                f"--tfds requested but {len(missing)} shard(s) in --shards are not yet converted "
-                f"(first missing: {missing[0]}); rerun without --tfds (converter resumes where it "
-                "left off) or extend the range once all shards exist."
-            )
-        if args.num_events != -1:
-            raise RuntimeError("--tfds refuses num_events != -1: the TFDS split logic requires the full shard.")
-
-        # TFDS dataset name per sample (two separate datasets, one per pileup level)
-        TFDS_DATASET_BY_SAMPLE = {
-            "ttbar_pu0": ("mlpf.heptfds.colliderml_pf.ttbar", "colliderml_ttbar_nopu_pf"),
-            "ttbar_pu200": ("mlpf.heptfds.colliderml_pf.ttbar_pu200", "colliderml_ttbar_pu200_pf"),
-        }
-        if args.sample not in TFDS_DATASET_BY_SAMPLE:
-            raise RuntimeError(f"no TFDS builder registered for sample {args.sample!r} (known: {sorted(TFDS_DATASET_BY_SAMPLE)})")
-        builder_module, builder_name = TFDS_DATASET_BY_SAMPLE[args.sample]
-        import importlib
-
-        importlib.import_module(builder_module)  # TFDS builder registration
-        from mlpf.heptfds.colliderml_utils.utils import NUM_SPLITS
-
-        import tensorflow_datasets as tfds
-
-        # the builder splits the manual_dir shard list into NUM_SPLITS TFDS configs; each is its own
-        # prepared dataset so all must be prepared explicitly. TFDS preparatn is atomic per config:
-        # writes go to a tmp dir and only the final rename publishes, so an interrupted build leaves
-        # the data_dir clean and a rerun redoes just that config; an already-prepared config is
-        # skipped by tfds itself.
-        for group in range(1, NUM_SPLITS + 1):
-            name = f"{builder_name}/{group}"
-            print(f"TFDS build: {name} -> {args.tfds_data_dir}")
-            builder = tfds.builder(name, data_dir=args.tfds_data_dir)
-            builder.download_and_prepare(download_config=tfds.download.DownloadConfig(manual_dir=args.outpath))
-            print(f"TFDS ready: {builder.info.full_name}")
 
 
 if __name__ == "__main__":

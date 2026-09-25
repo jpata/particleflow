@@ -24,11 +24,10 @@ set -euo pipefail
 #   # same but for the pu200 sample (third arg is the pileup label, default pu0):
 #   sbatch --array=0-19 scripts/flatiron/colliderml_convert_array.sh 0 100 pu200
 #
-#   # convert + TFDS build (requires every shard already exists in the range):
-#   sbatch scripts/flatiron/colliderml_convert_array.sh 0 100 pu0 --tfds
-#
 #   # custom output dir (4th positional arg; --export=NONE means env vars don't propagate):
 #   sbatch --array=0-19 scripts/flatiron/colliderml_convert_array.sh 0 100 pu0 /path/to/outdir
+#
+# TFDS building is a separate step: scripts/flatiron/colliderml_tfds.sh
 #
 #   # to bound concurrent array tasks: append %N to the range, e.g. --array=0-99%50
 #
@@ -43,11 +42,6 @@ PU="${3:-pu0}"
 # Optional 4th positional arg: output dir override. Jobs run with --export=NONE, so pass it
 # positionally; COLLIDERML_OUT_DIR below only helps direct/local runs.
 OUTDIR_ARG="${4:-}"
-if [ "${OUTDIR_ARG}" = "--tfds" ]; then OUTDIR_ARG=""; fi
-DO_TFDS=""
-for arg in "$@"; do
-  if [ "${arg}" = "--tfds" ]; then DO_TFDS="1"; fi
-done
 
 # In array mode the range [S0, S1) is split evenly across the tasks: N tasks each take
 # ceil(shards/N) shards. SLURM_ARRAY_TASK_{ID,MIN,MAX} come from the scheduler.
@@ -65,13 +59,6 @@ if [ -n "${SLURM_ARRAY_TASK_ID:-}" ]; then
   if [ "$S0" -ge "$RANGE_END" ]; then
     echo "array task ${SLURM_ARRAY_TASK_ID} is beyond the shard range; nothing to do"
     exit 0
-  fi
-  if [ -n "${DO_TFDS}" ]; then
-    # TFDS build needs every shard in [S0, S1); --array gives each task only a slice and
-    # the build would refuse. Fail fast.
-    echo "ERROR: --tfds is not allowed in array mode" >&2
-    echo "  run an array conversion first, then a separate non-array job with --tfds" >&2
-    exit 2
   fi
 fi
 echo "converting shards [${S0}, ${S1}) on $(hostname)${SLURM_ARRAY_TASK_ID:+ (array task ${SLURM_ARRAY_TASK_ID})}"
@@ -94,12 +81,6 @@ mkdir -p "${OUT_DIR}"
 # to args if that becomes common).
 ALGO="bfs_merge"
 MERGE_FRAC="0.25"
-TFDS_DATA_DIR="/mnt/ceph/users/ewulff/tensorflow_datasets/colliderml"
-
-EXTRA_ARGS=()
-if [ -n "${DO_TFDS}" ]; then
-  EXTRA_ARGS+=(--tfds --tfds-data-dir "${TFDS_DATA_DIR}")
-fi
 
 ${PYTHON} -m mlpf.data.colliderml.postprocessing \
     --input "${SOURCE_DIR}" \
@@ -107,6 +88,5 @@ ${PYTHON} -m mlpf.data.colliderml.postprocessing \
     --outpath "${OUT_DIR}" \
     --shards "${S0}:${S1}" \
     --algorithm "${ALGO}" \
-    --merge-frac "${MERGE_FRAC}" \
-    "${EXTRA_ARGS[@]}"
+    --merge-frac "${MERGE_FRAC}"
 echo "done"
