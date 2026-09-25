@@ -54,6 +54,15 @@ def iter_event_records(
         return ak.Record({f: table[f][i] for f in table.fields if f != "event_id"})
 
     for tables in zip(*[_iter_table_batches(p, batch_size) for p in paths]):
+        # Strip the parquet option level so downstream sees plain ndarrays, not MaskedArrays
+        # (option types make per-element access slow). Assert the tables carry no Nones.
+        for t in tables:
+            for f in t.fields:
+                if f == "event_id":
+                    continue
+                if ak.any(ak.is_none(t[f])):
+                    raise ValueError(f"unexpected None entries in field {f}")
+                t[f] = ak.fill_none(t[f], 0)
         ids = [np.asarray(ak.to_numpy(t["event_id"])) for t in tables]
         if any(not np.array_equal(i, ids[0]) for i in ids[1:]):
             raise RuntimeError("event_id mismatch between particles/tracks/calo_hits/tracker_hits")

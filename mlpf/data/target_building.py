@@ -15,9 +15,30 @@ from typing import Any, Dict, List, Tuple
 
 import awkward
 import fastjet
+import numba
 import numpy as np
 import vector
 from scipy.sparse import coo_matrix
+
+
+@numba.njit
+def _segment_argmax_first(indptr: np.ndarray, indices: np.ndarray, data: np.ndarray, out: np.ndarray) -> None:
+    """out[j] = indices[k] of the first maximum data value in segment [indptr[j], indptr[j+1]).
+
+    First-occurrence tie-break matches np.argmax on a column whose row indices are ascending
+    (canonical CSR/CSC), which is the dense argmax(axis=0) tie-break this replaces.
+    """
+    for j in range(len(out)):
+        s, e = indptr[j], indptr[j + 1]
+        if e > s:
+            best = data[s]
+            bi = indices[s]
+            for k in range(s + 1, e):
+                if data[k] > best:
+                    best = data[k]
+                    bi = indices[k]
+            out[j] = bi
+
 
 # Type aliases for clarity
 SparseMatrixCOO = Tuple[np.ndarray, np.ndarray, np.ndarray]
@@ -267,11 +288,11 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     gp_to_cluster.eliminate_zeros()
 
     def _col_argmax_and_mask(m_sp):
+        # segment argmax per CSC column; first occurrence wins ties (column indices ascend),
+        # exactly the dense argmax(axis=0) tie-break on a nonnegative matrix
         csc = m_sp.tocsc()
         out = -1 * np.ones(m_sp.shape[1], dtype=np.int32)
-        for j in np.nonzero(np.diff(csc.indptr))[0]:
-            s, e = csc.indptr[j], csc.indptr[j + 1]
-            out[j] = csc.indices[s + np.argmax(csc.data[s:e])]
+        _segment_argmax_first(csc.indptr, csc.indices, csc.data, out)
         return out
 
     def _row_sorted_by_weight(m_sp, i):

@@ -31,6 +31,7 @@
 #   * energy-conserving: every retained hit belongs to exactly one cluster
 from typing import Dict, List, Tuple
 
+import numba
 import numpy as np
 from scipy.spatial import cKDTree
 
@@ -47,6 +48,57 @@ DEFAULT_REGION_RADII_MM = {
     14: 90.0,  # HCAL endcap +
 }
 DEFAULT_MERGE_FRAC = 0.25
+
+
+@numba.njit
+def _build_csr_adjacency(src: np.ndarray, dst: np.ndarray, deg: np.ndarray, n_hit: int):
+    """Counting-sort fill of CSR adjacency; within-group order = original edge order,
+    content-identical to `dst[np.argsort(src, kind="stable")]` (deterministic, O(n))."""
+    indptr = np.empty(n_hit + 1, np.int64)
+    indptr[0] = 0
+    for i in range(n_hit):
+        indptr[i + 1] = indptr[i] + deg[i]
+    fill = indptr[:-1].copy()
+    adj = np.empty(len(dst), np.int64)
+    for k in range(len(dst)):
+        adj[fill[src[k]]] = dst[k]
+        fill[src[k]] += 1
+    return adj, indptr
+
+
+@numba.njit
+def _wavefront_bfs(seed_idx: np.ndarray, adj: np.ndarray, indptr: np.ndarray, hops: np.ndarray, seed_of: np.ndarray) -> None:
+    """Multi-source BFS by hop count; within a hop a hit takes the minimum-priority seed that
+    reaches it (priority = seed order by stable rank). Imperative version of the per-hop
+    lexsort/dedupe numpy wavefront, with identical hop/seed assignments."""
+    n = hops.shape[0]
+    hop_inf = n + 2
+    hops[seed_idx] = 0
+    for k in range(len(seed_idx)):
+        seed_of[seed_idx[k]] = k
+    cand_min = np.empty(n, dtype=np.int64)  # per-candidate min seed-priority this hop
+    cand_min[:] = hop_inf
+    frontier = seed_idx.copy()
+    frontier_prio = np.arange(len(seed_idx), dtype=np.int64)
+    hop = 0
+    while len(frontier) > 0:
+        cand_min[:] = hop_inf
+        for f in range(len(frontier)):
+            node = frontier[f]
+            prio = frontier_prio[f]
+            for e in range(indptr[node], indptr[node + 1]):
+                c = adj[e]
+                if hops[c] == hop_inf and prio < cand_min[c]:
+                    cand_min[c] = prio
+        m = cand_min != hop_inf
+        cand = np.nonzero(m)[0]
+        if len(cand) == 0:
+            break
+        hops[cand] = hop + 1
+        seed_of[cand] = cand_min[cand]
+        frontier = cand
+        frontier_prio = cand_min[cand]
+        hop += 1
 
 
 def _stable_rank(E: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
@@ -76,6 +128,8 @@ def _pair_graph(
     regions = np.unique(det)
     index_of = {int(r): np.where(det == r)[0] for r in regions}
     trees = {r: cKDTree(pts[idx]) for r, idx in index_of.items()}
+    # per-region coordinate bounds, for skipping provably-empty cross-region queries
+    bounds = {r: (pts[idx].min(axis=0), pts[idx].max(axis=0)) for r, idx in index_of.items()}
 
     pis, pjs = [], []
     for ai, a in enumerate(regions):
@@ -93,6 +147,12 @@ def _pair_graph(
         for b in (int(r) for r in regions[ai + 1 :]):
             rab = max(ra, float(radii_mm[b]))
             ib = index_of[b]
+            # exact skip: if the regions' coordinate bounding boxes are rab-disjoint, no pair
+            # can lie within rab (ODD's regions are radially well-separated, so this skips
+            # most ball-tree walks, which returned ~0 pairs anyway)
+            (amin, amax), (bmin, bmax) = bounds[a], bounds[b]
+            if np.any(bmin > amax + rab) or np.any(amin > bmax + rab):
+                continue
             for li, ljs in enumerate(trees[a].query_ball_tree(trees[b], rab)):
                 if ljs:
                     segments.append((np.full(len(ljs), ia[li], dtype=np.int64), ib[np.asarray(ljs, dtype=np.int64)], rab))
@@ -217,14 +277,13 @@ def _cluster_event_bfs(
         cluster_of = np.arange(n_hit, dtype=np.int64)
         return cluster_of, _build_features(x, y, z, E, detector, cluster_of), _make_hit_to_cluster(cluster_of), _cluster_region(cluster_of, detector)
 
-    # CSR adjacency of the link graph. Within a hop the BFS assigns each hit the
-    # minimum-priority seed that reaches it, so neighbor *order* cannot change the outcome.
+    # CSR adjacency of the link graph, built by counting sort (fill order = edge order, same
+    # content as a stable argsort). Within a hop the BFS assigns each hit the minimum-priority
+    # seed that reaches it, so neighbor *order* cannot change the outcome.
     src = np.concatenate([pi, pj])
     dst = np.concatenate([pj, pi])
     deg = np.bincount(src, minlength=n_hit)
-    indptr = np.concatenate([[0], np.cumsum(deg)]).astype(np.int64)
-    adj = dst[np.argsort(src, kind="stable")]
-    nbs = np.split(adj, indptr[1:-1])
+    adj, indptr = _build_csr_adjacency(src, dst, deg, n_hit)
 
     # seeds = strict local maxima within this link graph: no neighbor with LARGER energy
     # (equal-energy neighbors are both seeds; isolated hits are seeds)
@@ -242,30 +301,11 @@ def _cluster_event_bfs(
     hop_inf = n_hit + 2
     hops = np.full(n_hit, hop_inf, dtype=np.int64)
     seed_of = -np.ones(n_hit, dtype=np.int64)
+    _wavefront_bfs(np.asarray(seed_idx, dtype=np.int64), adj, indptr, hops, seed_of)
 
-    frontier = np.asarray(seed_idx, dtype=np.int64)  # seed_idx is already priority-sorted
-    frontier_prio = np.arange(len(seed_idx), dtype=np.int64)
-    hop = 0
-    while len(frontier):
-        hops[frontier] = hop
-        seed_of[frontier] = frontier_prio
-        # expand all frontier edges in one go via the CSR adjacency
-        counts = deg[frontier]
-        e0 = np.repeat(indptr[frontier], counts)
-        offs = np.arange(counts.sum()) - np.repeat(np.cumsum(counts) - counts, counts)
-        cand = adj[e0 + offs]
-        cand_prio = np.repeat(frontier_prio, counts)
-        # unvisited candidates only
-        m = hops[cand] == hop_inf
-        cand, cand_prio = cand[m], cand_prio[m]
-        if len(cand) == 0:
-            break
-        # next frontier: each candidate node once, with its minimum seed priority
-        order = np.lexsort((cand_prio, cand))
-        cand, cand_prio = cand[order], cand_prio[order]
-        first = np.concatenate([[True], cand[1:] != cand[:-1]])
-        frontier, frontier_prio = cand[first], cand_prio[first]
-        hop += 1
+    # lazy neighbor slices: only the leftover-component path needs them (usually empty)
+    def _nbs(i):
+        return adj[indptr[i] : indptr[i + 1]]
 
     # unlinked components (hops == inf due to isolated subgraphs): build connected components
     unreached = np.where(hops == hop_inf)[0]
@@ -279,7 +319,7 @@ def _cluster_event_bfs(
         stack = [int(u)]
         while stack:
             cur = stack.pop()
-            for nb in nbs[cur]:
+            for nb in _nbs(cur):
                 if hops[nb] == hop_inf and not seen[nb]:
                     seen[nb] = True
                     comp.append(nb)
@@ -297,6 +337,49 @@ def _cluster_event_bfs(
     if merge_frac > 0.0:
         cluster_of = _merge_bfs_clusters(cluster_of, E, x, y, z, pi, pj, stable_rank, merge_frac)
     return cluster_of, _build_features(x, y, z, E, detector, cluster_of), _make_hit_to_cluster(cluster_of), _cluster_region(cluster_of, detector)
+
+
+@numba.njit
+def _uf_find(uf: np.ndarray, v: int) -> int:
+    root = v
+    while uf[root] != root:
+        root = uf[root]
+    while uf[v] != root:
+        uf[v], v = root, uf[v]
+    return root
+
+
+@numba.njit
+def _merge_union_loop(
+    edges_a: np.ndarray,
+    edges_b: np.ndarray,
+    order_edges: np.ndarray,
+    cluster_E: np.ndarray,
+    best_rank: np.ndarray,
+    uf: np.ndarray,
+    merge_frac: float,
+) -> None:
+    """Cluster-pair union-find loop for the fragment merge; identical to the python loop it
+    replaces (same candidate order, same two-by-two energy/rank tie-breaks), just compiled."""
+    for oi in order_edges:
+        ra = _uf_find(uf, edges_a[oi])
+        rb = _uf_find(uf, edges_b[oi])
+        if ra == rb:
+            continue
+        if cluster_E[ra] <= cluster_E[rb]:
+            lo, hi = ra, rb
+        else:
+            lo, hi = rb, ra
+        if cluster_E[lo] > merge_frac * cluster_E[hi]:
+            continue  # fragment too heavy: probably a distinct comparably-energetic shower
+        # attach by stable rank for determinism
+        if best_rank[lo] < best_rank[hi]:
+            root, child = lo, hi
+        else:
+            root, child = hi, lo
+        uf[child] = root
+        cluster_E[root] += cluster_E[child]
+        cluster_E[child] = 0.0
 
 
 def _merge_bfs_clusters(
@@ -354,29 +437,14 @@ def _merge_bfs_clusters(
     order_edges = np.lexsort((best_rank[edges_b], best_rank[edges_a], -E_pair_max))
 
     uf = np.arange(n_clusters, dtype=np.int64)
+    _merge_union_loop(edges_a, edges_b, order_edges, cluster_E, best_rank, uf, merge_frac)
 
-    def _find(v: int) -> int:
-        root = v
-        while uf[root] != root:
-            root = uf[root]
-        while uf[v] != root:
-            uf[v], v = root, uf[v]
-        return root
-
-    for oi in order_edges:
-        ra, rb = _find(int(edges_a[oi])), _find(int(edges_b[oi]))
-        if ra == rb:
-            continue
-        lo, hi = (ra, rb) if cluster_E[ra] <= cluster_E[rb] else (rb, ra)
-        if cluster_E[lo] > merge_frac * cluster_E[hi]:
-            continue  # fragment too heavy: probably a distinct comparably-energetic shower
-        # attach by stable rank for determinism
-        root, child = (lo, hi) if best_rank[lo] < best_rank[hi] else (hi, lo)
-        uf[child] = root
-        cluster_E[root] += cluster_E[child]
-        cluster_E[child] = 0.0
-
-    labels = np.array([_find(v) for v in cluster_of], dtype=np.int64)
+    labels = cluster_of
+    while True:  # vectorized pointer-jump to roots (no path compression; final roots identical)
+        root = uf[labels]
+        if np.array_equal(root, labels):
+            break
+        labels = root
     uniq, inv = np.unique(labels, return_inverse=True)
     new_cluster_of = inv.astype(np.int64)
     n_new = len(uniq)

@@ -83,29 +83,47 @@ def _build_parent_maps(particles_ev: Dict[str, Any]):
     # `primary` is used only here (leaf = primary with no primary children); everything
     # downstream keys off `is_leaf`.
     primary = np.asarray(ak.to_numpy(particles_ev["primary"])).astype(bool)
-    index_of = {int(p): i for i, p in enumerate(pid)}
+    index_of: Dict[int, int] = {int(p): i for i, p in enumerate(pid)}
     parents_of_primary = {int(parent[i]) for i in np.where(primary)[0] if int(parent[i]) in index_of and primary[index_of[int(parent[i])]]}
     is_leaf = np.array([primary[i] and int(pid[i]) not in parents_of_primary for i in range(len(pid))], dtype=bool)
-    return pid, pdg, parent, is_leaf, index_of
+    return pid, pdg, parent, is_leaf
 
 
-def walk_to_leaf(particle_id: int, index_of: Dict[int, int], pid: np.ndarray, is_leaf: np.ndarray, parent: np.ndarray, max_depth: int = 256) -> int:
-    """Source index of the leaf primary that contains `particle_id`, or -1."""
-    depth = 0
-    i = index_of.get(int(particle_id), -1)
-    while i != -1 and depth < max_depth:
-        if is_leaf[i]:
-            return i
-        i = index_of.get(int(parent[i]), -1)
-        depth += 1
-    return -1
+def walk_to_leaf_many(particle_ids: np.ndarray, pid: np.ndarray, is_leaf: np.ndarray, parent: np.ndarray, max_depth: int = 256) -> np.ndarray:
+    """Vectorized walk_to_leaf over many ids: per id, the source row whose parent chain ends
+    in a leaf primary (row index), else -1."""
+    ids = np.asarray(particle_ids)
+    if len(ids) == 0:
+        return np.empty(0, np.int64)
+    order = np.argsort(pid, kind="stable")
+    pid_s = pid[order]
+
+    def row_of(v):
+        pos = np.clip(np.searchsorted(pid_s, v), 0, len(pid_s) - 1)
+        return np.where(pid_s[pos] == v, order[pos], -1)
+
+    cur = row_of(ids)
+    res = np.full(len(ids), -1, np.int64)
+    alive = cur >= 0
+    for _ in range(max_depth):
+        if not alive.any():
+            break
+        idx_alive = np.nonzero(alive)[0]
+        cur_alive = cur[alive]
+        leaf_now = is_leaf[cur_alive]
+        res[idx_alive[leaf_now]] = cur_alive[leaf_now]
+        cont = idx_alive[~leaf_now]
+        if len(cont) == 0:
+            break
+        cur[cont] = row_of(parent[cur_alive[~leaf_now]])
+        alive[cont[cur[cont] < 0]] = False
+    return res
 
 
 def _track_hit_fraction_links(
     tracks_ev: Dict[str, Any],
     tracker_ev: Dict[str, Any],
     leaf_row_to_local: np.ndarray,
-    index_of: Dict[int, int],
     pid: np.ndarray,
     is_leaf: np.ndarray,
     parent: np.ndarray,
@@ -132,7 +150,7 @@ def _track_hit_fraction_links(
 
     # walk each unique hit particle once, broadcast over all hit entries
     uniq, inv = np.unique(pid_of_hit, return_inverse=True)
-    leaf_of_uniq = np.asarray([walk_to_leaf(int(u), index_of, pid, is_leaf, parent) for u in uniq.tolist()], dtype=np.int64)
+    leaf_of_uniq = walk_to_leaf_many(uniq, pid, is_leaf, parent)
     leaf_global = leaf_of_uniq[inv]
     tracked = leaf_global != -1
     leaf_local = leaf_row_to_local[leaf_global[tracked]]
@@ -167,7 +185,7 @@ def compute_gen_tables(
     analogue).
     """
 
-    pid, pdg, parent, is_leaf, index_of = _build_parent_maps(particles_ev)
+    pid, pdg, parent, is_leaf = _build_parent_maps(particles_ev)
     leaf_indices = np.where(is_leaf)[0]
     n_leaf = len(leaf_indices)
     # neutrino leaf primaries: excluded from both gen/genref so they can
@@ -190,9 +208,8 @@ def compute_gen_tables(
     leaf_of_contrib = np.full(len(cid_flat), -1, dtype=np.int64)
     if len(cid_flat):
         uniq, inv = np.unique(cid_flat, return_inverse=True)
-        uniq = uniq.tolist()
-        uniq_leaf_id = [walk_to_leaf(int(u), index_of, pid, is_leaf, parent) for u in uniq]
-        leaf_id_flat = np.asarray(uniq_leaf_id, dtype=np.int64)[inv]
+        uniq_leaf_id = walk_to_leaf_many(uniq, pid, is_leaf, parent)
+        leaf_id_flat = uniq_leaf_id[inv]
         valid_flat = leaf_id_flat != -1
         leaf_of_contrib[valid_flat] = leaf_row_to_local[leaf_id_flat[valid_flat]]
 
@@ -216,7 +233,7 @@ def compute_gen_tables(
     # Link weights are per-track hit-ownership fractions (matching the key4hep
     # SiTracksMCTruthLink semantics). The visibility cut below applies the
     # key4hep gp_in_tracker rule (>= TRACK_HIT_FRACTION_MIN of a track's hits).
-    gp_to_track: SparseMatrixCOO = _track_hit_fraction_links(tracks_ev, tracker_ev, leaf_row_to_local, index_of, pid, is_leaf, parent, n_leaf)
+    gp_to_track: SparseMatrixCOO = _track_hit_fraction_links(tracks_ev, tracker_ev, leaf_row_to_local, pid, is_leaf, parent, n_leaf)
 
     # ---------------- per-leaf features ----------------
     # np.asarray strips nominal parquet-nullable masks (see _build_parent_maps note)
