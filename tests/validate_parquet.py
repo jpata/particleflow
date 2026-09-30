@@ -209,9 +209,6 @@ class ParquetValidator:
         self.input_path = Path(input_path)
         self.detector = detector
         # The B-field is used only by gate H3 (tracker-hit circle fits, pT = 0.0003*B*r).
-        # ColliderML has no tracker-hit targets (ytarget_hit_tracker is all zero), so H3
-        # finds no particles to fit and reports empty; the colliderml entry in
-        # EDM4HEP.DETECTORS exists mainly so this line reads the B-field uniformly.
         self.bfield = EDM4HEP.DETECTORS[detector].b_field
         self.has_configured_hits = bool(EDM4HEP.DETECTORS[detector].hit_collections)
         self.vis_range = VIS_RANGE_COLLIDERML if detector.startswith("colliderml") else VIS_RANGE
@@ -514,7 +511,7 @@ class ParquetValidator:
 
         def _norm_empty(a):
             # only zero-row events lose their column width in the parquet readback; non-empty
-            # hit tables keep their native width (key4hep 15-wide vs ColliderML 12-wide)
+            # hit tables keep their native width (the 15-wide EDM4hep layout, key4hep and ColliderML)
             return a.reshape(-1, n_hit_features) if a.size == 0 else a
 
         n_trk_hits = np.array([int(np.sum(_norm_empty(self.ev("X_hit_tracker", i))[:, X_ELEMTYPE] != 0)) for i in range(self.nev_used)])
@@ -688,8 +685,8 @@ class ParquetValidator:
         pos_trk = pn_trk = pos_cl = pn_cl = None
 
         # reshape only when the event is empty: the parquet readback drops the column width
-        # for zero-row events, while non-empty tables keep their native width (which differs
-        # between key4hep EDM4hep hit layouts and ColliderML's).
+        # for zero-row events, while non-empty tables keep their native width (the 15-wide
+        # EDM4hep hit layout).
         def _hit_ev_pair(fx, fy):
             x, y = self.ev(fx, iev), self.ev(fy, iev)
             if x.size == 0:
@@ -1247,12 +1244,7 @@ class ParquetValidator:
         else:
             # R2: deposited-energy fraction of target representatives
             fracs = []
-            # ColliderML tracks carry no calo deposit, so the check there runs on
-            # cluster reps + the hit-level calo table; key4hep keeps track+cluster reps.
-            if self.detector.startswith("colliderml"):
-                r2_fields = ["ytarget_cluster", "ytarget_hit_calo"]
-            else:
-                r2_fields = ["ytarget_track", "ytarget_cluster"]
+            r2_fields = ["ytarget_track", "ytarget_cluster"]
             fracs = []
             for f in r2_fields:
                 for i in range(self.nev_used):

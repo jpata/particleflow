@@ -70,11 +70,14 @@ def main():
 
         # run the allocator to get gp_to_obj (which cluster each gp owns, if any)
         # EventData needs the *lengths* of hit/cluster/track to size its matrices. Use typed
-        # filler arrays — only the length is ever read, never the values.
+        # filler arrays — only the length is ever read, never the values. The hit axis is the
+        # extended calo-then-tracker space (compute_gen_tables appends zero-weight tracker links
+        # at hit index n_hit + i), as in postprocessing.py.
         n_track = int(np.asarray(ak.to_numpy(ev["tracks"]["track_id"])).shape[0]) if "track_id" in ev["tracks"].fields else 0
+        n_tracker = len(ak.to_numpy(ev["tracker_hits"]["x"]))
         gd = EventData(
             gen_features,
-            {"type": np.zeros(n_hit, np.float32)},
+            {"type": np.zeros(n_hit + n_tracker, np.float32)},
             {"type": np.zeros(n_cluster, np.float32)},
             {"type": np.zeros(n_track, np.float32)},
             gp_to_hit,
@@ -100,8 +103,11 @@ def main():
         # by the allocator's post-cleaning gp index (same as gd2.gen_features rows). That is
         # the same index space as gpo_cleaned.
         gpi = np.asarray(gd2.genparticle_to_hit[0], np.int64)  # cleaned gp index
-        hi = np.asarray(gd2.genparticle_to_hit[1], np.int64)  # calo hit index
+        hi = np.asarray(gd2.genparticle_to_hit[1], np.int64)  # extended hit index
         w = np.asarray(gd2.genparticle_to_hit[2], np.float64)  # calibrated deposit weight
+        # keep the calo links only; the tracker tail (hi >= n_hit) belongs to no cluster
+        m_calo = hi < n_hit
+        gpi, hi, w = gpi[m_calo], hi[m_calo], w[m_calo]
 
         # per cleaned gp
         for j in range(n_cleaned):

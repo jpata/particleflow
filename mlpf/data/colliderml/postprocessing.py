@@ -3,8 +3,8 @@
 # For each source shard this produces one MLPF-format parquet with the same record layout as
 # the key4hep converters write:
 #   X_track, X_cluster, ytarget_track, ytarget_cluster,
-#   X_hit_tracker, ytarget_hit_tracker  (empty; ACTS track information lives in X_track),
-#   X_hit_calo,  ytarget_hit_calo       (one per raw colliderml calo hit),
+#   X_hit_tracker, ytarget_hit_tracker  (raw tracker hits; PN marks for target-owned hits),
+#   X_hit_calo,  ytarget_hit_calo       (raw calo hits; also hosts the exclusive target rows),
 #   genmet, genjet, targetjet, event_id
 # genmet/genjet are clustered from the *measurable truth* set (pre-visibility, pre-allocator,
 # see truth.py genref_features); targetjet from the ytarget representatives.
@@ -68,11 +68,9 @@ particle_feature_order = [
 ]
 track_feature_order = EDM4HEP.TrackFeatures.get_names()  # 16 names; only the first 11 are filled
 cluster_feature_order = EDM4HEP.ClusterFeatures.get_names()  # 17 names
-# EDM4hep hit layout used elsewhere in the codebase (X_hit already includes `type`); we write
-# only the hits that the current view actually contains. For the clustered view on ColliderML
-# the calo hits are the raw inputs we cluster over; the tracker hits exist in the release but
-# we model them indirectly via the tracks.
-_hit_feature_order = EDM4HEP.HitFeatures.get_names()  # 12 names
+# EDM4hep hit layout used elsewhere in the codebase (X_hit already includes `type`), shared by
+# X_hit_calo (the raw calo hits we also cluster over) and X_hit_tracker (the raw tracker hits).
+_hit_feature_order = EDM4HEP.HitFeatures.get_names()  # 15 names
 
 
 def _event_record_one(
@@ -83,6 +81,8 @@ def _event_record_one(
     tracker_ev: ak.Record,
     algorithm: str = "bfs_merge",
     merge_frac: float = 0.0,
+    event_index: int = -1,
+    shard_label: str = "",
 ) -> Dict[str, Any]:
     """Convert one ColliderML event into the MLPF record fields."""
     # raw inputs
@@ -135,10 +135,13 @@ def _event_record_one(
     n_cluster = len(cl_feats)
 
     # -- build EventData and run the shared allocator --------------------------
+    # The allocator indexes hits in the extended calo-then-tracker space (truth.py appends
+    # zero-weight tracker links with hit index offset by n_hit); the feature filler just needs
+    # that total length.
+    n_tracker = len(ak.to_numpy(tracker_ev["x"]))
     gpdata = EventData(
         gen_features,
-        {"type": np.zeros(n_hit, dtype=np.float32)},  # filler; key4hep fills a real matrix but the
-        # allocator only uses the length of the features
+        {"type": np.zeros(n_hit + n_tracker, dtype=np.float32)},  # filler; only the length is read
         {"type": np.zeros(n_cluster, dtype=np.float32)},
         {"type": tfeat["type"]},
         gp_to_hit,
@@ -150,7 +153,7 @@ def _event_record_one(
         assign_genparticles_to_obj_and_merge(gpdata)
     )
     n_gp = len(gpdata_cleaned.gen_features["PDG"])
-    del hit_to_gp_inclusive  # unused in the clustered view
+    del hit_to_gp_inclusive  # unused here (the hits view consumes the filtered COO directly)
 
     # exclusive-average + fill the canonical particle features, exactly like the key4hep
     # stage (lines ~1643-1694 in the pre-extraction postprocessing.py).
@@ -262,11 +265,12 @@ def _event_record_one(
 
     # -- calo-hit view -----------------------------------------------------------
     # X_hit_calo rows follow EDM4hep hit layout:
-    #   [ elemtype(2), et, eta, sin_phi, cos_phi, energy(=total_energy), x, y, z, time(0), subdetector(=region), type(0) ]
+    #   [ elemtype(2), et, eta, sin_phi, cos_phi, energy(=calibrated total_energy), x, y, z, time(0),
+    #     subdetector(=region), type(0), system(0), side(0), layer(0) ]
     # ytarget_hit_calo rows use the canonical particle_feature_order layout with:
-    #   * exactly one full-target row per cluster-represented truth particle (via gp_to_hit_idx from
-    #     the allocator); all other hits may carry particle_number but zero kinematics, so the
-    #     clustered and hit views agree on which elements carry truth information.
+    #   * exactly one full-target (exclusive) row per truth particle on its max-deposit
+    #     attributed hit (via the allocator's gp_to_hit_idx; key4hep parity), and
+    #   * particle_number marks on every hit inclusively attributed to a kept target.
     X_hit_calo = np.zeros((n_hit, len(_hit_feature_order)), dtype=np.float32)
     X_hit_calo[:, 0] = 2.0
     pos_mag = np.sqrt(hit_x**2 + hit_y**2 + hit_z**2)
@@ -289,35 +293,43 @@ def _event_record_one(
 
     ytarget_hit_calo = np.zeros((n_hit, len(particle_feature_order)), dtype=np.float32)
     # use the *post-merge* filtered hit adjacency (rows dropped by the allocator have
-    # already been filtered out of this COO list)
+    # already been filtered out of this COO list). Hit indices are in the extended
+    # calo-then-tracker space; the calo slice starts at 0.
     hit_to_gp_incl = np.array(gpdata_cleaned.genparticle_to_hit[0], dtype=np.int64)
     hit_to_hit_idx = np.array(gpdata_cleaned.genparticle_to_hit[1], dtype=np.int64)
     if len(hit_to_gp_incl):
         # inclusive: every hit of a (target-owned) genparticle picks up that particle's
         # particle_number so shower fragments are grouped
         pns = np.asarray(gps_canonical[hit_to_gp_incl, PN_IDX], dtype=np.float32)
-        ytarget_hit_calo[hit_to_hit_idx, PN_IDX] = pns
+        m_calo = hit_to_hit_idx < n_hit
+        ytarget_hit_calo[hit_to_hit_idx[m_calo], PN_IDX] = pns[m_calo]
+    # One exclusive full-target row per particle on its max-deposit attributed calo hit,
+    # which also makes the hit-level table the host of the target set for the
+    # hits view (set-prediction's build_target_set reads exactly these rows). The one
+    # exception: a target whose every hit was claim-stolen in the allocator's greedy race and
+    # that owns no tracker hits (a fully-stolen neutral, e.g. a soft PU photon on a single
+    # calo cell) gets no row and is absent from the hits-view target set.
+    n_excl_written = 0
     for igp in range(n_gp):
         h = int(gp_to_hit_idx[igp])
         if h != -1:
-            # exclusive hit if the particle is cluster-represented
-            if gp_to_obj[igp, 1] != -1:
-                ytarget_hit_calo[h, :] = gps_canonical[igp]
+            ytarget_hit_calo[h, :] = gps_canonical[igp]
+            n_excl_written += 1
     X_hit_calo_sanitized = X_hit_calo.copy()
     ytarget_hit_calo_sanitized = ytarget_hit_calo.copy()
     sanitize(X_hit_calo_sanitized)
     sanitize(ytarget_hit_calo_sanitized)
 
     # raw tracker hits from the release (tracker_hits table, subdetector=3, "tracker" in the
-    # key4hep HitFeatures convention). We keep only what the validator needs to run; the
-    # truth-label column is not filled because tracker hits are not PF targets (targets live
-    # on tracks/clusters), so PN on tracker hits stays 0 by construction. This block exists so
-    # tests/validate_parquet.py sees a "normal" HDF-hit layout on all detectors.
+    # key4hep HitFeatures convention). Hits view parity: tracker hits carry no energy, so they
+    # only get inclusive particle_number marks (from the truth walk in truth.py); the one
+    # exception is the exclusive fallback row below.
     tx = ak.to_numpy(tracker_ev["x"]).astype(np.float32)
     ty = ak.to_numpy(tracker_ev["y"]).astype(np.float32)
     tz = ak.to_numpy(tracker_ev["z"]).astype(np.float32)
     te = ak.to_numpy(tracker_ev["time"]).astype(np.float32)
-    n_tracker = len(tx)
+    # n_tracker was already computed for the allocator's EventData
+    assert n_tracker == len(tx)
     X_hit_tracker = np.zeros((n_tracker, len(_hit_feature_order)), dtype=np.float32)
     X_hit_tracker[:, 0] = 1.0  # elemtype: tracker
     # columns 1..5 (et/eta/sin_phi/cos_phi/E) are not meaningful for un-tracked tracker hits;
@@ -327,12 +339,42 @@ def _event_record_one(
     X_hit_tracker[:, 8] = tz
     X_hit_tracker[:, 9] = te
     X_hit_tracker[:, 10] = 3.0  # subdetector = tracker
-    # ytarget_hit_tracker is a zero format placeholder: unlike key4hep (cld/clic), ColliderML
-    # has no hits-view training dataset yet, so nothing consumes this array. Filling it would
-    # first require a gp->tracker-hit truth adjacency so charged particles can claim an
-    # exclusive tracker-hit representative (the key4hep hits-view pattern); release-1 tracker
-    # hits do carry per-hit truth particle_id, so the wiring is possible when needed.
-    ytarget_hit_tracker = np.zeros((X_hit_tracker.shape[0], len(particle_feature_order)), dtype=np.float32)
+    ytarget_hit_tracker = np.zeros((n_tracker, len(particle_feature_order)), dtype=np.float32)
+    if n_tracker:
+        # Inclusive marks: tag every tracker hit a kept target made with the owner's
+        # particle_number (tag only; the row stays background for training). Owners come from
+        # the cleaned adjacency's tracker tail (hit index >= n_hit, offset back by n_hit; at
+        # most one owner per hit, so this scatter cannot collide). hit_to_gp_inclusive can't
+        # serve here because eliminate_zeros dropped the zero-weight tracker links.
+        own_cleaned = np.full(n_tracker, -1, dtype=np.int64)
+        m_trk = hit_to_hit_idx >= n_hit
+        if np.any(m_trk):
+            own_cleaned[hit_to_hit_idx[m_trk] - n_hit] = hit_to_gp_incl[m_trk]
+            good = own_cleaned >= 0
+            if np.any(good):
+                ytarget_hit_tracker[good, PN_IDX] = gps_canonical[own_cleaned[good], PN_IDX]
+
+        # Exclusive fallback row: a target with no calo host (gp_to_hit_idx == -1, e.g. a MIP
+        # muon or a soft particle whose deposits were all claim-stolen) would vanish from the
+        # hits-view target set, so its target row is written on the innermost tracker
+        # hit it owns.
+        for igp in range(n_gp):
+            if int(gp_to_hit_idx[igp]) != -1:
+                continue
+            owned = np.nonzero(own_cleaned == igp)[0]
+            if len(owned) == 0:
+                continue
+            innermost = owned[np.argmin(np.hypot(tx[owned], ty[owned]))]
+            ytarget_hit_tracker[innermost, :] = gps_canonical[igp]
+            n_excl_written += 1
+
+    n_orphan = n_gp - n_excl_written
+    if n_orphan:
+        where = f" [{shard_label} event {event_index} (event_id {event_id})]" if shard_label else ""
+        print(
+            f"{n_orphan} of {n_gp} target(s) own no exclusive hit row (fully claim-stolen, no tracker hits);"
+            f" they are absent from the hits-view target set{where}"
+        )
 
     # -- target jets, gen jets, gen met ---------------------------------------
     ytarget_all = np.concatenate([ytarget_track, ytarget_cluster], axis=0)
@@ -499,15 +541,25 @@ def process_one_file(
             return n
 
         n_written = 0
-        for ev in tqdm.tqdm(
-            iter_events,
-            total=total,
-            desc=desc,
-            unit="event",
-            ncols=100,
+        for i, ev in enumerate(
+            tqdm.tqdm(
+                iter_events,
+                total=total,
+                desc=desc,
+                unit="event",
+                ncols=100,
+            )
         ):
             event = _event_record_one(
-                ev["event_id"], ev["particles"], ev["tracks"], ev["calo_hits"], ev["tracker_hits"], algorithm=algorithm, merge_frac=merge_frac
+                ev["event_id"],
+                ev["particles"],
+                ev["tracks"],
+                ev["calo_hits"],
+                ev["tracker_hits"],
+                algorithm=algorithm,
+                merge_frac=merge_frac,
+                event_index=i,
+                shard_label=Path(ofn).name,
             )
             out.append(event)
             del event

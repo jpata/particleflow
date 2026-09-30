@@ -594,21 +594,9 @@ X_FEATURES = {
         "Null | sigma_y",
         "Null | sigma_z",
     ],
-    Dataset.COLLIDERML_HITS.value: [
-        "type | elemtype",
-        "pt | et",
-        "eta | eta",
-        "sin_phi | sin_phi",
-        "cos_phi | cos_phi",
-        "p | energy",
-        "d0 | position.x",
-        "z0 | position.y",
-        "theta | position.z",
-        "qop | region",
-        "tanLambda | sigma_x",
-        "Null | sigma_y",
-        "Null | sigma_z",
-    ],
+    # ColliderML hits view mirrors the key4hep hits view (edm4hep_utils/utils_hits.py):
+    # hits in the 15-wide EDM4hep hit layout carry targets directly.
+    Dataset.COLLIDERML_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
 

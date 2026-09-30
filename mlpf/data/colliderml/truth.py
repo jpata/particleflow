@@ -170,7 +170,7 @@ def compute_gen_tables(
     tracks_ev: Dict[str, Any],
     calibration: Dict[int, float],
     tracker_ev: Dict[str, Any],
-) -> Tuple[Dict[str, np.ndarray], SparseMatrixCOO, SparseMatrixCOO]:
+) -> Tuple[Dict[str, np.ndarray], SparseMatrixCOO, SparseMatrixCOO, Dict[str, np.ndarray]]:
     """Return gen_features, gp_to_hit, gp_to_track, genref_features for one event.
 
     gen_features keys follow the MLPF target layout (pt/eta/phi + charge etc.). Only visible leaf
@@ -182,7 +182,8 @@ def compute_gen_tables(
     set used for the gen jet/MET reference.
 
     gp_to_track weights are per-track hit ownership fractions (key4hep SiTracksMCTruthLink
-    analogue).
+    analogue). gp_to_hit additionally carries zero-weight tracker-hit links (hit index is in the
+    extended space: calo hits first, then tracker hits) feeding the hits-view PN marks.
     """
 
     pid, pdg, parent, is_leaf = _build_parent_maps(particles_ev)
@@ -274,6 +275,29 @@ def compute_gen_tables(
         remapped = local_to_filtered[np.asarray(gp_to_track[0])]
         m = remapped >= 0
         gp_to_track_filtered = (remapped[m], np.asarray(gp_to_track[1], dtype=np.int64)[m], np.asarray(gp_to_track[2], dtype=np.float32)[m])
+
+    # ---------------- tracker hits (for the hits view) ----------------
+    # Zero-weight links in the extended hit index space (calo hits first, then tracker hits),
+    # so the shared allocator's post-merge filtering delivers target-owned tracker hits in the
+    # cleaned row order — the hits view's PN marks ride on those. Zero weight means they never
+    # enter the exclusive-claim race (CSR eliminate_zeros drops them). In key4hep tracker-hit
+    # eDeps simply lose that race to GeV-scale calo deposits.
+    th_pid = np.asarray(ak.to_numpy(tracker_ev["particle_id"])).astype(np.int64)
+    n_th = len(th_pid)
+    if n_th:
+        uniq, inv = np.unique(th_pid, return_inverse=True)
+        leaf_global = walk_to_leaf_many(uniq, pid, is_leaf, parent)[inv]
+        gp_rows = np.full(n_th, -1, dtype=np.int64)
+        ok = leaf_global != -1
+        gp_rows[ok] = local_to_filtered[leaf_row_to_local[leaf_global[ok]]]
+        m = gp_rows >= 0
+        if np.any(m):
+            add_cols = np.nonzero(m)[0] + n_hit  # tracker hits live after the calo hits
+            gp_to_hit_filtered = (
+                np.concatenate([np.asarray(gp_to_hit_filtered[0], dtype=np.int64), gp_rows[m]]),
+                np.concatenate([np.asarray(gp_to_hit_filtered[1], dtype=np.int64), add_cols]),
+                np.concatenate([np.asarray(gp_to_hit_filtered[2], dtype=np.float32), np.zeros(len(add_cols), dtype=np.float32)]),
+            )
 
     # One row per leaf primary on the leaf axis; gen/genref are slices of this table under
     # their respective masks. The gp columns are the leaf-axis aggregates:

@@ -82,10 +82,11 @@ def test_leaf_primary_selection_excludes_neutrinos_and_invisible():
     # exactly one track link for the pi+, with full hit share
     assert len(gp_to_track[0]) == 1
     assert np.allclose(gp_to_track[2], 1.0)
-    # two calo contributions both pointing to the pi0's local index
-    assert len(gp_to_hit[0]) == 2
+    # two calo contributions both pointing to the pi0's local index (the zero-weight tracker
+    # links gp_to_hit also carries are excluded here by weight)
+    assert int(np.sum(np.asarray(gp_to_hit[2]) > 0)) == 2
     gp_idx = int(gp_to_track[0][0])
-    hit_gp = set(int(g) for g in gp_to_hit[0])
+    hit_gp = set(int(g) for g in np.asarray(gp_to_hit[0])[np.asarray(gp_to_hit[2]) > 0])  # calo links only
     assert hit_gp == {int(g) for g in [0, 1] if g != gp_idx}
     # gp_to_track column = max hit share of the leaf's tracks (0 for untracked neutrals)
     assert np.isclose(gen["gp_to_track"][gen["PDG"] == 211][0], 1.0)
@@ -136,6 +137,30 @@ def test_track_visibility_requires_min_hit_share():
     np.testing.assert_allclose(sorted(gp_to_track[2]), [0.9, 1.0], atol=1e-6)
     # gp_to_track target column carries the max fraction
     assert np.isclose(gen["gp_to_track"][gen["PDG"] == 211][0], 1.0)
+
+
+def test_tracker_links_are_zero_weight_and_offset_past_calo():
+    # tracker hits join the hit adjacency at zero weight, offset past the calo hits
+    gen, gp_to_hit, _, _ = compute_gen_tables(
+        _particles_event0(), _calo_hits_event0(), _tracks_event0(), DEFAULT_CALIBRATION, tracker_ev=_tracker_hits_event0()
+    )
+    n_calo = 2
+    sel = np.asarray(gp_to_hit[1]) >= n_calo
+    assert np.asarray(gp_to_hit[2])[sel].tolist() == [0.0, 0.0, 0.0]
+    assert sorted((np.asarray(gp_to_hit[1])[sel] - n_calo).tolist()) == [0, 1, 2]
+    # the pi+ owns these hits (kept gen row with PDG 211)
+    pi_row = int(np.argmax(np.asarray(gen["PDG"]) == 211))
+    assert set(np.asarray(gp_to_hit[0])[sel].tolist()) == {pi_row}
+
+
+def test_tracker_links_skip_unknown_and_unkept_owners():
+    # hit owner id absent from the table and the neutrino leaf both yield no link
+    tracker = ak.Record({"particle_id": ak.Array([1, 999, 3])})
+    gen, gp_to_hit, _, _ = compute_gen_tables(_particles_event0(), _calo_hits_event0(), _tracks_event0(), DEFAULT_CALIBRATION, tracker_ev=tracker)
+    sel = np.asarray(gp_to_hit[1]) >= 2
+    # only the pi+-owned hit (tracker row 0) survives, at extended index 2
+    assert sel.sum() == 1
+    assert int(np.asarray(gp_to_hit[1])[sel][0]) == 2
 
 
 def _particles_event0_extended():
@@ -224,3 +249,4 @@ def test_class_forcing_helpers():
     assert map_charged_to_neutral(11) == 22
     assert map_neutral_to_charged(22) == 211
     assert map_neutral_to_charged(130) == 211
+

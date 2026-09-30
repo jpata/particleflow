@@ -28,7 +28,9 @@ def split_list(lst, x):
     return result
 
 
-def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
+def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9, gen_fn=None):
+    if gen_fn is None:
+        gen_fn = generate_examples
     files = sorted(list(path.glob("*.parquet")))
     print("Found {} files in {}".format(len(files), path))
     assert len(files) > 0
@@ -45,8 +47,8 @@ def split_sample(path, builder_config, num_splits=NUM_SPLITS, test_frac=0.9):
     assert len(files_test_split[split_index]) > 0
 
     return {
-        "train": generate_examples(files_train_split[split_index]),
-        "test": generate_examples(files_test_split[split_index]),
+        "train": gen_fn(files_train_split[split_index]),
+        "test": gen_fn(files_test_split[split_index]),
     }
 
 
