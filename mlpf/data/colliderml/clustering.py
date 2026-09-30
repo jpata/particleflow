@@ -327,10 +327,8 @@ def _cluster_event_bfs(
         components.append(sorted(comp, key=lambda i: stable_rank[i]))
 
     # final cluster labels: seeds 0..n_seeds-1, then leftover components
-    cluster_of = -np.ones(n_hit, dtype=np.int64)
-    for si in range(len(seed_idx)):
-        members = np.where(seed_of == si)[0]
-        cluster_of[members] = si
+    # (seed_of already holds the seed priority 0..n_seeds-1, or -1 for unreached hits)
+    cluster_of = seed_of.copy()
     for k, comp in enumerate(components):
         for i in comp:
             cluster_of[i] = len(seed_idx) + k
