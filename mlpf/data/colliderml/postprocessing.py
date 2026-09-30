@@ -345,25 +345,26 @@ def _event_record_one(
         hit_to_hit_idx = np.asarray(gpdata_cleaned.genparticle_to_hit[1], dtype=np.int64)
         own_cleaned = np.full(n_tracker, -1, dtype=np.int64)
         m_trk = hit_to_hit_idx >= n_hit
-        if np.any(m_trk):
-            own_cleaned[hit_to_hit_idx[m_trk] - n_hit] = hit_to_gp_incl[m_trk]
-            good = own_cleaned >= 0
-            if np.any(good):
-                ytarget_hit_tracker[good, PN_IDX] = gps_canonical[own_cleaned[good], PN_IDX]
+        own_cleaned[hit_to_hit_idx[m_trk] - n_hit] = hit_to_gp_incl[m_trk]
+        good = own_cleaned >= 0
+        ytarget_hit_tracker[good, PN_IDX] = gps_canonical[own_cleaned[good], PN_IDX]
 
         # Exclusive fallback row: a target with no calo host (gp_to_hit_idx == -1, e.g. a MIP
         # muon or a soft particle whose deposits were all claim-stolen) would vanish from the
         # hits-view target set, so its target row is written on the innermost tracker
-        # hit it owns.
-        for igp in range(n_gp):
-            if int(gp_to_hit_idx[igp]) != -1:
-                continue
-            owned = np.nonzero(own_cleaned == igp)[0]
-            if len(owned) == 0:
-                continue
-            innermost = owned[np.argmin(np.hypot(tx[owned], ty[owned]))]
-            ytarget_hit_tracker[innermost, :] = gps_canonical[igp]
-            n_excl_written += 1
+        # hit it owns. Sorting by (owner, radius, hit index) and keeping each owner's first hit
+        # picks that innermost hit.
+        needs_fallback = np.asarray(gp_to_hit_idx, dtype=np.int64) == -1
+        cand = np.nonzero(good)[0]
+        cand = cand[needs_fallback[own_cleaned[cand]]]
+        if len(cand):
+            order = np.lexsort((cand, np.hypot(tx[cand], ty[cand]), own_cleaned[cand]))
+            cand_sorted = cand[order]
+            owner_sorted = own_cleaned[cand_sorted]
+            first = np.ones(len(cand_sorted), dtype=bool)
+            first[1:] = owner_sorted[1:] != owner_sorted[:-1]
+            ytarget_hit_tracker[cand_sorted[first], :] = gps_canonical[owner_sorted[first]]
+            n_excl_written += int(first.sum())
 
     n_orphan = n_gp - n_excl_written
     if n_orphan:

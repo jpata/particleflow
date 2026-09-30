@@ -156,12 +156,16 @@ def _track_hit_fraction_links(
     leaf_local = leaf_row_to_local[leaf_global[tracked]]
     trk = trk_of_hit[tracked]
 
-    # per (leaf, track) hit share; hits without a reachable leaf dilute the fractions
-    counts = np.zeros((n_leaf, n_track), dtype=np.float64)
-    np.add.at(counts, (leaf_local, trk), 1.0)
-    frac = counts / np.maximum(n_hits_trk, 1).astype(np.float64)[None, :]
-    li, ti = np.nonzero(frac)
-    return li.astype(np.int64), ti.astype(np.int64), frac[li, ti].astype(np.float32)
+    # per (leaf, track) hit share; hits without a reachable leaf dilute the fractions. Count
+    # the (leaf, track) pairs sparsely — a dense n_leaf x n_track matrix is ~GB at pileup —
+    # in the same row-major order the dense np.nonzero produced.
+    if len(trk) == 0:
+        return _empty_coo()
+    key = np.asarray(leaf_local, dtype=np.int64) * np.int64(n_track) + trk
+    ukey, counts = np.unique(key, return_counts=True)
+    li, ti = ukey // n_track, ukey % n_track
+    frac = counts.astype(np.float64) / np.maximum(n_hits_trk[ti], 1).astype(np.float64)
+    return li.astype(np.int64), ti.astype(np.int64), frac.astype(np.float32)
 
 
 def compute_gen_tables(

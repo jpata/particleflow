@@ -1,5 +1,6 @@
 # Unit tests for the ColliderML converter's per-event record (hits view).
 import awkward as ak
+import numpy as np
 
 from mlpf.data.colliderml.postprocessing import _event_record_one, particle_feature_order
 
@@ -56,4 +57,17 @@ def test_calo_hit_pn_is_largest_contributor():
     # both photons are kept calo-hosted targets; particle_number follows leaf order (A=1, B=2)
     assert sorted(y[y[:, 0] != 0, PN].tolist()) == [1.0, 2.0]
     assert y[:, PN].tolist() == [1.0, 2.0, 1.0, 2.0]
+
+
+def test_target_without_calo_claim_falls_back_to_innermost_tracker_hit():
+    # The pi+ has no calo deposit, so its full target row lands on its innermost owned tracker
+    # hit (x=30 mm) while every owned tracker hit carries its particle_number. Tracker-hit
+    # kinematic inputs stay zero: the release has no tracker-hit energy.
+    particles, tracks, calo, tracker = _shared_hits_event()
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+
+    x, y = rec["X_hit_tracker"], rec["ytarget_hit_tracker"]
+    assert (y[:, 0] != 0).tolist() == [True, False, False]
+    assert y[:, PN].tolist() == [3.0, 3.0, 3.0]
+    assert np.all(x[:, 1:6] == 0.0)
 
