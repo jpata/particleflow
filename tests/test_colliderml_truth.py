@@ -1,8 +1,9 @@
 # Unit tests for ColliderML truth selection and attribution.
 import awkward as ak
 import numpy as np
+import pytest
 
-from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, NEUTRINO_PDGS, compute_gen_tables
+from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, NEUTRINO_PDGS, calibration_factors, compute_gen_tables
 from mlpf.data.target_building import (
     map_charged_to_neutral,
     map_neutral_to_charged,
@@ -250,3 +251,10 @@ def test_class_forcing_helpers():
     assert map_neutral_to_charged(22) == 211
     assert map_neutral_to_charged(130) == 211
 
+
+def test_calibration_factors_reject_unknown_regions():
+    k = calibration_factors(np.array([9, 12, 14]), DEFAULT_CALIBRATION)
+    assert k.dtype == np.float32 and k.tolist() == [np.float32(DEFAULT_CALIBRATION[d]) for d in (9, 12, 14)]
+    for bad in ([3], [15], [-1]):
+        with pytest.raises(ValueError, match="no calibration factor"):
+            calibration_factors(np.array([9] + bad), DEFAULT_CALIBRATION)

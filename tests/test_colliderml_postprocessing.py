@@ -1,8 +1,11 @@
 # Unit tests for the ColliderML converter's per-event record (hits view).
 import awkward as ak
 import numpy as np
+import pyarrow.parquet as pq
 
-from mlpf.data.colliderml.postprocessing import _event_record_one, particle_feature_order
+from mlpf.data.colliderml.make_test_fixture import make_fixture
+from mlpf.data.colliderml.postprocessing import _event_record_one, particle_feature_order, process_one_file
+from mlpf.data.colliderml.reader import shard_paths
 
 PN = particle_feature_order.index("particle_number")
 
@@ -71,3 +74,19 @@ def test_target_without_calo_claim_falls_back_to_innermost_tracker_hit():
     assert y[:, PN].tolist() == [3.0, 3.0, 3.0]
     assert np.all(x[:, 1:6] == 0.0)
 
+
+def test_resume_reconverts_partial_output_and_skips_complete_one(tmp_path):
+    make_fixture(tmp_path / "src", n_events=6)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+
+    def rows():
+        return pq.ParquetFile(ofn).metadata.num_rows
+
+    process_one_file(*paths, ofn, num_events=2)  # debug cap
+    assert rows() == 2
+    process_one_file(*paths, ofn)  # a full run must not take the capped file for done
+    assert rows() == 3
+    mtime = ofn.stat().st_mtime_ns
+    process_one_file(*paths, ofn)  # complete: skipped
+    assert ofn.stat().st_mtime_ns == mtime

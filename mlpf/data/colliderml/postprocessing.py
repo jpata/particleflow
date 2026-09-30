@@ -31,7 +31,7 @@ from mlpf.conf import EDM4HEP
 from mlpf.data.colliderml.clustering import cluster_event
 from mlpf.data.colliderml.reader import iter_event_records, shard_paths
 from mlpf.data.colliderml.tracks import track_features_cml
-from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, compute_gen_tables
+from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, calibration_factors, compute_gen_tables
 from mlpf.data.target_building import (
     EventData,
     assign_genparticles_to_obj_and_merge,
@@ -80,11 +80,15 @@ def _event_record_one(
     calo_ev: ak.Record,
     tracker_ev: ak.Record,
     algorithm: str = "bfs_merge",
-    merge_frac: float = 0.0,
+    merge_frac: float | None = None,
     event_index: int = -1,
     shard_label: str = "",
 ) -> Dict[str, Any]:
-    """Convert one ColliderML event into the MLPF record fields."""
+    """Convert one ColliderML event into the MLPF record fields.
+
+    merge_frac=None takes cluster_event's per-algorithm default (DEFAULT_MERGE_FRAC for
+    bfs_merge), the same resolution as the CLI.
+    """
     # raw inputs
     hit_x = ak.to_numpy(calo_ev["x"]).astype(np.float32)
     hit_y = ak.to_numpy(calo_ev["y"]).astype(np.float32)
@@ -127,8 +131,7 @@ def _event_record_one(
     tfeat = track_features_cml(tracks_ev)
 
     # -- clusters via the truth-blind spatial clusterer ------------------------
-    cl_detector_k = np.array([DEFAULT_CALIBRATION[int(r)] for r in hit_det], dtype=np.float32)
-    hit_e_calibrated = hit_e * cl_detector_k
+    hit_e_calibrated = hit_e * calibration_factors(hit_det, DEFAULT_CALIBRATION)
     cluster_of, cl_feats, hit_to_cluster, cluster_region = cluster_event(
         hit_x, hit_y, hit_z, hit_e_calibrated, hit_det, algorithm=algorithm, merge_frac=merge_frac
     )
@@ -467,19 +470,25 @@ def _batch_arrow_arrays(events_batch: List[Dict[str, Any]]):
     return [(k, _from_events(k, [r[k] for r in events_batch])) for k in events_batch[0]]
 
 
-def _parquet_usable(ofn: Path) -> bool:
-    """True iff the named parquet file exists and pyarrow can open it. A truncated write
-    crashes pyarrow on the footer, so corrupted outputs from a killed mid-shard job are
-    reconvertible instead of being mistaken for done by the resume logic."""
+def _parquet_usable(ofn: Path, expected_rows: int | None = None) -> bool:
+    """True iff the named parquet file exists, pyarrow can open it and (if given) it holds
+    expected_rows events. A truncated write crashes pyarrow on the footer, so corrupted outputs
+    from a killed mid-shard job are reconvertible instead of being mistaken for done by the
+    resume logic; the row count does the same for a --num-events partial output."""
     if not os.path.isfile(ofn):
         return False
     try:
         import pyarrow.parquet as pq
 
-        pq.ParquetFile(ofn)
+        n_rows = pq.ParquetFile(ofn).metadata.num_rows
     except Exception:
         return False
-    return True
+    return expected_rows is None or n_rows == expected_rows
+
+
+def _shard_done(ofn: Path, particles_fn: Path) -> bool:
+    """A full-shard output is done iff it is readable and holds every source event."""
+    return _parquet_usable(ofn, expected_rows=pq.ParquetFile(particles_fn).metadata.num_rows)
 
 
 def process_one_file(
@@ -492,15 +501,15 @@ def process_one_file(
     shard_index: int = 0,
     job_total_shards: int = 1,
     algorithm: str = "bfs_merge",
-    merge_frac: float = 0.0,
+    merge_frac: float | None = None,
 ) -> None:
-    if num_events == -1 and _parquet_usable(ofn):
+    if num_events == -1 and _shard_done(ofn, particles_fn):
         print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} already exists, skipping")
         return
-    if os.path.isfile(ofn) and not _parquet_usable(ofn):
-        # a corrupted leftover (e.g. from an OOM-killed job) just falls through to the
-        # convert + rename path below, which overwrites it atomically
-        print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} exists but is corrupted; reconverting")
+    if os.path.isfile(ofn) and num_events == -1:
+        # a corrupted leftover (e.g. from an OOM-killed job) or a partial --num-events output
+        # just falls through to the convert + rename path below, which overwrites it atomically
+        print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} exists but is corrupted or incomplete; reconverting")
 
     # events per shard from the parquet metadata (1000 for pu0, 100 for pu200); tqdm uses it
     # for the ETA. num_events (debug cap) overrides.
@@ -647,7 +656,8 @@ def main():
     n_done = 0
     for i, (p, t, c) in enumerate(zip(pa, tr, ch)):
         out_name = Path(args.outpath) / (p.stem + ".parquet")
-        if _parquet_usable(out_name):
+        # --num-events is a debug cap: always (re)write, and never count a capped output as done
+        if args.num_events == -1 and _shard_done(out_name, Path(p)):
             n_done += 1
             print(f"[shard {i + 1}/{n_files}] {out_name.name} already exists, skipping")
             continue

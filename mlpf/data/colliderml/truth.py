@@ -120,6 +120,25 @@ def walk_to_leaf_many(particle_ids: np.ndarray, pid: np.ndarray, is_leaf: np.nda
     return res
 
 
+def calibration_factors(detector: np.ndarray, calibration: Dict[int, float]) -> np.ndarray:
+    """Per-hit float32 calibration factor for an array of calo region codes.
+
+    Raises on a region code missing from `calibration`, rather than silently giving its
+    deposits weight 0 (the truth attribution and the clusterer input must agree).
+    """
+    detector = np.asarray(detector, dtype=np.int64)
+    calib_map = np.full(max(calibration) + 1, np.nan, dtype=np.float32)
+    for d, k in calibration.items():
+        calib_map[d] = k
+    if len(detector) == 0:
+        return np.zeros(0, dtype=np.float32)
+    known = (detector >= 0) & (detector < len(calib_map))
+    known[known] = ~np.isnan(calib_map[detector[known]])
+    if not np.all(known):
+        raise ValueError(f"calo region code(s) {np.unique(detector[~known]).tolist()} have no calibration factor (known: {sorted(calibration)})")
+    return calib_map[detector]
+
+
 def _track_hit_fraction_links(
     tracks_ev: Dict[str, Any],
     tracker_ev: Dict[str, Any],
@@ -221,10 +240,7 @@ def compute_gen_tables(
     det = np.asarray(ak.to_numpy(calo_ev["detector"]))
     det_flat = np.repeat(det, nctr_flat)
     # weight = raw contrib energy * region calibration (vectorized over the 6 named regions)
-    calib_map = np.zeros(max(calibration) + 1, dtype=np.float32)
-    for d, k in calibration.items():
-        calib_map[d] = k
-    calib_flat = calib_map[det_flat]
+    calib_flat = calibration_factors(det_flat, calibration)
     weight_flat = ce_flat.astype(np.float32, copy=False) * calib_flat
 
     m_valid = leaf_of_contrib >= 0
