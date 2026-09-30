@@ -1088,7 +1088,7 @@ models:
 
   # Hits view: TFDS builder mlpf/heptfds/colliderml_hits/ttbar.py -> colliderml_ttbar_hits
   # (converted from the ytarget_hit_* columns of the clustered-view parquet).
-  pyg-colliderml-hits-v1:
+  pyg-colliderml-hits-v1: &pyg_colliderml_hits_v1
     <<: *defaults
     dataset: colliderml_hits
     gpu_batch_multiplier: 8
@@ -1097,7 +1097,7 @@ models:
       batch_size: 1
       lr: 0.0001
 
-    architecture:
+    architecture: &pyg_colliderml_hits_architecture
       type: "attention"
       input_encoding: "split"
       attention:
@@ -1127,3 +1127,22 @@ models:
       - name: "colliderml_ttbar_hits"
         version: "1.0.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  # Set-prediction variant of the hits model (cf. pyg-cld-hits-set-v1). Regresses absolute
+  # log(pt), log(E), so it needs no per-element energy anchor (release-1 tracker hits have none).
+  # ttbar_pu0 has up to ~390 targets per event (p99 ~310), above the 256-slot default; pu200
+  # (~7.8k targets per event) is out of reach for set mode.
+  pyg-colliderml-hits-set-v1:
+    <<: *pyg_colliderml_hits_v1
+    gpu_batch_multiplier: 1
+    pad_to_multiple_elements: 128
+
+    architecture:
+      <<: *pyg_colliderml_hits_architecture
+      output_mode: "set"
+      set_decoder:
+        num_slots: 512
+        num_layers: 2
+        num_heads: 8
+        ffn_multiplier: 4.0
+        dropout: 0.0

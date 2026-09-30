@@ -97,13 +97,26 @@ def test_set_config_populates_decoder_defaults():
     assert config.model.set_decoder.matcher.dr_scale == 0.1
 
 
+def test_set_config_accepts_colliderml_hits():
+    config = MLPFConfig.model_validate(
+        {
+            "dataset": "colliderml_hits",
+            "data_dir": "/tmp",
+            "model": {"type": "heptv2", "output_mode": "set", "heptv2": {}},
+            "conv_type": "heptv2",
+        }
+    )
+
+    assert config.model.set_decoder is not None
+
+
 def test_set_config_rejects_local_attention_for_global_queries():
     with pytest.raises(ValueError, match="local_attention_radius requires"):
         make_config(local_attention_radius=0.4)
 
 
 def test_set_config_rejects_non_hit_datasets():
-    with pytest.raises(ValueError, match="supported only for CLD/CLIC hit datasets"):
+    with pytest.raises(ValueError, match="supported only for the CLD/CLIC/ColliderML hit datasets"):
         MLPFConfig.model_validate(
             {
                 "dataset": "cld",

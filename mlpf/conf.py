@@ -1178,8 +1178,8 @@ class MLPFConfig(BaseModel):
             if self.elemtypes_nonzero is None:
                 self.elemtypes_nonzero = ELEM_TYPES_NONZERO[self.dataset.value]
         if self.model.output_mode == OutputMode.SET:
-            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS):
-                raise ValueError("model.output_mode='set' is currently supported only for CLD/CLIC hit datasets")
+            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.COLLIDERML_HITS):
+                raise ValueError("model.output_mode='set' is currently supported only for the CLD/CLIC/ColliderML hit datasets")
             if self.model.set_decoder is None:
                 self.model.set_decoder = SetDecoderConfig()
             if self.model.backbone.mode != BackboneMode.SHARED:

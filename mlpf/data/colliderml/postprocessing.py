@@ -327,8 +327,10 @@ def _event_record_one(
     assert n_tracker == len(tx)
     X_hit_tracker = np.zeros((n_tracker, len(_hit_feature_order)), dtype=np.float32)
     X_hit_tracker[:, 0] = 1.0  # elemtype: tracker
-    # columns 1..5 (et/eta/sin_phi/cos_phi/E) are not meaningful for un-tracked tracker hits;
-    # zero them so no physics expectation is silently attached.
+    # columns 1..5 (et/eta/sin_phi/cos_phi/E) stay 0: release-1 tracker hits carry no energy.
+    # Consequence for the elementwise hits model: a target hosted on a tracker hit (the exclusive
+    # fallback below, ~0.05% of targets) has no element pt/E to anchor log(target / element),
+    # so its pt/E regression is lost there; set mode regresses absolute log(pt), log(E).
     X_hit_tracker[:, 6] = tx
     X_hit_tracker[:, 7] = ty
     X_hit_tracker[:, 8] = tz
