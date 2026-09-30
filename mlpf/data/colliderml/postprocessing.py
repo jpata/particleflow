@@ -153,7 +153,6 @@ def _event_record_one(
         assign_genparticles_to_obj_and_merge(gpdata)
     )
     n_gp = len(gpdata_cleaned.gen_features["PDG"])
-    del hit_to_gp_inclusive  # unused here (the hits view consumes the filtered COO directly)
 
     # exclusive-average + fill the canonical particle features, exactly like the key4hep
     # stage (lines ~1643-1694 in the pre-extraction postprocessing.py).
@@ -270,7 +269,7 @@ def _event_record_one(
     # ytarget_hit_calo rows use the canonical particle_feature_order layout with:
     #   * exactly one full-target (exclusive) row per truth particle on its max-deposit
     #     attributed hit (via the allocator's gp_to_hit_idx; key4hep parity), and
-    #   * particle_number marks on every hit inclusively attributed to a kept target.
+    #   * particle_number marks on every hit whose largest contributor is a kept target.
     X_hit_calo = np.zeros((n_hit, len(_hit_feature_order)), dtype=np.float32)
     X_hit_calo[:, 0] = 2.0
     pos_mag = np.sqrt(hit_x**2 + hit_y**2 + hit_z**2)
@@ -292,17 +291,13 @@ def _event_record_one(
     X_hit_calo[:, 11] = 0.0
 
     ytarget_hit_calo = np.zeros((n_hit, len(particle_feature_order)), dtype=np.float32)
-    # use the *post-merge* filtered hit adjacency (rows dropped by the allocator have
-    # already been filtered out of this COO list). Hit indices are in the extended
-    # calo-then-tracker space; the calo slice starts at 0.
-    hit_to_gp_incl = np.array(gpdata_cleaned.genparticle_to_hit[0], dtype=np.int64)
-    hit_to_hit_idx = np.array(gpdata_cleaned.genparticle_to_hit[1], dtype=np.int64)
-    if len(hit_to_gp_incl):
-        # inclusive: every hit of a (target-owned) genparticle picks up that particle's
-        # particle_number so shower fragments are grouped
-        pns = np.asarray(gps_canonical[hit_to_gp_incl, PN_IDX], dtype=np.float32)
-        m_calo = hit_to_hit_idx < n_hit
-        ytarget_hit_calo[hit_to_hit_idx[m_calo], PN_IDX] = pns[m_calo]
+    # inclusive: a calo hit carries the particle_number of its largest contributor, if that
+    # contributor is a kept target (the allocator's hit_to_gp_inclusive, already in cleaned
+    # row order; -1 when the top contributor was merged away or dropped).
+    # The extended hit axis puts calo hits first, so the calo slice is [:n_hit].
+    calo_to_gp_incl = np.asarray(hit_to_gp_inclusive[:n_hit], dtype=np.int64)
+    m_incl = calo_to_gp_incl != -1
+    ytarget_hit_calo[m_incl, PN_IDX] = gps_canonical[calo_to_gp_incl[m_incl], PN_IDX]
     # One exclusive full-target row per particle on its max-deposit attributed calo hit,
     # which also makes the hit-level table the host of the target set for the
     # hits view (set-prediction's build_target_set reads exactly these rows). The one
@@ -346,6 +341,8 @@ def _event_record_one(
         # the cleaned adjacency's tracker tail (hit index >= n_hit, offset back by n_hit; at
         # most one owner per hit, so this scatter cannot collide). hit_to_gp_inclusive can't
         # serve here because eliminate_zeros dropped the zero-weight tracker links.
+        hit_to_gp_incl = np.asarray(gpdata_cleaned.genparticle_to_hit[0], dtype=np.int64)
+        hit_to_hit_idx = np.asarray(gpdata_cleaned.genparticle_to_hit[1], dtype=np.int64)
         own_cleaned = np.full(n_tracker, -1, dtype=np.int64)
         m_trk = hit_to_hit_idx >= n_hit
         if np.any(m_trk):
