@@ -57,8 +57,7 @@ for ((r=0; r<N; r++)); do
   echo "  rank ${r}: shards [${RSTART}, $(( RSTART + RLEN )))"
 done
 
-CONDA_ENV=/mnt/home/ewulff/miniforge3/envs/mlpf
-PYTHON=${CONDA_ENV}/bin/python
+PYTHON=/mnt/home/ewulff/repositories/particleflow/.venv/bin/python
 export PYTHONPATH="/mnt/home/ewulff/repositories/particleflow"
 export KERAS_BACKEND=torch
 

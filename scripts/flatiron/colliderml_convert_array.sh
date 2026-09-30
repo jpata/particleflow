@@ -63,8 +63,7 @@ if [ -n "${SLURM_ARRAY_TASK_ID:-}" ]; then
 fi
 echo "converting shards [${S0}, ${S1}) on $(hostname)${SLURM_ARRAY_TASK_ID:+ (array task ${SLURM_ARRAY_TASK_ID})}"
 
-CONDA_ENV=/mnt/home/ewulff/miniforge3/envs/mlpf
-PYTHON=${CONDA_ENV}/bin/python
+PYTHON=/mnt/home/ewulff/repositories/particleflow/.venv/bin/python
 export PYTHONPATH="/mnt/home/ewulff/repositories/particleflow"
 export KERAS_BACKEND=torch
 
