@@ -107,3 +107,38 @@ def test_merge_host_tie_breaks_on_lowest_cluster_index():
 
     assert list(zip(np.asarray(cleaned.gp_merges[0]).astype(int), np.asarray(cleaned.gp_merges[1]).astype(int))) == [(0, 3)]
 
+
+def _two_particle_event(gp_to_hit, n_hits, hit_clusters):
+    return dataclasses.replace(
+        make_eventdata([100.0, 5.0], cluster_weights=[1.0, 1.0]),
+        hit_features=ak.Array({"type": [0] * n_hits}),
+        cluster_features=ak.Array({"type": [0] * (max(hit_clusters) + 1)}),
+        genparticle_to_hit=tuple(np.asarray(a) for a in gp_to_hit),
+        hit_to_cluster=(np.arange(n_hits, dtype=np.int32), np.asarray(hit_clusters, dtype=np.int32), np.ones(n_hits)),
+    )
+
+
+def test_negative_weight_hit_is_never_claimed():
+    # gp1's only link is a negative weight on hit 1. It may still own that cluster (the dense
+    # code sorted all nonzero cluster weights), but no hit representative: only weights > 0
+    # can be claimed.
+    gpdata = _two_particle_event(([0, 1], [0, 1], [10.0, -0.5]), n_hits=2, hit_clusters=[0, 1])
+
+    _, gp_to_obj, gp_to_hit_idx, *_ = pp.assign_genparticles_to_obj_and_merge(gpdata)
+
+    assert gp_to_obj[:, 1].tolist() == [0, 1]
+    assert gp_to_hit_idx.tolist() == [0, -1]
+
+
+def test_unmatched_particle_with_only_negative_cluster_weight_is_dropped():
+    # gp1 loses cluster 0 to gp0 and has no positive cluster weight, so there is no merge
+    # host: it is dropped (and accounted), not merged into gp0.
+    gpdata = _two_particle_event(([0, 1], [0, 0], [10.0, -1.0]), n_hits=1, hit_clusters=[0])
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        cleaned, *_ = pp.assign_genparticles_to_obj_and_merge(gpdata)
+
+    assert len(cleaned.gp_merges[0]) == 0
+    assert "Dropped 1 unmatched genparticles" in buf.getvalue()
+    assert np.asarray(ak.to_numpy(cleaned.gen_features["energy"])).tolist() == [100.0]

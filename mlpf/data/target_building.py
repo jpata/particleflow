@@ -22,11 +22,13 @@ from scipy.sparse import coo_matrix
 
 
 @numba.njit
-def _segment_argmax_first(indptr: np.ndarray, indices: np.ndarray, data: np.ndarray, out: np.ndarray) -> None:
-    """out[j] = indices[k] of the first maximum data value in segment [indptr[j], indptr[j+1]).
+def _segment_argmax_first(indptr: np.ndarray, indices: np.ndarray, data: np.ndarray, n_rows: int, out: np.ndarray) -> None:
+    """Sparse equivalent of the dense `argmax(axis=0)` + "column max == 0 -> -1" mapping.
 
+    out[j] = indices[k] of the first maximum data value in segment [indptr[j], indptr[j+1]).
     First-occurrence tie-break matches np.argmax on a column whose row indices are ascending
-    (canonical CSR/CSC), which is the dense argmax(axis=0) tie-break this replaces.
+    (canonical CSR/CSC). Stored values are nonzero (eliminate_zeros), so a column whose best
+    stored value is negative has dense max 0 (-> -1) unless all n_rows entries are stored.
     """
     for j in range(len(out)):
         s, e = indptr[j], indptr[j + 1]
@@ -37,7 +39,8 @@ def _segment_argmax_first(indptr: np.ndarray, indices: np.ndarray, data: np.ndar
                 if data[k] > best:
                     best = data[k]
                     bi = indices[k]
-            out[j] = bi
+            if best > 0 or e - s == n_rows:
+                out[j] = bi
 
 
 # Type aliases for clarity
@@ -291,11 +294,11 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     gp_to_cluster.sort_indices()
 
     def _col_argmax_and_mask(m_sp):
-        # segment argmax per CSC column; first occurrence wins ties (column indices ascend),
-        # exactly the dense argmax(axis=0) tie-break on a nonnegative matrix
+        # segment argmax per CSC column; first occurrence wins ties (row indices ascend),
+        # exactly the dense argmax(axis=0) + "max == 0 -> -1" result
         csc = m_sp.tocsc()
         out = -1 * np.ones(m_sp.shape[1], dtype=np.int32)
-        _segment_argmax_first(csc.indptr, csc.indices, csc.data, out)
+        _segment_argmax_first(csc.indptr, csc.indices, csc.data, m_sp.shape[0], out)
         return out
 
     def _row_sorted_by_weight(m_sp, i):
@@ -349,8 +352,8 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     gp_to_hit_idx = -1 * np.ones(n_gp, dtype=np.int32)
     set_used_hits = set([])
     for igp in gps_sorted_energy:
-        hits, _ = _row_sorted_by_weight(gp_to_hit, igp)
-        for ihit in hits:
+        hits, w_hits = _row_sorted_by_weight(gp_to_hit, igp)
+        for ihit in hits[w_hits > 0]:  # only positive-weight hits can be claimed
             if ihit not in set_used_hits:
                 gp_to_hit_idx[igp] = ihit
                 set_used_hits.add(ihit)
@@ -373,10 +376,13 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     for igp_unmatched in unmatched:
         mask_gp_unmatched[igp_unmatched] = False
 
-        # find closest cluster that this particle is matched to
+        # find closest cluster that this particle is matched to (positive weights only: the
+        # host is the dense row argmax, which requires some cluster weight > 0)
         s, e = gp_to_cluster.indptr[igp_unmatched], gp_to_cluster.indptr[igp_unmatched + 1]
-        if n_cluster > 0 and e > s:
-            idx_best_cluster = gp_to_cluster.indices[s + np.argmax(gp_to_cluster.data[s:e])]
+        cl_idx, cl_w = gp_to_cluster.indices[s:e], gp_to_cluster.data[s:e]
+        cl_idx, cl_w = cl_idx[cl_w > 0], cl_w[cl_w > 0]
+        if n_cluster > 0 and len(cl_w) > 0:
+            idx_best_cluster = cl_idx[np.argmax(cl_w)]
             # get the first genparticle matched to that cluster
             idx_gp_bestcluster = np.where(gp_to_obj[:, 1] == idx_best_cluster)[0]
         else:
