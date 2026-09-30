@@ -1,6 +1,7 @@
 """Unit tests for the genparticle merge accounting in the Key4hep postprocessing."""
 
 import contextlib
+import dataclasses
 import io
 
 import awkward as ak
@@ -83,3 +84,26 @@ def test_particle_without_cluster_host_is_dropped_but_accounted():
     assert after_e[0] == pytest.approx(160.0, abs=1e-6)
     assert "Dropped 1 unmatched genparticles" in buf.getvalue()
     assert after_e.sum() + 5.0 == pytest.approx(sum(energies), abs=1e-6)
+
+
+def test_merge_host_tie_breaks_on_lowest_cluster_index():
+    # gp0/gp1/gp2 each own one cluster; gp3 deposits equally into all three, loses every
+    # claim and is merged. The host must be the owner of the lowest-index tied cluster
+    # (gp0), as with the dense argmax — scipy's matmul stores that row as [2, 1, 0].
+    energies = [100.0, 90.0, 80.0, 5.0]
+    gpdata = dataclasses.replace(
+        make_eventdata(energies, cluster_weights=[1.0] * 4),
+        hit_features=ak.Array({"type": [0, 0, 0]}),
+        cluster_features=ak.Array({"type": [0, 0, 0]}),
+        genparticle_to_hit=(
+            np.array([0, 1, 2, 3, 3, 3], dtype=np.int32),
+            np.array([0, 1, 2, 0, 1, 2], dtype=np.int32),
+            np.array([10.0, 10.0, 10.0, 1.0, 1.0, 1.0]),
+        ),
+        hit_to_cluster=(np.arange(3, dtype=np.int32), np.arange(3, dtype=np.int32), np.ones(3)),
+    )
+
+    cleaned, *_ = pp.assign_genparticles_to_obj_and_merge(gpdata)
+
+    assert list(zip(np.asarray(cleaned.gp_merges[0]).astype(int), np.asarray(cleaned.gp_merges[1]).astype(int))) == [(0, 3)]
+

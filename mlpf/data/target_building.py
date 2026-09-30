@@ -286,6 +286,9 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
 
     gp_to_cluster = (gp_to_hit @ calohit_to_cluster).tocsr()
     gp_to_cluster.eliminate_zeros()
+    # sparse matmul leaves each row's column indices in unspecified order; sort them so the
+    # merge-host argmax below breaks ties on the lowest cluster index, like the dense argmax
+    gp_to_cluster.sort_indices()
 
     def _col_argmax_and_mask(m_sp):
         # segment argmax per CSC column; first occurrence wins ties (column indices ascend),
