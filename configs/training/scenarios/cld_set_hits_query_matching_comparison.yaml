@@ -1,0 +1,91 @@
+name: cld_set_hits_query_matching_comparison
+spec_file: particleflow_spec.yaml
+production_name: cld
+
+# A 2x2 follow-up to the hit-set improvement study. The four-layer local
+# decoder is the baseline because it gave the best early particle matching.
+# The two factors target the remaining slot-formation bottlenecks:
+#
+#   1. allocate more queries to calorimeter hits, where photons and neutral
+#      hadrons were under-covered;
+#   2. remove PID from Hungarian assignment, without removing presence. This
+#      avoids self-reinforcing early PID mistakes while preserving the object
+#      association that the kinematics-only matcher lost.
+variants:
+  baseline_4layer_local:
+    model_name: pyg-cld-hits-set-v1
+    overrides: &baseline_overrides
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.num_layers: 4
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+
+  calo_balanced_queries:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      <<: *baseline_overrides
+      # Increase calorimeter-seeded slots from 40% (102/256) to 50% (128/256).
+      model.set_decoder.tracker_query_fraction: 0.5
+
+  pid_free_match:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      <<: *baseline_overrides
+      # Keep presence in the assignment; removing both presence and PID caused
+      # severe hard-count and event-energy under-response in the previous run.
+      model.set_decoder.matcher.pid: 0.0
+
+  calo_balanced_pid_free_match:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      <<: *baseline_overrides
+      model.set_decoder.tracker_query_fraction: 0.5
+      model.set_decoder.matcher.pid: 0.0
+
+# One seed gives exactly four parallel jobs. Add seeds only when expanding the
+# campaign intentionally; the launcher derives len(variants) * len(seeds).
+seeds: [12345]
+
+training:
+  # Keep the event exposure identical across accelerator profiles. The runner
+  # derives the per-GPU accumulation needed to reach this global batch.
+  global_batch_size: 512
+  parameters:
+    lr: 0.001
+    num_steps: 50000
+    val_freq: 5000
+    # More frequent checkpoints make long preempted jobs cheap to resume while
+    # retaining the same validation cadence for all variants.
+    checkpoint_freq: 1000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+
+common_overrides:
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.backbone.num_tracker_layers: 2
+  model.backbone.num_calo_layers: 2
+  model.backbone.num_common_layers: 2
+  model.attention.use_jagged_attention: true
+
+# The two experimental factors are nested under the set decoder. Resolution
+# still verifies that data, optimizer, schedule, seed, and backbone are equal.
+allowed_variant_differences:
+  - model.set_decoder

@@ -1,4 +1,7 @@
 import json
+import subprocess
+
+import pytest
 from pathlib import Path
 
 import yaml
@@ -106,9 +109,39 @@ def test_lumi_submission_uses_task_gpus_account_and_container_worker():
     assert len(jobs) == 2
     assert command[command.index("--gpus-per-task") + 1] == "8"
     assert command[command.index("--account") + 1] == "project_465001293"
-    assert command[command.index("--mem") + 1] == "450G"
+    assert command[command.index("--time") + 1] == "2-00:00:00"
+    assert command[command.index("--mem") + 1] == "480G"
     assert "--no-requeue" in command
     assert str(worker) in command
+
+
+def test_set_query_matching_scenario_submits_four_lumi_nodes():
+    scenario = resolve_scenario_path("cld_set_hits_query_matching_comparison", ROOT)
+    profile_path = resolve_platform_profile_path("mi250x", ROOT, "lumi")
+    profile = load_platform_profile(profile_path)
+    worker = ROOT / "scripts/lumi/run_scenario.sh"
+
+    command, jobs = build_slurm_submission(
+        scenario,
+        profile_path,
+        ROOT,
+        worker=worker,
+    )
+
+    assert [job.variant_name for job in jobs] == [
+        "baseline_4layer_local",
+        "calo_balanced_queries",
+        "pid_free_match",
+        "calo_balanced_pid_free_match",
+    ]
+    assert command[command.index("--array") + 1] == "0-3"
+    assert command[command.index("--gpus-per-task") + 1] == "8"
+    assert {job.global_batch_size for job in jobs} == {512}
+    assert {job.per_gpu_batch_size for job in jobs} == {64}
+    assert {job.gpu_batch_multiplier for job in jobs} == {64}
+    assert {job.resolved_config.compile for job in jobs} == {False}
+    assert {job.resolved_config.model.attention.use_flash_attn_varlen for job in jobs} == {True}
+    assert profile.environment["OMP_NUM_THREADS"] == "4"
 
 
 def test_picker_discovers_site_specific_accelerators():
@@ -165,3 +198,33 @@ def test_continue_submission_selects_only_unfinished_original_array_indices(tmp_
     ]
     assert command[command.index("--array") + 1] == "1,3"
     assert command[-1] == "--continue"
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, monkeypatch, dry_run):
+    import mlpf.training_submission as submission
+
+    scenario_path = tmp_path / "scenario.yaml"
+    profile_path = tmp_path / "profile.yaml"
+    script_path = tmp_path / "submit.sh"
+    payload = "argument with spaces; $(false) 'quoted'"
+    command = ["printf", "%s", payload]
+    monkeypatch.setattr(submission, "available_choices", lambda *args: ([], []))
+    monkeypatch.setattr(submission, "resolve_scenario_path", lambda *args: scenario_path)
+    monkeypatch.setattr(submission, "resolve_platform_profile_path", lambda *args: profile_path)
+    monkeypatch.setattr(submission, "build_slurm_submission", lambda *args, **kwargs: (command, [object()]))
+    monkeypatch.setattr(Path, "mkdir", lambda *args, **kwargs: None)
+
+    # Preparing a container submission must never invoke sbatch itself.
+    with monkeypatch.context() as patch:
+        patch.setattr(submission.subprocess, "run", lambda *args, **kwargs: pytest.fail("unexpected submission"))
+        args = ["scenario", "mi250x", "--submission-script", str(script_path)]
+        if dry_run:
+            args.append("--dry-run")
+        submission.main(args, site="lumi")
+
+    if dry_run:
+        assert not script_path.exists()
+    else:
+        result = subprocess.run(["bash", str(script_path)], check=True, capture_output=True, text=True)
+        assert result.stdout == payload

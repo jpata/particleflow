@@ -1,0 +1,82 @@
+name: cld_set_hits_improvement_comparison
+spec_file: particleflow_spec.yaml
+production_name: cld
+
+# Four CLD hit-set trainings with the current 2+2+2 detector-aware backbone.
+# Each non-control variant changes one decoder design choice so improvements can
+# be attributed to depth, cross-attention locality, or matching supervision.
+variants:
+  control_8layer_local:
+    model_name: pyg-cld-hits-set-v1
+    overrides: &control_overrides
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.num_layers: 8
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+
+  decoder4_local:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      <<: *control_overrides
+      # Tests decoder depth without changing the hit representation or losses.
+      model.set_decoder.num_layers: 4
+
+  decoder8_global:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      <<: *control_overrides
+      # Tests whether the radius-0.4 mask hides spatially dispersed shower
+      # information needed to form neutral-hadron and photon slots.
+      model.set_decoder.local_attention_radius: null
+
+  decoder8_kinematic_match:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      <<: *control_overrides
+      # Make assignment independent of the heads it supervises. Geometry, pT,
+      # and energy determine the match; presence and PID are learned afterward.
+      model.set_decoder.matcher.presence: 0.0
+      model.set_decoder.matcher.pid: 0.0
+      model.set_decoder.matcher.energy: 1.0
+
+seeds: [12345]
+
+training:
+  global_batch_size: 512
+  parameters:
+    lr: 0.001
+    num_steps: 50000
+    val_freq: 5000
+    checkpoint_freq: 5000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+
+common_overrides:
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.backbone.num_tracker_layers: 2
+  model.backbone.num_calo_layers: 2
+  model.backbone.num_common_layers: 2
+  model.attention.use_jagged_attention: true
+
+# All resolved jobs must otherwise be identical. In particular, data, batch,
+# optimizer, schedule, seed, and hit backbone are held fixed.
+allowed_variant_differences:
+  - model.set_decoder
