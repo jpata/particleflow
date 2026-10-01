@@ -25,6 +25,7 @@ BACKBONE_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_backbone_compari
 PF_HITS_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_hits_comparison.yaml"
 CLIC_CLD_SCENARIO = ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comparison.yaml"
 SET_IMPROVEMENT_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_improvement_comparison.yaml"
+SET_QUERY_MATCHING_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_query_matching_comparison.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -214,6 +215,37 @@ def test_set_improvement_scenario_resolves_four_isolated_cld_variants():
     assert [job.resolved_config.model.set_decoder.matcher.presence for job in jobs] == [1.0, 1.0, 1.0, 0.0]
     assert [job.resolved_config.model.set_decoder.matcher.pid for job in jobs] == [1.0, 1.0, 1.0, 0.0]
     assert {job.resolved_config.num_steps for job in jobs} == {50000}
+    assert {job.seed for job in jobs} == {12345}
+
+
+def test_set_query_matching_scenario_resolves_four_factorial_variants():
+    scenario = load_training_scenario(SET_QUERY_MATCHING_SCENARIO)
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+
+    jobs = resolve_scenario_jobs(
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=8,
+    )
+
+    assert [job.variant_name for job in jobs] == [
+        "baseline_4layer_local",
+        "calo_balanced_queries",
+        "pid_free_match",
+        "calo_balanced_pid_free_match",
+    ]
+    assert {job.model_name for job in jobs} == {"pyg-cld-hits-set-v1"}
+    assert {job.resolved_config.dataset.value for job in jobs} == {"cld_hits"}
+    assert {job.resolved_config.model.output_mode.value for job in jobs} == {"set"}
+    assert {job.resolved_config.model.set_decoder.num_layers for job in jobs} == {4}
+    assert {job.resolved_config.model.set_decoder.local_attention_radius for job in jobs} == {0.4}
+    assert [job.resolved_config.model.set_decoder.tracker_query_fraction for job in jobs] == [0.6, 0.5, 0.6, 0.5]
+    assert [job.resolved_config.model.set_decoder.matcher.presence for job in jobs] == [1.0, 1.0, 1.0, 1.0]
+    assert [job.resolved_config.model.set_decoder.matcher.pid for job in jobs] == [1.0, 1.0, 0.0, 0.0]
+    assert {job.resolved_config.num_steps for job in jobs} == {50000}
+    assert {job.resolved_config.val_freq for job in jobs} == {5000}
+    assert {job.resolved_config.checkpoint_freq for job in jobs} == {1000}
     assert {job.seed for job in jobs} == {12345}
 
 

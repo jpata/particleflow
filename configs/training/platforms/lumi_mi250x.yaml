@@ -7,6 +7,10 @@ environment:
   MIOPEN_CUSTOM_CACHE_DIR: /tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
   ROCM_PATH: /opt/rocm
   KERAS_BACKEND: torch
+  # Eight DDP ranks share the 32 requested CPU cores. Limit library thread
+  # pools so they do not each try to consume the full allocation.
+  OMP_NUM_THREADS: "4"
+  PYTHONUNBUFFERED: "1"
   NCCL_SOCKET_IFNAME: hsn
   NCCL_NET_GDR_LEVEL: "3"
 runtime_overrides:
@@ -18,10 +22,13 @@ runtime_overrides:
 slurm:
   partition: standard-g
   account: project_465001293
-  time: "1-00:00:00"
+  # standard-g permits 48 hours. The scenario checkpoints every 1,000 steps,
+  # so an unfinished allocation can be resumed with --continue.
+  time: "2-00:00:00"
   nodes: 1
   tasks_per_node: 1
   cpus_per_task: 32
   gpu_request: gpus-per-task
-  memory: 450G
+  # Leave operating-system headroom on the 512 GB LUMI-G node.
+  memory: 480G
   no_requeue: true

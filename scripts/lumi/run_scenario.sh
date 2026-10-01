@@ -54,9 +54,25 @@ export NCCL_NET_GDR_LEVEL=${NCCL_NET_GDR_LEVEL:-3}
 export NCCL_DEBUG=${NCCL_DEBUG:-INFO}
 export PYTHONPATH="$REPO_ROOT"
 
+# A standard-g allocation is a complete node and this profile requests all
+# eight MI250X GCDs for one task. Do not inherit a login-shell or Slurm binding
+# that would hide devices from the eight-process torch DDP launcher.
+unset ROCR_VISIBLE_DEVICES
+
+if [[ ! -r "$IMG" ]]; then
+  echo "LUMI PyTorch container is not readable at '$IMG'; set IMG" >&2
+  exit 2
+fi
+if [[ ! -f "$REPO_ROOT/particleflow-env/bin/activate" ]]; then
+  echo "Python environment activation script is missing at '$REPO_ROOT/particleflow-env/bin/activate'" >&2
+  exit 2
+fi
+mkdir -p "$MIOPEN_USER_DB_PATH"
+
 rocm-smi --showdriverversion
 echo "SLURM_JOB_ID=${SLURM_JOB_ID:-none}"
 echo "SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID:-none}"
+echo "ROCR_VISIBLE_DEVICES=${ROCR_VISIBLE_DEVICES:-all} OMP_NUM_THREADS=${OMP_NUM_THREADS:-unset}"
 echo "scenario=$SCENARIO_FILE platform=$PLATFORM_FILE task_index=$TASK_INDEX"
 
 RUN_ARGS=(
