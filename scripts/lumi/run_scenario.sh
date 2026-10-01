@@ -40,11 +40,11 @@ if [[ ! -f "$REPO_ROOT/scripts/training/run_scenario.py" ]]; then
 fi
 cd "$REPO_ROOT"
 
-module use /appl/local/containers/ai-modules
-module load singularity-AI-bindings
-module load aws-ofi-rccl
+module purge
+module load Local-LAIF lumi-aif-singularity-bindings
+export PYTHONNOUSERSITE=1
 
-export IMG=${IMG:-/appl/local/containers/sif-images/lumi-pytorch-rocm-6.2.4-python-3.12-pytorch-v2.7.0.sif}
+export IMG=${IMG:-/appl/local/laifs/containers/lumi-multitorch-latest.sif}
 export MIOPEN_USER_DB_PATH=${MIOPEN_USER_DB_PATH:-/tmp/${USER}-${SLURM_JOB_ID}-miopen-cache}
 export MIOPEN_CUSTOM_CACHE_DIR=${MIOPEN_CUSTOM_CACHE_DIR:-$MIOPEN_USER_DB_PATH}
 export ROCM_PATH=${ROCM_PATH:-/opt/rocm}
@@ -63,10 +63,16 @@ if [[ ! -r "$IMG" ]]; then
   echo "LUMI PyTorch container is not readable at '$IMG'; set IMG" >&2
   exit 2
 fi
-if [[ ! -f "$REPO_ROOT/particleflow-env/bin/activate" ]]; then
-  echo "Python environment activation script is missing at '$REPO_ROOT/particleflow-env/bin/activate'" >&2
+# The old particleflow-env points to the previous container's Conda Python.
+# Use an overlay built in LAIF with access to its GPU packages.
+export LUMI_VENV=${LUMI_VENV:-$REPO_ROOT/particleflow-laif-env}
+if [[ -n "$LUMI_VENV" && ! -f "$LUMI_VENV/bin/activate" ]]; then
+  echo "Python environment activation script is missing at '$LUMI_VENV/bin/activate'" >&2
+  echo "Run bash scripts/lumi/setup_env.sh to create the LAIF overlay" >&2
   exit 2
 fi
+# Keep the same release if the latest symlink changes while jobs are queued.
+export IMG=$(readlink -f "$IMG")
 mkdir -p "$MIOPEN_USER_DB_PATH"
 
 rocm-smi --showdriverversion
@@ -88,9 +94,9 @@ if [[ "$CONTINUE_RUN" == 1 ]]; then
   RUN_ARGS+=(--continue)
 fi
 
-singularity exec \
+singularity run \
   -B /scratch/project_465001293 \
   -B /tmp \
   "$IMG" \
-  bash -lc 'source "$1/particleflow-env/bin/activate"; shift; exec python3 "$@"' \
-  bash "$REPO_ROOT" "${RUN_ARGS[@]}"
+  bash -c 'set -e; if [[ -n "${LUMI_VENV:-}" ]]; then source "$LUMI_VENV/bin/activate"; fi; exec python3 "$@"' \
+  bash "${RUN_ARGS[@]}"

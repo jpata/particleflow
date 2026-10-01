@@ -489,3 +489,14 @@ def test_continuation_chooses_most_advanced_compatible_checkpoint(tmp_path):
     assert continuation.step == 15000
     assert continuation.checkpoint.name == "checkpoint-15000.pth"
     assert continuation.experiment_dir.name.endswith("_best")
+
+
+@pytest.mark.parametrize("profile, expected", [("lumi_mi250x", ["python3", "-u"]), ("local", ["uv", "run", "python3", "-u"])])
+def test_pipeline_command_uses_platform_python_environment(profile, expected):
+    from mlpf.training_scenarios import _pipeline_command
+
+    scenario = load_training_scenario(SET_IMPROVEMENT_SCENARIO)
+    platform = load_platform_profile(PLATFORMS / f"{profile}.yaml")
+    job = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")[0]
+    command = _pipeline_command(job, scenario, platform, ROOT / "particleflow_spec.yaml", Path("experiment"))
+    assert command[:len(expected)] == expected

@@ -120,6 +120,7 @@ class PlatformProfile(BaseModel):
 
     name: str
     gpus: int = Field(gt=0)
+    python_command: list[str] = Field(default_factory=lambda: ["uv", "run", "python3"], min_length=1)
     # Either one TFDS directory shared by every production, or a mapping from
     # production name to that production's TFDS directory.
     data_dir: str | dict[str, str]
@@ -392,9 +393,7 @@ def resolve_scenario_jobs(
 def _pipeline_command(job, scenario, platform, spec_file, experiment_dir):
     settings = dict(job.settings)
     command = [
-        "uv",
-        "run",
-        "python3",
+        *platform.python_command,
         "-u",
         "mlpf/pipeline.py",
         "--spec-file",

@@ -190,6 +190,11 @@ def main(argv=None, *, site="flatiron"):
         action="store_true",
         help="Resubmit only compatible jobs whose latest checkpoint is below num_steps",
     )
+    parser.add_argument(
+        "--submission-script",
+        type=Path,
+        help="Write the sbatch command to a shell script for submission outside the container",
+    )
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -219,6 +224,9 @@ def main(argv=None, *, site="flatiron"):
         return
 
     (repo_root / "logs_slurm").mkdir(parents=True, exist_ok=True)
+    if args.submission_script is not None:
+        args.submission_script.write_text("#!/bin/bash\nexec " + shlex.join(command) + "\n")
+        return
     subprocess.run(command, check=True)
 
 
