@@ -3,8 +3,12 @@
 # Policy (written in code, not user-facing; there is deliberately no runtime switch):
 #
 # TARGETS (gen_features)
-#   Leaf primary particles: primary == True with no primary children. Neutrinos
-#   (|PDG| in {12, 14, 16}) are excluded. A leaf must additionally be *visible*, i.e.:
+#   Leaf primary particles: primary == True with no primary children, except that a leaf pi0
+#   which Geant4 decayed is replaced by its direct decay products (gamma gamma, or gamma e+ e-),
+#   as in key4hep, where the generator decays the pi0 and the photons are status 1 (the
+#   release's hard-scatter generator leaves pi0 stable; its pileup generator already decays
+#   them). Neutrinos (|PDG| in {12, 14, 16}) are excluded. A leaf must additionally be
+#   *visible*, i.e.:
 #     - track-visible: it owns >= 20% of the hits of a reconstructed track
 #       (TRACK_HIT_FRACTION_MIN; tracker_hits.particle_id joined through tracks.hit_ids and
 #       walked to the leaf — the analogue of key4hep's SiTracksMCTruthLink fractions), or
@@ -20,8 +24,10 @@
 # TRUTH LINKS (attribution)
 #   Calo deposit owner ids (contrib_particle_ids) and tracker-hit owner ids
 #   (tracker_hits.particle_id) of *any* generator or simulated particle are walked up
-#   parent_id until a leaf primary is reached, and attributed entirely to that leaf — so a
-#   visible parent and its visible descendants are the *same* target.
+#   parent_id until a leaf is reached, and attributed entirely to that leaf — so a visible
+#   parent and its visible descendants are the *same* target. Contributions the release
+#   credits directly to a split pi0 (unrecorded soft decay photons) go to its most energetic
+#   decay product.
 #
 # MERGES
 #   Handled by the shared allocator (target_building.assign_genparticles_to_obj_and_merge);
@@ -86,12 +92,73 @@ def _build_parent_maps(particles_ev: Dict[str, Any]):
     index_of: Dict[int, int] = {int(p): i for i, p in enumerate(pid)}
     parents_of_primary = {int(parent[i]) for i in np.where(primary)[0] if int(parent[i]) in index_of and primary[index_of[int(parent[i])]]}
     is_leaf = np.array([primary[i] and int(pid[i]) not in parents_of_primary for i in range(len(pid))], dtype=bool)
-    return pid, pdg, parent, is_leaf
+    redirect = _split_leaf_pi0(pid, pdg, parent, primary, np.asarray(ak.to_numpy(particles_ev["energy"])), is_leaf)
+    return pid, pdg, parent, is_leaf, redirect
+
+
+def _split_leaf_pi0(
+    pid: np.ndarray, pdg: np.ndarray, parent: np.ndarray, primary: np.ndarray, energy: np.ndarray, is_leaf: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Replace each leaf pi0 that Geant4 decayed by its decay products, in place on is_leaf.
+
+    The release's generator leaves hard-scatter pi0 stable, so Geant4 decays them and the
+    photons (or gamma e+ e- for Dalitz decays) are non-primary children of a leaf pi0. In
+    key4hep the generator decays the pi0 (status 2) and the photons are the status-1 targets,
+    so promote the direct children to leaves and unmark the pi0. A pi0 without recorded
+    children (not simulated, or both photons below the recording threshold) stays a leaf.
+
+    Returns the redirect (split pi0 ids -> id of the pi0's most energetic child, sorted by pi0
+    id): the release credits deposits of unrecorded soft decay photons directly to the pi0 id,
+    and the walk from a non-leaf pi0 would lose them.
+    """
+    no_redirect = (np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64))
+    pid64 = pid.astype(np.int64)
+    pi0_leaf = is_leaf & (np.abs(pdg) == 111)
+    if len(pid) == 0 or not pi0_leaf.any():
+        return no_redirect
+    order = np.argsort(pid64, kind="stable")
+    pid_sorted = pid64[order]
+    pos = np.clip(np.searchsorted(pid_sorted, parent.astype(np.int64)), 0, len(pid_sorted) - 1)
+    parent_row = np.where(pid_sorted[pos] == parent.astype(np.int64), order[pos], -1)
+    child = ~primary & (parent_row >= 0)
+    child[child] = pi0_leaf[parent_row[child]]
+    if not child.any():
+        return no_redirect
+    split_rows = np.unique(parent_row[child])
+    is_leaf[split_rows] = False
+    is_leaf[child] = True
+
+    # most energetic child per split pi0 (ties: first child in table order)
+    child_rows = np.nonzero(child)[0]
+    by_energy = child_rows[np.lexsort((child_rows, -energy[child_rows], parent_row[child_rows]))]
+    first = np.ones(len(by_energy), dtype=bool)
+    first[1:] = parent_row[by_energy[1:]] != parent_row[by_energy[:-1]]
+    best = by_energy[first]  # one per split pi0, ordered by parent row
+    src = pid64[parent_row[best]]
+    dst = pid64[best]
+    o = np.argsort(src)
+    return src[o], dst[o]
+
+
+def _redirect_ids(ids: np.ndarray, redirect: Tuple[np.ndarray, np.ndarray]) -> np.ndarray:
+    """Replace every id found in redirect[0] by the matching redirect[1] entry."""
+    src, dst = redirect
+    ids = np.asarray(ids)
+    if len(src) == 0 or len(ids) == 0:
+        return ids
+    ids64 = ids.astype(np.int64)
+    pos = np.clip(np.searchsorted(src, ids64), 0, len(src) - 1)
+    hit = src[pos] == ids64
+    if not hit.any():
+        return ids
+    out = ids64.copy()
+    out[hit] = dst[pos[hit]]
+    return out
 
 
 def walk_to_leaf_many(particle_ids: np.ndarray, pid: np.ndarray, is_leaf: np.ndarray, parent: np.ndarray, max_depth: int = 256) -> np.ndarray:
     """Vectorized walk_to_leaf over many ids: per id, the source row whose parent chain ends
-    in a leaf primary (row index), else -1."""
+    in a leaf (row index), else -1. The leaf is a leaf primary or a promoted pi0 decay product."""
     ids = np.asarray(particle_ids)
     if len(ids) == 0:
         return np.empty(0, np.int64)
@@ -147,6 +214,7 @@ def _track_hit_fraction_links(
     is_leaf: np.ndarray,
     parent: np.ndarray,
     n_leaf: int,
+    redirect: Tuple[np.ndarray, np.ndarray],
 ) -> SparseMatrixCOO:
     """COO (leaf, track, fraction of the track's hits attributed to the leaf).
 
@@ -158,7 +226,7 @@ def _track_hit_fraction_links(
     n_track = len(ak.to_numpy(tracks_ev["majority_particle_id"]))
     n_hits_trk = np.asarray(ak.to_numpy(ak.num(tracks_ev["hit_ids"])), dtype=np.int64)
     flat_hids = np.asarray(ak.to_numpy(ak.flatten(tracks_ev["hit_ids"], axis=None)), dtype=np.int64)
-    hit_pid = np.asarray(ak.to_numpy(tracker_ev["particle_id"])).astype(np.int64)
+    hit_pid = _redirect_ids(np.asarray(ak.to_numpy(tracker_ev["particle_id"])).astype(np.int64), redirect)
 
     # ignore out-of-range hit-row references defensively (release data should not contain any)
     in_range = (flat_hids >= 0) & (flat_hids < len(hit_pid))
@@ -196,9 +264,11 @@ def compute_gen_tables(
 ) -> Tuple[Dict[str, np.ndarray], SparseMatrixCOO, SparseMatrixCOO, Dict[str, np.ndarray]]:
     """Return gen_features, gp_to_hit, gp_to_track, genref_features for one event.
 
-    gen_features keys follow the MLPF target layout (pt/eta/phi + charge etc.). Only visible leaf
-    primaries are retained. Contributions whose parent chain never reaches a leaf primary (stray
-    Geant4 secondaries) cannot be attributed and are dropped.
+    gen_features keys follow the MLPF target layout (pt/eta/phi + charge etc.). Only visible leaves
+    are retained (leaf primaries, with Geant4-decayed pi0 replaced by their decay products).
+    Contributions whose parent chain never reaches a leaf cannot be attributed and are dropped
+    (mostly Geant4 secondaries of generator-decayed K0S/Lambda/Sigma/Xi that interacted before
+    their preassigned decay — key4hep's surrogate-ancestor case, not handled here).
 
     genref_features has the same layout but spans the *measurable* leaf primaries (any
     attributed calibrated deposit or track hit share, minus neutrinos) — the truth-level
@@ -209,7 +279,7 @@ def compute_gen_tables(
     extended space: calo hits first, then tracker hits) feeding the hits-view PN marks.
     """
 
-    pid, pdg, parent, is_leaf = _build_parent_maps(particles_ev)
+    pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles_ev)
     leaf_indices = np.where(is_leaf)[0]
     n_leaf = len(leaf_indices)
     # neutrino leaf primaries: excluded from both gen/genref so they can
@@ -221,7 +291,7 @@ def compute_gen_tables(
 
     # ---------------- calo hits ----------------
     n_hit = len(ak.to_numpy(calo_ev["x"]))
-    cid_flat = np.asarray(ak.to_numpy(ak.flatten(calo_ev["contrib_particle_ids"], axis=None))).ravel()
+    cid_flat = _redirect_ids(np.asarray(ak.to_numpy(ak.flatten(calo_ev["contrib_particle_ids"], axis=None))).ravel(), redirect)
     ce_flat = np.asarray(ak.to_numpy(ak.flatten(calo_ev["contrib_energies"], axis=None))).ravel()
     nctr_flat = np.asarray(ak.to_numpy(ak.num(calo_ev["contrib_particle_ids"]))).ravel()
     hit_idx_flat = np.repeat(np.arange(n_hit, dtype=np.int64), nctr_flat)
@@ -254,7 +324,7 @@ def compute_gen_tables(
     # Link weights are per-track hit-ownership fractions (matching the key4hep
     # SiTracksMCTruthLink semantics). The visibility cut below applies the
     # key4hep gp_in_tracker rule (>= TRACK_HIT_FRACTION_MIN of a track's hits).
-    gp_to_track: SparseMatrixCOO = _track_hit_fraction_links(tracks_ev, tracker_ev, leaf_row_to_local, pid, is_leaf, parent, n_leaf)
+    gp_to_track: SparseMatrixCOO = _track_hit_fraction_links(tracks_ev, tracker_ev, leaf_row_to_local, pid, is_leaf, parent, n_leaf, redirect)
 
     # ---------------- per-leaf features ----------------
     # np.asarray strips nominal parquet-nullable masks (see _build_parent_maps note)
@@ -302,7 +372,7 @@ def compute_gen_tables(
     # cleaned row order — the hits view's PN marks ride on those. Zero weight means they never
     # enter the exclusive-claim race (CSR eliminate_zeros drops them). In key4hep tracker-hit
     # eDeps simply lose that race to GeV-scale calo deposits.
-    th_pid = np.asarray(ak.to_numpy(tracker_ev["particle_id"])).astype(np.int64)
+    th_pid = _redirect_ids(np.asarray(ak.to_numpy(tracker_ev["particle_id"])).astype(np.int64), redirect)
     n_th = len(th_pid)
     if n_th:
         uniq, inv = np.unique(th_pid, return_inverse=True)

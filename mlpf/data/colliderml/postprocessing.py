@@ -174,6 +174,10 @@ def _event_record_one(
     gps_canonical = np.zeros((n_gp, len(particle_feature_order)), dtype=np.float32)
     for igp in range(n_gp):
         p = np.abs(float(gpdata_cleaned.gen_features["PDG"][igp]))
+        # truth.py replaces Geant4-decayed pi0 by their photons; the rare pi0 left unsplit (no
+        # recorded decay products) is a photon target too, not the shared mapping's neutral hadron
+        if p == 111:
+            p = 22.0
         c = float(gpdata_cleaned.gen_features["charge"][igp])
         pid = map_pdgid_to_candid(p, c)
         if gp_to_obj[igp, 0] != -1:

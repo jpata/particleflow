@@ -105,3 +105,17 @@ def test_resume_reconverts_partial_output_and_skips_complete_one(tmp_path):
     mtime = ofn.stat().st_mtime_ns
     process_one_file(*paths, ofn)  # complete: skipped
     assert ofn.stat().st_mtime_ns == mtime
+
+
+def test_unsplit_pi0_target_is_a_photon():
+    # a pi0 without recorded decay products stays a leaf in truth.py; the converter labels its
+    # target a photon (like the split ones), not the shared mapping's neutral hadron
+    particles, tracks, calo, tracker = _shared_hits_event()
+    pdg = ak.to_list(particles["pdg_id"])
+    pdg[1] = 111
+    particles = ak.Record({k: (ak.Array(pdg) if k == "pdg_id" else particles[k]) for k in particles.fields})
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+
+    y = rec["ytarget_cluster"]
+    classes = sorted(y[y[:, 0] != 0, 0].tolist())
+    assert classes == [22.0, 22.0]

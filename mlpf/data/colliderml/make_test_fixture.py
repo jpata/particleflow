@@ -50,16 +50,16 @@ def _event_arrays(rng: np.random.Generator, iev: int):
         leaves.append((pid_next, 13, rng.uniform(2, 40), rng.uniform(-2.5, 2.5), rng.uniform(-np.pi, np.pi)))
         pid_next += 1
 
-    # secondaries: two gammas for each pi0 (parent chains)
-    secondaries = []
+    # secondaries: two gammas for each pi0 (parent chains), each carrying ~half the pi0
+    # momentum (the converter promotes them to the targets in place of the pi0)
+    secondaries = []  # (id, pdg, pt, eta, phi, parent id)
     for lid, pdg, ptv, eta, phi in leaves:
         if pdg != 111:
             continue
-        e = ptv * np.cosh(eta)
         for k in range(2):
             g_id = pid_next
             pid_next += 1
-            secondaries.append((g_id, 22, 0.5 * e, eta + rng.normal(0, 0.05), phi + rng.normal(0, 0.05), lid))
+            secondaries.append((g_id, 22, 0.5 * ptv, eta + rng.normal(0, 0.05), phi + rng.normal(0, 0.05), lid))
 
     # build particles table
     ids = [leaf[0] for leaf in leaves] + [s[0] for s in secondaries]
@@ -166,7 +166,8 @@ def _event_arrays(rng: np.random.Generator, iev: int):
         return (r_cyl * np.cos(phi) * np.cosh(eta) / max(np.cosh(eta), 1e-9), r_cyl * np.sin(phi), z)
 
     for s in secondaries:
-        sid, _, e, eta, phi, _ = s
+        sid, _, ptv, eta, phi, _ = s
+        e = ptv * np.cosh(eta)
         xyz = _xyz_from_eta_phi(eta, phi, 1400.0)
         _add_hit_cloud(xyz, sid, e / 30.0, 10)  # raw ~ e/30
     for leaf in leaves:
