@@ -52,6 +52,21 @@ def _shared_hits_event():
     return particles, tracks, calo, tracker
 
 
+def test_track_x_carries_perigee_track_state_parameters():
+    # col 10 = tanLambda = 1/tan(theta), col 11 = omega = q/pT [1/mm], col 12 =
+    # radiusOfInnermostHit = transverse radius of the innermost owned tracker hit (30 mm here).
+    particles, tracks, calo, tracker = _shared_hits_event()
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+
+    x = rec["X_track"]
+    assert x.shape == (1, 17)
+    assert np.isclose(x[0, 10], 1.0 / np.tan(0.1), rtol=1e-5)
+    # qop = 0.1, theta = 0.1 -> pt = sin(0.1)/0.1; omega = 3e-4 * 3 T / pt
+    pt = np.sin(0.1) / 0.1
+    assert np.isclose(x[0, 11], 9e-4 / pt, rtol=1e-5)
+    assert np.isclose(x[0, 12], 30.0, atol=1e-6)
+
+
 def test_calo_hit_pn_is_largest_contributor():
     particles, tracks, calo, tracker = _shared_hits_event()
     rec = _event_record_one(0, particles, tracks, calo, tracker)

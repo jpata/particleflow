@@ -66,7 +66,7 @@ particle_feature_order = [
     "jet_idx",
     "particle_number",
 ]
-track_feature_order = EDM4HEP.TrackFeatures.get_names()  # 16 names; only the first 11 are filled
+track_feature_order = EDM4HEP.TrackFeatures.get_names()  # 16 names; the union layout fills 13
 cluster_feature_order = EDM4HEP.ClusterFeatures.get_names()  # 17 names
 # EDM4hep hit layout used elsewhere in the codebase (X_hit already includes `type`), shared by
 # X_hit_calo (the raw calo hits we also cluster over) and X_hit_tracker (the raw tracker hits).
@@ -128,7 +128,7 @@ def _event_record_one(
         genjet_np = np.zeros((0, 4), dtype=np.float32)
 
     # -- tracks -> features ---------------------------------------------------
-    tfeat = track_features_cml(tracks_ev)
+    tfeat = track_features_cml(tracks_ev, tracker_ev)
 
     # -- clusters via the truth-blind spatial clusterer ------------------------
     hit_e_calibrated = hit_e * calibration_factors(hit_det, DEFAULT_CALIBRATION)
@@ -238,8 +238,11 @@ def _event_record_one(
     )
 
     # -- X features -------------------------------------------------------------
-    # tracks: 11 features, plus a copy of sin_phi stored in the tanLambda slot (existing joint
-    # EDM4hep layout does the same: track sin_phi = tanLambda). Width = 17 (union layout).
+    # tracks carry the same perigee-derived parameters the key4hep EDM4hep converter reads
+    # from the first track state: tanLambda (= 1/tan(theta)) and omega (= q/pT computed from
+    # qop with the ODD 3 T solenoid, key4hep's track_pt inverted) in addition to d0/z0, plus
+    # radiusOfInnermostHit (the AtFirstHit reference-point radius in key4hep) from the
+    # track's own tracker hits. Width = 17 (union layout).
     X_track = np.zeros((n_track, 17), dtype=np.float32)
     X_track[:, 0] = 1.0
     X_track[:, 1] = np.asarray(tfeat["pt"], dtype=np.float32)
@@ -251,10 +254,12 @@ def _event_record_one(
     X_track[:, 7] = np.asarray(tfeat["z0"], dtype=np.float32)
     X_track[:, 8] = np.asarray(tfeat["theta"], dtype=np.float32)
     X_track[:, 9] = np.asarray(tfeat["qop"], dtype=np.float32)
-    X_track[:, 10] = np.asarray(tfeat["sin_phi"], dtype=np.float32)  # tanLambda slot (same value)
-    # cols 11..16 are the cluster-only slots of the union layout (energy_hcal, energy_other,
-    # num_hits, sigma_x, sigma_y, sigma_z) and stay 0 for tracks, except n_meas in col 13
-    # (the num_hits slot) as a proxy for ndf
+    X_track[:, 10] = np.asarray(tfeat["tanLambda"], dtype=np.float32)  # = sinh(eta) = 1/tan(theta)
+    X_track[:, 11] = np.asarray(tfeat["omega"], dtype=np.float32)  # [1/mm], key4hep convention
+    X_track[:, 12] = np.asarray(tfeat["radiusOfInnermostHit"], dtype=np.float32)  # [mm]
+    # cols 13..16 are the cluster-only slots of the union layout (num_hits, sigma_x, sigma_y,
+    # sigma_z) and stay 0 for tracks, except n_meas in col 13 (the num_hits slot) as a proxy
+    # for ndf
     X_track[:, 13] = np.asarray(tfeat["n_meas"], dtype=np.float32)
 
     X_cluster = np.asarray(cl_feats, dtype=np.float32) if n_cluster else np.zeros((0, 17), dtype=np.float32)
