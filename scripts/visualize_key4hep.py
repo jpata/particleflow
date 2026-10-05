@@ -10,7 +10,7 @@ collections unless explicitly selected. Adapted from erwulff/particlemind's
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import awkward as ak
@@ -57,6 +57,8 @@ class DetectorConfig:
     cluster_size_max: float
     cluster_alpha: float
     magnetic_field_tesla: float
+    particle_collection: str = "MCParticles"
+    particle_proxy_label: str = "visible status-1 target proxy"
 
 
 DETECTORS = {
@@ -155,6 +157,30 @@ DETECTORS = {
     ),
 }
 
+# These envelopes bound display trajectories; they are not geometry models.
+DETECTORS["maia"] = replace(
+    DETECTORS["cld"], key="maia", title="MAIA", magnetic_field_tesla=5.0,
+    particle_collection="MCParticle", plot_limit=6500.0,
+    hit_collections=tuple((f"{prefix}TrackerHits", "Tracker hits", "#d62728")
+                          for prefix in ("IB", "IE", "OB", "OE", "VB", "VE")) + (
+        ("EcalBarrelCollectionRec", "ECAL hits", "#1f77b4"),
+        ("EcalEndcapCollectionRec", "ECAL hits", "#1f77b4"),
+        ("HcalBarrelCollectionRec", "HCAL hits", "#2ca02c"),
+        ("HcalEndcapCollectionRec", "HCAL hits", "#2ca02c"),
+        ("MUON", "Muon hits", "#ff7f0e"),
+    ),
+)
+DETECTORS["colliderml"] = replace(
+    DETECTORS["cld"], key="colliderml", title="ColliderML ODD", magnetic_field_tesla=3.0,
+    track_collection="ActsTracks", track_radius=1200.0, track_half_z=3200.0,
+    particle_barrel_radius=1500.0, particle_endcap_z=3200.0,
+    particle_max_length=6000.0, plot_limit=6500.0,
+    particle_proxy_label="visible primary-leaf target proxy",
+    hit_collections=tuple((f"TrackerRegion{region}", "Tracker hits", "#d62728") for region in range(9))
+    + tuple((f"CaloRegion{region}", "ECAL hits" if region < 12 else "HCAL hits",
+             "#1f77b4" if region < 12 else "#2ca02c") for region in range(9, 15)),
+)
+
 
 def _detector_config(tree, detector: str = "auto") -> DetectorConfig:
     if detector != "auto":
@@ -168,8 +194,10 @@ def _detector_config(tree, detector: str = "auto") -> DetectorConfig:
     # productions. ECALOther is specific to the CLIC detector model.
     if "ECALOther" in tree:
         return DETECTORS["clic"]
+    if "EcalBarrelCollectionRec" in tree and "MCParticle" in tree:
+        return DETECTORS["maia"]
     matches = [
-        config for config in DETECTORS.values() if config.key != "clic" and config.track_collection in tree and config.cluster_collection in tree
+        config for config in DETECTORS.values() if config.key not in {"clic", "maia"} and config.track_collection in tree and config.cluster_collection in tree
     ]
     if len(matches) != 1:
         found = ", ".join(config.key for config in matches) or "none"
@@ -296,6 +324,25 @@ def _particle_display_length(
     return float(np.clip(calorimeter_distance * scale, 900.0, config.particle_max_length))
 
 
+def _particle_trajectory(px, py, pz, charge, length, magnetic_field_tesla):
+    """Truth guide in a uniform axial field, in mm; cap curling guides at one turn."""
+    momentum = np.sqrt(px * px + py * py + pz * pz)
+    pt = np.hypot(px, py)
+    if momentum == 0:
+        return tuple(np.zeros(1) for _ in range(3))
+    if abs(charge) < .5 or magnetic_field_tesla == 0 or pt < 1e-12:
+        return tuple(np.asarray([0., length * value / momentum]) for value in (px, py, pz))
+    curvature = 2.99792458e-4 * magnetic_field_tesla * charge / pt
+    transverse_length = min(length * pt / momentum, 2 * np.pi / abs(curvature))
+    bend = abs(curvature * transverse_length)
+    arc = np.linspace(0., transverse_length, max(36, int(np.ceil(bend / .03)) + 1))
+    phi = np.arctan2(py, px)
+    half_bend = .5 * curvature * arc
+    # This midpoint/sinc form avoids subtracting huge radii for high-pT tracks.
+    displacement = arc * np.sinc(half_bend / np.pi)
+    return displacement * np.cos(phi - half_bend), displacement * np.sin(phi - half_bend), arc * pz / pt
+
+
 def render_debug_plots(root_file: str | Path, event: int, output_dir: str | Path, detector: str = "auto") -> list[Path]:
     """Render association sanity checks for tracks/hits and clusters/hits."""
     source = _open_root(root_file)
@@ -410,9 +457,11 @@ def render_event(
     compact: bool = False,
     icon_size_cm: float = 1.0,
     input_view: str = "combined",
+    tree=None,
 ) -> str:
-    """Render one CLD, CLIC, or IDEA event in the transverse x-y plane."""
-    tree = _open_root(root_file)["events"]
+    """Render a ROOT event or an adapted ColliderML event in the transverse x-y plane."""
+    if tree is None:
+        tree = _open_root(root_file)["events"]
     if not 0 <= event < tree.num_entries:
         raise IndexError(f"event {event} is outside [0, {tree.num_entries})")
     config = _detector_config(tree, detector)
@@ -497,13 +546,14 @@ def render_event(
         )
 
     if show_particles or target_only:
-        status = _event(tree, "MCParticles/MCParticles.generatorStatus", event)
-        px = _event(tree, "MCParticles/MCParticles.momentum.x", event)
-        py = _event(tree, "MCParticles/MCParticles.momentum.y", event)
-        pz = _event(tree, "MCParticles/MCParticles.momentum.z", event)
-        pdg = np.abs(_event(tree, "MCParticles/MCParticles.PDG", event)).astype(int)
-        charge = _event(tree, "MCParticles/MCParticles.charge", event)
-        mass = _event(tree, "MCParticles/MCParticles.mass", event)
+        mc = config.particle_collection
+        status = _event(tree, f"{mc}/{mc}.generatorStatus", event)
+        px = _event(tree, f"{mc}/{mc}.momentum.x", event)
+        py = _event(tree, f"{mc}/{mc}.momentum.y", event)
+        pz = _event(tree, f"{mc}/{mc}.momentum.z", event)
+        pdg = np.abs(_event(tree, f"{mc}/{mc}.PDG", event)).astype(int)
+        charge = _event(tree, f"{mc}/{mc}.charge", event)
+        mass = _event(tree, f"{mc}/{mc}.mass", event)
         particle_energy = np.sqrt(px * px + py * py + pz * pz + mass * mass)
         # Visible status-1 particles are a compact proxy for the MLPF target
         # population. The full postprocessing additionally accounts for
@@ -536,24 +586,8 @@ def render_event(
                     length = display_limit * (0.28 + 0.58 * energy_fraction)
                 else:
                     length = _particle_display_length(vx, vy, vz, particle_e, abs(particle_charge) < 0.5, config)
-                transverse_momentum = np.hypot(vx, vy)
-                if target_only and abs(particle_charge) >= 0.5 and transverse_momentum > 1e-6:
-                    # Helical propagation in the detector's axial solenoidal
-                    # field. Radius is in mm for pT in GeV and B in tesla.
-                    signed_radius = transverse_momentum * 1000.0 / (0.3 * config.magnetic_field_tesla * particle_charge)
-                    tan_lambda = vz / transverse_momentum
-                    transverse_arc = length / np.sqrt(1.0 + tan_lambda * tan_lambda)
-                    arc = np.linspace(0.0, transverse_arc, 36)
-                    phi = np.arctan2(vy, vx)
-                    angle = phi - arc / signed_radius
-                    path_x = signed_radius * np.sin(phi) - signed_radius * np.sin(angle)
-                    path_y = -signed_radius * np.cos(phi) + signed_radius * np.cos(angle)
-                    path_z = arc * tan_lambda
-                else:
-                    scale = length / norm
-                    path_x = np.asarray([0.0, scale * vx])
-                    path_y = np.asarray([0.0, scale * vy])
-                    path_z = np.asarray([0.0, scale * vz])
+                path_x, path_y, path_z = _particle_trajectory(
+                    vx, vy, vz, particle_charge, length, config.magnetic_field_tesla)
                 particle_x.extend(path_x.tolist() + [np.nan])
                 particle_y.extend(path_y.tolist() + [np.nan])
                 particle_z.extend(path_z.tolist() + [np.nan])
@@ -653,7 +687,7 @@ def render_event(
     if not compact:
         seed = _production_suffix(root_file)
         seed_label = f" — seed {seed}" if seed is not None else ""
-        title_suffix = " — visible status-1 target proxy" if target_only else ""
+        title_suffix = f" — {config.particle_proxy_label}" if target_only else ""
         ax.set_title(f"{config.title}{seed_label} — event {event}{title_suffix}", fontsize=15)
         ax.legend(loc="upper left", fontsize=7.5, ncol=2, frameon=True, framealpha=0.9)
         # Fixed camera-orientation marker: the beam axis is perpendicular to
@@ -721,17 +755,18 @@ def render_comparison(images: list[tuple[Path, str]], event: int, output: str | 
         ax.imshow(plt.imread(path))
         ax.axis("off")
     detector_names = " vs ".join(DETECTORS[detector].title for _, detector in images)
-    fig.suptitle(f"{detector_names} — event {event}", fontsize=18)
+    fig.suptitle(f"{detector_names} — event index {event} (independent collisions)", fontsize=18)
     fig.savefig(output, dpi=150, facecolor="white", bbox_inches="tight", pad_inches=0.04)
     plt.close(fig)
 
 
-def main() -> None:
+def main(default_detector="auto") -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root_files", type=Path, nargs="+")
     parser.add_argument("--events", type=int, nargs="+", default=[0])
     parser.add_argument("--output-dir", type=Path, default=Path("event_displays"))
-    parser.add_argument("--detector", choices=("auto", *DETECTORS), default="auto")
+    parser.add_argument("--detector", choices=("auto", "clic", "cld", "idea", "maia"), default=default_detector)
+    parser.add_argument("--plot-limit", type=float, help="shared transverse half-width in mm")
     parser.add_argument(
         "--max-hits",
         type=int,
@@ -784,7 +819,7 @@ def main() -> None:
     numeric_suffixes = [suffix for suffix in production_suffixes if suffix is not None]
     if len(inputs) > 1 and len(numeric_suffixes) == len(inputs) and len(set(numeric_suffixes)) != 1:
         raise ValueError("comparison inputs must have the same trailing numerical suffix " f"(got: {', '.join(numeric_suffixes)})")
-    comparison_limit = max(config.plot_limit for _, config in inputs) if len(inputs) > 1 else None
+    comparison_limit = args.plot_limit if args.plot_limit is not None else (max(config.plot_limit for _, config in inputs) if len(inputs) > 1 else None)
 
     for event in args.events:
         event_images = []

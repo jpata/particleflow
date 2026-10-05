@@ -30,6 +30,8 @@ dependencies = [
     "comet-ml",
     "fastjet",
     "fsspec",
+    # TFDS imports this backport even on Python 3.11.
+    "importlib-resources",
     "jupyter",
     "jupyter-book>=2.1.6",
     "keras",

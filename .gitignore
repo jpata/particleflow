@@ -62,3 +62,14 @@ build
 .env
 
 logs_slurm/
+
+# Local validation and analysis artifacts
+.chart-data-*/
+data/tfds_validation_cld_hits/
+local_test_data/
+tmp/
+experiments.tar
+experiments.tgz
+log_*.err
+*.log
+**/tensorboard/
