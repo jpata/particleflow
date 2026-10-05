@@ -1,7 +1,7 @@
 # This file contains the structure of the MLPF configuration and some generic defaults.
 # Dataset-specific overrides are in particleflow_spec.yaml
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from dataclasses import dataclass, fields
 import os
 from enum import Enum
@@ -780,6 +780,10 @@ class SetDecoderConfig(BaseModel):
     query_init: SetQueryInit = SetQueryInit.LEARNED
     local_attention_radius: Optional[float] = Field(default=None, gt=0.0)
     tracker_query_fraction: float = Field(default=0.5, ge=0.0, le=1.0)
+    proposal_mode: Literal["topk", "grid-diverse"] = "topk"
+    proposal_grid_size: float = Field(default=0.1, gt=0.0)
+    use_aggregate_anchors: bool = False
+    aggregate_grid_size: float = Field(default=0.1, gt=0.0)
     presence_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
     no_object_weight: float = Field(default=1.0, gt=0.0)
     cardinality_loss_weight: float = Field(default=0.0, ge=0.0)
@@ -790,6 +794,10 @@ class SetDecoderConfig(BaseModel):
     def validate_query_locality(self):
         if self.local_attention_radius is not None and self.query_init != SetQueryInit.INPUT_CONDITIONED:
             raise ValueError("set decoder local_attention_radius requires query_init='input-conditioned'")
+        if self.proposal_mode != "topk" and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder proposal_mode requires query_init='input-conditioned'")
+        if self.use_aggregate_anchors and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder aggregate anchors require query_init='input-conditioned'")
         return self
 
 

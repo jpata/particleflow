@@ -102,6 +102,12 @@ def test_set_config_rejects_local_attention_for_global_queries():
         make_config(local_attention_radius=0.4)
 
 
+@pytest.mark.parametrize("override", [{"proposal_mode": "grid-diverse"}, {"use_aggregate_anchors": True}])
+def test_set_config_rejects_object_formation_for_global_queries(override):
+    with pytest.raises(ValueError, match="query_init='input-conditioned'"):
+        make_config(**override)
+
+
 def test_set_config_rejects_non_hit_datasets():
     with pytest.raises(ValueError, match="supported only for CLD/CLIC hit datasets"):
         MLPFConfig.model_validate(
@@ -158,6 +164,58 @@ def test_input_conditioned_set_decoder_forward_backward():
 
     auxiliary = [output for prediction in predictions.auxiliary_predictions for output in prediction]
     sum(output.square().mean() for output in [*predictions, *auxiliary]).backward()
+    assert [name for name, parameter in model.named_parameters() if parameter.grad is None] == []
+
+
+def test_grid_diverse_queries_choose_one_representative_per_angular_cell():
+    config = make_config(
+        num_slots=4,
+        query_init="input-conditioned",
+        local_attention_radius=0.4,
+        tracker_query_fraction=0.5,
+        proposal_mode="grid-diverse",
+        proposal_grid_size=0.2,
+    )
+    decoder = MLPF(config).set_decoder
+    features = torch.zeros(6, config.input_dim)
+    features[:, 0] = torch.tensor([1, 1, 1, 2, 2, 2])
+    features[:, 2] = torch.tensor([0.01, 0.02, 0.45, 0.01, 0.02, 0.45])
+    phi = torch.tensor([0.01, 0.02, 0.45, 0.01, 0.02, 0.45])
+    features[:, 3] = torch.sin(phi)
+    features[:, 4] = torch.cos(phi)
+    features[:, 5] = torch.tensor([0.0, 0.0, 0.0, 1.0, 3.0, 2.0])
+    features[:, 6] = torch.tensor([20.0, 10.0, 30.0, 1000.0, 1000.0, 1000.0])
+
+    summaries, scores, representatives = decoder._angular_grid_summary(features, torch.ones(6, dtype=torch.bool), 0.2)
+
+    assert representatives.tolist() == [False, True, True, False, True, True]
+    assert representatives.sum() == 4
+    torch.testing.assert_close(summaries[3, 2], torch.log1p(torch.tensor(4.0)))
+    torch.testing.assert_close(scores[3], scores[4])
+
+
+def test_aggregate_anchor_set_decoder_forward_backward():
+    config = make_config(
+        num_slots=6,
+        query_init="input-conditioned",
+        local_attention_radius=0.4,
+        proposal_mode="grid-diverse",
+        use_aggregate_anchors=True,
+        num_layers=2,
+    )
+    model = MLPF(config)
+    X = torch.randn(2, 12, config.input_dim)
+    X[..., 0] = torch.tensor([1, 2] * 6)
+    X[..., 1] = X[..., 1].abs() + 0.1
+    X[..., 5] = X[..., 5].abs() + 0.1
+    mask = torch.ones(2, 12, dtype=torch.bool)
+    mask[1, 9:] = False
+
+    predictions = model(X, mask)
+    sum(output.square().mean() for output in predictions).backward()
+
+    assert all(torch.isfinite(output).all() for output in predictions)
+    assert model.set_decoder.aggregate_projection[0].weight.grad is not None
     assert [name for name, parameter in model.named_parameters() if parameter.grad is None] == []
 
 

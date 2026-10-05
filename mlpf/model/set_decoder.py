@@ -119,6 +119,8 @@ class ParticleSetDecoderLayer(nn.Module):
 class ParticleSetDecoder(nn.Module):
     """Decode learned or detector-seeded queries into an unordered particle set."""
 
+    AGGREGATE_FEATURE_DIM = 8
+
     def __init__(self, embedding_dim, num_classes, config):
         super().__init__()
         if embedding_dim % config.num_heads != 0:
@@ -128,6 +130,10 @@ class ParticleSetDecoder(nn.Module):
         self.query_init = getattr(config.query_init, "value", config.query_init)
         self.local_attention_radius = config.local_attention_radius
         self.tracker_query_fraction = config.tracker_query_fraction
+        self.proposal_mode = config.proposal_mode
+        self.proposal_grid_size = config.proposal_grid_size
+        self.use_aggregate_anchors = config.use_aggregate_anchors
+        self.aggregate_grid_size = config.aggregate_grid_size
         self.use_auxiliary_losses = config.auxiliary_loss_weight > 0
         self.queries = nn.Parameter(torch.empty(1, config.num_slots, embedding_dim))
         nn.init.trunc_normal_(self.queries, std=0.02)
@@ -148,12 +154,22 @@ class ParticleSetDecoder(nn.Module):
             )
             self.reference_delta_heads = nn.ModuleList(nn.Linear(embedding_dim, 2) for _ in self.layers)
             self.scale_head = nn.Linear(embedding_dim, 2)
+            self.aggregate_projection = (
+                nn.Sequential(
+                    nn.Linear(self.AGGREGATE_FEATURE_DIM, embedding_dim),
+                    nn.GELU(),
+                    nn.Linear(embedding_dim, embedding_dim),
+                )
+                if self.use_aggregate_anchors
+                else None
+            )
             self.momentum_head = None
         else:
             self.seed_projection = None
             self.reference_embedding = None
             self.reference_delta_heads = None
             self.scale_head = None
+            self.aggregate_projection = None
             self.momentum_head = nn.Linear(embedding_dim, 5)
 
     @staticmethod
@@ -164,14 +180,103 @@ class ParticleSetDecoder(nn.Module):
         ranked = scores.masked_fill(~candidates, -torch.inf)
         return torch.topk(ranked, count, sorted=True).indices
 
+    @staticmethod
+    def _angular_grid_summary(input_features, valid, grid_size):
+        """Return per-element cell summaries and one representative per occupied cell.
+
+        The implementation uses sorting and scatter reductions rather than
+        materializing pairwise hit distances. Tracker and calorimeter hits use
+        disjoint cell keys.
+        """
+
+        device = input_features.device
+        num_elements = input_features.shape[0]
+        summaries = input_features.new_zeros((num_elements, ParticleSetDecoder.AGGREGATE_FEATURE_DIM), dtype=torch.float32)
+        cell_rank = input_features.new_full((num_elements,), -torch.inf, dtype=torch.float32)
+        representative = torch.zeros(num_elements, dtype=torch.bool, device=device)
+        valid_indices = torch.nonzero(valid, as_tuple=False).squeeze(-1)
+        if valid_indices.numel() == 0:
+            return summaries, cell_rank, representative
+
+        features = input_features[valid_indices].float()
+        element_type = features[:, 0]
+        pt = features[:, 1].abs()
+        eta = torch.nan_to_num(features[:, 2], nan=0.0, posinf=10.0, neginf=-10.0).clamp(-10.0, 10.0)
+        phi = torch.atan2(features[:, 3], features[:, 4])
+        energy = features[:, 5].abs()
+        radius = torch.linalg.vector_norm(features[:, 6:9], dim=-1)
+
+        eta_bin = torch.floor((eta + 10.0) / grid_size).to(torch.int64)
+        phi_bin = torch.floor((phi + math.pi) / grid_size).to(torch.int64)
+        num_phi_bins = math.ceil(2.0 * math.pi / grid_size)
+        num_eta_bins = math.ceil(20.0 / grid_size)
+        type_index = (element_type == 2).to(torch.int64)
+        keys = (type_index * num_eta_bins + eta_bin) * num_phi_bins + phi_bin
+        occupied_keys, inverse = torch.unique(keys, sorted=True, return_inverse=True)
+        num_cells = occupied_keys.shape[0]
+
+        is_calo = element_type == 2
+        weight = torch.where(is_calo, energy.clamp_min(1.0e-8), torch.ones_like(energy))
+        values = torch.stack(
+            [
+                torch.ones_like(weight),
+                pt,
+                energy,
+                weight,
+                weight * eta,
+                weight * torch.sin(phi),
+                weight * torch.cos(phi),
+            ],
+            dim=-1,
+        )
+        reductions = torch.zeros((num_cells, values.shape[-1]), dtype=torch.float32, device=device)
+        reductions.scatter_add_(0, inverse.unsqueeze(-1).expand_as(values), values)
+        local = reductions[inverse]
+        centroid_eta = local[:, 4] / local[:, 3].clamp_min(1.0e-8)
+        centroid_phi = torch.atan2(local[:, 5], local[:, 6])
+        local_summary = torch.stack(
+            [
+                torch.log1p(local[:, 0]),
+                torch.log1p(local[:, 1]),
+                torch.log1p(local[:, 2]),
+                centroid_eta,
+                torch.sin(centroid_phi),
+                torch.cos(centroid_phi),
+                (~is_calo).to(torch.float32),
+                is_calo.to(torch.float32),
+            ],
+            dim=-1,
+        )
+        summaries[valid_indices] = local_summary
+
+        # Rank calorimeter cells by total energy and tracker cells by occupancy.
+        local_rank = torch.where(is_calo, torch.log1p(local[:, 2]), torch.log1p(local[:, 0]))
+        cell_rank[valid_indices] = local_rank
+
+        # Use the highest-energy calorimeter hit and the innermost tracker hit
+        # as a deterministic representative of each occupied cell.
+        element_rank = torch.where(is_calo, torch.log1p(energy), -radius)
+        max_rank = torch.full((num_cells,), -torch.inf, dtype=torch.float32, device=device)
+        max_rank.scatter_reduce_(0, inverse, element_rank, reduce="amax", include_self=True)
+        local_position = torch.arange(valid_indices.numel(), device=device)
+        candidate_position = torch.where(element_rank == max_rank[inverse], local_position, valid_indices.numel())
+        representative_position = torch.full((num_cells,), valid_indices.numel(), dtype=torch.long, device=device)
+        representative_position.scatter_reduce_(0, inverse, candidate_position, reduce="amin", include_self=True)
+        representative[valid_indices[representative_position]] = True
+        return summaries, cell_rank, representative
+
     def _input_conditioned_queries(self, memory, memory_mask, input_features):
         if input_features is None or input_features.shape[-1] < 6:
             raise ValueError("Input-conditioned set queries require raw input features through energy")
+        if (self.proposal_mode == "grid-diverse" or self.use_aggregate_anchors) and input_features.shape[-1] < 9:
+            raise ValueError("Grid-diverse proposals and aggregate anchors require raw hit positions")
 
         batch_size = memory.shape[0]
         slots = self.queries.expand(batch_size, -1, -1).clone()
         references = memory.new_zeros((batch_size, self.num_slots, 2), dtype=torch.float32)
         reference_mask = torch.zeros((batch_size, self.num_slots), dtype=torch.bool, device=memory.device)
+        scale_anchors = memory.new_zeros((batch_size, self.num_slots, 2), dtype=torch.float32)
+        scale_anchor_mask = torch.zeros((batch_size, self.num_slots), dtype=torch.bool, device=memory.device)
         num_tracker_slots = round(self.num_slots * self.tracker_query_fraction)
 
         element_type = input_features[..., 0]
@@ -186,10 +291,18 @@ class ParticleSetDecoder(nn.Module):
             tracker = valid & (element_type[event_idx] == 1)
             calorimeter = valid & (element_type[event_idx] == 2)
 
-            tracker_indices = self._take_topk(proposal_score[event_idx], tracker, num_tracker_slots)
+            proposal_candidates = valid
+            proposal_scores = proposal_score[event_idx]
+            proposal_summary = None
+            if self.proposal_mode == "grid-diverse":
+                proposal_summary, proposal_scores, proposal_candidates = self._angular_grid_summary(
+                    input_features[event_idx], valid, self.proposal_grid_size
+                )
+
+            tracker_indices = self._take_topk(proposal_scores, tracker & proposal_candidates, num_tracker_slots)
             chosen_mask[tracker_indices] = True
             calo_slots = self.num_slots - len(tracker_indices)
-            calo_indices = self._take_topk(proposal_score[event_idx], calorimeter & ~chosen_mask, calo_slots)
+            calo_indices = self._take_topk(proposal_scores, calorimeter & proposal_candidates & ~chosen_mask, calo_slots)
             chosen_mask[calo_indices] = True
             selected = torch.cat([tracker_indices, calo_indices])
 
@@ -201,7 +314,26 @@ class ParticleSetDecoder(nn.Module):
             num_selected = len(selected)
             if num_selected == 0:
                 continue
-            reference = torch.stack([input_eta[event_idx, selected], input_phi[event_idx, selected]], dim=-1)
+            selected_eta = input_eta[event_idx, selected]
+            selected_phi = input_phi[event_idx, selected]
+            selected_summary = None
+            if self.use_aggregate_anchors:
+                if proposal_summary is not None and self.aggregate_grid_size == self.proposal_grid_size:
+                    summary = proposal_summary
+                else:
+                    summary, _, _ = self._angular_grid_summary(input_features[event_idx], valid, self.aggregate_grid_size)
+                selected_summary = summary[selected]
+                selected_is_calo = element_type[event_idx, selected] == 2
+                centroid_eta = selected_summary[:, 3]
+                centroid_phi = torch.atan2(selected_summary[:, 4], selected_summary[:, 5])
+                selected_eta = torch.where(selected_is_calo, centroid_eta, selected_eta)
+                selected_phi = torch.where(selected_is_calo, centroid_phi, selected_phi)
+                log_energy = selected_summary[:, 2]
+                log_pt = torch.log(torch.expm1(log_energy).clamp_min(1.0e-8) / torch.cosh(selected_eta).clamp_min(1.0))
+                scale_anchors[event_idx, :num_selected] = torch.stack([log_pt, log_energy], dim=-1)
+                scale_anchor_mask[event_idx, :num_selected] = selected_is_calo
+
+            reference = torch.stack([selected_eta, selected_phi], dim=-1)
             position_features = torch.stack(
                 [
                     reference[:, 0],
@@ -215,11 +347,15 @@ class ParticleSetDecoder(nn.Module):
                 + self.seed_projection(memory[event_idx, selected])
                 + self.reference_embedding(position_features).to(memory.dtype)
             )
+            if self.aggregate_projection is not None:
+                slots[event_idx, :num_selected] = slots[event_idx, :num_selected] + self.aggregate_projection(
+                    selected_summary.to(memory.dtype)
+                )
             references[event_idx, :num_selected] = reference
             reference_mask[event_idx, :num_selected] = True
-        return slots, references, reference_mask
+        return slots, references, reference_mask, scale_anchors, scale_anchor_mask
 
-    def _predict(self, slots, references=None):
+    def _predict(self, slots, references=None, scale_anchors=None, scale_anchor_mask=None):
         normalized_slots = self.output_norm(slots)
         presence = self.presence_head(normalized_slots)
         pid = self.pid_head(normalized_slots)
@@ -229,6 +365,8 @@ class ParticleSetDecoder(nn.Module):
             momentum = torch.cat([momentum[..., :2], phi_direction, momentum[..., 4:5]], dim=-1)
         else:
             scales = self.scale_head(normalized_slots)
+            if scale_anchors is not None:
+                scales = torch.where(scale_anchor_mask.unsqueeze(-1), scales + scale_anchors.to(scales.dtype), scales)
             momentum = torch.stack(
                 [
                     scales[..., 0],
@@ -245,8 +383,11 @@ class ParticleSetDecoder(nn.Module):
     def forward(self, memory, memory_mask, input_features=None):
         memory_mask = memory_mask.bool()
         references = reference_mask = memory_positions = None
+        scale_anchors = scale_anchor_mask = None
         if self.query_init == "input-conditioned":
-            slots, references, reference_mask = self._input_conditioned_queries(memory, memory_mask, input_features)
+            slots, references, reference_mask, scale_anchors, scale_anchor_mask = self._input_conditioned_queries(
+                memory, memory_mask, input_features
+            )
             memory_positions = torch.stack(
                 [
                     torch.nan_to_num(
@@ -282,7 +423,7 @@ class ParticleSetDecoder(nn.Module):
                 references = torch.stack([eta, torch.atan2(torch.sin(phi), torch.cos(phi))], dim=-1)
             is_final_layer = layer_index == len(self.layers) - 1
             if self.use_auxiliary_losses or is_final_layer:
-                outputs.append(self._predict(slots, references))
+                outputs.append(self._predict(slots, references, scale_anchors, scale_anchor_mask))
 
         auxiliary_predictions = tuple(outputs[:-1]) if self.use_auxiliary_losses else ()
         return ParticleSetDecoderOutput(

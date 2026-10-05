@@ -26,6 +26,7 @@ PF_HITS_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_hits_comparison.yam
 CLIC_CLD_SCENARIO = ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comparison.yaml"
 SET_IMPROVEMENT_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_improvement_comparison.yaml"
 SET_QUERY_MATCHING_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_query_matching_comparison.yaml"
+OBJECT_FORMATION_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_object_formation_comparison.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -247,6 +248,42 @@ def test_set_query_matching_scenario_resolves_four_factorial_variants():
     assert {job.resolved_config.val_freq for job in jobs} == {5000}
     assert {job.resolved_config.checkpoint_freq for job in jobs} == {1000}
     assert {job.seed for job in jobs} == {12345}
+
+
+def test_object_formation_scenario_resolves_scalable_two_by_two_campaign():
+    scenario = load_training_scenario(OBJECT_FORMATION_SCENARIO)
+    platform = load_platform_profile(PLATFORMS / "lumi_mi250x.yaml")
+
+    jobs = resolve_scenario_jobs(
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+    )
+
+    assert [job.variant_name for job in jobs] == [
+        "baseline_topk_absolute",
+        "grid_diverse_absolute",
+        "topk_aggregate_anchors",
+        "grid_diverse_aggregate_anchors",
+    ]
+    assert [
+        (
+            job.resolved_config.model.set_decoder.proposal_mode,
+            job.resolved_config.model.set_decoder.use_aggregate_anchors,
+        )
+        for job in jobs
+    ] == [
+        ("topk", False),
+        ("grid-diverse", False),
+        ("topk", True),
+        ("grid-diverse", True),
+    ]
+    assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
+    assert {job.resolved_config.model.set_decoder.num_layers for job in jobs} == {4}
+    assert {job.resolved_config.num_steps for job in jobs} == {50000}
+    assert {job.resolved_config.compile for job in jobs} == {False}
+    assert {job.global_batch_size for job in jobs} == {512}
+    assert {job.gpu_batch_multiplier for job in jobs} == {64}
 
 
 def test_platform_data_dir_mapping_requires_the_variant_production():
