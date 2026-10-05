@@ -1,5 +1,10 @@
 # Reproducible notebook studies
 
+Only existing `README.md` files and event-display SVGs in this directory are
+tracked by Git. Notebooks, scripts, other inputs, and outputs are local
+artifacts; rendering a study requires its local files in addition to the
+tracked description and displays.
+
 Use this directory for dated, reproducible analyses and presentations. A study
 should remain renderable after its source experiment directory has been moved or
 deleted.

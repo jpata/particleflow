@@ -58,3 +58,17 @@ particleflow.egg-info/
 build
 
 /docs/_build/
+
+# Local validation and analysis artifacts
+.chart-data-*/
+data/tfds_validation_cld_hits/
+local_test_data/
+tmp/
+experiments.tar
+experiments.tgz
+log_*.err
+*.log
+**/tensorboard/
+
+# Previously tracked study READMEs and event-display SVGs stay tracked.
+/notebooks/studies/**
