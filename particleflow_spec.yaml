@@ -407,6 +407,50 @@ productions:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/qq"
         version: "3.2.1"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  # ColliderML Release 1 (OpenDataDetector, pp @ 14 TeV)
+  colliderml:
+    type: "colliderml"
+    comment: "ColliderML Release 1 ttbar (no pileup), clustered view (tracks + our spatial clusters)"
+    # Site-local roots for this production: download_root = the release-1 source parquet,
+    # workspace_root = this pipeline's converted parquet + TFDS area. Everything below derives
+    # from these two via ${...} references, so moving sites means editing only these two lines.
+    download_root: "/mnt/ceph/users/ewulff/data/colliderml/CERN__ColliderML-Release-1"
+    workspace_root: "/mnt/ceph/users/ewulff/mlpf/colliderml"
+    workspace_dir: "${productions.colliderml.workspace_root}/v1_release1_64c3d2f1"
+    source_revision: "64c3d2f112df3d5d20979d22da7cfdff13e10c4b"
+    memory:
+      post: 32000
+      tfds: 32000
+
+    samples:
+      ttbar_pu0:
+        source_dir: "${productions.colliderml.download_root}"
+      ttbar_pu200:
+        source_dir: "${productions.colliderml.download_root}"
+
+    postprocessing:
+      script: "mlpf/data/colliderml/postprocessing.py"
+      args: {}
+
+    tfds_mapping:
+      ttbar_pu0:
+        builder_path: "mlpf/heptfds/colliderml_pf/ttbar"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ttbar_pu200:
+        builder_path: "mlpf/heptfds/colliderml_pf/ttbar_pu200"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    tfds_hit_mapping:
+      ttbar_pu0:
+        builder_path: "mlpf/heptfds/colliderml_hits/ttbar"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ttbar_pu200:
+        builder_path: "mlpf/heptfds/colliderml_hits/ttbar_pu200"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # IDEA full simulation and the reconstruction currently provided by FCC-config.
   # This initial ML path deliberately uses truth-seeded proxy tracks and an
@@ -955,6 +999,149 @@ models:
       output_mode: "set"
       set_decoder:
         num_slots: 256
+        num_layers: 2
+        num_heads: 8
+        ffn_multiplier: 4.0
+        dropout: 0.0
+
+  pyg-colliderml-v1:
+    <<: *defaults
+    dataset: colliderml
+    gpu_batch_multiplier: 8
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0001
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        attention_type: flash
+        num_convs: 3
+        head_dim: 16
+        num_heads: 16
+
+    # Dataset Selection
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "colliderml_ttbar_nopu_pf"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  # Same recipe as pyg-colliderml-v1 but on the ~200-pileup dataset (ispu flag carried per
+  # target/gen particle)
+  pyg-colliderml-pu200-v1:
+    <<: *defaults
+    dataset: colliderml
+    gpu_batch_multiplier: 8
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0001
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        attention_type: flash
+        num_convs: 3
+        head_dim: 16
+        num_heads: 16
+
+    # Dataset Selection
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_pu200_pf"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_pu200_pf"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "colliderml_ttbar_pu200_pf"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  # Hits view: TFDS builder mlpf/heptfds/colliderml_hits/ttbar.py -> colliderml_ttbar_hits
+  # (converted from the ytarget_hit_* columns of the clustered-view parquet).
+  pyg-colliderml-hits-v1: &pyg_colliderml_hits_v1
+    <<: *defaults
+    dataset: colliderml_hits
+    gpu_batch_multiplier: 8
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0001
+
+    architecture: &pyg_colliderml_hits_architecture
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        attention_type: flash
+        num_convs: 3
+        head_dim: 16
+        num_heads: 16
+
+    # Dataset Selection
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_hits"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_hits"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "colliderml_ttbar_hits"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  # Set-prediction variant of the hits model (cf. pyg-cld-hits-set-v1). Regresses absolute
+  # log(pt), log(E), so it needs no per-element energy anchor (release-1 tracker hits have none).
+  # ttbar_pu0 has up to ~390 targets per event (p99 ~310), above the 256-slot default; pu200
+  # (~7.8k targets per event) is out of reach for set mode.
+  pyg-colliderml-hits-set-v1:
+    <<: *pyg_colliderml_hits_v1
+    gpu_batch_multiplier: 1
+    pad_to_multiple_elements: 128
+
+    architecture:
+      <<: *pyg_colliderml_hits_architecture
+      output_mode: "set"
+      set_decoder:
+        num_slots: 512
         num_layers: 2
         num_heads: 8
         ffn_multiplier: 4.0

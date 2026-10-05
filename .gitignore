@@ -58,3 +58,7 @@ particleflow.egg-info/
 build
 
 /docs/_build/
+
+.env
+
+logs_slurm/

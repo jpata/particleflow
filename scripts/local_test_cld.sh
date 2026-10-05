@@ -4,8 +4,7 @@ export TFDS_DATA_DIR=$(pwd)/tensorflow_datasets
 export PYTHONPATH=$(pwd)
 export KERAS_BACKEND=torch
 
-# Quick unit tests
-uv run python -m pytest --cache-clear tests
+# Unit tests run in the once-per-run 'units' CI job (.github/workflows/test.yml), not here.
 
 # 1. Fetch test data
 rm -Rf local_test_data/cld
