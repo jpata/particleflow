@@ -218,7 +218,17 @@ def track_pt(omega: np.ndarray, b_field: float) -> np.ndarray:
     return a * np.abs(b_field / omega)
 
 
-def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[str], cellid_encoding: Optional[str] = None) -> awkward.Record:
+_warned_missing_cellid_encoding = set()
+
+
+def hits_to_features(
+    hit_data: awkward.Array,
+    iev: int,
+    coll: str,
+    feats: List[str],
+    cellid_encoding: Optional[str] = None,
+    require_cellid_encoding: bool = True,
+) -> awkward.Record:
     available_fields = hit_data.fields
     feat_arr = {}
     n_hits = 0
@@ -240,12 +250,14 @@ def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[s
             print(f"feature {full_f} not available in {coll}")
             feat_arr[f] = np.zeros(n_hits, dtype=np.float32)
 
-    # set the subdetector type
+    # set the subdetector type. Match the calorimeter prefix case-insensitively: CLIC and CLD
+    # name their collections ECAL*/HCAL*, but MAIA uses Ecal*/Hcal*, which a case-sensitive
+    # match sends to the "other" bucket along with the muon system.
     sdcoll = "subdetector"
     feat_arr[sdcoll] = np.zeros(n_hits, dtype=np.int32)
-    if coll.startswith("ECAL") or coll.startswith("ECal"):
+    if coll.lower().startswith("ecal"):
         feat_arr[sdcoll][:] = 0
-    elif coll.startswith("HCAL") or coll.startswith("HCal"):
+    elif coll.lower().startswith("hcal"):
         feat_arr[sdcoll][:] = 1
     elif "Tracker" in coll or "VXD" in coll or "Tracker" in coll or "VXD" in coll or coll.startswith("ITracker") or coll.startswith("OTracker"):
         feat_arr[sdcoll][:] = 3
@@ -263,7 +275,11 @@ def hits_to_features(hit_data: awkward.Array, iev: int, coll: str, feats: List[s
     cellids = np.asarray(feat_arr["cellID"], dtype=np.uint64)
     cellid_fields = parse_cellid_encoding(cellid_encoding) if cellid_encoding is not None else {}
     if np.any(feat_arr[sdcoll] == 3) and not {"system", "side", "layer"}.issubset(cellid_fields):
-        raise RuntimeError(f"Tracker collection {coll!r} has no valid system/side/layer CellIDEncoding")
+        if require_cellid_encoding:
+            raise RuntimeError(f"Tracker collection {coll!r} has no valid system/side/layer CellIDEncoding")
+        if coll not in _warned_missing_cellid_encoding:
+            print(f"WARNING: tracker collection {coll!r} has no system/side/layer CellIDEncoding, setting those fields to zero")
+            _warned_missing_cellid_encoding.add(coll)
     for field in ("system", "side", "layer"):
         if field in cellid_fields:
             feat_arr[field] = decode_cellid_field(cellids, cellid_encoding, field)
@@ -299,6 +315,7 @@ def get_hit_matrix_and_genadj(
     collectionIDs: Dict[str, int],
     mcp_id: int,
     cellid_encodings: Optional[Dict[str, str]] = None,
+    require_cellid_encoding: bool = True,
 ) -> Tuple[awkward.Record, SparseMatrixCOO, Dict[Tuple[int, int], int]]:
     feats = [
         "type",
@@ -323,7 +340,7 @@ def get_hit_matrix_and_genadj(
     for col in sorted(hit_data.keys()):
         icol = collectionIDs[col]
         encoding = cellid_encodings.get(col) if cellid_encodings is not None else None
-        hit_features = hits_to_features(hit_data[col], iev, col, feats, encoding)
+        hit_features = hits_to_features(hit_data[col], iev, col, feats, encoding, require_cellid_encoding)
         hit_feature_matrix.append(hit_features)
         n_hits = len(hit_features["energy"])
 
@@ -941,10 +958,11 @@ def get_genparticles_and_adjacencies(
     mcp_id: int,
     b_field: float,
     cellid_encodings: Optional[Dict[str, str]] = None,
+    require_cellid_encoding: bool = True,
 ) -> EventData:
     gen_features = gen_to_features(prop_data, iev)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_hit_matrix_and_genadj(
-        hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id, cellid_encodings
+        hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id, cellid_encodings, require_cellid_encoding
     )
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
@@ -1786,6 +1804,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
                 mcp_id,
                 b_field,
                 cellid_encodings,
+                detector_cfg.require_cellid_encoding,
             )
         except ValueError as e:
             print(f"Skipping event {iev} because it has no visible particles: {e}")

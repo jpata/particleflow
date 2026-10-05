@@ -213,6 +213,11 @@ class EDM4HEP:
         name: str
         b_field: float
         hit_collections: List[str]
+        # Tracker hits are decoded into system/side/layer from the per-collection
+        # CellIDEncoding in the podio metadata, and a missing encoding is an error. Files
+        # converted from LCIO carry no collection metadata at all, so detectors produced that
+        # way opt out and get zeros for those three fields instead.
+        require_cellid_encoding: bool = True
 
     # Registry of supported key4hep detector scenarios. Add new detectors here;
     # mlpf/data/key4hep/postprocessing.py and tests/validate_parquet.py pick up
@@ -279,6 +284,9 @@ class EDM4HEP:
                 "VBTrackerHits",
                 "VETrackerHits",
             ],
+            # MAIA samples are converted from LCIO with an empty podio metadata tree, so no
+            # CellIDEncoding is available for any collection.
+            require_cellid_encoding=False,
         ),
         # OpenDataDetector as released by ColliderML release 1; not EDM4hep geometry, but the
         # registry is the single place the B-field comes from for downstream tools, so the
