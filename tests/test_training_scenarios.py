@@ -281,6 +281,7 @@ def test_object_formation_scenario_resolves_scalable_two_by_two_campaign():
     assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
     assert {job.resolved_config.model.set_decoder.num_layers for job in jobs} == {4}
     assert {job.resolved_config.num_steps for job in jobs} == {50000}
+    assert {job.resolved_config.checkpoint_freq for job in jobs} == {1000}
     assert {job.resolved_config.compile for job in jobs} == {False}
     assert {job.global_batch_size for job in jobs} == {512}
     assert {job.gpu_batch_multiplier for job in jobs} == {64}
@@ -536,4 +537,4 @@ def test_pipeline_command_uses_platform_python_environment(profile, expected):
     platform = load_platform_profile(PLATFORMS / f"{profile}.yaml")
     job = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")[0]
     command = _pipeline_command(job, scenario, platform, ROOT / "particleflow_spec.yaml", Path("experiment"))
-    assert command[:len(expected)] == expected
+    assert command[: len(expected)] == expected

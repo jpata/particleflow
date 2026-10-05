@@ -30,7 +30,7 @@ training:
     lr: 0.001
     num_steps: 50000
     val_freq: 5000
-    checkpoint_freq: 5000
+    checkpoint_freq: 1000
     nvalid: 512
     ntest: 512
     sampler_mode: interleaved-shards

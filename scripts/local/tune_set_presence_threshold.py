@@ -119,9 +119,7 @@ def main():
         "thresholds": {},
     }
     for threshold, metrics in accumulators.items():
-        output["thresholds"][str(threshold)] = {
-            name: total / count if count else None for name, (total, count) in metrics.items()
-        }
+        output["thresholds"][str(threshold)] = {name: total / count if count else None for name, (total, count) in metrics.items()}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n")
     print(f"wrote {args.output}")

@@ -73,7 +73,9 @@ def parse_args():
     parser.add_argument("--start-event", type=int, default=0)
     parser.add_argument("--min-hits-per-particle", type=int, default=5, help="Min true hits for a particle to enter the metrics")
     parser.add_argument("--max-hits-per-event", type=int, default=4000, help="Subsample kept hits per event to this many, for compute")
-    parser.add_argument("--max-probe-samples", type=int, default=20000, help="Subsample the pooled probe set (per checkpoint/layer) to this many rows")
+    parser.add_argument(
+        "--max-probe-samples", type=int, default=20000, help="Subsample the pooled probe set (per checkpoint/layer) to this many rows"
+    )
     parser.add_argument("--probe-cv-folds", type=int, default=5)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -141,7 +143,8 @@ def prepare_event(X: np.ndarray, ytarget: np.ndarray, min_hits: int, max_hits: i
         idx = np.sort(rng.choice(idx, size=max_hits, replace=False))
 
     pn = particle_number[idx].astype(int)
-    sizes = np.array([counts[p] for p in pn])
+    selected_counts = Counter(pn.tolist())
+    sizes = np.array([selected_counts[p] for p in pn])
     nn_random_baseline = float(np.mean((sizes - 1) / (len(pn) - 1)))
 
     return {

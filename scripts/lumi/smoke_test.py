@@ -1,4 +1,5 @@
 """Check GPU execution and an RCCL all-reduce under torchrun."""
+
 import datetime
 import os
 

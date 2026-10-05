@@ -206,10 +206,10 @@ class ParticleSetDecoder(nn.Module):
         energy = features[:, 5].abs()
         radius = torch.linalg.vector_norm(features[:, 6:9], dim=-1)
 
-        eta_bin = torch.floor((eta + 10.0) / grid_size).to(torch.int64)
-        phi_bin = torch.floor((phi + math.pi) / grid_size).to(torch.int64)
         num_phi_bins = math.ceil(2.0 * math.pi / grid_size)
         num_eta_bins = math.ceil(20.0 / grid_size)
+        eta_bin = torch.floor((eta + 10.0) / grid_size).to(torch.int64).clamp_(0, num_eta_bins - 1)
+        phi_bin = torch.floor((phi + math.pi) / grid_size).to(torch.int64).clamp_(0, num_phi_bins - 1)
         type_index = (element_type == 2).to(torch.int64)
         keys = (type_index * num_eta_bins + eta_bin) * num_phi_bins + phi_bin
         occupied_keys, inverse = torch.unique(keys, sorted=True, return_inverse=True)
@@ -307,6 +307,11 @@ class ParticleSetDecoder(nn.Module):
             selected = torch.cat([tracker_indices, calo_indices])
 
             remaining = self.num_slots - len(selected)
+            if remaining and self.proposal_mode == "grid-diverse":
+                extra_representatives = self._take_topk(proposal_scores, proposal_candidates & ~chosen_mask, remaining)
+                chosen_mask[extra_representatives] = True
+                selected = torch.cat([selected, extra_representatives])
+                remaining = self.num_slots - len(selected)
             if remaining:
                 fallback = self._take_topk(proposal_score[event_idx], valid & ~chosen_mask, remaining)
                 selected = torch.cat([selected, fallback])
@@ -348,9 +353,7 @@ class ParticleSetDecoder(nn.Module):
                 + self.reference_embedding(position_features).to(memory.dtype)
             )
             if self.aggregate_projection is not None:
-                slots[event_idx, :num_selected] = slots[event_idx, :num_selected] + self.aggregate_projection(
-                    selected_summary.to(memory.dtype)
-                )
+                slots[event_idx, :num_selected] = slots[event_idx, :num_selected] + self.aggregate_projection(selected_summary.to(memory.dtype))
             references[event_idx, :num_selected] = reference
             reference_mask[event_idx, :num_selected] = True
         return slots, references, reference_mask, scale_anchors, scale_anchor_mask
@@ -385,9 +388,7 @@ class ParticleSetDecoder(nn.Module):
         references = reference_mask = memory_positions = None
         scale_anchors = scale_anchor_mask = None
         if self.query_init == "input-conditioned":
-            slots, references, reference_mask, scale_anchors, scale_anchor_mask = self._input_conditioned_queries(
-                memory, memory_mask, input_features
-            )
+            slots, references, reference_mask, scale_anchors, scale_anchor_mask = self._input_conditioned_queries(memory, memory_mask, input_features)
             memory_positions = torch.stack(
                 [
                     torch.nan_to_num(

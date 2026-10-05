@@ -194,6 +194,35 @@ def test_grid_diverse_queries_choose_one_representative_per_angular_cell():
     torch.testing.assert_close(scores[3], scores[4])
 
 
+def test_angular_grid_keeps_detector_types_separate_at_bin_boundaries():
+    features = torch.zeros(2, 9)
+    features[:, 0] = torch.tensor([1.0, 2.0])
+    features[:, 2] = torch.tensor([10.0, -10.0])
+    features[:, 4:6] = 1.0
+
+    decoder = MLPF(make_config()).set_decoder
+    summaries, _, representatives = decoder._angular_grid_summary(features, torch.ones(2, dtype=torch.bool), 0.1)
+
+    assert representatives.tolist() == [True, True]
+    torch.testing.assert_close(summaries[:, 0], torch.log1p(torch.ones(2)))
+
+
+def test_grid_diverse_queries_use_remaining_cell_representatives_before_duplicate_hits():
+    config = make_config(num_slots=4, query_init="input-conditioned", proposal_mode="grid-diverse", tracker_query_fraction=0.5)
+    decoder = MLPF(config).set_decoder
+    features = torch.zeros(5, config.input_dim)
+    features[:, 0] = torch.tensor([1.0, 1.0, 1.0, 2.0, 2.0])
+    features[:, 2] = torch.tensor([0.01, 0.31, 0.61, 1.01, 1.02])
+    features[:, 4] = 1.0
+    features[:, 5] = torch.tensor([0.0, 0.0, 0.0, 10.0, 20.0])
+    memory = torch.zeros(1, 5, decoder.queries.shape[-1])
+
+    _, references, reference_mask, _, _ = decoder._input_conditioned_queries(memory, torch.ones(1, 5, dtype=torch.bool), features.unsqueeze(0))
+
+    assert reference_mask.all()
+    torch.testing.assert_close(references[0, :, 0].sort().values, torch.tensor([0.01, 0.31, 0.61, 1.02]))
+
+
 def test_aggregate_anchor_set_decoder_forward_backward():
     config = make_config(
         num_slots=6,
