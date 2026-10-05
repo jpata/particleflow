@@ -24,7 +24,7 @@ def write_smoke_shards(input_path, manual_dir, train_fraction=0.5):
     manual_dir.mkdir(parents=True, exist_ok=True)
     middle = max(1, min(len(table) - 1, int(len(table) * train_fraction)))
     for index, (start, count) in enumerate(((0, middle), (middle, len(table) - middle))):
-        ak.to_parquet(table[start:start + count], manual_dir / f"train-{index:05d}-of-00002.parquet")
+        ak.to_parquet(table[start : start + count], manual_dir / f"train-{index:05d}-of-00002.parquet")
 
 
 def main():
@@ -38,6 +38,7 @@ def main():
     write_smoke_shards(args.input, args.manual_dir, args.train_fraction)
     if args.detector == "maia":
         from mlpf.heptfds.maia_pf_edm4hep.ttbar import MaiaEdmTtbarPf
+
         builder = MaiaEdmTtbarPf(config="10", data_dir=str(args.data_dir))
     else:
         builder = CollidermlTtbarNopuPf(config="10", data_dir=str(args.data_dir))

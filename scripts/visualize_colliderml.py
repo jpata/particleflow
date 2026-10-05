@@ -32,6 +32,7 @@ class EventBranch:
 
 class EventTree(dict):
     """Minimal single-event adapter for the shared ROOT display renderer."""
+
     def __init__(self, branches, event, num_entries):
         super().__init__({key: EventBranch(value, event) for key, value in branches.items()})
         self.num_entries = num_entries
@@ -47,11 +48,16 @@ def adapt_event(record, event, num_entries, clusters=None):
     tracks = record["tracks"]
     theta = np.clip(np.asarray(tracks["theta"]), 1e-9, np.pi - 1e-9)
     collection("ActsTracks", {"trackStates_begin": np.arange(len(theta))})
-    collection("_ActsTracks_trackStates", {
-        "phi": tracks["phi"], "D0": tracks["d0"], "Z0": tracks["z0"],
-        "omega": 2.99792458e-4 * DETECTORS["colliderml"].magnetic_field_tesla * np.asarray(tracks["qop"]) / np.sin(theta),
-        "tanLambda": np.cos(theta) / np.sin(theta),
-    })
+    collection(
+        "_ActsTracks_trackStates",
+        {
+            "phi": tracks["phi"],
+            "D0": tracks["d0"],
+            "Z0": tracks["z0"],
+            "omega": 2.99792458e-4 * DETECTORS["colliderml"].magnetic_field_tesla * np.asarray(tracks["qop"]) / np.sin(theta),
+            "tanLambda": np.cos(theta) / np.sin(theta),
+        },
+    )
     calo = record["calo_hits"]
     if clusters is None:
         region = np.asarray(calo["detector"])
@@ -66,11 +72,16 @@ def adapt_event(record, event, num_entries, clusters=None):
             collection(f"{prefix}{region}", {f"position.{axis}": np.asarray(hits[axis])[selected] for axis in "xyz"})
     particles = record["particles"]
     _, _, _, leaf, _ = _build_parent_maps(particles)
-    collection("MCParticles", {
-        "generatorStatus": leaf.astype(int), "PDG": particles["pdg_id"],
-        "charge": particles["charge"], "mass": particles["mass"],
-        **{f"momentum.{axis}": particles[f"p{axis}"] for axis in "xyz"},
-    })
+    collection(
+        "MCParticles",
+        {
+            "generatorStatus": leaf.astype(int),
+            "PDG": particles["pdg_id"],
+            "charge": particles["charge"],
+            "mass": particles["mass"],
+            **{f"momentum.{axis}": particles[f"p{axis}"] for axis in "xyz"},
+        },
+    )
     return EventTree(branches, event, num_entries)
 
 
@@ -109,8 +120,18 @@ def main():
         tree = adapt_event(record, index, count, clusters)
         suffix = "_targets" if args.target_only else ""
         output = args.output_dir / f"colliderml_event_{index}{suffix}.png"
-        render_event(args.input, index, output, args.max_hits, "colliderml", args.plot_limit,
-                     show_particles=not args.no_particles, target_only=args.target_only, input_view=args.input_view, tree=tree)
+        render_event(
+            args.input,
+            index,
+            output,
+            args.max_hits,
+            "colliderml",
+            args.plot_limit,
+            show_particles=not args.no_particles,
+            target_only=args.target_only,
+            input_view=args.input_view,
+            tree=tree,
+        )
         print(f"{output} (source event_id={record['event_id']})")
 
 

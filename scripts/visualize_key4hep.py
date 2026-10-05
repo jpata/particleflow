@@ -159,10 +159,14 @@ DETECTORS = {
 
 # These envelopes bound display trajectories; they are not geometry models.
 DETECTORS["maia"] = replace(
-    DETECTORS["cld"], key="maia", title="MAIA", magnetic_field_tesla=5.0,
-    particle_collection="MCParticle", plot_limit=6500.0,
-    hit_collections=tuple((f"{prefix}TrackerHits", "Tracker hits", "#d62728")
-                          for prefix in ("IB", "IE", "OB", "OE", "VB", "VE")) + (
+    DETECTORS["cld"],
+    key="maia",
+    title="MAIA",
+    magnetic_field_tesla=5.0,
+    particle_collection="MCParticle",
+    plot_limit=6500.0,
+    hit_collections=tuple((f"{prefix}TrackerHits", "Tracker hits", "#d62728") for prefix in ("IB", "IE", "OB", "OE", "VB", "VE"))
+    + (
         ("EcalBarrelCollectionRec", "ECAL hits", "#1f77b4"),
         ("EcalEndcapCollectionRec", "ECAL hits", "#1f77b4"),
         ("HcalBarrelCollectionRec", "HCAL hits", "#2ca02c"),
@@ -171,14 +175,20 @@ DETECTORS["maia"] = replace(
     ),
 )
 DETECTORS["colliderml"] = replace(
-    DETECTORS["cld"], key="colliderml", title="ColliderML ODD", magnetic_field_tesla=3.0,
-    track_collection="ActsTracks", track_radius=1200.0, track_half_z=3200.0,
-    particle_barrel_radius=1500.0, particle_endcap_z=3200.0,
-    particle_max_length=6000.0, plot_limit=6500.0,
+    DETECTORS["cld"],
+    key="colliderml",
+    title="ColliderML ODD",
+    magnetic_field_tesla=3.0,
+    track_collection="ActsTracks",
+    track_radius=1200.0,
+    track_half_z=3200.0,
+    particle_barrel_radius=1500.0,
+    particle_endcap_z=3200.0,
+    particle_max_length=6000.0,
+    plot_limit=6500.0,
     particle_proxy_label="visible primary-leaf target proxy",
     hit_collections=tuple((f"TrackerRegion{region}", "Tracker hits", "#d62728") for region in range(9))
-    + tuple((f"CaloRegion{region}", "ECAL hits" if region < 12 else "HCAL hits",
-             "#1f77b4" if region < 12 else "#2ca02c") for region in range(9, 15)),
+    + tuple((f"CaloRegion{region}", "ECAL hits" if region < 12 else "HCAL hits", "#1f77b4" if region < 12 else "#2ca02c") for region in range(9, 15)),
 )
 
 
@@ -197,7 +207,9 @@ def _detector_config(tree, detector: str = "auto") -> DetectorConfig:
     if "EcalBarrelCollectionRec" in tree and "MCParticle" in tree:
         return DETECTORS["maia"]
     matches = [
-        config for config in DETECTORS.values() if config.key not in {"clic", "maia"} and config.track_collection in tree and config.cluster_collection in tree
+        config
+        for config in DETECTORS.values()
+        if config.key not in {"clic", "maia"} and config.track_collection in tree and config.cluster_collection in tree
     ]
     if len(matches) != 1:
         found = ", ".join(config.key for config in matches) or "none"
@@ -330,14 +342,14 @@ def _particle_trajectory(px, py, pz, charge, length, magnetic_field_tesla):
     pt = np.hypot(px, py)
     if momentum == 0:
         return tuple(np.zeros(1) for _ in range(3))
-    if abs(charge) < .5 or magnetic_field_tesla == 0 or pt < 1e-12:
-        return tuple(np.asarray([0., length * value / momentum]) for value in (px, py, pz))
+    if abs(charge) < 0.5 or magnetic_field_tesla == 0 or pt < 1e-12:
+        return tuple(np.asarray([0.0, length * value / momentum]) for value in (px, py, pz))
     curvature = 2.99792458e-4 * magnetic_field_tesla * charge / pt
     transverse_length = min(length * pt / momentum, 2 * np.pi / abs(curvature))
     bend = abs(curvature * transverse_length)
-    arc = np.linspace(0., transverse_length, max(36, int(np.ceil(bend / .03)) + 1))
+    arc = np.linspace(0.0, transverse_length, max(36, int(np.ceil(bend / 0.03)) + 1))
     phi = np.arctan2(py, px)
-    half_bend = .5 * curvature * arc
+    half_bend = 0.5 * curvature * arc
     # This midpoint/sinc form avoids subtracting huge radii for high-pT tracks.
     displacement = arc * np.sinc(half_bend / np.pi)
     return displacement * np.cos(phi - half_bend), displacement * np.sin(phi - half_bend), arc * pz / pt
@@ -586,8 +598,7 @@ def render_event(
                     length = display_limit * (0.28 + 0.58 * energy_fraction)
                 else:
                     length = _particle_display_length(vx, vy, vz, particle_e, abs(particle_charge) < 0.5, config)
-                path_x, path_y, path_z = _particle_trajectory(
-                    vx, vy, vz, particle_charge, length, config.magnetic_field_tesla)
+                path_x, path_y, path_z = _particle_trajectory(vx, vy, vz, particle_charge, length, config.magnetic_field_tesla)
                 particle_x.extend(path_x.tolist() + [np.nan])
                 particle_y.extend(path_y.tolist() + [np.nan])
                 particle_z.extend(path_z.tolist() + [np.nan])
@@ -819,7 +830,9 @@ def main(default_detector="auto") -> None:
     numeric_suffixes = [suffix for suffix in production_suffixes if suffix is not None]
     if len(inputs) > 1 and len(numeric_suffixes) == len(inputs) and len(set(numeric_suffixes)) != 1:
         raise ValueError("comparison inputs must have the same trailing numerical suffix " f"(got: {', '.join(numeric_suffixes)})")
-    comparison_limit = args.plot_limit if args.plot_limit is not None else (max(config.plot_limit for _, config in inputs) if len(inputs) > 1 else None)
+    comparison_limit = (
+        args.plot_limit if args.plot_limit is not None else (max(config.plot_limit for _, config in inputs) if len(inputs) > 1 else None)
+    )
 
     for event in args.events:
         event_images = []

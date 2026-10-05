@@ -5,14 +5,23 @@ import json
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 
-LOSSES = ("Total", "Classification_binary", "Classification", "Regression_pt",
-          "Regression_energy", "Regression_eta", "Regression_sin_phi", "Regression_cos_phi")
+LOSSES = (
+    "Total",
+    "Classification_binary",
+    "Classification",
+    "Regression_pt",
+    "Regression_energy",
+    "Regression_eta",
+    "Regression_sin_phi",
+    "Regression_cos_phi",
+)
 
 
 def main():
@@ -36,7 +45,7 @@ def main():
         # Weighted total is not comparable across task-weight calibration.
         selected = x > calibration if name == "Total" else np.ones(len(x), dtype=bool)
         x, y = x[selected], y[selected]
-        ax.plot(x, y, color="C0", alpha=.25, linewidth=1, label="Training batches")
+        ax.plot(x, y, color="C0", alpha=0.25, linewidth=1, label="Training batches")
         if len(y) >= 5:
             ax.plot(x[4:], np.convolve(y, np.ones(5) / 5, mode="valid"), color="C0", label="Train: 5-point mean")
         vx = [step for step, _ in validation]
@@ -44,17 +53,19 @@ def main():
         assert np.isfinite(vy).all(), name
         ax.plot(vx, vy, "o-", color="C1", label="Held-out: 100 events")
         ax.set(title=name.replace("_", " "), xlabel="Optimizer step", ylabel="Loss")
-        ax.grid(alpha=.2)
+        ax.grid(alpha=0.2)
     axes.flat[0].legend(fontsize=8)
     fig.suptitle("ColliderML ttbar: 900 train / 100 held-out events\nTotal loss shown only after task-weight calibration", fontsize=14)
     fig.savefig(root / "convergence.png", dpi=150)
     plt.close(fig)
     first, last = validation[0][1], validation[-1][1]
-    summary = {"experiment_dir": str(root.resolve()), "task_weight_calibration_step": calibration,
-               "validation": [{"step": step, "losses": {key: float(losses[key]) for key in LOSSES}}
-                              for step, losses in validation],
-               "validation_total_relative_change": float(last["Total"] / first["Total"] - 1),
-               "caveat": "Training curves are sampled batches, validation is the full fixed held-out split. This tiny sample cannot establish physics convergence."}
+    summary = {
+        "experiment_dir": str(root.resolve()),
+        "task_weight_calibration_step": calibration,
+        "validation": [{"step": step, "losses": {key: float(losses[key]) for key in LOSSES}} for step, losses in validation],
+        "validation_total_relative_change": float(last["Total"] / first["Total"] - 1),
+        "caveat": "Training curves are sampled batches, validation is the full fixed held-out split. This tiny sample cannot establish physics convergence.",
+    }
     (root / "convergence.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))
 

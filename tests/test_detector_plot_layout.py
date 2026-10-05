@@ -14,8 +14,7 @@ def test_header_titles_do_not_overlap_each_other_or_panels(rows, synthetic):
     for ax in axes.flat:
         ax.set_title("Individual plot title")
         ax.set_xlabel("Feature label")
-    main, columns = layout_comparison_figure(
-        fig, axes, "ttbar • parquet • tracks — shared bins/axes; union of detector 0.5–99.5% ranges", synthetic)
+    main, columns = layout_comparison_figure(fig, axes, "ttbar • parquet • tracks — shared bins/axes; union of detector 0.5–99.5% ranges", synthetic)
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     main_box = main.get_window_extent(renderer)

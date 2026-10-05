@@ -1,12 +1,19 @@
 """MAIA ttbar sample in the shared EDM4hep track/cluster tensor schema."""
+
 from pathlib import Path
 
 import numpy as np
 import tensorflow_datasets as tfds
 
 from mlpf.heptfds.edm4hep_utils.utils_pf import (
-    NUM_SPLITS, N_X_FEATURES, N_Y_FEATURES, X_FEATURES_TRK, X_FEATURES_CL,
-    Y_FEATURES, generate_examples, split_sample,
+    NUM_SPLITS,
+    N_X_FEATURES,
+    N_Y_FEATURES,
+    X_FEATURES_TRK,
+    X_FEATURES_CL,
+    Y_FEATURES,
+    generate_examples,
+    split_sample,
 )
 
 
@@ -29,14 +36,16 @@ class MaiaEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
         return tfds.core.DatasetInfo(
             builder=self,
             description="MAIA muon-collider ttbar: reconstructed tracks/clusters and particle-flow targets/candidates.",
-            features=tfds.features.FeaturesDict({
-                "X": tfds.features.Tensor(shape=(None, N_X_FEATURES), dtype=np.float32),
-                "ytarget": tfds.features.Tensor(shape=(None, N_Y_FEATURES), dtype=np.float32),
-                "ycand": tfds.features.Tensor(shape=(None, N_Y_FEATURES), dtype=np.float32),
-                "genmet": tfds.features.Scalar(dtype=np.float32),
-                "genjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
-                "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
-            }),
+            features=tfds.features.FeaturesDict(
+                {
+                    "X": tfds.features.Tensor(shape=(None, N_X_FEATURES), dtype=np.float32),
+                    "ytarget": tfds.features.Tensor(shape=(None, N_Y_FEATURES), dtype=np.float32),
+                    "ycand": tfds.features.Tensor(shape=(None, N_Y_FEATURES), dtype=np.float32),
+                    "genmet": tfds.features.Scalar(dtype=np.float32),
+                    "genjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
+                    "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
+                }
+            ),
             homepage="https://github.com/jpata/particleflow",
             metadata=tfds.core.MetadataDict(x_features_track=X_FEATURES_TRK, x_features_cluster=X_FEATURES_CL, y_features=Y_FEATURES),
         )

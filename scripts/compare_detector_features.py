@@ -22,8 +22,25 @@ from mlpf.jet_utils import _match_jets_event  # noqa: E402
 DETECTORS = ["colliderml", "clic", "cld", "idea", "maia"]
 COLORS = ["#a23b72", "#0072b2", "#d55e00", "#009e73", "#9467bd"]
 LABELS = np.array([0, 211, 130, 22, 11, 13])
-CML_TRACK = ["elemtype", "pt", "eta", "sin_phi", "cos_phi", "p", "D0", "Z0", "theta", "qop",
-             "tanLambda", "omega", "radiusOfInnermostHit", "n_meas", "unused14", "unused15", "unused16"]
+CML_TRACK = [
+    "elemtype",
+    "pt",
+    "eta",
+    "sin_phi",
+    "cos_phi",
+    "p",
+    "D0",
+    "Z0",
+    "theta",
+    "qop",
+    "tanLambda",
+    "omega",
+    "radiusOfInnermostHit",
+    "n_meas",
+    "unused14",
+    "unused15",
+    "unused16",
+]
 
 
 def matrix(value, width):
@@ -81,17 +98,35 @@ def jet_matching_values(genjets, targetjets, match_dr):
     target_matched = np.zeros(len(target), dtype=bool)
     gen_matched[gi] = True
     target_matched[ti] = True
-    return {"gen_pt": gen[:, 0], "gen_eta": gen[:, 1], "gen_matched": gen_matched,
-            "target_pt": target[:, 0], "target_eta": target[:, 1], "target_matched": target_matched,
-            "matched_gen_pt": gen[gi, 0], "matched_gen_eta": gen[gi, 1],
-            "pt_ratio": target[ti, 0] / gen[gi, 0]}
+    return {
+        "gen_pt": gen[:, 0],
+        "gen_eta": gen[:, 1],
+        "gen_matched": gen_matched,
+        "target_pt": target[:, 0],
+        "target_eta": target[:, 1],
+        "target_matched": target_matched,
+        "matched_gen_pt": gen[gi, 0],
+        "matched_gen_eta": gen[gi, 1],
+        "pt_ratio": target[ti, 0] / gen[gi, 0],
+    }
 
 
-def collect(events, detector, features=None, match_dr=.1):
+def collect(events, detector, features=None, match_dr=0.1):
     values = defaultdict(list)
-    checks = {"events": 0, "nonfinite": {}, "alignment_failures": 0, "phi_norm_failures": 0, "unknown_target_pids": 0,
-              "target_jet_index_failures": 0, "unknown_element_types": 0, "serialization_events": 0, "serialization_mismatches": 0,
-              "track_p_kinematics_failures": 0, "cluster_et_kinematics_failures": 0, "target_energy_below_momentum": 0}
+    checks = {
+        "events": 0,
+        "nonfinite": {},
+        "alignment_failures": 0,
+        "phi_norm_failures": 0,
+        "unknown_target_pids": 0,
+        "target_jet_index_failures": 0,
+        "unknown_element_types": 0,
+        "serialization_events": 0,
+        "serialization_mismatches": 0,
+        "track_p_kinematics_failures": 0,
+        "cluster_et_kinematics_failures": 0,
+        "target_energy_below_momentum": 0,
+    }
     track_names = CML_TRACK if detector == "colliderml" else EDM4HEP.TrackFeatures.get_names()
     cluster_names = EDM4HEP.ClusterFeatures.get_names()
     y_names = ParticleFeatures.get_names()
@@ -105,11 +140,14 @@ def collect(events, detector, features=None, match_dr=.1):
         y = matrix(event["ytarget"], 14)
         checks["unknown_element_types"] += int((~np.isin(x[:, 0], [1, 2])).sum())
         if features is not None:
-            encoded = {"X": x.astype(np.float32), "ytarget": y.astype(np.float32),
-                       "ycand": matrix(event.get("ycand", y if detector == "idea" else np.zeros_like(y)), 14).astype(np.float32),
-                       "genmet": np.float32(np.asarray(event["genmet"]).reshape(-1)[0]),
-                       "genjets": matrix(event["genjets"], 4).astype(np.float32),
-                       "targetjets": matrix(event["targetjets"], 4).astype(np.float32)}
+            encoded = {
+                "X": x.astype(np.float32),
+                "ytarget": y.astype(np.float32),
+                "ycand": matrix(event.get("ycand", y if detector == "idea" else np.zeros_like(y)), 14).astype(np.float32),
+                "genmet": np.float32(np.asarray(event["genmet"]).reshape(-1)[0]),
+                "genjets": matrix(event["genjets"], 4).astype(np.float32),
+                "targetjets": matrix(event["targetjets"], 4).astype(np.float32),
+            }
             for key in ("ytarget", "ycand"):
                 encoded[key] = encoded[key].copy()
                 encoded[key][:, 0] = [int(np.flatnonzero(LABELS == pid)[0]) for pid in encoded[key][:, 0]]
@@ -126,7 +164,9 @@ def collect(events, detector, features=None, match_dr=.1):
         tracks = x[x[:, 0] == 1]
         clusters = x[x[:, 0] == 2]
         checks["track_p_kinematics_failures"] += int((~np.isclose(tracks[:, 5], tracks[:, 1] * np.cosh(tracks[:, 2]), rtol=1e-3, atol=1e-4)).sum())
-        checks["cluster_et_kinematics_failures"] += int((~np.isclose(clusters[:, 1], clusters[:, 5] / np.cosh(clusters[:, 2]), rtol=1e-3, atol=1e-4)).sum())
+        checks["cluster_et_kinematics_failures"] += int(
+            (~np.isclose(clusters[:, 1], clusters[:, 5] / np.cosh(clusters[:, 2]), rtol=1e-3, atol=1e-4)).sum()
+        )
         for kind, code, names in (("track", 1, track_names), ("cluster", 2, cluster_names)):
             rows = x[x[:, 0] == code]
             add(f"event/n_{kind}", len(rows))
@@ -164,9 +204,14 @@ def collect(events, detector, features=None, match_dr=.1):
 
 def stats(arr):
     finite = arr[np.isfinite(arr)].astype(np.float64, copy=False)
-    return {"count": len(arr), "nonfinite": int(len(arr) - len(finite)), "zero_fraction": float(np.mean(finite == 0)) if len(finite) else None,
-            "min": float(finite.min()) if len(finite) else None, "max": float(finite.max()) if len(finite) else None,
-            "quantiles_01_50_99": np.quantile(finite, [0.01, 0.5, 0.99]).tolist() if len(finite) else []}
+    return {
+        "count": len(arr),
+        "nonfinite": int(len(arr) - len(finite)),
+        "zero_fraction": float(np.mean(finite == 0)) if len(finite) else None,
+        "min": float(finite.min()) if len(finite) else None,
+        "max": float(finite.max()) if len(finite) else None,
+        "quantiles_01_50_99": np.quantile(finite, [0.01, 0.5, 0.99]).tolist() if len(finite) else [],
+    }
 
 
 def verify_persisted_colliderml(parquet_path, tfds_path, detector="colliderml"):
@@ -191,21 +236,25 @@ def verify_persisted_colliderml(parquet_path, tfds_path, detector="colliderml"):
         source = builder.as_data_source(split=split)
         for index in range(len(source)):
             actual[fingerprint(source[index])] += 1
-    return {"parquet_examples": sum(expected.values()), "tfds_examples": sum(actual.values()),
-            "missing": sum((expected - actual).values()), "unexpected": sum((actual - expected).values()), "exact_match": expected == actual}
+    return {
+        "parquet_examples": sum(expected.values()),
+        "tfds_examples": sum(actual.values()),
+        "missing": sum((expected - actual).values()),
+        "unexpected": sum((actual - expected).values()),
+        "exact_match": expected == actual,
+    }
 
 
 def layout_comparison_figure(fig, axes, title, synthetic=False):
     """Reserve a fixed-height header, including on short one-row sheets."""
     height = fig.get_figheight()
-    fig.tight_layout(rect=(0, 0, 1, 1 - .85 / height))
-    main_title = fig.suptitle(title, fontsize=12, y=1 - .12 / height, va="top")
+    fig.tight_layout(rect=(0, 0, 1, 1 - 0.85 / height))
+    main_title = fig.suptitle(title, fontsize=12, y=1 - 0.12 / height, va="top")
     column_titles = []
     for detector, ax in zip(DETECTORS, axes[0]):
         label = detector.upper() + (" (SYNTHETIC)" if detector == "colliderml" and synthetic else "")
         position = ax.get_position()
-        column_titles.append(fig.text((position.x0 + position.x1) / 2, 1 - .48 / height,
-                                      label, ha="center", va="top", fontweight="bold"))
+        column_titles.append(fig.text((position.x0 + position.x1) / 2, 1 - 0.48 / height, label, ha="center", va="top", fontweight="bold"))
     return main_title, column_titles
 
 
@@ -219,18 +268,18 @@ def plot_group(datasets, keys, title, path, synthetic):
             continue
         # Give every detector equal influence on the visible range even when
         # their object multiplicities differ by orders of magnitude.
-        lo = min(np.quantile(arr, .005) for arr in finite if len(arr))
-        hi = max(np.quantile(arr, .995) for arr in finite if len(arr))
+        lo = min(np.quantile(arr, 0.005) for arr in finite if len(arr))
+        hi = max(np.quantile(arr, 0.995) for arr in finite if len(arr))
         if lo == hi:
             lo, hi = lo - 0.5, hi + 0.5
         categorical = key == "target/PDG"
         if categorical:
             finite = [np.array([np.flatnonzero(LABELS == p)[0] for p in a]) for a in finite]
-            lo, hi = -.5, 5.5
+            lo, hi = -0.5, 5.5
         positive = pooled[pooled > 0]
-        scale = max(float(np.quantile(positive, .01)), hi / 1000) if len(positive) else 1
+        scale = max(float(np.quantile(positive, 0.01)), hi / 1000) if len(positive) else 1
         log_x = not categorical and lo >= 0 and hi / max(scale, 1e-9) > 100
-        edges = np.arange(-.5, 6.5) if categorical else np.linspace(lo, hi, 51)
+        edges = np.arange(-0.5, 6.5) if categorical else np.linspace(lo, hi, 51)
         if log_x:
             edges = scale * np.expm1(np.linspace(np.log1p(lo / scale), np.log1p(hi / scale), 51))
         for col, (detector, arr, ax) in enumerate(zip(DETECTORS, finite, axes[row])):
@@ -240,18 +289,25 @@ def plot_group(datasets, keys, title, path, synthetic):
                 ax.stairs(fractions, edges, color=COLORS[col], linewidth=1.4)
                 outside = np.mean((arr < lo) | (arr > hi))
                 annotation = f"n={len(arr):,}" if categorical else f"n={len(arr):,}\nmedian={np.median(arr):.3g}\noutside={outside:.1%}"
-                ax.text(.98, .94, annotation,
-                        transform=ax.transAxes, ha="right", va="top", fontsize=8,
-                        bbox={"facecolor": "white", "alpha": .8, "edgecolor": "none", "pad": 1})
+                ax.text(
+                    0.98,
+                    0.94,
+                    annotation,
+                    transform=ax.transAxes,
+                    ha="right",
+                    va="top",
+                    fontsize=8,
+                    bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none", "pad": 1},
+                )
             else:
-                ax.text(.5, .5, "Unavailable", transform=ax.transAxes, ha="center")
+                ax.text(0.5, 0.5, "Unavailable", transform=ax.transAxes, ha="center")
             ax.set_xlim(lo, hi)
             if log_x:
                 ax.set_xscale("symlog", linthresh=scale)
             ax.set_xlabel(key)
             if categorical:
                 ax.set_xticks(range(6), ["none", "chhad", "nhad", "gamma", "e", "mu"])
-            ax.grid(alpha=.2)
+            ax.grid(alpha=0.2)
             if col == 0:
                 ax.set_ylabel("Fraction / bin")
         ymax = max(ax.get_ylim()[1] for ax in axes[row])
@@ -267,10 +323,15 @@ def binned_fraction(values, matched, edges):
     passed = np.histogram(values[np.asarray(matched, dtype=bool)], edges)[0]
     fraction = np.divide(passed, total, out=np.full(len(total), np.nan), where=total > 0)
     # Wilson 68% interval remains nonzero at efficiency zero or one.
-    denominator = 1 + np.divide(1., total, out=np.zeros(len(total)), where=total > 0)
-    center = (fraction + np.divide(.5, total, out=np.zeros(len(total)), where=total > 0)) / denominator
-    half = np.sqrt(np.divide(fraction * (1 - fraction), total, out=np.zeros(len(total)), where=total > 0)
-                   + np.divide(.25, total**2, out=np.zeros(len(total)), where=total > 0)) / denominator
+    denominator = 1 + np.divide(1.0, total, out=np.zeros(len(total)), where=total > 0)
+    center = (fraction + np.divide(0.5, total, out=np.zeros(len(total)), where=total > 0)) / denominator
+    half = (
+        np.sqrt(
+            np.divide(fraction * (1 - fraction), total, out=np.zeros(len(total)), where=total > 0)
+            + np.divide(0.25, total**2, out=np.zeros(len(total)), where=total > 0)
+        )
+        / denominator
+    )
     return fraction, center - half, center + half, passed, total
 
 
@@ -280,33 +341,45 @@ def plot_jet_matching(datasets, stage, path, match_dr):
     all_eta = np.concatenate([v["jetmatch/gen_eta"] for v in datasets.values()])
     all_target_pt = np.concatenate([v["jetmatch/target_pt"] for v in datasets.values()])
     all_target_eta = np.concatenate([v["jetmatch/target_eta"] for v in datasets.values()])
-    max_pt = max(200., float(np.max(np.concatenate([all_pt, all_target_pt]), initial=0)) * 1.01)
-    min_pt = min(3., float(np.min(np.concatenate([all_pt, all_target_pt]), initial=3)))
+    max_pt = max(200.0, float(np.max(np.concatenate([all_pt, all_target_pt]), initial=0)) * 1.01)
+    min_pt = min(3.0, float(np.min(np.concatenate([all_pt, all_target_pt]), initial=3)))
     pt_edges = np.geomspace(min_pt, max_pt, 13)
-    eta_max = max(3., np.ceil(np.max(np.abs(np.concatenate([all_eta, all_target_eta])), initial=0)))
+    eta_max = max(3.0, np.ceil(np.max(np.abs(np.concatenate([all_eta, all_target_eta])), initial=0)))
     eta_edges = np.linspace(-eta_max, eta_max, 13)
-    response_edges = np.linspace(.5, 1.5, 81)
+    response_edges = np.linspace(0.5, 1.5, 81)
     summaries = {}
     for col, detector in enumerate(DETECTORS):
         if detector not in datasets:
             for ax in axes[:, col]:
-                ax.text(.5, .5, "Unavailable", transform=ax.transAxes, ha="center")
+                ax.text(0.5, 0.5, "Unavailable", transform=ax.transAxes, ha="center")
             continue
         data = datasets[detector]
         ratio = data["jetmatch/pt_ratio"]
         counts = np.histogram(ratio, response_edges)[0]
         axes[0, col].stairs(counts / max(len(ratio), 1), response_edges, color=COLORS[col])
         axes[0, col].axvline(1, color="black", linestyle=":", linewidth=1)
-        axes[0, col].set_xlim(.5, 1.5)
+        axes[0, col].set_xlim(0.5, 1.5)
         axes[0, col].set_xlabel(r"Matched $p_T^{target}/p_T^{gen}$")
-        outside = np.mean((ratio < .5) | (ratio > 1.5)) if len(ratio) else 0
+        outside = np.mean((ratio < 0.5) | (ratio > 1.5)) if len(ratio) else 0
         median = f"{np.median(ratio):.3f}" if len(ratio) else "n/a"
-        axes[0, col].text(.98, .95, f"matches={len(ratio)}\nmedian={median}\noutside={outside:.1%}",
-                          transform=axes[0, col].transAxes, ha="right", va="top", fontsize=8,
-                          bbox={"facecolor": "white", "alpha": .8, "edgecolor": "none"})
-        summaries[detector] = {"match_dr": match_dr, "gen_jets": len(data["jetmatch/gen_pt"]),
-                               "target_jets": len(data["jetmatch/target_pt"]), "matched_pairs": len(ratio),
-                               "pt_ratio": stats(ratio), "bins": {}}
+        axes[0, col].text(
+            0.98,
+            0.95,
+            f"matches={len(ratio)}\nmedian={median}\noutside={outside:.1%}",
+            transform=axes[0, col].transAxes,
+            ha="right",
+            va="top",
+            fontsize=8,
+            bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
+        )
+        summaries[detector] = {
+            "match_dr": match_dr,
+            "gen_jets": len(data["jetmatch/gen_pt"]),
+            "target_jets": len(data["jetmatch/target_pt"]),
+            "matched_pairs": len(ratio),
+            "pt_ratio": stats(ratio),
+            "bins": {},
+        }
         for dim, edges, response_row, fraction_row in (("pt", pt_edges, 1, 3), ("eta", eta_edges, 2, 4)):
             centers = np.sqrt(edges[:-1] * edges[1:]) if dim == "pt" else (edges[:-1] + edges[1:]) / 2
             matched_x = data[f"jetmatch/matched_gen_{dim}"]
@@ -315,18 +388,19 @@ def plot_jet_matching(datasets, stage, path, match_dr):
                 below_upper = matched_x <= edges[index + 1] if index == len(centers) - 1 else matched_x < edges[index + 1]
                 selected = ratio[(matched_x >= edges[index]) & below_upper]
                 if len(selected):
-                    quantiles[index] = np.quantile(selected, [.16, .5, .84])
+                    quantiles[index] = np.quantile(selected, [0.16, 0.5, 0.84])
             ax = axes[response_row, col]
             ax.plot(centers, quantiles[:, 1], "o-", color=COLORS[col], markersize=3)
-            ax.fill_between(centers, quantiles[:, 0], quantiles[:, 2], color=COLORS[col], alpha=.2)
+            ax.fill_between(centers, quantiles[:, 0], quantiles[:, 2], color=COLORS[col], alpha=0.2)
             ax.axhline(1, color="black", linestyle=":", linewidth=1)
             ax.set_xlabel(r"Genjet $p_T$ [GeV]" if dim == "pt" else r"Genjet $\eta$")
             for collection, style, label in (("gen", "-", "Genjet efficiency"), ("target", "--", "Targetjet purity")):
-                fraction, lower, upper, passed, total = binned_fraction(data[f"jetmatch/{collection}_{dim}"],
-                                                                        data[f"jetmatch/{collection}_matched"], edges)
+                fraction, lower, upper, passed, total = binned_fraction(
+                    data[f"jetmatch/{collection}_{dim}"], data[f"jetmatch/{collection}_matched"], edges
+                )
                 ax = axes[fraction_row, col]
                 ax.plot(centers, fraction, style, color=COLORS[col], label=label, marker="o", markersize=3)
-                ax.fill_between(centers, lower, upper, color=COLORS[col], alpha=.12)
+                ax.fill_between(centers, lower, upper, color=COLORS[col], alpha=0.12)
                 summaries[detector]["bins"][f"{collection}_{dim}"] = {"edges": edges.tolist(), "matched": passed.tolist(), "total": total.tolist()}
             axes[fraction_row, col].set_ylim(0, 1.05)
             axes[fraction_row, col].set_xlabel(r"Jet $p_T$ [GeV] (each collection)" if dim == "pt" else r"Jet $\eta$ (each collection)")
@@ -335,15 +409,17 @@ def plot_jet_matching(datasets, stage, path, match_dr):
                 if dim == "pt":
                     axes[row, col].set_xscale("log")
         axes[3, col].legend(fontsize=8, loc="lower right")
-    for row, label in enumerate(("Fraction / bin", "pT ratio: median, 16–84%", "pT ratio: median, 16–84%", "Matched fraction (68% Wilson)", "Matched fraction (68% Wilson)")):
+    for row, label in enumerate(
+        ("Fraction / bin", "pT ratio: median, 16–84%", "pT ratio: median, 16–84%", "Matched fraction (68% Wilson)", "Matched fraction (68% Wilson)")
+    ):
         axes[row, 0].set_ylabel(label)
         if row < 3:
             upper = max(ax.get_ylim()[1] for ax in axes[row])
             lower = min(ax.get_ylim()[0] for ax in axes[row])
             for ax in axes[row]:
-                ax.set_ylim(0, upper) if row == 0 else ax.set_ylim(min(.9, lower), max(1.1, upper))
+                ax.set_ylim(0, upper) if row == 0 else ax.set_ylim(min(0.9, lower), max(1.1, upper))
         for ax in axes[row]:
-            ax.grid(alpha=.2)
+            ax.grid(alpha=0.2)
     layout_comparison_figure(fig, axes, f"ttbar • {stage} • genjet ↔ targetjet: one-to-one ΔR < {match_dr:g}; no pT response cut")
     fig.savefig(path, dpi=130)
     plt.close(fig)
@@ -358,22 +434,27 @@ def main():
     parser.add_argument("--num-events", type=int, default=100)
     parser.add_argument("--split", default="test")
     parser.add_argument("--seed", type=int, default=12345)
-    parser.add_argument("--jet-match-dr", type=float, default=.1, help="One-to-one angular jet matching cut; no response cut")
+    parser.add_argument("--jet-match-dr", type=float, default=0.1, help="One-to-one angular jet matching cut; no response cut")
     parser.add_argument("--colliderml-synthetic", action="store_true")
-    parser.add_argument("--verify-colliderml-roundtrip", action="store_true",
-                        help="Compare all native loader examples against all stored ColliderML TFDS records")
-    parser.add_argument("--verify-maia-roundtrip", action="store_true",
-                        help="Compare all native loader examples against all stored MAIA TFDS records")
-    parser.add_argument("--maia-validation-report", type=Path,
-                        help="Include the independent MAIA physics-gate report")
+    parser.add_argument(
+        "--verify-colliderml-roundtrip", action="store_true", help="Compare all native loader examples against all stored ColliderML TFDS records"
+    )
+    parser.add_argument(
+        "--verify-maia-roundtrip", action="store_true", help="Compare all native loader examples against all stored MAIA TFDS records"
+    )
+    parser.add_argument("--maia-validation-report", type=Path, help="Include the independent MAIA physics-gate report")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     report = {"settings": vars(args) | {"output_dir": str(args.output_dir)}, "samples": {}}
     if args.maia_validation_report:
         report["settings"]["maia_validation_report"] = str(args.maia_validation_report)
         report["maia_validation"] = json.loads(args.maia_validation_report.read_text())
-    report["feature_columns"] = {"track_key4hep": EDM4HEP.TrackFeatures.get_names(), "track_colliderml": CML_TRACK,
-                                 "cluster": EDM4HEP.ClusterFeatures.get_names(), "target": ParticleFeatures.get_names()}
+    report["feature_columns"] = {
+        "track_key4hep": EDM4HEP.TrackFeatures.get_names(),
+        "track_colliderml": CML_TRACK,
+        "cluster": EDM4HEP.ClusterFeatures.get_names(),
+        "target": ParticleFeatures.get_names(),
+    }
     tfds_paths = dict(spec.split("=", 1) for spec in args.tfds)
     parquet_paths = dict(spec.split("=", 1) for spec in args.parquet)
     if args.verify_colliderml_roundtrip:
@@ -396,8 +477,11 @@ def main():
             features = tfds.builder_from_directory(tfds_paths[detector]).info.features if stage == "parquet" and detector in tfds_paths else None
             values, checks = collect(events, detector, features, args.jet_match_dr)
             datasets[detector] = values
-            report["samples"][f"{stage}/{detector}"] = {"paths": [str(p) for p in paths], "checks": checks,
-                                                        "features": {k: stats(v) for k, v in values.items()}}
+            report["samples"][f"{stage}/{detector}"] = {
+                "paths": [str(p) for p in paths],
+                "checks": checks,
+                "features": {k: stats(v) for k, v in values.items()},
+            }
             print(stage, detector, checks, flush=True)
         if not datasets:
             continue
@@ -407,18 +491,24 @@ def main():
         allkeys = sorted(set().union(*(v.keys() for v in datasets.values())))
         for group in ("event", "track", "cluster", "target", "genjets", "targetjets", "diagnostic"):
             keys = [k for k in allkeys if k.startswith(group + "/")]
-            preferred = {"event": ["n_track", "n_cluster", "n_target", "target_active_fraction", "target_energy_sum", "genmet"],
-                         "track": ["pt", "p", "eta", "phi", "D0", "Z0"],
-                         "cluster": ["energy", "et", "eta", "phi", "num_hits", "energy_ecal"],
-                         "target": ["PDG", "charge", "pt", "eta", "phi", "energy"]}.get(group, [])
+            preferred = {
+                "event": ["n_track", "n_cluster", "n_target", "target_active_fraction", "target_energy_sum", "genmet"],
+                "track": ["pt", "p", "eta", "phi", "D0", "Z0"],
+                "cluster": ["energy", "et", "eta", "phi", "num_hits", "energy_ecal"],
+                "target": ["PDG", "charge", "pt", "eta", "phi", "energy"],
+            }.get(group, [])
             first = [f"{group}/{key}" for key in preferred if f"{group}/{key}" in keys]
             keys = first + [key for key in keys if key not in first]
             for start in range(0, len(keys), 6):
                 filename = f"{stage}_{group}_{start // 6 + 1}.png"
-                plot_group(datasets, keys[start:start + 6], f"ttbar • {stage} • {group}", args.output_dir / filename, args.colliderml_synthetic)
+                plot_group(datasets, keys[start : start + 6], f"ttbar • {stage} • {group}", args.output_dir / filename, args.colliderml_synthetic)
                 images.append(filename)
     (args.output_dir / "summary.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
-    note = "ColliderML is SYNTHETIC: this validates schema and plumbing only." if args.colliderml_synthetic else "ColliderML: pp ttbar; CLIC/CLD/IDEA: ee ttbar at 380/365/365 GeV; MAIA: muon-collider ttbar. Shape agreement is not expected."
+    note = (
+        "ColliderML is SYNTHETIC: this validates schema and plumbing only."
+        if args.colliderml_synthetic
+        else "ColliderML: pp ttbar; CLIC/CLD/IDEA: ee ttbar at 380/365/365 GeV; MAIA: muon-collider ttbar. Shape agreement is not expected."
+    )
     html = "<!doctype html><meta charset='utf-8'><title>ttbar detector comparison</title><style>body{font:16px sans-serif;max-width:1600px;margin:30px auto}img{width:100%}</style>"
     html += f"<h1>ttbar detector feature comparison</h1><p>{note}</p><p>CLIC uses ee ttbar at 380 GeV; CLD and IDEA use ee ttbar at 365 GeV. IDEA tracks are truth-seeded and candidates are target oracles. ColliderML has no PF baseline. For CLIC/CLD/IDEA, stored TFDS and newly converted ROOT samples are independent; distributions are not an event-matched serialization test. ColliderML and MAIA TFDS are built from the plotted parquet samples. The serialization checks separately verify each parquet event against the TFDS feature encoder/decoder. Targets exclude PDG=0 padding/unassigned rows. Non-finite values are counted in summary.json and excluded from histograms. Tail fractions are shown per panel. Input paths, sample counts, full ranges, quantiles, zero fractions and validation results are in <a href='summary.json'>summary.json</a>.</p>"
     if (args.output_dir.parent / "event_displays" / "index.html").exists():
@@ -438,7 +528,18 @@ def main():
     html += "<h2>Validation checks</h2><table border='1' cellpadding='6'><tr><th>Sample</th><th>Events</th><th>Non-finite</th><th>Alignment</th><th>Phi normalization</th><th>Jet indices</th><th>p / pt / eta</th><th>ET / E / eta</th><th>Target E &lt; p</th><th>Encoding mismatches</th></tr>"
     for sample, entry in report["samples"].items():
         check = entry["checks"]
-        numbers = [check["events"], sum(check["nonfinite"].values())] + [check[k] for k in ("alignment_failures", "phi_norm_failures", "target_jet_index_failures", "track_p_kinematics_failures", "cluster_et_kinematics_failures", "target_energy_below_momentum", "serialization_mismatches")]
+        numbers = [check["events"], sum(check["nonfinite"].values())] + [
+            check[k]
+            for k in (
+                "alignment_failures",
+                "phi_norm_failures",
+                "target_jet_index_failures",
+                "track_p_kinematics_failures",
+                "cluster_et_kinematics_failures",
+                "target_energy_below_momentum",
+                "serialization_mismatches",
+            )
+        ]
         html += f"<tr><td>{sample}</td>" + "".join(f"<td>{n}</td>" for n in numbers) + "</tr>"
     html += "</table>"
     html += "<h2>Median event content</h2><table border='1' cellpadding='6'><tr><th>Sample</th><th>Tracks</th><th>Clusters</th><th>Targets</th><th>Active target fraction</th><th>Target energy sum [GeV]</th></tr>"
@@ -448,9 +549,17 @@ def main():
         html += f"<tr><td>{sample}</td>" + "".join(f"<td>{value:.4g}</td>" for value in medians) + "</tr>"
     html += "</table><p>Compare cluster multiplicity, hits per cluster and active target fraction together: fine clustering creates many small input objects with no assigned target. These quantities describe the sampled reconstruction and target-building output; they are not detector performance rankings.</p>"
     if "colliderml_persisted_roundtrip" in report:
-        html += "<p>Stored ColliderML records compared with native parquet loader examples (order-independent SHA-256 fingerprints): " + json.dumps(report["colliderml_persisted_roundtrip"]) + "</p>"
+        html += (
+            "<p>Stored ColliderML records compared with native parquet loader examples (order-independent SHA-256 fingerprints): "
+            + json.dumps(report["colliderml_persisted_roundtrip"])
+            + "</p>"
+        )
     if "maia_persisted_roundtrip" in report:
-        html += "<p>Stored MAIA records compared with native parquet loader examples (order-independent SHA-256 fingerprints): " + json.dumps(report["maia_persisted_roundtrip"]) + "</p>"
+        html += (
+            "<p>Stored MAIA records compared with native parquet loader examples (order-independent SHA-256 fingerprints): "
+            + json.dumps(report["maia_persisted_roundtrip"])
+            + "</p>"
+        )
     html += "".join(f"<h2>{name}</h2><img src='{name}' loading='lazy'>" for name in images)
     (args.output_dir / "index.html").write_text(html)
 

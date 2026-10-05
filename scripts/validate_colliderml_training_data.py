@@ -23,8 +23,14 @@ def main():
     assert len(ids) == 2 and not ids[0].intersection(ids[1]), "Event overlap between train and held-out splits"
     assert sum(len(shard) for shard in shards) == args.num_events
     assert sum(map(len, ids)) == args.num_events, "Duplicate event IDs"
-    report = {"events": args.num_events, "split_events": {}, "input_objects": 0,
-              "active_targets": 0, "max_tanLambda_residual": 0.0, "max_omega_residual": 0.0}
+    report = {
+        "events": args.num_events,
+        "split_events": {},
+        "input_objects": 0,
+        "active_targets": 0,
+        "max_tanLambda_residual": 0.0,
+        "max_omega_residual": 0.0,
+    }
     builder = tfds.builder_from_directory(str(tfds_path))
     for split in ("train", "test"):
         source = builder.as_data_source(split=split)
@@ -42,7 +48,7 @@ def main():
             tracks = x[x[:, 0] == 1]
             if len(tracks):
                 np.testing.assert_allclose(tracks[:, 10], np.sinh(tracks[:, 2]), rtol=2e-5, atol=2e-5)
-                expected_omega = np.sign(np.where(tracks[:, 9] == 0, .001, tracks[:, 9])) * .0009 / tracks[:, 1]
+                expected_omega = np.sign(np.where(tracks[:, 9] == 0, 0.001, tracks[:, 9])) * 0.0009 / tracks[:, 1]
                 np.testing.assert_allclose(tracks[:, 11], expected_omega, rtol=2e-5, atol=1e-7)
                 assert (tracks[:, 12] >= 0).all()
                 report["max_tanLambda_residual"] = max(report["max_tanLambda_residual"], float(np.max(np.abs(tracks[:, 10] - np.sinh(tracks[:, 2])))))

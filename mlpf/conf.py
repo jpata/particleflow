@@ -629,8 +629,12 @@ class JetConfig:
 
 JET_CONFIG = {
     Dataset.MAIA.value: JetConfig(
-        algorithm="ee_genkt_algorithm", radius=0.4, p=-1.0,
-        pt_cut=5.0, match_dr=0.1, match_rel_pt=0.5,
+        algorithm="ee_genkt_algorithm",
+        radius=0.4,
+        p=-1.0,
+        pt_cut=5.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
     ),
     Dataset.CMS.value: JetConfig(
         algorithm="antikt_algorithm",

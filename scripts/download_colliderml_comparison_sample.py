@@ -18,14 +18,21 @@ def main():
 
     def download(obj):
         config = f"ttbar_pu0_{obj}"
-        path = hf_hub_download("CERN/ColliderML-Release-1", f"data/{config}/train-00000-of-01000.parquet",
-                               repo_type="dataset", revision=REVISION, local_dir=args.output_dir / config)
+        path = hf_hub_download(
+            "CERN/ColliderML-Release-1",
+            f"data/{config}/train-00000-of-01000.parquet",
+            repo_type="dataset",
+            revision=REVISION,
+            local_dir=args.output_dir / config,
+        )
         print(f"Downloaded {obj}: {path}", flush=True)
         return path
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         paths = list(pool.map(download, OBJECTS))
-    (args.output_dir / "provenance.json").write_text(json.dumps({"repo": "CERN/ColliderML-Release-1", "revision": REVISION, "paths": paths}, indent=2) + "\n")
+    (args.output_dir / "provenance.json").write_text(
+        json.dumps({"repo": "CERN/ColliderML-Release-1", "revision": REVISION, "paths": paths}, indent=2) + "\n"
+    )
 
 
 if __name__ == "__main__":

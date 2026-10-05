@@ -26,12 +26,14 @@ def test_maia_spec_and_pipeline_use_native_maia_dataset():
 def test_maia_builder_serializes_common_tensor_contract(tmp_path):
     builder = MaiaEdmTtbarPf(config="10", data_dir=str(tmp_path))
     features = builder.info.features
-    event = {"X": np.ones((2, 17), dtype=np.float32),
-             "ytarget": np.ones((2, 14), dtype=np.float32),
-             "ycand": np.ones((2, 14), dtype=np.float32),
-             "genmet": np.float32(2),
-             "genjets": np.ones((1, 4), dtype=np.float32),
-             "targetjets": np.ones((1, 4), dtype=np.float32)}
+    event = {
+        "X": np.ones((2, 17), dtype=np.float32),
+        "ytarget": np.ones((2, 14), dtype=np.float32),
+        "ycand": np.ones((2, 14), dtype=np.float32),
+        "genmet": np.float32(2),
+        "genjets": np.ones((1, 4), dtype=np.float32),
+        "targetjets": np.ones((1, 4), dtype=np.float32),
+    }
     restored = features.deserialize_example_np(features.serialize_example(event))
     for key, value in event.items():
         np.testing.assert_array_equal(value, restored[key])
@@ -53,8 +55,7 @@ def test_smoke_shards_split_events_not_outer_parquet_rows(tmp_path, record_layou
 def test_real_shards_use_disjoint_ninety_ten_split_and_omit_hits(tmp_path):
     source = tmp_path / "source.parquet"
     manual = tmp_path / "manual"
-    ak.to_parquet(ak.Array({"event_id": list(range(10)), "X_track": [[[1.0]]] * 10,
-                            "X_hit_tracker": [[[2.0]]] * 10}), source)
+    ak.to_parquet(ak.Array({"event_id": list(range(10)), "X_track": [[[1.0]]] * 10, "X_hit_tracker": [[[2.0]]] * 10}), source)
     write_smoke_shards(source, manual, train_fraction=0.9)
     train, test = [ak.from_parquet(path) for path in sorted(manual.glob("*.parquet"))]
     assert train.event_id.to_list() == list(range(9))
