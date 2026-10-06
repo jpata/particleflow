@@ -337,6 +337,39 @@ def test_hungarian_match_finds_permuted_particles():
     assert target_indices.tolist() == [1, 0]
 
 
+def test_hungarian_match_reports_nonfinite_prediction():
+    targets = unpack_target(make_target_tensor(num_targets=1), None)
+    predictions = {
+        "cls_binary": torch.zeros(1, 1, 2),
+        "cls_id_onehot": torch.zeros(1, 1, 6),
+        "pt": torch.tensor([[float("nan")]]),
+        "eta": targets["eta"].clone(),
+        "sin_phi": targets["sin_phi"].clone(),
+        "cos_phi": targets["cos_phi"].clone(),
+        "energy": targets["energy"].clone(),
+    }
+
+    with pytest.raises(ValueError, match="event 0.*slot 0, target 0.*prediction fields: pt: count=1.*target fields: none"):
+        hungarian_match(targets, predictions, torch.ones(1, 1, dtype=torch.bool))
+
+
+def test_hungarian_match_reports_nonfinite_target_with_zero_energy_weight():
+    targets = unpack_target(make_target_tensor(num_targets=1), None)
+    targets["energy"][0, 0] = float("nan")
+    predictions = {
+        "cls_binary": torch.zeros(1, 1, 2),
+        "cls_id_onehot": torch.zeros(1, 1, 6),
+        "pt": targets["pt"].clone(),
+        "eta": targets["eta"].clone(),
+        "sin_phi": targets["sin_phi"].clone(),
+        "cos_phi": targets["cos_phi"].clone(),
+        "energy": torch.zeros(1, 1),
+    }
+
+    with pytest.raises(ValueError, match="event 0.*slot 0, target 0.*prediction fields: none; target fields: energy: count=1"):
+        hungarian_match(targets, predictions, torch.ones(1, 1, dtype=torch.bool))
+
+
 def test_set_loss_is_target_permutation_invariant():
     torch.manual_seed(3)
     target_tensor = make_target_tensor()

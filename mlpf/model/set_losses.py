@@ -47,6 +47,17 @@ def _pairwise_matching_cost(target, prediction, weights):
     ).detach()
 
 
+def _nonfinite_field_summary(values, keys):
+    failures = []
+    for key in keys:
+        tensor = values[key].detach().float().cpu()
+        bad = ~torch.isfinite(tensor)
+        if bad.any():
+            first = tuple(bad.nonzero()[0].tolist())
+            failures.append(f"{key}: count={int(bad.sum())}, first_index={first}, value={tensor[first].item()}")
+    return "; ".join(failures) if failures else "none"
+
+
 def hungarian_match(targets, predictions, target_mask, weights=None):
     """Match particle slots to targets independently for each event."""
 
@@ -66,7 +77,22 @@ def hungarian_match(targets, predictions, target_mask, weights=None):
         event_targets = {key: value[event_idx][valid] for key, value in targets.items()}
         event_predictions = {key: value[event_idx] for key, value in predictions.items()}
         cost = _pairwise_matching_cost(event_targets, event_predictions, weights)
-        slot_indices, target_indices = linear_sum_assignment(cost.float().cpu().numpy())
+        cost_cpu = cost.float().cpu()
+        bad_cost = ~torch.isfinite(cost_cpu)
+        if bad_cost.any():
+            slot_idx, target_idx = bad_cost.nonzero()[0].tolist()
+            target_row = valid.nonzero()[target_idx].item()
+            prediction_fields = _nonfinite_field_summary(
+                event_predictions, ("cls_binary", "cls_id_onehot", "eta", "sin_phi", "cos_phi", "pt", "energy")
+            )
+            target_fields = _nonfinite_field_summary(event_targets, ("eta", "sin_phi", "cos_phi", "pt", "energy"))
+            raise ValueError(
+                f"Non-finite Hungarian matching cost in event {event_idx}: "
+                f"{int(bad_cost.sum())} invalid entries; first at slot {slot_idx}, "
+                f"target {target_idx} (padded row {target_row}), value={cost_cpu[slot_idx, target_idx].item()}; "
+                f"prediction fields: {prediction_fields}; target fields: {target_fields}"
+            )
+        slot_indices, target_indices = linear_sum_assignment(cost_cpu.numpy())
         matches.append(
             (
                 torch.as_tensor(slot_indices, dtype=torch.long, device=cost.device),
