@@ -37,8 +37,12 @@ from scipy.spatial import cKDTree
 
 from mlpf.data.target_building import SparseMatrixCOO
 
-# NOTE: radii are shared between union_find and bfs_merge; merge_frac differs by algorithm.
-# The radii may benefit from tuning
+# NOTE: radii and merge_frac below are tuned on ttbar_pu0. At pu200 the defaults percolate:
+# any fragment-merge criterion chains transitively through the pileup-dense link graph, so
+# O(10^5)-hit / multi-TeV mega-clusters form even from capped or frozen-threshold merge
+# variants (measured 2026-10-05 on ttbar_pu200 shards 0-1). The pu200 conversion therefore
+# runs algorithm="bfs" (no merge) with tightened radii ECAL 16.25 / HCAL 36 mm via
+# scripts/flatiron/colliderml_convert{,_array}.sh; keep these defaults pu0-shaped.
 DEFAULT_REGION_RADII_MM = {
     9: 25.0,  # ECAL endcap - (5.1 mm cells -> ~5 cells wide)
     10: 25.0,  # ECAL barrel
