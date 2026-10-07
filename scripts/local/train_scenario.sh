@@ -64,7 +64,7 @@ NTEST=${NTEST:-100}
 # The HEPTv2 sector model exceeds a 16 GB local GPU at batch size 8.
 DEFAULT_GLOBAL_BATCH_SIZE=8
 if [[ $(basename "$SCENARIO_FILE" .yaml) == cld_set_hits_heptv2_sector_comparison ]]; then
-  DEFAULT_GLOBAL_BATCH_SIZE=1
+  DEFAULT_GLOBAL_BATCH_SIZE=2
 fi
 GLOBAL_BATCH_SIZE=${GLOBAL_BATCH_SIZE:-${GPU_BATCH_MULTIPLIER:-$DEFAULT_GLOBAL_BATCH_SIZE}}
 NUM_WORKERS=${NUM_WORKERS:-8}
