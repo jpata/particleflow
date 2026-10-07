@@ -25,8 +25,11 @@ be interpreted as reconstructed-physics performance.
 
 
 class IdeaEdmQqPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.1.0"))
-    RELEASE_NOTES = {"0.1.0": "Initial pipeline-validation dataset with explicit proxy provenance."}
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.1.1"))
+    RELEASE_NOTES = {
+        "0.1.0": "Initial pipeline-validation dataset with explicit proxy provenance.",
+        "0.1.1": "Compute cluster shower widths from associated calorimeter cells.",
+    }
     BUILDER_CONFIGS = [tfds.core.BuilderConfig(name="1")]
     MANUAL_DOWNLOAD_INSTRUCTIONS = "Point --manual_dir at a directory containing the IDEA parquet file."
 

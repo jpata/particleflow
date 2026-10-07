@@ -1268,7 +1268,7 @@ def _idea_dual_readout_cluster_energies(prop_data: Any, clusters: Any, iev: int)
     return cherenkov, scintillation
 
 
-def idea_cluster_to_features(prop_data: Any, iev: int) -> awkward.Record:
+def idea_cluster_to_features(prop_data: Any, iev: int, cell_collection_id: int) -> awkward.Record:
     """Map IDEA dual-readout topological clusters to the common PF schema.
 
     IDEA's two signal components occupy the common schema's component slots:
@@ -1290,6 +1290,38 @@ def idea_cluster_to_features(prop_data: Any, iev: int) -> awkward.Record:
     theta = np.arctan2(rho, posz)
     num_hits = get("hits_end") - get("hits_begin")
     n_clusters = len(energy)
+    cells = prop_data["TopoClusterAllCells"][iev]
+    cell_energy = awkward.to_numpy(cells["TopoClusterAllCells.energy"])
+    cell_positions = [awkward.to_numpy(cells[f"TopoClusterAllCells.position.{axis}"]) for axis in "xyz"]
+    hit_indices = awkward.to_numpy(prop_data["_TopoClusterAll_hits/_TopoClusterAll_hits.index"][iev])
+    hit_collection_ids = awkward.to_numpy(prop_data["_TopoClusterAll_hits/_TopoClusterAll_hits.collectionID"][iev])
+    if len(hit_indices) != len(hit_collection_ids) or np.any(hit_collection_ids != cell_collection_id):
+        raise ValueError("IDEA cluster hits do not all refer to TopoClusterAllCells")
+    if np.any((hit_indices < 0) | (hit_indices >= len(cell_energy))):
+        raise ValueError("IDEA cluster hit index is outside TopoClusterAllCells")
+    begins, ends = get("hits_begin"), get("hits_end")
+    if (
+        np.any(ends < begins)
+        or np.any(begins[1:] != ends[:-1])
+        or (n_clusters and (begins[0] != 0 or ends[-1] != len(hit_indices)))
+        or (not n_clusters and len(hit_indices))
+    ):
+        raise ValueError("IDEA cluster hit ranges do not cover the hit associations")
+    widths = np.zeros((n_clusters, 3), dtype=np.float32)
+    cluster_indices = np.repeat(np.arange(n_clusters), num_hits)
+    weights = cell_energy[hit_indices].astype(np.float64)
+    weight_sum = np.bincount(cluster_indices, weights=weights, minlength=n_clusters)
+    positive = weight_sum > 0
+    for axis, positions in enumerate(cell_positions):
+        coordinates = positions[hit_indices].astype(np.float64)
+        centroid = np.divide(
+            np.bincount(cluster_indices, weights=weights * coordinates, minlength=n_clusters),
+            weight_sum,
+            out=np.zeros(n_clusters, dtype=np.float64),
+            where=positive,
+        )
+        variance = np.bincount(cluster_indices, weights=weights * (coordinates - centroid[cluster_indices]) ** 2, minlength=n_clusters)
+        widths[positive, axis] = np.sqrt(variance[positive] / weight_sum[positive])
     energy_cherenkov, energy_scintillation = _idea_dual_readout_cluster_energies(prop_data, clusters, iev)
     has_dual_readout = np.any(energy_cherenkov != 0) or np.any(energy_scintillation != 0)
     return awkward.Record(
@@ -1315,11 +1347,9 @@ def idea_cluster_to_features(prop_data: Any, iev: int) -> awkward.Record:
             # no per-channel shape parameters.
             "energy_other": (np.zeros(n_clusters, dtype=np.float32) if has_dual_readout else energy),
             "num_hits": num_hits,
-            # Cluster-cell coordinates are intentionally not loaded in the
-            # no-hit IDEA mode, so shower-width features are unavailable.
-            "sigma_x": np.zeros(n_clusters, dtype=np.float32),
-            "sigma_y": np.zeros(n_clusters, dtype=np.float32),
-            "sigma_z": np.zeros(n_clusters, dtype=np.float32),
+            "sigma_x": widths[:, 0],
+            "sigma_y": widths[:, 1],
+            "sigma_z": widths[:, 2],
         }
     )
 
@@ -1340,7 +1370,13 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
     # constrained batch environments. IDEA files are local production outputs;
     # memory mapping avoids that thread-pool overhead and makes branch reads
     # deterministic (about 10 ms versus minutes for the event-0 MC PDG branch).
-    tree = uproot.open(fn, handler=uproot.source.file.MemmapSource)["events"]
+    root_file = uproot.open(fn, handler=uproot.source.file.MemmapSource)
+    tree = root_file["events"]
+    metadata = root_file["podio_metadata"]
+    prefix = "events___CollectionTypeInfo/events___CollectionTypeInfo."
+    names = metadata[prefix + "name"].array()[0]
+    ids = metadata[prefix + "collectionID"].array()[0]
+    cell_collection_id = dict(zip(names, ids))["TopoClusterAllCells"]
     stop = tree.num_entries if num_events == -1 else min(tree.num_entries, first_event + num_events)
     if first_event < 0 or first_event >= tree.num_entries or stop <= first_event:
         raise ValueError(f"Invalid IDEA event range [{first_event}, {stop}) for input with {tree.num_entries} events")
@@ -1364,6 +1400,9 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         "TracksFromGenParticles",
         "_TracksFromGenParticles_trackStates",
         "TopoClusterAll",
+        "TopoClusterAllCells",
+        "_TopoClusterAll_hits/_TopoClusterAll_hits.index",
+        "_TopoClusterAll_hits/_TopoClusterAll_hits.collectionID",
         "_TopoClusterAll_shapeParameters",
         "TracksFromGenParticlesAssociation.weight",
         "_TracksFromGenParticlesAssociation_from/_TracksFromGenParticlesAssociation_from.index",
@@ -1419,7 +1458,7 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         print(f"idea_postprocessing: event {iev} started", flush=True)
         gen = gen_to_features(prop_data, local_iev)
         tracks = idea_track_to_features(prop_data, local_iev, b_field)
-        clusters = idea_cluster_to_features(prop_data, local_iev)
+        clusters = idea_cluster_to_features(prop_data, local_iev, cell_collection_id)
         gp_to_track = _idea_relation(prop_data, "TracksFromGenParticlesAssociation", local_iev)
         gp_to_cluster = _idea_relation(prop_data, "ClusterMCParticleLinks", local_iev)
         # Propagate reconstructed-object links from generator descendants to
