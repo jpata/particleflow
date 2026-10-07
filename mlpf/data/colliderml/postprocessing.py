@@ -81,13 +81,15 @@ def _event_record_one(
     tracker_ev: ak.Record,
     algorithm: str = "bfs_merge",
     merge_frac: float | None = None,
+    radii_mm: Dict[int, float] | None = None,
     event_index: int = -1,
     shard_label: str = "",
 ) -> Dict[str, Any]:
     """Convert one ColliderML event into the MLPF record fields.
 
-    merge_frac=None takes cluster_event's per-algorithm default (DEFAULT_MERGE_FRAC for
-    bfs_merge), the same resolution as the CLI.
+    merge_frac=None and radii_mm=None take cluster_event's per-algorithm defaults
+    (DEFAULT_MERGE_FRAC for bfs_merge; DEFAULT_REGION_RADII_MM), the same resolution as
+    the CLI.
     """
     # raw inputs
     hit_x = ak.to_numpy(calo_ev["x"]).astype(np.float32)
@@ -133,7 +135,7 @@ def _event_record_one(
     # -- clusters via the truth-blind spatial clusterer ------------------------
     hit_e_calibrated = hit_e * calibration_factors(hit_det, DEFAULT_CALIBRATION)
     cluster_of, cl_feats, hit_to_cluster, cluster_region = cluster_event(
-        hit_x, hit_y, hit_z, hit_e_calibrated, hit_det, algorithm=algorithm, merge_frac=merge_frac
+        hit_x, hit_y, hit_z, hit_e_calibrated, hit_det, algorithm=algorithm, merge_frac=merge_frac, radii_mm=radii_mm
     )
     n_cluster = len(cl_feats)
 
@@ -511,6 +513,7 @@ def process_one_file(
     job_total_shards: int = 1,
     algorithm: str = "bfs_merge",
     merge_frac: float | None = None,
+    radii_mm: Dict[int, float] | None = None,
 ) -> None:
     if num_events == -1 and _shard_done(ofn, particles_fn):
         print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} already exists, skipping")
@@ -576,6 +579,7 @@ def process_one_file(
                 ev["tracker_hits"],
                 algorithm=algorithm,
                 merge_frac=merge_frac,
+                radii_mm=radii_mm,
                 event_index=i,
                 shard_label=Path(ofn).name,
             )
@@ -639,6 +643,18 @@ def main():
         default=None,
         help="merge threshold; None uses DEFAULT_MERGE_FRAC (0.25) for bfs_merge and 0.0 for the others",
     )
+    parser.add_argument(
+        "--radii-ecal",
+        type=float,
+        default=None,
+        help="clustering link radius (mm) for the ECAL regions 9-11; default keeps DEFAULT_REGION_RADII_MM (25 mm)",
+    )
+    parser.add_argument(
+        "--radii-hcal",
+        type=float,
+        default=None,
+        help="clustering link radius (mm) for the HCAL regions 12-14; default keeps DEFAULT_REGION_RADII_MM (90 mm)",
+    )
     parser.add_argument("--num-events", type=int, default=-1, help="cap number of events per shard (for tests)")
     args = parser.parse_args()
 
@@ -656,12 +672,21 @@ def main():
             f"(expected matching four-table layout under {Path(args.input) / f'{args.sample}_tracker_hits'})"
         )
 
-    from mlpf.data.colliderml.clustering import DEFAULT_MERGE_FRAC
+    from mlpf.data.colliderml.clustering import DEFAULT_MERGE_FRAC, DEFAULT_REGION_RADII_MM
 
     merge_frac = args.merge_frac if args.merge_frac is not None else (DEFAULT_MERGE_FRAC if args.algorithm == "bfs_merge" else 0.0)
+    radii_mm = None
+    if args.radii_ecal is not None or args.radii_hcal is not None:
+        radii_mm = dict(DEFAULT_REGION_RADII_MM)
+        if args.radii_ecal is not None:
+            radii_mm.update({9: args.radii_ecal, 10: args.radii_ecal, 11: args.radii_ecal})
+        if args.radii_hcal is not None:
+            radii_mm.update({12: args.radii_hcal, 13: args.radii_hcal, 14: args.radii_hcal})
 
     n_files = len(pa)
-    print(f"planning {n_files} shards (range {args.shards}) -> {args.outpath} with algorithm={args.algorithm} merge_frac={merge_frac}")
+    print(
+        f"planning {n_files} shards (range {args.shards}) -> {args.outpath} with algorithm={args.algorithm} merge_frac={merge_frac} radii_mm={radii_mm}"
+    )
     n_done = 0
     for i, (p, t, c) in enumerate(zip(pa, tr, ch)):
         out_name = Path(args.outpath) / (p.stem + ".parquet")
@@ -682,6 +707,7 @@ def main():
             job_total_shards=n_files,
             algorithm=args.algorithm,
             merge_frac=merge_frac,
+            radii_mm=radii_mm,
         )
     print(f"all {n_files} shards accounted for ({n_done} already present, {n_files - n_done} newly converted)")
 

@@ -15,3 +15,7 @@ class CollidermlTtbarPu200Pf(CollidermlTtbarNopuPf):
     """
 
     DESCRIPTION = _DESCRIPTION
+    RELEASE_NOTES = {
+        "1.0.0": "Prepared 2026-10-06 from parquet converted with the tuned pu200 clustering "
+        "(bfs, merge-frac 0, radii ECAL 16.25 mm / HCAL 36 mm).",
+    }

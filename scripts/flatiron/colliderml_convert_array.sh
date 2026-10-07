@@ -74,12 +74,29 @@ SOURCE_DIR="/mnt/ceph/users/ewulff/data/colliderml/CERN__ColliderML-Release-1"
 OUT_DIR="${OUTDIR_ARG:-${COLLIDERML_OUT_DIR:-/mnt/ceph/users/ewulff/data/colliderml/mlpf_parquet/clustered/${SAMPLE}}}"
 mkdir -p "${OUT_DIR}"
 
-# ${ALGO} overrides the clustering algorithm; the tuned default is bfs_merge (BFS watershed +
-# fragment merging with merge_frac=0.25). ${MERGE_FRAC} overrides the merge threshold.
-# ALGO and MERGE_FRAC are job-side defaults; to override them, edit this script (or switch
-# to args if that becomes common).
-ALGO="bfs_merge"
-MERGE_FRAC="0.25"
+# Clustering settings per pileup (tuned 2026-10-05 via radii/merge sweeps on 10 ttbar_pu200
+# events from shards 0-1 plus 5 ttbar_pu0 events).
+# pu0: bfs_merge with merge_frac=0.25 (the tuned default; fragment merge recovers shower
+# tails and there is no pileup to bridge clusters).
+# pu200: any fragment merging cascades through the dense pileup-linked graph into
+# O(10^5)-hit / multi-TeV mega-clusters (~200k hits / 4.5 TeV largest with the pu0
+# settings; transitivity defeats even frozen-threshold/capped merges), so the merge is
+# switched off (bfs) and the link radii tightened to ECAL 16.25 mm (0.65x) / HCAL 36 mm
+# (0.4x): measured pu200 purity 0.20 -> 0.69 (E-weighted dominant-particle share) and the
+# largest cluster drops to ~500 hits / ~70 GeV.
+# ALGO / MERGE_FRAC / RADII_* are job-side defaults; to override them, edit this script
+# (or switch to args if that becomes common).
+if [ "${PU}" = "pu200" ]; then
+  ALGO="bfs"
+  MERGE_FRAC="0"
+  RADII_ECAL="16.25"
+  RADII_HCAL="36"
+else
+  ALGO="bfs_merge"
+  MERGE_FRAC="0.25"
+  RADII_ECAL="25"
+  RADII_HCAL="90"
+fi
 
 ${PYTHON} -m mlpf.data.colliderml.postprocessing \
     --input "${SOURCE_DIR}" \
@@ -87,5 +104,7 @@ ${PYTHON} -m mlpf.data.colliderml.postprocessing \
     --outpath "${OUT_DIR}" \
     --shards "${S0}:${S1}" \
     --algorithm "${ALGO}" \
-    --merge-frac "${MERGE_FRAC}"
+    --merge-frac "${MERGE_FRAC}" \
+    --radii-ecal "${RADII_ECAL}" \
+    --radii-hcal "${RADII_HCAL}"
 echo "done"

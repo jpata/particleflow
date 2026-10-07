@@ -52,7 +52,7 @@ def test_cluster_energy_is_sum_of_members():
     cluster_of, feats, _, _ = cluster_event(x, y, z, E, det)
     for cid in np.unique(cluster_of):
         m = cluster_of == cid
-        assert abs(feats[cid, 5] - np.sum(E[m])) < 1e-6, f"cluster {cid} energy {feats[cid,5]} != member sum {np.sum(E[m])}"
+        assert abs(feats[cid, 5] - np.sum(E[m])) < 1e-6, f"cluster {cid} energy {feats[cid, 5]} != member sum {np.sum(E[m])}"
 
 
 def test_total_energy_conserved():

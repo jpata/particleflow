@@ -70,6 +70,21 @@ mkdir -p "${OUT_DIR}"
 LOGDIR="/mnt/home/ewulff/repositories/particleflow/logs_slurm"
 mkdir -p "$LOGDIR"
 
+# Clustering settings per pileup (tuned 2026-10-05; see colliderml_convert_array.sh for the
+# full comment): pu200 disables the fragment merge (cascades into mega-clusters through the
+# dense pileup-linked graph) and tightens the link radii.
+if [ "${PU}" = "pu200" ]; then
+  ALGO="bfs"
+  MERGE_FRAC="0"
+  RADII_ECAL="16.25"
+  RADII_HCAL="36"
+else
+  ALGO="bfs_merge"
+  MERGE_FRAC="0.25"
+  RADII_ECAL="25"
+  RADII_HCAL="90"
+fi
+
 # rank r starts after r*PER_RANK shards plus the extra shards handed to ranks < r
 # --export=NONE leaves PATH unset in the job environment, so srun cannot resolve `bash`;
 # use the absolute path (the batch script itself runs via its shebang and is unaffected).
@@ -83,8 +98,10 @@ srun --kill-on-bad-exit=1 /bin/bash -c "
     --sample '$SAMPLE' \
     --outpath '$OUT_DIR' \
     --shards \"\$START:\$END\" \
-    --algorithm bfs_merge \
-    --merge-frac 0.25 \
+    --algorithm $ALGO \
+    --merge-frac $MERGE_FRAC \
+    --radii-ecal $RADII_ECAL \
+    --radii-hcal $RADII_HCAL \
     > \"${LOGDIR}/colliderml_convert.${SLURM_JOB_ID}.rank\${RANK}.out\"
 "
 echo "done"
