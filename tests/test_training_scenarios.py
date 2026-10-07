@@ -299,12 +299,17 @@ def test_heptv2_sector_scenario_matches_grid_aggregate_baseline():
     assert [job.variant_name for job in jobs] == [
         "attention_grid_diverse_aggregate",
         "heptv2_sector_grid_diverse_aggregate",
+        "heptv2_global_grid_diverse_aggregate",
     ]
     # Keep the paired comparison aligned while lowering its memory footprint.
     previous_baseline.resolved_config.gpu_batch_multiplier = 8
     assert jobs[0].resolved_config.model_dump(mode="json") == previous_baseline.resolved_config.model_dump(mode="json")
-    assert [job.resolved_config.model.type.value for job in jobs] == ["attention", "heptv2"]
-    assert [job.resolved_config.model.set_decoder.attention_mode for job in jobs] == ["dense", "sectorized"]
+    hept_global = jobs[2].resolved_config.model_dump(mode="json")
+    hept_sector = jobs[1].resolved_config.model_dump(mode="json")
+    hept_sector["model"]["set_decoder"]["attention_mode"] = "global-flash"
+    assert hept_global == hept_sector
+    assert [job.resolved_config.model.type.value for job in jobs] == ["attention", "heptv2", "heptv2"]
+    assert [job.resolved_config.model.set_decoder.attention_mode for job in jobs] == ["global-flash", "sectorized", "global-flash"]
     assert {job.resolved_config.model.set_decoder.proposal_mode for job in jobs} == {"grid-diverse"}
     assert {job.resolved_config.model.set_decoder.use_aggregate_anchors for job in jobs} == {True}
     assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}

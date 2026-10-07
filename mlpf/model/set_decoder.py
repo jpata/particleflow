@@ -7,6 +7,11 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+try:
+    from flash_attn import flash_attn_varlen_func
+except (ImportError, OSError):
+    flash_attn_varlen_func = None
+
 
 PredictionTensors = tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 
@@ -42,13 +47,108 @@ def _wrapped_delta_phi(left, right):
     return torch.remainder(left - right + math.pi, 2.0 * math.pi) - math.pi
 
 
+def _streaming_attention(query, key, value, dropout_p=0.0, query_chunk_size=128, key_chunk_size=512):
+    """Small-device fallback with bounded attention workspace and autograd support."""
+    if key.shape[-2] == 0:
+        return torch.zeros_like(query)
+    scale = query.shape[-1] ** -0.5
+    outputs = []
+    for query_chunk in query.split(query_chunk_size, dim=-2):
+        maximum = query_chunk.new_full((*query_chunk.shape[:-1], 1), -torch.inf, dtype=torch.float32)
+        denominator = query_chunk.new_zeros((*query_chunk.shape[:-1], 1), dtype=torch.float32)
+        numerator = query_chunk.new_zeros(query_chunk.shape, dtype=torch.float32)
+        for key_chunk, value_chunk in zip(key.split(key_chunk_size, dim=-2), value.split(key_chunk_size, dim=-2)):
+            scores = torch.matmul(query_chunk.float(), key_chunk.float().transpose(-1, -2)) * scale
+            new_maximum = torch.maximum(maximum, scores.amax(dim=-1, keepdim=True))
+            old_scale = torch.exp(maximum - new_maximum)
+            probabilities = torch.exp(scores - new_maximum)
+            denominator = denominator * old_scale + probabilities.sum(dim=-1, keepdim=True)
+            numerator = numerator * old_scale + torch.matmul(
+                F.dropout(probabilities, p=dropout_p, training=dropout_p > 0), value_chunk.float()
+            )
+            maximum = new_maximum
+        outputs.append((numerator / denominator.clamp_min(1.0e-12)).to(query.dtype))
+    return torch.cat(outputs, dim=-2)
+
+
+@torch.compiler.disable
+def _flash_attn_varlen_eager(*args, **kwargs):
+    # ROCm's custom op has a fake registration incompatible with torch.compile.
+    return flash_attn_varlen_func(*args, **kwargs)
+
+
+def _flash_multihead_attention(module, queries, memory, memory_mask=None):
+    """Cross/self attention without a query-by-memory allocation.
+
+    GPU execution requires variable-length FlashAttention. The streaming fallback
+    keeps CPU tests and inference bounded too; it is not the production kernel.
+    """
+    batch_size, num_queries, embedding_dim = queries.shape
+    num_heads = module.num_heads
+    head_dim = embedding_dim // num_heads
+    q_weight, k_weight, v_weight = module.in_proj_weight.chunk(3, dim=0)
+    q_bias, k_bias, v_bias = module.in_proj_bias.chunk(3, dim=0) if module.in_proj_bias is not None else (None,) * 3
+    q = F.linear(queries, q_weight, q_bias).reshape(batch_size, num_queries, num_heads, head_dim)
+    k = F.linear(memory, k_weight, k_bias).reshape(batch_size, memory.shape[1], num_heads, head_dim)
+    v = F.linear(memory, v_weight, v_bias).reshape(batch_size, memory.shape[1], num_heads, head_dim)
+    if memory_mask is None:
+        memory_mask = torch.ones(memory.shape[:2], dtype=torch.bool, device=memory.device)
+    else:
+        memory_mask = memory_mask.bool()
+    empty_events = ~memory_mask.any(dim=1)
+
+    if queries.is_cuda:
+        if flash_attn_varlen_func is None:
+            raise RuntimeError("Set decoder attention on GPU requires flash_attn_varlen_func")
+        if q.dtype not in (torch.float16, torch.bfloat16):
+            raise TypeError("Set decoder FlashAttention requires float16 or bfloat16; enable mixed precision")
+        if memory.shape[1] == 0:
+            attention_output = torch.zeros_like(q)
+        else:
+            # FlashAttention requires a nonempty key sequence for every event.
+            safe_mask = memory_mask.clone()
+            safe_mask[empty_events, 0] = True
+            lengths = safe_mask.sum(dim=1, dtype=torch.int32)
+            key_offsets = F.pad(lengths.cumsum(dim=0, dtype=torch.int32), (1, 0))
+            query_offsets = torch.arange(batch_size + 1, dtype=torch.int32, device=queries.device) * num_queries
+            flash_attn_varlen = _flash_attn_varlen_eager if torch.version.hip is not None else flash_attn_varlen_func
+            attention_output = flash_attn_varlen(
+                q.contiguous().reshape(-1, num_heads, head_dim),
+                k[safe_mask].contiguous(),
+                v[safe_mask].contiguous(),
+                query_offsets,
+                key_offsets,
+                num_queries,
+                int(lengths.max().item()),
+                dropout_p=module.dropout if module.training else 0.0,
+                causal=False,
+            ).reshape(batch_size, num_queries, num_heads, head_dim)
+            attention_output = attention_output.masked_fill(empty_events[:, None, None, None], 0)
+    else:
+        attention_output = torch.stack(
+            [
+                _streaming_attention(
+                    q[event_idx].transpose(0, 1),
+                    k[event_idx, memory_mask[event_idx]].transpose(0, 1),
+                    v[event_idx, memory_mask[event_idx]].transpose(0, 1),
+                    dropout_p=module.dropout if module.training else 0.0,
+                ).transpose(0, 1)
+                for event_idx in range(batch_size)
+            ]
+        )
+    projected = F.linear(attention_output.reshape(batch_size, num_queries, embedding_dim), module.out_proj.weight, module.out_proj.bias)
+    return projected.masked_fill(empty_events[:, None, None], 0)
+
+
 class ParticleSetDecoderLayer(nn.Module):
-    """Pre-norm particle-query decoder layer with optional local cross-attention."""
+    """Pre-norm particle-query decoder layer using global FlashAttention."""
 
     def __init__(self, embedding_dim, num_heads, ffn_dim, dropout=0.0):
         super().__init__()
         self.query_norm = nn.LayerNorm(embedding_dim)
         self.memory_norm = nn.LayerNorm(embedding_dim)
+        # Keep the standard parameter layout so existing decoder checkpoints load.
+        # Attention itself runs through _flash_multihead_attention.
         self.cross_attention = nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout, batch_first=True)
         self.self_norm = nn.LayerNorm(embedding_dim)
         self.self_attention = nn.MultiheadAttention(embedding_dim, num_heads, dropout=dropout, batch_first=True)
@@ -66,53 +166,13 @@ class ParticleSetDecoderLayer(nn.Module):
         slots,
         memory,
         memory_mask,
-        query_references=None,
-        query_reference_mask=None,
-        memory_positions=None,
-        local_attention_radius=None,
     ):
         cross_queries = self.query_norm(slots)
         normalized_memory = self.memory_norm(memory)
-        cross_outputs = []
-        for event_idx in range(memory.shape[0]):
-            valid_memory = memory_mask[event_idx]
-            event_memory = normalized_memory[event_idx : event_idx + 1, valid_memory]
-            if event_memory.shape[1] == 0:
-                cross_outputs.append(torch.zeros_like(cross_queries[event_idx : event_idx + 1]))
-                continue
-
-            attention_mask = None
-            if local_attention_radius is not None:
-                event_positions = memory_positions[event_idx, valid_memory]
-                reference = query_references[event_idx]
-                delta_eta = reference[:, None, 0] - event_positions[None, :, 0]
-                delta_phi = _wrapped_delta_phi(reference[:, None, 1], event_positions[None, :, 1])
-                attention_mask = delta_eta.square() + delta_phi.square() > local_attention_radius**2
-                if query_reference_mask is not None:
-                    attention_mask[~query_reference_mask[event_idx]] = False
-
-                # A sparse or malformed event must never produce a fully masked
-                # attention row. Fall back to its nearest valid input.
-                fully_masked = attention_mask.all(dim=1)
-                if fully_masked.any():
-                    distance = delta_eta.square() + delta_phi.square()
-                    nearest = distance[fully_masked].argmin(dim=1)
-                    attention_mask[fully_masked] = True
-                    attention_mask[fully_masked, nearest] = False
-
-            event_output, _ = self.cross_attention(
-                cross_queries[event_idx : event_idx + 1],
-                event_memory,
-                event_memory,
-                attn_mask=attention_mask,
-                need_weights=False,
-            )
-            cross_outputs.append(event_output)
-        slots = slots + torch.cat(cross_outputs, dim=0)
+        slots = slots + _flash_multihead_attention(self.cross_attention, cross_queries, normalized_memory, memory_mask)
 
         normalized_slots = self.self_norm(slots)
-        self_output, _ = self.self_attention(normalized_slots, normalized_slots, normalized_slots, need_weights=False)
-        slots = slots + self_output
+        slots = slots + _flash_multihead_attention(self.self_attention, normalized_slots, normalized_slots)
         return slots + self.ffn(self.ffn_norm(slots))
 
 
@@ -132,7 +192,6 @@ class SectorizedParticleSetDecoderLayer(ParticleSetDecoderLayer):
         query_references=None,
         query_reference_mask=None,
         memory_positions=None,
-        local_attention_radius=None,
         num_sectors=32,
         sector_neighbors=1,
     ):
@@ -163,7 +222,7 @@ class SectorizedParticleSetDecoderLayer(ParticleSetDecoderLayer):
                     hit_indices = valid_hits[nearest : nearest + 1]
                 event_queries = cross_queries[event_idx : event_idx + 1, slot_indices]
                 event_memory = normalized_memory[event_idx : event_idx + 1, hit_indices]
-                sector_output, _ = self.cross_attention(event_queries, event_memory, event_memory, need_weights=False)
+                sector_output = _flash_multihead_attention(self.cross_attention, event_queries, event_memory)
                 sector_indices.append(slot_indices)
                 sector_outputs.append(sector_output.squeeze(0))
             if sector_outputs:
@@ -182,7 +241,7 @@ class SectorizedParticleSetDecoderLayer(ParticleSetDecoderLayer):
                 if slot_indices.numel() == 0:
                     continue
                 sector_slots = normalized_slots[event_idx : event_idx + 1, slot_indices]
-                sector_output, _ = self.self_attention(sector_slots, sector_slots, sector_slots, need_weights=False)
+                sector_output = _flash_multihead_attention(self.self_attention, sector_slots, sector_slots)
                 sector_indices.append(slot_indices)
                 sector_outputs.append(sector_output.squeeze(0))
             self_outputs.append(torch.cat(sector_outputs)[torch.argsort(torch.cat(sector_indices))])
@@ -202,7 +261,9 @@ class ParticleSetDecoder(nn.Module):
 
         self.num_slots = config.num_slots
         self.query_init = getattr(config.query_init, "value", config.query_init)
-        self.local_attention_radius = config.local_attention_radius
+        # Retain the historical config name for checkpoint/scenario compatibility.
+        # Global attention no longer uses it as a radius mask.
+        self.reference_update_scale = config.local_attention_radius
         self.attention_mode = config.attention_mode
         self.num_sectors = config.num_sectors
         self.sector_neighbors = config.sector_neighbors
@@ -215,7 +276,10 @@ class ParticleSetDecoder(nn.Module):
         self.queries = nn.Parameter(torch.empty(1, config.num_slots, embedding_dim))
         nn.init.trunc_normal_(self.queries, std=0.02)
         ffn_dim = int(config.ffn_multiplier * embedding_dim)
-        layer_type = SectorizedParticleSetDecoderLayer if self.attention_mode == "sectorized" else ParticleSetDecoderLayer
+        layer_type = {
+            "global-flash": ParticleSetDecoderLayer,
+            "sectorized": SectorizedParticleSetDecoderLayer,
+        }[self.attention_mode]
         self.layers = nn.ModuleList(layer_type(embedding_dim, config.num_heads, ffn_dim, config.dropout) for _ in range(config.num_layers))
         self.output_norm = nn.LayerNorm(embedding_dim)
         self.presence_head = nn.Linear(embedding_dim, 2)
@@ -482,19 +546,17 @@ class ParticleSetDecoder(nn.Module):
 
         outputs = []
         for layer_index, layer in enumerate(self.layers):
-            layer_kwargs = dict(
-                query_references=references,
-                query_reference_mask=reference_mask,
-                memory_positions=memory_positions,
-                local_attention_radius=self.local_attention_radius,
-            )
             if self.attention_mode == "sectorized":
-                layer_kwargs.update(num_sectors=self.num_sectors, sector_neighbors=self.sector_neighbors)
-            slots = layer(slots, memory, memory_mask, **layer_kwargs)
+                slots = layer(
+                    slots, memory, memory_mask, references, reference_mask, memory_positions,
+                    num_sectors=self.num_sectors, sector_neighbors=self.sector_neighbors,
+                )
+            else:
+                slots = layer(slots, memory, memory_mask)
             if references is not None:
                 normalized_slots = self.output_norm(slots)
                 delta = torch.tanh(self.reference_delta_heads[layer_index](normalized_slots))
-                step_size = self.local_attention_radius or 1.0
+                step_size = self.reference_update_scale or 1.0
                 eta = references[..., 0] + step_size * delta[..., 0]
                 phi = references[..., 1] + step_size * delta[..., 1]
                 references = torch.stack([eta, torch.atan2(torch.sin(phi), torch.cos(phi))], dim=-1)

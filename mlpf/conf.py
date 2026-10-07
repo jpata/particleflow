@@ -778,8 +778,10 @@ class SetDecoderConfig(BaseModel):
     ffn_multiplier: float = Field(default=4.0, gt=0.0)
     dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
     query_init: SetQueryInit = SetQueryInit.LEARNED
-    local_attention_radius: Optional[float] = Field(default=None, gt=0.0)
-    attention_mode: Literal["dense", "sectorized"] = "dense"
+    local_attention_radius: Optional[float] = Field(
+        default=None, gt=0.0, description="Legacy name for the per-layer query reference update scale; attention remains unmasked."
+    )
+    attention_mode: Literal["global-flash", "sectorized"] = "global-flash"
     num_sectors: int = Field(default=32, gt=0)
     sector_neighbors: int = Field(default=1, ge=0)
     tracker_query_fraction: float = Field(default=0.5, ge=0.0, le=1.0)

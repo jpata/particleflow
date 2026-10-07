@@ -4,7 +4,7 @@ import torch
 from mlpf.conf import MLPFConfig
 from mlpf.model.PFDataset import PFBatch
 from mlpf.model.mlpf import MLPF
-from mlpf.model.set_decoder import _phi_sector
+from mlpf.model.set_decoder import _flash_multihead_attention, _phi_sector
 from mlpf.model.set_losses import hungarian_match, set_event_loss
 from mlpf.model.utils import unpack_predictions, unpack_target
 
@@ -111,6 +111,38 @@ def test_set_config_rejects_sectorized_attention_for_global_queries():
 def test_phi_sectors_wrap_at_periodic_boundary():
     sectors = _phi_sector(torch.tensor([-torch.pi, torch.pi, -torch.pi + 0.01, torch.pi - 0.01]), 32)
     assert sectors.tolist() == [0, 0, 0, 31]
+
+
+def test_global_set_attention_matches_unmasked_attention_without_dense_pairwise_mask(monkeypatch):
+    module = torch.nn.MultiheadAttention(16, 2, batch_first=True, dropout=0.0)
+    queries = torch.randn(2, 5, 16, requires_grad=True)
+    memory = torch.randn(2, 9, 16, requires_grad=True)
+    mask = torch.ones(2, 9, dtype=torch.bool)
+    mask[1, 6:] = False
+    expected = torch.stack([
+        module(queries[index:index + 1], memory[index:index + 1, mask[index]], memory[index:index + 1, mask[index]], need_weights=False)[0][0]
+        for index in range(2)
+    ])
+
+    def reject_dense_attention(*args, **kwargs):
+        raise AssertionError("Set decoder called dense MultiheadAttention.forward")
+
+    monkeypatch.setattr(torch.nn.MultiheadAttention, "forward", reject_dense_attention)
+    actual = _flash_multihead_attention(module, queries, memory, mask)
+    torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
+    actual.sum().backward()
+    assert queries.grad is not None and memory.grad is not None
+
+
+def test_global_set_attention_returns_zero_for_event_without_hits():
+    module = torch.nn.MultiheadAttention(16, 2, batch_first=True)
+    queries = torch.randn(1, 5, 16)
+    memory = torch.randn(1, 9, 16)
+    mask = torch.zeros(1, 9, dtype=torch.bool)
+
+    output = _flash_multihead_attention(module, queries, memory, mask)
+
+    torch.testing.assert_close(output, torch.zeros_like(output))
 
 
 def test_heptv2_sectorized_set_decoder_forward_backward():
@@ -261,6 +293,22 @@ def test_grid_diverse_queries_use_remaining_cell_representatives_before_duplicat
 
     assert reference_mask.all()
     torch.testing.assert_close(references[0, :, 0].sort().values, torch.tensor([0.01, 0.31, 0.61, 1.02]))
+
+
+def test_grid_diverse_queries_prioritize_distinct_high_energy_cells():
+    config = make_config(num_slots=2, query_init="input-conditioned", proposal_mode="grid-diverse", tracker_query_fraction=0.0)
+    decoder = MLPF(config).set_decoder
+    features = torch.zeros(1, 4, config.input_dim)
+    features[0, :, 0] = 2
+    features[0, :, 2] = torch.tensor([0.01, 0.02, 0.51, 1.01])
+    features[0, :, 4] = 1
+    features[0, :, 5] = torch.tensor([1.0, 10.0, 5.0, 0.1])
+    memory = torch.zeros(1, 4, decoder.queries.shape[-1])
+
+    _, references, reference_mask, _, _ = decoder._input_conditioned_queries(memory, torch.ones(1, 4, dtype=torch.bool), features)
+
+    assert reference_mask.all()
+    torch.testing.assert_close(references[0, :, 0].sort().values, torch.tensor([0.02, 0.51]))
 
 
 def test_aggregate_anchor_set_decoder_forward_backward():

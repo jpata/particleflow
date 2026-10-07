@@ -61,8 +61,9 @@ scripts/lumi/train_scenario.sh cld_hits_output_comparison mi250x --dry-run
 scripts/lumi/train_scenario.sh cld_hits_output_comparison mi250x
 ```
 
-For the attention grid-diverse aggregate baseline versus the HEPTv2 backbone
-with sectorized set decoder, preview and submit the paired CLD hit-set campaign:
+For the three CLD hit-set references (Flash backbone with global Flash decoder,
+HEPTv2 backbone with global Flash decoder, and HEPTv2 backbone with sectorized
+Flash decoder), preview and submit the comparison campaign:
 
 ```bash
 scripts/lumi/train_scenario.sh cld_set_hits_heptv2_sector_comparison mi250x --dry-run

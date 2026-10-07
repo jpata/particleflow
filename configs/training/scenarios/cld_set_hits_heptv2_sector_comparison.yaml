@@ -10,7 +10,7 @@ variants:
       model.backbone.num_calo_layers: 2
       model.backbone.num_common_layers: 2
       model.attention.use_jagged_attention: true
-      model.set_decoder.attention_mode: dense
+      model.set_decoder.attention_mode: global-flash
 
   heptv2_sector_grid_diverse_aggregate:
     model_name: pyg-cld-hits-heptv2-sector-set-v1
@@ -20,6 +20,13 @@ variants:
       model.set_decoder.attention_mode: sectorized
       model.set_decoder.num_sectors: 32
       model.set_decoder.sector_neighbors: 1
+
+  heptv2_global_grid_diverse_aggregate:
+    model_name: pyg-cld-hits-heptv2-sector-set-v1
+    overrides:
+      model.heptv2.num_convs: 6
+      model.binary_classification_focal_gamma: 2.0
+      model.set_decoder.attention_mode: global-flash
 
 seeds: [12345]
 
