@@ -269,9 +269,11 @@ def hits_to_features(
 
     # Preserve the exact DD4hep detector surface identity. Layer numbers are
     # local to a detector system, so system and signed side must be retained as
-    # well. All supported Key4hep tracker collections provide these fields in
-    # their CellIDEncoding metadata. Collections without a side field (for
-    # example LumiCal) use the neutral value zero.
+    # well. Hit-based models require these fields in CellIDEncoding metadata.
+    # MAIA's legacy sample omits this metadata and uses track/cluster inputs;
+    # its explicit opt-out leaves unknown surface fields zero rather than
+    # guessing an encoding. Collections without a side field (for example
+    # LumiCal) use the neutral value zero.
     cellids = np.asarray(feat_arr["cellID"], dtype=np.uint64)
     cellid_fields = parse_cellid_encoding(cellid_encoding) if cellid_encoding is not None else {}
     if np.any(feat_arr[sdcoll] == 3) and not {"system", "side", "layer"}.issubset(cellid_fields):
@@ -1615,6 +1617,8 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     }
     collectionIDs_reverse = {v: k for (k, v) in collectionIDs.items()}
     cellid_encodings = get_cellid_encodings(fi)
+    if detector == "maia" and not cellid_encodings:
+        print("MAIA has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero); use track/cluster inputs only.")
 
     prop_data = arrs.arrays(
         [

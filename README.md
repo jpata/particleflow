@@ -21,12 +21,17 @@ uv run ./scripts/local_test_cms.sh
 ```
 
 Before opening a pull request, run the lightweight quality checks with
-`uv run pre-commit run --all-files`. The cyclomatic-complexity check covers the
+`uvx --python 3.12 pre-commit run --all-files`. The cyclomatic-complexity check covers the
 first-party `mlpf/` package (not the vendored detector configuration under
 `mlpf/data/key4hep/gen/`) and rejects new functions above the transitional
 complexity ceiling. Prefer small, single-purpose helpers when generating or
 refactoring code; a local `# noqa: C901` should be a reviewed exception, not an
 automatic workaround.
+
+To run the same all-files check before every local commit, enable the repository
+hook with `git config core.hooksPath .githooks`. The hook uses the same pre-commit
+flags and Python version as GitHub Actions. It requires `uv`, which installs the
+lint tool and Python 3.12 if needed.
 
 Alternatively, you can use a prepared container:
 ```
