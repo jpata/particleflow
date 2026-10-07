@@ -32,7 +32,17 @@ def make_hit_data(collection):
         ("ITrackerEndcapHits", 3, 1),
         ("ECALBarrel", 0, 2),
         ("HCALBarrel", 1, 2),
+        ("HCALOther", 1, 2),
         ("MUON", 2, 2),
+        ("LumiCal_Hits", 2, 2),
+        # MAIA names its calorimeters Ecal*/Hcal*, which a case-sensitive prefix match used to
+        # send to subdetector 2, leaving energy_ecal and energy_hcal zero on every MAIA cluster
+        ("EcalBarrelCollectionRec", 0, 2),
+        ("EcalEndcapCollectionRec", 0, 2),
+        ("HcalBarrelCollectionRec", 1, 2),
+        ("HcalEndcapCollectionRec", 1, 2),
+        ("IBTrackerHits", 3, 1),
+        ("VETrackerHits", 3, 1),
     ],
 )
 def test_hit_elemtype_follows_subdetector(collection, expected_subdetector, expected_elemtype):
@@ -64,6 +74,25 @@ def test_tracker_surface_fields_are_decoded_from_cellid():
     np.testing.assert_array_equal(features["side"], side[:2])
     np.testing.assert_array_equal(features["layer"], layer[:2])
     np.testing.assert_array_equal(decode_cellid_field(cellids, TRACKER_ENCODING, "side"), side)
+
+
+def test_tracker_without_cellid_encoding_raises_by_default():
+    with pytest.raises(RuntimeError, match="CellIDEncoding"):
+        hits_to_features(make_hit_data("IBTrackerHits"), 0, "IBTrackerHits", HIT_FEATURES, None)
+
+
+def test_tracker_without_cellid_encoding_falls_back_to_zero_when_not_required():
+    features = hits_to_features(make_hit_data("IBTrackerHits"), 0, "IBTrackerHits", HIT_FEATURES, None, require_cellid_encoding=False)
+
+    np.testing.assert_array_equal(features["subdetector"], [3, 3])
+    for field in ("system", "side", "layer"):
+        np.testing.assert_array_equal(features[field], [0, 0])
+
+
+def test_only_lcio_converted_detectors_skip_the_cellid_encoding_requirement():
+    assert not EDM4HEP.DETECTORS["maia"].require_cellid_encoding
+    for name in ("clic", "cld"):
+        assert EDM4HEP.DETECTORS[name].require_cellid_encoding
 
 
 def test_tfds_hit_schema_retains_detector_surface_fields():
