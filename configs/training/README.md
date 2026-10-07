@@ -61,6 +61,14 @@ scripts/lumi/train_scenario.sh cld_hits_output_comparison mi250x --dry-run
 scripts/lumi/train_scenario.sh cld_hits_output_comparison mi250x
 ```
 
+For the attention grid-diverse aggregate baseline versus the HEPTv2 backbone
+with sectorized set decoder, preview and submit the paired CLD hit-set campaign:
+
+```bash
+scripts/lumi/train_scenario.sh cld_set_hits_heptv2_sector_comparison mi250x --dry-run
+scripts/lumi/train_scenario.sh cld_set_hits_heptv2_sector_comparison mi250x
+```
+
 The Tallinn worker runs the repository's `uv` environment directly. The LUMI
 submitter uses `particleflow-env` (override its interpreter with
 `PYTHON_EXECUTABLE`) and the worker executes that environment in the standard

@@ -116,6 +116,12 @@ uv run python3 mlpf/pipeline.py \
 
 Memory use depends on event size, attention implementation, precision, and batch accumulation. Lower `--gpu_batch_multiplier` first if the process runs out of GPU memory. Assess physics quality with the held-out checks in the [validation overview](../validation/overview.md).
 
+## Experimental CLD hit-set model
+
+The `pyg-cld-hits-heptv2-sector-set-v1` recipe uses a HEPTv2 hit backbone and an input-conditioned particle-set decoder. Decoder slots are assigned to periodic azimuthal sectors from their current reference direction. Each slot cross-attends only to hits in its sector and `sector_neighbors` sectors on either side; slot self-attention is also sector-local. This avoids dense slot-by-hit masks and global slot self-attention. A sector with no nearby hits uses its nearest hit so attention is always defined.
+
+The recipe starts with 32 sectors, one neighboring sector on each side, and 256 slots. These settings can be overridden with `model.set_decoder.num_sectors`, `model.set_decoder.sector_neighbors`, and `model.set_decoder.num_slots`. In this mode, `local_attention_radius` limits the reference update per decoder layer; it is not an exact geometric cross-attention cutoff. The model requires hit counts padded to a multiple of the HEPTv2 block size (128 in this recipe).
+
 ## Train CMS or CLIC
 
 The command shape is the same, but the production, model recipe, data root, dataset version, and locally available samples must agree:

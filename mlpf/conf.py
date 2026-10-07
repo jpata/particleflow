@@ -779,6 +779,9 @@ class SetDecoderConfig(BaseModel):
     dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
     query_init: SetQueryInit = SetQueryInit.LEARNED
     local_attention_radius: Optional[float] = Field(default=None, gt=0.0)
+    attention_mode: Literal["dense", "sectorized"] = "dense"
+    num_sectors: int = Field(default=32, gt=0)
+    sector_neighbors: int = Field(default=1, ge=0)
     tracker_query_fraction: float = Field(default=0.5, ge=0.0, le=1.0)
     proposal_mode: Literal["topk", "grid-diverse"] = "topk"
     proposal_grid_size: float = Field(default=0.1, gt=0.0)
@@ -792,6 +795,8 @@ class SetDecoderConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_query_locality(self):
+        if self.attention_mode == "sectorized" and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder sectorized attention requires query_init='input-conditioned'")
         if self.local_attention_radius is not None and self.query_init != SetQueryInit.INPUT_CONDITIONED:
             raise ValueError("set decoder local_attention_radius requires query_init='input-conditioned'")
         if self.proposal_mode != "topk" and self.query_init != SetQueryInit.INPUT_CONDITIONED:
@@ -883,6 +888,7 @@ class _PipelineDatasetOverride:
 _PIPELINE_DATASETS = {
     "cms": _PipelineDatasetOverride("physical_pu", "cms_pf_ttbar", "3.2.0"),
     "cld": _PipelineDatasetOverride("physical", "cld_edm_ttbar_pf", "3.2.1", gpu_batch_multiplier=8),
+    "cld_hits": _PipelineDatasetOverride("physical", "cld_edm_ttbar_hits", "3.2.1"),
     "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.2.1"),
 }
 

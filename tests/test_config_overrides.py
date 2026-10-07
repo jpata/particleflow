@@ -198,6 +198,27 @@ class TestConfigOverrides(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             cld_override.version = "changed"
 
+    def test_cld_hits_pipeline_overrides(self):
+        model = self.spec["models"]["test_model"]
+        model["dataset"] = "cld_hits"
+        model["train_datasets"] = {"physical": {"batch_size": 1, "samples": [{"name": "cld_edm_ttbar_hits", "version": "1.0.0", "splits": ["1"]}]}}
+        model["validation_datasets"] = model["train_datasets"]
+        model["test_datasets"] = [{"name": "cld_edm_ttbar_hits", "version": "1.0.0"}]
+        self.spec["productions"]["test_prod"]["type"] = "cld"
+        self.write_spec()
+
+        config = MLPFConfig.from_spec(
+            self.temp_spec.name,
+            "test_model",
+            "test_prod",
+            args=argparse.Namespace(pipeline=True, test_datasets=[]),
+        )
+
+        self.assertEqual(config.gpu_batch_multiplier, 1)
+        self.assertEqual(config.train_dataset["cld_hits"]["physical"].samples["cld_edm_ttbar_hits"].splits, ["10"])
+        self.assertEqual(config.valid_dataset["cld_hits"]["physical"].samples["cld_edm_ttbar_hits"].version, "3.2.1")
+        self.assertEqual(list(config.test_dataset), ["cld_edm_ttbar_hits"])
+
     def test_pipeline_overrides(self):
         args = argparse.Namespace()
         args.pipeline = True

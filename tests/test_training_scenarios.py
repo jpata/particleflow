@@ -27,6 +27,7 @@ CLIC_CLD_SCENARIO = ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comp
 SET_IMPROVEMENT_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_improvement_comparison.yaml"
 SET_QUERY_MATCHING_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_query_matching_comparison.yaml"
 OBJECT_FORMATION_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_object_formation_comparison.yaml"
+HEPTV2_SECTOR_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_heptv2_sector_comparison.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -283,6 +284,30 @@ def test_object_formation_scenario_resolves_scalable_two_by_two_campaign():
     assert {job.resolved_config.num_steps for job in jobs} == {50000}
     assert {job.resolved_config.checkpoint_freq for job in jobs} == {1000}
     assert {job.resolved_config.compile for job in jobs} == {False}
+    assert {job.global_batch_size for job in jobs} == {512}
+    assert {job.gpu_batch_multiplier for job in jobs} == {64}
+
+
+def test_heptv2_sector_scenario_matches_grid_aggregate_baseline():
+    platform = load_platform_profile(PLATFORMS / "lumi_mi250x.yaml")
+    scenario = load_training_scenario(HEPTV2_SECTOR_SCENARIO)
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    baseline_scenario = load_training_scenario(OBJECT_FORMATION_SCENARIO)
+    baseline_jobs = resolve_scenario_jobs(baseline_scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    previous_baseline = next(job for job in baseline_jobs if job.variant_name == "grid_diverse_aggregate_anchors")
+
+    assert [job.variant_name for job in jobs] == [
+        "attention_grid_diverse_aggregate",
+        "heptv2_sector_grid_diverse_aggregate",
+    ]
+    assert jobs[0].resolved_config.model_dump(mode="json") == previous_baseline.resolved_config.model_dump(mode="json")
+    assert [job.resolved_config.model.type.value for job in jobs] == ["attention", "heptv2"]
+    assert [job.resolved_config.model.set_decoder.attention_mode for job in jobs] == ["dense", "sectorized"]
+    assert {job.resolved_config.model.set_decoder.proposal_mode for job in jobs} == {"grid-diverse"}
+    assert {job.resolved_config.model.set_decoder.use_aggregate_anchors for job in jobs} == {True}
+    assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
+    assert {job.resolved_config.model.set_decoder.num_layers for job in jobs} == {4}
+    assert {job.resolved_config.pad_to_multiple_elements for job in jobs} == {128}
     assert {job.global_batch_size for job in jobs} == {512}
     assert {job.gpu_batch_multiplier for job in jobs} == {64}
 

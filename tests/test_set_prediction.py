@@ -4,6 +4,7 @@ import torch
 from mlpf.conf import MLPFConfig
 from mlpf.model.PFDataset import PFBatch
 from mlpf.model.mlpf import MLPF
+from mlpf.model.set_decoder import _phi_sector
 from mlpf.model.set_losses import hungarian_match, set_event_loss
 from mlpf.model.utils import unpack_predictions, unpack_target
 
@@ -100,6 +101,45 @@ def test_set_config_populates_decoder_defaults():
 def test_set_config_rejects_local_attention_for_global_queries():
     with pytest.raises(ValueError, match="local_attention_radius requires"):
         make_config(local_attention_radius=0.4)
+
+
+def test_set_config_rejects_sectorized_attention_for_global_queries():
+    with pytest.raises(ValueError, match="sectorized attention requires"):
+        make_config(attention_mode="sectorized")
+
+
+def test_phi_sectors_wrap_at_periodic_boundary():
+    sectors = _phi_sector(torch.tensor([-torch.pi, torch.pi, -torch.pi + 0.01, torch.pi - 0.01]), 32)
+    assert sectors.tolist() == [0, 0, 0, 31]
+
+
+def test_heptv2_sectorized_set_decoder_forward_backward():
+    config = make_config(
+        num_slots=12,
+        query_init="input-conditioned",
+        attention_mode="sectorized",
+        num_sectors=8,
+        sector_neighbors=1,
+        num_layers=2,
+        proposal_mode="grid-diverse",
+        use_aggregate_anchors=True,
+    )
+    config.model.heptv2.num_convs = 1
+    model = MLPF(config)
+    features = torch.randn(2, 16, config.input_dim)
+    features[..., 0] = torch.tensor([1, 2] * 8)
+    features[..., 1] = features[..., 1].abs() + 0.1
+    features[..., 5] = features[..., 5].abs() + 0.1
+    mask = torch.ones(2, 16, dtype=torch.bool)
+    mask[1, 10:] = False
+
+    predictions = model(features, mask)
+    assert predictions[2].shape == (2, 12, 5)
+    assert all(torch.isfinite(output).all() for output in predictions)
+    sum(output.square().mean() for output in predictions).backward()
+    assert model.set_decoder.layers[0].cross_attention.in_proj_weight.grad is not None
+    assert model.set_decoder.layers[0].self_attention.in_proj_weight.grad is not None
+    assert [name for name, parameter in model.named_parameters() if parameter.grad is None] == []
 
 
 @pytest.mark.parametrize("override", [{"proposal_mode": "grid-diverse"}, {"use_aggregate_anchors": True}])

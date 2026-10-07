@@ -116,6 +116,80 @@ class ParticleSetDecoderLayer(nn.Module):
         return slots + self.ffn(self.ffn_norm(slots))
 
 
+def _phi_sector(phi, num_sectors):
+    normalized_phi = torch.remainder(torch.nan_to_num(phi.float(), nan=0.0) + math.pi, 2.0 * math.pi)
+    return torch.floor(normalized_phi * (num_sectors / (2.0 * math.pi))).long().remainder(num_sectors)
+
+
+class SectorizedParticleSetDecoderLayer(ParticleSetDecoderLayer):
+    """Cross- and self-attention on periodic phi sectors without pairwise masks."""
+
+    def forward(
+        self,
+        slots,
+        memory,
+        memory_mask,
+        query_references=None,
+        query_reference_mask=None,
+        memory_positions=None,
+        local_attention_radius=None,
+        num_sectors=32,
+        sector_neighbors=1,
+    ):
+        cross_queries = self.query_norm(slots)
+        normalized_memory = self.memory_norm(memory)
+        cross_outputs = []
+        slot_sectors = _phi_sector(query_references[..., 1], num_sectors)
+        if query_reference_mask is not None:
+            fallback_sectors = torch.arange(slots.shape[1], device=slots.device).remainder(num_sectors)
+            slot_sectors = torch.where(query_reference_mask, slot_sectors, fallback_sectors.unsqueeze(0))
+        hit_sectors = _phi_sector(memory_positions[..., 1], num_sectors)
+
+        for event_idx in range(memory.shape[0]):
+            sector_indices = []
+            sector_outputs = []
+            valid_hits = torch.nonzero(memory_mask[event_idx], as_tuple=True)[0]
+            event_hit_sectors = hit_sectors[event_idx, valid_hits]
+            for sector in range(num_sectors):
+                slot_indices = torch.nonzero(slot_sectors[event_idx] == sector, as_tuple=True)[0]
+                if slot_indices.numel() == 0 or valid_hits.numel() == 0:
+                    continue
+                sector_distance = (event_hit_sectors - sector).remainder(num_sectors)
+                nearby = (sector_distance <= sector_neighbors) | (sector_distance >= num_sectors - sector_neighbors)
+                hit_indices = valid_hits[nearby]
+                if hit_indices.numel() == 0:
+                    sector_center = -math.pi + (sector + 0.5) * (2.0 * math.pi / num_sectors)
+                    nearest = _wrapped_delta_phi(memory_positions[event_idx, valid_hits, 1], sector_center).abs().argmin()
+                    hit_indices = valid_hits[nearest : nearest + 1]
+                event_queries = cross_queries[event_idx : event_idx + 1, slot_indices]
+                event_memory = normalized_memory[event_idx : event_idx + 1, hit_indices]
+                sector_output, _ = self.cross_attention(event_queries, event_memory, event_memory, need_weights=False)
+                sector_indices.append(slot_indices)
+                sector_outputs.append(sector_output.squeeze(0))
+            if sector_outputs:
+                cross_outputs.append(torch.cat(sector_outputs)[torch.argsort(torch.cat(sector_indices))])
+            else:
+                cross_outputs.append(torch.zeros_like(cross_queries[event_idx]))
+        slots = slots + torch.stack(cross_outputs)
+
+        normalized_slots = self.self_norm(slots)
+        self_outputs = []
+        for event_idx in range(slots.shape[0]):
+            sector_indices = []
+            sector_outputs = []
+            for sector in range(num_sectors):
+                slot_indices = torch.nonzero(slot_sectors[event_idx] == sector, as_tuple=True)[0]
+                if slot_indices.numel() == 0:
+                    continue
+                sector_slots = normalized_slots[event_idx : event_idx + 1, slot_indices]
+                sector_output, _ = self.self_attention(sector_slots, sector_slots, sector_slots, need_weights=False)
+                sector_indices.append(slot_indices)
+                sector_outputs.append(sector_output.squeeze(0))
+            self_outputs.append(torch.cat(sector_outputs)[torch.argsort(torch.cat(sector_indices))])
+        slots = slots + torch.stack(self_outputs)
+        return slots + self.ffn(self.ffn_norm(slots))
+
+
 class ParticleSetDecoder(nn.Module):
     """Decode learned or detector-seeded queries into an unordered particle set."""
 
@@ -129,6 +203,9 @@ class ParticleSetDecoder(nn.Module):
         self.num_slots = config.num_slots
         self.query_init = getattr(config.query_init, "value", config.query_init)
         self.local_attention_radius = config.local_attention_radius
+        self.attention_mode = config.attention_mode
+        self.num_sectors = config.num_sectors
+        self.sector_neighbors = config.sector_neighbors
         self.tracker_query_fraction = config.tracker_query_fraction
         self.proposal_mode = config.proposal_mode
         self.proposal_grid_size = config.proposal_grid_size
@@ -138,9 +215,8 @@ class ParticleSetDecoder(nn.Module):
         self.queries = nn.Parameter(torch.empty(1, config.num_slots, embedding_dim))
         nn.init.trunc_normal_(self.queries, std=0.02)
         ffn_dim = int(config.ffn_multiplier * embedding_dim)
-        self.layers = nn.ModuleList(
-            ParticleSetDecoderLayer(embedding_dim, config.num_heads, ffn_dim, config.dropout) for _ in range(config.num_layers)
-        )
+        layer_type = SectorizedParticleSetDecoderLayer if self.attention_mode == "sectorized" else ParticleSetDecoderLayer
+        self.layers = nn.ModuleList(layer_type(embedding_dim, config.num_heads, ffn_dim, config.dropout) for _ in range(config.num_layers))
         self.output_norm = nn.LayerNorm(embedding_dim)
         self.presence_head = nn.Linear(embedding_dim, 2)
         self.pid_head = nn.Linear(embedding_dim, num_classes)
@@ -406,15 +482,15 @@ class ParticleSetDecoder(nn.Module):
 
         outputs = []
         for layer_index, layer in enumerate(self.layers):
-            slots = layer(
-                slots,
-                memory,
-                memory_mask,
+            layer_kwargs = dict(
                 query_references=references,
                 query_reference_mask=reference_mask,
                 memory_positions=memory_positions,
                 local_attention_radius=self.local_attention_radius,
             )
+            if self.attention_mode == "sectorized":
+                layer_kwargs.update(num_sectors=self.num_sectors, sector_neighbors=self.sector_neighbors)
+            slots = layer(slots, memory, memory_mask, **layer_kwargs)
             if references is not None:
                 normalized_slots = self.output_norm(slots)
                 delta = torch.tanh(self.reference_delta_heads[layer_index](normalized_slots))

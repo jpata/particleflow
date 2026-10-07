@@ -825,6 +825,34 @@ models:
         ffn_multiplier: 4.0
         dropout: 0.0
 
+  pyg-cld-hits-heptv2-sector-set-v1:
+    <<: *pyg_cld_hits_v1
+    gpu_batch_multiplier: 1
+    pad_to_multiple_elements: 128
+
+    architecture:
+      type: "heptv2"
+      input_encoding: "split"
+      output_mode: "set"
+      heptv2:
+        num_convs: 3
+        embedding_dim: 256
+        width: 256
+        num_heads: 16
+        dropout_ff: 0.0
+        block_size: 128
+      set_decoder:
+        num_slots: 256
+        num_layers: 2
+        num_heads: 8
+        query_init: "input-conditioned"
+        local_attention_radius: 0.4
+        proposal_mode: "grid-diverse"
+        use_aggregate_anchors: true
+        attention_mode: "sectorized"
+        num_sectors: 32
+        sector_neighbors: 1
+
   # CLIC Model
   pyg-clic-v1:
     <<: *defaults
