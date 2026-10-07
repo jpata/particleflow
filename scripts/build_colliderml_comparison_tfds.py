@@ -14,7 +14,18 @@ def write_smoke_shards(input_path, manual_dir, train_fraction=0.5):
         raise ValueError("train_fraction must be strictly between zero and one")
     # The PF builder does not consume the much larger raw-hit columns.
     fields = ak.metadata_from_parquet(input_path)["columns"]
-    required = ("event_id", "X_track", "X_cluster", "ytarget_track", "ytarget_cluster", "genmet", "genjet", "targetjet")
+    required = (
+        "event_id",
+        "X_track",
+        "X_cluster",
+        "ytarget_track",
+        "ytarget_cluster",
+        "ycand_track",
+        "ycand_cluster",
+        "genmet",
+        "genjet",
+        "targetjet",
+    )
     table = ak.from_parquet(input_path, columns=[field for field in required if any(c == field or c.startswith(field + ".") for c in fields)])
     # Key4hep writes one outer Record of event lists; ColliderML writes rows.
     if isinstance(table, ak.Record):
