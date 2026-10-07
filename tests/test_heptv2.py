@@ -1,3 +1,4 @@
+import pytest
 import torch
 import math
 from mlpf.model.heptv2 import (
@@ -78,3 +79,43 @@ def test_heptv2_layer_forward():
     assert out.shape == (B, S, D)
     # Check that masked out elements remain zero
     assert torch.allclose(out[1, 12:], torch.zeros_like(out[1, 12:]))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required for fused HEPTv2")
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_fused_bucket_attention_outputs_and_hash_weight_gradients(dtype):
+    # Both outputs enter HEPTv2's loss: LSE controls mixing across hashes.
+    torch.manual_seed(42)
+    tensors = [torch.randn(2, 2, 3, 128, 16, device="cuda", dtype=dtype, requires_grad=True) for _ in range(3)]
+    q, k, v = tensors
+    scores = q.float() @ k.float().transpose(-1, -2) / math.sqrt(16)
+    expected_lse = scores.logsumexp(-1, keepdim=True)
+    expected_out = scores.softmax(-1) @ v.float()
+    lse, out = qkv_res(q, k, v)
+    tolerance = 0.03 if dtype == torch.bfloat16 else 1e-4
+    torch.testing.assert_close(out.float(), expected_out, atol=tolerance, rtol=tolerance)
+    torch.testing.assert_close(lse, expected_lse, atol=tolerance, rtol=tolerance)
+    actual_loss = (out.float() * lse.softmax(0)).square().sum()
+    expected_loss = (expected_out * expected_lse.softmax(0)).square().sum()
+    actual_grads = torch.autograd.grad(actual_loss, tensors)
+    expected_grads = torch.autograd.grad(expected_loss, tensors)
+    for actual, expected in zip(actual_grads, expected_grads):
+        torch.testing.assert_close(actual.float(), expected.float(), atol=tolerance, rtol=tolerance)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required for fused HEPTv2")
+def test_gpu_never_falls_back_to_dense_attention(monkeypatch):
+    import mlpf.model.heptv2 as heptv2
+
+    tensors = [torch.randn(1, 2, 2, 8, 8, device="cuda") for _ in range(3)]
+    monkeypatch.setattr(heptv2, "flex_attention", None)
+    with pytest.raises(RuntimeError, match="dense fallback is disabled"):
+        qkv_res(*tensors)
+
+    def failing_kernel(*args, **kwargs):
+        raise ValueError("kernel failure")
+
+    monkeypatch.setattr(heptv2, "flex_attention", failing_kernel)
+    with pytest.raises(RuntimeError, match="dense GPU fallback is disabled") as error:
+        qkv_res(*tensors)
+    assert isinstance(error.value.__cause__, ValueError)

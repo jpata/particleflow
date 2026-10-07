@@ -122,6 +122,18 @@ The `pyg-cld-hits-heptv2-sector-set-v1` recipe uses a HEPTv2 hit backbone and an
 
 The recipe starts with 32 sectors, one neighboring sector on each side, and 256 slots. These settings can be overridden with `model.set_decoder.num_sectors`, `model.set_decoder.sector_neighbors`, and `model.set_decoder.num_slots`. In this mode, `local_attention_radius` limits the reference update per decoder layer; it is not an exact geometric cross-attention cutoff. The model requires hit counts padded to a multiple of the HEPTv2 block size (128 in this recipe).
 
+HEPTv2 GPU bucket attention requires compiled `torch.nn.attention.flex_attention` and never falls back to materializing attention scores. Bucket counts use a dynamic batch dimension so varying padded event lengths do not create a separate compiled kernel for every number of buckets. Failures retain the original exception and report the input shape, dtype, and PyTorch/ROCm versions; the explicit score calculation is used only on CPU.
+
+Run the small MI250X diagnostic before a training campaign:
+
+```bash
+sbatch scripts/lumi/debug_heptv2.sh
+```
+
+It checks fused attention outputs and gradients (including log-normalizers used to weight hashes), runs six-layer BF16 forward/backward/optimizer steps with varying event sizes and batches, and reports peak GPU allocation in `logs_slurm/heptv2-debug-<jobid>.out`. This is a synthetic smoke test, not a full training memory estimate: matching, data loading, and distributed training are not exercised.
+
+On MI250X with LAIF PyTorch 2.11 / ROCm 7.2 (2026-10-07, job 22601649), all 34 HEPTv2/set-prediction tests and 16 six-layer training smoke cases passed. Peak allocation was 14.0 GiB for one 100,000-hit event and 11.2 GiB for 64 events with 1,024 hits each. The original static bucket-as-head layout reproduced Dynamo’s eight-recompilation limit and silent unfused/dense execution on the ninth distinct bucket count.
+
 ## Train CMS or CLIC
 
 The command shape is the same, but the production, model recipe, data root, dataset version, and locally available samples must agree:

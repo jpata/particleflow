@@ -19,8 +19,8 @@ copies or substantial portions of the Software.
 Local modifications in this repository:
 - Batched `[B, S, D]` handling in `HEPTv2Layer.forward`, including mask-aware
   per-event hashing and flattened batch-offset gather indices.
-- CPU fallback for bucket attention when `flex_attention` is unavailable or not
-  used, plus optional shape/debug logging.
+- Dense bucket attention only on CPU; GPU execution requires compiled
+  `flex_attention`, with dynamic bucket counts and optional shape/debug logging.
 - Integration with the MLPF stack through the repo-specific feature layout
   (`eta`, `sin_phi`, `cos_phi` -> eta-phi coordinates).
 - Several `HEPTV2_*` environment switches are preserved from the upstream
@@ -40,7 +40,7 @@ try:
 
     # The eager flex_attention kernel prints a warning that it "may produce
     # incorrect results" — wrap with torch.compile to get the fused path.
-    flex_attention = torch.compile(_raw_flex_attention, dynamic=False)
+    flex_attention = torch.compile(_raw_flex_attention, dynamic=True, fullgraph=True)
 except ImportError:
     flex_attention = None
 
@@ -228,19 +228,29 @@ def unsort_from_buckets(s_x, perm_inverse):
 
 
 def qkv_res(s_query, s_key, s_value):
-    if flex_attention is not None and s_query.is_cuda and s_query.shape[-1] >= 16 and s_value.shape[-1] >= 16:
+    if s_query.is_cuda:
+        if flex_attention is None:
+            raise RuntimeError("HEPTv2 GPU attention requires compiled flex_attention; dense fallback is disabled")
+        # Bucket count varies with event length. Put it in the dynamic batch
+        # dimension, keeping the model's head count static for flex_attention.
+        # Treating buckets as heads specializes each sequence length and can
+        # exhaust Dynamo's recompilation limit during training.
+        t_query = rearrange(s_query, "c h n b d -> (c n) h b d").contiguous()
+        t_key = rearrange(s_key, "c h n b d -> (c n) h b d").contiguous()
+        t_value = rearrange(s_value, "c h n b d -> (c n) h b d").contiguous()
         try:
-            t_query = rearrange(s_query, "c h nbuckets b d -> (c h) nbuckets b d").contiguous()
-            t_key = rearrange(s_key, "c h nbuckets b d -> (c h) nbuckets b d").contiguous()
-            t_value = rearrange(s_value, "c h nbuckets b d -> (c h) nbuckets b d").contiguous()
             out, lse = flex_attention(t_query, t_key, t_value, return_lse=True)
-            out = rearrange(out, "(c h) nbuckets b d -> c h nbuckets b d", h=s_query.shape[1])
-            lse = rearrange(lse, "(c h) nbuckets b -> c h nbuckets b 1", h=s_query.shape[1])
-            return lse, out
-        except Exception:
-            pass
+        except Exception as error:
+            raise RuntimeError(
+                f"HEPTv2 fused bucket attention failed for shape={tuple(t_query.shape)}, "
+                f"dtype={t_query.dtype}, torch={torch.__version__}, HIP={torch.version.hip}; "
+                "dense GPU fallback is disabled"
+            ) from error
+        out = rearrange(out, "(c n) h b d -> c h n b d", c=s_query.shape[0])
+        lse = rearrange(lse, "(c n) h b -> c h n b 1", c=s_query.shape[0])
+        return lse, out
 
-    # Fallback scaled dot-product attention
+    # CPU reference scaled dot-product attention
     # s_query shape: [c, h, nbuckets, bucketsz, d]
     # s_key shape: [c, h, nbuckets, bucketsz, d]
     d = s_query.shape[-1]
