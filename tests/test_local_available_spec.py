@@ -25,6 +25,8 @@ def test_local_spec_uses_current_cld_and_clic_dataset_versions(tmp_path):
                     "pyg-cld-v1": {},
                     "pyg-clic-v1": {},
                     "pyg-cld-hits-v1": {},
+                    "pyg-cld-hits-set-v1": {},
+                    "pyg-cld-hits-heptv2-sector-set-v1": {},
                     "pyg-clic-hits-v1": {},
                 }
             }
@@ -37,6 +39,8 @@ def test_local_spec_uses_current_cld_and_clic_dataset_versions(tmp_path):
     assert _model_dataset(output_spec, "pyg-cld-v1") == ("3.2.1", [str(index) for index in range(1, 11)])
     assert _model_dataset(output_spec, "pyg-clic-v1") == ("3.2.1", [str(index) for index in range(1, 11)])
     assert _model_dataset(output_spec, "pyg-cld-hits-v1") == ("3.2.1", ["1"])
+    assert _model_dataset(output_spec, "pyg-cld-hits-set-v1") == ("3.2.1", ["1"])
+    assert _model_dataset(output_spec, "pyg-cld-hits-heptv2-sector-set-v1") == ("3.2.1", ["1"])
     assert _model_dataset(output_spec, "pyg-clic-hits-v1") == ("3.2.1", ["1"])
 
 
