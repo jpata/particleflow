@@ -24,7 +24,8 @@ variants:
 seeds: [12345]
 
 training:
-  global_batch_size: 512
+  # Eight events per MI250X GCD on the eight-GPU LUMI profile.
+  global_batch_size: 64
   parameters:
     lr: 0.001
     num_steps: 50000
