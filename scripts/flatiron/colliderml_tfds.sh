@@ -33,8 +33,8 @@ set -euo pipefail
 # Safe to parallelize: split_sample() gives each config a disjoint slice of the manual_dir
 # parquet shards, and each config prepares into its own directory under --data_dir (TFDS
 # preparation is atomic per config: tmp dir + rename; an already-prepared config is
-# skipped). Re-running after a converter change still requires deleting the prepared
-# <data_dir>/<dataset>/<version>/ tree first — the version stays 1.0.0 during development.
+# skipped). Re-running after a converter change requires either deleting the prepared
+# <data_dir>/<dataset>/<config>/<version>/ tree first or bumping the builder VERSION.
 
 PU="${1:-pu0}"
 SAMPLE="ttbar_${PU}"
