@@ -453,7 +453,9 @@ def build_parser():
     parquet_parser = subparsers.add_parser("parquet", help="Upload postprocessed Parquet files")
     add_common_arguments(parquet_parser)
     parquet_parser.add_argument("--sample", action="append", default=[], help="Only upload this sample (repeatable)")
-    parquet_parser.add_argument("--parquet-dir", action="append", default=[], metavar="SAMPLE=PATH", help="Parquet directory for a sample (repeatable)")
+    parquet_parser.add_argument(
+        "--parquet-dir", action="append", default=[], metavar="SAMPLE=PATH", help="Parquet directory for a sample (repeatable)"
+    )
     parquet_parser.add_argument(
         "--selection",
         choices=("matching-root", "first", "all"),
