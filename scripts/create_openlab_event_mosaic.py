@@ -58,8 +58,7 @@ def event_layer(source: Path, detector: str, side: int) -> Image.Image:
             raise ValueError(f"unexpected source aspect ratio for {source}: {original.size}")
         radius = HALF_WIDTH[detector]
         crop = original.convert("RGB").crop(
-            (round((580 - radius) * scale_x), round((610 - radius) * scale_y),
-             round((580 + radius) * scale_x), round((610 + radius) * scale_y))
+            (round((580 - radius) * scale_x), round((610 - radius) * scale_y), round((580 + radius) * scale_x), round((610 + radius) * scale_y))
         )
     rgb = np.asarray(crop.resize((side, side), Image.LANCZOS), dtype=np.float32)
     low = rgb.min(axis=2)
