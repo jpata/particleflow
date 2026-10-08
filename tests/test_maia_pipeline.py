@@ -15,7 +15,7 @@ def test_maia_spec_and_pipeline_use_native_maia_dataset():
     spec = Path(__file__).resolve().parents[1] / "particleflow_spec.yaml"
     config = MLPFConfig.from_spec(spec, "pyg-maia-v1", "maia", SimpleNamespace(pipeline=True))
     assert config.dataset is Dataset.MAIA
-    assert config.input_dim == 17 and config.num_classes == 6
+    assert config.input_dim == 19 and config.num_classes == 6
     assert config.elemtypes_nonzero == [1, 2]
     assert config.model.attention.num_convs == 1
     assert config.train_dataset["maia"]["physical"].samples["maia_edm_ttbar_pf"].splits == ["10"]
@@ -28,7 +28,7 @@ def test_maia_builder_serializes_common_tensor_contract(tmp_path):
     builder = MaiaEdmTtbarPf(config="10", data_dir=str(tmp_path))
     features = builder.info.features
     event = {
-        "X": np.ones((2, 17), dtype=np.float32),
+        "X": np.ones((2, 19), dtype=np.float32),
         "ytarget": np.ones((2, 14), dtype=np.float32),
         "ycand": np.ones((2, 14), dtype=np.float32),
         "genmet": np.float32(2),

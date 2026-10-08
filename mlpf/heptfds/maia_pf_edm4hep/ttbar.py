@@ -18,8 +18,11 @@ from mlpf.heptfds.edm4hep_utils.utils_pf import (
 
 
 class MaiaEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.0.0")
-    RELEASE_NOTES = {"1.0.0": "MAIA ttbar track/cluster dataset with shared target building."}
+    VERSION = tfds.core.Version("1.1.0")
+    RELEASE_NOTES = {
+        "1.0.0": "MAIA ttbar track/cluster dataset with shared target building.",
+        "1.1.0": "Add num_muon_hits and energy_muon cluster features (#511); input width 17 -> 19, regenerate",
+    }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     Download https://uaf-3.t2.ucsd.edu/~atuna/muoncollider/data/mlpf/ttbar/v04/ttbar_reco_10000.slcio.edm4hep.root
     and convert with mlpf.data.key4hep.postprocessing --detector maia.

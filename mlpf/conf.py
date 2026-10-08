@@ -1,7 +1,7 @@
 # This file contains the structure of the MLPF configuration and some generic defaults.
 # Dataset-specific overrides are in particleflow_spec.yaml
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass, fields
 import os
 from enum import Enum
@@ -203,6 +203,10 @@ class EDM4HEP:
         sigma_x: Any
         sigma_y: Any
         sigma_z: Any
+        # Muon-system hits in the cluster, selected by collection (Detector.muon_collections).
+        # Appended last so the existing columns keep their indices.
+        num_muon_hits: Any
+        energy_muon: Any
 
         @classmethod
         def get_names(cls):
@@ -220,6 +224,10 @@ class EDM4HEP:
         # converted from LCIO carry no collection metadata at all, so detectors produced that
         # way opt out and get zeros for those three fields instead.
         require_cellid_encoding: bool = True
+        # Hit collections from the muon system. Cluster muon features count these by
+        # collection rather than by subdetector, because subdetector 2 also holds other
+        # systems (LumiCal on CLIC).
+        muon_collections: Tuple[str, ...] = ()
 
     # Registry of supported key4hep detector scenarios. Add new detectors here;
     # mlpf/data/key4hep/postprocessing.py and tests/validate_parquet.py pick up
@@ -251,6 +259,7 @@ class EDM4HEP:
                 "VXDTrackerHits",
                 "VXDEndcapTrackerHits",
             ],
+            muon_collections=("MUON",),
         ),
         "cld": Detector(
             name="cld",
@@ -269,6 +278,7 @@ class EDM4HEP:
                 "VXDTrackerHits",
                 "VXDEndcapTrackerHits",
             ],
+            muon_collections=("MUON",),
         ),
         "maia": Detector(
             name="maia",
@@ -289,6 +299,7 @@ class EDM4HEP:
             # MAIA samples are converted from LCIO with an empty podio metadata tree, so no
             # CellIDEncoding is available for any collection.
             require_cellid_encoding=False,
+            muon_collections=("MUON",),
         ),
         # OpenDataDetector as released by ColliderML release 1; not EDM4hep geometry, but the
         # registry is the single place the B-field comes from for downstream tools, so the
@@ -961,10 +972,10 @@ class _PipelineDatasetOverride:
 
 _PIPELINE_DATASETS = {
     "cms": _PipelineDatasetOverride("physical_pu", "cms_pf_ttbar", "3.2.0"),
-    "cld": _PipelineDatasetOverride("physical", "cld_edm_ttbar_pf", "3.2.1", gpu_batch_multiplier=8),
-    "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.2.1"),
+    "cld": _PipelineDatasetOverride("physical", "cld_edm_ttbar_pf", "3.3.0", gpu_batch_multiplier=8),
+    "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.3.0"),
     "colliderml": _PipelineDatasetOverride("physical", "colliderml_ttbar_nopu_pf", "1.0.0", gpu_batch_multiplier=8),
-    "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.0.0", gpu_batch_multiplier=1),
+    "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.1.0", gpu_batch_multiplier=1),
     "colliderml_hits": _PipelineDatasetOverride("physical", "colliderml_ttbar_hits", "1.0.0", gpu_batch_multiplier=8),
 }
 
