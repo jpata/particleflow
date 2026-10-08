@@ -470,6 +470,7 @@ def render_event(
     icon_size_cm: float = 1.0,
     input_view: str = "combined",
     tree=None,
+    dpi: int = 150,
 ) -> str:
     """Render a ROOT event or an adapted ColliderML event in the transverse x-y plane."""
     if tree is None:
@@ -753,7 +754,7 @@ def render_event(
     if compact:
         fig.savefig(output, format="svg", transparent=True)
     else:
-        fig.savefig(output, dpi=150, facecolor="white", bbox_inches="tight", pad_inches=0.02)
+        fig.savefig(output, dpi=dpi, facecolor="white", bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
     return config.key
 
@@ -776,6 +777,7 @@ def main(default_detector="auto") -> None:
     parser.add_argument("root_files", type=Path, nargs="+")
     parser.add_argument("--events", type=int, nargs="+", default=[0])
     parser.add_argument("--output-dir", type=Path, default=Path("event_displays"))
+    parser.add_argument("--dpi", type=int, default=150, help="PNG output resolution (default: 150)")
     parser.add_argument("--detector", choices=("auto", "clic", "cld", "idea", "maia"), default=default_detector)
     parser.add_argument("--plot-limit", type=float, help="shared transverse half-width in mm")
     parser.add_argument(
@@ -870,6 +872,7 @@ def main(default_detector="auto") -> None:
                     show_particles=not args.no_particles,
                     target_only=args.target_only,
                     input_view=args.input_view,
+                    dpi=args.dpi,
                 )
                 event_images.append((output, detector))
                 print(output)
