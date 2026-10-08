@@ -5,5 +5,6 @@ colorhash
 comet-ml
 fastjet
 mplhep
+tabulate
 tensorflow-datasets~=4.9.9
 vector
