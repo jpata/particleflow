@@ -3,7 +3,14 @@ import numpy as np
 import pytest
 
 from mlpf.conf import EDM4HEP
-from mlpf.data.key4hep.postprocessing import decode_cellid_field, hits_to_features, parse_cellid_encoding
+from mlpf.data.key4hep.postprocessing import (
+    cluster_to_features,
+    decode_cellid_field,
+    get_hit_matrix_and_genadj,
+    hit_cluster_adj,
+    hits_to_features,
+    parse_cellid_encoding,
+)
 from mlpf.heptfds.edm4hep_utils.utils_hits import X_FEATURES
 
 
@@ -93,6 +100,102 @@ def test_only_lcio_converted_detectors_skip_the_cellid_encoding_requirement():
     assert not EDM4HEP.DETECTORS["maia"].require_cellid_encoding
     for name in ("clic", "cld"):
         assert EDM4HEP.DETECTORS[name].require_cellid_encoding
+
+
+def make_calo_hits(collection, energies):
+    n = len(energies)
+    values = {
+        "type": [0] * n,
+        "cellID": list(range(n)),
+        "energy": energies,
+        "energyError": [0.0] * n,
+        "time": [0.0] * n,
+        "position.x": [1.0] * n,
+        "position.y": [0.0] * n,
+        "position.z": [1.0] * n,
+    }
+    return ak.Array({f"{collection}.{feature}": [value] for feature, value in values.items()})
+
+
+def make_clustered_event():
+    # A CLIC-like event. LumiCal shares subdetector 2 with the muon system, so only selecting
+    # muon hits by collection keeps it out of the muon features.
+    collection_ids = {"ECALBarrel": 11, "HCALBarrel": 12, "MUON": 13, "LumiCal_Hits": 14}
+    hit_data = {
+        "ECALBarrel": make_calo_hits("ECALBarrel", [1.0, 2.0]),
+        "HCALBarrel": make_calo_hits("HCALBarrel", [3.0]),
+        "MUON": make_calo_hits("MUON", [1e-4, 2e-4, 3e-4, 4e-4]),  # the last one is in no cluster
+        "LumiCal_Hits": make_calo_hits("LumiCal_Hits", [5.0, 6.0]),
+    }
+    hit_features, _, local_to_global = get_hit_matrix_and_genadj(hit_data, ak.Array([{"unused": 0}]), None, 0, collection_ids, 0)
+
+    # Pandora's cluster -> hit relation, stored as (collectionID, index) as in the ROOT files
+    references = [
+        [(11, 0), (12, 0), (13, 0), (13, 1)],  # ECAL + HCAL + two muon-system hits
+        [(14, 0), (14, 1), (11, 1)],  # LumiCal + ECAL, no muon-system hit
+        [(13, 2)],  # a lone muon-system hit
+    ]
+    begin = np.cumsum([0] + [len(r) for r in references[:-1]]).tolist()
+    clusters = [
+        {
+            "PandoraClusters.type": 0,
+            "PandoraClusters.position.x": 1.0,
+            "PandoraClusters.position.y": 0.0,
+            "PandoraClusters.position.z": 1.0,
+            "PandoraClusters.iTheta": 1.0,
+            "PandoraClusters.phi": 0.0,
+            "PandoraClusters.energy": 1.0,
+            "PandoraClusters.hits_begin": b,
+            "PandoraClusters.hits_end": b + len(r),
+        }
+        for b, r in zip(begin, references)
+    ]
+    prop_data = ak.Array(
+        [
+            {
+                "PandoraClusters": clusters,
+                "_PandoraClusters_hits/_PandoraClusters_hits.collectionID": [c for r in references for c, _ in r],
+                "_PandoraClusters_hits/_PandoraClusters_hits.index": [i for r in references for _, i in r],
+            }
+        ]
+    )
+    hit_to_cluster = hit_cluster_adj(prop_data, local_to_global, 0, {v: k for k, v in collection_ids.items()})
+    return prop_data, hit_features, hit_to_cluster, collection_ids
+
+
+def test_cluster_muon_features_follow_pandora_hit_references():
+    prop_data, hit_features, hit_to_cluster, collection_ids = make_clustered_event()
+
+    features = cluster_to_features(prop_data, hit_features, hit_to_cluster, 0, (collection_ids["MUON"],))
+
+    np.testing.assert_array_equal(features["num_muon_hits"], [2, 0, 1])
+    np.testing.assert_allclose(features["energy_muon"], [3e-4, 0.0, 3e-4])
+    # LumiCal does land in energy_other with the muon hits, which is why subdetector 2 cannot be used
+    np.testing.assert_allclose(features["energy_other"], [3e-4, 11.0, 3e-4])
+
+
+def test_cluster_muon_features_are_zero_without_muon_collections():
+    prop_data, hit_features, hit_to_cluster, _ = make_clustered_event()
+
+    features = cluster_to_features(prop_data, hit_features, hit_to_cluster, 0)
+
+    np.testing.assert_array_equal(features["num_muon_hits"], [0, 0, 0])
+    np.testing.assert_array_equal(features["energy_muon"], [0.0, 0.0, 0.0])
+
+
+def test_cluster_schema_appends_muon_features():
+    names = EDM4HEP.ClusterFeatures.get_names()
+
+    assert names[-2:] == ["num_muon_hits", "energy_muon"]
+    # appended, so every existing column keeps its index
+    assert names.index("energy_other") == 12 and names.index("sigma_z") == 16
+
+
+def test_registered_muon_collections_are_read():
+    for name, detector in EDM4HEP.DETECTORS.items():
+        assert set(detector.muon_collections).issubset(detector.hit_collections), name
+    for name in ("clic", "cld", "maia"):
+        assert EDM4HEP.DETECTORS[name].muon_collections == ("MUON",)
 
 
 def test_tfds_hit_schema_retains_detector_surface_fields():

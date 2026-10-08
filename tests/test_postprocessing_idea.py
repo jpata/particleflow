@@ -43,6 +43,28 @@ def test_dual_readout_cluster_shape_parameters_are_split_by_channel():
     np.testing.assert_allclose(scintillation, [3.0, 7.0])
 
 
+def test_idea_clusters_fill_every_schema_column_with_no_muon_hits():
+    clusters = ak.Array(
+        {
+            "TopoClusterAll.energy": [4.0, 6.0],
+            "TopoClusterAll.position.x": [100.0, 0.0],
+            "TopoClusterAll.position.y": [0.0, 100.0],
+            "TopoClusterAll.position.z": [10.0, -10.0],
+            "TopoClusterAll.hits_begin": [0, 3],
+            "TopoClusterAll.hits_end": [3, 5],
+            "TopoClusterAll.shapeParameters_begin": [0, 3],
+            "TopoClusterAll.shapeParameters_end": [3, 6],
+        }
+    )
+    prop_data = {"TopoClusterAll": [clusters], "_TopoClusterAll_shapeParameters": [ak.Array([0.1, 2.0, 3.0, 0.2, 5.0, 7.0])]}
+
+    features = pp.idea_cluster_to_features(prop_data, 0)
+
+    assert set(pp.cluster_feature_order).issubset(features.fields)
+    np.testing.assert_array_equal(features["num_muon_hits"], [0, 0])
+    np.testing.assert_array_equal(features["energy_muon"], [0.0, 0.0])
+
+
 def test_legacy_idea_clusters_leave_channel_energies_empty():
     clusters = ak.Array(
         {
