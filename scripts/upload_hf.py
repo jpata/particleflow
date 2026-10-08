@@ -175,7 +175,10 @@ def load_production(args, parser):
     if not workspace_value:
         parser.error(f"no workspace directory configured for scenario '{args.scenario}'")
     workspace_dir = Path(workspace_value)
-    if not workspace_dir.is_dir():
+    explicit_sources = (args.command == "tfds" and args.tfds_root) or (
+        args.command == "parquet" and args.parquet_dir and args.selection != "matching-root"
+    )
+    if not workspace_dir.is_dir() and not explicit_sources:
         parser.error(f"workspace directory not found: {workspace_dir}")
     return production, workspace_dir
 
@@ -252,10 +255,9 @@ def choose_files(paths, selection, num_files):
 
 
 def upload_tfds(args, production, workspace_dir, api):
-    tfds_root = workspace_dir / "tfds"
+    tfds_root = Path(args.tfds_root) if args.tfds_root else workspace_dir / "tfds"
     if not tfds_root.is_dir():
-        print(f"TFDS root directory not found: {tfds_root}")
-        return
+        raise RuntimeError(f"TFDS root directory not found: {tfds_root}")
 
     datasets = []
     for dataset_dir in sorted(tfds_root.iterdir()):
@@ -375,12 +377,26 @@ def local_parquet_files(args, production, workspace_dir, parser):
     if not samples:
         parser.error("local Parquet selection requires samples configured in the production spec")
 
+    source_dirs = {}
+    for value in args.parquet_dir:
+        sample_name, separator, directory = value.partition("=")
+        if not separator or not sample_name or not directory:
+            parser.error("--parquet-dir must be SAMPLE=PATH")
+        if sample_name in source_dirs:
+            parser.error(f"duplicate --parquet-dir for sample '{sample_name}'")
+        source_dirs[sample_name] = Path(directory)
+    unknown = sorted(set(source_dirs) - set(samples))
+    if unknown:
+        parser.error(f"--parquet-dir refers to unselected sample(s): {', '.join(unknown)}")
+
     files = []
     for sample_name, sample in samples.items():
-        parquet_dir = find_parquet_dir(workspace_dir, sample)
+        parquet_dir = source_dirs.get(sample_name) or find_parquet_dir(workspace_dir, sample)
         if parquet_dir is None:
             print(f"Parquet directory not found for sample '{sample_name}', skipping.")
             continue
+        if not parquet_dir.is_dir():
+            parser.error(f"Parquet directory not found for sample '{sample_name}': {parquet_dir}")
         selected = choose_files(parquet_dir.glob("*.parquet"), args.selection, args.num_files)
         if not selected:
             print(f"No Parquet files found for sample '{sample_name}', skipping.")
@@ -390,6 +406,8 @@ def local_parquet_files(args, production, workspace_dir, parser):
 
 def upload_parquet(args, production, workspace_dir, api, parser):
     if args.selection == "matching-root":
+        if args.parquet_dir:
+            parser.error("--parquet-dir requires --selection first or all")
         files = parquets_matching_hub_root(args, workspace_dir, api)
     else:
         files = local_parquet_files(args, production, workspace_dir, parser)
@@ -418,6 +436,7 @@ def build_parser():
     tfds_parser.add_argument("split", help="TFDS configuration split (for example: 1)")
     tfds_parser.add_argument("--version", help="Only upload this dataset version")
     tfds_parser.add_argument("--dataset", action="append", default=[], help="Only upload this dataset (repeatable)")
+    tfds_parser.add_argument("--tfds-root", help="Directory containing the TFDS dataset-name directories")
     tfds_parser.add_argument("--batch-size", type=int, default=100, help="Files per upload commit (default: 100)")
 
     root_parser = subparsers.add_parser("root", help="Upload raw ROOT files")
@@ -434,6 +453,7 @@ def build_parser():
     parquet_parser = subparsers.add_parser("parquet", help="Upload postprocessed Parquet files")
     add_common_arguments(parquet_parser)
     parquet_parser.add_argument("--sample", action="append", default=[], help="Only upload this sample (repeatable)")
+    parquet_parser.add_argument("--parquet-dir", action="append", default=[], metavar="SAMPLE=PATH", help="Parquet directory for a sample (repeatable)")
     parquet_parser.add_argument(
         "--selection",
         choices=("matching-root", "first", "all"),
