@@ -2,6 +2,7 @@
 
 import numpy as np
 import awkward as ak
+import pytest
 
 from mlpf.data.key4hep import postprocessing as pp
 
@@ -56,9 +57,23 @@ def test_idea_clusters_fill_every_schema_column_with_no_muon_hits():
             "TopoClusterAll.shapeParameters_end": [3, 6],
         }
     )
-    prop_data = {"TopoClusterAll": [clusters], "_TopoClusterAll_shapeParameters": [ak.Array([0.1, 2.0, 3.0, 0.2, 5.0, 7.0])]}
+    cells = ak.Array(
+        {
+            "TopoClusterAllCells.energy": [1.0, 1.0, 2.0, 3.0, 3.0],
+            "TopoClusterAllCells.position.x": [100.0, 100.0, 100.0, 0.0, 0.0],
+            "TopoClusterAllCells.position.y": [0.0, 0.0, 0.0, 100.0, 100.0],
+            "TopoClusterAllCells.position.z": [10.0, 10.0, 10.0, -10.0, -10.0],
+        }
+    )
+    prop_data = {
+        "TopoClusterAll": [clusters],
+        "TopoClusterAllCells": [cells],
+        "_TopoClusterAll_hits/_TopoClusterAll_hits.index": [ak.Array([0, 1, 2, 3, 4])],
+        "_TopoClusterAll_hits/_TopoClusterAll_hits.collectionID": [ak.Array([42] * 5)],
+        "_TopoClusterAll_shapeParameters": [ak.Array([0.1, 2.0, 3.0, 0.2, 5.0, 7.0])],
+    }
 
-    features = pp.idea_cluster_to_features(prop_data, 0)
+    features = pp.idea_cluster_to_features(prop_data, 0, cell_collection_id=42)
 
     assert set(pp.cluster_feature_order).issubset(features.fields)
     np.testing.assert_array_equal(features["num_muon_hits"], [0, 0])
@@ -78,3 +93,41 @@ def test_legacy_idea_clusters_leave_channel_energies_empty():
 
     np.testing.assert_array_equal(cherenkov, [0.0, 0.0])
     np.testing.assert_array_equal(scintillation, [0.0, 0.0])
+
+
+def test_idea_cluster_widths_use_associated_cell_energy_and_positions():
+    clusters = ak.Array(
+        {
+            "TopoClusterAll.energy": [4.0, 2.0],
+            "TopoClusterAll.position.x": [3.0, 10.0],
+            "TopoClusterAll.position.y": [0.0, 0.0],
+            "TopoClusterAll.position.z": [0.0, 0.0],
+            "TopoClusterAll.hits_begin": [0, 2],
+            "TopoClusterAll.hits_end": [2, 3],
+            "TopoClusterAll.shapeParameters_begin": [0, 3],
+            "TopoClusterAll.shapeParameters_end": [3, 6],
+        }
+    )
+    cells = ak.Array(
+        {
+            "TopoClusterAllCells.energy": [1.0, 3.0, 2.0],
+            "TopoClusterAllCells.position.x": [0.0, 4.0, 10.0],
+            "TopoClusterAllCells.position.y": [0.0, 0.0, 0.0],
+            "TopoClusterAllCells.position.z": [0.0, 0.0, 0.0],
+        }
+    )
+    prop_data = {
+        "TopoClusterAll": [clusters],
+        "TopoClusterAllCells": [cells],
+        "_TopoClusterAll_hits/_TopoClusterAll_hits.index": [ak.Array([0, 1, 2])],
+        "_TopoClusterAll_hits/_TopoClusterAll_hits.collectionID": [ak.Array([42, 42, 42])],
+        "_TopoClusterAll_shapeParameters": [ak.Array([0.0, 2.0, 2.0, 0.0, 1.0, 1.0])],
+    }
+
+    features = pp.idea_cluster_to_features(prop_data, 0, cell_collection_id=42)
+
+    np.testing.assert_allclose(features["sigma_x"], [np.sqrt(3.0), 0.0])
+    np.testing.assert_array_equal(features["sigma_y"], [0.0, 0.0])
+    np.testing.assert_array_equal(features["sigma_z"], [0.0, 0.0])
+    with pytest.raises(ValueError, match="do not all refer to TopoClusterAllCells"):
+        pp.idea_cluster_to_features(prop_data, 0, cell_collection_id=43)
