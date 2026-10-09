@@ -9,9 +9,11 @@
 #   13 HCAL barrel
 #   14 HCAL endcap +
 #
-# Two algorithms, selected by `algorithm=` on `cluster_event`:
+# Algorithms, selected by `algorithm=` on `cluster_event` (default bfs_merge): the
+# radius-graph clusterers below, plus CLUE (`algorithm="clue"`), which lives in clue.py
+# (presets and defaults: clue.CLUE_PRESETS / DEFAULT_CLUE_PARAMS / DEFAULT_CLUE_OPTIONS).
 #
-#   union_find (default): connected components over the radius graph, with an optional
+#   union_find: connected components over the radius graph, with an optional
 #     energy-asymmetry edge gate (merge_frac) — no seeding, no splitting at valleys. Each
 #     connected blob of linked hits is one cluster. Pandora-like in that a shower is one
 #     energy-energy block; Pandora does more with seeds, this is a pure geometric clustering.
@@ -23,18 +25,24 @@
 #     topological clustering shape: seeding handles the "valley between maxima" case
 #     directly.
 #
-# Properties enforced by both implementations:
+#   bfs_merge: bfs followed by a Pandora-style fragment merge (see _merge_bfs_clusters).
+#
+# Properties enforced by all clusterers (CLUE included):
 #   * deterministic per-event: identical inputs always give the same output
 #   * truth-blind: contrib_particle_ids/energies/times never read
 #   * region-crossing hits allowed via a single tree over all hits + radius max per pair
 #     (ECAL cells can join HCAL cells when a shower crosses the detector boundary)
-#   * energy-conserving: every retained hit belongs to exactly one cluster
-from typing import Dict, List, Tuple
+#   * energy-conserving: every retained hit belongs to exactly one cluster (only CLUE's
+#     optional drop_E / drop_1hit leave hits unclustered, with cluster -1 and no
+#     hit_to_cluster entry)
+from typing import Any, Dict, List, Tuple
 
 import numba
 import numpy as np
 from scipy.spatial import cKDTree
 
+from mlpf.data.colliderml.clue import _cluster_event_clue, resolve_clue_config
+from mlpf.data.colliderml.cluster_common import build_features, cluster_region, make_hit_to_cluster, relabel_by_rank, stable_rank, uf_find
 from mlpf.data.target_building import SparseMatrixCOO
 
 # NOTE: radii and merge_frac below are tuned on ttbar_pu0. At pu200 the defaults percolate:
@@ -103,14 +111,6 @@ def _wavefront_bfs(seed_idx: np.ndarray, adj: np.ndarray, indptr: np.ndarray, ho
         frontier = cand
         frontier_prio = cand_min[cand]
         hop += 1
-
-
-def _stable_rank(E: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
-    # stable per-event sort rank: (-E, x, y, z, original index)
-    order = np.lexsort((np.arange(len(x)), z, y, x, -E))
-    stable_rank = np.empty(len(x), dtype=np.int64)
-    stable_rank[order] = np.arange(len(x))
-    return stable_rank
 
 
 def _pair_graph(
@@ -190,17 +190,17 @@ def _cluster_event_union_find(
     n_hit = len(x)
     pi, pj = _pair_graph(x, y, z, detector, radii_mm)
 
-    # deterministic pair order: sort by (stable_rank pi, stable_rank pj) within each
+    # deterministic pair order: sort by (rank pi, rank pj) within each
     # (pi, pj) so we process pairs in a stable order
-    stable_rank = _stable_rank(E, x, y, z)
-    pair_order = np.lexsort((stable_rank[pj], stable_rank[pi]))
+    rank = stable_rank(E, x, y, z)
+    pair_order = np.lexsort((rank[pj], rank[pi]))
     pi = pi[pair_order]
     pj = pj[pair_order]
 
     if len(pi) == 0:
         # no links at all -> every hit is its own cluster
         cluster_of = np.arange(n_hit, dtype=np.int64)
-        return cluster_of, _build_features(x, y, z, E, detector, cluster_of), _make_hit_to_cluster(cluster_of), _cluster_region(cluster_of, detector)
+        return cluster_of, build_features(x, y, z, E, detector, cluster_of), make_hit_to_cluster(cluster_of), cluster_region(cluster_of, detector)
 
     parent = np.arange(n_hit, dtype=np.int64)
     comp_max_E = E.astype(np.float64).copy()
@@ -223,7 +223,7 @@ def _cluster_event_union_find(
             E_small, E_big = (E_a, Ebig_b) if E_a <= E_b else (E_b, Ebig_a)
             if E_big > 0.0 and E_small > merge_frac * E_big:
                 continue  # too balanced -> leave as two clusters
-        if stable_rank[ra] < stable_rank[rb]:
+        if rank[ra] < rank[rb]:
             parent[rb] = ra
             if comp_max_E[rb] > comp_max_E[ra]:
                 comp_max_E[ra] = comp_max_E[rb]
@@ -233,22 +233,8 @@ def _cluster_event_union_find(
                 comp_max_E[rb] = comp_max_E[ra]
 
     labels = np.array([_find(v) for v in range(n_hit)], dtype=np.int64)
-    # map root label -> dense cluster id; order clusters by best (smallest) stable rank
-    root_to_id = {}
-    cluster_of = np.empty(n_hit, dtype=np.int64)
-    for v in range(n_hit):
-        root = int(labels[v])
-        if root not in root_to_id:
-            root_to_id[root] = len(root_to_id)
-        cluster_of[v] = root_to_id[root]
-    n_clusters = len(root_to_id)
-    comp_best_rank = np.full(n_clusters, n_hit + 10, dtype=np.int64)
-    np.minimum.at(comp_best_rank, cluster_of, stable_rank)
-    order_cluster = np.argsort(comp_best_rank, kind="stable")
-    cluster_relabel = np.empty(n_clusters, dtype=np.int64)
-    cluster_relabel[order_cluster] = np.arange(n_clusters, dtype=np.int64)
-    cluster_of = cluster_relabel[cluster_of]
-    return cluster_of, _build_features(x, y, z, E, detector, cluster_of), _make_hit_to_cluster(cluster_of), _cluster_region(cluster_of, detector)
+    cluster_of = relabel_by_rank(labels, rank)
+    return cluster_of, build_features(x, y, z, E, detector, cluster_of), make_hit_to_cluster(cluster_of), cluster_region(cluster_of, detector)
 
 
 def _cluster_event_bfs(
@@ -275,11 +261,11 @@ def _cluster_event_bfs(
     """
     n_hit = len(x)
     pi, pj = _pair_graph(x, y, z, detector, radii_mm)
-    stable_rank = _stable_rank(E, x, y, z)
+    rank = stable_rank(E, x, y, z)
 
     if len(pi) == 0:
         cluster_of = np.arange(n_hit, dtype=np.int64)
-        return cluster_of, _build_features(x, y, z, E, detector, cluster_of), _make_hit_to_cluster(cluster_of), _cluster_region(cluster_of, detector)
+        return cluster_of, build_features(x, y, z, E, detector, cluster_of), make_hit_to_cluster(cluster_of), cluster_region(cluster_of, detector)
 
     # CSR adjacency of the link graph, built by counting sort (fill order = edge order, same
     # content as a stable argsort). Within a hop the BFS assigns each hit the minimum-priority
@@ -297,7 +283,7 @@ def _cluster_event_bfs(
     seed = np.asarray(E, dtype=np.float64) >= nbr_max_E
     seed_idx = np.where(seed)[0].tolist()
     # deterministic seed order: by stable rank, so the most energetic / lowest-rank goes first
-    seed_idx.sort(key=lambda i: stable_rank[i])
+    seed_idx.sort(key=lambda i: rank[i])
 
     # multi-source BFS by hop count; within a hop a hit takes the minimum-priority seed that
     # reaches it (priority = seed order by stable rank). Vectorized wavefront: each hop is a
@@ -328,7 +314,7 @@ def _cluster_event_bfs(
                     seen[nb] = True
                     comp.append(nb)
                     stack.append(nb)
-        components.append(sorted(comp, key=lambda i: stable_rank[i]))
+        components.append(sorted(comp, key=lambda i: rank[i]))
 
     # final cluster labels: seeds 0..n_seeds-1, then leftover components
     # (seed_of already holds the seed priority 0..n_seeds-1, or -1 for unreached hits)
@@ -337,18 +323,8 @@ def _cluster_event_bfs(
         for i in comp:
             cluster_of[i] = len(seed_idx) + k
     if merge_frac > 0.0:
-        cluster_of = _merge_bfs_clusters(cluster_of, E, x, y, z, pi, pj, stable_rank, merge_frac)
-    return cluster_of, _build_features(x, y, z, E, detector, cluster_of), _make_hit_to_cluster(cluster_of), _cluster_region(cluster_of, detector)
-
-
-@numba.njit
-def _uf_find(uf: np.ndarray, v: int) -> int:
-    root = v
-    while uf[root] != root:
-        root = uf[root]
-    while uf[v] != root:
-        uf[v], v = root, uf[v]
-    return root
+        cluster_of = _merge_bfs_clusters(cluster_of, E, x, y, z, pi, pj, rank, merge_frac)
+    return cluster_of, build_features(x, y, z, E, detector, cluster_of), make_hit_to_cluster(cluster_of), cluster_region(cluster_of, detector)
 
 
 @numba.njit
@@ -364,8 +340,8 @@ def _merge_union_loop(
     """Cluster-pair union-find loop for the fragment merge; identical to the python loop it
     replaces (same candidate order, same two-by-two energy/rank tie-breaks), just compiled."""
     for oi in order_edges:
-        ra = _uf_find(uf, edges_a[oi])
-        rb = _uf_find(uf, edges_b[oi])
+        ra = uf_find(uf, edges_a[oi])
+        rb = uf_find(uf, edges_b[oi])
         if ra == rb:
             continue
         if cluster_E[ra] <= cluster_E[rb]:
@@ -392,7 +368,7 @@ def _merge_bfs_clusters(
     z: np.ndarray,
     pi: np.ndarray,
     pj: np.ndarray,
-    stable_rank: np.ndarray,
+    rank: np.ndarray,
     merge_frac: float,
 ) -> np.ndarray:
     """Pandora-style fragment merge over BFS clusters.
@@ -422,7 +398,7 @@ def _merge_bfs_clusters(
     cluster_E = np.zeros(n_clusters, dtype=np.float64)
     np.add.at(cluster_E, cluster_of, E)
     best_rank = np.full(n_clusters, n_hit + 10, dtype=np.int64)
-    np.minimum.at(best_rank, cluster_of, stable_rank)
+    np.minimum.at(best_rank, cluster_of, rank)
 
     ci = cluster_of[pi]
     cj = cluster_of[pj]
@@ -447,118 +423,7 @@ def _merge_bfs_clusters(
         if np.array_equal(root, labels):
             break
         labels = root
-    uniq, inv = np.unique(labels, return_inverse=True)
-    new_cluster_of = inv.astype(np.int64)
-    n_new = len(uniq)
-    new_rank = np.full(n_new, n_hit + 10, dtype=np.int64)
-    np.minimum.at(new_rank, new_cluster_of, stable_rank)
-    order = np.argsort(new_rank, kind="stable")
-    remap = np.empty(n_new, dtype=np.int64)
-    remap[order] = np.arange(n_new, dtype=np.int64)
-    return remap[new_cluster_of]
-
-
-def _build_features(
-    x: np.ndarray,
-    y: np.ndarray,
-    z: np.ndarray,
-    E: np.ndarray,
-    detector: np.ndarray,
-    cluster_of: np.ndarray,
-) -> np.ndarray:
-    """17-wide cluster feature matrix (EDM4hep cluster layout)."""
-    n_clusters = int(cluster_of.max()) + 1 if len(cluster_of) else 0
-    feats = np.zeros((n_clusters, 17), dtype=np.float32)
-
-    # per-cluster totals; also per-hit E/total
-    tot_per_cluster = np.zeros(n_clusters, dtype=np.float64)
-    np.add.at(tot_per_cluster, cluster_of, E)
-    safe_tot = np.maximum(tot_per_cluster, 1e-12)
-    w_per_hit = E / safe_tot[cluster_of]
-
-    # energy-weighted centroids, width from weighted RMS around centroid
-    head_coords = {}
-    for coord_name, coord_arr in (("x", x), ("y", y), ("z", z)):
-        s = np.zeros(n_clusters, dtype=np.float64)
-        np.add.at(s, cluster_of, w_per_hit * coord_arr)
-        head_coords[coord_name] = s
-    cx_arr = head_coords["x"]
-    cy_arr = head_coords["y"]
-    cz_arr = head_coords["z"]
-
-    n_hits_per_cluster = np.bincount(cluster_of, minlength=n_clusters)
-
-    head_sig = {}
-    for coord_name, coord_arr, ctr_arr in (("x", x, cx_arr), ("y", y, cy_arr), ("z", z, cz_arr)):
-        dev2 = (coord_arr - ctr_arr[cluster_of]) ** 2
-        s = np.zeros(n_clusters, dtype=np.float64)
-        np.add.at(s, cluster_of, w_per_hit * dev2)
-        head_sig[coord_name] = np.sqrt(s)
-    sigma_x_arr = head_sig["x"]
-    sigma_y_arr = head_sig["y"]
-    sigma_z_arr = head_sig["z"]
-
-    is_ecal = np.isin(detector, (9, 10, 11))
-    is_hcal = np.isin(detector, (12, 13, 14))
-    e_ecal_arr = np.zeros(n_clusters, dtype=np.float64)
-    e_hcal_arr = np.zeros(n_clusters, dtype=np.float64)
-    np.add.at(e_ecal_arr, cluster_of, np.where(is_ecal, E, 0.0))
-    np.add.at(e_hcal_arr, cluster_of, np.where(is_hcal, E, 0.0))
-    e_other_arr = tot_per_cluster - e_ecal_arr - e_hcal_arr
-
-    # direction (eta, phi) from centroid; guard degenerate directions
-    dir_norm = np.sqrt(cx_arr**2 + cy_arr**2 + cz_arr**2)
-    safe_dir = np.maximum(dir_norm, 1e-30)
-    nz = np.clip(cz_arr / safe_dir, -1 + 1e-9, 1 - 1e-9)
-    eta_arr = -np.log(np.sqrt((1 - nz) / (1 + nz)))
-    eta_arr = np.where(dir_norm == 0, 0.0, eta_arr)
-    phi_arr = np.where(dir_norm > 0, np.arctan2(cy_arr, cx_arr), 0.0)
-
-    r_arr = np.hypot(cx_arr, cy_arr)
-    denom = np.maximum(np.hypot(cz_arr, r_arr), 1e-30)
-    pt_arr = tot_per_cluster * r_arr / denom
-
-    feats[:, 0] = 2.0  # elemtype: cluster
-    feats[:, 1] = pt_arr
-    feats[:, 2] = eta_arr
-    feats[:, 3] = np.sin(phi_arr)
-    feats[:, 4] = np.cos(phi_arr)
-    feats[:, 5] = tot_per_cluster
-    feats[:, 6] = cx_arr
-    feats[:, 7] = cy_arr
-    feats[:, 8] = cz_arr
-    feats[:, 9] = 0.0  # iTheta placeholder
-    feats[:, 10] = e_ecal_arr
-    feats[:, 11] = e_hcal_arr
-    feats[:, 12] = e_other_arr
-    feats[:, 13] = n_hits_per_cluster.astype(np.float64)
-    feats[:, 14] = sigma_x_arr
-    feats[:, 15] = sigma_y_arr
-    feats[:, 16] = sigma_z_arr
-    return feats
-
-
-def _cluster_region(cluster_of: np.ndarray, detector: np.ndarray) -> np.ndarray:
-    """Dominant region code per cluster (audit; for neutral-hadron PID forcing)."""
-    n_clusters = int(cluster_of.max()) + 1 if len(cluster_of) else 0
-    if n_clusters == 0:
-        return np.zeros(0, dtype=np.int64)
-    region_codes_sorted = np.unique(detector)
-    region_compact = np.searchsorted(region_codes_sorted, detector)
-    es_by_creg = np.zeros((n_clusters, len(region_codes_sorted)), dtype=np.float64)
-    np.add.at(es_by_creg, (cluster_of, region_compact), np.ones(len(detector), dtype=np.float64))
-    membership_eps = np.zeros_like(es_by_creg)
-    np.add.at(membership_eps, (cluster_of, region_compact), 1e-12)
-    return region_codes_sorted[np.argmax(es_by_creg + membership_eps, axis=1)]
-
-
-def _make_hit_to_cluster(cluster_of: np.ndarray) -> SparseMatrixCOO:
-    """COO (hit_idx, cluster_idx, 1.0) — dense assignment, no partial hits."""
-    return (
-        np.arange(len(cluster_of), dtype=np.int64),
-        cluster_of.astype(np.int64),
-        np.ones(len(cluster_of), dtype=np.float32),
-    )
+    return relabel_by_rank(labels, rank)
 
 
 def cluster_event(
@@ -570,10 +435,12 @@ def cluster_event(
     radii_mm: Dict[int, float] | None = None,
     merge_frac: float | None = None,
     algorithm: str = "bfs_merge",
+    clue_params: Dict[int, Dict[str, float]] | None = None,
+    clue_options: Dict[str, Any] | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, SparseMatrixCOO, np.ndarray]:
     """Cluster one event's calorimeter hits.
 
-    Three algorithms, selected by `algorithm`:
+    Four algorithms, selected by `algorithm`:
 
     - **bfs_merge** (default): seeded multi-source BFS watershed (strict local maxima claim
       hits by hop count) + a Pandora-style fragment merge over the seed clusters that touch
@@ -585,6 +452,8 @@ def cluster_event(
       gate based on hit energy asymmetry if merge_frac > 0). No seeding. Higher R2 on the
       5-event sweep before fragment merging, but melts separate showers when they sit close.
     - **bfs**: raw seeded BFS on the radius graph, no merging.
+    - **clue**: CLUE density-peak clustering per region (clue.py); radii_mm
+      and merge_frac are ignored, clue_params/clue_options configure it.
 
     Args:
       x, y, z:     float32/64 positions in mm, length N
@@ -594,7 +463,11 @@ def cluster_event(
       merge_frac:  None (per-algorithm defaults), 0.0 (disable merging), or a fraction.
                   For bfs_merge this is the fragment-absorption threshold; for union_find
                   this is the link-refusal gate.
-      algorithm:   "bfs_merge" | "union_find" | "bfs"
+      algorithm:   "bfs_merge" | "union_find" | "bfs" | "clue"
+      clue_params: per-region overrides of DEFAULT_CLUE_PARAMS for "clue", e.g.
+                   {9: {"dc": 8.0}}; keys dc, rhoc, dm, seed_dc, alpha (see clue.py's header)
+      clue_options: overrides of DEFAULT_CLUE_OPTIONS for "clue" (keys in clue.py's header;
+                   clue.CLUE_PRESETS holds the named per-pileup settings)
     """
 
     # ColliderML parquet columns are option-typed, so ak.to_numpy hands us numpy.ma
@@ -622,5 +495,8 @@ def cluster_event(
         return _cluster_event_bfs(x, y, z, E, detector, radii_mm, merge_frac=0.0)
     elif algorithm == "bfs_merge":
         return _cluster_event_bfs(x, y, z, E, detector, radii_mm, merge_frac=merge_frac)
+    elif algorithm == "clue":
+        params, options = resolve_clue_config(params=clue_params, options=clue_options)
+        return _cluster_event_clue(x, y, z, E, detector, params, **options)
     else:
-        raise ValueError(f"algorithm must be 'bfs_merge', 'union_find' or 'bfs', got {algorithm!r}")
+        raise ValueError(f"algorithm must be 'bfs_merge', 'union_find', 'bfs' or 'clue', got {algorithm!r}")

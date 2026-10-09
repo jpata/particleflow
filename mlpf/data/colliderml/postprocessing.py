@@ -15,6 +15,7 @@
 # the ones key4hep already uses.
 import argparse
 import gc
+import json
 import os
 import resource
 from pathlib import Path
@@ -82,6 +83,8 @@ def _event_record_one(
     algorithm: str = "bfs_merge",
     merge_frac: float | None = None,
     radii_mm: Dict[int, float] | None = None,
+    clue_params: Dict[int, Dict[str, float]] | None = None,
+    clue_options: Dict[str, Any] | None = None,
     event_index: int = -1,
     shard_label: str = "",
 ) -> Dict[str, Any]:
@@ -135,7 +138,16 @@ def _event_record_one(
     # -- clusters via the truth-blind spatial clusterer ------------------------
     hit_e_calibrated = hit_e * calibration_factors(hit_det, DEFAULT_CALIBRATION)
     cluster_of, cl_feats, hit_to_cluster, cluster_region = cluster_event(
-        hit_x, hit_y, hit_z, hit_e_calibrated, hit_det, algorithm=algorithm, merge_frac=merge_frac, radii_mm=radii_mm
+        hit_x,
+        hit_y,
+        hit_z,
+        hit_e_calibrated,
+        hit_det,
+        algorithm=algorithm,
+        merge_frac=merge_frac,
+        radii_mm=radii_mm,
+        clue_params=clue_params,
+        clue_options=clue_options,
     )
     n_cluster = len(cl_feats)
 
@@ -172,7 +184,9 @@ def _event_record_one(
     # gp_to_cluster follows the key4hep semantic: the particle's total attributed calibrated
     # deposit (key4hep computes (gp_to_hit * calohit_to_cluster).sum(axis=1); here every hit
     # lives in exactly one cluster, so the row sum is just the total — which truth.py already
-    # carries as gen_features["gp_to_cluster"]).
+    # carries as gen_features["gp_to_cluster"]). Exception: CLUE with drop_E > 0 or drop_1hit
+    # leaves soft isolated hits unclustered; their (tiny) deposit still counts here, as
+    # truth-level energy.
     gps_canonical = np.zeros((n_gp, len(particle_feature_order)), dtype=np.float32)
     for igp in range(n_gp):
         p = np.abs(float(gpdata_cleaned.gen_features["PDG"][igp]))
@@ -514,6 +528,8 @@ def process_one_file(
     algorithm: str = "bfs_merge",
     merge_frac: float | None = None,
     radii_mm: Dict[int, float] | None = None,
+    clue_params: Dict[int, Dict[str, float]] | None = None,
+    clue_options: Dict[str, Any] | None = None,
 ) -> None:
     if num_events == -1 and _shard_done(ofn, particles_fn):
         print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} already exists, skipping")
@@ -580,6 +596,8 @@ def process_one_file(
                 algorithm=algorithm,
                 merge_frac=merge_frac,
                 radii_mm=radii_mm,
+                clue_params=clue_params,
+                clue_options=clue_options,
                 event_index=i,
                 shard_label=Path(ofn).name,
             )
@@ -633,9 +651,10 @@ def main():
     parser.add_argument(
         "--algorithm",
         type=str,
-        choices=("union_find", "bfs", "bfs_merge"),
+        choices=("union_find", "bfs", "bfs_merge", "clue"),
         default="bfs_merge",
-        help="clustering algorithm (bfs_merge is the current default after tuning)",
+        help="clustering algorithm; clue = CLUE density-peak clustering (mlpf/data/colliderml/clue.py; ignores "
+        "--merge-frac/--radii-*). Its defaults are the pu0 setting: for pileup samples use --clue-preset pu200.",
     )
     parser.add_argument(
         "--merge-frac",
@@ -655,8 +674,48 @@ def main():
         default=None,
         help="clustering link radius (mm) for the HCAL regions 12-14; default keeps DEFAULT_REGION_RADII_MM (90 mm)",
     )
+    parser.add_argument(
+        "--clue-preset",
+        type=str,
+        default=None,
+        help="named CLUE setting from clue.CLUE_PRESETS (pu0 = defaults, pu200 = more clusters); "
+        "--clue-params/--clue-options apply on top (algorithm clue only)",
+    )
+    parser.add_argument(
+        "--clue-params",
+        type=str,
+        default=None,
+        help='json per-region overrides of clue.DEFAULT_CLUE_PARAMS, e.g. \'{"9": {"dc": 8}}\' (algorithm clue only)',
+    )
+    parser.add_argument(
+        "--clue-options",
+        type=str,
+        default=None,
+        help="json overrides of clue.DEFAULT_CLUE_OPTIONS, e.g. '{\"drop_E\": 0.1}' (algorithm clue only)",
+    )
     parser.add_argument("--num-events", type=int, default=-1, help="cap number of events per shard (for tests)")
     args = parser.parse_args()
+    from mlpf.data.colliderml.clue import resolve_clue_config
+
+    if (args.clue_preset or args.clue_params or args.clue_options) and args.algorithm != "clue":
+        parser.error("--clue-preset/--clue-params/--clue-options require --algorithm clue")
+    clue_params = clue_options = None
+    if args.algorithm == "clue":
+        # resolve (and validate) the full setting before any shard is planned
+        try:
+            raw_params = json.loads(args.clue_params) if args.clue_params else {}
+            raw_params = {int(r) if str(r).isdigit() else r: v for r, v in raw_params.items()}  # json keys are strings
+            clue_params, clue_options = resolve_clue_config(
+                args.clue_preset, raw_params, json.loads(args.clue_options) if args.clue_options else None
+            )
+        except ValueError as e:
+            parser.error(str(e))
+        if "pu200" in args.sample and args.clue_preset is None:
+            print(
+                f"WARNING: --algorithm clue on {args.sample} without --clue-preset: using the pu0 default setting; "
+                "pileup samples normally use --clue-preset pu200",
+                flush=True,
+            )
 
     shard_ids = args.shards.split(":")
     a, b = int(shard_ids[0]), int(shard_ids[1])
@@ -686,6 +745,7 @@ def main():
     n_files = len(pa)
     print(
         f"planning {n_files} shards (range {args.shards}) -> {args.outpath} with algorithm={args.algorithm} merge_frac={merge_frac} radii_mm={radii_mm}"
+        + (f" clue_params={clue_params} clue_options={clue_options}" if args.algorithm == "clue" else "")
     )
     n_done = 0
     for i, (p, t, c) in enumerate(zip(pa, tr, ch)):
@@ -708,6 +768,8 @@ def main():
             algorithm=args.algorithm,
             merge_frac=merge_frac,
             radii_mm=radii_mm,
+            clue_params=clue_params,
+            clue_options=clue_options,
         )
     print(f"all {n_files} shards accounted for ({n_done} already present, {n_files - n_done} newly converted)")
 
