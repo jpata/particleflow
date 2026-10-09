@@ -111,6 +111,8 @@ def set_event_loss(
     no_object_weight=1.0,
     cardinality_loss_weight=0.0,
     matches=None,
+    momentum_loss="mse",
+    momentum_huber_delta=0.2,
 ):
     """Permutation-invariant particle-set loss for a padded event batch."""
 
@@ -163,7 +165,14 @@ def set_event_loss(
     sqrt_target_pt = torch.sqrt(torch.exp(matched_targets["pt"].float()).clamp_min(1e-6))
     for feature in REGRESSION_FEATURES:
         prediction = torch.nan_to_num(matched_predictions[feature].float())
-        per_particle = regression_weights[feature] * F.mse_loss(prediction, matched_targets[feature].float(), reduction="none")
+        target = matched_targets[feature].float()
+        if feature in ("pt", "energy") and momentum_loss == "huber":
+            # Match MSE's quadratic scale for small residuals while limiting
+            # the influence of large log-momentum residuals.
+            error = 2.0 * F.huber_loss(prediction, target, reduction="none", delta=momentum_huber_delta)
+        else:
+            error = F.mse_loss(prediction, target, reduction="none")
+        per_particle = regression_weights[feature] * error
         losses[f"Regression_{feature}"] = (per_particle * sqrt_target_pt).sum() / num_matched
     return losses, matches
 
@@ -179,6 +188,8 @@ def set_mlpf_loss(
     cardinality_loss_weight=0.0,
     auxiliary_predictions=None,
     auxiliary_loss_weight=0.0,
+    momentum_loss="mse",
+    momentum_huber_delta=0.2,
 ):
     """Compute the set-prediction objective with the standard task names."""
 
@@ -194,6 +205,8 @@ def set_mlpf_loss(
         matcher_weights=matcher_weights,
         no_object_weight=no_object_weight,
         cardinality_loss_weight=cardinality_loss_weight,
+        momentum_loss=momentum_loss,
+        momentum_huber_delta=momentum_huber_delta,
     )
     task_losses = {task: losses[task] for task in LOSS_TASKS}
     if task_loss_weighter is None:
@@ -218,6 +231,8 @@ def set_mlpf_loss(
                 matcher_weights=matcher_weights,
                 no_object_weight=no_object_weight,
                 cardinality_loss_weight=cardinality_loss_weight,
+                momentum_loss=momentum_loss,
+                momentum_huber_delta=momentum_huber_delta,
                 matches=matches,
             )
             auxiliary_losses.append(sum(layer_losses.values()))

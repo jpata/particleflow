@@ -793,6 +793,8 @@ class SetDecoderConfig(BaseModel):
     no_object_weight: float = Field(default=1.0, gt=0.0)
     cardinality_loss_weight: float = Field(default=0.0, ge=0.0)
     auxiliary_loss_weight: float = Field(default=0.0, ge=0.0)
+    momentum_loss: Literal["mse", "huber"] = "mse"
+    momentum_huber_delta: float = Field(default=0.2, gt=0.0)
     matcher: SetMatcherConfig = Field(default_factory=SetMatcherConfig)
 
     @model_validator(mode="after")

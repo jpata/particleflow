@@ -528,6 +528,30 @@ def test_set_loss_supports_an_event_without_targets():
     assert all(prediction.grad is not None for prediction in predictions.values())
 
 
+def test_huber_momentum_caps_large_log_residuals_without_changing_geometry():
+    targets = unpack_target(make_target_tensor(num_targets=1), None)
+    predictions = {
+        "cls_binary": torch.tensor([[[0.0, 1.0]]]),
+        "cls_id_onehot": torch.zeros(1, 1, 6),
+        "pt": targets["pt"] + 1.0,
+        "eta": targets["eta"] + 0.1,
+        "sin_phi": targets["sin_phi"].clone(),
+        "cos_phi": targets["cos_phi"].clone(),
+        "energy": targets["energy"] + 1.0,
+    }
+    target_mask = torch.ones(1, 1, dtype=torch.bool)
+
+    mse, _ = set_event_loss(targets, predictions, target_mask, REGRESSION_WEIGHTS)
+    huber, _ = set_event_loss(
+        targets, predictions, target_mask, REGRESSION_WEIGHTS,
+        momentum_loss="huber", momentum_huber_delta=0.2,
+    )
+
+    torch.testing.assert_close(huber["Regression_pt"], 0.36 * mse["Regression_pt"])
+    torch.testing.assert_close(huber["Regression_energy"], 0.36 * mse["Regression_energy"])
+    torch.testing.assert_close(huber["Regression_eta"], mse["Regression_eta"])
+
+
 def test_cardinality_loss_penalizes_excess_present_slots():
     target_tensor = make_target_tensor(num_targets=2)
     targets = unpack_target(target_tensor, None)

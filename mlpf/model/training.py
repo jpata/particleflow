@@ -303,6 +303,8 @@ def _set_loss_kwargs(model_module, raw_predictions):
         "cardinality_loss_weight": config.cardinality_loss_weight,
         "auxiliary_predictions": auxiliary_predictions,
         "auxiliary_loss_weight": config.auxiliary_loss_weight,
+        "momentum_loss": config.momentum_loss,
+        "momentum_huber_delta": config.momentum_huber_delta,
     }
 
 
