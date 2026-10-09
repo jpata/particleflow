@@ -57,9 +57,23 @@ def test_idea_clusters_fill_every_schema_column_with_no_muon_hits():
             "TopoClusterAll.shapeParameters_end": [3, 6],
         }
     )
-    prop_data = {"TopoClusterAll": [clusters], "_TopoClusterAll_shapeParameters": [ak.Array([0.1, 2.0, 3.0, 0.2, 5.0, 7.0])]}
+    cells = ak.Array(
+        {
+            "TopoClusterAllCells.energy": [1.0, 1.0, 2.0, 3.0, 3.0],
+            "TopoClusterAllCells.position.x": [100.0, 100.0, 100.0, 0.0, 0.0],
+            "TopoClusterAllCells.position.y": [0.0, 0.0, 0.0, 100.0, 100.0],
+            "TopoClusterAllCells.position.z": [10.0, 10.0, 10.0, -10.0, -10.0],
+        }
+    )
+    prop_data = {
+        "TopoClusterAll": [clusters],
+        "TopoClusterAllCells": [cells],
+        "_TopoClusterAll_hits/_TopoClusterAll_hits.index": [ak.Array([0, 1, 2, 3, 4])],
+        "_TopoClusterAll_hits/_TopoClusterAll_hits.collectionID": [ak.Array([42] * 5)],
+        "_TopoClusterAll_shapeParameters": [ak.Array([0.1, 2.0, 3.0, 0.2, 5.0, 7.0])],
+    }
 
-    features = pp.idea_cluster_to_features(prop_data, 0)
+    features = pp.idea_cluster_to_features(prop_data, 0, cell_collection_id=42)
 
     assert set(pp.cluster_feature_order).issubset(features.fields)
     np.testing.assert_array_equal(features["num_muon_hits"], [0, 0])
