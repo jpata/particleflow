@@ -184,7 +184,7 @@ class TestConfigOverrides(unittest.TestCase):
         self.assertEqual(config.gpu_batch_multiplier, 8)
         self.assertEqual(config.train_dataset["cld"]["physical"].batch_size, 7)
         self.assertEqual(config.train_dataset["cld"]["physical"].samples["cld_edm_ttbar_pf"].splits, ["10"])
-        self.assertEqual(config.valid_dataset["cld"]["physical"].samples["cld_edm_ttbar_pf"].version, "3.2.1")
+        self.assertEqual(config.valid_dataset["cld"]["physical"].samples["cld_edm_ttbar_pf"].version, "3.3.0")
         self.assertEqual(config.test_dataset["cld_edm_ttbar_pf"].splits, ["10"])
 
     def test_pipeline_dataset_overrides_are_immutable_named_records(self):
@@ -192,7 +192,7 @@ class TestConfigOverrides(unittest.TestCase):
 
         self.assertEqual(cld_override.physical_name, "physical")
         self.assertEqual(cld_override.sample_name, "cld_edm_ttbar_pf")
-        self.assertEqual(cld_override.version, "3.2.1")
+        self.assertEqual(cld_override.version, "3.3.0")
         self.assertEqual(cld_override.gpu_batch_multiplier, 8)
         self.assertIsNone(_PIPELINE_DATASETS["cms"].gpu_batch_multiplier)
         with self.assertRaises(FrozenInstanceError):

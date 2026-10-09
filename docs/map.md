@@ -136,6 +136,18 @@ Outputs are under `local_test_data/detector_comparison/`:
 - `real_plots/summary.json`: input paths, settings, feature-column maps, finite
   ranges/quantiles, zero fractions, checks, and matching-bin counts.
 - `event_displays/index.html`: five-detector event gallery, linked from the report.
+- `event_displays/openlab_multi_event_dark.png`: a text-free, wide, dark project
+  artwork for ColliderML, CLIC, CLD and IDEA. `scripts/create_openlab_event_mosaic.py`
+  builds it from the first two selected event indices in the gallery PNGs,
+  using one fixed crop per detector across event rows; cross-detector scales
+  differ. The gallery builder regenerates it automatically when two or more
+  event indices are requested. Subtle column tints, gutters, and repeated
+  circular motifs distinguish sources; the motifs are decorative abstractions,
+  not detector geometry.
+- `event_displays/openlab_multi_event_dark_2x.png`: 6400 × 3160 high-resolution
+  version of the same artwork. Run `bash scripts/run_openlab_event_hires.sh`
+  to rerender events 0 and 1 at 300 DPI from the detector data before composing
+  the image; this avoids enlarging the lower-resolution gallery PNGs.
 - `colliderml_source/provenance.json`: pinned Hugging Face revision and shard paths.
 
 Render only the event gallery, optionally selecting event indices:

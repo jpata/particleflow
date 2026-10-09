@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import tensorflow_datasets as tfds  # noqa: E402
 
-from mlpf.conf import EDM4HEP, ParticleFeatures  # noqa: E402
+from mlpf.conf import EDM4HEP, X_FEATURES, ParticleFeatures  # noqa: E402
 from mlpf.jet_utils import _match_jets_event  # noqa: E402
 
 
@@ -48,7 +48,7 @@ def matrix(value, width):
     return arr.reshape(-1, width) if arr.size else np.empty((0, width))
 
 
-def parquet_events(paths, limit):
+def parquet_events(paths, limit, width):
     count = 0
     for path in paths:
         data = ak.from_parquet(path)
@@ -57,10 +57,10 @@ def parquet_events(paths, limit):
             event = {key: ak.to_numpy(data[key][index]) for key in wanted if key in data.fields}
             xt = np.asarray(event["X_track"])
             xc = np.asarray(event["X_cluster"])
-            xt = xt.reshape(-1, xt.shape[-1]) if xt.size else np.empty((0, 17))
-            xc = matrix(xc, 17)
-            if xt.shape[1] < 17:
-                xt = np.pad(xt, ((0, 0), (0, 17 - xt.shape[1])))
+            xt = xt.reshape(-1, xt.shape[-1]) if xt.size else np.empty((0, width))
+            xc = matrix(xc, width)
+            if xt.shape[1] < width:
+                xt = np.pad(xt, ((0, 0), (0, width - xt.shape[1])))
             event["X"] = np.concatenate([xt, xc])
             event["ytarget"] = np.concatenate([matrix(event["ytarget_track"], 14), matrix(event["ytarget_cluster"], 14)])
             if "ycand_track" in event:
@@ -136,7 +136,8 @@ def collect(events, detector, features=None, match_dr=0.1):
 
     for event in events:
         checks["events"] += 1
-        x = matrix(event["X"], 17)
+        # ColliderML keeps its own 17-column layout; the EDM4hep detectors share a wider schema
+        x = matrix(event["X"], len(X_FEATURES[detector]))
         y = matrix(event["ytarget"], 14)
         checks["unknown_element_types"] += int((~np.isin(x[:, 0], [1, 2])).sum())
         if features is not None:
@@ -170,7 +171,8 @@ def collect(events, detector, features=None, match_dr=0.1):
         for kind, code, names in (("track", 1, track_names), ("cluster", 2, cluster_names)):
             rows = x[x[:, 0] == code]
             add(f"event/n_{kind}", len(rows))
-            for col, name in enumerate(names):
+            # ColliderML's narrower layout has no columns for the trailing EDM4hep cluster features
+            for col, name in enumerate(names[: x.shape[1]]):
                 if not name.startswith("unused") and name != "elemtype":
                     add(f"{kind}/{name}", rows[:, col])
             add(f"{kind}/phi", np.arctan2(rows[:, 3], rows[:, 4]))
@@ -473,7 +475,11 @@ def main():
             paths = sorted(Path(path).glob("*.parquet")) if stage == "parquet" else [Path(path)]
             if not paths:
                 raise FileNotFoundError(path)
-            events = parquet_events(paths, args.num_events) if stage == "parquet" else tfds_events(path, args.num_events, args.split, args.seed)
+            events = (
+                parquet_events(paths, args.num_events, len(X_FEATURES[detector]))
+                if stage == "parquet"
+                else tfds_events(path, args.num_events, args.split, args.seed)
+            )
             features = tfds.builder_from_directory(tfds_paths[detector]).info.features if stage == "parquet" and detector in tfds_paths else None
             values, checks = collect(events, detector, features, args.jet_match_dr)
             datasets[detector] = values

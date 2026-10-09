@@ -93,6 +93,7 @@ def main():
     parser.add_argument("--events", type=int, nargs="+", default=[0], help="row indices within the source shard")
     parser.add_argument("--parquet", type=Path, help="converted MLPF parquet containing the selected event IDs")
     parser.add_argument("--output-dir", type=Path, default=Path("event_displays"))
+    parser.add_argument("--dpi", type=int, default=150, help="PNG output resolution (default: 150)")
     parser.add_argument("--plot-limit", type=float, default=6500.0, help="transverse half-width in mm")
     parser.add_argument("--max-hits", type=int, default=800, help="display cap per detector region")
     parser.add_argument("--input-view", choices=("combined", "pf", "hits"), default="combined")
@@ -131,6 +132,7 @@ def main():
             target_only=args.target_only,
             input_view=args.input_view,
             tree=tree,
+            dpi=args.dpi,
         )
         print(f"{output} (source event_id={record['event_id']})")
 

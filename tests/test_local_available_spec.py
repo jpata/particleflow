@@ -34,8 +34,8 @@ def test_local_spec_uses_current_cld_and_clic_dataset_versions(tmp_path):
     subprocess.run([sys.executable, SCRIPT, input_path, output_path], check=True)
 
     output_spec = yaml.safe_load(output_path.read_text())
-    assert _model_dataset(output_spec, "pyg-cld-v1") == ("3.2.1", [str(index) for index in range(1, 11)])
-    assert _model_dataset(output_spec, "pyg-clic-v1") == ("3.2.1", [str(index) for index in range(1, 11)])
+    assert _model_dataset(output_spec, "pyg-cld-v1") == ("3.3.0", [str(index) for index in range(1, 11)])
+    assert _model_dataset(output_spec, "pyg-clic-v1") == ("3.3.0", [str(index) for index in range(1, 11)])
     assert _model_dataset(output_spec, "pyg-cld-hits-v1") == ("3.2.1", ["1"])
     assert _model_dataset(output_spec, "pyg-clic-hits-v1") == ("3.2.1", ["1"])
 
@@ -67,7 +67,7 @@ def test_local_spec_accepts_pf_version_and_split_overrides(tmp_path):
 def test_local_training_launcher_forwards_pf_overrides_without_global_split_override():
     launcher = TRAIN_SCENARIO_SCRIPT.read_text()
 
-    assert "PF_VERSION=${PF_VERSION:-3.2.1}" in launcher
+    assert "PF_VERSION=${PF_VERSION:-3.3.0}" in launcher
     assert "PF_SPLITS=${PF_SPLITS:-1}" in launcher
     assert '--pf-version "$PF_VERSION"' in launcher
     assert '--pf-splits "${PF_SPLIT_LIST[@]}"' in launcher

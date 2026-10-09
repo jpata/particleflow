@@ -25,10 +25,11 @@ be interpreted as reconstructed-physics performance.
 
 
 class IdeaEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.1.1"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.2.0"))
     RELEASE_NOTES = {
         "0.1.0": "Initial pipeline-validation dataset with explicit proxy provenance.",
-        "0.1.1": "Compute cluster shower widths from associated calorimeter cells.",
+        "0.2.0": "Add num_muon_hits and energy_muon cluster features (#511); input width 17 -> 19, regenerate",
+        "0.2.1": "Compute cluster shower widths from associated calorimeter cells.",
     }
     BUILDER_CONFIGS = [tfds.core.BuilderConfig(name="1")]
     MANUAL_DOWNLOAD_INSTRUCTIONS = "Point --manual_dir at a directory containing the IDEA parquet files."

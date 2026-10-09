@@ -343,8 +343,12 @@ def get_hit_matrix_and_genadj(
         icol = collectionIDs[col]
         encoding = cellid_encodings.get(col) if cellid_encodings is not None else None
         hit_features = hits_to_features(hit_data[col], iev, col, feats, encoding, require_cellid_encoding)
-        hit_feature_matrix.append(hit_features)
         n_hits = len(hit_features["energy"])
+        # keep the source collection of every hit, so later steps can select a detector system
+        # by collection; subdetector alone cannot tell the muon system from LumiCal on CLIC.
+        # Rebuilt from a dict because awkward.with_field broadcasts on a Record, nesting every field.
+        hit_features = awkward.Record({**{k: hit_features[k] for k in hit_features.fields}, "collectionID": np.full(n_hits, icol, dtype=np.int64)})
+        hit_feature_matrix.append(hit_features)
 
         if col in tracker_hit_relations:
             rel_name = tracker_hit_relations[col]
@@ -547,6 +551,7 @@ def cluster_to_features(
     hit_features: awkward.Record,
     hit_to_cluster: SparseMatrixCOO,
     iev: int,
+    muon_collection_ids: Tuple[int, ...] = (),
 ) -> awkward.Record:
     cluster_arr = prop_data["PandoraClusters"][iev]
     feats = [
@@ -569,6 +574,15 @@ def cluster_to_features(
     cl_sigma_x = []
     cl_sigma_y = []
     cl_sigma_z = []
+    cl_num_muon_hits = []
+    cl_energy_muon = []
+
+    # Muon-system hits are picked by source collection rather than subdetector, which would also
+    # catch LumiCal on CLIC. Their energies are tiny (~0.1 MeV), so the count carries the signal.
+    if len(muon_collection_ids) > 0:
+        is_muon_hit = np.isin(awkward.to_numpy(hit_features["collectionID"]), list(muon_collection_ids))
+    else:
+        is_muon_hit = np.zeros(len(hit_features["energy"]), dtype=bool)
 
     n_cl = len(ret["energy"])
     for cl in range(n_cl):
@@ -593,6 +607,10 @@ def cluster_to_features(
         cl_energy_hcal.append(energy_hcal)
         cl_energy_other.append(energy_other)
 
+        is_muon = is_muon_hit[hits]
+        cl_num_muon_hits.append(int(np.sum(is_muon)))
+        cl_energy_muon.append(np.sum(hits_energy[is_muon]))
+
         # weighted standard deviation of cluster hits
         sigma_x = weighted_avg_and_std(hits_posx, hits_energy)[1]
         sigma_y = weighted_avg_and_std(hits_posy, hits_energy)[1]
@@ -608,6 +626,8 @@ def cluster_to_features(
     ret["sigma_x"] = np.array(cl_sigma_x)
     ret["sigma_y"] = np.array(cl_sigma_y)
     ret["sigma_z"] = np.array(cl_sigma_z)
+    ret["num_muon_hits"] = np.array(cl_num_muon_hits)
+    ret["energy_muon"] = np.array(cl_energy_muon)
 
     tt = awkward.to_numpy(np.tan(ret["iTheta"] / 2.0))
     eta = awkward.to_numpy(-np.log(tt, where=tt > 0))
@@ -961,13 +981,14 @@ def get_genparticles_and_adjacencies(
     b_field: float,
     cellid_encodings: Optional[Dict[str, str]] = None,
     require_cellid_encoding: bool = True,
+    muon_collection_ids: Tuple[int, ...] = (),
 ) -> EventData:
     gen_features = gen_to_features(prop_data, iev)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_hit_matrix_and_genadj(
         hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id, cellid_encodings, require_cellid_encoding
     )
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
-    cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
+    cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev, muon_collection_ids)
     track_features = track_to_features(prop_data, iev, b_field)
     genparticle_to_trk = genparticle_track_adj(sitrack_links, iev)
 
@@ -1350,6 +1371,9 @@ def idea_cluster_to_features(prop_data: Any, iev: int, cell_collection_id: int) 
             "sigma_x": widths[:, 0],
             "sigma_y": widths[:, 1],
             "sigma_z": widths[:, 2],
+            # The dual-readout topological clusters are built from calorimeter cells only.
+            "num_muon_hits": np.zeros(n_clusters, dtype=np.float32),
+            "energy_muon": np.zeros(n_clusters, dtype=np.float32),
         }
     )
 
@@ -1751,6 +1775,11 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         raise ValueError(f"Unknown detector type: {detector}. Available detectors: {list(EDM4HEP.DETECTORS.keys())}")
     b_field = detector_cfg.b_field
     hit_collections = detector_cfg.hit_collections
+    # a muon collection that is not read would leave the cluster muon features silently zero
+    unread_muon_collections = [c for c in detector_cfg.muon_collections if c not in hit_collections]
+    if unread_muon_collections:
+        raise ValueError(f"Muon collections {unread_muon_collections} are not among the hit collections read for {detector}")
+    muon_collection_ids = tuple(collectionIDs[c] for c in detector_cfg.muon_collections)
 
     hit_data = {}
     for k in hit_collections:
@@ -1848,6 +1877,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
                 b_field,
                 cellid_encodings,
                 detector_cfg.require_cellid_encoding,
+                muon_collection_ids,
             )
         except ValueError as e:
             print(f"Skipping event {iev} because it has no visible particles: {e}")
