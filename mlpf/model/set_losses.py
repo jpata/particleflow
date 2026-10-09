@@ -4,7 +4,9 @@ from dataclasses import dataclass
 import torch
 from scipy.optimize import linear_sum_assignment
 from torch.nn import functional as F
+from torch.utils.checkpoint import checkpoint
 
+from mlpf.conf import Y_FEATURES
 from mlpf.logger import _logger
 from mlpf.model.losses import LOSS_TASKS, REGRESSION_FEATURES
 
@@ -190,6 +192,10 @@ def set_mlpf_loss(
     auxiliary_loss_weight=0.0,
     momentum_loss="mse",
     momentum_huber_delta=0.2,
+    hit_grouping=None,
+    hit_grouping_loss_weight=0.0,
+    hit_grouping_chunk_size=1024,
+    hit_grouping_background_weight=0.1,
 ):
     """Compute the set-prediction objective with the standard task names."""
 
@@ -220,6 +226,14 @@ def set_mlpf_loss(
     if "Cardinality" in losses:
         loss_opt = loss_opt + losses["Cardinality"]
 
+    if hit_grouping is not None:
+        grouping_loss = hit_grouping_loss(
+            hit_grouping, batch, matches, chunk_size=hit_grouping_chunk_size,
+            background_weight=hit_grouping_background_weight,
+        )
+        losses["HitGrouping"] = hit_grouping_loss_weight * grouping_loss
+        loss_opt = loss_opt + losses["HitGrouping"]
+
     if auxiliary_predictions and auxiliary_loss_weight > 0:
         auxiliary_losses = []
         for auxiliary_prediction in auxiliary_predictions:
@@ -249,3 +263,48 @@ def set_mlpf_loss(
     if diagnostics is not None:
         diagnostics = {name: {task: value.detach() for task, value in values.items()} for name, values in diagnostics.items()}
     return loss_opt, detached_losses, diagnostics
+
+
+def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weight=0.1):
+    """Supervise event-local hit ownership without a dense hit-pair matrix."""
+    hit_keys, slot_keys, background = grouping
+    num_slots = slot_keys.shape[1]
+    pn_index = Y_FEATURES.index("particle_number")
+    total = hit_keys.sum() * 0.0 + slot_keys.sum() * 0.0 + background.sum() * 0.0
+    weight_sum = hit_keys.new_zeros(())
+    for event_idx, (slot_indices, target_indices) in enumerate(matches):
+        hit_mask = batch.mask[event_idx].bool()
+        target_pn = batch.ytarget_set[event_idx, batch.target_mask[event_idx], pn_index].long()
+        matched_pn = target_pn[target_indices]
+        sorted_pn, order = matched_pn.sort()
+        sorted_slots = slot_indices[order]
+        hit_pn = batch.ytarget[event_idx, hit_mask, pn_index].long()
+        labels = torch.full_like(hit_pn, num_slots)
+        if sorted_pn.numel():
+            position = torch.searchsorted(sorted_pn.contiguous(), hit_pn.contiguous()).clamp_max(sorted_pn.numel() - 1)
+            owned = (hit_pn > 0) & (sorted_pn[position] == hit_pn)
+            labels[owned] = sorted_slots[position[owned]]
+        weight_sum = weight_sum + torch.where(labels == num_slots, background_weight, 1.0).sum()
+        event_hit_keys = hit_keys[event_idx, hit_mask]
+        event_background = background[event_idx, hit_mask]
+        event_slot_keys = slot_keys[event_idx]
+        for keys_chunk, background_chunk, labels_chunk in zip(
+            event_hit_keys.split(chunk_size), event_background.split(chunk_size), labels.split(chunk_size)
+        ):
+            def chunk_loss(keys, slots, bg, targets):
+                scores = torch.cat([10.0 * (keys @ slots.T), bg], dim=-1)
+                per_hit = F.cross_entropy(scores, targets, reduction="none")
+                weights = torch.where(targets == num_slots, background_weight, 1.0)
+                return (per_hit * weights).sum()
+
+            if torch.is_grad_enabled() and (keys_chunk.requires_grad or event_slot_keys.requires_grad or background_chunk.requires_grad):
+                # Reentrant checkpointing discards the chunk's CE activations;
+                # non-reentrant checkpointing retains them and grows as hits * slots.
+                part = checkpoint(
+                    chunk_loss, keys_chunk, event_slot_keys, background_chunk, labels_chunk,
+                    use_reentrant=True,
+                )
+            else:
+                part = chunk_loss(keys_chunk, event_slot_keys, background_chunk, labels_chunk)
+            total = total + part
+    return total / weight_sum.clamp_min(1.0)

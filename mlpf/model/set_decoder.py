@@ -26,6 +26,7 @@ class ParticleSetDecoderOutput(Sequence[torch.Tensor]):
 
     predictions: PredictionTensors
     auxiliary_predictions: tuple[PredictionTensors, ...] = ()
+    hit_grouping: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
 
     @overload
     def __getitem__(self, index: int) -> torch.Tensor: ...
@@ -273,6 +274,9 @@ class ParticleSetDecoder(nn.Module):
         self.use_aggregate_anchors = config.use_aggregate_anchors
         self.aggregate_grid_size = config.aggregate_grid_size
         self.use_auxiliary_losses = config.auxiliary_loss_weight > 0
+        self.hit_grouping = config.hit_grouping
+        self.hit_grouping_chunk_size = config.hit_grouping_chunk_size
+        self.hit_grouping_dim = config.hit_grouping_dim
         self.queries = nn.Parameter(torch.empty(1, config.num_slots, embedding_dim))
         nn.init.trunc_normal_(self.queries, std=0.02)
         ffn_dim = int(config.ffn_multiplier * embedding_dim)
@@ -282,6 +286,13 @@ class ParticleSetDecoder(nn.Module):
         }[self.attention_mode]
         self.layers = nn.ModuleList(layer_type(embedding_dim, config.num_heads, ffn_dim, config.dropout) for _ in range(config.num_layers))
         self.output_norm = nn.LayerNorm(embedding_dim)
+        if self.hit_grouping:
+            self.hit_grouping_hit = nn.Linear(embedding_dim, config.hit_grouping_dim)
+            self.hit_grouping_slot = nn.Linear(embedding_dim, config.hit_grouping_dim)
+            self.hit_grouping_background = nn.Linear(embedding_dim, 1)
+            self.hit_grouping_projection = nn.Linear(2 * embedding_dim + 3, embedding_dim)
+            nn.init.zeros_(self.hit_grouping_projection.weight)
+            nn.init.zeros_(self.hit_grouping_projection.bias)
         self.presence_head = nn.Linear(embedding_dim, 2)
         self.pid_head = nn.Linear(embedding_dim, num_classes)
 
@@ -523,12 +534,64 @@ class ParticleSetDecoder(nn.Module):
         pileup = torch.zeros_like(presence)
         return presence, pid, momentum, pileup
 
+    def _group_hits(self, slots, memory, memory_mask, input_features):
+        """Hard predicted membership, followed by linear-memory detector-wise pooling."""
+        hit_keys = F.normalize(self.hit_grouping_hit(memory).float(), dim=-1)
+        slot_keys = F.normalize(self.hit_grouping_slot(slots).float(), dim=-1)
+        background = self.hit_grouping_background(memory).float()
+        batch_size, _, width = memory.shape
+        pooled = memory.new_zeros((batch_size, self.num_slots, 2, width))
+        counts = memory.new_zeros((batch_size, self.num_slots, 2), dtype=torch.float32)
+        energy = memory.new_zeros((batch_size, self.num_slots, 2), dtype=torch.float32)
+        selected_by_event = []
+        destination_by_event = []
+        # Only the winning indices are retained. No hit-by-slot affinity matrix
+        # survives a chunk, even during backward through the pooled features.
+        with torch.no_grad():
+            for event_idx in range(batch_size):
+                valid_indices = torch.nonzero(memory_mask[event_idx], as_tuple=False).squeeze(-1)
+                event_selected = []
+                event_destinations = []
+                for indices in valid_indices.split(self.hit_grouping_chunk_size):
+                    score = 10.0 * (hit_keys[event_idx, indices] @ slot_keys[event_idx].T)
+                    score = torch.cat([score, background[event_idx, indices]], dim=-1)
+                    winner = score.argmax(dim=-1)
+                    chosen = winner < self.num_slots
+                    selected = indices[chosen]
+                    destination = winner[chosen]
+                    detector = (input_features[event_idx, selected, 0] == 2).long()
+                    flat = destination * 2 + detector
+                    event_selected.append(selected)
+                    event_destinations.append(flat)
+                selected_by_event.append(torch.cat(event_selected) if event_selected else valid_indices[:0])
+                destination_by_event.append(
+                    torch.cat(event_destinations) if event_destinations else valid_indices[:0]
+                )
+        # Only O(number of hits) selected indices are retained. The reduction
+        # remains differentiable with respect to hit embeddings, while the hard
+        # membership is trained separately by the supervised grouping loss.
+        for event_idx, (selected, flat) in enumerate(zip(selected_by_event, destination_by_event)):
+            if selected.numel() == 0:
+                continue
+            pooled[event_idx].view(-1, width).index_add_(0, flat, memory[event_idx, selected])
+            counts[event_idx].view(-1).index_add_(0, flat, torch.ones_like(flat, dtype=torch.float32))
+            deposit = input_features[event_idx, selected, 5].float().clamp_min(0)
+            energy[event_idx].view(-1).index_add_(0, flat, deposit)
+        mean = pooled.float() / counts.clamp_min(1).unsqueeze(-1)
+        summary = torch.cat(
+            [mean[:, :, 0], mean[:, :, 1], torch.log1p(counts), torch.log1p(energy[:, :, 1:2])], dim=-1
+        )
+        return slots + self.hit_grouping_projection(summary.to(slots.dtype)), (hit_keys, slot_keys, background)
+
     def forward(self, memory, memory_mask, input_features=None):
         memory_mask = memory_mask.bool()
         references = reference_mask = memory_positions = None
         scale_anchors = scale_anchor_mask = None
         if self.query_init == "input-conditioned":
             slots, references, reference_mask, scale_anchors, scale_anchor_mask = self._input_conditioned_queries(memory, memory_mask, input_features)
+            grouping = None
+            if self.hit_grouping:
+                slots, grouping = self._group_hits(slots, memory, memory_mask, input_features)
             memory_positions = torch.stack(
                 [
                     torch.nan_to_num(
@@ -543,6 +606,7 @@ class ParticleSetDecoder(nn.Module):
             )
         else:
             slots = self.queries.expand(memory.shape[0], -1, -1)
+            grouping = None
 
         outputs = []
         for layer_index, layer in enumerate(self.layers):
@@ -568,4 +632,5 @@ class ParticleSetDecoder(nn.Module):
         return ParticleSetDecoderOutput(
             predictions=outputs[-1],
             auxiliary_predictions=auxiliary_predictions,
+            hit_grouping=grouping,
         )

@@ -1,0 +1,103 @@
+# Raw-hit grouping ablation: same 50k schedule as the momentum comparison.
+# Ground-truth particle_number supervises ownership only during training.
+name: cld_pf_heptv2_hit_grouping_50k
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  hit_heptv2_baseline:
+    model_name: pyg-cld-hits-heptv2-sector-set-v1
+    overrides:
+      model.heptv2.num_convs: 6
+      model.binary_classification_focal_gamma: 2.0
+      model.set_decoder.attention_mode: global-flash
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.num_layers: 4
+      model.set_decoder.num_slots: 256
+      model.set_decoder.proposal_mode: grid-diverse
+      model.set_decoder.proposal_grid_size: 0.1
+      model.set_decoder.use_aggregate_anchors: true
+      model.set_decoder.aggregate_grid_size: 0.1
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+  hit_heptv2_grouped:
+    model_name: pyg-cld-hits-heptv2-sector-set-v1
+    overrides:
+      model.heptv2.num_convs: 6
+      model.binary_classification_focal_gamma: 2.0
+      model.set_decoder.attention_mode: global-flash
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.num_layers: 4
+      model.set_decoder.num_slots: 256
+      model.set_decoder.proposal_mode: grid-diverse
+      model.set_decoder.proposal_grid_size: 0.1
+      model.set_decoder.use_aggregate_anchors: true
+      model.set_decoder.aggregate_grid_size: 0.1
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+      model.set_decoder.hit_grouping: true
+      model.set_decoder.hit_grouping_dim: 32
+      model.set_decoder.hit_grouping_chunk_size: 1024
+      model.set_decoder.hit_grouping_loss_weight: 0.1
+seeds:
+- 12345
+training:
+  global_batch_size: 64
+  parameters:
+    lr: 0.001
+    num_steps: 50000
+    val_freq: 5000
+    checkpoint_freq: 1000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+common_overrides:
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+allowed_variant_differences:
+- conv_type
+- data_dir
+- dataset
+- elemtypes_nonzero
+- enabled_test_datasets
+- hyperparameters.lr
+- input_dim
+- model.type
+- model.binary_classification_focal_gamma
+- model.attention
+- model.heptv2
+- model.backbone.num_tracker_layers
+- model.backbone.num_calo_layers
+- model.backbone.num_common_layers
+- model.output_mode
+- model.set_decoder
+- train_dataset
+- valid_dataset
+- test_dataset

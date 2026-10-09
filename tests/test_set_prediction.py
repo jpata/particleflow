@@ -6,6 +6,7 @@ from mlpf.model.PFDataset import PFBatch
 from mlpf.model.mlpf import MLPF
 from mlpf.model.set_decoder import _flash_multihead_attention, _phi_sector
 from mlpf.model.set_losses import hungarian_match, set_event_loss
+from mlpf.model.set_losses import hit_grouping_loss
 from mlpf.model.utils import unpack_predictions, unpack_target
 
 
@@ -106,6 +107,73 @@ def test_set_config_rejects_local_attention_for_global_queries():
 def test_set_config_rejects_sectorized_attention_for_global_queries():
     with pytest.raises(ValueError, match="sectorized attention requires"):
         make_config(attention_mode="sectorized")
+
+
+def test_hit_grouping_uses_predicted_membership_and_event_local_truth():
+    config = make_config(
+        num_slots=4, query_init="input-conditioned", hit_grouping=True,
+        hit_grouping_dim=8, hit_grouping_chunk_size=2,
+    )
+    model = MLPF(config)
+    features = torch.zeros(1, 6, config.input_dim)
+    features[0, :5, 0] = torch.tensor([1, 1, 2, 2, 2])
+    features[0, :5, 1] = 1.0
+    features[0, :5, 5] = 1.0
+    features[0, :5, 3] = 0.0
+    features[0, :5, 4] = 1.0
+    target = make_target_tensor(num_targets=2)
+    hit_target = torch.zeros(1, 6, 14)
+    hit_target[0, :5, 13] = torch.tensor([1, 1, 1, 2, 0])
+    batch = PFBatch(X=features, ytarget=hit_target, ytarget_set=target)
+    output = model(features, batch.mask)
+    assert output.hit_grouping is not None
+    assert output[2].shape == (1, 4, 5)
+    grouping_loss = hit_grouping_loss(
+        output.hit_grouping, batch,
+        [(torch.tensor([3, 1]), torch.tensor([0, 1]))], chunk_size=2,
+    )
+    assert torch.isfinite(grouping_loss)
+    grouping_loss.backward()
+    assert model.set_decoder.hit_grouping_hit.weight.grad is not None
+    assert model.set_decoder.hit_grouping_slot.weight.grad is not None
+    assert model.set_decoder.hit_grouping_background.weight.grad is not None
+
+
+def test_hit_grouping_is_included_in_set_training_loss():
+    from mlpf.model.training import model_step
+
+    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=True)
+    model = MLPF(config)
+    features = torch.zeros(1, 5, config.input_dim)
+    features[..., 0] = torch.tensor([1, 1, 2, 2, 2])
+    features[..., 1] = 1
+    features[..., 4] = 1
+    features[..., 5] = 1
+    target = make_target_tensor(num_targets=2)
+    hit_target = torch.zeros(1, 5, 14)
+    hit_target[0, :, 13] = torch.tensor([1, 1, 2, 2, 0])
+    batch = PFBatch(X=features, ytarget=hit_target, ytarget_set=target)
+    loss, losses, _, _, _, _ = model_step(batch, model, None, REGRESSION_WEIGHTS)
+    assert losses["HitGrouping"] > 0
+    loss.backward()
+    assert model.set_decoder.hit_grouping_projection.weight.grad is not None
+
+
+def test_hit_grouping_labels_are_local_to_each_event():
+    features = torch.ones(2, 3, 15)
+    targets = make_target_tensor(batch_size=2, num_targets=2)
+    hit_targets = torch.zeros(2, 3, 14)
+    hit_targets[..., 13] = torch.tensor([[1, 2, 0], [1, 2, 0]])
+    batch = PFBatch(X=features, ytarget=hit_targets, ytarget_set=targets)
+    hit_keys = torch.tensor([[[1., 0.], [0., 1.], [0., 0.]]] * 2)
+    slot_keys = torch.tensor([[[1., 0.], [0., 1.]], [[0., 1.], [1., 0.]]])
+    background = torch.tensor([[[-10.], [-10.], [10.]]] * 2)
+    matches = [
+        (torch.tensor([0, 1]), torch.tensor([0, 1])),
+        (torch.tensor([1, 0]), torch.tensor([0, 1])),
+    ]
+    loss = hit_grouping_loss((hit_keys, slot_keys, background), batch, matches, chunk_size=2)
+    assert loss < 0.01
 
 
 def test_phi_sectors_wrap_at_periodic_boundary():

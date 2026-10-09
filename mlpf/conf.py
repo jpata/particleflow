@@ -795,6 +795,11 @@ class SetDecoderConfig(BaseModel):
     auxiliary_loss_weight: float = Field(default=0.0, ge=0.0)
     momentum_loss: Literal["mse", "huber"] = "mse"
     momentum_huber_delta: float = Field(default=0.2, gt=0.0)
+    hit_grouping: bool = False
+    hit_grouping_dim: int = Field(default=32, gt=0)
+    hit_grouping_chunk_size: int = Field(default=1024, gt=0)
+    hit_grouping_loss_weight: float = Field(default=0.1, ge=0.0)
+    hit_grouping_background_weight: float = Field(default=0.1, gt=0.0)
     matcher: SetMatcherConfig = Field(default_factory=SetMatcherConfig)
 
     @model_validator(mode="after")
@@ -807,6 +812,10 @@ class SetDecoderConfig(BaseModel):
             raise ValueError("set decoder proposal_mode requires query_init='input-conditioned'")
         if self.use_aggregate_anchors and self.query_init != SetQueryInit.INPUT_CONDITIONED:
             raise ValueError("set decoder aggregate anchors require query_init='input-conditioned'")
+        if self.hit_grouping and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder hit grouping requires query_init='input-conditioned'")
+        if self.hit_grouping and self.hit_grouping_loss_weight == 0:
+            raise ValueError("set decoder hit grouping requires a positive hit_grouping_loss_weight")
         return self
 
 

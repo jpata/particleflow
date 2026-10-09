@@ -29,6 +29,7 @@ SET_QUERY_MATCHING_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_qu
 OBJECT_FORMATION_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_object_formation_comparison.yaml"
 HEPTV2_SECTOR_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_heptv2_sector_comparison.yaml"
 HEPTV2_MOMENTUM_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_heptv2_momentum_50k_comparison.yaml"
+HEPTV2_GROUPING_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_heptv2_hit_grouping_50k.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -47,6 +48,19 @@ def test_heptv2_momentum_scenario_isolates_50k_loss_and_matcher_changes():
     assert {job.seed for job in jobs} == {12345}
     assert [job.resolved_config.model.set_decoder.matcher.energy for job in jobs[1:]] == [0.0, 0.5, 0.0]
     assert [job.resolved_config.model.set_decoder.momentum_loss for job in jobs[1:]] == ["mse", "mse", "huber"]
+
+
+def test_heptv2_grouping_scenario_changes_only_hit_grouping():
+    scenario = load_training_scenario(HEPTV2_GROUPING_SCENARIO)
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+    jobs = resolve_scenario_jobs(
+        scenario, platform, spec_file=ROOT / "particleflow_spec.yaml", global_batch_size=8,
+    )
+    assert [job.variant_name for job in jobs] == ["hit_heptv2_baseline", "hit_heptv2_grouped"]
+    baseline, grouped = (job.resolved_config for job in jobs)
+    assert not baseline.model.set_decoder.hit_grouping
+    assert grouped.model.set_decoder.hit_grouping
+    assert grouped.num_steps == baseline.num_steps == 50000
 
 
 def test_comparison_scenario_resolves_both_output_modes_with_same_seed():
