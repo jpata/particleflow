@@ -25,7 +25,7 @@ be interpreted as reconstructed-physics performance.
 
 
 class IdeaEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.2.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.2.1"))
     RELEASE_NOTES = {
         "0.1.0": "Initial pipeline-validation dataset with explicit proxy provenance.",
         "0.2.0": "Add num_muon_hits and energy_muon cluster features (#511); input width 17 -> 19, regenerate",
