@@ -61,11 +61,12 @@ VAL_FREQ=${VAL_FREQ:-200}
 CHECKPOINT_FREQ=${CHECKPOINT_FREQ:-200}
 NVALID=${NVALID:-100}
 NTEST=${NTEST:-100}
-# The HEPTv2 sector model exceeds a 16 GB local GPU at batch size 8.
+# Keep the large HEPTv2 variants within a 16 GB local GPU.
 DEFAULT_GLOBAL_BATCH_SIZE=8
-if [[ $(basename "$SCENARIO_FILE" .yaml) == cld_set_hits_heptv2_sector_comparison ]]; then
-  DEFAULT_GLOBAL_BATCH_SIZE=2
-fi
+case $(basename "$SCENARIO_FILE" .yaml) in
+  cld_set_hits_heptv2_sector_comparison) DEFAULT_GLOBAL_BATCH_SIZE=2 ;;
+  cld_pf_heptv2_hit_grouping_50k) DEFAULT_GLOBAL_BATCH_SIZE=1 ;;
+esac
 GLOBAL_BATCH_SIZE=${GLOBAL_BATCH_SIZE:-${GPU_BATCH_MULTIPLIER:-$DEFAULT_GLOBAL_BATCH_SIZE}}
 NUM_WORKERS=${NUM_WORKERS:-8}
 PREFETCH_FACTOR=${PREFETCH_FACTOR:-4}
