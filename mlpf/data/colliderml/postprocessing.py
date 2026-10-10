@@ -24,13 +24,12 @@ from typing import Any, Dict, List
 import awkward as ak
 import fastjet
 import numpy as np
-import pyarrow.parquet as pq
 import tqdm
 import vector
 
 from mlpf.conf import EDM4HEP
 from mlpf.data.colliderml.clustering import cluster_event
-from mlpf.data.colliderml.reader import iter_event_records, shard_paths
+from mlpf.data.colliderml.reader import iter_event_records, n_shard_events, shard_paths
 from mlpf.data.colliderml.tracks import track_features_cml
 from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, calibration_factors, compute_gen_tables
 from mlpf.data.target_building import (
@@ -511,9 +510,10 @@ def _parquet_usable(ofn: Path, expected_rows: int | None = None) -> bool:
     return expected_rows is None or n_rows == expected_rows
 
 
-def _shard_done(ofn: Path, particles_fn: Path) -> bool:
-    """A full-shard output is done iff it is readable and holds every source event."""
-    return _parquet_usable(ofn, expected_rows=pq.ParquetFile(particles_fn).metadata.num_rows)
+def _shard_done(ofn: Path, source_fns: List[Path]) -> bool:
+    """A full-shard output is done iff it is readable and holds every source event present in
+    all four tables (the reader drops the rare event missing from one)."""
+    return _parquet_usable(ofn, expected_rows=n_shard_events(source_fns))
 
 
 def process_one_file(
@@ -531,7 +531,8 @@ def process_one_file(
     clue_params: Dict[int, Dict[str, float]] | None = None,
     clue_options: Dict[str, Any] | None = None,
 ) -> None:
-    if num_events == -1 and _shard_done(ofn, particles_fn):
+    source_fns = [particles_fn, tracks_fn, calo_fn, tracker_fn]
+    if num_events == -1 and _shard_done(ofn, source_fns):
         print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} already exists, skipping")
         return
     if os.path.isfile(ofn) and num_events == -1:
@@ -541,7 +542,7 @@ def process_one_file(
 
     # events per shard from the parquet metadata (1000 for pu0, 100 for pu200); tqdm uses it
     # for the ETA. num_events (debug cap) overrides.
-    total = num_events if num_events != -1 else pq.ParquetFile(particles_fn).metadata.num_rows
+    total = num_events if num_events != -1 else n_shard_events(source_fns)
     desc = f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name}"
     iter_events = iter_event_records(particles_fn, tracks_fn, calo_fn, tracker_fn)
     os.makedirs(os.path.dirname(ofn), exist_ok=True)
@@ -751,7 +752,7 @@ def main():
     for i, (p, t, c) in enumerate(zip(pa, tr, ch)):
         out_name = Path(args.outpath) / (p.stem + ".parquet")
         # --num-events is a debug cap: always (re)write, and never count a capped output as done
-        if args.num_events == -1 and _shard_done(out_name, Path(p)):
+        if args.num_events == -1 and _shard_done(out_name, [Path(p), Path(t), Path(c), Path(th[i])]):
             n_done += 1
             print(f"[shard {i + 1}/{n_files}] {out_name.name} already exists, skipping")
             continue
