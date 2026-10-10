@@ -1,4 +1,4 @@
-# Shared helpers of the ColliderML calorimeter clusterers: clustering.py's radius-graph
+# Shared helpers of the ColliderML calorimeter clusterers: radius_graph.py's radius-graph
 # algorithms (union_find, bfs, bfs_merge) and clue.py's CLUE. Holds the deterministic
 # stable hit rank, union-find primitives, rank-ordered relabelling, and the cluster output
 # assembly (17-wide feature matrix, dominant region, hit->cluster COO). The properties every
