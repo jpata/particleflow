@@ -1,6 +1,7 @@
 # Unit tests for the ColliderML converter's per-event record (hits view).
 import awkward as ak
 import numpy as np
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from mlpf.data.colliderml.make_test_fixture import make_fixture
@@ -104,6 +105,23 @@ def test_resume_reconverts_partial_output_and_skips_complete_one(tmp_path):
     assert rows() == 3
     mtime = ofn.stat().st_mtime_ns
     process_one_file(*paths, ofn)  # complete: skipped
+    assert ofn.stat().st_mtime_ns == mtime
+
+
+def test_event_missing_from_one_table_is_dropped(tmp_path):
+    # release-1 ttbar_pu0 train-00991: the tracks table lacks one event (999 vs 1000 rows)
+    make_fixture(tmp_path / "src", n_events=8)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    tracks = pq.read_table(paths[1])
+    missing = tracks["event_id"][1].as_py()
+    pq.write_table(tracks.filter(pc.not_equal(tracks["event_id"], missing)), paths[1])
+    ofn = tmp_path / "out" / "shard.parquet"
+
+    process_one_file(*paths, ofn)
+    ids = pq.read_table(ofn)["event_id"].to_pylist()
+    assert len(ids) == 3 and missing not in ids
+    mtime = ofn.stat().st_mtime_ns
+    process_one_file(*paths, ofn)  # the 3-event output counts as complete: skipped
     assert ofn.stat().st_mtime_ns == mtime
 
 

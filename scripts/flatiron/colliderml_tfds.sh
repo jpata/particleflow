@@ -38,7 +38,7 @@ set -euo pipefail
 
 PU="${1:-pu0}"
 SAMPLE="ttbar_${PU}"
-MANUAL_DIR="${2:-/mnt/ceph/users/ewulff/data/colliderml/mlpf_parquet/clustered/${SAMPLE}}"
+MANUAL_DIR="${2:-/mnt/ceph/users/ewulff/data/colliderml/mlpf_parquet/clue/${SAMPLE}}"
 TFDS_DATA_DIR="/mnt/ceph/users/ewulff/tensorflow_datasets/colliderml"
 
 case "${PU}" in

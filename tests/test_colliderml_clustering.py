@@ -98,3 +98,128 @@ def test_truth_blindness():
     for cid in m:
         # every cluster has exactly one region
         assert len(set(det[c2 == cid])) == 1
+
+
+# ---------------- CLUE ----------------
+
+
+def _shower(center, n, sigma, e_tot, rng, det):
+    """Gaussian blob of n hits around center (mm) carrying e_tot GeV, exponential hit energies."""
+    pos = np.asarray(center, dtype=np.float64) + rng.normal(0.0, sigma, (n, 3))
+    e = rng.exponential(1.0, n)
+    return pos, e * e_tot / e.sum(), np.full(n, det, dtype=np.int64)
+
+
+def _clue_event(seed=0, sep_mm=200.0):
+    """Two ECAL-barrel showers sep_mm apart (along z), plus one isolated soft hit."""
+    rng = np.random.default_rng(seed)
+    p1, e1, d1 = _shower((1350.0, 0.0, 0.0), 300, 8.0, 20.0, rng, 10)
+    p2, e2, d2 = _shower((1350.0, 0.0, sep_mm), 300, 8.0, 10.0, rng, 10)
+    p3 = np.array([[1350.0, 0.0, -2000.0]])
+    pos = np.vstack([p1, p2, p3])
+    E = np.concatenate([e1, e2, [0.02]])
+    det = np.concatenate([d1, d2, [10]])
+    truth = np.concatenate([np.zeros(300, int), np.ones(300, int), [2]])
+    return pos[:, 0], pos[:, 1], pos[:, 2], E, det, truth
+
+
+def test_clue_invariants():
+    x, y, z, E, det, _ = _clue_event(seed=1)
+    cluster_of, feats, coo, region = cluster_event(x, y, z, E, det, algorithm="clue")
+    n_cl = int(cluster_of.max()) + 1
+    assert cluster_of.min() >= 0 and len(np.unique(cluster_of)) == n_cl
+    assert feats.shape[0] == n_cl == len(region)
+    assert np.array_equal(np.sort(coo[0]), np.arange(len(x)))
+    assert abs(feats[:, 5].sum() - E.sum()) < 1e-6
+    for cid in range(n_cl):
+        assert abs(feats[cid, 5] - E[cluster_of == cid].sum()) < 1e-6
+
+
+def test_clue_separates_two_showers():
+    x, y, z, E, det, truth = _clue_event(seed=2, sep_mm=200.0)
+    cluster_of = cluster_event(x, y, z, E, det, algorithm="clue")[0]
+    # each shower's energy sits in one dominant cluster, and the two are different
+    dom = []
+    for t in (0, 1):
+        m = truth == t
+        e_by_cl = np.bincount(cluster_of[m], weights=E[m])
+        assert e_by_cl.max() > 0.9 * E[m].sum()
+        dom.append(int(np.argmax(e_by_cl)))
+    assert dom[0] != dom[1]
+    # the isolated soft hit (2 m away) is kept as its own cluster: energy is never dropped
+    assert np.sum(cluster_of == cluster_of[-1]) == 1
+
+
+def test_clue_absorbs_small_fragment():
+    # a 0.2 GeV fragment 60 mm from a 20 GeV shower joins it with absorption on, not without
+    rng = np.random.default_rng(3)
+    p1, e1, d1 = _shower((1350.0, 0.0, 0.0), 300, 8.0, 20.0, rng, 10)
+    p2, e2, d2 = _shower((1350.0, 0.0, 60.0), 5, 2.0, 0.2, rng, 10)
+    pos = np.vstack([p1, p2])
+    E = np.concatenate([e1, e2])
+    det = np.concatenate([d1, d2])
+    args = (pos[:, 0], pos[:, 1], pos[:, 2], E, det)
+    on = cluster_event(*args, algorithm="clue")[0]
+    off = cluster_event(*args, algorithm="clue", clue_options={"min_cluster_E": 0.0})[0]
+    assert len(np.unique(on[300:])) == 1 and on[300] == np.bincount(on[:300]).argmax()
+    assert not np.any(np.isin(off[300:], off[:300]))
+
+
+def test_clue_component_cap_bounds_cluster_size():
+    # a long chain of soft (sub-seed-threshold) hits: components would join it into one
+    # cluster; the cap re-clusters it into pieces no bigger than the cap allows
+    n = 400
+    z = np.arange(n) * 6.0
+    x = np.full(n, 1350.0)
+    y = np.zeros(n)
+    E = np.full(n, 0.01)
+    det = np.full(n, 10, dtype=np.int64)
+    opts = {"min_cluster_E": 0.0}
+    whole = cluster_event(x, y, z, E, det, algorithm="clue", clue_options={**opts, "max_component_hits": 0})[0]
+    capped = cluster_event(x, y, z, E, det, algorithm="clue", clue_options={**opts, "max_component_hits": 100})[0]
+    assert len(np.unique(whole)) == 1
+    assert np.bincount(capped).max() <= 100
+
+
+def test_clue_deterministic_and_region_local():
+    x, y, z, E, det = _event(seed=7)
+    c1 = cluster_event(x, y, z, E, det, algorithm="clue")[0]
+    c2 = cluster_event(x, y, z, E, det, algorithm="clue")[0]
+    assert np.array_equal(c1, c2)
+    for cid in np.unique(c1):
+        assert len(set(det[c1 == cid])) == 1
+
+
+def test_clue_empty_and_single_hit():
+    empty = np.zeros(0)
+    cluster_of, feats, _, _ = cluster_event(empty, empty, empty, empty, np.zeros(0, np.int64), algorithm="clue")
+    assert len(cluster_of) == 0 and feats.shape == (0, 17)
+    one = np.array([1350.0])
+    cluster_of, feats, _, _ = cluster_event(one, np.zeros(1), np.zeros(1), np.array([0.3]), np.array([10]), algorithm="clue")
+    assert cluster_of.tolist() == [0] and feats.shape[0] == 1
+
+
+def test_clue_drop_isolated_soft_clusters():
+    # the isolated 20 MeV hit 2 m away is kept by default, dropped (cluster -1) with drop_E
+    x, y, z, E, det, _ = _clue_event(seed=4)
+    kept = cluster_event(x, y, z, E, det, algorithm="clue")
+    cluster_of, feats, coo, region = cluster_event(x, y, z, E, det, algorithm="clue", clue_options={"drop_E": 0.1})
+    assert kept[0][-1] >= 0 and cluster_of[-1] == -1
+    assert feats.shape[0] == kept[1].shape[0] - 1 == len(region)
+    assert -1 not in coo[1] and len(coo[0]) == len(x) - 1
+    assert abs(feats[:, 5].sum() - E[:-1].sum()) < 1e-6
+
+
+def test_clue_drop_single_hit_clusters():
+    # same fixture: the isolated 20 MeV hit forms a single-hit cluster by default, dropped with
+    # drop_1hit; multi-hit clusters are untouched
+    x, y, z, E, det, _ = _clue_event(seed=4)
+    kept = cluster_event(x, y, z, E, det, algorithm="clue")
+    cluster_of, feats, coo, region = cluster_event(x, y, z, E, det, algorithm="clue", clue_options={"drop_1hit": True})
+    sizes = np.bincount(kept[0], minlength=len(kept[1]))
+    singles = int((sizes == 1).sum())
+    assert singles >= 1 and cluster_of[-1] == -1
+    assert feats.shape[0] == kept[1].shape[0] - singles == len(region)
+    assert (np.bincount(cluster_of[cluster_of >= 0], minlength=feats.shape[0]) > 1).all()
+    assert -1 not in coo[1] and len(coo[0]) == int((kept[0] >= 0).sum()) - singles
+    assert abs(feats[:, 5].sum() - (E.sum() - E[-1])) < 1e-6
