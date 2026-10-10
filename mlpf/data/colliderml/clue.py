@@ -1,4 +1,8 @@
-# A re-implementation of CLUE using numba.
+# CLUE re-implemented from scratch in numba by E. Wulff and Claude (Anthropic). Cross-checked
+# against the reference CLUEstering package (core="cluestering", see _clue_labels_cluestering):
+# identical seeds and identical clusters up to single-precision near-ties, while ~4x faster at
+# pu200.
+#
 # Reference: CLUE (CLUstering of Energy, Rovere et al., Front. Big Data 3 (2020) 591315; the algorithm of
 # the CLUEstering package and CMS HGCAL):
 #
