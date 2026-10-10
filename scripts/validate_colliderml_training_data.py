@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--num-events", type=int, default=1000)
     args = parser.parse_args()
     manual = args.run_dir / "manual"
-    tfds_path = args.run_dir / "tensorflow_datasets/colliderml_ttbar_nopu_pf/10/1.0.0"
+    tfds_path = args.run_dir / "tensorflow_datasets/colliderml_ttbar_nopu_pf/10/1.1.0"
     shards = [ak.from_parquet(path, columns=["event_id"]) for path in sorted(manual.glob("*.parquet"))]
     ids = [set(ak.to_list(shard.event_id)) for shard in shards]
     assert len(ids) == 2 and not ids[0].intersection(ids[1]), "Event overlap between train and held-out splits"
