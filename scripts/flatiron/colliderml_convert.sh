@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=64
 #SBATCH --cpus-per-task=1
-#SBATCH --time=12:00:00
+#SBATCH --time=16:00:00
 #SBATCH --output=logs_slurm/colliderml_convert_%j.out
 #SBATCH --error=logs_slurm/colliderml_convert_%j.err
 #SBATCH --export=NONE
@@ -26,6 +26,8 @@
 # The per-rank shard arithmetic uses SLURM_NTASKS, so override --ntasks to taste.
 # pu200 events are memory-heavy (~10-20 GB/rank); if the node OOMs, give ranks a larger
 # memory slice, e.g. --ntasks=32 --cpus-per-task=2.
+# Walltime: the full 1000-shard ttbar_pu200 CLUE run takes ~10 h on 64 ranks (job 7210413;
+# pu0 ~1.5 h), hence 16 h.
 #
 
 set -euo pipefail
