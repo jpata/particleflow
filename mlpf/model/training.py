@@ -38,6 +38,7 @@ import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import gc
+from contextlib import nullcontext
 import tqdm
 import yaml
 import json
@@ -336,6 +337,12 @@ def _log_validation_results_to_tensorboard(tensorboard_writer, validation_result
         else:
             tag = f"step/loss_{name}"
         tensorboard_writer.add_scalar(tag, value, step)
+
+
+def _log_validation_probe_results(values, step):
+    for name, value in sorted(values.items()):
+        if name.startswith("metrics/linear_probe/"):
+            _logger.info("VALIDATION_PROBE | Step=%s | %s=%.6g", step, name.removeprefix("metrics/"), value)
 
 
 def _format_compact_diagnostic(values, keys):
@@ -867,6 +874,12 @@ def evaluate(
     model.eval()
     eval_loss = {}
     diagnostic_accum = {}
+    model_module = model.module if hasattr(model, "module") else model
+    probe = None
+    if config.validation_linear_probe and config.validation_diagnostics_batches > 0 and model_module.output_mode == OutputMode.SET:
+        from mlpf.model.validation_probes import ValidationCaloProbe
+
+        probe = ValidationCaloProbe(config.validation_linear_probe_max_events)
 
     # Only show progress bar on rank 0
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
@@ -884,12 +897,14 @@ def evaluate(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
-                _, loss, _, ypred_raw, ypred, ytarget = model_step(
-                    batch,
-                    model,
-                    mlpf_loss,
-                    UNIT_REGRESSION_WEIGHTS,
-                )
+                capture_probe = probe is not None and ival < config.validation_diagnostics_batches and len(probe.events) < probe.max_events
+                with probe.capture(model_module, batch) if capture_probe else nullcontext():
+                    _, loss, _, ypred_raw, ypred, ytarget = model_step(
+                        batch,
+                        model,
+                        mlpf_loss,
+                        UNIT_REGRESSION_WEIGHTS,
+                    )
 
                 model_module = model.module if hasattr(model, "module") else model
                 ypred_particles = model_module.predict_particles(batch.X, batch.mask)
@@ -985,6 +1000,10 @@ def evaluate(
         if world_size > 1:
             torch.distributed.all_reduce(eval_loss[loss_name])
         eval_loss[loss_name] = eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
+
+    if probe is not None:
+        for name, (total, count) in probe.finalize().items():
+            _add_accumulator(diagnostic_accum, name, torch.as_tensor(total, device=rank), count=count)
 
     eval_loss.update(_finalize_diagnostics(diagnostic_accum, world_size))
 
@@ -1169,6 +1188,8 @@ def _run_validation_cycle(
             f"Stale={stale_steps} | "
             f"ETA={eta:.1f}m"
         )
+
+        _log_validation_probe_results(losses_valid, step)
 
         tensorboard_writer_valid.flush()
 

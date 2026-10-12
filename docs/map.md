@@ -45,6 +45,8 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`distributed_ray.py`**: Integration with Ray for distributed training and HPO.
 
 ## 5. Validation, Plotting & Monitoring
+- **`scripts/studies/probe_calo_continuation.py`**: Cross-layer, distance-matched calorimeter continuation probes with equal particle weighting. See [`calo_continuation_probe.md`](calo_continuation_probe.md).
+- **`scripts/studies/probe_hit_instances.py`**: Frozen linear pair-affinity probes comparing raw hit features and HEPTv2 embeddings for separate tracker/calorimeter instance segmentation. See [`hit_instance_probe.md`](hit_instance_probe.md).
 - **`mlpf/model/reconstruction_diagnostics.py`**: Optional validation diagnostics for hit-grouping purity/completeness and momentum errors by class and eta. Enable with `validation_diagnostics_batches`; definitions and output paths are in [`reconstruction_diagnostics.md`](reconstruction_diagnostics.md).
 - **`mlpf/standalone_eval/key4hep/`**: Standalone tools for evaluating model checkpoints and generating performance plots on ROOT files for Key4Hep detectors.
 - **`mlpf/plotting/`**: Comprehensive suite of plotting tools.

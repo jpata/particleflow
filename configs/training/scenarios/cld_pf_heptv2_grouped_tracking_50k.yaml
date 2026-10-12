@@ -38,6 +38,8 @@ training:
     ntest: 512
     sampler_mode: interleaved-shards
     validation_diagnostics_batches: 4
+    validation_linear_probe: true
+    validation_linear_probe_max_events: 16
     pad_to_multiple_elements: 128
     make_plots: true
 common_overrides:

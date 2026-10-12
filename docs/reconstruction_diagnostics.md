@@ -120,3 +120,19 @@ These truth-defined bins prevent incorrect assignments from changing the
 population on which grouping is judged. Read calorimeter count-based and
 energy-based completeness together, and compare tracker completeness with the
 charged-particle momentum slices before attributing an error to association.
+
+## Linear calorimeter continuation probes
+
+Set `validation_linear_probe: true` to fit and evaluate frozen raw/embedding
+continuation probes on disjoint events from the configured diagnostic batches.
+`validation_linear_probe_max_events: 16` caps collected events per rank. Scalars
+appear in TensorBoard under `validation/linear_probe/calorimeter/`, in history
+JSON, and in `VALIDATION_PROBE` log lines. See
+[calo_continuation_probe.md](calo_continuation_probe.md#during-training-validation)
+for support, rank-local reduction semantics, costs and minimum event counts.
+
+The same switch logs held-out instance ARI for **tracker and calorimeter** under
+`validation/linear_probe/{tracker,calorimeter}/{raw,embedding}/ari`, plus the
+embedding-minus-raw gain, oracle-graph ARI and support. These instance probes use
+disjoint fit/calibration/evaluation events and the original within-detector
+neighbor graph. See the ARI subsection of the continuation-probe documentation.

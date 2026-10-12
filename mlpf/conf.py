@@ -1095,6 +1095,9 @@ class MLPFConfig(BaseModel):
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
     validation_diagnostics_batches: int = 0  # batches per rank for domain, momentum, and hit-grouping diagnostics; 0 disables extras
 
+    validation_linear_probe: bool = False  # frozen hit-instance ARI and calo continuation probes on diagnostic batches
+    validation_linear_probe_max_events: int = Field(default=16, ge=8)  # per rank; every fourth event is held out
+
     # Flags
     train: bool = False
     test: bool = False

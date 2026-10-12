@@ -137,3 +137,15 @@ Submit on LUMI using the same scenario through `scripts/lumi/train_scenario.sh`.
 For local smoke runs, `scripts/local/train_scenario.sh
 cld_pf_heptv2_grouped_tracking_50k` uses global batch 1 by default to accommodate
 local GPU memory; it is not the production batch-64 comparison.
+
+The grouped tracking scenario also enables `validation_linear_probe` with a
+16-event cap per rank. It fits fresh raw/embedding calorimeter continuation
+rankers on diagnostic events and evaluates on disjoint events. TensorBoard,
+history JSON and `VALIDATION_PROBE` log lines report accuracy, coverage and
+support. See `docs/calo_continuation_probe.md`. Local batch-one runs need at least
+eight diagnostic batches for sufficient fit/evaluation events.
+
+The same diagnostics also report tracker and calorimeter instance ARI for raw
+features and embeddings. Their default per-rank split is 8 fitting, 4 threshold
+calibration and 4 evaluation events; TensorBoard tags end in `/raw/ari` and
+`/embedding/ari`. Calibration and final evaluation are disjoint.
