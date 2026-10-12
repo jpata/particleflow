@@ -460,6 +460,34 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
             f"(pT {float(np.sum(pt_arr[dropped_gps])):.1f} GeV, E {dropped_energy:.1f} GeV)"
         )
 
+    # A retained particle may have only hits already claimed by higher-energy particles.
+    # Move an owner to its best unused positive-weight hit to free one of those hits.
+    # Ignore claims by particles removed above: their hits are free in the final target.
+    retained = np.flatnonzero(mask_gp_unmatched)
+    hit_owner = {int(gp_to_hit_idx[igp]): int(igp) for igp in retained if gp_to_hit_idx[igp] != -1}
+    for igp in retained:
+        if gp_to_hit_idx[igp] != -1:
+            continue
+        hits, weights = _row_sorted_by_weight(gp_to_hit, igp)
+        for ihit in hits[weights > 0]:
+            ihit = int(ihit)
+            owner = hit_owner.get(ihit)
+            if owner is None:
+                gp_to_hit_idx[igp] = ihit
+                hit_owner[ihit] = int(igp)
+                break
+            owner_hits, owner_weights = _row_sorted_by_weight(gp_to_hit, owner)
+            for alternative in owner_hits[owner_weights > 0]:
+                alternative = int(alternative)
+                if alternative not in hit_owner:
+                    gp_to_hit_idx[owner] = alternative
+                    gp_to_hit_idx[igp] = ihit
+                    hit_owner[alternative] = owner
+                    hit_owner[ihit] = int(igp)
+                    break
+            if gp_to_hit_idx[igp] != -1:
+                break
+
     genpart_idx_all_to_filtered = {idx_all: idx_filtered for idx_filtered, idx_all in enumerate(idx_all_masked)}
     genparticle_to_hit = filter_adj(gpdata.genparticle_to_hit, genpart_idx_all_to_filtered)
     genparticle_to_track = filter_adj(gpdata.genparticle_to_track, genpart_idx_all_to_filtered)
