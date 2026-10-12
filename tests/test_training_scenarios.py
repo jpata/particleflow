@@ -20,6 +20,20 @@ from mlpf.training_scenarios import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_fit_correction_scenario_resolves_three_controlled_variants():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_fit_correction_50k.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/local.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml", global_batch_size=8)
+    assert len(jobs) == 3
+    configs = [job.resolved_config for job in jobs]
+    assert {c.num_steps for c in configs} == {50000}
+    assert [c.model.set_decoder.tracker_group_readout for c in configs] == [False, True, True]
+    assert [c.model.set_decoder.tracker_fit_correction for c in configs] == [False, False, True]
+    assert configs[-1].model.set_decoder.tracker_fit_max_log_correction == pytest.approx(0.4054651081081644)
+
+
 SCENARIO = ROOT / "configs/training/scenarios/cld_hits_output_comparison.yaml"
 BACKBONE_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
 PF_HITS_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_hits_comparison.yaml"

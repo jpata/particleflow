@@ -145,6 +145,12 @@ history JSON and `VALIDATION_PROBE` log lines report accuracy, coverage and
 support. See `docs/calo_continuation_probe.md`. Local batch-one runs need at least
 eight diagnostic batches for sufficient fit/evaluation events.
 
+The `cld_pf_heptv2_fit_correction_50k` scenario compares ordinary grouped
+regression, legacy tracker anchors and a bounded learned correction to fitted
+charged-particle pT. See [charged fit correction](../../docs/charged_fit_correction.md)
+for fit gates, fallback behavior and limitations. It does not start training
+automatically.
+
 The same diagnostics also report tracker and calorimeter instance ARI for raw
 features and embeddings. Their default per-rank split is 8 fitting, 4 threshold
 calibration and 4 evaluation events; TensorBoard tags end in `/raw/ari` and

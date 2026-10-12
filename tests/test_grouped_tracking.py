@@ -74,3 +74,32 @@ def test_tracker_circle_readout_recovers_momentum_and_rejects_bad_groups():
     assert not tracker_group_geometry(x, torch.zeros(16, dtype=torch.long), 1, 2.0)[2][0]
     assert not tracker_group_geometry(x[:2], torch.zeros(2, dtype=torch.long), 1, 2.0)[2][0]
     assert not tracker_group_geometry(x[:0], torch.empty(0, dtype=torch.long), 1, 2.0)[2][0]
+
+
+@pytest.mark.parametrize("radius", [1., 10., 100.])
+def test_tracker_fit_rotation_translation_order_and_measurement_noise(radius):
+    # Fixed detector lever arm; increasing radius reduces the bending signal.
+    angle = torch.linspace(.1 / radius, 1.6 / radius, 24, dtype=torch.float64)
+    x = torch.zeros(24, 15, dtype=torch.float64)
+    x[:, 0] = 1
+    xy = torch.stack((radius * angle.sin(), radius * (1-angle.cos())), dim=-1)
+    rotation = torch.tensor([[.6, -.8], [.8, .6]], dtype=torch.float64)
+    xy = xy @ rotation.T + torch.tensor([.04, -.03])
+    noise = torch.randn(24, 2, generator=torch.Generator().manual_seed(13), dtype=torch.float64) * .005
+    x[:, 6:8] = xy * 1000 + noise  # 5 micron coordinate noise
+    x[:, 14] = torch.arange(24) // 2
+    permutation = torch.randperm(24, generator=torch.Generator().manual_seed(42))
+    _, logpt, valid = tracker_group_geometry(x[permutation], torch.zeros(24, dtype=torch.long), 2, 2.)
+    assert valid.tolist() == [True, False]
+    assert logpt[0].exp().item() == pytest.approx(.299792458 * 2 * radius, rel=.01)
+
+
+def test_tracker_fit_nonfinite_hits_and_insufficient_surface_coverage():
+    x = arc_features()
+    x[0, 6] = float("nan")
+    x[1, 7] = float("inf")
+    summary, logpt, valid = tracker_group_geometry(x, torch.zeros(16, dtype=torch.long), 2, 2.)
+    assert torch.isfinite(summary).all() and torch.isfinite(logpt).all()
+    assert valid.tolist() == [True, False]
+    x[:, 14] = 0
+    assert not tracker_group_geometry(x, torch.zeros(16, dtype=torch.long), 1, 2.)[2][0]
