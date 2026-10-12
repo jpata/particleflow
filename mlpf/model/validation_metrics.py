@@ -12,6 +12,7 @@ from scipy.optimize import linear_sum_assignment
 
 from mlpf.conf import OutputMode
 from mlpf.model.utils import unpack_target
+from mlpf.model.reconstruction_diagnostics import accumulate_momentum_metrics, empty_momentum_metrics
 
 
 MATCH_DR = 0.1
@@ -116,7 +117,7 @@ def _pairwise_geometry(targets, predictions):
     return delta_eta, delta_phi, delta_r, log_pt_ratio, relative_pt
 
 
-def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
+def _accumulate_event_metrics(metrics, targets, predictions, num_classes, detailed=False):
     num_targets = len(targets["pt"])
     num_predictions = len(predictions["pt"])
     _add(metrics, "count/target_mean", num_targets, 1)
@@ -138,6 +139,10 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
     relative_pt = pairwise_relative_pt[matched_prediction_indices, matched_target_indices] if pairwise_relative_pt is not None else torch.empty(0)
     accepted = (matched_dr < MATCH_DR) & (relative_pt < MATCH_REL_PT)
     num_accepted = int(accepted.sum())
+    if detailed:
+        accumulate_momentum_metrics(
+            metrics, targets, predictions, matched_prediction_indices, matched_target_indices, accepted, matched_dr, num_classes
+        )
 
     _add(
         metrics,
@@ -266,10 +271,16 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
     _add(metrics, "event/met_abs_error", torch.abs(prediction_met - target_met), 1)
 
 
-def compute_validation_particle_metrics(targets, target_mask, predictions, prediction_mask, num_classes):
-    """Compute additive, scheme-independent particle metrics for one batch."""
+def compute_validation_particle_metrics(targets, target_mask, predictions, prediction_mask, num_classes, detailed=False):
+    """Compute additive particle metrics; detailed=True adds momentum slices.
+
+    Detailed metrics reuse the same assignment and include uncensored pairs
+    and event sums, so the ordinary accepted-match errors retain their meaning.
+    """
 
     metrics = _empty_metrics(num_classes)
+    if detailed:
+        metrics.update(empty_momentum_metrics(num_classes))
     for event_idx in range(target_mask.shape[0]):
         event_targets = _clean_kinematics(
             {name: value[event_idx] for name, value in targets.items()},
@@ -279,7 +290,7 @@ def compute_validation_particle_metrics(targets, target_mask, predictions, predi
             {name: value[event_idx] for name, value in predictions.items()},
             prediction_mask[event_idx],
         )
-        _accumulate_event_metrics(metrics, event_targets, event_predictions, num_classes)
+        _accumulate_event_metrics(metrics, event_targets, event_predictions, num_classes, detailed=detailed)
     return {name: tuple(values) for name, values in metrics.items()}
 
 

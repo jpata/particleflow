@@ -800,6 +800,10 @@ class SetDecoderConfig(BaseModel):
     hit_grouping_chunk_size: int = Field(default=1024, gt=0)
     hit_grouping_loss_weight: float = Field(default=0.1, ge=0.0)
     hit_grouping_background_weight: float = Field(default=0.1, gt=0.0)
+    hit_grouping_detector_balanced: bool = False
+    tracker_group_readout: bool = False
+    tracker_group_magnetic_field: float = Field(default=2.0, gt=0.0)  # tesla; CLD solenoid
+    event_consistency_loss_weight: float = Field(default=0.0, ge=0.0)
     matcher: SetMatcherConfig = Field(default_factory=SetMatcherConfig)
 
     @model_validator(mode="after")
@@ -816,6 +820,8 @@ class SetDecoderConfig(BaseModel):
             raise ValueError("set decoder hit grouping requires query_init='input-conditioned'")
         if self.hit_grouping and self.hit_grouping_loss_weight == 0:
             raise ValueError("set decoder hit grouping requires a positive hit_grouping_loss_weight")
+        if (self.tracker_group_readout or self.hit_grouping_detector_balanced) and not self.hit_grouping:
+            raise ValueError("tracker group readout and detector balancing require hit_grouping")
         return self
 
 
@@ -1087,7 +1093,7 @@ class MLPFConfig(BaseModel):
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
     task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
-    validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
+    validation_diagnostics_batches: int = 0  # batches per rank for domain, momentum, and hit-grouping diagnostics; 0 disables extras
 
     # Flags
     train: bool = False

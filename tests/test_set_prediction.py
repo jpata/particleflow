@@ -702,3 +702,92 @@ def test_set_model_10k_inputs_forward_backward():
     assert torch.isfinite(loss)
     assert model.set_decoder.queries.grad is not None
     assert torch.isfinite(model.set_decoder.queries.grad).all()
+
+
+@pytest.mark.parametrize("grouping", [False, True])
+def test_evaluate_reconstruction_diagnostics_respect_batch_limit(grouping):
+    from mlpf.model.training import evaluate
+
+    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=grouping, hit_grouping_dim=8)
+    config.validation_diagnostics_batches = 1
+    config.make_plots = False
+    model = MLPF(config)
+    features = torch.zeros(1, 5, config.input_dim)
+    features[..., 0] = torch.tensor([1, 1, 2, 2, 2])
+    features[..., 1] = 1
+    features[..., 4] = 1
+    features[..., 5] = 1
+    hit_targets = torch.zeros(1, 5, 14)
+    hit_targets[0, :, 13] = torch.tensor([1, 1, 2, 2, 0])
+    batch = PFBatch(X=features, ytarget=hit_targets, ytarget_set=make_target_tensor())
+    metrics = evaluate("cpu", 1, model, [batch, batch], 1, config, device_type="cpu")
+    assert metrics["metrics/particle/momentum/all/event/samples"] == 1
+    assert metrics["metrics/particle/momentum/all/target_samples"] == 2
+    if grouping:
+        assert metrics["metrics/hit_grouping/tracker/hit_samples"] == 2
+        assert metrics["metrics/hit_grouping/calorimeter/hit_samples"] == 3
+    else:
+        assert not any(key.startswith("metrics/hit_grouping/") for key in metrics)
+    config.validation_diagnostics_batches = 0
+    ordinary = evaluate("cpu", 1, model, [batch, batch], 1, config, device_type="cpu")
+    assert not any("momentum/" in key or "hit_grouping/" in key for key in ordinary)
+    assert all(metrics[key] == pytest.approx(value) for key, value in ordinary.items())
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"hit_grouping_detector_balanced": True},
+        {"tracker_group_readout": True},
+        {"event_consistency_loss_weight": 0.1},
+    ],
+)
+def test_grouped_tracking_variants_forward_backward(overrides):
+    from mlpf.model.training import model_step
+
+    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=True, **overrides)
+    model = MLPF(config)
+    features = torch.ones(1, 8, 15)
+    features[0, :, 0] = torch.tensor([1, 1, 1, 1, 2, 2, 2, 2])
+    targets = make_target_tensor()
+    hit_targets = torch.zeros(1, 8, 14)
+    hit_targets[0, :, 13] = torch.tensor([1, 1, 1, 0, 2, 2, 2, 0])
+    batch = PFBatch(X=features, ytarget=hit_targets, ytarget_set=targets)
+    loss, values, _, _, _, _ = model_step(batch, model, None, REGRESSION_WEIGHTS)
+    assert torch.isfinite(loss)
+    loss.backward()
+    assert model.set_decoder.scale_head.weight.grad is not None
+    if overrides.get("tracker_group_readout"):
+        assert model.set_decoder.tracker_group_projection.weight.grad is not None
+        from mlpf.model.training import evaluate
+        config.validation_diagnostics_batches = 1
+        config.make_plots = False
+        metrics = evaluate("cpu", 1, model, [batch], 1, config, device_type="cpu")
+        assert "metrics/set_slot/tracker_fit_fraction" in metrics
+        assert "metrics/set_slot/tracker_fits_per_event" in metrics
+    if overrides.get("event_consistency_loss_weight"):
+        assert values["EventConsistency"] > 0
+
+
+def test_tracker_readout_supplies_scale_prior_and_invalid_fit_falls_back(monkeypatch):
+    import mlpf.model.set_decoder as decoder
+
+    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=True, tracker_group_readout=True)
+    model = MLPF(config)
+    torch.nn.init.zeros_(model.set_decoder.scale_head.weight)
+    torch.nn.init.zeros_(model.set_decoder.scale_head.bias)
+
+    def fit(features, groups, num_slots, magnetic_field):
+        return torch.zeros(num_slots, 9), torch.full((num_slots,), 2.0), torch.tensor([True, False, True, False])
+
+    monkeypatch.setattr(decoder, "tracker_group_geometry", fit)
+    features = torch.ones(1, 8, 15)
+    output = model(features, torch.ones(1, 8, dtype=torch.bool))
+    assert output.predictions[2][0, :, 0].tolist() == [2.0, 0.0, 2.0, 0.0]
+    assert output.tracker_group_fit_valid.tolist() == [[True, False, True, False]]
+
+
+def test_group_readout_and_balancing_require_grouping():
+    for kwargs in ({"tracker_group_readout": True}, {"hit_grouping_detector_balanced": True}):
+        with pytest.raises(ValueError, match="require hit_grouping"):
+            make_config(**kwargs)

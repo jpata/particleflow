@@ -1,0 +1,82 @@
+# Controlled follow-up to the completed 50k grouped HEPTv2 run.
+# Each variant changes one mechanism relative to the grouped baseline.
+# Rank momentum/jet metrics with particle efficiency and count-bias guards;
+# grouping and event consistency add objectives, so total losses differ.
+name: cld_pf_heptv2_grouped_tracking_50k
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  hit_heptv2_grouped_baseline:
+    model_name: pyg-cld-hits-heptv2-sector-set-v1
+    overrides: {}
+  hit_heptv2_grouped_tracker_features:
+    model_name: pyg-cld-hits-heptv2-sector-set-v1
+    overrides:
+      model.hit_feature_engineering.tracker_neighborhood: true
+  hit_heptv2_grouped_balanced:
+    model_name: pyg-cld-hits-heptv2-sector-set-v1
+    overrides:
+      model.set_decoder.hit_grouping_detector_balanced: true
+  hit_heptv2_grouped_tracker_readout:
+    model_name: pyg-cld-hits-heptv2-sector-set-v1
+    overrides:
+      model.set_decoder.tracker_group_readout: true
+  hit_heptv2_grouped_event_consistency:
+    model_name: pyg-cld-hits-heptv2-sector-set-v1
+    overrides:
+      model.set_decoder.event_consistency_loss_weight: 0.1
+seeds:
+- 12345
+training:
+  global_batch_size: 64
+  parameters:
+    lr: 0.001
+    num_steps: 50000
+    val_freq: 5000
+    checkpoint_freq: 1000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+common_overrides:
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.heptv2.num_convs: 6
+  model.binary_classification_focal_gamma: 2.0
+  model.set_decoder.attention_mode: global-flash
+  model.set_decoder.query_init: input-conditioned
+  model.set_decoder.local_attention_radius: 0.4
+  model.set_decoder.tracker_query_fraction: 0.6
+  model.set_decoder.num_layers: 4
+  model.set_decoder.num_slots: 256
+  model.set_decoder.proposal_mode: grid-diverse
+  model.set_decoder.proposal_grid_size: 0.1
+  model.set_decoder.use_aggregate_anchors: true
+  model.set_decoder.aggregate_grid_size: 0.1
+  model.set_decoder.presence_threshold: 0.5
+  model.set_decoder.no_object_weight: 1.0
+  model.set_decoder.cardinality_loss_weight: 0.05
+  model.set_decoder.auxiliary_loss_weight: 0.25
+  model.set_decoder.matcher.presence: 1.0
+  model.set_decoder.matcher.pid: 1.0
+  model.set_decoder.matcher.geometry: 2.0
+  model.set_decoder.matcher.pt: 1.0
+  model.set_decoder.matcher.energy: 0.0
+  model.set_decoder.matcher.dr_scale: 0.1
+  model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+  model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+  model.set_decoder.hit_grouping: true
+  model.set_decoder.hit_grouping_dim: 32
+  model.set_decoder.hit_grouping_chunk_size: 1024
+  model.set_decoder.hit_grouping_loss_weight: 0.1
+  model.hit_feature_engineering.tracker_neighborhood: false
+  model.set_decoder.hit_grouping_detector_balanced: false
+  model.set_decoder.tracker_group_readout: false
+  model.set_decoder.tracker_group_magnetic_field: 2.0
+  model.set_decoder.event_consistency_loss_weight: 0.0
+allowed_variant_differences:
+- model.hit_feature_engineering.tracker_neighborhood
+- model.set_decoder

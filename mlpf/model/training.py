@@ -92,7 +92,8 @@ from mlpf.model.losses import (
     mlpf_loss,
     particle_loss,
 )
-from mlpf.model.set_losses import SetMatcherWeights, set_mlpf_loss
+from mlpf.model.set_losses import SetMatcherWeights, hungarian_match, set_mlpf_loss
+from mlpf.model.reconstruction_diagnostics import compute_hit_grouping_metrics
 from mlpf.model.validation_metrics import compute_set_slot_metrics, compute_validation_particle_metrics, validation_particle_collections
 from mlpf.utils import create_comet_experiment
 from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
@@ -276,10 +277,18 @@ def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weight
 
 def _finalize_diagnostics(accum, world_size):
     finalized = {}
-    for key, (value_sum, count_sum) in accum.items():
-        if world_size > 1:
-            torch.distributed.all_reduce(value_sum)
-            torch.distributed.all_reduce(count_sum)
+    if not accum:
+        return finalized
+    # Reduce all additive sums/counts together rather than issuing two
+    # collectives for each of the detailed reconstruction metrics.
+    keys = sorted(accum)
+    packed = torch.stack([torch.stack(accum[key]) for key in keys])
+    if world_size > 1:
+        torch.distributed.all_reduce(packed)
+    for key, (value_sum, count_sum) in zip(keys, packed):
+        if key.endswith("samples"):
+            finalized[key] = value_sum.cpu().item()
+            continue
         if count_sum.item() <= 0:
             continue
         value = value_sum / count_sum
@@ -309,6 +318,8 @@ def _set_loss_kwargs(model_module, raw_predictions):
         "hit_grouping_loss_weight": config.hit_grouping_loss_weight,
         "hit_grouping_chunk_size": config.hit_grouping_chunk_size,
         "hit_grouping_background_weight": config.hit_grouping_background_weight,
+        "hit_grouping_detector_balanced": config.hit_grouping_detector_balanced,
+        "event_consistency_loss_weight": config.event_consistency_loss_weight,
     }
 
 
@@ -890,6 +901,7 @@ def evaluate(
                 particle_metrics = compute_validation_particle_metrics(
                     *metric_collections,
                     num_classes=config.num_classes,
+                    detailed=ival < config.validation_diagnostics_batches,
                 )
                 for metric_name, (metric_total, metric_count) in particle_metrics.items():
                     _add_accumulator(
@@ -900,6 +912,24 @@ def evaluate(
                     )
 
                 if model_module.output_mode == OutputMode.SET:
+                    if ypred_raw.tracker_group_fit_valid is not None and ival < config.validation_diagnostics_batches:
+                        fits = ypred_raw.tracker_group_fit_valid
+                        _add_accumulator(diagnostic_accum, "metrics/set_slot/tracker_fit_fraction", fits.sum(), count=fits.numel())
+                        _add_accumulator(diagnostic_accum, "metrics/set_slot/tracker_fits_per_event", fits.sum(), count=fits.shape[0])
+                    if ypred_raw.hit_grouping is not None and ival < config.validation_diagnostics_batches:
+                        matches = hungarian_match(
+                            ytarget, ypred, batch.target_mask,
+                            SetMatcherWeights(**model_module.config.set_decoder.matcher.model_dump()),
+                        )
+                        grouping_metrics = compute_hit_grouping_metrics(
+                            ypred_raw.hit_grouping, batch, matches,
+                            chunk_size=model_module.config.set_decoder.hit_grouping_chunk_size,
+                        )
+                        for metric_name, (metric_total, metric_count) in grouping_metrics.items():
+                            _add_accumulator(
+                                diagnostic_accum, f"metrics/hit_grouping/{metric_name}",
+                                torch.as_tensor(metric_total, device=batch.X.device), count=metric_count,
+                            )
                     slot_fields = ("cls_binary", "cls_id_onehot", "pt", "eta", "sin_phi", "cos_phi", "energy")
                     raw_slots = {name: ypred[name].detach().to(torch.float32) for name in slot_fields}
                     raw_slots["pt"] = torch.exp(raw_slots["pt"].clamp(-20.0, 20.0))
