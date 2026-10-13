@@ -876,22 +876,23 @@ def evaluate(
 
                 model_module = model.module if hasattr(model, "module") else model
                 ypred_particles = model_module.predict_particles(batch.X, batch.mask)
-                metric_collections = validation_particle_collections(
-                    batch,
-                    ypred_particles,
-                    model_module.output_mode,
-                )
-                particle_metrics = compute_validation_particle_metrics(
-                    *metric_collections,
-                    num_classes=config.num_classes,
-                )
-                for metric_name, (metric_total, metric_count) in particle_metrics.items():
-                    _add_accumulator(
-                        diagnostic_accum,
-                        f"metrics/particle/{metric_name}",
-                        torch.as_tensor(metric_total, device=batch.X.device),
-                        count=metric_count,
+                if config.validation_particle_metrics:
+                    metric_collections = validation_particle_collections(
+                        batch,
+                        ypred_particles,
+                        model_module.output_mode,
                     )
+                    particle_metrics = compute_validation_particle_metrics(
+                        *metric_collections,
+                        num_classes=config.num_classes,
+                    )
+                    for metric_name, (metric_total, metric_count) in particle_metrics.items():
+                        _add_accumulator(
+                            diagnostic_accum,
+                            f"metrics/particle/{metric_name}",
+                            torch.as_tensor(metric_total, device=batch.X.device),
+                            count=metric_count,
+                        )
 
                 if model_module.output_mode == OutputMode.ELEMENTWISE and ival == 0 and (rank == 0 or rank == "cpu"):
                     print_event_table(batch, ytarget, ypred_particles, config)

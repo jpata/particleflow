@@ -1162,6 +1162,7 @@ class MLPFConfig(BaseModel):
     task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
     validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
+    validation_particle_metrics: bool = True  # matched-particle metrics (metrics/particle/*) in validation; slow on large (pu200) events
 
     # Flags
     train: bool = False
