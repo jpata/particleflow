@@ -59,7 +59,8 @@ class SdpaModule(nn.Module):
         if self.masked:
             attn_mask = mask.to(torch.bool).view(batch, 1, 1, seq_len)
         out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=0.0)
-        return out.transpose(1, 2).reshape(batch, seq_len, self.num_heads * self.head_dim)
+        out = out.transpose(1, 2).reshape(batch, seq_len, self.num_heads * self.head_dim)
+        return out * mask.to(out.dtype).unsqueeze(-1) if self.masked else out
 
 
 @dataclass
@@ -129,6 +130,7 @@ def make_variants(device: str, modes: list[str], selected: set[str] | None, prov
     variants = [
         Variant("pt_math_fp32", "pytorch", "fp32", "math"),
         Variant("onnx_sdpa_export_fp32", "onnx_export", "fp32"),
+        Variant("ort_attention24_fp32", "ort_attention24", "fp32", provider_option_sdpa_kernel=provider_sdpa_kernel),
         Variant("ort_mha_fp32", "ort_mha", "fp32", provider_option_sdpa_kernel=provider_sdpa_kernel),
     ]
     if device == "cpu":
@@ -136,6 +138,7 @@ def make_variants(device: str, modes: list[str], selected: set[str] | None, prov
             [
                 Variant("pt_math_fp16", "pytorch", "fp16", "math"),
                 Variant("onnx_sdpa_export_fp16", "onnx_export", "fp16"),
+                Variant("ort_attention24_fp16", "ort_attention24", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
                 Variant("ort_mha_fp16", "ort_mha", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
                 Variant("onnx_sdpa_static_int8", "onnx_static_quant", "int8"),
             ]
@@ -145,6 +148,7 @@ def make_variants(device: str, modes: list[str], selected: set[str] | None, prov
             [
                 Variant("pt_flash_fp16", "pytorch", "fp16", "flash"),
                 Variant("pt_efficient_fp32", "pytorch", "fp32", "efficient"),
+                Variant("ort_attention24_fp16", "ort_attention24", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
                 Variant("ort_mha_fp16", "ort_mha", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
                 Variant("onnx_sdpa_static_int8", "onnx_static_quant", "int8"),
             ]
@@ -182,7 +186,10 @@ def make_inputs(batch, seq_len, hidden, dtype, device, masked, mask_fraction, se
         mask = torch.ones(batch, seq_len, dtype=torch.int32, device=device)
         num_masked = int(seq_len * mask_fraction)
         if num_masked > 0:
-            mask[:, seq_len - num_masked :] = 0
+            for i in range(batch):
+                count = min(seq_len - 1, num_masked * (i + 1) // batch)
+                if count:
+                    mask[i, seq_len - count :] = 0
     return query, key, value, mask
 
 
@@ -201,6 +208,17 @@ def run_pytorch_variant(variant, query, key, value, mask, num_heads, head_dim):
         "efficient": torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION,
     }[variant.backend]
     with torch.no_grad(), torch.nn.attention.sdpa_kernel(backend):
+        if variant.backend == "flash" and mask is not None:
+            from flash_attn import flash_attn_varlen_func
+
+            valid = mask.bool()
+            lengths = valid.sum(-1, dtype=torch.int32)
+            cu = F.pad(lengths.cumsum(0, dtype=torch.int32), (1, 0))
+            q, k, v = [x[valid].reshape(-1, num_heads, head_dim) for x in (query, key, value)]
+            packed = flash_attn_varlen_func(q, k, v, cu, cu, query.shape[1], key.shape[1], dropout_p=0.0, causal=False)
+            out = torch.zeros_like(query)
+            out[valid] = packed.reshape(-1, num_heads * head_dim)
+            return out
         return module(query, key, value, mask)
 
 
@@ -253,6 +271,37 @@ def make_mha_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked)
         opset_imports=[helper.make_opsetid("", 20), helper.make_opsetid("com.microsoft", 1)],
     )
     model.ir_version = min(model.ir_version, 10)
+    onnx.save(model, path)
+
+
+def make_attention24_model(path, hidden, dtype_proto, num_heads, masked):
+    inputs = [helper.make_tensor_value_info(n, dtype_proto, ["batch", "seq", hidden]) for n in ("query", "key", "value")]
+    nodes = []
+    attention_inputs = ["query", "key", "value"]
+    if masked:
+        inputs.append(helper.make_tensor_value_info("mask", TensorProto.INT32, ["batch", "seq"]))
+        nodes.extend(
+            [
+                helper.make_node("Cast", ["mask"], ["mask64"], to=TensorProto.INT64),
+                helper.make_node("Constant", [], ["axes"], value=helper.make_tensor("axes", TensorProto.INT64, [1], [1])),
+                helper.make_node("ReduceSum", ["mask64", "axes"], ["lengths"], keepdims=0),
+            ]
+        )
+        attention_inputs += ["", "", "", "lengths"]
+    nodes.append(helper.make_node("Attention", attention_inputs, ["raw" if masked else "output"], q_num_heads=num_heads, kv_num_heads=num_heads, is_causal=0))
+    if masked:
+        nodes.extend(
+            [
+                helper.make_node("Cast", ["mask"], ["mask_float"], to=dtype_proto),
+                helper.make_node("Constant", [], ["last_axis"], value=helper.make_tensor("last_axis", TensorProto.INT64, [1], [2])),
+                helper.make_node("Unsqueeze", ["mask_float", "last_axis"], ["query_mask"]),
+                helper.make_node("Mul", ["raw", "query_mask"], ["output"]),
+            ]
+        )
+    model = helper.make_model(
+        helper.make_graph(nodes, "Attention24", inputs, [helper.make_tensor_value_info("output", dtype_proto, ["batch", "seq", hidden])]), opset_imports=[helper.make_opsetid("", 24)], ir_version=10
+    )
+    onnx.checker.check_model(model)
     onnx.save(model, path)
 
 
@@ -334,7 +383,12 @@ def create_session(path, args, variant, model_dir):
         providers = [("CUDAExecutionProvider", opts), "CPUExecutionProvider"]
     else:
         providers = ["CPUExecutionProvider"]
-    return ort.InferenceSession(str(path), so, providers=providers)
+    if args.device == "cuda":
+        ort.preload_dlls()
+    session = ort.InferenceSession(str(path), so, providers=providers)
+    if args.device == "cuda" and "CUDAExecutionProvider" not in session.get_providers():
+        raise RuntimeError("CUDA provider failed to initialize; refusing CPU fallback")
+    return session
 
 
 def to_numpy_inputs(query, key, value, mask, variant):
@@ -495,6 +549,8 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
             model_path = model_dir / f"{variant.name}_s{seq_len}.onnx"
             if variant.engine == "onnx_export":
                 export_sdpa_model(model_path, query, key, value, mask, args.num_heads, args.head_dim, variant.masked)
+            elif variant.engine == "ort_attention24":
+                make_attention24_model(model_path, hidden, onnx_dtype, args.num_heads, variant.masked)
             elif variant.engine == "ort_mha":
                 make_mha_model(model_path, args.batch_size, seq_len, hidden, onnx_dtype, args.num_heads, variant.masked)
             elif variant.engine == "onnx_static_quant":
@@ -559,6 +615,8 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
 
         result.update(summarize_times(times))
         result.update(summarize_memory(result["runs"]))
+        if variant.masked:
+            output_np = np.where(mask.cpu().numpy()[..., None].astype(bool), output_np, 0)
         diff = np.abs(reference - output_np.astype(np.float32))
         result["mae"] = float(np.nanmean(diff))
         result["max_abs_err"] = float(np.nanmax(diff))
@@ -656,12 +714,7 @@ def print_ranking(results):
         peak_memory_mib = row.get("peak_memory_mib")
         if peak_memory_mib is None:
             peak_memory_mib = float("nan")
-        print(
-            f"  S={row['sequence_length']:5d} {row['variant']:<32s} "
-            f"{row['mean_ms']:10.3f} ms  "
-            f"peak_mem={peak_memory_mib:10.1f} MiB  "
-            f"MAE={row.get('mae', float('nan')):.3e}"
-        )
+        print(f"  S={row['sequence_length']:5d} {row['variant']:<32s} {row['mean_ms']:10.3f} ms  peak_mem={peak_memory_mib:10.1f} MiB  MAE={row.get('mae', float('nan')):.3e}")
     if failed:
         print("\nFailures:")
         for row in failed:

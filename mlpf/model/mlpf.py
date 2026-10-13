@@ -8,6 +8,7 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from mlpf.logger import _logger
 from mlpf.model.gnnlsh import CombinedGraphLayer
+from mlpf.model.onnx_attention import export_attention
 
 try:
     from mlpf.model.litept import LitePTLayer
@@ -125,6 +126,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         self.head_dim = int(embed_dim // num_heads)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
         self.export_onnx_fused = export_onnx_fused
+        self.onnx_attention_dtype = None
         self.attention_type = AttentionType(attention_type)
         self.use_flash_attn_varlen = use_flash_attn_varlen
         if self.use_flash_attn_varlen and self.attention_type != AttentionType.FLASH:
@@ -188,26 +190,17 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
                 )
                 nested_qkv.append(nested.transpose(1, 2))
             q_attn, k_attn, v_attn = nested_qkv
-        elif not self.export_onnx_fused:
+        else:
             q_attn = q_values.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
             k_attn = k_values.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
             v_attn = v_values.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
-        else:
-            q_attn, k_attn, v_attn = q_values, k_values, v_values
-
-        # this function will have different shape signatures in native pytorch sdpa and in ONNX com.microsoft.MultiHeadAttention
-        # in pytorch: (bs, num_heads, seq_len, head_dim)
-        # in ONNX: (bs, seq_len, num_heads*head_dim)
-
         # Dense flash SDPA does not accept a non-null mask. Callers that need
         # correct variable-length flash attention must pass jagged q/k/v.
         attn_mask = None
         if key_padding_mask is not None:
             # key_padding_mask: [bs, seq_len], True where elements are to be ignored
             # scaled_dot_product_attention expects attn_mask: [bs, 1, 1, seq_len], False where elements are to be ignored
-            if self.export_onnx_fused:
-                attn_mask = ~key_padding_mask.unsqueeze(1)
-            elif self.attention_type == AttentionType.FLASH:
+            if self.attention_type == AttentionType.FLASH and not self.export_onnx_fused:
                 raise ValueError("Dense flash attention cannot use key_padding_mask; enable jagged attention")
             else:
                 attn_mask = ~key_padding_mask.view(bs, 1, 1, k_len)
@@ -226,10 +219,19 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
                 causal=False,
             )
         elif self.export_onnx_fused:
-            attn_output = torch.nn.functional.scaled_dot_product_attention(q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout)
+            if self.onnx_attention_dtype is not None:
+                q_attn, k_attn, v_attn = (t.to(self.onnx_attention_dtype) for t in (q_attn, k_attn, v_attn))
+            valid = ~key_padding_mask if key_padding_mask is not None else torch.ones_like(k_values[..., 0], dtype=torch.bool)
+            if torch.onnx.is_in_onnx_export():
+                attn_output = export_attention(q_attn, k_attn, v_attn, valid)
+            else:
+                with sdpa_kernel(SDPBackend.MATH):
+                    attn_output = torch.nn.functional.scaled_dot_product_attention(
+                        q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout if self.training else 0.0
+                    )
         else:
             with sdpa_kernel(self.attn_params[self.attention_type]):
-                attn_output = torch.nn.functional.scaled_dot_product_attention(q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout)
+                attn_output = torch.nn.functional.scaled_dot_product_attention(q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout if self.training else 0.0)
 
         # Keep residual paths type-stable for half-precision ONNX export.
         attn_output = attn_output.to(q_values.dtype)
@@ -240,7 +242,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
                 attn_output = attn_output.reshape(-1, num_heads * head_dim)
             else:
                 attn_output = attn_output.transpose(1, 2).values().reshape(-1, num_heads * head_dim)
-        elif not self.export_onnx_fused:
+        else:
             attn_output = attn_output.transpose(1, 2).reshape(bs, -1, num_heads * head_dim)
 
         # assert list(attn_output.size()) == [bs, seq_len, num_heads * head_dim]
@@ -327,7 +329,8 @@ class PreLnSelfAttentionLayer(nn.Module):
         if mask is not None and not jagged_input:
             q = q * mask_
 
-        mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
+        key_padding_mask = None if jagged_input or mask is None else ~mask.bool()
+        mha_out = self.mha(q, x_norm, x_norm, need_weights=False, key_padding_mask=key_padding_mask)[0]
 
         self.mha_res_norm = (mha_out.values if jagged_input else mha_out).norm().detach()
 
@@ -1213,7 +1216,7 @@ class MLPF(nn.Module):
             backbone_dropout_mha = sub_config.dropout_conv_id_mha
             backbone_dropout_ff = sub_config.dropout_conv_id_ff
             self.use_pre_layernorm = sub_config.use_pre_layernorm
-            self.use_jagged_attention = sub_config.use_jagged_attention
+            self.use_jagged_attention = sub_config.use_jagged_attention or (attention_type == AttentionType.FLASH and not sub_config.export_onnx_fused)
             self.use_flash_attn_varlen = sub_config.use_flash_attn_varlen
             export_onnx_fused = sub_config.export_onnx_fused
             save_attention = sub_config.save_attention

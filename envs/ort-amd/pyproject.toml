@@ -1,0 +1,17 @@
+[project]
+name = "particleflow-ort-amd"
+version = "3.1.0"
+# AMD publishes MIGraphX wheels for 3.10/3.12, not particleflow's Python 3.11.
+# This environment replays exports; it deliberately does not install particleflow.
+requires-python = "==3.12.*"
+dependencies = [
+    "numpy>=1.26,<3",
+    "onnx>=1.19,<1.24",
+    "onnxruntime-migraphx==1.23.2",
+]
+
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.sources]
+onnxruntime-migraphx = { url = "https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.4/onnxruntime_migraphx-1.23.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }

@@ -47,9 +47,32 @@ uv sync --project envs/ort-cpu
 
 # Nvidia GPU inference and numerical validation
 uv sync --project envs/ort-gpu
+
+# AMD MIGraphX inference only (Linux x86-64, ROCm 7.2.4 installed on the host)
+uv sync --project envs/ort-amd
 ```
 
 Run a command in the matching environment with `uv run --project envs/ort-cpu ...` or `uv run --project envs/ort-gpu ...`.
+
+The CPU and Nvidia projects pin ONNX Runtime **1.29.0**. The Nvidia project
+resolves `onnxruntime-gpu` exclusively from Microsoft's CUDA 12 package feed;
+its wheel reports CUDA **12.8** and needs a compatible host driver. Do not
+replace this with the default PyPI wheel: recent releases there use CUDA 13.
+1.29.0 is the newest stable CUDA 12 Python wheel verified in that feed for this
+upgrade. No manual copying of provider libraries is needed.
+
+Check the [ORT releases](https://github.com/microsoft/onnxruntime/releases) and
+the [CUDA 12 wheel feed](https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/onnxruntime-gpu/)
+separately when updating this pin: the latest upstream release need not have a
+stable CUDA 12 Python wheel.
+
+The AMD project is a separate Python **3.12** inference environment with AMD's
+ONNX Runtime MIGraphX **1.23.2** wheel for ROCm **7.2.4**. AMD does not publish a
+matching Python 3.11 wheel, so it does not install `particleflow`, PyTorch, TFDS,
+or CUDA packages. Export with the CPU/Nvidia environment and replay saved input
+batches there using the [ONNX validation guide](../validation/onnx.md). Installing
+the wheel does not install the host ROCm/MIGraphX libraries or establish GPU
+operator support.
 
 ## Prepared container
 

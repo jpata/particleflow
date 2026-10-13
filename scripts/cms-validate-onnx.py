@@ -23,10 +23,7 @@ import matplotlib.pyplot as plt
 import mplhep
 import boost_histogram as bh
 import torch
-import onnx
 import onnxruntime as rt
-import onnxscript
-from onnxscript import opset20 as op
 import awkward
 import vector
 import fastjet
@@ -37,6 +34,7 @@ os.environ.setdefault("HEPTV2_DIRECT_BUCKET_GATHER", "0")
 
 print("onnxruntime", rt.__path__)
 from mlpf.model.mlpf import MLPF  # noqa: E402
+from mlpf.model.onnx_attention import export_mlpf, validate_padding_mask  # noqa: E402
 from mlpf.conf import MLPFConfig, ModelType, AttentionType  # noqa: E402
 from mlpf.model.utils import unpack_predictions  # noqa: E402
 from mlpf.plotting.plot_utils import ELEM_NAMES_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CLIC  # noqa: E402
@@ -59,7 +57,7 @@ def make_mlpf_config(model_kwargs: MLPFConfig, **overrides):
     config = model_kwargs.model_copy(deep=True)
     # Apply overrides
     for k, v in overrides.items():
-        if k in ["export_onnx_fused", "save_attention", "attention_type"]:
+        if k in ["export_onnx_fused", "save_attention", "attention_type", "use_jagged_attention", "use_flash_attn_varlen"]:
             if config.model.type == ModelType.ATTENTION:
                 setattr(config.model.attention, k, v)
         elif hasattr(config, k):
@@ -72,7 +70,7 @@ def make_mlpf_config(model_kwargs: MLPFConfig, **overrides):
 # Updated configurations
 SUPPORTED_CONFIGS = [
     # Attention-based models
-    "ONNX_ATTN_FLASH_FP32",
+    "ONNX_ATTN_OP_FP32",
     "ONNX_ATTN_FLASH_FP16",
     "ONNX_ATTN_FLASH_FP32_FP16",
     "ONNX_ATTN_MATH_FP16",
@@ -112,6 +110,10 @@ def parse_args():
         default=SUPPORTED_CONFIGS,
         help="List of configurations to run",
     )
+    parser.add_argument("--batch-size", type=int, default=1, help="Events per inference batch (right-padded independently)")
+    parser.add_argument("--save-inputs", action="store_true", help="Save NPZ batches for standalone AMD/CPU/CUDA replay")
+    parser.add_argument("--profile", action="store_true", help="Save ONNX execution-provider profiles")
+    parser.add_argument("--compile", action="store_true", help="Compile PyTorch models before validation")
     parser.add_argument("--num-threads", type=int, default=1, help="Number of CPU threads to use")
     return parser.parse_args()
 
@@ -206,6 +208,12 @@ def get_gpu_info():
 def main():
     print("Starting MLPF ONNX validation script...")
     args = parse_args()
+    if args.batch_size < 1 or args.num_events < 1:
+        raise ValueError("--batch-size and --num-events must be positive")
+    if args.device == "cuda":
+        rt.preload_dlls()
+        if not torch.cuda.is_available() or "CUDAExecutionProvider" not in rt.get_available_providers():
+            raise RuntimeError("CUDA validation requires CUDA PyTorch and ONNX Runtime; use envs/ort-gpu")
 
     # Set seeds for reproducibility during model initialization and export
     torch.manual_seed(42)
@@ -260,14 +268,6 @@ def main():
     except Exception as e:
         print(f"Could not load step losses: {e}")
 
-    if model_kwargs.model.type == ModelType.ATTENTION:
-        NUM_HEADS = model_kwargs.model.attention.num_heads
-    elif model_kwargs.model.type == ModelType.HEPT:
-        NUM_HEADS = model_kwargs.model.hept.num_heads
-    elif model_kwargs.model.type == ModelType.HEPTV2:
-        NUM_HEADS = model_kwargs.model.heptv2.num_heads
-    else:
-        NUM_HEADS = 1
     input_dim = model_kwargs.input_dim
 
     # For HEPT and GNN-LSH models, we MUST pad to block_size externally for ONNX
@@ -281,8 +281,6 @@ def main():
     elif model_kwargs.model.type == ModelType.GNNLSH:
         pad_size = max(pad_size, model_kwargs.model.gnnlsh.bin_size)
 
-    opset_version = 20
-
     configs = args.configs
     # Auto-select configs based on model type if not specified
     if not args.configs or set(args.configs) == set(SUPPORTED_CONFIGS):
@@ -290,11 +288,10 @@ def main():
             configs = [
                 "PT_ATTN_MATH_FP32",
                 "PT_ATTN_MATH_FP16",
-                "PT_ATTN_FLASH_FP32",
                 "PT_ATTN_FLASH_FP16",
                 "ONNX_ATTN_MATH_FP32",
                 "ONNX_ATTN_MATH_FP16",
-                "ONNX_ATTN_FLASH_FP32",
+                "ONNX_ATTN_OP_FP32",
                 "ONNX_ATTN_FLASH_FP32_FP16",
                 "ONNX_ATTN_FLASH_FP16",
             ]
@@ -308,7 +305,9 @@ def main():
             configs = ["PT_GNNLSH_FP32", "ONNX_GNNLSH_FP32"]
 
     if args.device == "cpu":
-        configs = [c for c in configs if "LITEPT" not in c]
+        if args.configs != SUPPORTED_CONFIGS and any("FLASH" in cfg for cfg in configs):
+            raise ValueError("FLASH configurations require --device cuda; use ONNX_ATTN_OP_FP32 for CPU Attention-24")
+        configs = [c for c in configs if "LITEPT" not in c and "FLASH" not in c]
         if not configs:
             print("LitePT is not supported on CPU. Skipping.")
             return
@@ -317,186 +316,56 @@ def main():
     # Reorder configs to run baseline first for comparison
     configs = [baseline] + [c for c in configs if c != baseline]
 
-    # Model Variants for Export (always in float32 for export reliability)
-    model_kwargs_export = model_kwargs.model_copy(deep=True)
-    if model_kwargs_export.model.type == ModelType.ATTENTION:
-        model_kwargs_export.model.attention.attention_type = AttentionType.SIMPLE
-
-    # model_export is used for non-fused exports (ATTN_MATH, HEPT, GNNLSH)
-    if any(cfg in configs for cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_ATTN_MATH_FP16", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]):
-        print("Initializing model for export...")
-        model_export = MLPF(
-            config=make_mlpf_config(model_kwargs_export, export_onnx_fused=False),
+    # Export with B>1 and unequal lengths, regardless of the inference batch size.
+    export_dummy_size = max(32, pad_size)
+    dummy_features = torch.randn(2, export_dummy_size, input_dim)
+    dummy_features[..., 0] = model_kwargs.elemtypes_nonzero[0]
+    dummy_features[..., 1] = dummy_features[..., 1].exp()
+    dummy_features[..., 5] = dummy_features[..., 5].exp()
+    dummy_mask = torch.ones(2, export_dummy_size)
+    dummy_features[1, export_dummy_size // 2 :] = 0
+    dummy_mask[1, export_dummy_size // 2 :] = 0
+    paths = {
+        "ONNX_ATTN_MATH_FP32": path_math_fp32,
+        "ONNX_ATTN_MATH_FP16": path_math_fp16,
+        "ONNX_ATTN_OP_FP32": path_fused_fp32,
+        "ONNX_ATTN_FLASH_FP32_FP16": path_fused_fp32_fp16,
+        "ONNX_ATTN_FLASH_FP16": path_fused_fp16,
+        "ONNX_HEPT_FP32": path_math_fp32,
+        "ONNX_HEPTV2_FP32": path_math_fp32,
+        "ONNX_GNNLSH_FP32": path_math_fp32,
+    }
+    for cfg in configs:
+        if cfg not in paths:
+            continue
+        standard_attention = cfg in ("ONNX_ATTN_OP_FP32", "ONNX_ATTN_FLASH_FP32_FP16", "ONNX_ATTN_FLASH_FP16")
+        export_config = make_mlpf_config(
+            model_kwargs,
+            attention_type=AttentionType.MATH,
+            export_onnx_fused=standard_attention,
+            use_jagged_attention=False,
+            use_flash_attn_varlen=False,
+            save_attention=False,
         )
-        model_export.eval()
-        model_export.load_state_dict(model_state["model_state_dict"], strict=False)
-        model_export = model_export.to(device=args.device)
-
-    # Fused attention model (for fused export)
-    if any(cfg in configs for cfg in ["ONNX_ATTN_FLASH_FP32", "ONNX_ATTN_FLASH_FP32_FP16", "ONNX_ATTN_FLASH_FP16"]):
-        print("Initializing Fused attention model for export...")
-        model_fused = MLPF(
-            config=make_mlpf_config(model_kwargs_export, export_onnx_fused=True),
-        )
-        model_fused.eval()
-        model_fused.load_state_dict(model_state["model_state_dict"], strict=False)
-        model_fused = model_fused.to(device=args.device)
-
-    # Export ATTN_MATH/HEPT/GNNLSH model
-    # Use dummy input size that is a multiple of HEPT block_size (100) or GNNLSH bin_size
-    export_dummy_size = 400
-    if pad_size > 0:
-        export_dummy_size = ((export_dummy_size + pad_size - 1) // pad_size) * pad_size
-
-    dummy_features = torch.randn(1, export_dummy_size, input_dim).float().to(args.device)
-    dummy_mask = torch.ones(1, export_dummy_size).float().to(args.device)
-
-    # 1. Export ONNX ATTN_MATH/HEPT/GNNLSH FP32
-    if any(cfg in configs for cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]):
-
-        path_math_fp32 = os.path.join(args.outdir, "model_math_fp32.onnx")
-        print(f"Exporting ONNX ATTN_MATH/HEPT/GNNLSH FP32 to {path_math_fp32}...")
-
-        torch.onnx.export(
+        model_export = MLPF(export_config).eval()
+        model_export.load_state_dict(model_state["model_state_dict"], strict=True)
+        full_half = cfg in ("ONNX_ATTN_MATH_FP16", "ONNX_ATTN_FLASH_FP16")
+        if full_half:
+            model_export = model_export.half()
+        export_mlpf(
             model_export,
-            (dummy_features, dummy_mask),
-            path_math_fp32,
-            opset_version=opset_version,
-            verbose=False,
-            input_names=["Xfeat_normed", "mask"],
-            output_names=["bid", "id", "momentum", "pu"],
-            dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
-            dynamo=False,
+            dummy_features.half() if full_half else dummy_features,
+            dummy_mask.half() if full_half else dummy_mask,
+            paths[cfg],
+            attention_dtype=torch.float16 if cfg == "ONNX_ATTN_FLASH_FP32_FP16" else None,
         )
-
-    # 2. Export ONNX ATTN_MATH FP16
-    if "ONNX_ATTN_MATH_FP16" in configs:
-        path_math_fp16 = os.path.join(args.outdir, "model_math_fp16.onnx")
-        print(f"Exporting ONNX ATTN_MATH FP16 to {path_math_fp16}...")
-        # Re-instantiate model for FP16 export instead of using deepcopy
-        model_export_half = MLPF(
-            config=make_mlpf_config(model_kwargs_export, export_onnx_fused=False),
-        )
-        model_export_half.eval()
-        model_export_half.load_state_dict(model_state["model_state_dict"], strict=False)
-        model_export_half = model_export_half.to(device=args.device).half()
-        torch.onnx.export(
-            model_export_half,
-            (dummy_features.half(), dummy_mask.half()),
-            path_math_fp16,
-            opset_version=opset_version,
-            verbose=False,
-            input_names=["Xfeat_normed", "mask"],
-            output_names=["bid", "id", "momentum", "pu"],
-            dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
-            dynamo=False,
-        )
-        del model_export_half
-
-    # 3. Export ONNX Fused Flash
-    if any(cfg in configs for cfg in ["ONNX_ATTN_FLASH_FP32", "ONNX_ATTN_FLASH_FP32_FP16", "ONNX_ATTN_FLASH_FP16"]):
-        print("Registering custom SDPA op for ONNX export...")
-        custom_opset = onnxscript.values.Opset(domain="onnx-script", version=1)
-        msft_op = onnxscript.values.Opset("com.microsoft", 1)
-
-        @onnxscript.script(custom_opset)
-        def SDPA_FP16(query, key, value):
-            q16 = op.Cast(query, to=onnx.TensorProto.FLOAT16)
-            k16 = op.Cast(key, to=onnx.TensorProto.FLOAT16)
-            v16 = op.Cast(value, to=onnx.TensorProto.FLOAT16)
-            output, _, _ = msft_op.MultiHeadAttention(q16, k16, v16, num_heads=NUM_HEADS)
-            return op.CastLike(output, query)
-
-        @onnxscript.script(custom_opset)
-        def SDPA_FP32(query, key, value):
-            output, _, _ = msft_op.MultiHeadAttention(query, key, value, num_heads=NUM_HEADS)
-            return output
-
-        def custom_scaled_dot_product_attention_fp16(
-            g, query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, enable_gqa=False
-        ):
-            return g.onnxscript_op(SDPA_FP16, query, key, value).setType(query.type())
-
-        def custom_scaled_dot_product_attention_fp32(
-            g, query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, enable_gqa=False
-        ):
-            return g.onnxscript_op(SDPA_FP32, query, key, value).setType(query.type())
-
-        # 3a. Export ONNX Fused Flash FP32
-        if "ONNX_ATTN_FLASH_FP32" in configs:
-            torch.onnx.register_custom_op_symbolic(
-                symbolic_name="aten::scaled_dot_product_attention",
-                symbolic_fn=custom_scaled_dot_product_attention_fp32,
-                opset_version=opset_version,
-            )
-            path_fused_fp32 = os.path.join(args.outdir, "model_fused_fp32.onnx")
-            print(f"Exporting ONNX Fused Flash FP32 to {path_fused_fp32}...")
-            torch.onnx.export(
-                model_fused,
-                (dummy_features, dummy_mask),
-                path_fused_fp32,
-                opset_version=opset_version,
-                verbose=False,
-                input_names=["Xfeat_normed", "mask"],
-                output_names=["bid", "id", "momentum", "pu"],
-                dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
-                dynamo=False,
-            )
-
-        # 3b. Export ONNX Fused Flash Mixed (FP32 model, FP16 attention)
-        if "ONNX_ATTN_FLASH_FP32_FP16" in configs:
-            torch.onnx.register_custom_op_symbolic(
-                symbolic_name="aten::scaled_dot_product_attention",
-                symbolic_fn=custom_scaled_dot_product_attention_fp16,
-                opset_version=opset_version,
-            )
-            path_fused_fp32_fp16 = os.path.join(args.outdir, "model_fused_fp32_fp16.onnx")
-            print(f"Exporting ONNX Fused Flash Mixed (FP32/FP16) to {path_fused_fp32_fp16}...")
-            torch.onnx.export(
-                model_fused,
-                (dummy_features, dummy_mask),
-                path_fused_fp32_fp16,
-                opset_version=opset_version,
-                verbose=False,
-                input_names=["Xfeat_normed", "mask"],
-                output_names=["bid", "id", "momentum", "pu"],
-                dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
-                dynamo=False,
-            )
-
-        # 3c. Export ONNX Fused Flash FP16 (Full FP16)
-        if "ONNX_ATTN_FLASH_FP16" in configs:
-            torch.onnx.register_custom_op_symbolic(
-                symbolic_name="aten::scaled_dot_product_attention",
-                symbolic_fn=custom_scaled_dot_product_attention_fp16,
-                opset_version=opset_version,
-            )
-            path_fused_fp16 = os.path.join(args.outdir, "model_fused_fp16.onnx")
-            print(f"Exporting ONNX Fused Flash FP16 to {path_fused_fp16}...")
-            # Re-instantiate model_fused for FP16 export instead of using deepcopy
-            model_fused_half = MLPF(
-                config=make_mlpf_config(model_kwargs_export, export_onnx_fused=True),
-            )
-            model_fused_half.eval()
-            model_fused_half.load_state_dict(model_state["model_state_dict"], strict=False)
-            model_fused_half = model_fused_half.to(device=args.device).half()
-            torch.onnx.export(
-                model_fused_half,
-                (dummy_features.half(), dummy_mask.half()),
-                path_fused_fp16,
-                opset_version=opset_version,
-                verbose=False,
-                input_names=["Xfeat_normed", "mask"],
-                output_names=["bid", "id", "momentum", "pu"],
-                dynamic_axes={"Xfeat_normed": {0: "num_batch", 1: "num_elements"}, "mask": {0: "num_batch", 1: "num_elements"}},
-                dynamo=False,
-            )
-            del model_fused_half
+        del model_export
 
     # Validation Setup
     print(f"Loading dataset {args.dataset} from {args.data_dir}...")
     builder = tfds.builder(args.dataset, data_dir=args.data_dir)
     ds = builder.as_data_source(split="train")
+    args.num_events = min(args.num_events, len(ds))
 
     results = {
         cfg: {
@@ -525,10 +394,15 @@ def main():
     sess_options = rt.SessionOptions()
     sess_options.intra_op_num_threads = args.num_threads
     sess_options.inter_op_num_threads = args.num_threads
+    if args.profile:
+        sess_options.enable_profiling = True
+        sess_options.profile_file_prefix = os.path.join(args.outdir, "ort_profile")
     execution_provider = "CPUExecutionProvider" if args.device == "cpu" else "CUDAExecutionProvider"
 
     for cfg in configs:
         print(f"Running validation for {cfg}...")
+        if "ONNX_ATTN_FLASH" in cfg:
+            os.environ["ORT_ENABLE_ATTENTION_KERNEL_DEBUG_INFO"] = "1"
 
         # 1. Initialize model/session dynamically for this configuration
         model = None
@@ -541,71 +415,79 @@ def main():
                 config=make_mlpf_config(
                     model_kwargs_math,
                     attention_type=AttentionType.MATH,
+                    use_jagged_attention=False,
+                    use_flash_attn_varlen=False,
                     export_onnx_fused=False,
                     save_attention=False,
                 ),
             )
             model.eval()
-            model.load_state_dict(model_state["model_state_dict"], strict=False)
+            model.load_state_dict(model_state["model_state_dict"], strict=True)
             model = model.to(device=args.device)
 
-        elif cfg in ["PT_ATTN_FLASH_FP32", "PT_ATTN_FLASH_FP16"]:
+        elif cfg == "PT_ATTN_FLASH_FP16":
             print("Initializing PyTorch Flash model...")
             model_kwargs_flash = model_kwargs.model_copy(deep=True)
             model = MLPF(
                 config=make_mlpf_config(
                     model_kwargs_flash,
-                    attention_type=AttentionType.FLASH if args.device == "cuda" else AttentionType.MATH,
+                    attention_type=AttentionType.FLASH,
+                    use_jagged_attention=True,
+                    use_flash_attn_varlen=True,
                     export_onnx_fused=False,
                     save_attention=False,
                 ),
             )
             model.eval()
-            model.load_state_dict(model_state["model_state_dict"], strict=False)
+            model.load_state_dict(model_state["model_state_dict"], strict=True)
             model = model.to(device=args.device)
 
         elif cfg in ["PT_HEPT_FP32", "PT_HEPTV2_FP32"]:
             print(f"Initializing PyTorch {cfg.split('_')[1]} model...")
             model = MLPF(config=model_kwargs)
             model.eval()
-            model.load_state_dict(model_state["model_state_dict"], strict=False)
+            model.load_state_dict(model_state["model_state_dict"], strict=True)
             model = model.to(device=args.device)
 
         elif cfg == "PT_LITEPT_FP32":
             print("Initializing PyTorch LitePT model...")
             model = MLPF(config=model_kwargs)
             model.eval()
-            model.load_state_dict(model_state["model_state_dict"], strict=False)
+            model.load_state_dict(model_state["model_state_dict"], strict=True)
             model = model.to(device=args.device)
 
         elif cfg == "PT_GNNLSH_FP32":
             print("Initializing PyTorch GNNLSH model...")
             model = MLPF(config=model_kwargs)
             model.eval()
-            model.load_state_dict(model_state["model_state_dict"], strict=False)
+            model.load_state_dict(model_state["model_state_dict"], strict=True)
             model = model.to(device=args.device)
 
         elif cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]:
             print(f"Creating ONNX session for ATTN_MATH/HEPT/HEPTV2/GNNLSH FP32 using {execution_provider}...")
-            sess = rt.InferenceSession(path_math_fp32, sess_options, providers=[execution_provider])
+            sess = rt.InferenceSession(path_math_fp32, sess_options, providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider])
 
-        elif cfg == "ONNX_ATTN_FLASH_FP32":
+        elif cfg == "ONNX_ATTN_OP_FP32":
             print(f"Creating ONNX session for Fused FP32 using {execution_provider}...")
-            sess = rt.InferenceSession(path_fused_fp32, sess_options, providers=[execution_provider])
+            sess = rt.InferenceSession(path_fused_fp32, sess_options, providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider])
 
         elif cfg == "ONNX_ATTN_MATH_FP16":
             print(f"Creating ONNX session for ATTN_MATH FP16 using {execution_provider}...")
-            sess = rt.InferenceSession(path_math_fp16, sess_options, providers=[execution_provider])
+            sess = rt.InferenceSession(path_math_fp16, sess_options, providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider])
 
         elif cfg == "ONNX_ATTN_FLASH_FP32_FP16":
             print(f"Creating ONNX session for Fused Mixed using {execution_provider}...")
-            sess = rt.InferenceSession(path_fused_fp32_fp16, sess_options, providers=[execution_provider])
+            sess = rt.InferenceSession(
+                path_fused_fp32_fp16, sess_options, providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider]
+            )
 
         elif cfg == "ONNX_ATTN_FLASH_FP16":
             print(f"Creating ONNX session for Fused FP16 using {execution_provider}...")
-            sess = rt.InferenceSession(path_fused_fp16, sess_options, providers=[execution_provider])
+            sess = rt.InferenceSession(path_fused_fp16, sess_options, providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider])
 
-        if model is not None:
+        if sess is not None and execution_provider not in sess.get_providers():
+            raise RuntimeError(f"Requested {execution_provider} but session selected {sess.get_providers()}")
+        if model is not None and args.compile:
             if model_kwargs.model.type == ModelType.LITEPT:
                 print("Skipping PyTorch compilation for LitePT model...")
             else:
@@ -619,8 +501,8 @@ def main():
             if warmup_seq_len % pad_size != 0:
                 warmup_seq_len = ((warmup_seq_len + pad_size - 1) // pad_size) * pad_size
 
-        X_warmup = torch.randn(1, warmup_seq_len, input_dim).float().to(args.device)
-        mask_warmup = torch.ones(1, warmup_seq_len, dtype=torch.bool, device=args.device)
+        X_warmup = torch.randn(args.batch_size, warmup_seq_len, input_dim).float().to(args.device)
+        mask_warmup = torch.ones(args.batch_size, warmup_seq_len, dtype=torch.bool, device=args.device)
 
         X_warmup_np = X_warmup.cpu().float().numpy()
         mask_f_warmup = mask_warmup.float().cpu().numpy()
@@ -637,8 +519,6 @@ def main():
                         with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
                             with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
                                 _ = model(X_warmup, mask_warmup)
-                    elif cfg == "PT_ATTN_FLASH_FP32":
-                        _ = model(X_warmup, mask_warmup)
                     elif cfg == "PT_ATTN_FLASH_FP16":
                         with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
                             _ = model(X_warmup, mask_warmup)
@@ -650,7 +530,7 @@ def main():
                     "ONNX_HEPT_FP32",
                     "ONNX_HEPTV2_FP32",
                     "ONNX_GNNLSH_FP32",
-                    "ONNX_ATTN_FLASH_FP32",
+                    "ONNX_ATTN_OP_FP32",
                     "ONNX_ATTN_FLASH_FP32_FP16",
                 ]:
                     _ = sess.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup})
@@ -659,29 +539,37 @@ def main():
         print(f"Warmup for {cfg} complete. Starting validation.")
 
         # 3. Run validation for this configuration
-        for i in tqdm(range(args.num_events)):
-            elem = ds[i]
-            X_features = torch.tensor(elem["X"]).to(torch.float32).to(args.device)
-            num_elements = X_features.shape[0]
-
-            # Pad elements to the nearest multiple if specified
+        for i in tqdm(range(0, args.num_events, args.batch_size)):
+            event_indices = list(range(i, min(i + args.batch_size, args.num_events)))
+            events = [torch.tensor(ds[j]["X"], dtype=torch.float32) for j in event_indices]
+            # Match TFDSDataSource's feature-width contract for mixed schema versions.
+            if any(event.shape[1] > input_dim for event in events):
+                raise ValueError(f"Dataset feature width exceeds model input_dim={input_dim}")
+            events = [torch.nn.functional.pad(event, (0, input_dim - event.shape[1])) for event in events]
+            if model_kwargs.sort_data:
+                events = [event[torch.argsort(event[:, 1], descending=True)] for event in events]
+            # Drop pre-existing zero padding before forming a new right-padded batch.
+            events = [event[event[:, 0] != 0] for event in events]
+            lengths = [len(event) for event in events]
+            if not all(lengths):
+                raise ValueError(f"Empty event in batch {event_indices}; remove empty events before inference")
+            num_elements = sum(lengths)
+            X_features_padded = torch.nn.utils.rnn.pad_sequence(events, batch_first=True).to(args.device)
+            padded_length = X_features_padded.shape[1]
             if pad_size > 0:
-                if num_elements % pad_size != 0:
-                    num_to_pad = pad_size - (num_elements % pad_size)
-                    X_features = torch.nn.functional.pad(X_features, (0, 0, 0, num_to_pad), mode="constant", value=0)
-
-            # Clip features to avoid FP16 overflow (max value ~65500)
-            X_features = torch.clamp(X_features, min=-60000, max=60000)
-
-            X_features_padded = X_features.unsqueeze(0).contiguous()
-            mask = torch.zeros(X_features_padded.shape[:2], dtype=torch.bool, device=args.device)
-            mask[:, :num_elements] = True
+                padded_length = ((padded_length + pad_size - 1) // pad_size) * pad_size
+                X_features_padded = torch.nn.functional.pad(X_features_padded, (0, 0, 0, padded_length - X_features_padded.shape[1]))
+            X_features_padded = X_features_padded.clamp(-60000, 60000).contiguous()
+            mask = torch.arange(padded_length, device=args.device)[None, :] < torch.tensor(lengths, device=args.device)[:, None]
+            validate_padding_mask(mask)
             mask_f = mask.float()
             m_cpu = mask.cpu()
 
             # Pre-convert to numpy for ONNX
             X_features_np = X_features_padded.cpu().float().numpy()
             mask_f_np = mask_f.cpu().numpy()
+            if args.save_inputs and cfg == baseline:
+                np.savez(os.path.join(args.outdir, f"inputs_{i:06d}.npz"), Xfeat_normed=X_features_np, mask=mask_f_np)
 
             try:
                 if args.device == "cuda":
@@ -698,9 +586,6 @@ def main():
                         with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
                             with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
                                 pred = model(X_features_padded, mask)
-                elif cfg == "PT_ATTN_FLASH_FP32":
-                    with torch.no_grad():
-                        pred = model(X_features_padded, mask)
                 elif cfg == "PT_ATTN_FLASH_FP16":
                     with torch.no_grad():
                         with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
@@ -711,7 +596,7 @@ def main():
                 elif cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]:
                     pred = sess.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
                     pred = tuple(torch.tensor(p) for p in pred)
-                elif cfg == "ONNX_ATTN_FLASH_FP32":
+                elif cfg == "ONNX_ATTN_OP_FP32":
                     pred = sess.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
                     pred = tuple(torch.tensor(p).float() for p in pred)
                 elif cfg == "ONNX_ATTN_MATH_FP16":
@@ -746,10 +631,34 @@ def main():
                 results[cfg]["runtime"].append(t1 - t0)
                 results[cfg]["memory_max"].append(mem_max)
                 results[cfg]["event_size"].append(num_elements)
-                results[cfg]["runs"].append({"event_idx": i, "size": num_elements, "runtime": t1 - t0, "memory_max": mem_max, "oom": False})
+                results[cfg]["runs"].append(
+                    {
+                        "event_idx": i,
+                        "event_indices": event_indices,
+                        "batch_size": len(lengths),
+                        "lengths": lengths,
+                        "padded_length": padded_length,
+                        "size": num_elements,
+                        "runtime": t1 - t0,
+                        "memory_max": mem_max,
+                        "oom": False,
+                    }
+                )
             except (rt.capi.onnxruntime_pybind11_state.RuntimeException, torch.cuda.OutOfMemoryError) as e:
                 is_oom = "Out of memory" in str(e) or isinstance(e, torch.cuda.OutOfMemoryError)
-                results[cfg]["runs"].append({"event_idx": i, "size": num_elements, "runtime": None, "memory_max": None, "oom": is_oom})
+                results[cfg]["runs"].append(
+                    {
+                        "event_idx": i,
+                        "event_indices": event_indices,
+                        "batch_size": len(lengths),
+                        "lengths": lengths,
+                        "padded_length": padded_length,
+                        "size": num_elements,
+                        "runtime": None,
+                        "memory_max": None,
+                        "oom": is_oom,
+                    }
+                )
                 print(f"Skipping event {i} for {cfg} due to error: {e}")
                 if args.device == "cuda":
                     torch.cuda.empty_cache()
@@ -786,6 +695,8 @@ def main():
         if model is not None:
             del model
         if sess is not None:
+            if args.profile:
+                print(f"ORT profile: {sess.end_profiling()}")
             del sess
         gc.collect()
         print(f"Finished validation for {cfg}.")
@@ -799,10 +710,10 @@ def main():
     plt.figure(figsize=(12, 8))
     for idx, cfg in enumerate(configs):
         plt.scatter(results[cfg]["event_size"], np.array(results[cfg]["runtime"]) * 1000.0, label=cfg, color=colors[idx], alpha=0.5)
-    plt.xlabel("Event size (number of elements)")
+    plt.xlabel("Batch size (total valid elements)")
     plt.ylabel("Inference time [ms]")
     plt.legend()
-    plt.title("Inference Runtime vs. Event Size", y=1.05)
+    plt.title("Inference Runtime vs. Batch Elements", y=1.05)
     plt.savefig(os.path.join(args.outdir, "runtime_vs_size.pdf"), bbox_inches="tight")
     plt.close()
 
@@ -839,7 +750,7 @@ def main():
             color=colors[idx],
         )
     plt.xlabel("Inference time [ms]")
-    plt.ylabel("Number of events")
+    plt.ylabel("Number of batches")
     plt.legend()
     plt.title("Distribution of Inference Runtime", y=1.05)
     plt.savefig(os.path.join(args.outdir, "runtime_dist.pdf"), bbox_inches="tight")
@@ -874,7 +785,7 @@ def main():
         print(f"{cfg:20s}: {results[cfg]['mae']:.6e}{invalid_str}")
         # Print per-event MAE for the first few events to debug
         event_maes = [run.get("mae") for run in results[cfg]["runs"][:10]]
-        print(f"  First 10 events MAE: {['{:.2e}'.format(m) if m is not None else 'None' for m in event_maes]}")
+        print(f"  First 10 batches MAE: {['{:.2e}'.format(m) if m is not None else 'None' for m in event_maes]}")
 
     print("\nMean Runtime Summary:")
     for cfg in configs:
@@ -979,6 +890,9 @@ def main():
     summary = {
         "num_processed_events": args.num_events,
         "event_size_distribution": all_event_sizes,
+        "batch_size": args.batch_size,
+        "pad_bin_size": pad_size,
+        "runtime_unit": "seconds_per_batch",
         "train_loss": train_loss,
         "valid_loss": valid_loss,
         "system": {
