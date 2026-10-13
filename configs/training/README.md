@@ -1,5 +1,25 @@
 # Reusable training scenarios
 
+The recommended CLD hit-model default is `pyg-cld-hits-heptv2-set-v1` in
+`particleflow_spec.yaml`. Use `cld_pf_heptv2_default_50k` for its training recipe:
+
+```bash
+scripts/lumi/train_scenario.sh cld_pf_heptv2_default_50k mi250x --dry-run
+scripts/local/train_scenario.sh cld_pf_heptv2_default_50k --dry-run
+```
+
+This promotes the 50k `hit_heptv2_grouped_tracker_features` result: six HEPTv2
+layers, four global Flash decoder layers, 256 slots, supervised hit grouping,
+and tracker-neighborhood features. Circle-fit readout, bounded fit correction,
+detector-balanced grouping loss and event-consistency loss are disabled.
+The recipe uses learning rate 0.001, global batch 64 and seed 12345; the local
+launcher applies its usual short-run overrides and global batch 1.
+
+On the study's 1,536 test events, charged pT residual half-width improved from
+16.53% to 14.89% and charged matching efficiency from 77.16% to 78.40% versus
+the previous grouped reference. This is the single-seed result evaluated on
+2026-10-13. Historical sector and comparison presets remain unchanged.
+
 Scientific comparisons live under `scenarios/`; machine-dependent paths and runtime
 tuning live under `platforms/`. Run a scenario locally with:
 
@@ -155,3 +175,9 @@ The same diagnostics also report tracker and calorimeter instance ARI for raw
 features and embeddings. Their default per-rank split is 8 fitting, 4 threshold
 calibration and 4 evaluation events; TensorBoard tags end in `/raw/ari` and
 `/embedding/ari`. Calibration and final evaluation are disjoint.
+
+The next tracker-feature ablation is `cld_pf_heptv2_fit_loss_50k`: baseline,
+truth-circle compatibility loss, differentiable curvature loss, and both losses.
+All retain the learned inference readout. See
+[the experiment design](../../docs/tracker_fit_loss_experiments.md) for objectives,
+local commands and acceptance criteria.

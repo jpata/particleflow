@@ -801,6 +801,9 @@ class SetDecoderConfig(BaseModel):
     hit_grouping_loss_weight: float = Field(default=0.1, ge=0.0)
     hit_grouping_background_weight: float = Field(default=0.1, gt=0.0)
     hit_grouping_detector_balanced: bool = False
+    tracker_geometry_loss_weight: float = Field(default=0.0, ge=0.0)
+    tracker_curvature_loss_weight: float = Field(default=0.0, ge=0.0)
+    tracker_loss_max_hits: int = Field(default=64, ge=4)
     tracker_group_readout: bool = False
     tracker_fit_correction: bool = False
     tracker_fit_max_log_correction: float = Field(default=0.4054651081081644, gt=0.0)  # log(1.5)
@@ -824,6 +827,8 @@ class SetDecoderConfig(BaseModel):
             raise ValueError("set decoder hit grouping requires a positive hit_grouping_loss_weight")
         if (self.tracker_group_readout or self.hit_grouping_detector_balanced) and not self.hit_grouping:
             raise ValueError("tracker group readout and detector balancing require hit_grouping")
+        if (self.tracker_geometry_loss_weight or self.tracker_curvature_loss_weight) and not self.hit_grouping:
+            raise ValueError("tracker fit losses require hit_grouping")
         if self.tracker_fit_correction and not self.tracker_group_readout:
             raise ValueError("tracker_fit_correction requires tracker_group_readout")
         return self

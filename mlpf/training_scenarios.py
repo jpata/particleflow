@@ -75,8 +75,8 @@ class TrainingScenario(BaseModel):
 
     @model_validator(mode="after")
     def validate_scenario(self):
-        if len(self.variants) < 2:
-            raise ValueError("A comparison scenario requires at least two variants")
+        if not self.variants:
+            raise ValueError("A training scenario requires at least one variant")
         if len(set(self.seeds)) != len(self.seeds):
             raise ValueError("Scenario seeds must be unique")
         if any(seed < 0 for seed in self.seeds):

@@ -22,6 +22,33 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_cld_default_matches_winning_tracker_feature_configuration():
+    platform = load_platform_profile(ROOT / "configs/training/platforms/local.yaml")
+    configs = []
+    for name in ("cld_pf_heptv2_default_50k", "cld_pf_heptv2_grouped_tracking_50k"):
+        scenario = load_training_scenario(ROOT / f"configs/training/scenarios/{name}.yaml")
+        jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml", global_batch_size=8)
+        if name == "cld_pf_heptv2_default_50k":
+            assert len(jobs) == 1
+        configs.append(next(job.resolved_config for job in jobs if job.variant_name == "hit_heptv2_grouped_tracker_features"))
+    default, winner = configs
+    assert default.model.model_dump() == winner.model.model_dump()
+    for field in ("lr", "num_steps", "val_freq", "checkpoint_freq", "nvalid", "ntest", "sampler_mode", "seed"):
+        assert getattr(default, field) == getattr(winner, field)
+    assert default.model.hit_feature_engineering.tracker_neighborhood
+    assert default.model.set_decoder.hit_grouping
+    assert not default.model.set_decoder.tracker_group_readout
+    assert not default.model.set_decoder.tracker_fit_correction
+
+
+def test_training_scenario_rejects_empty_variants():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_default_50k.yaml")
+    payload = scenario.model_dump()
+    payload["variants"] = {}
+    with pytest.raises(ValueError, match="at least one variant"):
+        type(scenario).model_validate(payload)
+
+
 def test_fit_correction_scenario_resolves_three_controlled_variants():
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_fit_correction_50k.yaml")
     platform = load_platform_profile(ROOT / "configs/training/platforms/local.yaml")
@@ -640,3 +667,24 @@ def test_grouped_tracking_scenario_isolates_each_mechanism():
         assert variant[change[0]][change[1]] != baseline[change[0]][change[1]]
         variant[change[0]][change[1]] = baseline[change[0]][change[1]]
         assert variant == baseline
+
+
+def test_tracker_fit_loss_ablation_changes_only_auxiliary_weights():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_fit_loss_50k.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/local.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml", global_batch_size=8)
+    assert len(jobs) == 4
+    reference = None
+    weights = []
+    for job in jobs:
+        config = job.resolved_config
+        assert config.num_steps == 50000
+        assert config.model.hit_feature_engineering.tracker_neighborhood
+        decoder = config.model.set_decoder
+        assert decoder.hit_grouping and not decoder.tracker_group_readout and not decoder.tracker_fit_correction
+        model = config.model.model_dump()
+        weights.append((model["set_decoder"].pop("tracker_geometry_loss_weight"), model["set_decoder"].pop("tracker_curvature_loss_weight")))
+        if reference is None:
+            reference = model
+        assert model == reference
+    assert weights == [(0., 0.), (.01, 0.), (0., .1), (.01, .1)]

@@ -139,10 +139,12 @@ def test_hit_grouping_uses_predicted_membership_and_event_local_truth():
     assert model.set_decoder.hit_grouping_background.weight.grad is not None
 
 
-def test_hit_grouping_is_included_in_set_training_loss():
+@pytest.mark.parametrize("fit_weight", [0.0, 0.1])
+def test_hit_grouping_is_included_in_set_training_loss(fit_weight):
     from mlpf.model.training import model_step
 
-    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=True)
+    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=True,
+                         tracker_geometry_loss_weight=fit_weight, tracker_curvature_loss_weight=fit_weight)
     model = MLPF(config)
     features = torch.zeros(1, 5, config.input_dim)
     features[..., 0] = torch.tensor([1, 1, 2, 2, 2])
@@ -155,6 +157,8 @@ def test_hit_grouping_is_included_in_set_training_loss():
     batch = PFBatch(X=features, ytarget=hit_target, ytarget_set=target)
     loss, losses, _, _, _, _ = model_step(batch, model, None, REGRESSION_WEIGHTS)
     assert losses["HitGrouping"] > 0
+    assert ("TrackerGeometry" in losses) == (fit_weight > 0)
+    assert ("TrackerCurvature" in losses) == (fit_weight > 0)
     loss.backward()
     assert model.set_decoder.hit_grouping_projection.weight.grad is not None
 

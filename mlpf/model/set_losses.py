@@ -197,6 +197,10 @@ def set_mlpf_loss(
     hit_grouping_chunk_size=1024,
     hit_grouping_background_weight=0.1,
     hit_grouping_detector_balanced=False,
+    tracker_geometry_loss_weight=0.0,
+    tracker_curvature_loss_weight=0.0,
+    tracker_loss_max_hits=64,
+    tracker_group_magnetic_field=2.0,
     event_consistency_loss_weight=0.0,
 ):
     """Compute the set-prediction objective with the standard task names."""
@@ -236,6 +240,21 @@ def set_mlpf_loss(
         )
         losses["HitGrouping"] = hit_grouping_loss_weight * grouping_loss
         loss_opt = loss_opt + losses["HitGrouping"]
+
+    if tracker_geometry_loss_weight > 0 or tracker_curvature_loss_weight > 0:
+        from mlpf.model.tracker_fit_loss import tracker_fit_losses
+
+        if hit_grouping is None:
+            raise ValueError("Tracker fit supervision requires learned hit grouping")
+        fit_losses = tracker_fit_losses(
+            hit_grouping, batch, matches, magnetic_field=tracker_group_magnetic_field,
+            max_hits=tracker_loss_max_hits, chunk_size=hit_grouping_chunk_size,
+        )
+        for name, weight in (("TrackerGeometry", tracker_geometry_loss_weight), ("TrackerCurvature", tracker_curvature_loss_weight)):
+            losses[name] = weight * fit_losses[name]
+            loss_opt = loss_opt + losses[name]
+        for name in ("TrackerGeometryCount", "TrackerCurvatureCount", "TrackerCandidateCount"):
+            losses[name] = fit_losses[name]
 
     if event_consistency_loss_weight > 0:
         losses["EventConsistency"] = event_consistency_loss_weight * event_consistency_loss(targets, predictions, batch.target_mask)
