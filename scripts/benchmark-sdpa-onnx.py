@@ -93,7 +93,9 @@ def parse_args():
     parser.add_argument("--seq-lens", type=int, nargs="+", default=[512, 1024, 2048, 4096, 8192, 10000])
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--batch-sizes", type=int, nargs="+", help="Sweep batch sizes instead of --batch-size")
-    parser.add_argument("--length-policy", choices=["staggered", "balanced"], default="staggered", help="Balanced keeps mean valid length fixed across batch sizes")
+    parser.add_argument(
+        "--length-policy", choices=["staggered", "balanced"], default="staggered", help="Balanced keeps mean valid length fixed across batch sizes"
+    )
     parser.add_argument("--num-heads", type=int, default=16)
     parser.add_argument("--head-dim", type=int, default=16)
     parser.add_argument("--iters", type=int, default=10)
@@ -291,7 +293,9 @@ def make_attention24_model(path, hidden, dtype_proto, num_heads, masked):
             ]
         )
         attention_inputs += ["", "", "", "lengths"]
-    nodes.append(helper.make_node("Attention", attention_inputs, ["raw" if masked else "output"], q_num_heads=num_heads, kv_num_heads=num_heads, is_causal=0))
+    nodes.append(
+        helper.make_node("Attention", attention_inputs, ["raw" if masked else "output"], q_num_heads=num_heads, kv_num_heads=num_heads, is_causal=0)
+    )
     if masked:
         nodes.extend(
             [
@@ -302,7 +306,9 @@ def make_attention24_model(path, hidden, dtype_proto, num_heads, masked):
             ]
         )
     model = helper.make_model(
-        helper.make_graph(nodes, "Attention24", inputs, [helper.make_tensor_value_info("output", dtype_proto, ["batch", "seq", hidden])]), opset_imports=[helper.make_opsetid("", 24)], ir_version=10
+        helper.make_graph(nodes, "Attention24", inputs, [helper.make_tensor_value_info("output", dtype_proto, ["batch", "seq", hidden])]),
+        opset_imports=[helper.make_opsetid("", 24)],
+        ir_version=10,
     )
     onnx.checker.check_model(model)
     onnx.save(model, path)
@@ -725,7 +731,9 @@ def print_ranking(results):
         peak_memory_mib = row.get("peak_memory_mib")
         if peak_memory_mib is None:
             peak_memory_mib = float("nan")
-        print(f"  B={row['batch_size']:2d} S={row['sequence_length']:5d} {row['variant']:<32s} {row['mean_ms']:10.3f} ms  peak_mem={peak_memory_mib:10.1f} MiB  MAE={row.get('mae', float('nan')):.3e}")
+        print(
+            f"  B={row['batch_size']:2d} S={row['sequence_length']:5d} {row['variant']:<32s} {row['mean_ms']:10.3f} ms  peak_mem={peak_memory_mib:10.1f} MiB  MAE={row.get('mae', float('nan')):.3e}"
+        )
     if failed:
         print("\nFailures:")
         for row in failed:

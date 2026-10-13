@@ -231,7 +231,9 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
                     )
         else:
             with sdpa_kernel(self.attn_params[self.attention_type]):
-                attn_output = torch.nn.functional.scaled_dot_product_attention(q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout if self.training else 0.0)
+                attn_output = torch.nn.functional.scaled_dot_product_attention(
+                    q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout if self.training else 0.0
+                )
 
         # Keep residual paths type-stable for half-precision ONNX export.
         attn_output = attn_output.to(q_values.dtype)
@@ -1216,7 +1218,9 @@ class MLPF(nn.Module):
             backbone_dropout_mha = sub_config.dropout_conv_id_mha
             backbone_dropout_ff = sub_config.dropout_conv_id_ff
             self.use_pre_layernorm = sub_config.use_pre_layernorm
-            self.use_jagged_attention = sub_config.use_jagged_attention or (attention_type == AttentionType.FLASH and not sub_config.export_onnx_fused)
+            self.use_jagged_attention = sub_config.use_jagged_attention or (
+                attention_type == AttentionType.FLASH and not sub_config.export_onnx_fused
+            )
             self.use_flash_attn_varlen = sub_config.use_flash_attn_varlen
             export_onnx_fused = sub_config.export_onnx_fused
             save_attention = sub_config.save_attention

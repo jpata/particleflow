@@ -26,7 +26,9 @@ def configure_migraphx(options, provider_options):
             raise RuntimeError("MIGraphX plugin found no supported AMD device")
         options.add_provider_for_devices([devices[0]], provider_options)
     except Exception as error:
-        raise RuntimeError("Cannot initialize MIGraphX: use envs/ort-amd on a supported AMD GPU with ROCm 10.1.0 installed and its libraries discoverable") from error
+        raise RuntimeError(
+            "Cannot initialize MIGraphX: use envs/ort-amd on a supported AMD GPU with ROCm 10.1.0 installed and its libraries discoverable"
+        ) from error
     return {name: version(name) for name in ("onnxruntime-ep-migraphx", "migraphx", "migraphx-libs")}
 
 
@@ -99,9 +101,22 @@ def main():
             close = finite and bool(np.allclose(target, value, atol=args.atol, rtol=args.rtol))
             errors[output.name] = {"finite": finite, "close": close, "max_abs_error": float(np.max(np.abs(target - value))) if finite else None}
             passed &= close
-        results.append({"inputs": str(path), "shape": list(feeds["Xfeat_normed"].shape), "lengths": valid.sum(-1).tolist(), "first_call_seconds": cold, "warm_seconds": elapsed, "outputs": errors})
+        results.append(
+            {
+                "inputs": str(path),
+                "shape": list(feeds["Xfeat_normed"].shape),
+                "lengths": valid.sum(-1).tolist(),
+                "first_call_seconds": cold,
+                "warm_seconds": elapsed,
+                "outputs": errors,
+            }
+        )
     profile = session.end_profiling()
-    nodes = Counter(e.get("args", {}).get("provider") for e in json.loads(Path(profile).read_text()) if e.get("cat") == "Node" and e.get("args", {}).get("provider"))
+    nodes = Counter(
+        e.get("args", {}).get("provider")
+        for e in json.loads(Path(profile).read_text())
+        if e.get("cat") == "Node" and e.get("args", {}).get("provider")
+    )
     if args.require_full_gpu and (args.provider == "cpu" or nodes.get("CPUExecutionProvider", 0)):
         passed = False
     report = {

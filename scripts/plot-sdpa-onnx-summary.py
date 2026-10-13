@@ -124,8 +124,15 @@ def make_figure(rows, sweep, metric, outdir):
         columns = sorted({(r["sequence_length"], r["masked"]) for r in rows})
     else:
         columns = sorted({(r["batch_size"], r["masked"]) for r in rows})
-    fig, axes = plt.subplots(len(row_keys), len(columns), figsize=(6 * len(columns), 3.8 * len(row_keys)), squeeze=False, sharey="row", layout="constrained")
-    labels = {"latency": "Median latency [ms / batch]", "throughput": "Throughput [events / s]", "tokens": "Valid elements / s", "memory": "Peak process memory [MiB]"}
+    fig, axes = plt.subplots(
+        len(row_keys), len(columns), figsize=(6 * len(columns), 3.8 * len(row_keys)), squeeze=False, sharey="row", layout="constrained"
+    )
+    labels = {
+        "latency": "Median latency [ms / batch]",
+        "throughput": "Throughput [events / s]",
+        "tokens": "Valid elements / s",
+        "memory": "Peak process memory [MiB]",
+    }
     for i, (device, dtype) in enumerate(row_keys):
         for j, (fixed, masked) in enumerate(columns):
             fixedkey = "sequence_length" if sweep == "batch" else "batch_size"
@@ -140,9 +147,11 @@ def make_figure(rows, sweep, metric, outdir):
             axes[i, j].set_ylabel(labels[metric] if metric != "memory" else ("Process RSS [MiB]" if device == "CPU" else "Process VRAM [MiB]"))
     fig.suptitle(f"Attention {'batch-size' if sweep == 'batch' else 'sequence-length'} scaling — {labels[metric].split(' [')[0]}", fontsize=15)
     fig.supxlabel(
-        "ORT includes host↔device transfers on GPU; PyTorch inputs are device-resident. Memory is sampled process usage."
-        if metric == "memory"
-        else "Warm measurements · ORT includes GPU transfers · PyTorch includes packing for variable lengths",
+        (
+            "ORT includes host↔device transfers on GPU; PyTorch inputs are device-resident. Memory is sampled process usage."
+            if metric == "memory"
+            else "Warm measurements · ORT includes GPU transfers · PyTorch includes packing for variable lengths"
+        ),
         fontsize=9,
     )
     name = "sdpa_onnx_summary" if sweep == "sequence" and metric == "latency" else f"{sweep}_scaling_{metric}"

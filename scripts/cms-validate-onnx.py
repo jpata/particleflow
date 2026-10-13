@@ -465,25 +465,43 @@ def main():
 
         elif cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]:
             print(f"Creating ONNX session for ATTN_MATH/HEPT/HEPTV2/GNNLSH FP32 using {execution_provider}...")
-            sess = rt.InferenceSession(path_math_fp32, sess_options, providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider])
+            sess = rt.InferenceSession(
+                path_math_fp32,
+                sess_options,
+                providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
+            )
 
         elif cfg == "ONNX_ATTN_OP_FP32":
             print(f"Creating ONNX session for Fused FP32 using {execution_provider}...")
-            sess = rt.InferenceSession(path_fused_fp32, sess_options, providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider])
+            sess = rt.InferenceSession(
+                path_fused_fp32,
+                sess_options,
+                providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
+            )
 
         elif cfg == "ONNX_ATTN_MATH_FP16":
             print(f"Creating ONNX session for ATTN_MATH FP16 using {execution_provider}...")
-            sess = rt.InferenceSession(path_math_fp16, sess_options, providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider])
+            sess = rt.InferenceSession(
+                path_math_fp16,
+                sess_options,
+                providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
+            )
 
         elif cfg == "ONNX_ATTN_FLASH_FP32_FP16":
             print(f"Creating ONNX session for Fused Mixed using {execution_provider}...")
             sess = rt.InferenceSession(
-                path_fused_fp32_fp16, sess_options, providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider]
+                path_fused_fp32_fp16,
+                sess_options,
+                providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
             )
 
         elif cfg == "ONNX_ATTN_FLASH_FP16":
             print(f"Creating ONNX session for Fused FP16 using {execution_provider}...")
-            sess = rt.InferenceSession(path_fused_fp16, sess_options, providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider])
+            sess = rt.InferenceSession(
+                path_fused_fp16,
+                sess_options,
+                providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
+            )
 
         if sess is not None and execution_provider not in sess.get_providers():
             raise RuntimeError(f"Requested {execution_provider} but session selected {sess.get_providers()}")
