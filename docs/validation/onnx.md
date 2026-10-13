@@ -257,3 +257,39 @@ uv run --project envs/ort-cpu python3 scripts/plot-onnx-summary.py \
 ```
 
 Normalize or stratify event-size and padding distributions before comparing throughput across runs.
+
+### Upgrading the deployed July 2025 CMS artifact
+
+`scripts/convert-cms-onnx-attention24.py` converts the pinned
+`mlpf_5M_attn2x3x256_bm12_relu_checkpoint10_8xmi250_fp32_fused_20250722.onnx`
+artifact. It verifies the source SHA256, preserves every initializer byte, replaces
+six custom attention calls with standard Attention-24, and replaces the broken
+padding ScatterND with Where. FP16 attention boundaries are retained for CUDA
+FlashAttention; the other model operations and public tensors remain FP32.
+
+```bash
+uv run --project envs/ort-cpu python scripts/convert-cms-onnx-attention24.py \
+  original.onnx attention24.onnx
+ORT_ENABLE_ATTENTION_KERNEL_DEBUG_INFO=1 \
+uv run --project envs/ort-gpu python scripts/validate-cms-attention24.py \
+  --original original.onnx --model attention24.onnx \
+  --inputs cms_events --device cuda --output validation_cuda.json
+uv run --project envs/ort-cpu python scripts/validate-cms-attention24.py \
+  --original original.onnx --model attention24.onnx \
+  --inputs cms_events --device cpu --limit 4 --output validation_cpu.json
+```
+
+Each input NPZ contains one unpadded FP32 `Xfeat_normed` array `[1,L,55]`,
+prepared with the CMS feature ordering in `mlpf/heptfds/cms_pf/cms_utils.py`.
+The validator compares valid outputs against original single-event inference,
+using batch sizes 1, 2, and 4 with unequal lengths and several padding sizes.
+It records numerical differences and classification changes; completion alone
+is not a numerical acceptance test. Check the JSON metrics and CUDA kernel log.
+Masks must be binary with a valid prefix followed by right padding. Discard
+padded outputs. This conversion does not support masks with internal holes.
+
+The original CPU runtime effectively uses FP32 attention whereas CUDA uses
+FP16 FlashAttention. The converted artifact prioritizes the latter; CPU results
+can differ appreciably from the original CPU model. Assess each backend against
+its own original reference. CUDA validation does not establish MIGraphX support
+or replace a full downstream physics validation.
