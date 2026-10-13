@@ -92,6 +92,8 @@ def parse_args():
     parser.add_argument("--outdir", type=Path, default=Path("sdpa_onnx_bench"))
     parser.add_argument("--seq-lens", type=int, nargs="+", default=[512, 1024, 2048, 4096, 8192, 10000])
     parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--batch-sizes", type=int, nargs="+", help="Sweep batch sizes instead of --batch-size")
+    parser.add_argument("--length-policy", choices=["staggered", "balanced"], default="staggered", help="Balanced keeps mean valid length fixed across batch sizes")
     parser.add_argument("--num-heads", type=int, default=16)
     parser.add_argument("--head-dim", type=int, default=16)
     parser.add_argument("--iters", type=int, default=10)
@@ -175,7 +177,7 @@ def provider_options_from_args(args):
     return opts
 
 
-def make_inputs(batch, seq_len, hidden, dtype, device, masked, mask_fraction, seed):
+def make_inputs(batch, seq_len, hidden, dtype, device, masked, mask_fraction, seed, length_policy="staggered"):
     gen = torch.Generator(device="cpu")
     gen.manual_seed(seed + seq_len)
     query = torch.randn(batch, seq_len, hidden, generator=gen, dtype=torch.float32).to(device=device, dtype=dtype)
@@ -187,7 +189,8 @@ def make_inputs(batch, seq_len, hidden, dtype, device, masked, mask_fraction, se
         num_masked = int(seq_len * mask_fraction)
         if num_masked > 0:
             for i in range(batch):
-                count = min(seq_len - 1, num_masked * (i + 1) // batch)
+                position = i + 0.5 if length_policy == "balanced" else i + 1
+                count = min(seq_len - 1, int(num_masked * position / batch))
                 if count:
                     mask[i, seq_len - count :] = 0
     return query, key, value, mask
@@ -433,6 +436,8 @@ class MemorySampler:
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        # Callers stop their inference timer before cleanup: the final GPU
+        # sample launches nvidia-smi and can dominate short attention calls.
         self._stop.set()
         if self._thread is not None:
             self._thread.join()
@@ -495,6 +500,7 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
         variant.masked,
         args.mask_fraction,
         args.seed,
+        args.length_policy,
     )
     reference = run_pytorch_reference(query, key, value, mask, args.num_heads, args.head_dim)
 
@@ -510,6 +516,8 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
         "num_heads": args.num_heads,
         "head_dim": args.head_dim,
         "hidden": hidden,
+        "lengths": mask.sum(-1).cpu().tolist() if mask is not None else [seq_len] * args.batch_size,
+        "valid_elements": int(mask.sum().item()) if mask is not None else seq_len * args.batch_size,
         "status": "ok",
         "error": "",
         "graph_nodes": {},
@@ -540,7 +548,7 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
                     output = run_pytorch_variant(variant, query, key, value, mask, args.num_heads, args.head_dim)
                     if args.device == "cuda":
                         torch.cuda.synchronize()
-                elapsed = time.perf_counter() - t0
+                    elapsed = time.perf_counter() - t0
                 times.append(elapsed)
                 result["runs"].append({"runtime_s": elapsed, "memory_mib": memory.peak_mib})
 
@@ -596,7 +604,7 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
                     output_np = sess.run(None, feeds)[0]
                     if args.device == "cuda":
                         torch.cuda.synchronize()
-                elapsed = time.perf_counter() - t0
+                    elapsed = time.perf_counter() - t0
                 times.append(elapsed)
                 result["runs"].append({"runtime_s": elapsed, "memory_mib": memory.peak_mib})
 
@@ -683,6 +691,9 @@ def write_outputs(outdir, payload):
         "dtype",
         "backend",
         "masked",
+        "batch_size",
+        "lengths",
+        "valid_elements",
         "sequence_length",
         "num_heads",
         "head_dim",
@@ -710,15 +721,15 @@ def print_ranking(results):
     ok = [r for r in results if r.get("status") == "ok" and "mean_ms" in r]
     failed = [r for r in results if r.get("status") != "ok"]
     print("\nRuntime ranking:")
-    for row in sorted(ok, key=lambda r: (r["sequence_length"], r["mean_ms"])):
+    for row in sorted(ok, key=lambda r: (r["batch_size"], r["sequence_length"], r["mean_ms"])):
         peak_memory_mib = row.get("peak_memory_mib")
         if peak_memory_mib is None:
             peak_memory_mib = float("nan")
-        print(f"  S={row['sequence_length']:5d} {row['variant']:<32s} {row['mean_ms']:10.3f} ms  peak_mem={peak_memory_mib:10.1f} MiB  MAE={row.get('mae', float('nan')):.3e}")
+        print(f"  B={row['batch_size']:2d} S={row['sequence_length']:5d} {row['variant']:<32s} {row['mean_ms']:10.3f} ms  peak_mem={peak_memory_mib:10.1f} MiB  MAE={row.get('mae', float('nan')):.3e}")
     if failed:
         print("\nFailures:")
         for row in failed:
-            print(f"  S={row['sequence_length']:5d} {row['variant']:<32s} {row['error']}")
+            print(f"  B={row['batch_size']:2d} S={row['sequence_length']:5d} {row['variant']:<32s} {row['error']}")
 
 
 def main():
@@ -745,16 +756,25 @@ def main():
     model_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
-    for seq_len in args.seq_lens:
-        for variant in variants:
-            print(f"Running {variant.name} S={seq_len} on {args.device}")
-            results.append(benchmark_variant(args, variant, seq_len, hidden, model_dir))
+    batch_sizes = args.batch_sizes or [args.batch_size]
+    if any(batch < 1 for batch in batch_sizes):
+        raise ValueError("Batch sizes must be positive")
+    for batch in batch_sizes:
+        args.batch_size = batch
+        batch_model_dir = model_dir / f"batch_{batch}"
+        batch_model_dir.mkdir(exist_ok=True)
+        for seq_len in args.seq_lens:
+            for variant in variants:
+                print(f"Running {variant.name} B={batch} S={seq_len} on {args.device}", flush=True)
+                results.append(benchmark_variant(args, variant, seq_len, hidden, batch_model_dir))
 
     payload = {
         "system": system_info(args),
         "config": {
             "seq_lens": args.seq_lens,
-            "batch_size": args.batch_size,
+            "batch_size": batch_sizes[0] if len(batch_sizes) == 1 else None,
+            "batch_sizes": batch_sizes,
+            "length_policy": args.length_policy,
             "num_heads": args.num_heads,
             "head_dim": args.head_dim,
             "iters": args.iters,

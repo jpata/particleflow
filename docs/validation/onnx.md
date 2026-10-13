@@ -170,6 +170,48 @@ export on CPU; AMD GPU execution remains untested.
 
 ## Benchmark methodology
 
+For batch-size scaling, the attention microbenchmark accepts `--batch-sizes`
+and `--length-policy balanced`. With `--mask-fraction 0.5`, balanced lengths
+sample the interval from 50% to 100% of the padded length at bin midpoints;
+the mean is 75% (up to integer rounding), independently of batch size. This
+avoids changing the average event size while measuring batching. For example,
+at padded length 512, batch size four has valid lengths 480, 416, 352, and 288.
+The single-event baseline has length 384.
+
+```bash
+uv run --project envs/ort-cpu python3 scripts/benchmark-sdpa-onnx.py \
+  --device cpu --batch-sizes 1 2 4 8 16 --seq-lens 512 1280 \
+  --length-policy balanced --modes masked --mask-fraction 0.5 \
+  --num-heads 16 --head-dim 16 --num-threads 1 --warmup 3 --iters 10 \
+  --variants pt_math_fp32 ort_attention24_fp32 ort_mha_fp32 \
+  --outdir onnx_validation/batch-cpu
+
+uv run --project envs/ort-gpu python3 scripts/benchmark-sdpa-onnx.py \
+  --device cuda --batch-sizes 1 2 4 8 16 --seq-lens 512 1280 \
+  --length-policy balanced --modes masked --mask-fraction 0.5 \
+  --num-heads 16 --head-dim 16 --warmup 5 --iters 30 \
+  --variants pt_flash_fp16 ort_attention24_fp16 ort_mha_fp16 \
+  --provider-option sdpa_kernel=1 --provider-option use_tf32=0 \
+  --outdir onnx_validation/batch-gpu
+
+uv run --project envs/ort-cpu python3 scripts/plot-sdpa-onnx-summary.py \
+  --cpu-csv onnx_validation/batch-cpu/summary.csv \
+  --gpu-csv onnx_validation/batch-gpu/summary.csv \
+  --sweep batch --outdir onnx_validation/batch-plots
+```
+
+The plotter produces separate median latency, event throughput, valid-element
+throughput, and process-memory figures (PNG/PDF). Panels separate device,
+precision, and workload; implementation colors, markers, and dashes remain
+consistent. Use the default `--sweep sequence` for sequence-length scans.
+The adjacent summary JSON supplies metadata omitted by older CSV files.
+
+Timing excludes memory-sampler cleanup. GPU ORT calls include host/device
+transfers through `session.run`; PyTorch inputs already reside on the GPU, and
+its variable-length path includes packing/unpacking. These measurements are
+call-level timings, not isolated kernel benchmarks. Process-memory samples
+include runtime overhead and retained allocations, not just attention workspace.
+
 First establish numerical agreement on representative small, medium, large, and pathological events. Then benchmark after warm-up using enough repetitions to quote a timing distribution. Record hardware, software versions, threads, device, precision, model, event sizes, padding, and peak memory.
 
 For a collection of validation directories, create comparison plots with:
