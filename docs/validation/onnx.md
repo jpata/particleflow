@@ -110,8 +110,9 @@ replay without TFDS or a PyTorch checkpoint.
 
 ## AMD and standalone runtime checks
 
-`envs/ort-amd` installs AMD's vendor MIGraphX wheel and is inference-only. On a
-Linux x86-64 host with ROCm/MIGraphX 7.2.4, run:
+`envs/ort-amd` installs ORT 1.29.0 plus AMD's MIGraphX provider plugin 1.0.0
+and MIGraphX 2.18.0 (ROCm 10.1.0 builds). It is inference-only. On a Linux
+x86-64 host with ROCm 10.1.0 and a supported AMD GPU, run:
 
 ```bash
 uv sync --project envs/ort-amd
@@ -123,8 +124,13 @@ uv run --project envs/ort-amd python3 scripts/validate-onnx-runtime.py \
 
 Produce these inputs with `--save-inputs` in the CPU example above. Start with
 the opset-20 math export: support and Flash lowering of `Attention-24` in
-MIGraphX have **not** been established. This environment uses vendor ORT 1.23.2,
-not the 1.29.0 CPU/CUDA runtime. No AMD hardware was available for validation.
+MIGraphX have **not** been established. All three environments now pin ORT
+1.29.0. The script explicitly registers the AMD plugin and selects its first
+available device using ORT's plugin API. It records plugin versions in the
+summary and refuses initialization failure or whole-session CPU fallback.
+No AMD hardware was available for validation; local checks cover package
+installation and CPU execution of both math and Attention-24 exports. The host
+also lacks ROCm, so plugin registration cannot complete locally.
 
 The replay script compares valid outputs to the same model on ORT CPU, rejects
 non-finite or out-of-tolerance results, records first-call versus repeated-call timing, and saves

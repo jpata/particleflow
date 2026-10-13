@@ -48,7 +48,7 @@ uv sync --project envs/ort-cpu
 # Nvidia GPU inference and numerical validation
 uv sync --project envs/ort-gpu
 
-# AMD MIGraphX inference only (Linux x86-64, ROCm 7.2.4 installed on the host)
+# AMD MIGraphX inference only (Linux x86-64, ROCm 10.1.0 installed on the host)
 uv sync --project envs/ort-amd
 ```
 
@@ -66,13 +66,25 @@ the [CUDA 12 wheel feed](https://aiinfra.pkgs.visualstudio.com/PublicPackages/_p
 separately when updating this pin: the latest upstream release need not have a
 stable CUDA 12 Python wheel.
 
-The AMD project is a separate Python **3.12** inference environment with AMD's
-ONNX Runtime MIGraphX **1.23.2** wheel for ROCm **7.2.4**. AMD does not publish a
-matching Python 3.11 wheel, so it does not install `particleflow`, PyTorch, TFDS,
+The AMD project is a separate Python **3.12** inference environment with
+**ONNX Runtime 1.29.0**, AMD's **onnxruntime-ep-migraphx 1.0.0+rocm10.1.0**
+plugin, and **MIGraphX / migraphx-libs 2.18.0+rocm10.1.0**. Packages resolve
+through explicit AMD indexes; ORT itself comes from PyPI. This replaces the
+older monolithic `onnxruntime-migraphx` 1.23.2 package. Run `uv sync` to remove
+that package and install the new stack.
+
+The host needs ROCm **10.1.0** and a supported AMD GPU. This environment installs
+MIGraphX libraries but omits GPU-specific ROCm extras; it does not install the
+host ROCm runtime or driver. Follow AMD's [ONNX Runtime installation guide](https://rocm.docs.amd.com/projects/ai-ecosystem/en/latest/inference/onnxruntime.html)
+and [MIGraphX guide](https://rocm.docs.amd.com/projects/ai-ecosystem/en/latest/inference/migraphx.html)
+for host setup. The plugin must be explicitly registered before device discovery;
+`scripts/validate-onnx-runtime.py --provider migraphx` handles registration and
+selects the first available MIGraphX device, failing if initialization fails.
+
+The environment remains inference-only, without `particleflow`, PyTorch, TFDS,
 or CUDA packages. Export with the CPU/Nvidia environment and replay saved input
-batches there using the [ONNX validation guide](../validation/onnx.md). Installing
-the wheel does not install the host ROCm/MIGraphX libraries or establish GPU
-operator support.
+batches using the [ONNX validation guide](../validation/onnx.md). Installation
+alone does not establish AMD GPU operator support.
 
 ## Prepared container
 

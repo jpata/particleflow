@@ -5,9 +5,29 @@ from collections import Counter
 import json
 from pathlib import Path
 import time
+from importlib.metadata import version
 
 import numpy as np
 import onnxruntime as ort
+
+
+def configure_migraphx(options, provider_options):
+    """Register AMD's plugin and explicitly select its first available device."""
+    try:
+        import onnxruntime_ep_migraphx as plugin
+
+        names, paths = plugin.get_ep_names(), plugin.get_library_paths()
+        if not names or len(names) != len(paths):
+            raise RuntimeError("MIGraphX plugin package has missing provider libraries")
+        for name, path in zip(names, paths, strict=True):
+            ort.register_execution_provider_library(name, path)
+        devices = [device for device in ort.get_ep_devices() if device.ep_name == "MIGraphXExecutionProvider"]
+        if not devices:
+            raise RuntimeError("MIGraphX plugin found no supported AMD device")
+        options.add_provider_for_devices([devices[0]], provider_options)
+    except Exception as error:
+        raise RuntimeError("Cannot initialize MIGraphX: use envs/ort-amd on a supported AMD GPU with ROCm 10.1.0 installed and its libraries discoverable") from error
+    return {name: version(name) for name in ("onnxruntime-ep-migraphx", "migraphx", "migraphx-libs")}
 
 
 def load_inputs(path, session):
@@ -41,14 +61,21 @@ def main():
     provider = {"cpu": "CPUExecutionProvider", "cuda": "CUDAExecutionProvider", "migraphx": "MIGraphXExecutionProvider"}[args.provider]
     if args.provider == "cuda":
         ort.preload_dlls()
-    if provider not in ort.get_available_providers():
+    if args.provider != "migraphx" and provider not in ort.get_available_providers():
         raise RuntimeError(f"{provider} is unavailable: {ort.get_available_providers()}")
     args.outdir.mkdir(parents=True, exist_ok=True)
     options = ort.SessionOptions()
     options.intra_op_num_threads = 1
     options.enable_profiling = True
     options.profile_file_prefix = str(args.outdir / "ort_profile")
-    session = ort.InferenceSession(str(args.model), options, providers=[(provider, dict(item.split("=", 1) for item in args.provider_option))])
+    provider_options = dict(item.split("=", 1) for item in args.provider_option)
+    plugin_versions = {}
+    if args.provider == "migraphx":
+        plugin_versions = configure_migraphx(options, provider_options)
+        # Passing providers= here would override the plugin device selection.
+        session = ort.InferenceSession(str(args.model), options)
+    else:
+        session = ort.InferenceSession(str(args.model), options, providers=[(provider, provider_options)])
     if provider not in session.get_providers():
         raise RuntimeError(f"Requested {provider}, session fell back to {session.get_providers()}")
     cpu_options = ort.SessionOptions()
@@ -79,6 +106,7 @@ def main():
         passed = False
     report = {
         "onnxruntime": ort.__version__,
+        "plugin_versions": plugin_versions,
         "model": str(args.model),
         "provider": provider,
         "provider_options": session.get_provider_options(),
