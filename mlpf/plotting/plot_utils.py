@@ -158,8 +158,10 @@ EVALUATION_DATASET_NAMES = {
     "cms_pf_photonjet": r"$\gamma$ + jets, pileup 55-75",
     "cms_pf_photonjet_nopu": r"$\gamma$ + jets, no pileup",
     "colliderml_ttbar_nopu_pf": r"ColliderML ODD, $pp \rightarrow \mathrm{t}\bar{\mathrm{t}}$, no pileup",
+    "colliderml_ttbar_pu200_pf": r"ColliderML ODD, $pp \rightarrow \mathrm{t}\bar{\mathrm{t}}$, pileup 200",
     "maia_edm_ttbar_pf": r"MAIA, $\mu^+\mu^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "colliderml_ttbar_hits": r"ColliderML ODD hits, $pp \rightarrow \mathrm{t}\bar{\mathrm{t}}$, no pileup",
+    "colliderml_ttbar_pu200_hits": r"ColliderML ODD hits, $pp \rightarrow \mathrm{t}\bar{\mathrm{t}}$, pileup 200",
 }
 
 GENJET_BINS_PT_DATASET = {
