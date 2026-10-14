@@ -22,6 +22,17 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_tracker_momentum_ablation_changes_only_input_features():
+    platform = load_platform_profile(ROOT / "configs/training/platforms/lumi_mi250x.yaml")
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_tracker_momentum_50k.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    assert len(jobs) == 3
+    flags = [job.resolved_config.model.hit_feature_engineering for job in jobs]
+    assert [(f.tracker_momentum, f.tracker_doublets) for f in flags] == [(False, False), (True, False), (True, True)]
+    assert all(job.global_batch_size == 512 and job.per_gpu_batch_size == 64 for job in jobs)
+    assert all(job.resolved_config.model.heptv2.activation_checkpointing for job in jobs)
+
+
 @pytest.mark.parametrize("platform_name", ["flatiron_h100", "lumi_mi250x"])
 def test_heptv2_batch512_matches_september_training_budget(platform_name):
     platform = load_platform_profile(ROOT / f"configs/training/platforms/{platform_name}.yaml")

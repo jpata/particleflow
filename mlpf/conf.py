@@ -750,7 +750,15 @@ class HitFeatureEngineeringConfig(BaseModel):
     enabled: bool = True
     geometry: bool = True
     tracker_neighborhood: bool = False
+    tracker_momentum: bool = False
+    tracker_doublets: bool = False
     calorimeter_neighborhood: bool = True
+
+    @model_validator(mode="after")
+    def validate_tracker_momentum(self):
+        if self.tracker_momentum and not self.tracker_neighborhood:
+            raise ValueError("tracker_momentum requires tracker_neighborhood")
+        return self
 
 
 class SetMatcherConfig(BaseModel):

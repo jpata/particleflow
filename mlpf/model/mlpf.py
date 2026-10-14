@@ -17,6 +17,7 @@ except ImportError:
 
 from mlpf.model.hept import HEPTLayer, trunc_normal_
 from mlpf.model.heptv2 import HEPTv2Layer
+from mlpf.model.tracker_features import TrackerDoubletFeatures
 from mlpf.model.set_decoder import ParticleSetDecoder
 
 try:
@@ -660,6 +661,23 @@ TRACKER_NEIGHBORHOOD_FEATURE_NAMES = (
     )
 )
 
+TRACKER_MOMENTUM_BASE_FEATURE_NAMES = (
+    "conformal_offset",
+    "curvature_asinh",
+    "axis_cos2phi",
+    "axis_sin2phi",
+    "along_axis_std",
+    "relative_transverse_rms",
+    "curvature_valid",
+    "rz_slope_asinh",
+    "rz_intercept_norm",
+    "rz_residual_norm",
+    "rz_valid",
+)
+TRACKER_MOMENTUM_FEATURE_NAMES = ("tracker_conformal_u_asinh", "tracker_conformal_v_asinh") + tuple(
+    f"tracker_momentum_{scale}_{name}" for scale in TRACKER_NEIGHBORHOOD_SCALE_NAMES for name in TRACKER_MOMENTUM_BASE_FEATURE_NAMES
+)
+
 
 class TrackerNeighborhoodFeatures(nn.Module):
     """GPU-native local-surface and cross-layer tracker-hit summaries."""
@@ -678,6 +696,12 @@ class TrackerNeighborhoodFeatures(nn.Module):
     SPEED_OF_LIGHT_MM_PER_NS = 299.792458
     NUM_OUTPUT_FEATURES = len(TRACKER_NEIGHBORHOOD_FEATURE_NAMES)
     OUTPUT_FEATURE_NAMES = TRACKER_NEIGHBORHOOD_FEATURE_NAMES
+
+    def __init__(self, momentum=False):
+        super().__init__()
+        self.momentum = momentum
+        self.OUTPUT_FEATURE_NAMES = TRACKER_NEIGHBORHOOD_FEATURE_NAMES + (TRACKER_MOMENTUM_FEATURE_NAMES if momentum else ())
+        self.NUM_OUTPUT_FEATURES = len(self.OUTPUT_FEATURE_NAMES)
 
     @staticmethod
     def _scatter_sum(inverse, values, num_bins):
@@ -760,6 +784,7 @@ class TrackerNeighborhoodFeatures(nn.Module):
         conformal_v,
         time_residual,
         system,
+        z,
     ):
         keys = (batch_index * num_eta_bins + eta_bin) * num_phi_bins + phi_bin
         occupied_keys, inverse = torch.unique(keys, sorted=True, return_inverse=True)
@@ -787,6 +812,14 @@ class TrackerNeighborhoodFeatures(nn.Module):
             ],
             dim=-1,
         )
+        if self.momentum:
+            # Reuse bin assignments and the existing scatter pass. Normalize
+            # lengths before accumulating the four longitudinal moments.
+            r_norm, z_norm = rho / self.POSITION_SCALE_MM, z / self.POSITION_SCALE_MM
+            values = torch.cat(
+                [values, weight[:, None] * torch.stack([r_norm, r_norm.square(), z_norm, r_norm * z_norm], dim=-1)],
+                dim=-1,
+            )
         reductions = self._scatter_sum(inverse, values, num_bins)
         local = reductions[inverse]
         count = local[:, 0]
@@ -858,7 +891,40 @@ class TrackerNeighborhoodFeatures(nn.Module):
             ],
             dim=-1,
         )
-        return features * valid.unsqueeze(-1), count * weight, local_distinct_surfaces * weight
+        momentum_features = features[:, :0]
+        if self.momentum:
+            along_variance = (0.5 * (covariance_trace + covariance_discriminant)).clamp_min(0.0)
+            offset = -torch.sin(principal_axis_angle) * mean_u + torch.cos(principal_axis_angle) * mean_v
+            curvature_valid = valid & (local_distinct_surfaces >= 3) & (spans[:, 1] >= 100.0) & (along_variance > 1.0e-10)
+            mean_r, mean_z = local[:, 15] / safe_count, local[:, 17] / safe_count
+            variance_r = (local[:, 16] / safe_count - mean_r.square()).clamp_min(0.0)
+            covariance_rz = local[:, 18] / safe_count - mean_r * mean_z
+            slope = covariance_rz / variance_r.clamp_min(1.0e-10)
+            rz_valid = valid & (local_distinct_surfaces >= 2) & (spans[:, 1] >= 5.0) & (variance_r > 1.0e-10)
+            # Centered residual sums avoid cancellation in nearly straight
+            # high-pT tracks (subtracting two similar covariance eigenvalues).
+            residuals = torch.stack([conformal_axis_residual, z_norm - mean_z - slope * (r_norm - mean_r)], dim=-1)
+            residual_variance = self._scatter_sum(inverse, weight[:, None] * residuals.square(), num_bins)[inverse] / safe_count[:, None]
+            momentum_features = (
+                torch.stack(
+                    [
+                        offset * curvature_valid,
+                        torch.asinh(2000.0 * offset.abs() / self.CONFORMAL_SCALE_MM) * curvature_valid,
+                        torch.cos(2.0 * principal_axis_angle) * curvature_valid,
+                        torch.sin(2.0 * principal_axis_angle) * curvature_valid,
+                        torch.sqrt(along_variance),
+                        torch.sqrt(residual_variance[:, 0] / along_variance.clamp_min(1.0e-10)),
+                        curvature_valid,
+                        torch.asinh(slope) * rz_valid,
+                        (mean_z - slope * mean_r) * rz_valid,
+                        torch.sqrt(residual_variance[:, 1]) * rz_valid,
+                        rz_valid,
+                    ],
+                    dim=-1,
+                )
+                * valid[:, None]
+            )
+        return features * valid.unsqueeze(-1), count * weight, local_distinct_surfaces * weight, momentum_features
 
     def forward(self, X_features, mask=None):
         geometry = X_features.to(torch.float32)
@@ -903,6 +969,7 @@ class TrackerNeighborhoodFeatures(nn.Module):
         surface_counts = []
         tracklet_counts = []
         tracklet_surface_counts = []
+        momentum_features = []
         for shift in self.SCALE_SHIFTS:
             divisor = 1 << shift
             eta_bin = torch.div(fine_eta_bin, divisor, rounding_mode="floor")
@@ -921,7 +988,7 @@ class TrackerNeighborhoodFeatures(nn.Module):
                 phi,
                 time_residual,
             )
-            local_tracklet_features, tracklet_count, tracklet_surface_count = self._tracklet_summary(
+            local_tracklet_features, tracklet_count, tracklet_surface_count, local_momentum_features = self._tracklet_summary(
                 batch_index,
                 eta_bin,
                 phi_bin,
@@ -938,12 +1005,14 @@ class TrackerNeighborhoodFeatures(nn.Module):
                 conformal_v,
                 time_residual,
                 system,
+                z,
             )
             surface_features.append(local_surface_features)
             tracklet_features.append(local_tracklet_features)
             surface_counts.append(surface_count)
             tracklet_counts.append(tracklet_count)
             tracklet_surface_counts.append(tracklet_surface_count)
+            momentum_features.append(local_momentum_features)
 
         ratios = torch.stack(
             [
@@ -954,6 +1023,11 @@ class TrackerNeighborhoodFeatures(nn.Module):
             dim=-1,
         )
         engineered = torch.cat([*surface_features, *tracklet_features, ratios], dim=-1)
+        if self.momentum:
+            # Smooth compression preserves inner-layer information that the
+            # legacy geometry channels clip. Existing channels retain their order.
+            scaled_uv = torch.asinh(torch.stack([x, y], dim=-1) * inverse_rho_sq[:, None])
+            engineered = torch.cat([engineered, scaled_uv, *momentum_features], dim=-1)
         engineered = torch.nan_to_num(engineered, nan=0.0, posinf=0.0, neginf=0.0)
         engineered = engineered * valid.unsqueeze(-1)
         return engineered.reshape(batch_size, sequence_length, -1).to(X_features.dtype)
@@ -963,8 +1037,9 @@ class HitFeatureEngineering(nn.Module):
     """Append inexpensive geometry features to the raw EDM4HEP hit inputs.
 
     The original feature order is preserved because the regression heads use the
-    ET, eta, phi, and energy columns as skip-connection reference values. All
-    calculations are elementwise and run on the same device as the model input.
+    ET, eta, phi, and energy columns as skip-connection reference values.
+    Input-only geometry, grid reductions and optional bounded doublet searches
+    run on the same device as the model input and can also be precomputed.
     """
 
     POSITION_SCALE_MM = 3000.0
@@ -990,12 +1065,16 @@ class HitFeatureEngineering(nn.Module):
         "is_tracker",
     )
 
-    def __init__(self, geometry=True, tracker_neighborhood=True, calorimeter_neighborhood=True):
+    def __init__(self, geometry=True, tracker_neighborhood=True, calorimeter_neighborhood=True, tracker_momentum=False, tracker_doublets=False):
         super().__init__()
+        if tracker_momentum and not tracker_neighborhood:
+            raise ValueError("tracker_momentum requires tracker_neighborhood")
         self.enable_geometry = geometry
         self.enable_tracker_neighborhood = tracker_neighborhood
         self.enable_calorimeter_neighborhood = calorimeter_neighborhood
-        self.tracker_neighborhood = TrackerNeighborhoodFeatures()
+        self.tracker_neighborhood = TrackerNeighborhoodFeatures(momentum=tracker_momentum)
+        self.enable_tracker_doublets = tracker_doublets
+        self.tracker_doublets = TrackerDoubletFeatures()
         self.calorimeter_neighborhood = CalorimeterNeighborhoodFeatures()
 
     @property
@@ -1005,6 +1084,7 @@ class HitFeatureEngineering(nn.Module):
                 self.NUM_GEOMETRY_FEATURES if self.enable_geometry else 0,
                 self.tracker_neighborhood.NUM_OUTPUT_FEATURES if self.enable_tracker_neighborhood else 0,
                 self.calorimeter_neighborhood.NUM_OUTPUT_FEATURES if self.enable_calorimeter_neighborhood else 0,
+                self.tracker_doublets.NUM_OUTPUT_FEATURES if self.enable_tracker_doublets else 0,
             ]
         )
 
@@ -1017,6 +1097,8 @@ class HitFeatureEngineering(nn.Module):
             names += self.tracker_neighborhood.OUTPUT_FEATURE_NAMES
         if self.enable_calorimeter_neighborhood:
             names += self.calorimeter_neighborhood.OUTPUT_FEATURE_NAMES
+        if self.enable_tracker_doublets:
+            names += self.tracker_doublets.OUTPUT_FEATURE_NAMES
         return names
 
     def forward(self, X_features, mask=None):
@@ -1072,6 +1154,8 @@ class HitFeatureEngineering(nn.Module):
             output_features.append(self.tracker_neighborhood(X_features, mask))
         if self.enable_calorimeter_neighborhood:
             output_features.append(self.calorimeter_neighborhood(X_features, mask))
+        if self.enable_tracker_doublets:
+            output_features.append(self.tracker_doublets(X_features, mask))
         return torch.cat(output_features, dim=-1)
 
 
@@ -1147,6 +1231,8 @@ class MLPF(nn.Module):
             HitFeatureEngineering(
                 geometry=hit_feature_config.geometry,
                 tracker_neighborhood=hit_feature_config.tracker_neighborhood,
+                tracker_momentum=hit_feature_config.tracker_momentum,
+                tracker_doublets=hit_feature_config.tracker_doublets,
                 calorimeter_neighborhood=hit_feature_config.calorimeter_neighborhood,
             )
             if self.is_hit_dataset and hit_feature_config.enabled
@@ -1653,12 +1739,7 @@ class MLPF(nn.Module):
             return embeddings
 
         for conv in backbone:
-            if (
-                self.conv_type == ModelType.HEPTV2
-                and self.config.heptv2.activation_checkpointing
-                and self.training
-                and torch.is_grad_enabled()
-            ):
+            if self.conv_type == ModelType.HEPTV2 and self.config.heptv2.activation_checkpointing and self.training and torch.is_grad_enabled():
                 # Pass the module directly: a closure over `conv` would replay
                 # the final layer during backward. Non-reentrant checkpointing
                 # also supports frozen inputs and DDP without changing weights.

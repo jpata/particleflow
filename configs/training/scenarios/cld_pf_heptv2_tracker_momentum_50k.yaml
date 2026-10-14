@@ -1,0 +1,38 @@
+# Controlled input-feature ablation at the September-equivalent event budget.
+name: cld_pf_heptv2_tracker_momentum_50k
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  hit_heptv2_grouped_tracker_features:
+    model_name: pyg-cld-hits-heptv2-set-v1
+  hit_heptv2_tracker_momentum:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides:
+      model.hit_feature_engineering.tracker_momentum: true
+  hit_heptv2_tracker_momentum_doublets:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides:
+      model.hit_feature_engineering.tracker_momentum: true
+      model.hit_feature_engineering.tracker_doublets: true
+seeds: [12345]
+training:
+  global_batch_size: 512
+  parameters:
+    optimizer: lamb
+    lr: 0.001
+    lr_schedule: cosinedecay
+    num_steps: 50000
+    val_freq: 5000
+    checkpoint_freq: 5000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+common_overrides:
+  model.heptv2.activation_checkpointing: true
+  model.hit_feature_engineering.tracker_neighborhood: true
+allowed_variant_differences:
+  - model.hit_feature_engineering.tracker_momentum
+  - model.hit_feature_engineering.tracker_doublets

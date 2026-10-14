@@ -126,6 +126,9 @@ def main():
     parser.add_argument("--steps", type=int, default=5)
     parser.add_argument("--warmup-steps", type=int, default=2)
     parser.add_argument("--checkpointing", action="store_true")
+    parser.add_argument("--tracker-momentum", action="store_true")
+    parser.add_argument("--tracker-doublets", action="store_true")
+    parser.add_argument("--features-only", action="store_true", help="Time input feature construction on a fixed real batch")
     parser.add_argument("--snapshot", action="store_true")
     parser.add_argument("--parity-only", action="store_true", help="Compare repeated forward/backward passes without optimizer updates")
     parser.add_argument("--deterministic", action="store_true", help="Require deterministic PyTorch algorithms for parity diagnosis")
@@ -141,6 +144,8 @@ def main():
     jobs = resolve_scenario_jobs(scenario, platform, spec_file="particleflow_spec.yaml")
     config = next(job.resolved_config for job in jobs if job.variant_name == "hit_heptv2_grouped_tracker_features")
     config.model.heptv2.activation_checkpointing = args.checkpointing
+    config.model.hit_feature_engineering.tracker_momentum = args.tracker_momentum
+    config.model.hit_feature_engineering.tracker_doublets = args.tracker_doublets
     torch.use_deterministic_algorithms(args.deterministic)
     torch.manual_seed(config.seed)
     model = MLPF(config)
@@ -187,6 +192,36 @@ def main():
         "validation_event_indices": list(range(args.batch_size)),
         "steps": [],
     }
+    if args.features_only:
+        batch = collate([training[i] for i in range(args.batch_size)]).to("cuda")
+        times, allocated, reserved = [], [], []
+        base_memory = torch.cuda.memory_allocated()
+        for iteration in range(13):
+            torch.cuda.synchronize()
+            torch.cuda.reset_peak_memory_stats()
+            start = time.perf_counter()
+            with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+                features = model._engineer_input_features(batch.X, batch.mask)
+            torch.cuda.synchronize()
+            elapsed = 1000 * (time.perf_counter() - start)
+            if iteration >= 3:
+                times.append(elapsed)
+                allocated.append(torch.cuda.max_memory_allocated() / 2**20)
+                reserved.append(torch.cuda.max_memory_reserved() / 2**20)
+            assert torch.isfinite(features).all()
+            del features
+        result["features"] = {
+            "mean_ms": sum(times) / len(times),
+            "times_ms": times,
+            "peak_allocated_mib": max(allocated),
+            "peak_reserved_mib": max(reserved),
+            "incremental_peak_mib": max(allocated) - base_memory / 2**20,
+            "padded_shape": list(batch.X.shape),
+            "engineered_dim": model.input_dim,
+        }
+        args.output.write_text(json.dumps(result, indent=2) + "\n")
+        print(json.dumps(result["features"], indent=2), flush=True)
+        return
     if args.parity_only:
         batch = collate([training[i] for i in range(args.batch_size)]).to("cuda")
         result["parity"] = compare_replay(model, batch, weights, config.seed)
