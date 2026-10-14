@@ -1,0 +1,54 @@
+# Match the September track/cluster training exposure: 50k * 512 = 25.6M events.
+# HEPTv2 keeps the current grouped tracker-feature model and set objective.
+# Checkpointing has a recomputation cost; validate memory on the target platform
+# with real hit occupancies before launching the full run (see docs/heptv2_checkpointing.md).
+name: cld_pf_heptv2_batch512_50k
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  track_cluster_mlpf:
+    model_name: pyg-cld-v1
+    overrides:
+      model.attention.use_jagged_attention: true
+  hit_heptv2_grouped_tracker_features:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides:
+      model.heptv2.activation_checkpointing: true
+seeds: [12345]
+training:
+  global_batch_size: 512
+  parameters:
+    optimizer: lamb
+    lr: 0.001
+    lr_schedule: cosinedecay
+    num_steps: 50000
+    val_freq: 5000
+    checkpoint_freq: 5000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+common_overrides:
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+allowed_variant_differences:
+  - conv_type
+  - data_dir
+  - dataset
+  - elemtypes_nonzero
+  - enabled_test_datasets
+  - hyperparameters.lr
+  - input_dim
+  - model.type
+  - model.binary_classification_focal_gamma
+  - model.attention
+  - model.heptv2
+  - model.output_mode
+  - model.set_decoder
+  - model.hit_feature_engineering.tracker_neighborhood
+  - train_dataset
+  - valid_dataset
+  - test_dataset

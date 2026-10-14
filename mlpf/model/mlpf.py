@@ -5,6 +5,7 @@ from typing import Union, List, Optional, NamedTuple
 import torch
 import torch.nn as nn
 from torch.nn.attention import SDPBackend, sdpa_kernel
+from torch.utils.checkpoint import checkpoint
 
 from mlpf.logger import _logger
 from mlpf.model.gnnlsh import CombinedGraphLayer
@@ -1595,6 +1596,7 @@ class MLPF(nn.Module):
             )
         if self.conv_type == ModelType.HEPTV2:
             heptv2_conf = self.config.heptv2.model_dump()
+            heptv2_conf.pop("activation_checkpointing")
             for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff", "num_heads"]:
                 if key in heptv2_conf:
                     heptv2_conf.pop(key)
@@ -1651,7 +1653,17 @@ class MLPF(nn.Module):
             return embeddings
 
         for conv in backbone:
-            if self.conv_type in [ModelType.LITEPT, ModelType.HEPT, ModelType.HEPTV2]:
+            if (
+                self.conv_type == ModelType.HEPTV2
+                and self.config.heptv2.activation_checkpointing
+                and self.training
+                and torch.is_grad_enabled()
+            ):
+                # Pass the module directly: a closure over `conv` would replay
+                # the final layer during backward. Non-reentrant checkpointing
+                # also supports frozen inputs and DDP without changing weights.
+                x = checkpoint(conv, x, mask, X_features, use_reentrant=False, preserve_rng_state=True)
+            elif self.conv_type in [ModelType.LITEPT, ModelType.HEPT, ModelType.HEPTV2]:
                 x = conv(x, mask, X_features)
             else:
                 x = conv(x, mask, initial_embedding)

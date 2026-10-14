@@ -22,6 +22,34 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("platform_name", ["flatiron_h100", "lumi_mi250x"])
+def test_heptv2_batch512_matches_september_training_budget(platform_name):
+    platform = load_platform_profile(ROOT / f"configs/training/platforms/{platform_name}.yaml")
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_batch512_50k.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    pf, hits = (job.resolved_config for job in jobs)
+    assert all(job.global_batch_size == 512 and job.gpu_batch_multiplier == 64 for job in jobs)
+    for config in (pf, hits):
+        assert config.num_steps == 50000
+        assert config.lr == 0.001
+        assert config.optimizer.value == "lamb"
+        assert config.lr_schedule.value == "cosinedecay"
+        assert config.seed == 12345
+        assert config.val_freq == config.checkpoint_freq == 5000
+        assert config.model.backbone.num_convs == 6
+    assert hits.model.heptv2.activation_checkpointing
+    assert hits.model.hit_feature_engineering.tracker_neighborhood
+    assert hits.model.set_decoder.hit_grouping
+    assert not hits.model.set_decoder.tracker_group_readout
+    assert not hits.model.set_decoder.tracker_fit_correction
+    default_scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_default_50k.yaml")
+    default = resolve_scenario_jobs(default_scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")[0].resolved_config
+    assert not default.model.heptv2.activation_checkpointing
+    default.model.heptv2.activation_checkpointing = True
+    default.model.backbone.num_convs = 6
+    assert hits.model.model_dump() == default.model.model_dump()
+
+
 def test_cld_default_matches_winning_tracker_feature_configuration():
     platform = load_platform_profile(ROOT / "configs/training/platforms/local.yaml")
     configs = []
