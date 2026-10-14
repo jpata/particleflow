@@ -247,6 +247,12 @@ def main():
     # Load model weights
     print(f"Loading model weights from {args.checkpoint}...")
     model_state = torch.load(args.checkpoint, map_location=torch.device("cpu"), weights_only=True)
+    # Training attaches loss calibration buffers that inference models do not have.
+    # Remove only those buffers so all model weights are still loaded strictly.
+    state_dict = model_state["model_state_dict"]
+    for key in list(state_dict):
+        if key.startswith("task_loss_weighter."):
+            del state_dict[key]
 
     # Load step losses if available
     print("Attempting to load step losses...")
