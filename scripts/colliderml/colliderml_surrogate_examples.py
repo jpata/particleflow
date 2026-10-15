@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Dump a few real surrogate-ancestor examples with full provenance.
 
-Scans the first events of a source shard with the exact study machinery, selects the N
-accepted surrogates with the largest recovered deposits (default 3 per sample), and for
+Scans the first events of a source shard with the converter's own rule
+(truth.find_surrogate_ancestors), selects the N accepted surrogates with the largest recovered
+calo deposits (default 3 per sample), and for
 each prints: what was deposited (and where), the surrogate's identity and its *silent*
 record daughters, the walk of a representative contribution from hit to surrogate, and the
 one-line "why it was dropped / why the surrogate rule adds it".
 
 Usage (from repo root, .venv):
-  python3 scripts/colliderml_surrogate_examples.py --sample pu0 --num-events 30
-  python3 scripts/colliderml_surrogate_examples.py --sample pu200 --num-events 5
+  python3 scripts/colliderml/colliderml_surrogate_examples.py --sample pu0 --num-events 30
+  python3 scripts/colliderml/colliderml_surrogate_examples.py --sample pu200 --num-events 5
   # --top N to change the number of examples
 """
 
@@ -21,11 +22,18 @@ import awkward as ak
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))  # import the study script's helpers
-sys.path.insert(0, str(Path(__file__).parent.parent))  # and the repo
+sys.path.insert(0, str(Path(__file__).parents[2]))  # and the repo
 
-from colliderml_surrogate_impact import _ancestors, _row_lookup, walk_to_primary_many, PDG_NAMES  # noqa: E402
+from colliderml_surrogate_impact import _row_lookup, walk_to_primary_many, PDG_NAMES  # noqa: E402
 from mlpf.data.colliderml import reader  # noqa: E402
-from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, _build_parent_maps, _redirect_ids, calibration_factors, walk_to_leaf_many  # noqa: E402
+from mlpf.data.colliderml.truth import (  # noqa: E402
+    DEFAULT_CALIBRATION,
+    _build_parent_maps,
+    _redirect_ids,
+    calibration_factors,
+    find_surrogate_ancestors,
+    walk_to_leaf_many,
+)
 
 ECAL, HCAL = {9, 10, 11}, {12, 13, 14}
 
@@ -39,10 +47,9 @@ def _name(pdg_id, charge=None):
 
 
 def event_surrogates(ev):
-    """Same candidate logic as the study (walk + key4hep guards), returning rows + metadata."""
+    """Accepted surrogates of one event (truth.find_surrogate_ancestors) with calo deposits, plus metadata."""
     particles, calo = ev["particles"], ev["calo_hits"]
     pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles)
-    row_of = _row_lookup(pid)
     primary = np.asarray(ak.to_numpy(particles["primary"])).astype(bool)
 
     cid = _redirect_ids(np.asarray(ak.to_numpy(ak.flatten(calo["contrib_particle_ids"], axis=None))).ravel(), redirect)
@@ -53,24 +60,19 @@ def event_surrogates(ev):
 
     leaf_row = walk_to_leaf_many(cid, pid, is_leaf, parent)
     th_pid = _redirect_ids(np.asarray(ak.to_numpy(ev["tracker_hits"]["particle_id"])).astype(np.int64), redirect)
-    th_leaf = walk_to_leaf_many(th_pid, pid, is_leaf, parent)
 
     out = []
     dropped = leaf_row == -1
+    clean, _, _ = find_surrogate_ancestors(np.concatenate([cid.astype(np.int64), th_pid]), pid, parent, primary, is_leaf)
     if dropped.any():
         uniq, inv = np.unique(cid[dropped], return_inverse=True)
         row_per_contrib = walk_to_primary_many(uniq, pid, primary, parent)[inv]
-        ok = row_per_contrib >= 0
-        cand = np.unique(row_per_contrib[ok])
-        measured = np.unique(np.concatenate([leaf_row[leaf_row >= 0], th_leaf[th_leaf >= 0]]))
-        partial = np.isin(cand, list(_ancestors(measured, parent, row_of)))
-        rest = cand[~partial]
-        nested = np.isin(rest, list(_ancestors(rest, parent, row_of)))
-        clean = rest[~nested]
         for r in clean:
             # lift the (dropped-space == r) mask back to full-contribution space
             m = np.zeros(len(cid), bool)
             m[np.nonzero(dropped)[0]] = row_per_contrib == r
+            if not m.any():
+                continue  # tracker-only surrogate: no calo deposit to show
             out.append(
                 dict(
                     row=int(r),

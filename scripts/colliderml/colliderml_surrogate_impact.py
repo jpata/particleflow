@@ -6,15 +6,18 @@ chain never reaches a leaf primary are dropped. The chain that fails is a genera
 K0S/Lambda/Sigma/Xi (a non-leaf primary) that Geant4 let interact before its preassigned decay,
 so its generator daughters are silent — key4hep's `find_surrogate_ancestors` case.
 
-"After" simulates the fix as key4hep defines it: the deepest primary on a dropped chain becomes a
-leaf (a target candidate), unless one of its leaf descendants registered anything (adding it would
-double count; "partial") or it is the ancestor of another candidate ("nested"). compute_gen_tables
-is then rerun unchanged, so visibility, track links and the gen reference follow the converter's
-own rules. Per sample the report shows what we gain (attributed energy, gen-MET closure against
-the neutrino MET) and what it costs (which targets are added, how measurable they are).
+"Before" runs compute_gen_tables with truth.use_surrogate_ancestors off. "After" simulates the fix
+as key4hep defines it, independently of truth.find_surrogate_ancestors: the deepest primary on a
+dropped chain (calo contribution or tracker hit) becomes a leaf (a target candidate), unless one of
+its leaf descendants registered anything (adding it would double count; "partial") or it is the
+ancestor of another candidate ("nested"). compute_gen_tables is then rerun with those rows as
+leaves, so visibility, track links and the gen reference follow the converter's own rules; the
+native implementation must reproduce it (sanity count in the report). Per sample the report shows
+what we gain (attributed energy, gen-MET closure against the neutrino MET) and what it costs (which
+targets are added, how measurable they are).
 
-Usage (from repo root, .venv; pu200 only via sbatch — scripts/flatiron/colliderml_surrogate_impact.sh):
-  python3 scripts/colliderml_surrogate_impact.py --sample pu0 --workers 10 --out /tmp/surr/pu0.json
+Usage (from repo root, .venv; pu200 only via sbatch):
+  python3 scripts/colliderml/colliderml_surrogate_impact.py --sample pu0 --workers 10 --out /tmp/surr/pu0.json
   # defaults: pu0 = shards 0-9 x 30 events, pu200 = shards 0-9 x 5 events
 """
 
@@ -95,6 +98,46 @@ def _ancestors(rows, parent, row_of, max_depth=256):
     return anc
 
 
+def simulated_surrogates(pid, parent, primary, cid, w, leaf_row, th_pid, th_leaf):
+    """The fix as key4hep defines it, written independently of truth.find_surrogate_ancestors.
+
+    cid/w: (pi0-redirected) calo contribution owner ids and calibrated energies, th_pid: tracker-hit
+    owner ids; leaf_row/th_leaf: their walk_to_leaf_many rows without surrogates. Returns the
+    accepted rows, {candidate row: its dropped calo deposit}, and the partial / nested exclusions.
+    """
+    row_of = _row_lookup(pid)
+    dropped, th_dropped = leaf_row == -1, th_leaf == -1
+    if not (dropped.any() or th_dropped.any()):
+        return [], {}, 0, 0
+
+    # candidates: deepest primary on each dropped chain (calo contribution or tracker hit)
+    def primary_of(ids):
+        uniq, inv = np.unique(ids, return_inverse=True)
+        return walk_to_primary_many(uniq, pid, primary, parent)[inv]
+
+    row_per_contrib, row_per_th = primary_of(cid[dropped]), primary_of(th_pid[th_dropped])
+    ok = row_per_contrib >= 0
+    cand = np.unique(np.concatenate([row_per_contrib[ok], row_per_th[row_per_th >= 0]]))
+    cand_dep = np.bincount(row_per_contrib[ok], weights=w[dropped][ok], minlength=len(pid))[cand]
+    # key4hep guards: no registered leaf descendant (else double counting), deepest of nested
+    measured = np.unique(np.concatenate([leaf_row[leaf_row >= 0], th_leaf[th_leaf >= 0]]))
+    partial = np.isin(cand, list(_ancestors(measured, parent, row_of)))
+    rest = cand[~partial]
+    nested = np.isin(rest, list(_ancestors(rest, parent, row_of)))
+    return rest[~nested].tolist(), dict(zip(cand.tolist(), cand_dep.tolist())), int(partial.sum()), int(nested.sum())
+
+
+@contextmanager
+def native_surrogates(enabled):
+    """Switch the converter's own surrogate promotion (truth.use_surrogate_ancestors)."""
+    orig = truth.use_surrogate_ancestors
+    truth.use_surrogate_ancestors = enabled
+    try:
+        yield
+    finally:
+        truth.use_surrogate_ancestors = orig
+
+
 @contextmanager
 def surrogates_as_leaves(rows):
     """Make compute_gen_tables treat `rows` as leaf primaries (the simulated fix)."""
@@ -126,6 +169,11 @@ def _added_rows(after, before):
         else:
             idx.append(i)
     return np.asarray(idx, np.int64), sum(remaining.values())
+
+
+def _same_tables(a, b):
+    """gen/genref tables equal on every column but generatorStatus (the simulation leaves it 1)."""
+    return all(set(x) == set(y) and all(np.array_equal(x[k], y[k]) for k in x if k != "generatorStatus") for x, y in zip(a, b))
 
 
 def _met_closure(genref, nu_px, nu_py):
@@ -176,33 +224,21 @@ def analyze_event(ev):
     th_pid = _redirect_ids(np.asarray(ak.to_numpy(tracker["particle_id"])).astype(np.int64), redirect)
     th_leaf = walk_to_leaf_many(th_pid, pid, is_leaf, parent)
 
-    # surrogate candidates: deepest primary on each dropped chain, with its dropped deposit
-    clean, dep_of, n_partial, n_nested = [], {}, 0, 0
-    if dropped.any():
-        uniq, inv = np.unique(cid[dropped], return_inverse=True)
-        row_per_contrib = walk_to_primary_many(uniq, pid, primary, parent)[inv]
-        ok = row_per_contrib >= 0
-        cand, cinv = np.unique(row_per_contrib[ok], return_inverse=True)
-        cand_dep = np.bincount(cinv, weights=w[dropped][ok], minlength=len(cand))
-        # key4hep guards: no registered leaf descendant (else double counting), deepest of nested
-        measured = np.unique(np.concatenate([leaf_row[leaf_row >= 0], th_leaf[th_leaf >= 0]]))
-        partial = np.isin(cand, list(_ancestors(measured, parent, row_of)))
-        rest = cand[~partial]
-        nested = np.isin(rest, list(_ancestors(rest, parent, row_of)))
-        clean = rest[~nested].tolist()
-        n_partial, n_nested = int(partial.sum()), int(nested.sum())
-        dep_of = dict(zip(cand.tolist(), cand_dep.tolist()))
+    clean, dep_of, n_partial, n_nested = simulated_surrogates(pid, parent, primary, cid, w, leaf_row, th_pid, th_leaf)
 
     # neutrino MET: the truth the gen reference should close against
     nu = is_leaf & np.isin(np.abs(pdg), list(NEUTRINO_PDGS))
     nu_px, nu_py = float(px[nu].sum()), float(py[nu].sum())
 
-    gen_b, _, _, ref_b = compute_gen_tables(particles, calo, tracks, DEFAULT_CALIBRATION, tracker)
-    if clean:
-        with surrogates_as_leaves(clean):
-            gen_a, _, _, ref_a = compute_gen_tables(particles, calo, tracks, DEFAULT_CALIBRATION, tracker)
-    else:
-        gen_a, ref_a = gen_b, ref_b
+    with native_surrogates(False):
+        gen_b, _, _, ref_b = compute_gen_tables(particles, calo, tracks, DEFAULT_CALIBRATION, tracker)
+        if clean:
+            with surrogates_as_leaves(clean):
+                gen_a, _, _, ref_a = compute_gen_tables(particles, calo, tracks, DEFAULT_CALIBRATION, tracker)
+        else:
+            gen_a, ref_a = gen_b, ref_b
+    with native_surrogates(True):
+        gen_n, _, _, ref_n = compute_gen_tables(particles, calo, tracks, DEFAULT_CALIBRATION, tracker)
     added, lost = _added_rows(gen_a, gen_b)
 
     # final-state set without / with surrogates; a surrogate replaces its (silent) generator descendants
@@ -232,6 +268,7 @@ def analyze_event(ev):
         n_partial=n_partial,
         n_nested=n_nested,
         n_lost=int(lost),
+        native_mismatch=not _same_tables((gen_a, ref_a), (gen_n, ref_n)),
         closure_before=_met_closure(ref_b, nu_px, nu_py),
         closure_after=_met_closure(ref_a, nu_px, nu_py),
         met_nu=float(np.hypot(nu_px, nu_py)),
@@ -285,6 +322,7 @@ def summarize(rows):
         "excluded_partial": sum(r["n_partial"] for r in rows),
         "excluded_nested": sum(r["n_nested"] for r in rows),
         "targets_lost_sanity": sum(r["n_lost"] for r in rows),
+        "native_mismatch_events": sum(r.get("native_mismatch", False) for r in rows),
         "unattr_rel_before": percentiles([r["e_unattr_before"] / r["e_total"] for r in rows if r["e_total"]]),
         "unattr_rel_after": percentiles([r["e_unattr_after"] / r["e_total"] for r in rows if r["e_total"]]),
         "targets_E_share_before": sum(r["e_targets_before"] for r in rows) / tot_e if tot_e else 0.0,
@@ -324,8 +362,8 @@ LABELS = [
 
 GLOSSARY = {
     "events affected": "events with any calibrated calo deposit whose chain reaches no leaf (dropped today)",
-    "surrogates added as candidates": "deepest primaries on dropped chains that pass the key4hep guards; excluded = a leaf descendant registered "
-    "(partial: would double count) or ancestor of another candidate (nested)",
+    "surrogates added as candidates": "deepest primaries on dropped chains (calo or tracker) that pass the key4hep guards; excluded = a leaf "
+    "descendant registered (partial: would double count) or ancestor of another candidate (nested)",
     "unattributed calo energy / event [med / p90]": "share of the event's calibrated deposit attributed to no truth particle, today → with surrogates"
     " (the remainder after is genuinely orphaned)",
     "calo energy on targets": "share of all calibrated deposit carried by the (visible) target set, summed over events",
@@ -396,7 +434,8 @@ def format_report(summaries, runs_header):
     r_lines += [f"| {_cell(label)} | " + " | ".join(_cell(rows_by_sample[name][label]) for name in columns) + " |" for label in LABELS]
     notes = [
         f"- {name}: tracker-hit orphan share (count-level) med {_pct(s['tracker_hit_orphan_frac'].get('median', 0.0))}; "
-        f"targets lost by the fix (sanity, must be 0): {s['targets_lost_sanity']}"
+        f"targets lost by the fix (sanity, must be 0): {s['targets_lost_sanity']}; "
+        f"events where the native truth.py surrogates differ from this simulation (must be 0): {s.get('native_mismatch_events', '–')}"
         for name, s in summaries.items()
     ]
     return "\n".join([f"# surrogate-ancestor impact: {runs_header}", ""] + g_lines + [""] + r_lines + [""] + notes)
