@@ -1,0 +1,36 @@
+# Track/cluster-only large-batch counterpart to cld_pf_heptv2_batch512_50k.
+# Baseline: global batch 384 (48/rank on 8 GPUs), LAMB lr 0.001.
+# Increase the device batch by 16x: 768/rank, global batch 6144.
+# Use a 4x learning rate (sqrt batch scaling), lr 0.004, after the
+# lr 0.016 run diverged. No gradient accumulation.
+# Keep 50k optimizer steps: this processes 307.2M events (16x the baseline).
+# The baseline log reports ~1.24 GB reserved and 4% VRAM usage; measure
+# peak memory and throughput on real occupancies before assuming saturation.
+name: cld_pf_track_cluster_batch6144_50k
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  track_cluster_mlpf:
+    model_name: pyg-cld-v1
+    overrides:
+      model.attention.use_jagged_attention: true
+seeds: [12345]
+training:
+  global_batch_size: 6144
+  parameters:
+    optimizer: lamb
+    lr: 0.004
+    lr_schedule: cosinedecay
+    num_steps: 50000
+    val_freq: 5000
+    checkpoint_freq: 5000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+common_overrides:
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
