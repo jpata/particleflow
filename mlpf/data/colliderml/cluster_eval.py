@@ -3,7 +3,7 @@
 # Reads the v20 pilot events (Pandora clusters on DDCaloDigi cells) together with the same events
 # of release 1 (v1 calo hits = our clusterer's production input; event_id joins 1:1), decodes
 # them once into per-event arrays (cached as pickles), and scores any clustering setting with
-# mlpf/data/colliderml/cluster_metrics.py. Pandora is scored the same way, at run time, so both
+# mlpf/data/cluster_metrics.py. Pandora is scored the same way, at run time, so both
 # always use the current metric definitions.
 import json
 import os
@@ -17,9 +17,9 @@ import numpy as np
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-from mlpf.data.colliderml.cluster_metrics import allocator_metrics as _allocator_metrics
-from mlpf.data.colliderml.cluster_metrics import cluster_metrics, hit_truth
-from mlpf.data.colliderml.cluster_metrics import pp_metrics as _pp_metrics
+from mlpf.data.cluster_metrics import allocator_metrics as _allocator_metrics
+from mlpf.data.cluster_metrics import cluster_metrics
+from mlpf.data.cluster_metrics import pp_metrics as _pp_metrics
 from mlpf.data.colliderml.clue import CLUE_PRESETS, resolve_clue_config
 from mlpf.data.colliderml.clustering import DEFAULT_MERGE_FRAC, DEFAULT_REGION_RADII_MM, cluster_event
 from mlpf.data.colliderml.truth import (
@@ -37,7 +37,7 @@ V20_ROOT = Path("/mnt/ceph/users/ewulff/data/colliderml/v20")
 V1_SAMPLE = {"hard_scatter": "ttbar_pu0", "full_pileup": "ttbar_pu200"}
 V1_EVENTS_PER_SHARD = {"hard_scatter": 1000, "full_pileup": 100}
 # decoded-event cache format; bump whenever decode_event's output changes
-CACHE_TAG = "v5"
+CACHE_TAG = "v1"
 
 _PU200_RADII = {**{k: 16.25 for k in (9, 10, 11)}, **{k: 36.0 for k in (12, 13, 14)}}
 PRESETS = {
@@ -168,6 +168,42 @@ def iter_events(sample: str, first: int, n: int, with_tracks: bool = True):
 def _np(a, dt=None):
     v = np.asarray(ak.to_numpy(a))
     return v.astype(dt) if dt is not None else v
+
+
+def hit_truth(particles_ev: Dict[str, Any], hits_ev: Dict[str, Any], calibration: Dict[int, float] = DEFAULT_CALIBRATION) -> Dict[str, np.ndarray]:
+    """Per-hit leaf-particle contributions of one ColliderML event, the converter's attribution.
+
+    hits_ev needs `detector`, `contrib_particle_ids`, `contrib_energies` (v1 calo_hits and v20
+    calo_cells share these). particles_ev is the v1 particles record. Returns COO arrays
+    hit/leaf/w (w = calibrated GeV, duplicates summed) plus per-particle-row `energy` (true
+    energy) and `ispu`.
+    """
+    pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles_ev)
+    cid = _redirect_ids(np.asarray(ak.to_numpy(ak.flatten(hits_ev["contrib_particle_ids"], axis=None))).ravel(), redirect)
+    ce = np.asarray(ak.to_numpy(ak.flatten(hits_ev["contrib_energies"], axis=None))).ravel().astype(np.float64)
+    nctr = np.asarray(ak.to_numpy(ak.num(hits_ev["contrib_particle_ids"]))).ravel()
+    det = np.asarray(ak.to_numpy(hits_ev["detector"])).astype(np.int64)
+    hit_of = np.repeat(np.arange(len(nctr), dtype=np.int64), nctr)
+    leaf_row = np.full(len(cid), -1, np.int64)
+    if len(cid):
+        uniq, inv = np.unique(cid.astype(np.int64), return_inverse=True)
+        leaf_row = walk_to_leaf_many(uniq, pid.astype(np.int64), is_leaf, parent.astype(np.int64))[inv]
+    ok = leaf_row >= 0
+    w = ce * calibration_factors(np.repeat(det, nctr), calibration).astype(np.float64)
+    # sum duplicate (hit, leaf) pairs (several G4 secondaries of one leaf in one hit)
+    n_rows = len(pid)
+    key = hit_of[ok] * n_rows + leaf_row[ok]
+    ukey, inv = np.unique(key, return_inverse=True)
+    wsum = np.bincount(inv, weights=w[ok], minlength=len(ukey))
+    vertex_primary = np.asarray(ak.to_numpy(particles_ev["vertex_primary"]))
+    return dict(
+        hit=(ukey // n_rows).astype(np.int64),
+        leaf=(ukey % n_rows).astype(np.int64),
+        w=wsum,
+        energy=np.asarray(ak.to_numpy(particles_ev["energy"])).astype(np.float64),
+        ispu=np.asarray(vertex_primary) != 1,
+        n_rows=n_rows,
+    )
 
 
 def decode_event(parts, hits, cells, clus, tracks=None, tracker=None, tracks_v20=None):
