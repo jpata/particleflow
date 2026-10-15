@@ -1,0 +1,39 @@
+# Spec for scripts/cluster_eval/cluster_plots.py: plots for judging the calorimeter clusterings.
+# `columns` follow cluster_table.yaml (sources: scripts/cluster_eval/columns.py); results_dir is
+# shared with the table, so a column defined identically in both is computed once. Columns on
+# the same dataset share a panel. Display-only keys: label (legend), slot (1-8: colour + line
+# style, the same clusterer keeps its slot across datasets).
+
+defaults:
+  cache_dir: /mnt/ceph/users/ewulff/data/colliderml/cluster_study_cache  # decoded ColliderML events
+  results_dir: /mnt/ceph/users/ewulff/data/colliderml/cluster_eval_results  # one json + npz per column
+
+columns:
+  # ---- ColliderML ttbar PU0: held-out events 500-549 (the tuning's validation events)
+  - {label: "CLUE", slot: 1, source: colliderml, sample: hard_scatter, events: [500, 50], config: clue}
+  # - {label: "CLUE, drop E<0.1", slot: 3, source: colliderml, sample: hard_scatter, events: [500, 50], config: clue_dropE0p1}
+  - {label: "Pandora", slot: 2, source: colliderml, sample: hard_scatter, events: [500, 50], config: pandora}
+  # ---- ColliderML ttbar PU200 (CLUE preset pu200): held-out events 50-69 (the tuning's validation
+  # events). Decoding them into cache_dir the first time takes ~4 min, 8 GB peak
+  - {label: "CLUE", slot: 1, source: colliderml, sample: full_pileup, events: [0, 50], config: clue_pu200}
+  # - {label: "CLUE, drop E<0.1", slot: 3, source: colliderml, sample: full_pileup, events: [50, 20], config: clue_pu200_dropE0p1}
+  - {label: "Pandora", slot: 2, source: colliderml, sample: full_pileup, events: [0, 50], config: pandora}
+  # ---- Key4hep references (Pandora), the table's columns
+  - label: "Pandora"
+    slot: 2
+    source: key4hep
+    detector: cld
+    file: /mnt/ceph/users/ewulff/data/jpata_particleflow_hf/root/cld/ttbar/reco_p8_ee_ttbar_ecm365_300000.root
+    events: [0, 50]
+  - label: "Pandora"
+    slot: 2
+    source: key4hep
+    detector: clic
+    file: /mnt/ceph/users/ewulff/data/jpata_particleflow_hf/root/clic/ttbar/reco_p8_ee_ttbar_ecm380_300000.root
+    events: [0, 50]
+
+plots:
+  - {kind: hits_per_cluster}
+  - {kind: clusters_per_event}
+  - {kind: efficiency}
+  - {kind: efficiency, rule: alloc, name: efficiency_alloc}
