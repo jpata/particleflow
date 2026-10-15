@@ -1,10 +1,10 @@
-# Unit tests for the clusterer-agnostic metrics (mlpf/data/colliderml/cluster_metrics.py).
+# Unit tests for the clusterer-agnostic metrics (mlpf/data/cluster_metrics.py).
 import contextlib
 import io
 
 import numpy as np
 
-from mlpf.data.colliderml.cluster_metrics import aggregate, cluster_metrics, greedy_assign, pp_metrics, _candidates, _sum_pairs
+from mlpf.data.cluster_metrics import aggregate, cluster_metrics, greedy_assign, pp_metrics, _candidates, _sum_pairs
 from mlpf.data.target_building import EventData, assign_genparticles_to_obj_and_merge
 
 
@@ -68,7 +68,10 @@ def test_allocator_order_differs_from_dominance():
     # most energetic particle (true energy), the double majority to the dominant one
     hit_e = np.array([2.0, 6.0])
     truth = _truth([0, 1], [0, 1], hit_e, 2, energy=[100.0, 5.0])
-    m = aggregate([cluster_metrics(np.array([0, 0]), hit_e, truth)])
+    m = cluster_metrics(np.array([0, 0]), hit_e, truth, dists=True)
+    d = m["_dist"]
+    assert d["par_alloc"].tolist() == [True, False] and d["par_dm"].tolist() == [False, True]
+    m = aggregate([m])
     assert np.isclose(m["purity_alloc_E"], 0.25) and np.isclose(m["purity_dm_E"], 0.75)
 
 
@@ -76,6 +79,32 @@ def test_per_visible_counts():
     m = aggregate([cluster_metrics(np.array([0, 0, 0, 1, 1, 2]), HIT_E, TRUTH, n_tracks=2, n_visible=4)])
     assert np.isclose(m["clusters_per_visible"], 3 / 4) and np.isclose(m["elements_per_visible"], 5 / 4)
     assert "elements_per_visible" not in aggregate([cluster_metrics(np.array([0, 0, 0, 1, 1, 2]), HIT_E, TRUTH)])
+
+
+def test_removed_hits_vs_targets():
+    # particles 0, 1 are targets, 2 is not; hits 2-4 are removed: hit 2 is particle 1's, hit 3
+    # particle 2's, hit 4 is shared 1.5 (particle 0) / 0.5 GeV (particle 2) -> particle 0's
+    hit_e = np.full(5, 2.0)
+    truth = _truth([0, 1, 2, 3, 4, 4], [0, 0, 1, 2, 0, 2], [2, 2, 2, 2, 1.5, 0.5], 3)
+    co = np.array([0, 0, -1, -1, -1])
+    m = aggregate([cluster_metrics(co, hit_e, dict(truth, target=np.array([True, True, False])))])
+    assert m["n_removed_hits"] == 3 and m["n_removed_hits_target"] == 2
+    assert np.isclose(m["removed_hits_target_frac"], 2 / 3)
+    assert np.isclose(m["removed_target_E_frac"], (2 + 1.5) / (5.5 + 2))  # targets' deposit in removed hits / in all
+    # particle 0 keeps 4 GeV in cluster 0 vs 1.5 removed; particle 1 has nothing left
+    assert m["n_targets_lost_best"] == 1 and m["n_targets_lost_all"] == 1 and np.isclose(m["targets_lost_best_frac"], 0.5)
+    assert np.isclose(m["targets_lost_all_frac"], 0.5)
+    m = aggregate([cluster_metrics(co, hit_e, truth)])  # no target mask: only the plain count
+    assert m["n_removed_hits"] == 3 and "n_removed_hits_target" not in m and "removed_target_E_frac" not in m
+
+
+def test_dists():
+    co = np.array([0, 0, 0, 1, 1, 2])
+    m = cluster_metrics(co, HIT_E, TRUTH, dists=True)
+    d = m["_dist"]
+    assert d["clu_nhit"].tolist() == [3, 2, 1] and d["clu_E"].tolist() == [6, 4, 2] and d["clu_dm"].all()
+    assert d["par_T"].tolist() == [6, 4, 2] and d["par_dm"].all() and d["par_alloc"].all() and d["clu_alloc"].all()
+    assert "_dist" not in aggregate([m]) and "_dist" not in cluster_metrics(co, HIT_E, TRUTH)
 
 
 def _allocator_event(rng, n_gp=40, n_hit=300, n_trk=15, n_cl=25):

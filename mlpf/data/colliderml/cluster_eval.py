@@ -10,6 +10,7 @@ import os
 import pickle
 import time
 from pathlib import Path
+from typing import Any, Dict
 
 import awkward as ak
 import numpy as np
@@ -21,7 +22,14 @@ from mlpf.data.colliderml.cluster_metrics import cluster_metrics, hit_truth
 from mlpf.data.colliderml.cluster_metrics import pp_metrics as _pp_metrics
 from mlpf.data.colliderml.clue import CLUE_PRESETS, resolve_clue_config
 from mlpf.data.colliderml.clustering import DEFAULT_MERGE_FRAC, DEFAULT_REGION_RADII_MM, cluster_event
-from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, calibration_factors, compute_gen_tables
+from mlpf.data.colliderml.truth import (
+    DEFAULT_CALIBRATION,
+    _build_parent_maps,
+    _redirect_ids,
+    calibration_factors,
+    compute_gen_tables,
+    walk_to_leaf_many,
+)
 from mlpf.data.target_building import EventData
 
 V1_ROOT = Path("/mnt/ceph/users/ewulff/data/colliderml/CERN__ColliderML-Release-1")
@@ -29,7 +37,7 @@ V20_ROOT = Path("/mnt/ceph/users/ewulff/data/colliderml/v20")
 V1_SAMPLE = {"hard_scatter": "ttbar_pu0", "full_pileup": "ttbar_pu200"}
 V1_EVENTS_PER_SHARD = {"hard_scatter": 1000, "full_pileup": 100}
 # decoded-event cache format; bump whenever decode_event's output changes
-CACHE_TAG = "v4"
+CACHE_TAG = "v5"
 
 _PU200_RADII = {**{k: 16.25 for k in (9, 10, 11)}, **{k: 36.0 for k in (12, 13, 14)}}
 PRESETS = {
@@ -177,9 +185,10 @@ def decode_event(parts, hits, cells, clus, tracks=None, tracker=None, tracks_v20
         truth=hit_truth(parts, hits),
     )
     if tracks is not None:
-        gen, gp_to_hit, gp_to_track, _ = compute_gen_tables(parts, hits, tracks, DEFAULT_CALIBRATION, tracker_ev=tracker)
+        gen, gp_to_hit, gp_to_track, _, rows = compute_gen_tables(parts, hits, tracks, DEFAULT_CALIBRATION, tracker_ev=tracker, return_rows=True)
         ev["alloc"] = dict(
             gen=gen,
+            gen_rows=rows,  # particle-table row of each gen (target) particle
             gp_to_hit=gp_to_hit,
             gp_to_track=gp_to_track,
             n_track=len(_np(tracks["majority_particle_id"])),
@@ -208,7 +217,7 @@ def pandora_metrics(ev):
     """cluster_metrics of the event's Pandora clustering (computed now, current definitions)."""
     p = ev["pandora"]
     counts = {k: p[k] for k in ("n_tracks", "n_visible") if k in p}
-    m = cluster_metrics(p["cluster_of"], p["e"], p["truth"], **counts)
+    m = cluster_metrics(p["cluster_of"], p["e"], p["truth"], **counts, dists=True)
     m["time_s"] = np.nan
     return m
 
@@ -247,14 +256,26 @@ def training_view_metrics(alloc, n_hit: int, cluster_of, hit_e):
     )
 
 
+def _attach_targets(events):
+    """truth["target"]: the mask of the target particles' rows (compute_gen_tables' gen rows),
+    for our hits and for Pandora's cells (the same particle rows)."""
+    for ev in events:
+        if "alloc" in ev:
+            mask = np.zeros(ev["truth"]["n_rows"], bool)
+            mask[ev["alloc"]["gen_rows"]] = True
+            ev["truth"]["target"] = mask
+            ev["pandora"]["truth"]["target"] = mask
+    return events
+
+
 def load_events(sample: str, first: int, n: int, cache: str | None, with_tracks: bool = True):
     """Decoded events [first, first + n) of a sample, from cache/<sample>_<first>_<n>_<tag>.pkl
-    if present (written atomically on first use)."""
+    if present (written atomically on first use), with the target-particle masks attached."""
     tag = CACHE_TAG + ("" if with_tracks else "_notracks")
     path = Path(cache) / f"{sample}_{first}_{n}_{tag}.pkl" if cache else None
     if path is not None and path.exists():
         with open(path, "rb") as f:
-            return pickle.load(f)
+            return _attach_targets(pickle.load(f))
     events = []
     for rec in iter_events(sample, first, n, with_tracks):
         events.append(decode_event(*rec))
@@ -265,7 +286,7 @@ def load_events(sample: str, first: int, n: int, cache: str | None, with_tracks:
         with open(tmp, "wb") as f:  # write-then-rename: a concurrent job never reads a partial file
             pickle.dump(events, f)
         os.replace(tmp, path)
-    return events
+    return _attach_targets(events)
 
 
 def run_one(job):
@@ -276,7 +297,7 @@ def run_one(job):
     cluster_of, feats, hit_to_cluster, _ = cluster_event(ev["x"], ev["y"], ev["z"], ev["e"], ev["det"], **kw)
     t_cluster = time.time() - t0  # clustering only (metrics and allocator excluded)
     counts = dict(n_tracks=ev["alloc"]["n_track"], n_visible=len(ev["alloc"]["gen"]["energy"])) if "alloc" in ev else {}
-    m = cluster_metrics(cluster_of, ev["e"], ev["truth"], **counts)
+    m = cluster_metrics(cluster_of, ev["e"], ev["truth"], **counts, dists=True)
     m["time_s"] = t_cluster
     if "alloc" in ev:
         m.update(allocator_metrics(ev["alloc"], len(ev["x"]), hit_to_cluster, len(feats)))

@@ -1,9 +1,9 @@
-# Truth-based quality metrics for calorimeter clusterings.
+# Truth-based quality metrics for calorimeter clusterings, detector- and clusterer-agnostic.
 #
-# Clusterer-agnostic: a clustering is a per-hit label array (`cluster_of`, -1 = unclustered),
-# scored against per-hit truth contributions (for ColliderML: the Geant4 contributions walked to
-# the same leaf particles the converter targets, truth.py).
-# mlpf/data/colliderml/cluster_eval.py (ColliderML events, Pandora reference) drives it.
+# A clustering is a per-hit label array (`cluster_of`, -1 = unclustered), scored against per-hit
+# truth contributions (hit, particle, energy) that a detector-specific adapter builds, e.g.
+# mlpf/data/colliderml/cluster_eval.py for ColliderML (Geant4 contributions walked to the leaf
+# particles the converter targets).
 #
 # Notation: M[c, p] = energy particle p deposited in the hits of cluster c; T_p = p's total
 # deposit over ALL hits (clustered or not); A_c = sum_p M[c, p] (the cluster's truth-attributed
@@ -15,7 +15,20 @@
 #   n_clusters, n_clusters_gt0p1, n_clusters_1hit   clusters per event (all / E > 0.1 GeV / one hit)
 #   clu_nhit_max, clu_E_max                          largest cluster: hits / energy (GeV)
 #   dropped_E_frac                                   hit energy in no cluster / all hit energy
+#   n_removed_hits                                   hits in no cluster ("removed"), per event
 #   n_tracks, n_visible, clusters_per_visible, elements_per_visible   (with n_tracks/n_visible)
+#
+# Removed hits vs the targets (needs truth["target"]: a per-row mask of the target particles,
+# i.e. the converter's visible particles, whose energy ends up in a target, merged or not):
+#   n_removed_hits_target     removed hits whose main contributor is a target particle, per event
+#   removed_hits_target_frac  n_removed_hits_target / n_removed_hits
+#   removed_target_E_frac     the targets' deposit in removed hits / the targets' total deposit
+#   n_targets_lost_best       targets (with a deposit) that lost their best cluster to the removal:
+#                             more of their deposit sits in removed hits than in any kept cluster
+#                             (removed hits counted as one pseudo-cluster), per event
+#   targets_lost_best_frac    n_targets_lost_best / targets with a deposit
+#   n_targets_lost_all        targets with a deposit that keep none of it in any cluster, per event
+#   targets_lost_all_frac     n_targets_lost_all / targets with a deposit
 #
 # Energy sharing without any matching:
 #   purity_E        sum_c max_p M / sum_c A_c    (every cluster vs its dominant particle)
@@ -44,61 +57,34 @@
 #   purity_pp_trk_hits  over track-assigned pairs: sum (p's hits on the track) / sum (track hits)
 #   recall_pp_trk_hits  over track-assigned pairs: sum (p's hits on the track) / sum (p's tracker hits)
 #   (tracks have no energy-based version: ColliderML tracker hits carry no energy)
-# and from allocator_metrics: n_targets, merged_frac[_E,_hs], n_massive, massive_E,
+# and from allocator_metrics: n_targets, merged_frac[_E,_hs], n_massive,
 # clusters_per_target, elements_per_target.
+#
+# Distributions for plots (cluster_metrics(..., dists=True) -> out["_dist"]; `aggregate` skips it):
+#   per cluster:   clu_nhit   number of hits
+#                  clu_E      energy (GeV)
+#                  clu_dm     matched under the double majority (not matched = fake)
+#                  clu_alloc  matched by the allocator, clusters only
+#   per particle with T_p >= DIST_PARTICLE_MIN_E:
+#                  par_T      calorimeter deposit T_p (GeV)
+#                  par_dm     matched under the double majority (efficiency)
+#                  par_alloc  matched by the allocator, clusters only
 import contextlib
 import io
 from typing import Any, Dict, List, Tuple
 
-import awkward as ak
 import numpy as np
 
-from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, _build_parent_maps, _redirect_ids, calibration_factors, walk_to_leaf_many
 from mlpf.data.target_building import EventData, assign_genparticles_to_obj_and_merge
 
 # Bump whenever a metric's definition changes: caches of stored metric results should be keyed
 # on it, so they are recomputed instead of silently reused.
-METRICS_VERSION = "2026-10-09.2"
+METRICS_VERSION = "2026-10-13.5"
 
 PARTICLE_MIN_E = 1.0  # GeV of deposit, particles counted in the rule-based efficiencies/purities
 CLUSTER_MIN_E = 1.0  # GeV, clusters counted in the fake rates
 TRACK_MIN_P = 1.0  # GeV, tracks counted in the training-view fake rate
-
-
-def hit_truth(particles_ev: Dict[str, Any], hits_ev: Dict[str, Any], calibration: Dict[int, float] = DEFAULT_CALIBRATION) -> Dict[str, np.ndarray]:
-    """Per-hit leaf-particle contributions of one ColliderML event, the converter's attribution.
-
-    hits_ev needs `detector`, `contrib_particle_ids`, `contrib_energies` (v1 calo_hits and v20
-    calo_cells share these). particles_ev is the v1 particles record. Returns COO arrays
-    hit/leaf/w (w = calibrated GeV, duplicates summed) plus per-particle-row `energy` (true
-    energy) and `ispu`.
-    """
-    pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles_ev)
-    cid = _redirect_ids(np.asarray(ak.to_numpy(ak.flatten(hits_ev["contrib_particle_ids"], axis=None))).ravel(), redirect)
-    ce = np.asarray(ak.to_numpy(ak.flatten(hits_ev["contrib_energies"], axis=None))).ravel().astype(np.float64)
-    nctr = np.asarray(ak.to_numpy(ak.num(hits_ev["contrib_particle_ids"]))).ravel()
-    det = np.asarray(ak.to_numpy(hits_ev["detector"])).astype(np.int64)
-    hit_of = np.repeat(np.arange(len(nctr), dtype=np.int64), nctr)
-    leaf_row = np.full(len(cid), -1, np.int64)
-    if len(cid):
-        uniq, inv = np.unique(cid.astype(np.int64), return_inverse=True)
-        leaf_row = walk_to_leaf_many(uniq, pid.astype(np.int64), is_leaf, parent.astype(np.int64))[inv]
-    ok = leaf_row >= 0
-    w = ce * calibration_factors(np.repeat(det, nctr), calibration).astype(np.float64)
-    # sum duplicate (hit, leaf) pairs (several G4 secondaries of one leaf in one hit)
-    n_rows = len(pid)
-    key = hit_of[ok] * n_rows + leaf_row[ok]
-    ukey, inv = np.unique(key, return_inverse=True)
-    wsum = np.bincount(inv, weights=w[ok], minlength=len(ukey))
-    vertex_primary = np.asarray(ak.to_numpy(particles_ev["vertex_primary"]))
-    return dict(
-        hit=(ukey // n_rows).astype(np.int64),
-        leaf=(ukey % n_rows).astype(np.int64),
-        w=wsum,
-        energy=np.asarray(ak.to_numpy(particles_ev["energy"])).astype(np.float64),
-        ispu=np.asarray(vertex_primary) != 1,
-        n_rows=n_rows,
-    )
+DIST_PARTICLE_MIN_E = 0.1  # GeV of deposit, particles kept in the per-particle distributions
 
 
 def _first_per_group(group: np.ndarray, value: np.ndarray) -> np.ndarray:
@@ -165,11 +151,14 @@ def cluster_metrics(
     truth: Dict[str, np.ndarray],
     n_tracks: int | None = None,
     n_visible: int | None = None,
-) -> Dict[str, float]:
+    dists: bool = False,
+) -> Dict[str, Any]:
     """Metrics of one event's clustering; see the module header for definitions.
 
     truth: hit/leaf/w COO, n_rows, ispu, and `energy` (true particle energy per row, for the
-    allocator ordering). n_tracks / n_visible, if both given, enable the per-visible ratios.
+    allocator ordering); optional `target` (bool per row) enables the removed-hit metrics.
+    n_tracks / n_visible, if both given, enable the per-visible ratios. dists=True adds the
+    per-cluster / per-particle arrays under "_dist".
     Returns per-event values plus `_num`/`_den` pairs that `aggregate` sums over events.
     """
     cluster_of = np.asarray(cluster_of, dtype=np.int64)
@@ -186,6 +175,7 @@ def cluster_metrics(
     out["clu_E_max"] = float(cl_E.max()) if n_cl else 0.0
     out["dropped_E_frac_num"] = float(hit_e[~inc].sum())
     out["dropped_E_frac_den"] = float(hit_e.sum())
+    out["n_removed_hits"] = int(np.sum(~inc))
     if n_tracks is not None and n_visible is not None:
         out["n_tracks"] = int(n_tracks)
         out["n_visible"] = int(n_visible)
@@ -220,6 +210,28 @@ def cluster_metrics(
     out["completeness_E_num"] = float(Mw[best].sum())
     out["completeness_E_den"] = float(T.sum())
 
+    # ---- removed hits (in no cluster) vs the target particles
+    tgt = truth.get("target")
+    if tgt is not None:
+        tgt = np.asarray(tgt, bool)
+        n_from = int(np.sum(~inc[h_hit] & tgt[h_p]))  # removed hits whose main contributor is a target
+        out["n_removed_hits_target"] = n_from
+        out["removed_hits_target_frac_num"] = n_from
+        out["removed_hits_target_frac_den"] = out["n_removed_hits"]
+        tw = tgt[leaf]
+        out["removed_target_E_frac_num"] = float(w[tw & ~m].sum())
+        out["removed_target_E_frac_den"] = float(w[tw].sum())
+        # targets losing their best cluster: their removed deposit beats every kept cluster
+        R = np.bincount(leaf[~m], weights=w[~m], minlength=n_rows)
+        best_kept = np.zeros(n_rows)
+        best_kept[Mp[best]] = Mw[best]
+        has = tgt & (T > 0)
+        lost = has & (R > best_kept)
+        n_has = int(has.sum())
+        out["n_targets_lost_best"] = out["targets_lost_best_frac_num"] = int(lost.sum())
+        out["n_targets_lost_all"] = out["targets_lost_all_frac_num"] = int(np.sum(has & (best_kept == 0)))
+        out["targets_lost_best_frac_den"] = out["targets_lost_all_frac_den"] = n_has
+
     # ---- rule-based matching
     ref = T > PARTICLE_MIN_E
     big = cl_E > CLUSTER_MIN_E
@@ -233,11 +245,13 @@ def cluster_metrics(
     ap = np.nonzero(owner >= 0)[0]
     pairs["alloc"] = (owner[ap], ap)
     ispu = np.asarray(truth["ispu"], bool)
+    matched = {}  # rule -> (matched particles, matched clusters)
     for rule, (pc, pp) in pairs.items():
         matched_p = np.zeros(n_rows, bool)
         matched_p[pp] = True
         matched_c = np.zeros(n_cl, bool)
         matched_c[pc] = True
+        matched[rule] = (matched_p, matched_c)
         out[f"eff_{rule}_num"] = int(np.sum(ref & matched_p))
         out[f"eff_{rule}_den"] = int(np.sum(ref))
         out[f"fake_{rule}_num"] = int(np.sum(big & ~matched_c))
@@ -255,6 +269,18 @@ def cluster_metrics(
             out["eff_dm_E_den"] = float(T[ref].sum())
             out["eff_dm_E_hs_num"] = float(T[ref & matched_p & ~ispu].sum())
             out["eff_dm_E_hs_den"] = float(T[ref & ~ispu].sum())
+
+    if dists:
+        sel = T >= DIST_PARTICLE_MIN_E
+        out["_dist"] = dict(
+            clu_nhit=cl_n.astype(np.int32),
+            clu_E=cl_E.astype(np.float32),
+            clu_dm=matched["dm"][1],
+            clu_alloc=matched["alloc"][1],
+            par_T=T[sel].astype(np.float32),
+            par_dm=matched["dm"][0][sel],
+            par_alloc=matched["alloc"][0][sel],
+        )
     return out
 
 
@@ -348,9 +374,9 @@ def allocator_metrics(gd: EventData, n_cluster: int, n_track: int) -> Dict[str, 
     gd: the event's EventData with the clustering under test as hit_to_cluster (gen_features =
     visible particles before allocation). Returns n_targets (the targets after merging: what the
     model predicts), merged_frac[_E,_hs] (share of targets merged into a host for lack of a free
-    track/cluster: count / energy / hard scatter only), n_massive / massive_E (targets with
-    mass > 5 GeV after the 4-vector merges, and their energy), clusters_per_target = clusters /
-    targets and elements_per_target = (clusters + tracks) / targets.
+    track/cluster: count / energy / hard scatter only), n_massive (targets with mass > 5 GeV
+    after the 4-vector merges), clusters_per_target = clusters / targets and
+    elements_per_target = (clusters + tracks) / targets.
     """
     gen = gd.gen_features
     with contextlib.redirect_stdout(io.StringIO()):
@@ -373,7 +399,6 @@ def allocator_metrics(gd: EventData, n_cluster: int, n_track: int) -> Dict[str, 
         "merged_frac_hs_num": int((merged & ~ispu).sum()),
         "merged_frac_hs_den": int((~ispu).sum()),
         "n_massive": int(np.sum(mass > 5.0)),
-        "massive_E": float(e[mass > 5.0].sum()),
         "clusters_per_target_num": n_cluster,
         "clusters_per_target_den": len(e),
         "elements_per_target_num": n_cluster + n_track,
@@ -399,28 +424,3 @@ def aggregate(per_event: List[Dict[str, float]]) -> Dict[str, float]:
             vals = [e[k] for e in per_event]
             agg[k] = float(np.nanmean(vals)) if np.any(np.isfinite(vals)) else np.nan
     return agg
-
-
-def summary_columns() -> List[Tuple[str, str]]:
-    """(key, format) of the headline columns, in print order."""
-    return [
-        ("n_clusters", "{:.0f}"),
-        ("n_clusters_gt0p1", "{:.0f}"),
-        ("n_clusters_1hit", "{:.0f}"),
-        ("clu_nhit_max", "{:.0f}"),
-        ("clu_E_max", "{:.0f}"),
-        ("dropped_E_frac", "{:.3f}"),
-        ("purity_E", "{:.3f}"),
-        ("completeness_E", "{:.3f}"),
-        ("eff_dm", "{:.3f}"),
-        ("eff_dm_E", "{:.3f}"),
-        ("fake_dm", "{:.3f}"),
-        ("purity_dm_E", "{:.3f}"),
-        ("recall_dm_E", "{:.3f}"),
-        ("eff_alloc", "{:.3f}"),
-        ("fake_alloc", "{:.3f}"),
-        ("purity_alloc_E", "{:.3f}"),
-        ("recall_alloc_E", "{:.3f}"),
-        ("clusters_per_visible", "{:.2f}"),
-        ("elements_per_visible", "{:.2f}"),
-    ]
