@@ -19,5 +19,28 @@ export LUMI_VENV=${LUMI_VENV:-$PWD/particleflow-laif-env}
 export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 export OMP_NUM_THREADS=2
 export NCCL_DEBUG=INFO
+echo "=== Host AMD GPU driver ==="
+if [[ -r /sys/module/amdgpu/version ]]; then
+  cat /sys/module/amdgpu/version
+elif command -v modinfo >/dev/null 2>&1; then
+  modinfo -F version amdgpu || echo "AMD GPU driver version unavailable"
+else
+  echo "AMD GPU driver version unavailable"
+fi
 srun singularity run -B /scratch/project_465001293 -B /tmp "$IMG" \
-  bash -c 'set -e; source "$LUMI_VENV/bin/activate"; exec python -m torch.distributed.run --standalone --nproc-per-node=2 scripts/lumi/smoke_test.py'
+  bash -c '
+    set -e
+    source "$LUMI_VENV/bin/activate"
+    echo "=== Container ROCm software stack ==="
+    if [[ -r /opt/rocm/.info/version ]]; then
+      cat /opt/rocm/.info/version
+    else
+      echo "ROCm version metadata unavailable"
+    fi
+    if command -v hipconfig >/dev/null 2>&1; then
+      hipconfig --version || echo "HIP version unavailable"
+      echo
+    fi
+    python -c "import torch; print(f\"PyTorch: {torch.__version__}\"); print(f\"PyTorch HIP: {torch.version.hip}\")"
+    exec python -m torch.distributed.run --standalone --nproc-per-node=2 scripts/lumi/smoke_test.py
+  '
