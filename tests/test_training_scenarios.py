@@ -29,17 +29,17 @@ def test_tracker_momentum_ablation_changes_only_input_features():
     assert len(jobs) == 3
     flags = [job.resolved_config.model.hit_feature_engineering for job in jobs]
     assert [(f.tracker_momentum, f.tracker_doublets) for f in flags] == [(False, False), (True, False), (True, True)]
-    assert all(job.global_batch_size == 512 and job.per_gpu_batch_size == 64 for job in jobs)
+    assert all(job.global_batch_size == 384 and job.per_gpu_batch_size == 48 for job in jobs)
     assert all(job.resolved_config.model.heptv2.activation_checkpointing for job in jobs)
 
 
 @pytest.mark.parametrize("platform_name", ["flatiron_h100", "lumi_mi250x"])
-def test_heptv2_batch512_matches_september_training_budget(platform_name):
+def test_heptv2_batch512_uses_reduced_batch_for_memory_headroom(platform_name):
     platform = load_platform_profile(ROOT / f"configs/training/platforms/{platform_name}.yaml")
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_batch512_50k.yaml")
     jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
     pf, hits = (job.resolved_config for job in jobs)
-    assert all(job.global_batch_size == 512 and job.gpu_batch_multiplier == 64 for job in jobs)
+    assert all(job.global_batch_size == 384 and job.gpu_batch_multiplier == 48 for job in jobs)
     for config in (pf, hits):
         assert config.num_steps == 50000
         assert config.lr == 0.001

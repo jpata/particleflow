@@ -1,4 +1,5 @@
-# Controlled input-feature ablation at the September-equivalent event budget.
+# Controlled input-feature ablation: 50k * 384 = 19.2M events.
+# Eight GPUs process 48 events each for additional GPU memory headroom.
 name: cld_pf_heptv2_tracker_momentum_50k
 spec_file: particleflow_spec.yaml
 production_name: cld
@@ -16,7 +17,7 @@ variants:
       model.hit_feature_engineering.tracker_doublets: true
 seeds: [12345]
 training:
-  global_batch_size: 512
+  global_batch_size: 384
   parameters:
     optimizer: lamb
     lr: 0.001

@@ -1,4 +1,4 @@
-# HEPTv2 activation checkpointing and batch-512 training
+# HEPTv2 activation checkpointing and reduced-batch training
 
 `model.heptv2.activation_checkpointing=true` checkpoints each HEPTv2 backbone
 layer in `MLPF._run_backbone`, as proposed in
@@ -17,22 +17,24 @@ unchanged. Backward recomputes layer activations instead of retaining them.
   model with the four-layer global decoder, hit grouping and tracker-neighborhood
   features, plus activation checkpointing. No track-fitting branch is enabled.
 
-Both use global batch **512**, seed **12345**, **50,000 optimizer steps**, LAMB,
+Both use global batch **384**, seed **12345**, **50,000 optimizer steps**, LAMB,
 learning rate **0.001**, weight decay **0.01**, and the existing cosine schedule
 (ending at 10% of the initial LR). Validation and checkpointing run every 5,000
 steps, with `nvalid=ntest=512`, interleaved-shard sampling and padding to 128 hits.
-The eight-device profiles resolve to **64 events per device**, without gradient
-accumulation. This matches September's **25.6 million event presentations**.
+The eight-device profiles resolve to **48 events per device**, without gradient
+accumulation. This gives **19.2 million event presentations**, reduced from
+September's 25.6 million to provide GPU memory headroom. The historical scenario
+name is retained for existing launch commands.
 The BF16 hardware profiles retain their existing runtime settings.
 
-This matches the optimization budget, not the inputs or objective: the hit model
-still uses raw hits, set matching, auxiliary decoder and grouping losses, while
-the track/cluster model uses elementwise targets. Hardware and attention backend
+Both variants share the optimization budget. The hit model uses raw hits, set
+matching, auxiliary decoder and grouping losses; the track/cluster model uses
+elementwise targets. Hardware and attention backend
 also differ between the H100 and MI250X profiles. The existing batch-64 default
 scenario remains unchanged.
 
 The new scenario is a candidate for target-platform validation. Local CUDA tests
-do **not** establish that 64 events per MI250X device fit across the full occupancy
+do **not** establish that 48 events per MI250X device fit across the full occupancy
 distribution, or validate ROCm FlexAttention replay or eight-rank DDP.
 
 ## Local measurements, 2026-10-14
@@ -113,7 +115,7 @@ CUBLAS_WORKSPACE_CONFIG=:4096:8 uv run python3 \
 ```
 
 Local pipeline smoke test (the local wrapper deliberately overrides the production
-budget; these are **not** batch-512 production settings):
+budget; these are **not** batch-384 production settings):
 
 ```bash
 GLOBAL_BATCH_SIZE=8 NUM_STEPS=4 VAL_FREQ=2 CHECKPOINT_FREQ=2 \
@@ -124,7 +126,7 @@ NVALID=8 NTEST=8 NUM_WORKERS=0 VALIDATION_DIAGNOSTICS_BATCHES=0 \
 
 On LUMI, first repeat the benchmark in the existing LAIF environment with
 `--platform configs/training/platforms/lumi_mi250x.yaml`, the LUMI TFDS directory
-as `--data-dir`, and `--batch-size 64 --checkpointing`. Also run a short eight-rank
+as `--data-dir`, and `--batch-size 48 --checkpointing`. Also run a short eight-rank
 training/validation test at the target batch. Record allocated/reserved peaks and
 step times, including high-occupancy batches, before committing a full allocation.
 

@@ -88,7 +88,7 @@ momentum head, not replacements for it or for material-aware tracking.
 `configs/training/scenarios/cld_pf_heptv2_tracker_momentum_50k.yaml` has three
 variants: unchanged tracker-feature baseline, added moments, and added moments
 plus doublets. All use the current grouped HEPTv2 model and activation
-checkpointing, global batch 512, 50k steps, seed 12345, LAMB and LR 0.001 with
+checkpointing, global batch 384, 50k steps, seed 12345, LAMB and LR 0.001 with
 cosine decay. The permitted variant differences are only the two feature flags.
 Input dimensions are respectively **154, 178 and 190**. The extra input channels
 also slightly increase the encoder parameter count.
@@ -104,7 +104,7 @@ NVALID=4 NTEST=4 NUM_WORKERS=0 VALIDATION_DIAGNOSTICS_BATCHES=1 \
   --variant hit_heptv2_tracker_momentum_doublets
 ```
 
-As with the earlier batch-512 scenario, the full batch of 64 events per device
+As with the comparison scenario, the reduced batch of 48 events per device
 still needs target-platform memory/ROCm/DDP validation.
 
 ## Local tests and cost, 2026-10-14
