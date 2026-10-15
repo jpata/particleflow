@@ -159,6 +159,19 @@ def test_tracker_only_surrogate(monkeypatch):
     assert genref["PDG"].tolist() == [211.0, 310.0]
 
 
+def test_cluster_eval_truth_uses_the_same_leaves(monkeypatch):
+    # the clustering metrics' per-hit truth credits the K0S deposits to the surrogate, as the targets do
+    from mlpf.data.colliderml.cluster_eval import hit_truth
+
+    monkeypatch.setattr(truth, "use_surrogate_ancestors", True)
+    particles, calo, tracks, tracker = _event()
+    gen, _, _, _, rows = compute_gen_tables(particles, calo, tracks, DEFAULT_CALIBRATION, tracker_ev=tracker, return_rows=True)
+    ht = hit_truth(particles, calo, truth.build_leaf_maps(particles, calo, tracker))
+    per_row = np.bincount(ht["leaf"], weights=ht["w"], minlength=ht["n_rows"])
+    np.testing.assert_allclose(per_row[rows], gen["gp_to_cluster"], rtol=1e-6)
+    assert per_row[1] > 0 and per_row.sum() == pytest.approx(per_row[rows].sum())
+
+
 def _study():
     spec = importlib.util.spec_from_file_location("colliderml_surrogate_impact", REPO / "scripts" / "colliderml" / "colliderml_surrogate_impact.py")
     mod = importlib.util.module_from_spec(spec)
