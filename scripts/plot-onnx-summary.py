@@ -121,12 +121,13 @@ def plot_mae_vs_runtime(data, outdir, system_info):
         if not model_scenarios:
             continue
 
-        # Find the fastest scenario (lowest mean runtime)
+        # Compare the fastest ONNX run with its PyTorch baseline. Including the
+        # baseline here can hide the ONNX error when PyTorch is faster.
         best_scenario_key = None
         min_mean_rt = float("inf")
 
         for key, vals in model_scenarios.items():
-            if len(vals["runtimes"]) > 0:
+            if vals["scenario"].startswith("ONNX_") and vals["runtimes"] and vals["maes"]:
                 mean_rt = np.mean(vals["runtimes"])
                 if mean_rt < min_mean_rt:
                     min_mean_rt = mean_rt
@@ -192,8 +193,8 @@ def plot_mae_vs_runtime(data, outdir, system_info):
     plt.title("Numerical Error (MAE) vs. Inference Runtime", y=1.05)
     plt.grid(True, linestyle="--", alpha=0.7)
 
-    # Log scales can be useful for error
-    plt.yscale("log")
+    # A zero MAE is valid and cannot be drawn on a logarithmic axis.
+    plt.yscale("symlog", linthresh=1e-8)
 
     # Add margins to ensure space for labels and error bars
     plt.margins(x=0.3, y=0.2)
