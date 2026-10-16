@@ -19,4 +19,6 @@ class CollidermlTtbarPu200Pf(CollidermlTtbarNopuPf):
         "1.0.0": "Prepared 2026-10-06 from parquet converted with the tuned pu200 clustering "
         "(bfs, merge-frac 0, radii ECAL 16.25 mm / HCAL 36 mm).",
         "1.1.0": "CLUE clustering (converter --algorithm clue --clue-preset pu200).",
+        "1.2.0": "Surrogate ancestors in the truth (key4hep parity): generator-decayed particles that "
+        "interacted before decaying become targets, recovering their deposits. Clustering as in 1.1.0.",
     }
