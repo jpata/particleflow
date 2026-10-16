@@ -336,3 +336,116 @@ Attention-24 is rejected by this ORT 1.23.2 stack before execution; CUDA
 Attention-24 validation must not be interpreted as W7900 support. These are
 attention microbenchmark findings, not full-model throughput or physics
 validation.
+
+### Explicit attention export profiles
+
+Use `mlpf.model.onnx_attention.export_mlpf` for both representations; choosing
+an eager PyTorch attention backend does not select an ONNX runtime kernel.
+For an FP32 eval model and finite FP32 example features/mask:
+
+```python
+import torch
+from mlpf.model.onnx_attention import export_mlpf
+
+export_mlpf(model, features, mask, "attention24.onnx",
+            attention_format="attention24", attention_dtype=torch.float16)
+export_mlpf(model, features, mask, "decomposed.onnx",
+            attention_format="decomposed", attention_dtype=torch.float16)
+```
+
+The first representation uses standard Attention-24 and valid key lengths,
+without a dense attention mask. The second uses explicit scaled
+MatMul/FP32 Softmax/MatMul operations, with a broadcast key mask. Power-of-two
+Q prescaling reduces FP16 dot-product overflow risk; it does not guarantee
+safety for unbounded inputs. In both cases the other model operations and
+public I/O retain their model/example dtypes. This exports the same checkpoint
+without changing learned tensors. Omitted `attention_format` preserves the
+legacy `export_onnx_fused` selection. Export temporarily overrides native
+Flash/jagged execution and restores the model's settings, including on failure.
+
+Both profiles require binary `[B,L]` masks with nonempty valid prefixes and
+right padding. Callers must validate masks at inference too: the ONNX graph
+cannot throw for invalid masks. Padded input features are sanitized and padded
+predictions are zero. Nonfinite cleanup is lowered to equivalent comparisons,
+and one final Concat/Where/Split preserves the four named outputs. This helper
+exports elementwise predictions; set-decoder outputs need a different mask
+contract and are rejected explicitly.
+
+The CMS validator exposes the mixed profiles as `ONNX_ATTN_FLASH_FP32_FP16`
+and `ONNX_ATTN_MATH_FP32_FP16`. The latter can be exported/tested on CPU before
+replay on AMD. `cms-validate-onnx.py --device cuda` itself selects CUDA EP;
+use `scripts/validate-onnx-runtime.py --provider migraphx` for AMD replay.
+
+### CPU CI, offline compilation, and device qualification
+
+Ordinary GitHub CI runs both formats through ONNX checker and ORT 1.30 CPU
+inference. The lightweight environment does not need TensorFlow, flash-attn,
+or a GPU. The workflow is `.github/workflows/attention-export.yml`.
+
+```bash
+PYTHONPATH=. python -m pytest \
+  tests/test_attention24_export.py tests/test_attention_export_profiles.py \
+  -q --basetemp=onnx_validation/export-ci
+```
+
+Tests cover distinct events and changed batch/sequence dimensions, poisoned
+padding, zero padded outputs, unchanged learned tensors, restored export state,
+invalid masks, large FP16 scores, and IEEE NaN/infinity cleanup. Native Flash
+configuration can also be exported on CPU. These checks establish graph
+semantics, not execution by CUDA/MIGraphX or GPU fusion.
+
+Device tests are opt-in and fail if the explicitly requested provider cannot
+initialize. They use CPU PyTorch for export/reference, so GPU-enabled PyTorch
+and flash-attn are not prerequisites. Install the appropriate ORT provider and
+native GPU libraries. The qualification runtime must be ORT 1.30 or newer:
+
+```bash
+ORT_ENABLE_ATTENTION_KERNEL_DEBUG_INFO=1 MLPF_TEST_PROVIDER=cuda \
+PYTHONPATH=. python -m pytest tests/test_attention_export_profiles.py \
+  -k real_device -q --basetemp=onnx_validation/export-cuda
+
+MIGRAPHX_MLIR_USE_SPECIFIC_OPS=attention MLPF_TEST_PROVIDER=migraphx \
+PYTHONPATH=. python -m pytest tests/test_attention_export_profiles.py \
+  -k real_device -q --basetemp=onnx_validation/export-migraphx
+```
+
+For a separately built MIGraphX plugin (including a CMSSW build), set
+`MLPF_TEST_MIGRAPHX_LIBRARY=/path/to/the/provider-plugin.so` in the same command.
+This loads that exact library without requiring AMD's Python plugin wheel.
+Monolithic MIGraphX providers are also supported.
+
+The tests disable CPU compute fallback, check provider placement and numerical
+batching/padding tolerances, and retain models, profiles and `validation.json`
+under `--basetemp`. Reports include package versions, available driver-tool
+output and loaded-library paths. CUDA must also report FlashAttention dispatch.
+MIGraphX placement alone is not fusion evidence. Add
+`MLPF_TEST_REQUIRE_FUSION=1` to the AMD command to collect compiler traces and
+require attention code objects in the last compiled program, excluding earlier
+tuning/pass dumps. This retains a potentially large `compile.log`. Without
+that flag, the test makes no MIGraphX fusion claim. A rocprof trace can provide
+additional evidence of the actual kernel dispatches.
+
+MIGraphX 2.18+ additionally documents [hardware-free GPU cross-compilation](https://rocm.docs.amd.com/projects/AMDMIGraphX/en/develop/dev/cross_compilation.html).
+With the driver and its userspace dependencies installed, opt into the offline
+compiler/fusion check:
+
+```bash
+MLPF_TEST_MIGRAPHX_DRIVER=/opt/rocm/bin/migraphx-driver \
+PYTHONPATH=. python -m pytest tests/test_attention_export_profiles.py \
+  -k offline_compile -q --basetemp=onnx_validation/export-offline
+```
+
+This compiles a static test shape for `gfx1100`, checking that a fused attention
+code object is present. It does not allocate GPU buffers, run kernels, test ORT
+EP integration, or validate GPU numerical results. Cross-compilation supports
+rocMLIR/MIGraphX-generated kernels; library backends such as rocBLAS and MIOpen
+are unsupported. The test clears their conflicting selection flags and saves
+`compile.log`. It requires an appropriate recent driver and is not installed
+or run by the ordinary CPU workflow.
+
+There is no supported CUDA simulator used by this CI. CPU inference validates
+the exported Attention-24 semantics; actual CUDA FlashAttention dispatch still
+requires a real GPU. Do not replace device qualification with a CPU fallback
+and report it as a GPU pass. Trained checkpoints also need their own numerical
+and physics validation: passing the small deterministic test model is not a
+claim that shape-dependent FP16 differences disappear in deployed models.

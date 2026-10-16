@@ -74,6 +74,7 @@ SUPPORTED_CONFIGS = [
     "ONNX_ATTN_FLASH_FP16",
     "ONNX_ATTN_FLASH_FP32_FP16",
     "ONNX_ATTN_MATH_FP16",
+    "ONNX_ATTN_MATH_FP32_FP16",
     "ONNX_ATTN_MATH_FP32",
     "PT_ATTN_FLASH_FP16",
     "PT_ATTN_MATH_FP16",
@@ -225,6 +226,7 @@ def main():
 
     path_math_fp32 = os.path.join(args.outdir, "model_math_fp32.onnx")
     path_math_fp16 = os.path.join(args.outdir, "model_math_fp16.onnx")
+    path_math_fp32_fp16 = os.path.join(args.outdir, "model_math_fp32_fp16.onnx")
     path_fused_fp32 = os.path.join(args.outdir, "model_fused_fp32.onnx")
     path_fused_fp32_fp16 = os.path.join(args.outdir, "model_fused_fp32_fp16.onnx")
     path_fused_fp16 = os.path.join(args.outdir, "model_fused_fp16.onnx")
@@ -297,6 +299,7 @@ def main():
                 "PT_ATTN_FLASH_FP16",
                 "ONNX_ATTN_MATH_FP32",
                 "ONNX_ATTN_MATH_FP16",
+                "ONNX_ATTN_MATH_FP32_FP16",
                 "ONNX_ATTN_OP_FP32",
                 "ONNX_ATTN_FLASH_FP32_FP16",
                 "ONNX_ATTN_FLASH_FP16",
@@ -334,6 +337,7 @@ def main():
     paths = {
         "ONNX_ATTN_MATH_FP32": path_math_fp32,
         "ONNX_ATTN_MATH_FP16": path_math_fp16,
+        "ONNX_ATTN_MATH_FP32_FP16": path_math_fp32_fp16,
         "ONNX_ATTN_OP_FP32": path_fused_fp32,
         "ONNX_ATTN_FLASH_FP32_FP16": path_fused_fp32_fp16,
         "ONNX_ATTN_FLASH_FP16": path_fused_fp16,
@@ -363,7 +367,8 @@ def main():
             dummy_features.half() if full_half else dummy_features,
             dummy_mask.half() if full_half else dummy_mask,
             paths[cfg],
-            attention_dtype=torch.float16 if cfg == "ONNX_ATTN_FLASH_FP32_FP16" else None,
+            attention_format="attention24" if standard_attention else "decomposed",
+            attention_dtype=torch.float16 if cfg in ("ONNX_ATTN_FLASH_FP32_FP16", "ONNX_ATTN_MATH_FP32_FP16") else None,
         )
         del model_export
 
@@ -493,10 +498,10 @@ def main():
                 providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
             )
 
-        elif cfg == "ONNX_ATTN_FLASH_FP32_FP16":
-            print(f"Creating ONNX session for Fused Mixed using {execution_provider}...")
+        elif cfg in ("ONNX_ATTN_FLASH_FP32_FP16", "ONNX_ATTN_MATH_FP32_FP16"):
+            print(f"Creating ONNX session for Mixed attention using {execution_provider}...")
             sess = rt.InferenceSession(
-                path_fused_fp32_fp16,
+                paths[cfg],
                 sess_options,
                 providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
             )
@@ -556,6 +561,7 @@ def main():
                     "ONNX_GNNLSH_FP32",
                     "ONNX_ATTN_OP_FP32",
                     "ONNX_ATTN_FLASH_FP32_FP16",
+                    "ONNX_ATTN_MATH_FP32_FP16",
                 ]:
                     _ = sess.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup})
                 elif cfg in ["ONNX_ATTN_MATH_FP16", "ONNX_ATTN_FLASH_FP16"]:
@@ -628,7 +634,7 @@ def main():
                     mask_f_np_fp16 = mask_f_np.astype(np.float16)
                     pred = sess.run(None, {"Xfeat_normed": X_features_np_fp16, "mask": mask_f_np_fp16})
                     pred = tuple(torch.tensor(p).float() for p in pred)
-                elif cfg == "ONNX_ATTN_FLASH_FP32_FP16":
+                elif cfg in ("ONNX_ATTN_FLASH_FP32_FP16", "ONNX_ATTN_MATH_FP32_FP16"):
                     pred = sess.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
                     pred = tuple(torch.tensor(p).float() for p in pred)
                 elif cfg == "ONNX_ATTN_FLASH_FP16":
