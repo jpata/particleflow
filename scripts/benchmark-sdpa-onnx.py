@@ -90,6 +90,8 @@ class SingleBatchCalibrationDataReader(CalibrationDataReader):
 def parse_args():
     parser = argparse.ArgumentParser(description="Benchmark PyTorch SDPA and ONNX Runtime attention variants.")
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
+    parser.add_argument("--ort-provider", choices=["cpu", "cuda", "migraphx"], default=None)
+    parser.add_argument("--require-full-gpu", action="store_true", help="Disable ORT CPU node fallback")
     parser.add_argument("--outdir", type=Path, default=Path("sdpa_onnx_bench"))
     parser.add_argument("--seq-lens", type=int, nargs="+", default=[512, 1024, 2048, 4096, 8192, 10000])
     parser.add_argument("--batch-size", type=int, default=1)
@@ -157,6 +159,8 @@ def make_variants(device: str, modes: list[str], selected: set[str] | None, prov
     if device == "cuda":
         variants.extend(
             [
+                Variant("pt_math_fp16", "pytorch", "fp16", "math"),
+                Variant("onnx_sdpa_export_fp16", "onnx_export", "fp16"),
                 Variant("pt_flash_fp16", "pytorch", "fp16", "flash"),
                 Variant("pt_efficient_fp32", "pytorch", "fp32", "efficient"),
                 Variant("ort_attention24_fp16", "ort_attention24", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
@@ -251,16 +255,18 @@ def export_sdpa_model(path, query, key, value, mask, num_heads, head_dim, masked
     if export_shape == "dynamic":
         dynamic_axes = {name: {0: "batch", 1: "seq"} for name in input_names}
         dynamic_axes["output"] = {0: "batch", 1: "seq"}
-    torch.onnx.export(
-        module,
-        args,
-        path,
-        opset_version=20,
-        input_names=input_names,
-        output_names=["output"],
-        dynamic_axes=dynamic_axes,
-        dynamo=False,
-    )
+    # Export the unfused MATH decomposition; ORT/MIGraphX may fuse it independently.
+    with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
+        torch.onnx.export(
+            module,
+            args,
+            path,
+            opset_version=20,
+            input_names=input_names,
+            output_names=["output"],
+            dynamic_axes=dynamic_axes,
+            dynamo=False,
+        )
 
 
 def make_mha_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked, export_shape="dynamic"):
@@ -400,23 +406,31 @@ def create_session(path, args, variant, model_dir):
     so.intra_op_num_threads = args.num_threads
     so.inter_op_num_threads = args.num_threads
     so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    so.optimized_model_filepath = str(model_dir / f"{Path(path).stem}.optimized.onnx")
+    # MIGraphX compiled nodes cannot be serialized by ONNX Runtime.
+    if args.ort_provider != "migraphx":
+        so.optimized_model_filepath = str(model_dir / f"{Path(path).stem}.optimized.onnx")
     if args.profile:
         so.enable_profiling = True
         so.profile_file_prefix = str(model_dir / Path(path).stem)
 
-    if args.device == "cuda":
+    if args.require_full_gpu:
+        so.add_session_config_entry("session.disable_cpu_ep_fallback", "1")
+    if args.ort_provider != "cpu":
         opts = provider_options_from_args(args)
-        if variant.provider_option_sdpa_kernel is not None:
+        if args.ort_provider == "cuda" and variant.provider_option_sdpa_kernel is not None:
             opts.setdefault("sdpa_kernel", str(variant.provider_option_sdpa_kernel))
-        providers = [("CUDAExecutionProvider", opts), "CPUExecutionProvider"]
+        providers = [(args.ort_provider_name, opts)]
+        if not args.require_full_gpu:
+            providers.append("CPUExecutionProvider")
     else:
         providers = ["CPUExecutionProvider"]
-    if args.device == "cuda":
+    if args.ort_provider == "cuda":
         ort.preload_dlls()
     session = ort.InferenceSession(str(path), so, providers=providers)
-    if args.device == "cuda" and "CUDAExecutionProvider" not in session.get_providers():
-        raise RuntimeError("CUDA provider failed to initialize; refusing CPU fallback")
+    if args.ort_provider_name not in session.get_providers():
+        raise RuntimeError(f"{args.ort_provider_name} failed to initialize; refusing CPU fallback")
+    if args.require_full_gpu:
+        session.disable_fallback()
     return session
 
 
@@ -484,6 +498,8 @@ class MemorySampler:
         return self.process.memory_info().rss / (1024**2)
 
     def _sample_gpu_vram_mib(self):
+        if torch.version.hip:
+            return None
         try:
             output = subprocess.check_output(
                 [
@@ -537,6 +553,8 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
         "dtype": variant.dtype,
         "backend": variant.backend,
         "device": args.device,
+        "ort_provider": args.ort_provider,
+        "require_full_gpu": args.require_full_gpu,
         "masked": variant.masked,
         "batch_size": args.batch_size,
         "sequence_length": seq_len,
@@ -613,7 +631,7 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
             result["graph_nodes"] = graph_stats(model_path)
             sess = create_session(model_path, args, variant, model_dir)
             optimized_path = Path(sess.get_session_options().optimized_model_filepath)
-            if optimized_path.exists():
+            if optimized_path.is_file():
                 result["optimized_graph_nodes"] = graph_stats(optimized_path)
             feeds = to_numpy_inputs(query, key, value, mask, variant)
             for _ in range(args.warmup):
@@ -765,10 +783,18 @@ def print_ranking(results):
 
 def main():
     args = parse_args()
+    args.ort_provider = args.ort_provider or args.device
+    args.ort_provider_name = {"cpu": "CPUExecutionProvider", "cuda": "CUDAExecutionProvider", "migraphx": "MIGraphXExecutionProvider"}[
+        args.ort_provider
+    ]
+    if args.require_full_gpu and args.ort_provider == "cpu":
+        raise ValueError("--require-full-gpu requires a GPU ORT provider")
+    if args.ort_provider != "cuda" and any(opt.startswith("sdpa_kernel=") for opt in args.provider_option):
+        raise ValueError("sdpa_kernel is only supported by the CUDA provider")
     if args.device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("--device cuda requested, but torch.cuda.is_available() is false")
-    if args.device == "cuda" and "CUDAExecutionProvider" not in ort.get_available_providers():
-        raise RuntimeError("--device cuda requested, but CUDAExecutionProvider is not available")
+    if args.ort_provider_name not in ort.get_available_providers():
+        raise RuntimeError(f"{args.ort_provider_name} is not available")
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)

@@ -293,3 +293,46 @@ FP16 FlashAttention. The converted artifact prioritizes the latter; CPU results
 can differ appreciably from the original CPU model. Assess each backend against
 its own original reference. CUDA validation does not establish MIGraphX support
 or replace a full downstream physics validation.
+
+### W7900 / MIGraphX validation (2026-10-16)
+
+The Radeon PRO W7900 (`gfx1100`) was tested with PyTorch
+`2.9.1+rocm7.2.1.gitff65f5bc`, ROCm 7.2.4, MIGraphX 2.15.0 and the
+monolithic ONNX Runtime MIGraphX 1.23.2 wheel. The AMD driver/module version
+was 6.16.13. This is a different stack from `envs/ort-amd`'s ORT 1.29 plugin
+environment; these results do not validate that newer environment.
+
+Select MIGraphX explicitly; PyTorch names AMD devices `cuda` too:
+
+```bash
+python scripts/benchmark-sdpa-onnx.py \
+  --device cuda --ort-provider migraphx --require-full-gpu \
+  --variants pt_math_fp32 pt_math_fp16 onnx_sdpa_export_fp32 onnx_sdpa_export_fp16 \
+  --export-shapes static --seq-lens 128 512 --modes both \
+  --warmup 2 --iters 5 --profile --outdir onnx_validation/w7900-math
+```
+
+Inspect each result's status: per-variant failures are recorded rather than
+causing a nonzero process exit. `--require-full-gpu` disables CPU node fallback;
+provider availability alone does not establish that every node runs on GPU.
+AMD VRAM sampling is unavailable in this benchmark's NVIDIA memory sampler.
+
+On this stack, unmasked legacy MATH exports execute on MIGraphX. Masked
+exports contain an `IsNaN` safe-softmax guard that requires CPU fallback,
+including transfers of the full attention-probability tensor. They fail with
+strict GPU execution enabled. Removing that guard requires preserving the
+behavior of queries with no valid keys; multiplying NaN outputs by zero is
+insufficient.
+
+For the tested FP16 decompositions, setting
+`MIGRAPHX_MLIR_USE_SPECIFIC_OPS=attention` before starting Python enables
+rocMLIR attention fusion. The unmasked compiled program changes from three
+GPU kernels to one and avoids the full attention-score intermediate. FP32
+compilation with this override fails on the tested shapes, while default
+FP32 decomposition runs. This setting does not remove the masked `IsNaN`
+fallback. It is distinct from CUDA's `sdpa_kernel` provider option.
+
+Attention-24 is rejected by this ORT 1.23.2 stack before execution; CUDA
+Attention-24 validation must not be interpreted as W7900 support. These are
+attention microbenchmark findings, not full-model throughput or physics
+validation.
