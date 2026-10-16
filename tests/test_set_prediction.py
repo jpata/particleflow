@@ -50,6 +50,7 @@ def make_attention_config(num_slots=4):
                 "output_mode": "set",
                 "input_encoding": "joint",
                 "attention": {
+                    "attention_type": "math",  # These parameter/gradient tests run on CPU.
                     "num_convs": 1,
                     "num_heads": 2,
                     "head_dim": 8,
