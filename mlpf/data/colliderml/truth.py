@@ -7,8 +7,8 @@
 #   which Geant4 decayed is replaced by its direct decay products (gamma gamma, or gamma e+ e-),
 #   as in key4hep, where the generator decays the pi0 and the photons are status 1 (the
 #   release's hard-scatter generator leaves pi0 stable; its pileup generator already decays
-#   them). Neutrinos (|PDG| in {12, 14, 16}) are excluded. A leaf must additionally be
-#   *visible*, i.e.:
+#   them). Neutrinos (|PDG| in {12, 14, 16}) are excluded. Surrogate ancestors (below) join
+#   the leaves. A leaf must additionally be *visible*, i.e.:
 #     - track-visible: it owns >= 20% of the hits of a reconstructed track
 #       (TRACK_HIT_FRACTION_MIN; tracker_hits.particle_id joined through tracks.hit_ids and
 #       walked to the leaf — the analogue of key4hep's SiTracksMCTruthLink fractions), or
@@ -29,6 +29,17 @@
 #   credits directly to a split pi0 (unrecorded soft decay photons) go to its most energetic
 #   decay product.
 #
+# SURROGATE ANCESTORS (use_surrogate_ancestors)
+#   A chain that reaches no leaf dies at a non-leaf primary — a generator-decayed K0S, Lambda,
+#   Sigma or Xi that Geant4 let interact before its preassigned decay, so its deposits sit on
+#   its Geant4 secondaries and its generator daughters are silent. The deepest primary on each
+#   such chain (calo contribution or tracker hit) becomes a leaf, unless a leaf descendant of it
+#   registered anything (double counting) or it is the ancestor of another candidate (the
+#   deeper one is kept). key4hep's find_surrogate_ancestors rule, without its 8-hop climb cap
+#   (our chains include whole Geant4 secondary trees). Both targets and the gen reference are
+#   slices of the same leaf table, so the surrogate enters both — key4hep explains why
+#   target-only would bias the response above 1.
+#
 # MERGES
 #   Handled by the shared allocator (target_building.assign_genparticles_to_obj_and_merge);
 #   nothing is dropped silently: surviving + dropped reproduces the selected input energy
@@ -38,7 +49,8 @@
 #   ispu = vertex_primary != 1.
 #
 # STATUS FIELDS (constants, not release-table columns)
-#   generatorStatus = 1 for every target (they are generator-level final particles);
+#   generatorStatus = 1 for every target (they are generator-level final particles), except 2
+#   for surrogate ancestors (decayed by the generator, standing in for their daughters);
 #   simulatorStatus = 0x01000000 (bit 24, "endpoint": every target was Geant4-simulated,
 #   matching key4hep's flagging — see the comment at gen_features below).
 from typing import Any, Dict, Tuple
@@ -73,6 +85,10 @@ TRACK_HIT_FRACTION_MIN = 0.2
 # `simulatorStatus` propagated bits (24-27).
 GENREF_DEPOSIT_MIN = 0.0  # GeV, calibrated attributed calo deposit
 GENREF_TRACK_FRACTION_MIN = 0.0  # share of a track's hits
+
+# Promote surrogate ancestors to leaves (see SURROGATE ANCESTORS above; key4hep's switch of the
+# same name). Set False to recover the previous behaviour on both targets and gen reference.
+use_surrogate_ancestors = True
 
 
 def _empty_coo() -> SparseMatrixCOO:
@@ -187,6 +203,67 @@ def walk_to_leaf_many(particle_ids: np.ndarray, pid: np.ndarray, is_leaf: np.nda
     return res
 
 
+def find_surrogate_ancestors(
+    hit_pids: np.ndarray, pid: np.ndarray, parent: np.ndarray, primary: np.ndarray, is_leaf: np.ndarray, max_depth: int = 256
+) -> Tuple[np.ndarray, int, int]:
+    """Rows of the non-leaf primaries that stand in for their silent leaf descendants.
+
+    hit_pids are the owner ids of every calo contribution and tracker hit (pi0-redirected).
+    For each id whose chain reaches no leaf, the deepest primary on the chain is a candidate.
+    A candidate is excluded if a leaf descendant of it registered anything ("partial": it would
+    double count that leaf), or if it is an ancestor of another remaining candidate ("nested":
+    the deeper one is kept). Returns (accepted rows sorted, n_partial, n_nested).
+    """
+    empty = np.zeros(0, dtype=np.int64)
+    uniq = np.unique(np.asarray(hit_pids, dtype=np.int64))
+    if len(uniq) == 0:
+        return empty, 0, 0
+    leaf_of = walk_to_leaf_many(uniq, pid, is_leaf, parent, max_depth)
+    # walking until the first primary row: the same walk with `primary` as the stop mask
+    cand = walk_to_leaf_many(uniq[leaf_of < 0], pid, primary, parent, max_depth)
+    cand = np.unique(cand[cand >= 0])
+    if len(cand) == 0:
+        return empty, 0, 0
+
+    order = np.argsort(pid, kind="stable")
+    pid_s = pid[order]
+
+    def is_ancestor_of(rows):
+        """Mask over particle rows: an ancestor of any of `rows` (excluding the rows themselves)."""
+        anc = np.zeros(len(pid), dtype=bool)
+        cur = np.asarray(rows, dtype=np.int64)
+        for _ in range(max_depth):
+            pos = np.clip(np.searchsorted(pid_s, parent[cur]), 0, len(pid_s) - 1)
+            cur = np.unique(np.where(pid_s[pos] == parent[cur], order[pos], -1))
+            cur = cur[cur >= 0]
+            cur = cur[~anc[cur]]
+            if len(cur) == 0:
+                break
+            anc[cur] = True
+        return anc
+
+    partial = is_ancestor_of(np.unique(leaf_of[leaf_of >= 0]))[cand]
+    rest = cand[~partial]
+    nested = is_ancestor_of(rest)[rest]
+    return rest[~nested], int(partial.sum()), int(nested.sum())
+
+
+def build_leaf_maps(particles_ev: Dict[str, Any], calo_ev: Dict[str, Any], tracker_ev: Dict[str, Any]):
+    """The leaf set compute_gen_tables attributes to: _build_parent_maps, plus (with
+    use_surrogate_ancestors) the surrogate ancestors found from the event's calo contributions
+    and tracker hits. Returns pid, pdg, parent, is_leaf, redirect and the surrogate row mask.
+    """
+    pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles_ev)
+    surrogate = np.zeros(len(pid), dtype=bool)
+    if use_surrogate_ancestors:
+        cid = _redirect_ids(np.asarray(ak.to_numpy(ak.flatten(calo_ev["contrib_particle_ids"], axis=None))).ravel(), redirect)
+        th_pid = _redirect_ids(np.asarray(ak.to_numpy(tracker_ev["particle_id"])).astype(np.int64), redirect)
+        primary = np.asarray(ak.to_numpy(particles_ev["primary"])).astype(bool)
+        rows, _, _ = find_surrogate_ancestors(np.concatenate([cid.astype(np.int64), th_pid]), pid, parent, primary, is_leaf)
+        surrogate[rows] = True
+    return pid, pdg, parent, is_leaf | surrogate, redirect, surrogate
+
+
 def calibration_factors(detector: np.ndarray, calibration: Dict[int, float]) -> np.ndarray:
     """Per-hit float32 calibration factor for an array of calo region codes.
 
@@ -270,9 +347,10 @@ def compute_gen_tables(
 
     gen_features keys follow the MLPF target layout (pt/eta/phi + charge etc.). Only visible leaves
     are retained (leaf primaries, with Geant4-decayed pi0 replaced by their decay products).
-    Contributions whose parent chain never reaches a leaf cannot be attributed and are dropped
-    (mostly Geant4 secondaries of generator-decayed K0S/Lambda/Sigma/Xi that interacted before
-    their preassigned decay — key4hep's surrogate-ancestor case, not handled here).
+    With use_surrogate_ancestors, the deepest primary of a chain that never reaches a leaf (a
+    generator-decayed K0S/Lambda/Sigma/Xi that interacted before its preassigned decay) joins
+    the leaves, under the find_surrogate_ancestors guards, with generatorStatus 2. Contributions
+    that still reach no leaf cannot be attributed and are dropped.
 
     genref_features has the same layout but spans the *measurable* leaf primaries (any
     attributed calibrated deposit or track hit share, minus neutrinos) — the truth-level
@@ -286,7 +364,7 @@ def compute_gen_tables(
     targets), in gen_features order.
     """
 
-    pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles_ev)
+    pid, pdg, parent, is_leaf, redirect, surrogate = build_leaf_maps(particles_ev, calo_ev, tracker_ev)
     leaf_indices = np.where(is_leaf)[0]
     n_leaf = len(leaf_indices)
     # neutrino leaf primaries: excluded from both gen/genref so they can
@@ -414,7 +492,7 @@ def compute_gen_tables(
         "phi": phi[leaf_indices].astype(np.float32),
         "energy": E[leaf_indices].astype(np.float32),
         "ispu": (np.asarray(vertex_primary[leaf_indices]) != 1).astype(np.float32),
-        "generatorStatus": np.ones(n_leaf, dtype=np.float32),
+        "generatorStatus": np.where(surrogate[leaf_indices], 2.0, 1.0).astype(np.float32),
         "simulatorStatus": np.full(n_leaf, 0x01000000, dtype=np.float32),
         "gp_to_track": trk_frac_max.astype(np.float32),
         "gp_to_cluster": agg.astype(np.float32),

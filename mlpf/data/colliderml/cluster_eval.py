@@ -24,8 +24,8 @@ from mlpf.data.colliderml.clue import CLUE_PRESETS, resolve_clue_config
 from mlpf.data.colliderml.clustering import DEFAULT_MERGE_FRAC, DEFAULT_REGION_RADII_MM, cluster_event
 from mlpf.data.colliderml.truth import (
     DEFAULT_CALIBRATION,
-    _build_parent_maps,
     _redirect_ids,
+    build_leaf_maps,
     calibration_factors,
     compute_gen_tables,
     walk_to_leaf_many,
@@ -36,8 +36,8 @@ V1_ROOT = Path("/mnt/ceph/users/ewulff/data/colliderml/CERN__ColliderML-Release-
 V20_ROOT = Path("/mnt/ceph/users/ewulff/data/colliderml/v20")
 V1_SAMPLE = {"hard_scatter": "ttbar_pu0", "full_pileup": "ttbar_pu200"}
 V1_EVENTS_PER_SHARD = {"hard_scatter": 1000, "full_pileup": 100}
-# decoded-event cache format; bump whenever decode_event's output changes
-CACHE_TAG = "v1"
+# decoded-event cache format; bump whenever decode_event's output changes (v2: surrogate ancestors)
+CACHE_TAG = "v2"
 
 _PU200_RADII = {**{k: 16.25 for k in (9, 10, 11)}, **{k: 36.0 for k in (12, 13, 14)}}
 PRESETS = {
@@ -122,8 +122,8 @@ def _rows(path: Path, cols, start: int, n: int):
 
 
 def iter_events(sample: str, first: int, n: int, with_tracks: bool = True):
-    """Yield (v1 particles, v1 hits, v20 cells, pandora cell lists[, v1 tracks, v1 tracker hits,
-    {"n_tracks": v20 track count}])."""
+    """Yield (v1 particles, v1 hits, v20 cells, pandora cell lists, v1 tracker hits[, v1 tracks,
+    {"n_tracks": v20 track count}]). Tracker hits are always read: the truth's leaf set needs them."""
     s = V1_SAMPLE[sample]
     shard, start = divmod(first, V1_EVENTS_PER_SHARD[sample])
     assert start + n <= V1_EVENTS_PER_SHARD[sample], "events must come from one v1 shard"
@@ -148,10 +148,11 @@ def iter_events(sample: str, first: int, n: int, with_tracks: bool = True):
         _rows(v1("calo_hits"), V1_HIT_COLS, start, n),
         _rows(fc, CELL_COLS, oc, n),
         _rows(fk, ["event_id", "cell_ids"], ok, n),
+        _rows(v1("tracker_hits"), TRACKER_HIT_COLS, start, n),
     ]
     v20_ntracks = None
     if with_tracks:
-        gens += [_rows(v1("tracks"), TRACK_COLS, start, n), _rows(v1("tracker_hits"), TRACKER_HIT_COLS, start, n)]
+        gens.append(_rows(v1("tracks"), TRACK_COLS, start, n))
         # the v20 tracks files are NOT stored in event order (unlike cells/clusters and all v1
         # tables), so their per-event track count is looked up by event_id, not by row
         ft, _ = v20("tracks")
@@ -170,15 +171,18 @@ def _np(a, dt=None):
     return v.astype(dt) if dt is not None else v
 
 
-def hit_truth(particles_ev: Dict[str, Any], hits_ev: Dict[str, Any], calibration: Dict[int, float] = DEFAULT_CALIBRATION) -> Dict[str, np.ndarray]:
+def hit_truth(
+    particles_ev: Dict[str, Any], hits_ev: Dict[str, Any], leaves, calibration: Dict[int, float] = DEFAULT_CALIBRATION
+) -> Dict[str, np.ndarray]:
     """Per-hit leaf-particle contributions of one ColliderML event, the converter's attribution.
 
     hits_ev needs `detector`, `contrib_particle_ids`, `contrib_energies` (v1 calo_hits and v20
-    calo_cells share these). particles_ev is the v1 particles record. Returns COO arrays
-    hit/leaf/w (w = calibrated GeV, duplicates summed) plus per-particle-row `energy` (true
-    energy) and `ispu`.
+    calo_cells share these). particles_ev is the v1 particles record, leaves the event's
+    truth.build_leaf_maps output (from the v1 hits, so v1 hits and v20 cells share one leaf
+    set, surrogate ancestors included). Returns COO arrays hit/leaf/w (w = calibrated GeV,
+    duplicates summed) plus per-particle-row `energy` (true energy) and `ispu`.
     """
-    pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles_ev)
+    pid, _, parent, is_leaf, redirect, _ = leaves
     cid = _redirect_ids(np.asarray(ak.to_numpy(ak.flatten(hits_ev["contrib_particle_ids"], axis=None))).ravel(), redirect)
     ce = np.asarray(ak.to_numpy(ak.flatten(hits_ev["contrib_energies"], axis=None))).ravel().astype(np.float64)
     nctr = np.asarray(ak.to_numpy(ak.num(hits_ev["contrib_particle_ids"]))).ravel()
@@ -206,10 +210,11 @@ def hit_truth(particles_ev: Dict[str, Any], hits_ev: Dict[str, Any], calibration
     )
 
 
-def decode_event(parts, hits, cells, clus, tracks=None, tracker=None, tracks_v20=None):
+def decode_event(parts, hits, cells, clus, tracker, tracks=None, tracks_v20=None):
     """One event as plain arrays: v1 hits + truth for our clusterers, the converter's truth
     tables for the allocator metrics (with tracks), and Pandora's clustering of the v20 cells
     (cluster assignment + truth, scored at run time by pandora_metrics)."""
+    leaves = build_leaf_maps(parts, hits, tracker)  # the converter's leaf set, for hits and cells alike
     det = _np(hits["detector"], np.int64)
     ev = dict(
         event_id=int(parts["event_id"]),
@@ -218,7 +223,7 @@ def decode_event(parts, hits, cells, clus, tracks=None, tracker=None, tracks_v20
         z=_np(hits["z"], np.float64),
         e=_np(hits["total_energy"], np.float64) * calibration_factors(det, DEFAULT_CALIBRATION),
         det=det,
-        truth=hit_truth(parts, hits),
+        truth=hit_truth(parts, hits, leaves),
     )
     if tracks is not None:
         gen, gp_to_hit, gp_to_track, _, rows = compute_gen_tables(parts, hits, tracks, DEFAULT_CALIBRATION, tracker_ev=tracker, return_rows=True)
@@ -242,7 +247,7 @@ def decode_event(parts, hits, cells, clus, tracks=None, tracker=None, tracks_v20
         pos = order[np.searchsorted(cell_id[order], ids)]
         assert np.all(cell_id[pos] == ids)
         cluster_of[pos] = k
-    ev["pandora"] = dict(cluster_of=cluster_of, e=_np(cells["energy"], np.float64), truth=hit_truth(parts, cells))
+    ev["pandora"] = dict(cluster_of=cluster_of, e=_np(cells["energy"], np.float64), truth=hit_truth(parts, cells, leaves))
     if tracks is not None:
         # targets are the converter's (v1) visible set; Pandora's elements are its own v20 tracks
         ev["pandora"].update(n_tracks=int(tracks_v20["n_tracks"]), n_visible=len(gen["energy"]))
