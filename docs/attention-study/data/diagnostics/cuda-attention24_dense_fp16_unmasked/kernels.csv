@@ -1,0 +1,6 @@
+Generating SQLite file results/attention-study/diagnostics/cuda-attention24_dense_fp16_unmasked/trace.sqlite from results/attention-study/diagnostics/cuda-attention24_dense_fp16_unmasked/trace.nsys-rep
+Processing [results/attention-study/diagnostics/cuda-attention24_dense_fp16_unmasked/trace.sqlite] with [/opt/nvidia/nsight-systems/2025.5.2/host-linux-x64/reports/cuda_gpu_kern_sum.py]...
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+77.2,45633,3,15211.0,15265.0,14976,15392,213.2,"void onnxruntime::flash::flash_fwd_kernel<onnxruntime::flash::Flash_fwd_kernel_traits<(int)32, (int)128, (int)128, (int)4, (bool)0, (bool)0, cutlass::half_t, onnxruntime::flash::Flash_kernel_traits<(int)32, (int)128, (int)128, (int)4, cutlass::half_t>>, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0>(onnxruntime::flash::Flash_fwd_params)"
+11.9,7008,3,2336.0,2176.0,2144,2688,305.3,"void onnxruntime::contrib::cuda::TransposeCtx<float2>(int, bool, const T1 *, T1 *)"
+10.9,6464,3,2154.7,2144.0,2144,2176,18.5,"void onnxruntime::contrib::cuda::TransposeQKV<float2>(int, bool, const T1 *, T1 *, int)"

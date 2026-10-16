@@ -1,0 +1,127 @@
+[
+  {
+    "kind": "sdpa_legacy",
+    "dtype": "fp32",
+    "model": "causal_sdpa_legacy_fp32.onnx",
+    "nodes": {
+      "Shape": 3,
+      "Constant": 9,
+      "Slice": 3,
+      "Cast": 2,
+      "Sqrt": 3,
+      "Div": 1,
+      "Concat": 1,
+      "Expand": 1,
+      "Trilu": 1,
+      "Equal": 1,
+      "Where": 1,
+      "Transpose": 1,
+      "Mul": 2,
+      "MatMul": 2,
+      "Add": 1,
+      "Softmax": 1
+    },
+    "sha256": "bc5adb158f550645c152e418b790821c8e19f8cdd533d183fa6ee8933ac76c4e",
+    "provider": "migraphx",
+    "status": "failed",
+    "error": "[ONNXRuntimeError] : 6 : RUNTIME_EXCEPTION : Exception during initialization: Failed to call function"
+  },
+  {
+    "kind": "explicit",
+    "dtype": "fp32",
+    "model": "causal_explicit_fp32.onnx",
+    "nodes": {
+      "Constant": 7,
+      "Pow": 2,
+      "Mul": 2,
+      "Transpose": 1,
+      "MatMul": 2,
+      "Trilu": 1,
+      "Not": 1,
+      "Cast": 3,
+      "Where": 1,
+      "Softmax": 1
+    },
+    "sha256": "9bc1750d87cc05d924c6ab5b79510a38188d7d376cdbb2cea2a7be27832446a5",
+    "provider": "migraphx",
+    "status": "failed",
+    "error": "[ONNXRuntimeError] : 6 : RUNTIME_EXCEPTION : Exception during initialization: Failed to call function"
+  },
+  {
+    "kind": "attention24",
+    "dtype": "fp32",
+    "model": "causal_attention24_fp32.onnx",
+    "nodes": {
+      "Attention": 1
+    },
+    "sha256": "6f9d9c9b4c8e61eee025d93740d5a10cb558ea355734479289ce95103feadd1f",
+    "provider": "migraphx",
+    "status": "failed",
+    "error": "[ONNXRuntimeError] : 1 : FAIL : Load model from results/attention-study/causal-bundle/causal_attention24_fp32.onnx failed:/root/onnx_runtime/onnxruntime/onnxruntime-1.23.2/onnxruntime/core/graph/model_load_utils.h:46 void onnxruntime::model_load_utils::ValidateOpsetForDomain(const std::unordered_map<std::__cxx11::basic_string<char>, int>&, const onnxruntime::logging::Logger&, bool, const string&, int) ONNX Runtime only *guarantees* support for models stamped with official released onnx opset versions. Opset 24 is under development and support for this is limited. The operator schemas and or other functionality may change before next ONNX release and in this case ONNX Runtime will not guarantee backward compatibility. Current official support for domain ai.onnx is till opset 23.\n"
+  },
+  {
+    "kind": "sdpa_legacy",
+    "dtype": "fp16",
+    "model": "causal_sdpa_legacy_fp16.onnx",
+    "nodes": {
+      "Shape": 3,
+      "Constant": 9,
+      "Slice": 3,
+      "Cast": 5,
+      "Sqrt": 3,
+      "Div": 1,
+      "Concat": 1,
+      "Expand": 1,
+      "Trilu": 1,
+      "Equal": 1,
+      "Where": 1,
+      "Transpose": 1,
+      "Mul": 2,
+      "MatMul": 2,
+      "Add": 1,
+      "Softmax": 1
+    },
+    "sha256": "a3e9930eec7f1bbddfa57320e906ed80be0459dee80da0edee29912e156bb3f5",
+    "provider": "migraphx",
+    "status": "failed",
+    "error": "[ONNXRuntimeError] : 6 : RUNTIME_EXCEPTION : Exception during initialization: Failed to call function"
+  },
+  {
+    "kind": "explicit",
+    "dtype": "fp16",
+    "model": "causal_explicit_fp16.onnx",
+    "nodes": {
+      "Constant": 7,
+      "Pow": 2,
+      "Cast": 5,
+      "Mul": 2,
+      "Transpose": 1,
+      "MatMul": 2,
+      "Trilu": 1,
+      "Not": 1,
+      "Where": 1,
+      "Softmax": 1
+    },
+    "sha256": "b2ac577f59d9aa3ef53ebd206e1fff4fa65466289b96fc9fb1f72620bfec598d",
+    "provider": "migraphx",
+    "finite": true,
+    "mae": 7.264585292432457e-05,
+    "max_abs": 0.0011875629425048828,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": true,
+    "status": "ok"
+  },
+  {
+    "kind": "attention24",
+    "dtype": "fp16",
+    "model": "causal_attention24_fp16.onnx",
+    "nodes": {
+      "Attention": 1
+    },
+    "sha256": "1fb8cbe724ba9b07ad024446f61cc2a0091b8d7e1d7472367b18ab582fa30549",
+    "provider": "migraphx",
+    "status": "failed",
+    "error": "[ONNXRuntimeError] : 1 : FAIL : Load model from results/attention-study/causal-bundle/causal_attention24_fp16.onnx failed:/root/onnx_runtime/onnxruntime/onnxruntime-1.23.2/onnxruntime/core/graph/model_load_utils.h:46 void onnxruntime::model_load_utils::ValidateOpsetForDomain(const std::unordered_map<std::__cxx11::basic_string<char>, int>&, const onnxruntime::logging::Logger&, bool, const string&, int) ONNX Runtime only *guarantees* support for models stamped with official released onnx opset versions. Opset 24 is under development and support for this is limited. The operator schemas and or other functionality may change before next ONNX release and in this case ONNX Runtime will not guarantee backward compatibility. Current official support for domain ai.onnx is till opset 23.\n"
+  }
+]

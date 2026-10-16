@@ -1,0 +1,12 @@
+Generating SQLite file results/attention-study/diagnostics/cuda-sdpa_legacy_fp16_unmasked/trace.sqlite from results/attention-study/diagnostics/cuda-sdpa_legacy_fp16_unmasked/trace.nsys-rep
+Processing [results/attention-study/diagnostics/cuda-sdpa_legacy_fp16_unmasked/trace.sqlite] with [/opt/nvidia/nsight-systems/2025.5.2/host-linux-x64/reports/cuda_gpu_kern_sum.py]...
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+46.4,145313,3,48437.7,23744.0,21920,99649,44359.7,"void onnxruntime::cuda::softmax_warp_forward<__half, __half, float, (int)9, (bool)0>(T2 *, const T1 *, int, int, int)"
+23.1,72258,3,24086.0,26912.0,16353,28993,6777.3,void cutlass::Kernel2<cutlass_80_wmma_tensorop_f16_s161616gemm_f16_16x16_128x2_nn_align8>(T1::Params)
+19.3,60512,3,20170.7,20672.0,18816,21024,1186.3,ampere_fp16_s16816gemm_fp16_128x64_ldg8_f2f_nn
+3.4,10752,6,1792.0,1824.0,1664,1824,64.0,"void onnxruntime::cuda::_BinaryElementWiseSimple<(bool)1, (bool)0, __half, __half, __half, onnxruntime::cuda::OP_Mul<__half, __half, __half>, (int)256, (int)4, int>(const T4 *, const T5 *, T3 *, T6, T9)"
+2.3,7296,3,2432.0,2368.0,2304,2624,169.3,"void onnxruntime::cuda::Transpose3DKernel<short, (unsigned int)32>(long, long, long, const T1 *, T1 *)"
+2.2,6816,6,1136.0,1056.0,1024,1472,176.1,"void onnxruntime::cuda::_UnaryElementWise<__half, __half, onnxruntime::cuda::OP_Sqrt<__half>, (int)256, (int)4>(const T1 *, T2 *, T3, long)"
+1.1,3456,3,1152.0,1120.0,960,1376,209.8,"void onnxruntime::cuda::_UnaryElementWise<__half, float, onnxruntime::cuda::OP_Cast<__half, float>, (int)256, (int)4>(const T1 *, T2 *, T3, long)"
+1.1,3424,3,1141.3,1152.0,1120,1152,18.5,"void onnxruntime::cuda::_BinaryElementWiseSimple<(bool)1, (bool)1, float, float, float, onnxruntime::cuda::OP_Div<float, float, float>, (int)256, (int)4, int>(const T4 *, const T5 *, T3 *, T6, T9)"
+1.0,3200,3,1066.7,1120.0,960,1120,92.4,"void onnxruntime::cuda::_UnaryElementWise<float, __half, onnxruntime::cuda::OP_Cast<float, __half>, (int)256, (int)4>(const T1 *, T2 *, T3, long)"

@@ -1,0 +1,194 @@
+[
+  {
+    "session": 0,
+    "session_ms": 913.9818290714175
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 195.8681009709835,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 1.348505960777402,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 0.5130800418555737,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "placements": [
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      }
+    ]
+  }
+]

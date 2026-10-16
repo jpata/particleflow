@@ -1,0 +1,29 @@
+module: "main"
+@0 = check_context::migraphx::gpu::context -> float_type, {}, {}
+@1 = hip::hip_allocate_memory[shape=int8_type, {67110928}, {1},id=main:scratch] -> int8_type, {67110928}, {1}
+@2 = hip::hip_copy_literal[id=main:@literal:0] -> bool_type, {512}, {1}
+@3 = load[offset=33554432,end=33554448](@1) -> float_type, {4, 1, 1, 1}, {1, 1, 1, 1}
+mask = @param:mask -> int32_type, {4, 512}, {512, 1}
+@5 = unsqueeze[axes={1, 2},steps={}](mask) -> int32_type, {4, 1, 1, 512}, {512, 512, 512, 1}
+@6 = gpu::code_object[code_object=5384,symbol_name=convert_reduce_sum_greater_kernel,global=1024,local=256,](@5,@3) -> float_type, {4, 1, 1, 1}, {1, 1, 1, 1}
+@7 = load[offset=33554448,end=67108880](@1) -> half_type, {4, 16, 512, 512}, {4194304, 262144, 512, 1}
+query = @param:query -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+key = @param:key -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+@10 = gpu::code_object[code_object=6152,symbol_name=mlir_mul_transpose_mul_dot,global=262144,local=128,output_arg=2,](query,key,@7) -> half_type, {4, 16, 512, 512}, {4194304, 262144, 512, 1}
+@11 = unsqueeze[axes={0, 1},steps={}](@2) -> bool_type, {1, 1, 512}, {512, 512, 1}
+@12 = broadcast[axis=1,out_lens={4, 1, 1, 512}](@11) -> bool_type, {4, 1, 1, 512}, {0, 512, 512, 1}
+@13 = multibroadcast[out_lens={4, 1, 1, 512},out_dyn_dims={}](@6) -> float_type, {4, 1, 1, 512}, {1, 1, 1, 0}
+@14 = load[offset=67108880,end=67110928](@1) -> bool_type, {4, 1, 1, 512}, {512, 512, 512, 1}
+@15 = gpu::code_object[code_object=5784,symbol_name=convert_not_logical_and_convert_logical_or_not_kernel,global=1024,local=1024,](@13,@12,@5,@14) -> bool_type, {4, 1, 1, 512}, {512, 512, 512, 1}
+@16 = load[offset=0,end=33554432](@1) -> half_type, {4, 16, 512, 512}, {4194304, 262144, 512, 1}
+@17 = multibroadcast[out_lens={4, 16, 512, 512},out_dyn_dims={}](@15) -> bool_type, {4, 16, 512, 512}, {512, 0, 0, 1}
+@18 = gpu::code_object[code_object=7896,symbol_name=where_convert_reduce_max_sub_exp_reduce_sum_div_convert_kernel,global=2097152,local=64,](@17,@10,@16) -> half_type, {4, 16, 512, 512}, {4194304, 262144, 512, 1}
+@19 = load[offset=33554448,end=34603024](@1) -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+value = @param:value -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+@21 = gpu::code_object[code_object=6960,symbol_name=mlir_dot,global=65536,local=64,output_arg=2,](@18,value,@19) -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+@22 = unsqueeze[axes={1, 3},steps={}](mask) -> int32_type, {4, 1, 512, 1}, {512, 512, 1, 1}
+@23 = multibroadcast[out_lens={4, 16, 512, 16},out_dyn_dims={}](@22) -> int32_type, {4, 16, 512, 16}, {512, 0, 1, 0}
+main:#output_0 = @param:main:#output_0 -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+@25 = multibroadcast[out_lens={4, 16, 512, 16},out_dyn_dims={}](@6) -> float_type, {4, 16, 512, 16}, {1, 0, 0, 0}
+@26 = gpu::code_object[code_object=5368,symbol_name=convert_convert_mul_mul_kernel,global=131072,local=1024,](@23,@25,@21,main:#output_0) -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+@27 = @return(@26)

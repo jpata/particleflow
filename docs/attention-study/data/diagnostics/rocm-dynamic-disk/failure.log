@@ -1,0 +1,7 @@
+[0;93m2026-10-16 13:21:31.808417937 [W:onnxruntime:Default, migraphx_execution_provider.cc:167 MIGraphXExecutionProvider] [MIGraphX EP] MIGraphX ENV Override Variables Set:[m
+[0;93m2026-10-16 13:21:31.872107355 [W:onnxruntime:Default, migraphx_execution_provider.cc:1252 compile_program] Model Compile: Begin[m
+[0;93m2026-10-16 13:21:32.883039313 [W:onnxruntime:Default, migraphx_execution_provider.cc:1257 compile_program] Model Compile: Complete[m
+[0;93m2026-10-16 13:21:32.943258386 [W:onnxruntime:Default, migraphx_execution_provider.cc:1252 compile_program] Model Compile: Begin[m
+[0;93m2026-10-16 13:21:34.536885067 [W:onnxruntime:Default, migraphx_execution_provider.cc:1257 compile_program] Model Compile: Complete[m
+Memory access fault by GPU node-2 (Agent handle: 0x56032ec6a630) on address 0x7febe86a9000. Reason: Page not present or supervisor privilege.
+scripts/attention-study/diagnostics.sh: line 8: 17641 Aborted                 (core dumped) "$python" scripts/attention-study/probe.py "$@"

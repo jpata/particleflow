@@ -1,0 +1,44 @@
+[
+  {
+    "session": 0,
+    "session_ms": 1249.5826478116214
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 6.9755809381604195,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 0.5757110193371773,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 0.5927314050495625,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "placements": [
+      {
+        "name": "MIGraphXExecutionProvider_MGXKernel_graph_main_graph_13448317276732379673_0_0_kernel_time",
+        "op": "MGXKernel_graph_main_graph_13448317276732379673_0",
+        "provider": "MIGraphXExecutionProvider"
+      },
+      {
+        "name": "MIGraphXExecutionProvider_MGXKernel_graph_main_graph_13448317276732379673_0_0_kernel_time",
+        "op": "MGXKernel_graph_main_graph_13448317276732379673_0",
+        "provider": "MIGraphXExecutionProvider"
+      },
+      {
+        "name": "MIGraphXExecutionProvider_MGXKernel_graph_main_graph_13448317276732379673_0_0_kernel_time",
+        "op": "MGXKernel_graph_main_graph_13448317276732379673_0",
+        "provider": "MIGraphXExecutionProvider"
+      }
+    ]
+  }
+]

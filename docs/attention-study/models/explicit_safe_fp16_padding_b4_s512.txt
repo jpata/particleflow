@@ -1,0 +1,52 @@
+<
+   ir_version: 9,
+   opset_import: ["" : 20],
+   producer_name: "pytorch",
+   producer_version: "2.9.1"
+>
+main_graph (float16[4,16,512,16] query, float16[4,16,512,16] key, float16[4,16,512,16] value, int32[4,512] mask) => (float16[4,16,512,16] output)
+   <bool[4,512] "/Cast_output_0", int64[1] "/Constant_output_0", bool[4,1,512] "/Unsqueeze_output_0", int64[1] "/Constant_1_output_0", bool[4,1,1,512] "/Unsqueeze_1_output_0", float "/Constant_2_output_0", float "/Constant_3_output_0", float "/Pow_output_0", float16 "/Cast_1_output_0", float16[4,16,512,16] "/Mul_output_0", float16[4,16,16,512] "/Transpose_output_0", float "/Constant_4_output_0", float "/Constant_5_output_0", float "/Pow_1_output_0", float16 "/Cast_2_output_0", float16[4,16,16,512] "/Mul_1_output_0", float16[4,16,512,512] "/MatMul_output_0", int64[4,1,1,512] "/Cast_3_output_0", int64[1] "/Constant_6_output_0", int64[4,1,1,1] "/ReduceSum_output_0", int64 "/Constant_7_output_0", bool[4,1,1,1] "/Greater_output_0", bool[512] "/Constant_8_output_0", bool[4,1,1,1] "/Not_output_0", bool[4,1,1,512] "/And_output_0", bool[4,1,1,512] "/Or_output_0", bool[4,1,1,512] "/Not_1_output_0", bool[4,1,1,512] "/Cast_4_output_0", float16 "/Constant_9_output_0", float16[4,16,512,512] "/Where_output_0", float[4,16,512,512] "/Cast_5_output_0", float[4,16,512,512] "/Softmax_output_0", float16[4,16,512,512] "/Cast_6_output_0", float16[4,16,512,16] "/MatMul_1_output_0", float16[4,1,1,1] "/Cast_7_output_0", float16[4,16,512,16] "/Mul_2_output_0", int64[1] "/Constant_10_output_0", int32[4,1,512] "/Unsqueeze_2_output_0", int64[1] "/Constant_11_output_0", int32[4,1,512,1] "/Unsqueeze_3_output_0", float16[4,1,512,1] "/Cast_8_output_0">
+{
+   ["/Cast"] "/Cast_output_0" = Cast <to: int = 9> (mask)
+   ["/Constant"] "/Constant_output_0" = Constant <value: tensor = int64[1] {1}> ()
+   ["/Unsqueeze"] "/Unsqueeze_output_0" = Unsqueeze ("/Cast_output_0", "/Constant_output_0")
+   ["/Constant_1"] "/Constant_1_output_0" = Constant <value: tensor = int64[1] {2}> ()
+   ["/Unsqueeze_1"] "/Unsqueeze_1_output_0" = Unsqueeze ("/Unsqueeze_output_0", "/Constant_1_output_0")
+   ["/Constant_2"] "/Constant_2_output_0" = Constant <value: tensor = float {16}> ()
+   ["/Constant_3"] "/Constant_3_output_0" = Constant <value: tensor = float {-0.25}> ()
+   ["/Pow"] "/Pow_output_0" = Pow ("/Constant_2_output_0", "/Constant_3_output_0")
+   ["/Cast_1"] "/Cast_1_output_0" = Cast <to: int = 10> ("/Pow_output_0")
+   ["/Mul"] "/Mul_output_0" = Mul (query, "/Cast_1_output_0")
+   ["/Transpose"] "/Transpose_output_0" = Transpose <perm: ints = [0, 1, 3, 2]> (key)
+   ["/Constant_4"] "/Constant_4_output_0" = Constant <value: tensor = float {16}> ()
+   ["/Constant_5"] "/Constant_5_output_0" = Constant <value: tensor = float {-0.25}> ()
+   ["/Pow_1"] "/Pow_1_output_0" = Pow ("/Constant_4_output_0", "/Constant_5_output_0")
+   ["/Cast_2"] "/Cast_2_output_0" = Cast <to: int = 10> ("/Pow_1_output_0")
+   ["/Mul_1"] "/Mul_1_output_0" = Mul ("/Transpose_output_0", "/Cast_2_output_0")
+   ["/MatMul"] "/MatMul_output_0" = MatMul ("/Mul_output_0", "/Mul_1_output_0")
+   ["/Cast_3"] "/Cast_3_output_0" = Cast <to: int = 7> ("/Unsqueeze_1_output_0")
+   ["/Constant_6"] "/Constant_6_output_0" = Constant <value: tensor = int64[1] {-1}> ()
+   ["/ReduceSum"] "/ReduceSum_output_0" = ReduceSum <keepdims: int = 1, noop_with_empty_axes: int = 0> ("/Cast_3_output_0", "/Constant_6_output_0")
+   ["/Constant_7"] "/Constant_7_output_0" = Constant <value: tensor = int64 {0}> ()
+   ["/Greater"] "/Greater_output_0" = Greater ("/ReduceSum_output_0", "/Constant_7_output_0")
+   ["/Constant_8"] "/Constant_8_output_0" = Constant <value: tensor = bool[512]...> ()
+   ["/Not"] "/Not_output_0" = Not ("/Greater_output_0")
+   ["/And"] "/And_output_0" = And ("/Not_output_0", "/Constant_8_output_0")
+   ["/Or"] "/Or_output_0" = Or ("/Unsqueeze_1_output_0", "/And_output_0")
+   ["/Not_1"] "/Not_1_output_0" = Not ("/Or_output_0")
+   ["/Cast_4"] "/Cast_4_output_0" = Cast <to: int = 9> ("/Not_1_output_0")
+   ["/Constant_9"] "/Constant_9_output_0" = Constant <value: tensor = float16...> ()
+   ["/Where"] "/Where_output_0" = Where ("/Cast_4_output_0", "/Constant_9_output_0", "/MatMul_output_0")
+   ["/Cast_5"] "/Cast_5_output_0" = Cast <to: int = 1> ("/Where_output_0")
+   ["/Softmax"] "/Softmax_output_0" = Softmax <axis: int = -1> ("/Cast_5_output_0")
+   ["/Cast_6"] "/Cast_6_output_0" = Cast <to: int = 10> ("/Softmax_output_0")
+   ["/MatMul_1"] "/MatMul_1_output_0" = MatMul ("/Cast_6_output_0", value)
+   ["/Cast_7"] "/Cast_7_output_0" = Cast <to: int = 10> ("/Greater_output_0")
+   ["/Mul_2"] "/Mul_2_output_0" = Mul ("/MatMul_1_output_0", "/Cast_7_output_0")
+   ["/Constant_10"] "/Constant_10_output_0" = Constant <value: tensor = int64[1] {1}> ()
+   ["/Unsqueeze_2"] "/Unsqueeze_2_output_0" = Unsqueeze (mask, "/Constant_10_output_0")
+   ["/Constant_11"] "/Constant_11_output_0" = Constant <value: tensor = int64[1] {3}> ()
+   ["/Unsqueeze_3"] "/Unsqueeze_3_output_0" = Unsqueeze ("/Unsqueeze_2_output_0", "/Constant_11_output_0")
+   ["/Cast_8"] "/Cast_8_output_0" = Cast <to: int = 10> ("/Unsqueeze_3_output_0")
+   ["/Mul_3"] output = Mul ("/Mul_2_output_0", "/Cast_8_output_0")
+}

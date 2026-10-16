@@ -1,0 +1,32 @@
+{
+  "wrapper_sha256": "f9cab096226f01197fe3b575a17982fa7de2f334de128eba51cdd2fc0b2c8e98",
+  "dtype": "fp32",
+  "correctness": {
+    "finite": true,
+    "mae": 5.770278477257307e-09,
+    "max_abs": 2.384185791015625e-07,
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "correct": true
+  },
+  "contract_rejections": {
+    "empty": "Attention export requires at least one valid element per event",
+    "holes": "Attention export requires right padding (no holes or left padding)"
+  },
+  "final_nodes": {
+    "Cast": 3,
+    "Constant": 3,
+    "ReduceSum": 1,
+    "Attention": 1,
+    "Unsqueeze": 2,
+    "Mul": 1
+  },
+  "placeholder_nodes": {
+    "Cast": 3,
+    "Constant": 3,
+    "ReduceSum": 1,
+    "mlpf::Attention24": 1,
+    "Unsqueeze": 2,
+    "Mul": 1
+  }
+}

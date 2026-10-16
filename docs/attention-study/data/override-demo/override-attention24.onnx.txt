@@ -1,0 +1,19 @@
+graph main_graph (
+  %query[FLOAT, 2x4x128x16]
+  %key[FLOAT, 2x4x128x16]
+  %value[FLOAT, 2x4x128x16]
+  %mask[INT32, 2x128]
+) {
+  %/Cast_output_0 = Cast[to = 9](%mask)
+  %/Cast_1_output_0 = Cast[to = 7](%/Cast_output_0)
+  %onnx::ReduceSum_6 = Constant[value = <Tensor>]()
+  %/ReduceSum_output_0 = ReduceSum[keepdims = 0](%/Cast_1_output_0, %onnx::ReduceSum_6)
+  %/Attention24_output_0 = Attention[is_causal = 0](%query, %key, %value, %, %, %, %/ReduceSum_output_0)
+  %/Constant_output_0 = Constant[value = <Tensor>]()
+  %/Unsqueeze_output_0 = Unsqueeze(%mask, %/Constant_output_0)
+  %/Constant_1_output_0 = Constant[value = <Tensor>]()
+  %/Unsqueeze_1_output_0 = Unsqueeze(%/Unsqueeze_output_0, %/Constant_1_output_0)
+  %/Cast_2_output_0 = Cast[to = 1](%/Unsqueeze_1_output_0)
+  %output = Mul(%/Attention24_output_0, %/Cast_2_output_0)
+  return %output
+}

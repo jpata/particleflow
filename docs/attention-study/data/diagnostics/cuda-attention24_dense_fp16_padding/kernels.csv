@@ -1,0 +1,12 @@
+Generating SQLite file results/attention-study/diagnostics/cuda-attention24_dense_fp16_padding/trace.sqlite from results/attention-study/diagnostics/cuda-attention24_dense_fp16_padding/trace.nsys-rep
+Processing [results/attention-study/diagnostics/cuda-attention24_dense_fp16_padding/trace.sqlite] with [/opt/nvidia/nsight-systems/2025.5.2/host-linux-x64/reports/cuda_gpu_kern_sum.py]...
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+69.1,125312,3,41770.7,42048.0,41120,42144,565.5,"void attention_kernel_batched_impl<AttentionKernel<cutlass::half_t, cutlass::arch::Sm80, (bool)1, (int)64, (int)64, (int)64, (bool)0, (bool)1, DefaultToBatchHook>>(T1::Params)"
+7.2,13122,3,4374.0,4384.0,4353,4385,18.2,"void onnxruntime::cuda::ConvertBoolMaskToAttentionBiasKernel<__half>(const bool *, T1 *, long, float)"
+4.7,8608,3,2869.3,2848.0,2816,2944,66.6,"void onnxruntime::cuda::ExpandKernel<unsigned char, (int)256, (int)4>(int, int, const T1 *, T1 *, onnxruntime::cuda::TArray<onnxruntime::cuda::DivMod<int>, (int)8>, onnxruntime::cuda::TArray<long, (int)8>)"
+4.0,7264,3,2421.3,2432.0,2400,2432,18.5,"void onnxruntime::cuda::_BinaryElementWise<__half, __half, __half, onnxruntime::cuda::OP_Mul<__half, __half, __half>, (bool)0, (bool)1, (int)256, (int)4, int>(int, onnxruntime::cuda::TArray<long, (int)8>, const T2 *, onnxruntime::cuda::TArray<long, (int)8>, const T3 *, onnxruntime::cuda::TArray<onnxruntime::cuda::DivMod<int>, (int)8>, T1 *, const T4 &, T9)"
+3.7,6784,3,2261.3,2240.0,2176,2368,97.8,"void onnxruntime::contrib::cuda::TransposeQKV<float2>(int, bool, const T1 *, T1 *, int)"
+3.7,6720,3,2240.0,2240.0,2176,2304,64.0,"void onnxruntime::cuda::ZeroFullyMaskedRowsKernel<__half>(T1 *, const T1 *, const int *, int, int, int, int, int, bool, bool, int, int, float)"
+3.6,6496,3,2165.3,2176.0,2144,2176,18.5,"void onnxruntime::contrib::cuda::TransposeCtx<float2>(int, bool, const T1 *, T1 *)"
+2.0,3616,3,1205.3,1088.0,1088,1440,203.2,"void onnxruntime::cuda::_UnaryElementWise<int, __half, onnxruntime::cuda::OP_Cast<int, __half>, (int)256, (int)4>(const T1 *, T2 *, T3, long)"
+1.9,3456,3,1152.0,1056.0,1056,1344,166.3,"void onnxruntime::cuda::_UnaryElementWise<int, bool, onnxruntime::cuda::OP_Cast<int, bool>, (int)256, (int)4>(const T1 *, T2 *, T3, long)"

@@ -1,0 +1,9 @@
+<
+   ir_version: 10,
+   opset_import: ["" : 23],
+   producer_name: "pytorch",
+   producer_version: "2.9.1+rocm7.2.1.gitff65f5bc"
+>
+main_graph (float16[4,16,512,16] query, float16[4,16,512,16] key, float16[4,16,512,16] value) => (float16[4,16,512,16] output) {
+   [node_scaled_dot_product_attention] output = Attention <qk_matmul_output_mode: int = 0, softcap: float = 0, is_causal: int = 0> (query, key, value)
+}

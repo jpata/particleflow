@@ -1,0 +1,109 @@
+{
+  "canonical_models_checked": 76,
+  "configurations": {
+    "cpu129": {
+      "rows": 92,
+      "reassessed_fp16_rows": [
+        [
+          "sdpa_legacy",
+          "fp16",
+          "padding",
+          4,
+          128,
+          false
+        ],
+        [
+          "sdpa_legacy",
+          "fp16",
+          "padding",
+          4,
+          512,
+          false
+        ],
+        [
+          "sdpa_legacy",
+          "fp16",
+          "padding",
+          4,
+          512,
+          true
+        ],
+        [
+          "sdpa_legacy",
+          "fp16",
+          "padding",
+          4,
+          1280,
+          false
+        ],
+        [
+          "sdpa_legacy",
+          "fp16",
+          "padding",
+          4,
+          2560,
+          false
+        ]
+      ],
+      "correct_rows": 90,
+      "failed_rows": 2,
+      "incorrect_rows": 0
+    },
+    "cuda129": {
+      "rows": 108,
+      "reassessed_fp16_rows": [],
+      "correct_rows": 84,
+      "failed_rows": 24,
+      "incorrect_rows": 0
+    },
+    "rocm-default": {
+      "rows": 108,
+      "reassessed_fp16_rows": [],
+      "correct_rows": 50,
+      "failed_rows": 58,
+      "incorrect_rows": 0
+    },
+    "rocm-attention": {
+      "rows": 108,
+      "reassessed_fp16_rows": [],
+      "correct_rows": 35,
+      "failed_rows": 73,
+      "incorrect_rows": 0
+    },
+    "cpu123": {
+      "rows": 24,
+      "reassessed_fp16_rows": [],
+      "correct_rows": 15,
+      "failed_rows": 8,
+      "incorrect_rows": 1
+    },
+    "cuda123": {
+      "rows": 28,
+      "reassessed_fp16_rows": [],
+      "correct_rows": 13,
+      "failed_rows": 15,
+      "incorrect_rows": 0
+    },
+    "cpu-batch": {
+      "rows": 30,
+      "reassessed_fp16_rows": [],
+      "correct_rows": 30,
+      "failed_rows": 0,
+      "incorrect_rows": 0
+    },
+    "cuda-batch": {
+      "rows": 40,
+      "reassessed_fp16_rows": [],
+      "correct_rows": 30,
+      "failed_rows": 10,
+      "incorrect_rows": 0
+    },
+    "rocm-batch": {
+      "rows": 40,
+      "reassessed_fp16_rows": [],
+      "correct_rows": 20,
+      "failed_rows": 20,
+      "incorrect_rows": 0
+    }
+  }
+}

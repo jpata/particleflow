@@ -1,0 +1,8 @@
+[
+  {"name":"libgomp","version":"14.4.0","build":"he0feb66_7","sha256":"76b34fc094732e38055df85f99acdfc668eacbe38aaa81b100ddea454c0e29df"},
+  {"name":"_openmp_mutex","version":"4.5","build":"20_gnu","sha256":"1dd3fffd892081df9726d7eb7e0dea6198962ba775bd88842135a4ddb4deb3c9"},
+  {"name":"libgcc","version":"14.4.0","build":"hecc6394_7","sha256":"b8ae5d04510e014db4e4e04ada048479f89e507fac96e9b7572fc3520e943db6"},
+  {"name":"libgcc-ng","version":"14.4.0","build":"h69a702a_7","sha256":"3b17f36d5141c2e66ef6b8298ad36914c5ddbf910ec60a305d46fe2d12b28dca"},
+  {"name":"libstdcxx","version":"14.4.0","build":"h934c35e_7","sha256":"c8dce64507240af2f6132518400448080697a99c317989aff3e1ae8fc01cbdf1"},
+  {"name":"libstdcxx-ng","version":"14.4.0","build":"hdf11a46_7","sha256":"2d20bb3e6f0b34994b10d9f2216117475c3013d9c8c51b0ddcf7accde1d9e774"}
+]

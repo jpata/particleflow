@@ -1,0 +1,830 @@
+[
+  {
+    "session": 0,
+    "session_ms": 736.3010690314695
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 171.072326018475,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 1280,
+    "run_ms": 8.6421420564875,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 0.5789709975942969,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 2560,
+    "run_ms": 31.302127055823803,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 0.6030519725754857,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "placements": [
+      {
+        "name": "/Shape_kernel_time",
+        "op": "Shape",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Slice_kernel_time",
+        "op": "Slice",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Memcpy_kernel_time",
+        "op": "MemcpyFromHost",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Shape_kernel_time",
+        "op": "Shape",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Slice_kernel_time",
+        "op": "Slice",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Memcpy_kernel_time",
+        "op": "MemcpyFromHost",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Shape_kernel_time",
+        "op": "Shape",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Slice_kernel_time",
+        "op": "Slice",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Memcpy_kernel_time",
+        "op": "MemcpyFromHost",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Shape_kernel_time",
+        "op": "Shape",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Slice_kernel_time",
+        "op": "Slice",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Memcpy_kernel_time",
+        "op": "MemcpyFromHost",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Shape_kernel_time",
+        "op": "Shape",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Slice_kernel_time",
+        "op": "Slice",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Memcpy_kernel_time",
+        "op": "MemcpyFromHost",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      }
+    ]
+  },
+  {
+    "session": 1,
+    "session_ms": 5.860510049387813
+  },
+  {
+    "session": 1,
+    "seq": 512,
+    "run_ms": 9.818144026212394,
+    "finite": true
+  },
+  {
+    "session": 1,
+    "seq": 1280,
+    "run_ms": 3.0625970102846622,
+    "finite": true
+  },
+  {
+    "session": 1,
+    "seq": 512,
+    "run_ms": 0.5496999947354198,
+    "finite": true
+  },
+  {
+    "session": 1,
+    "seq": 2560,
+    "run_ms": 30.997290974482894,
+    "finite": true
+  },
+  {
+    "session": 1,
+    "seq": 512,
+    "run_ms": 0.5973009392619133,
+    "finite": true
+  },
+  {
+    "session": 1,
+    "placements": [
+      {
+        "name": "/Shape_kernel_time",
+        "op": "Shape",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Slice_kernel_time",
+        "op": "Slice",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Memcpy_kernel_time",
+        "op": "MemcpyFromHost",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Shape_kernel_time",
+        "op": "Shape",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Slice_kernel_time",
+        "op": "Slice",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Memcpy_kernel_time",
+        "op": "MemcpyFromHost",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Shape_kernel_time",
+        "op": "Shape",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Slice_kernel_time",
+        "op": "Slice",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Memcpy_kernel_time",
+        "op": "MemcpyFromHost",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Shape_kernel_time",
+        "op": "Shape",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Slice_kernel_time",
+        "op": "Slice",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Memcpy_kernel_time",
+        "op": "MemcpyFromHost",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Shape_kernel_time",
+        "op": "Shape",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Slice_kernel_time",
+        "op": "Slice",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Memcpy_kernel_time",
+        "op": "MemcpyFromHost",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CUDAExecutionProvider"
+      }
+    ]
+  }
+]

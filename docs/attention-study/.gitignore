@@ -1,0 +1,10 @@
+# These publication artifacts are intentional exceptions to repository-wide patterns.
+!models/
+!models/**
+!figures/*.png
+!figures/*.pdf
+!data/*-contract-tests.log
+
+# Generated distribution bundle; source and curated evidence are tracked.
+attention-export-study.tar.gz
+!data/**/*.log

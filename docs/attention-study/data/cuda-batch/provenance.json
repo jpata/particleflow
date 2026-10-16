@@ -1,0 +1,493 @@
+{
+  "captured_utc": "2026-10-16T11:45:08.522952+00:00",
+  "python": "3.12.15 (main, Oct  1 2026, 00:00:00) [GCC 11.5.0 20240719 (Red Hat 11.5.0-14)]",
+  "python_executable": "/tmp/attention-venv/bin/python",
+  "platform": "Linux-6.8.4-200.fc39.x86_64-x86_64-with-glibc2.34",
+  "affinity": [
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200,
+    201,
+    202,
+    203,
+    204,
+    205,
+    206,
+    207,
+    208,
+    209,
+    210,
+    211,
+    212,
+    213,
+    214,
+    215,
+    216,
+    217,
+    218,
+    219,
+    220,
+    221,
+    222
+  ],
+  "python_packages": [
+    {
+      "name": "contourpy",
+      "version": "1.3.3"
+    },
+    {
+      "name": "cycler",
+      "version": "0.12.1"
+    },
+    {
+      "name": "filelock",
+      "version": "3.32.3"
+    },
+    {
+      "name": "flatbuffers",
+      "version": "25.12.19"
+    },
+    {
+      "name": "fonttools",
+      "version": "4.67.0"
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.7.0"
+    },
+    {
+      "name": "graphviz",
+      "version": "0.21"
+    },
+    {
+      "name": "Jinja2",
+      "version": "3.1.6"
+    },
+    {
+      "name": "kiwisolver",
+      "version": "1.5.1"
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.3"
+    },
+    {
+      "name": "matplotlib",
+      "version": "3.11.2"
+    },
+    {
+      "name": "ml_dtypes",
+      "version": "0.5.4"
+    },
+    {
+      "name": "mpmath",
+      "version": "1.3.0"
+    },
+    {
+      "name": "networkx",
+      "version": "3.6.1"
+    },
+    {
+      "name": "numpy",
+      "version": "1.26.4"
+    },
+    {
+      "name": "nvidia-cublas-cu12",
+      "version": "12.8.4.1"
+    },
+    {
+      "name": "nvidia-cuda-cupti-cu12",
+      "version": "12.8.90"
+    },
+    {
+      "name": "nvidia-cuda-nvrtc-cu12",
+      "version": "12.8.93"
+    },
+    {
+      "name": "nvidia-cuda-runtime-cu12",
+      "version": "12.8.90"
+    },
+    {
+      "name": "nvidia-cudnn-cu12",
+      "version": "9.10.2.21"
+    },
+    {
+      "name": "nvidia-cufft-cu12",
+      "version": "11.3.3.83"
+    },
+    {
+      "name": "nvidia-cufile-cu12",
+      "version": "1.13.1.3"
+    },
+    {
+      "name": "nvidia-curand-cu12",
+      "version": "10.3.9.90"
+    },
+    {
+      "name": "nvidia-cusolver-cu12",
+      "version": "11.7.3.90"
+    },
+    {
+      "name": "nvidia-cusparse-cu12",
+      "version": "12.5.8.93"
+    },
+    {
+      "name": "nvidia-cusparselt-cu12",
+      "version": "0.7.1"
+    },
+    {
+      "name": "nvidia-nccl-cu12",
+      "version": "2.27.5"
+    },
+    {
+      "name": "nvidia-nvjitlink-cu12",
+      "version": "12.8.93"
+    },
+    {
+      "name": "nvidia-nvshmem-cu12",
+      "version": "3.3.20"
+    },
+    {
+      "name": "nvidia-nvtx-cu12",
+      "version": "12.8.90"
+    },
+    {
+      "name": "onnx",
+      "version": "1.19.1"
+    },
+    {
+      "name": "onnx-ir",
+      "version": "0.1.12"
+    },
+    {
+      "name": "onnxruntime-gpu",
+      "version": "1.29.0"
+    },
+    {
+      "name": "onnxscript",
+      "version": "0.5.3"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3"
+    },
+    {
+      "name": "pillow",
+      "version": "12.3.0"
+    },
+    {
+      "name": "pip",
+      "version": "23.2.1"
+    },
+    {
+      "name": "protobuf",
+      "version": "7.36.2"
+    },
+    {
+      "name": "psutil",
+      "version": "7.2.2"
+    },
+    {
+      "name": "pyparsing",
+      "version": "3.3.3"
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0"
+    },
+    {
+      "name": "setuptools",
+      "version": "78.1.0"
+    },
+    {
+      "name": "six",
+      "version": "1.17.0"
+    },
+    {
+      "name": "sympy",
+      "version": "1.14.0"
+    },
+    {
+      "name": "torch",
+      "version": "2.9.1+cu128"
+    },
+    {
+      "name": "triton",
+      "version": "3.5.1"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0"
+    }
+  ],
+  "torch": {
+    "version": "2.9.1+cu128",
+    "cuda_build": "12.8",
+    "hip_build": null,
+    "cudnn_version": 91002,
+    "miopen_version_via_torch": null,
+    "config": "PyTorch built with:\n  - GCC 13.3\n  - C++ Version: 201703\n  - Intel(R) oneAPI Math Kernel Library Version 2024.2-Product Build 20240605 for Intel(R) 64 architecture applications\n  - Intel(R) MKL-DNN v3.7.1 (Git Hash 8d263e693366ef8db40acc569cc7d8edf644556d)\n  - OpenMP 201511 (a.k.a. OpenMP 4.5)\n  - LAPACK is enabled (usually provided by MKL)\n  - NNPACK is enabled\n  - CPU capability usage: AVX512\n  - CUDA Runtime 12.8\n  - NVCC architecture flags: -gencode;arch=compute_70,code=sm_70;-gencode;arch=compute_75,code=sm_75;-gencode;arch=compute_80,code=sm_80;-gencode;arch=compute_86,code=sm_86;-gencode;arch=compute_90,code=sm_90;-gencode;arch=compute_100,code=sm_100;-gencode;arch=compute_120,code=sm_120\n  - CuDNN 91.0.2  (built against CUDA 12.9)\n    - Built with CuDNN 90.8\n  - Magma 2.6.1\n  - Build settings: BLAS_INFO=mkl, BUILD_TYPE=Release, COMMIT_SHA=5811a8d7da873dd699ff6687092c225caffcf1bb, CUDA_VERSION=12.8, CUDNN_VERSION=9.8.0, CXX_COMPILER=/opt/rh/gcc-toolset-13/root/usr/bin/c++, CXX_FLAGS= -fvisibility-inlines-hidden -DUSE_PTHREADPOOL -DNDEBUG -DUSE_KINETO -DLIBKINETO_NOROCTRACER -DLIBKINETO_NOXPUPTI=ON -DUSE_FBGEMM -DUSE_PYTORCH_QNNPACK -DUSE_XNNPACK -DSYMBOLICATE_MOBILE_DEBUG_HANDLE -O2 -fPIC -DC10_NODEPRECATED -Wall -Wextra -Werror=return-type -Werror=non-virtual-dtor -Werror=range-loop-construct -Werror=bool-operation -Wnarrowing -Wno-missing-field-initializers -Wno-unknown-pragmas -Wno-unused-parameter -Wno-strict-overflow -Wno-strict-aliasing -Wno-stringop-overflow -Wsuggest-override -Wno-psabi -Wno-error=old-style-cast -faligned-new -Wno-maybe-uninitialized -fno-math-errno -fno-trapping-math -Werror=format -Wno-dangling-reference -Wno-error=dangling-reference -Wno-stringop-overflow, LAPACK_INFO=mkl, PERF_WITH_AVX=1, PERF_WITH_AVX2=1, TORCH_VERSION=2.9.1, USE_CUDA=ON, USE_CUDNN=ON, USE_CUSPARSELT=1, USE_GFLAGS=OFF, USE_GLOG=OFF, USE_GLOO=ON, USE_MKL=ON, USE_MKLDNN=ON, USE_MPI=OFF, USE_NCCL=1, USE_NNPACK=ON, USE_OPENMP=ON, USE_ROCM=OFF, USE_ROCM_KERNEL_ASSERT=OFF, USE_XCCL=OFF, USE_XPU=OFF, \n",
+    "tf32_matmul": false,
+    "float32_matmul_precision": "highest",
+    "device": {
+      "name": "NVIDIA L40S",
+      "total_memory": 47667740672,
+      "capability": [
+        8,
+        9
+      ]
+    }
+  },
+  "ort": {
+    "version": "1.29.0",
+    "providers": [
+      "TensorrtExecutionProvider",
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "build": "ORT Build Info: git-branch=HEAD, git-commit-id=9b174a42fc, fp8-kv-cache=1, build type=Release"
+  },
+  "environment": {
+    "ROCM_PATH": "/opt/rocm",
+    "LD_LIBRARY_PATH": "/opt/rocm/lib:/usr/local/cuda-13.1/lib64:/usr/local/cuda-12.8/lib64::/usr/lib64/openmpi/lib",
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1"
+  },
+  "commands": {
+    "cpu": {
+      "command": [
+        "lscpu"
+      ],
+      "exit_code": 0,
+      "stdout": "Architecture:                         x86_64\nCPU op-mode(s):                       32-bit, 64-bit\nAddress sizes:                        52 bits physical, 57 bits virtual\nByte Order:                           Little Endian\nCPU(s):                               256\nOn-line CPU(s) list:                  0-255\nVendor ID:                            AuthenticAMD\nModel name:                           AMD EPYC 9534 64-Core Processor\nCPU family:                           25\nModel:                                17\nThread(s) per core:                   2\nCore(s) per socket:                   64\nSocket(s):                            2\nStepping:                             1\nFrequency boost:                      enabled\nCPU(s) scaling MHz:                   43%\nCPU max MHz:                          3718.0659\nCPU min MHz:                          1500.0000\nBogoMIPS:                             4900.08\nFlags:                                fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd amd_ppin cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq la57 rdpid overflow_recov succor smca fsrm flush_l1d debug_swap\nVirtualization:                       AMD-V\nL1d cache:                            4 MiB (128 instances)\nL1i cache:                            4 MiB (128 instances)\nL2 cache:                             128 MiB (128 instances)\nL3 cache:                             512 MiB (16 instances)\nNUMA node(s):                         4\nNUMA node0 CPU(s):                    0-31,128-159\nNUMA node1 CPU(s):                    32-63,160-191\nNUMA node2 CPU(s):                    64-95,192-223\nNUMA node3 CPU(s):                    96-127,224-255\nVulnerability Gather data sampling:   Not affected\nVulnerability Itlb multihit:          Not affected\nVulnerability L1tf:                   Not affected\nVulnerability Mds:                    Not affected\nVulnerability Meltdown:               Not affected\nVulnerability Mmio stale data:        Not affected\nVulnerability Reg file data sampling: Not affected\nVulnerability Retbleed:               Not affected\nVulnerability Spec rstack overflow:   Mitigation; Safe RET\nVulnerability Spec store bypass:      Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:             Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:             Mitigation; Enhanced / Automatic IBRS, IBPB conditional, STIBP always-on, RSB filling, PBRSB-eIBRS Not affected\nVulnerability Srbds:                  Not affected\nVulnerability Tsx async abort:        Not affected\n",
+      "stderr": ""
+    },
+    "os": {
+      "command": [
+        "cat",
+        "/etc/os-release"
+      ],
+      "exit_code": 0,
+      "stdout": "NAME=\"AlmaLinux\"\nVERSION=\"9.7 (Moss Jungle Cat)\"\nID=\"almalinux\"\nID_LIKE=\"rhel centos fedora\"\nVERSION_ID=\"9.7\"\nPLATFORM_ID=\"platform:el9\"\nPRETTY_NAME=\"AlmaLinux 9.7 (Moss Jungle Cat)\"\nANSI_COLOR=\"0;34\"\nLOGO=\"fedora-logo-icon\"\nCPE_NAME=\"cpe:/o:almalinux:almalinux:9::baseos\"\nHOME_URL=\"https://almalinux.org/\"\nDOCUMENTATION_URL=\"https://wiki.almalinux.org/\"\nBUG_REPORT_URL=\"https://bugs.almalinux.org/\"\n\nALMALINUX_MANTISBT_PROJECT=\"AlmaLinux-9\"\nALMALINUX_MANTISBT_PROJECT_VERSION=\"9.7\"\nREDHAT_SUPPORT_PRODUCT=\"AlmaLinux\"\nREDHAT_SUPPORT_PRODUCT_VERSION=\"9.7\"\nSUPPORT_END=2032-06-01\n",
+      "stderr": ""
+    },
+    "nvidia": {
+      "command": [
+        "nvidia-smi",
+        "-q"
+      ],
+      "exit_code": 0,
+      "stdout": "\n==============NVSMI LOG==============\n\nTimestamp                                              : Fri Oct 16 13:45:08 2026\nDriver Version                                         : 590.48.01\nCUDA Version                                           : 13.1\n\nAttached GPUs                                          : 1\nGPU 00000000:C1:00.0\n    Product Name                                       : NVIDIA L40S\n    Product Brand                                      : NVIDIA\n    Product Architecture                               : Ada Lovelace\n    Display Mode                                       : Requested functionality has been deprecated\n    Display Attached                                   : Yes\n    Display Active                                     : Disabled\n    Persistence Mode                                   : Disabled\n    Addressing Mode                                    : HMM\n    MIG Mode\n        Current                                        : N/A\n        Pending                                        : N/A\n    Accounting Mode                                    : Disabled\n    Accounting Mode Buffer Size                        : 4000\n    Driver Model\n        Current                                        : N/A\n        Pending                                        : N/A\n    Serial Number                                      : 1324323057854\n    GPU UUID                                           : GPU-e2f6e50d-a348-d8d3-b33b-44496f3cbf66\n    GPU PDI                                            : 0xcac0bf91f7d6060c\n    Minor Number                                       : 3\n    VBIOS Version                                      : 95.02.66.00.02\n    MultiGPU Board                                     : No\n    Board ID                                           : 0xc100\n    Board Part Number                                  : 900-2G133-0080-000\n    GPU Part Number                                    : 26B9-896-A1\n    FRU Part Number                                    : N/A\n    Platform Info\n        Chassis Serial Number                          : N/A\n        Slot Number                                    : N/A\n        Tray Index                                     : N/A\n        Host ID                                        : N/A\n        Peer Type                                      : N/A\n        Module Id                                      : 1\n        GPU Fabric GUID                                : N/A\n    Inforom Version\n        Image Version                                  : G133.0242.00.03\n        OEM Object                                     : 2.1\n        ECC Object                                     : 6.16\n        Power Management Object                        : N/A\n    Inforom BBX Object Flush\n        Latest Timestamp                               : N/A\n        Latest Duration                                : N/A\n    GPU Operation Mode\n        Current                                        : N/A\n        Pending                                        : N/A\n    GPU C2C Mode                                       : N/A\n    GPU Virtualization Mode\n        Virtualization Mode                            : None\n        Host VGPU Mode                                 : N/A\n        vGPU Heterogeneous Mode                        : N/A\n    GPU Recovery Action                                : None\n    GSP Firmware Version                               : 590.48.01\n    IBMNPU\n        Relaxed Ordering Mode                          : N/A\n    PCI\n        Bus                                            : 0xC1\n        Device                                         : 0x00\n        Domain                                         : 0x0000\n        Base Classcode                                 : 0x3\n        Sub Classcode                                  : 0x2\n        Device Id                                      : 0x26B910DE\n        Bus Id                                         : 00000000:C1:00.0\n        Sub System Id                                  : 0x185110DE\n        GPU Link Info\n            PCIe Generation\n                Max                                    : 4\n                Current                                : 1\n                Device Current                         : 1\n                Device Max                             : 4\n                Host Max                               : 5\n            Link Width\n                Max                                    : 16x\n                Current                                : 16x\n        Bridge Chip\n            Type                                       : N/A\n            Firmware                                   : N/A\n        Replays Since Reset                            : 0\n        Replay Number Rollovers                        : 0\n        Tx Throughput                                  : 390 KB/s\n        Rx Throughput                                  : 292 KB/s\n        Atomic Caps Outbound                           : N/A\n        Atomic Caps Inbound                            : N/A\n    Fan Speed                                          : N/A\n    Performance State                                  : P8\n    Clocks Event Reasons\n        Idle                                           : Active\n        Applications Clocks Setting                    : Not Active\n        SW Power Cap                                   : Not Active\n        HW Slowdown                                    : Not Active\n            HW Thermal Slowdown                        : Not Active\n            HW Power Brake Slowdown                    : Not Active\n        Sync Boost                                     : Not Active\n        SW Thermal Slowdown                            : Not Active\n        Display Clock Setting                          : Not Active\n    Clocks Event Reasons Counters\n        SW Power Capping                               : 28143510 us\n        Sync Boost                                     : 0 us\n        SW Thermal Slowdown                            : 0 us\n        HW Thermal Slowdown                            : 0 us\n        HW Power Braking                               : 0 us\n    Sparse Operation Mode                              : N/A\n    FB Memory Usage\n        Total                                          : 46068 MiB\n        Reserved                                       : 609 MiB\n        Used                                           : 3 MiB\n        Free                                           : 45457 MiB\n    BAR1 Memory Usage\n        Total                                          : 65536 MiB\n        Used                                           : 4 MiB\n        Free                                           : 65532 MiB\n    Conf Compute Protected Memory Usage\n        Total                                          : 0 MiB\n        Used                                           : 0 MiB\n        Free                                           : 0 MiB\n    Compute Mode                                       : Default\n    Utilization\n        GPU                                            : 0 %\n        Memory                                         : 0 %\n        Encoder                                        : 0 %\n        Decoder                                        : 0 %\n        JPEG                                           : 0 %\n        OFA                                            : 0 %\n    Encoder Stats\n        Active Sessions                                : 0\n        Average FPS                                    : 0\n        Average Latency                                : 0\n    FBC Stats\n        Active Sessions                                : 0\n        Average FPS                                    : 0\n        Average Latency                                : 0\n    DRAM Encryption Mode\n        Current                                        : N/A\n        Pending                                        : N/A\n    ECC Mode\n        Current                                        : Enabled\n        Pending                                        : Enabled\n    ECC Errors\n        Volatile\n            SRAM Correctable                           : 0\n            SRAM Uncorrectable Parity                  : 0\n            SRAM Uncorrectable SEC-DED                 : 0\n            DRAM Correctable                           : 0\n            DRAM Uncorrectable                         : 0\n        Aggregate\n            SRAM Correctable                           : 0\n            SRAM Uncorrectable Parity                  : 0\n            SRAM Uncorrectable SEC-DED                 : 0\n            DRAM Correctable                           : 0\n            DRAM Uncorrectable                         : 0\n            SRAM Threshold Exceeded                    : No\n        Aggregate Uncorrectable SRAM Sources\n            SRAM L2                                    : 0\n            SRAM SM                                    : 0\n            SRAM Microcontroller                       : 0\n            SRAM PCIE                                  : 0\n            SRAM Other                                 : 0\n        Channel Repair Pending                         : No\n        TPC Repair Pending                             : No\n        Unrepairable Memory                            : N/A\n    Retired Pages\n        Single Bit ECC                                 : N/A\n        Double Bit ECC                                 : N/A\n        Pending Page Blacklist                         : N/A\n    Remapped Rows\n        Correctable Error                              : 0\n        Uncorrectable Error                            : 0\n        Pending                                        : No\n        Remapping Failure Occurred                     : No\n        Bank Remap Availability Histogram\n            Max                                        : 192 bank(s)\n            High                                       : 0 bank(s)\n            Partial                                    : 0 bank(s)\n            Low                                        : 0 bank(s)\n            None                                       : 0 bank(s)\n    Temperature\n        GPU Current Temp                               : 43 C\n        GPU T.Limit Temp                               : 45 C\n        GPU Shutdown T.Limit Temp                      : -5 C\n        GPU Slowdown T.Limit Temp                      : -2 C\n        GPU Max Operating T.Limit Temp                 : 0 C\n        GPU Target Temperature                         : N/A\n        Memory Current Temp                            : N/A\n        Memory Max Operating T.Limit Temp              : N/A\n    GPU Power Readings\n        Average Power Draw                             : 37.07 W\n        Instantaneous Power Draw                       : 37.04 W\n        Current Power Limit                            : 350.00 W\n        Requested Power Limit                          : 350.00 W\n        Default Power Limit                            : 350.00 W\n        Min Power Limit                                : 100.00 W\n        Max Power Limit                                : 350.00 W\n    GPU Memory Power Readings \n        Average Power Draw                             : N/A\n        Instantaneous Power Draw                       : N/A\n    Module Power Readings\n        Average Power Draw                             : N/A\n        Instantaneous Power Draw                       : N/A\n        Current Power Limit                            : N/A\n        Requested Power Limit                          : N/A\n        Default Power Limit                            : N/A\n        Min Power Limit                                : N/A\n        Max Power Limit                                : N/A\n    Power Smoothing                                    : N/A\n    Workload Power Profiles\n        Requested Profiles                             : N/A\n        Enforced Profiles                              : N/A\n    EDPp Multiplier                                    : N/A\n    Clocks\n        Graphics                                       : 210 MHz\n        SM                                             : 210 MHz\n        Memory                                         : 405 MHz\n        Video                                          : 1185 MHz\n    Applications Clocks\n        Graphics                                       : Requested functionality has been deprecated\n        Memory                                         : Requested functionality has been deprecated\n    Default Applications Clocks\n        Graphics                                       : Requested functionality has been deprecated\n        Memory                                         : Requested functionality has been deprecated\n    Deferred Clocks\n        Memory                                         : N/A\n    Max Clocks\n        Graphics                                       : 2520 MHz\n        SM                                             : 2520 MHz\n        Memory                                         : 9001 MHz\n        Video                                          : 1965 MHz\n    Max Customer Boost Clocks\n        Graphics                                       : 2520 MHz\n    Clock Policy\n        Auto Boost                                     : N/A\n        Auto Boost Default                             : N/A\n    Fabric\n        State                                          : N/A\n        Status                                         : N/A\n        CliqueId                                       : N/A\n        ClusterUUID                                    : N/A\n        Health\n            Summary                                    : N/A\n            Bandwidth                                  : N/A\n            Route Recovery in progress                 : N/A\n            Route Unhealthy                            : N/A\n            Access Timeout Recovery                    : N/A\n            Incorrect Configuration                    : N/A\n    Processes                                          : None\n    Capabilities\n        EGM                                            : disabled\n\n",
+      "stderr": ""
+    },
+    "cuda_toolkit": {
+      "command": [
+        "nvcc",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_Dec_16_07:23:41_PM_PST_2025\nCuda compilation tools, release 13.1, V13.1.115\nBuild cuda_13.1.r13.1/compiler.37061995_0\n",
+      "stderr": ""
+    },
+    "amdgpu_module": {
+      "command": [
+        "modinfo",
+        "amdgpu"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "modinfo: ERROR: Module alias amdgpu not found.\n"
+    },
+    "hip_toolkit": {
+      "command": [
+        "hipconfig",
+        "--full"
+      ],
+      "exit_code": 0,
+      "stdout": "HIP version: 7.2.53211-97f5574fe2\n\n==hipconfig\nHIP_PATH           :/opt/rocm-7.2.4\nROCM_PATH          :/opt/rocm\nHIP_COMPILER       :clang\nHIP_PLATFORM       :amd\nHIP_RUNTIME        :rocclr\nCPP_CONFIG         : -D__HIP_PLATFORM_HCC__= -D__HIP_PLATFORM_AMD__= -I/opt/rocm-7.2.4/include -I/include\n\n==hip-clang\nHIP_CLANG_PATH     :/opt/rocm/lib/llvm/bin\nAMD clang version 22.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-7.2.4 26084 f58b06dce1f9c15707c5f808fd002e18c2accf7e)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/rocm-7.2.4/lib/llvm/bin\nConfiguration file: /opt/rocm-7.2.4/lib/llvm/bin/clang++.cfg\nAMD LLVM version 22.0.0git\n  Optimized build.\n  Default target: x86_64-unknown-linux-gnu\n  Host CPU: znver4\n\n  Registered Targets:\n    amdgcn - AMD GCN GPUs\n    r600   - AMD GPUs HD2XXX-HD6XXX\n    x86    - 32-bit X86: Pentium-Pro and above\n    x86-64 - 64-bit X86: EM64T and AMD64\nhip-clang-cxxflags :\n -O3\nhip-clang-ldflags :\n--driver-mode=g++ -O3 --hip-link\n\n== Environment Variables\nPATH =/opt/rocm/bin:/usr/local/cuda-13.1/bin:/usr/local/cuda-12.8/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/bin/miniconda3/bin:/usr/lib64/openmpi/bin\nLD_LIBRARY_PATH=/opt/rocm/lib:/usr/local/cuda-13.1/lib64:/usr/local/cuda-12.8/lib64::/usr/lib64/openmpi/lib\n\n== Linux Kernel\nHostname      :\nsdpa-l40s\nLinux sdpa-l40s 6.8.4-200.fc39.x86_64 #1 SMP PREEMPT_DYNAMIC Thu Apr  4 20:45:21 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux\n\n",
+      "stderr": ""
+    },
+    "rocm_smi": {
+      "command": [
+        "rocm-smi",
+        "--showdriverversion",
+        "--showproductname",
+        "--showmeminfo",
+        "vram"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "ERROR:root:Driver not initialized (amdgpu not found in modules)\n"
+    },
+    "amd_smi": {
+      "command": [
+        "amd-smi",
+        "version"
+      ],
+      "exit_code": 255,
+      "stdout": "AMDSMI Tool: 26.2.2+97f5574fe2 | AMDSMI Library version: 26.2.2 | ROCm version: 7.2.4\n",
+      "stderr": "ERROR:root:Unable to get devices, driver not initialized (amdgpu not found in modules)\nERROR:root:Unable to detect any GPU devices, check amdgpu version and module status (sudo modprobe amdgpu)\nERROR:root:Unable to detect any CPU devices, check amd_hsmp (or) hsmp_acpi version and module status (sudo modprobe amd_hsmp (or) sudo modprobe hsmp_acpi)\n"
+    },
+    "rocminfo": {
+      "command": [
+        "rocminfo"
+      ],
+      "exit_code": 1,
+      "stdout": "\u001b[31mROCk module is NOT loaded, possibly no GPU devices\u001b[0m\n",
+      "stderr": ""
+    },
+    "rocm_packages": {
+      "command": [
+        "rpm",
+        "-qa",
+        "*rocm*",
+        "*migraphx*",
+        "*hip*",
+        "*rocblas*",
+        "*miopen*",
+        "*hipblas*",
+        "*amdgpu*"
+      ],
+      "exit_code": 0,
+      "stdout": "rocm-core7.2.4-7.2.4.70204-93.el8.x86_64\nrocm-device-libs7.2.4-1.0.0.70204-93.el8.x86_64\nrocm-dbgapi7.2.4-0.77.4.70204-93.el8.x86_64\nhipblas-common-devel7.2.4-1.4.0.70204-93.el8.x86_64\nrocm-smi-lib7.2.4-7.8.0.70204-93.el8.x86_64\nhipfft7.2.4-1.0.22.70204-93.el8.x86_64\nrocm-llvm7.2.4-22.0.0.26084.70204-93.el8.x86_64\nrocminfo7.2.4-1.0.0.70204-93.el8.x86_64\nhip-runtime-amd7.2.4-7.2.53211.70204-93.el8.x86_64\nhipblaslt7.2.4-1.2.2.70204-93.el8.x86_64\nrocblas7.2.4-5.2.0.70204-93.el8.x86_64\nmiopen-hip7.2.4-3.5.1.70204-93.el8.x86_64\nhipcc7.2.4-1.1.1.70204-93.el8.x86_64\nhipsparse7.2.4-4.2.0.70204-93.el8.x86_64\nhipblas7.2.4-3.2.0.70204-93.el8.x86_64\nhipsolver7.2.4-3.2.0.70204-93.el8.x86_64\nmiopen-hip-devel7.2.4-3.5.1.70204-93.el8.x86_64\nrocblas-devel7.2.4-5.2.0.70204-93.el8.x86_64\nrocm-opencl7.2.4-2.0.0.70204-93.el8.x86_64\nhiprand7.2.4-3.1.0.70204-93.el8.x86_64\nhipsparselt7.2.4-0.2.6.70204-93.el8.x86_64\nhiptensor7.2.4-2.2.0.70204-93.el8.x86_64\nrocm-cmake7.2.4-0.14.0.70204-93.el8.x86_64\nhiptensor-devel7.2.4-2.2.0.70204-93.el8.x86_64\nhipsparselt-devel7.2.4-0.2.6.70204-93.el8.x86_64\nhiprand-devel7.2.4-3.1.0.70204-93.el8.x86_64\nhipsolver-devel7.2.4-3.2.0.70204-93.el8.x86_64\nhipblas-devel7.2.4-3.2.0.70204-93.el8.x86_64\nhipsparse-devel7.2.4-4.2.0.70204-93.el8.x86_64\nhipcub-devel7.2.4-4.2.0.70204-93.el8.x86_64\nhipblaslt-devel7.2.4-1.2.2.70204-93.el8.x86_64\nhipfort-devel7.2.4-0.7.1.70204-93.el8.x86_64\nrocm-debug-agent7.2.4-2.1.0.70204-93.el8.x86_64\nhipfft-devel7.2.4-1.0.22.70204-93.el8.x86_64\nhipify-clang7.2.4-22.0.0.70204-93.el8.x86_64\nrocm-gdb7.2.4-16.3.70204-93.el8.x86_64\nhip-devel7.2.4-7.2.53211.70204-93.el8.x86_64\nmigraphx7.2.4-2.15.0.70204-93.el8.x86_64\nmigraphx-devel7.2.4-2.15.0.70204-93.el8.x86_64\nrocm-openmp7.2.4-7.2.4.70204-93.el8.x86_64\nhip-doc7.2.4-7.2.53211.70204-93.el8.x86_64\nhip-samples7.2.4-7.2.53211.70204-93.el8.x86_64\nrocm-hip7.2.4-7.2.4.70204-93.el8.x86_64\nrocm-opencl-devel7.2.4-2.0.0.70204-93.el8.x86_64\nrocm-opencl-sdk7.2.4-7.2.4.70204-93.el8.x86_64\nrocm-developer-tools7.2.4-7.2.4.70204-93.el8.x86_64\nrocm7.2.4-7.2.4.70204-93.el8.x86_64\nrocm-core6.4.3-6.4.3.60403-128.el9.x86_64\nrocm-llvm6.4.3-19.0.0.25224.60403-128.el9.x86_64\nrocm-smi-lib6.4.3-7.7.0.60403-128.el9.x86_64\nhipcc6.4.3-1.1.1.60403-128.el9.x86_64\nrocm-dbgapi6.4.3-0.77.2.60403-128.el9.x86_64\nhipblas-common-devel6.4.3-1.0.0.60403-128.el9.x86_64\nrocm-device-libs6.4.3-1.0.0.60403-128.el9.x86_64\nhipfft6.4.3-1.0.18.60403-128.el9.x86_64\nrocm-language-runtime6.4.3-6.4.3.60403-128.el9.x86_64\nrocminfo6.4.3-1.0.0.60403-128.el9.x86_64\nhip-runtime-amd6.4.3-6.4.43484.60403-128.el9.x86_64\nhip-devel6.4.3-6.4.43484.60403-128.el9.x86_64\nrocm-hip-runtime6.4.3-6.4.3.60403-128.el9.x86_64\nhipblaslt6.4.3-0.12.1.60403-128.el9.x86_64\nrocblas6.4.3-4.4.1.60403-128.el9.x86_64\nmiopen-hip6.4.3-3.4.0.60403-128.el9.x86_64\nmigraphx6.4.3-2.12.0.60403-128.el9.x86_64\nhipsparse6.4.3-3.2.0.60403-128.el9.x86_64\nhipsparselt6.4.3-0.2.3.60403-128.el9.x86_64\nmigraphx-devel6.4.3-2.12.0.60403-128.el9.x86_64\nhipblas6.4.3-2.4.0.60403-128.el9.x86_64\nhipsolver6.4.3-2.4.0.60403-128.el9.x86_64\nmiopen-hip-devel6.4.3-3.4.0.60403-128.el9.x86_64\nrocblas-devel6.4.3-4.4.1.60403-128.el9.x86_64\nrocm-opencl6.4.3-2.0.0.60403-128.el9.x86_64\nhiprand6.4.3-2.12.0.60403-128.el9.x86_64\nhiptensor6.4.3-1.5.0.60403-128.el9.x86_64\nrocm-hip-libraries6.4.3-6.4.3.60403-128.el9.x86_64\nrocm-cmake6.4.3-0.14.0.60403-128.el9.x86_64\nrocm-utils6.4.3-6.4.3.60403-128.el9.x86_64\nrocm-ml-libraries6.4.3-6.4.3.60403-128.el9.x86_64\nhiptensor-devel6.4.3-1.5.0.60403-128.el9.x86_64\nhiprand-devel6.4.3-2.12.0.60403-128.el9.x86_64\nrocm-opencl-devel6.4.3-2.0.0.60403-128.el9.x86_64\nrocm-opencl-runtime6.4.3-6.4.3.60403-128.el9.x86_64\nrocm-opencl-sdk6.4.3-6.4.3.60403-128.el9.x86_64\nhipsolver-devel6.4.3-2.4.0.60403-128.el9.x86_64\nhipblas-devel6.4.3-2.4.0.60403-128.el9.x86_64\nhipsparselt-devel6.4.3-0.2.3.60403-128.el9.x86_64\nrocm-openmp-sdk6.4.3-6.4.3.60403-128.el9.x86_64\nhipcub-devel6.4.3-3.4.0.60403-128.el9.x86_64\nhipsparse-devel6.4.3-3.2.0.60403-128.el9.x86_64\nhipblaslt-devel6.4.3-0.12.1.60403-128.el9.x86_64\nhip-doc6.4.3-6.4.43484.60403-128.el9.x86_64\nhip-samples6.4.3-6.4.43484.60403-128.el9.x86_64\nhipfort-devel6.4.3-0.6.0.60403-128.el9.x86_64\nrocm-debug-agent6.4.3-2.0.4.60403-128.el9.x86_64\nhipfft-devel6.4.3-1.0.18.60403-128.el9.x86_64\nrocm-gdb6.4.3-15.2.60403-128.el9.x86_64\nrocm-developer-tools6.4.3-6.4.3.60403-128.el9.x86_64\nhipify-clang6.4.3-19.0.0.60403-128.el9.x86_64\nrocm-hip-runtime-devel6.4.3-6.4.3.60403-128.el9.x86_64\nrocm-hip-sdk6.4.3-6.4.3.60403-128.el9.x86_64\nrocm-ml-sdk6.4.3-6.4.3.60403-128.el9.x86_64\nrocm6.4.3-6.4.3.60403-128.el9.x86_64\n",
+      "stderr": ""
+    },
+    "cuda_packages": {
+      "command": [
+        "rpm",
+        "-qa",
+        "*cuda*",
+        "*cudnn*",
+        "*nvidia*"
+      ],
+      "exit_code": 0,
+      "stdout": "cuda-toolkit-config-common-12.8.90-1.noarch\ncuda-toolkit-12-config-common-12.8.90-1.noarch\ncuda-toolkit-12-8-config-common-12.8.90-1.noarch\ncuda-cudart-12-8-12.8.90-1.x86_64\ncuda-opencl-12-8-12.8.90-1.x86_64\ncuda-nvrtc-12-8-12.8.93-1.x86_64\ncuda-nvprof-12-8-12.8.90-1.x86_64\ncuda-nvml-devel-12-8-12.8.90-1.x86_64\ncuda-nvdisasm-12-8-12.8.90-1.x86_64\ncuda-cccl-12-8-12.8.90-1.x86_64\ncuda-cudart-devel-12-8-12.8.90-1.x86_64\ncuda-nvvp-12-8-12.8.93-1.x86_64\ncuda-libraries-12-8-12.8.1-1.x86_64\ncuda-nvrtc-devel-12-8-12.8.93-1.x86_64\ncuda-opencl-devel-12-8-12.8.90-1.x86_64\ncuda-nsight-systems-12-8-12.8.1-1.x86_64\ncuda-nsight-compute-12-8-12.8.1-1.x86_64\ncuda-profiler-api-12-8-12.8.90-1.x86_64\ncuda-nvvm-12-8-12.8.93-1.x86_64\ncuda-nvtx-12-8-12.8.90-1.x86_64\ncuda-nvprune-12-8-12.8.90-1.x86_64\ncuda-nsight-12-8-12.8.90-1.x86_64\ncuda-gdb-12-8-12.8.90-1.x86_64\ncuda-driver-devel-12-8-12.8.90-1.x86_64\ncuda-libraries-devel-12-8-12.8.1-1.x86_64\ncuda-visual-tools-12-8-12.8.1-1.x86_64\ncuda-documentation-12-8-12.8.90-1.x86_64\ncuda-cuxxfilt-12-8-12.8.90-1.x86_64\ncuda-cupti-12-8-12.8.90-1.x86_64\ncuda-cuobjdump-12-8-12.8.90-1.x86_64\ncuda-crt-12-8-12.8.93-1.x86_64\ncuda-nvcc-12-8-12.8.93-1.x86_64\ncuda-compiler-12-8-12.8.1-1.x86_64\ncuda-sanitizer-12-8-12.8.93-1.x86_64\ncuda-command-line-tools-12-8-12.8.1-1.x86_64\ncuda-tools-12-8-12.8.1-1.x86_64\ncuda-toolkit-12-8-12.8.1-1.x86_64\ncuda-toolkit-13-config-common-13.1.80-1.noarch\ncuda-toolkit-13-1-config-common-13.1.80-1.noarch\ncuda-culibos-devel-13-1-13.1.115-1.x86_64\ncuda-cudart-13-1-13.1.80-1.x86_64\ncuda-opencl-13-1-13.1.115-1.x86_64\nlibnvidia-ml-590.48.01-1.el9.x86_64\nlibnvidia-cfg-590.48.01-1.el9.x86_64\ncuda-nvrtc-13-1-13.1.115-1.x86_64\ncuda-nvml-devel-13-1-13.1.115-1.x86_64\ncuda-crt-13-1-13.1.115-1.x86_64\ncuda-cccl-13-1-13.1.115-1.x86_64\ncuda-cudart-devel-13-1-13.1.80-1.x86_64\ncuda-nvcc-13-1-13.1.115-1.x86_64\ncuda-libraries-13-1-13.1.1-1.x86_64\ncuda-nvrtc-devel-13-1-13.1.115-1.x86_64\nnvidia-persistenced-590.48.01-1.el9.x86_64\ncuda-opencl-devel-13-1-13.1.115-1.x86_64\ncuda-sandbox-devel-13-1-13.1.115-1.x86_64\nnvidia-modprobe-590.48.01-1.el9.x86_64\nnvidia-kmod-common-590.48.01-1.el9.noarch\nkmod-nvidia-open-dkms-590.48.01-1.el9.noarch\ncuda-nsight-compute-13-1-13.1.1-1.x86_64\nlibnvidia-gpucomp-590.48.01-1.el9.x86_64\nnvidia-driver-cuda-libs-590.48.01-1.el9.x86_64\ncuda-tileiras-13-1-13.1.80-1.x86_64\ncuda-profiler-api-13-1-13.1.115-1.x86_64\ncuda-nvtx-13-1-13.1.115-1.x86_64\ncuda-nvprune-13-1-13.1.115-1.x86_64\ncuda-nvdisasm-13-1-13.1.115-1.x86_64\ncuda-nsight-13-1-13.1.115-1.x86_64\ncuda-gdb-13-1-13.1.115-1.x86_64\ncuda-driver-devel-13-1-13.1.80-1.x86_64\ncuda-libraries-devel-13-1-13.1.1-1.x86_64\ncuda-documentation-13-1-13.1.115-1.x86_64\ncuda-cuxxfilt-13-1-13.1.115-1.x86_64\ncuda-cupti-13-1-13.1.115-1.x86_64\ncuda-cuobjdump-13-1-13.1.115-1.x86_64\ncuda-compiler-13-1-13.1.1-1.x86_64\ncuda-nsight-systems-13-1-13.1.1-1.x86_64\ncuda-visual-tools-13-1-13.1.1-1.x86_64\nnvidia-driver-cuda-590.48.01-1.el9.x86_64\nnvidia-fs-dkms-2.27.3-1.x86_64\nnvidia-fs-2.27.3-1.x86_64\nnvidia-gds-13-1-13.1.1-1.x86_64\ncuda-sanitizer-13-1-13.1.118-1.x86_64\ncuda-command-line-tools-13-1-13.1.1-1.x86_64\ncuda-tools-13-1-13.1.1-1.x86_64\ncuda-toolkit-13-1-13.1.1-1.x86_64\nnvidia-gds-13.1.1-1.x86_64\n",
+      "stderr": ""
+    },
+    "rocprof": {
+      "command": [
+        "rocprofv3",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "             version: 1.1.0\n        git_revision: 97f5574fe2fdc7bef44fb01545347912ee9f1779\n        library_arch: \n         system_name: Linux\n    system_processor: x86_64\n      system_version: 6.8.0-87-generic\n         compiler_id: GNU\n    compiler_version: 12.2.1\n        rocm_version: 7.2.4\n",
+      "stderr": ""
+    },
+    "nsys": {
+      "command": [
+        "nsys",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "NVIDIA Nsight Systems version 2025.5.2.266-255236693005v0\n",
+      "stderr": ""
+    },
+    "ncu": {
+      "command": [
+        "ncu",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "NVIDIA (R) Nsight Compute Command Line Profiler\nCopyright (c) 2018-2025 NVIDIA Corporation\nVersion 2025.4.1.0 (build 37053803) (public-release)\n",
+      "stderr": ""
+    },
+    "pip_check": {
+      "command": [
+        "/tmp/attention-venv/bin/python",
+        "-m",
+        "pip",
+        "check"
+      ],
+      "exit_code": 0,
+      "stdout": "No broken requirements found.\n",
+      "stderr": ""
+    }
+  },
+  "cuda_driver_api": {
+    "status": 0,
+    "version_integer": 13010
+  },
+  "nvidia_kernel": "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  590.48.01  Release Build  (dvs-builder@U22-I3-AE18-23-3)  Mon Dec  8 13:05:00 UTC 2025\nGCC version:  gcc version 13.3.1 20240913 (Red Hat 13.3.1-3) (GCC) \n",
+  "amdgpu_module": {
+    "unavailable": "[Errno 2] No such file or directory: '/sys/module/amdgpu/version'"
+  },
+  "kernel": "Linux version 6.8.4-200.fc39.x86_64 (mockbuild@ea9727ef4ac046558fb6c0e9fa407113) (gcc (GCC) 13.2.1 20240316 (Red Hat 13.2.1-7), GNU ld version 2.40-14.fc39) #1 SMP PREEMPT_DYNAMIC Thu Apr  4 20:45:21 UTC 2024\n",
+  "mapped_libraries": [
+    "/eos/home-i01/j/jpata/.cache/Microsoft/DeveloperTools/.onnxruntime/onnxruntime.db-shm",
+    "/tmp/attention-venv/lib/python3.12/site-packages/nvidia/cuda_cupti/lib/libcupti.so.12",
+    "/tmp/attention-venv/lib/python3.12/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc-builtins.so.12.8",
+    "/tmp/attention-venv/lib/python3.12/site-packages/nvidia/cuda_nvrtc/lib/libnvrtc.so.12",
+    "/tmp/attention-venv/lib/python3.12/site-packages/nvidia/cuda_runtime/lib/libcudart.so.12",
+    "/tmp/attention-venv/lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn.so.9",
+    "/tmp/attention-venv/lib/python3.12/site-packages/nvidia/cudnn/lib/libcudnn_graph.so.9",
+    "/tmp/attention-venv/lib/python3.12/site-packages/onnxruntime/capi/libonnxruntime_providers_shared.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/onnxruntime/capi/onnxruntime_pybind11_state.cpython-312-x86_64-linux-gnu.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/_C.cpython-312-x86_64-linux-gnu.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/lib/libc10.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/lib/libc10_cuda.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/lib/libgomp.so.1",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/lib/libshm.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/lib/libtorch.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/lib/libtorch_cpu.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/lib/libtorch_cuda.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/lib/libtorch_global_deps.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/lib/libtorch_nvshmem.so",
+    "/tmp/attention-venv/lib/python3.12/site-packages/torch/lib/libtorch_python.so",
+    "/usr/lib64/libcuda.so.590.48.01",
+    "/usr/lib64/libstdc++.so.6.0.29"
+  ],
+  "source_hashes": {
+    "/tmp/particleflow/scripts/attention-study/mlpf-onnx-attention.py": "f9cab096226f01197fe3b575a17982fa7de2f334de128eba51cdd2fc0b2c8e98",
+    "/tmp/particleflow/scripts/attention-study/audit.py": "92c3696d89acb1cc55aba3cc2db84e21b16411ff0e3385708b2447a4760bc201",
+    "/tmp/particleflow/scripts/attention-study/batch_bundle.py": "6b8f154dc58ac5f8ec54d1ad46d1f97053768bc967b1c99e3285e1aeb58797c1",
+    "/tmp/particleflow/scripts/attention-study/causal.py": "9655147d9a2447aae27ee214ce4d0eabe9be1c9c413401ddd5509db45c70946f",
+    "/tmp/particleflow/scripts/attention-study/evidence_figures.py": "ba2f60160943b79fcf39556b30f9b9346308c78f90e375133e5435fcc685a841",
+    "/tmp/particleflow/scripts/attention-study/finalize_article.py": "4e165e4369bfb7db7d408d7fd86270250e9f61c1c9fa68048e79796bb6191b5b",
+    "/tmp/particleflow/scripts/attention-study/finalize_bundle.py": "f8ea27c9271dba96010b37b005f3a111a6fb8d13d4927eccb2172ce8162bfb4b",
+    "/tmp/particleflow/scripts/attention-study/memory.py": "93c87855a6539a1d9e07486423b8c0a769f44398e97d361d7593f894a13c658c",
+    "/tmp/particleflow/scripts/attention-study/modern_export.py": "0c4acab844ae485623b11ae2264d444d3085afa3cde107c38f5b6a456554c313",
+    "/tmp/particleflow/scripts/attention-study/override_demo.py": "312eef5d6f2ded6698bf7091d88f32ed437c65e9a9b415c55860115d96503912",
+    "/tmp/particleflow/scripts/attention-study/probe.py": "51a2e9abc10e84e94a6918b7d5b8e52b47b4eb3778057d09d419d49695c8f40f",
+    "/tmp/particleflow/scripts/attention-study/provenance.py": "54d54f3cf0a000b9bc36a54dfea720f080f8b44e94946b58f33ce13714ed4d56",
+    "/tmp/particleflow/scripts/attention-study/report.py": "e8444c5d7700fcc5e8e3751671e38c41faeb9a42f054d31a415f851bb6bc3931",
+    "/tmp/particleflow/scripts/attention-study/study.py": "a3a1fac384c09f136e1eef736d9e832b75df4af4c811261e0b98cf926a27d440",
+    "/tmp/particleflow/scripts/attention-study/test_contracts.py": "54ed670cc7dae4b19de8662bb4066583347f1c7d4e78f2f175c637e9250f9bac"
+  }
+}

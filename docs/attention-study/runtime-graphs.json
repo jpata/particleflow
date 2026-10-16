@@ -1,0 +1,143 @@
+[
+  {
+    "configuration": "bundle",
+    "model": "sdpa_legacy_fp16_unmasked_b4_s512",
+    "nodes": {
+      "Shape": 1,
+      "Constant": 3,
+      "Slice": 1,
+      "Cast": 3,
+      "Sqrt": 3,
+      "Div": 1,
+      "Transpose": 1,
+      "Mul": 2,
+      "MatMul": 2,
+      "Softmax": 1
+    },
+    "artifact": "bundle-sdpa_legacy_fp16_unmasked_b4_s512.onnx"
+  },
+  {
+    "configuration": "cpu129",
+    "model": "sdpa_legacy_fp16_unmasked_b4_s512",
+    "nodes": {
+      "Transpose": 1,
+      "Cast": 3,
+      "Sqrt": 2,
+      "Div": 2,
+      "Mul": 2,
+      "MatMul": 2,
+      "ReduceMax": 1,
+      "Sub": 1,
+      "Exp": 1,
+      "ReduceSum": 1
+    },
+    "artifact": "cpu129-sdpa_legacy_fp16_unmasked_b4_s512.onnx"
+  },
+  {
+    "configuration": "cuda129",
+    "model": "sdpa_legacy_fp16_unmasked_b4_s512",
+    "nodes": {
+      "Sqrt": 2,
+      "Cast": 2,
+      "Div": 1,
+      "Transpose": 1,
+      "Mul": 2,
+      "MatMul": 2,
+      "Softmax": 1
+    },
+    "artifact": "cuda129-sdpa_legacy_fp16_unmasked_b4_s512.onnx"
+  },
+  {
+    "configuration": "bundle",
+    "model": "sdpa_legacy_fp16_padding_b4_s512",
+    "nodes": {
+      "Cast": 8,
+      "Constant": 10,
+      "Unsqueeze": 4,
+      "Shape": 1,
+      "Slice": 1,
+      "Sqrt": 3,
+      "Div": 1,
+      "Transpose": 1,
+      "Mul": 3,
+      "MatMul": 2,
+      "Where": 2,
+      "Add": 1,
+      "Softmax": 1,
+      "IsNaN": 1
+    },
+    "artifact": "bundle-sdpa_legacy_fp16_padding_b4_s512.onnx"
+  },
+  {
+    "configuration": "cpu129",
+    "model": "sdpa_legacy_fp16_padding_b4_s512",
+    "nodes": {
+      "Unsqueeze": 4,
+      "Cast": 9,
+      "Sqrt": 2,
+      "Div": 1,
+      "Mul": 3,
+      "Transpose": 1,
+      "MatMul": 2,
+      "Where": 2,
+      "Add": 1,
+      "Softmax": 1,
+      "IsNaN": 1
+    },
+    "artifact": "cpu129-sdpa_legacy_fp16_padding_b4_s512.onnx"
+  },
+  {
+    "configuration": "cuda129",
+    "model": "sdpa_legacy_fp16_padding_b4_s512",
+    "nodes": {
+      "Unsqueeze": 4,
+      "Cast": 7,
+      "Sqrt": 2,
+      "Div": 1,
+      "Transpose": 1,
+      "Mul": 3,
+      "MatMul": 2,
+      "Where": 2,
+      "com.microsoft::BiasSoftmax": 1,
+      "IsNaN": 1
+    },
+    "artifact": "cuda129-sdpa_legacy_fp16_padding_b4_s512.onnx"
+  },
+  {
+    "configuration": "bundle",
+    "model": "attention24_lengths_fp16_padding_b4_s512",
+    "nodes": {
+      "Cast": 2,
+      "Constant": 2,
+      "ReduceSum": 1,
+      "Attention": 1,
+      "Unsqueeze": 1,
+      "Mul": 1
+    },
+    "artifact": "bundle-attention24_lengths_fp16_padding_b4_s512.onnx"
+  },
+  {
+    "configuration": "cpu129",
+    "model": "attention24_lengths_fp16_padding_b4_s512",
+    "nodes": {
+      "Cast": 7,
+      "Unsqueeze": 1,
+      "ReduceSum": 1,
+      "Attention": 1,
+      "Mul": 1
+    },
+    "artifact": "cpu129-attention24_lengths_fp16_padding_b4_s512.onnx"
+  },
+  {
+    "configuration": "cuda129",
+    "model": "attention24_lengths_fp16_padding_b4_s512",
+    "nodes": {
+      "Cast": 2,
+      "ReduceSum": 1,
+      "Attention": 1,
+      "Unsqueeze": 1,
+      "Mul": 1
+    },
+    "artifact": "cuda129-attention24_lengths_fp16_padding_b4_s512.onnx"
+  }
+]

@@ -1,0 +1,28 @@
+<
+   ir_version: 9,
+   opset_import: ["" : 20],
+   producer_name: "pytorch",
+   producer_version: "2.9.1"
+>
+main_graph (float16[4,16,512,16] query, float16[4,16,512,16] key, float16[4,16,512,16] value) => (float16[4,16,512,16] output)
+   <int64[4] "/Shape_output_0", int64[1] "/Constant_output_0", int64[1] "/Constant_1_output_0", int64[1] "/Slice_output_0", float16[1] "/Cast_output_0", float16[1] "/Sqrt_output_0", float[1] "/Constant_2_output_0", float[1] "/Cast_1_output_0", float[1] "/Div_output_0", float16[1] "/Cast_2_output_0", float16[4,16,16,512] "/Transpose_output_0", float16[1] "/Sqrt_1_output_0", float16[4,16,512,16] "/Mul_output_0", float16[1] "/Sqrt_2_output_0", float16[4,16,16,512] "/Mul_1_output_0", float16[4,16,512,512] "/MatMul_output_0", float16[4,16,512,512] "/Softmax_output_0">
+{
+   ["/Shape"] "/Shape_output_0" = Shape (query)
+   ["/Constant"] "/Constant_output_0" = Constant <value: tensor = int64[1] {-1}> ()
+   ["/Constant_1"] "/Constant_1_output_0" = Constant <value: tensor = int64[1] {9223372036854775807}> ()
+   ["/Slice"] "/Slice_output_0" = Slice ("/Shape_output_0", "/Constant_output_0", "/Constant_1_output_0")
+   ["/Cast"] "/Cast_output_0" = Cast <to: int = 10> ("/Slice_output_0")
+   ["/Sqrt"] "/Sqrt_output_0" = Sqrt ("/Cast_output_0")
+   ["/Constant_2"] "/Constant_2_output_0" = Constant <value: tensor = float[1] {1}> ()
+   ["/Cast_1"] "/Cast_1_output_0" = Cast <to: int = 1> ("/Sqrt_output_0")
+   ["/Div"] "/Div_output_0" = Div ("/Constant_2_output_0", "/Cast_1_output_0")
+   ["/Cast_2"] "/Cast_2_output_0" = Cast <to: int = 10> ("/Div_output_0")
+   ["/Transpose"] "/Transpose_output_0" = Transpose <perm: ints = [0, 1, 3, 2]> (key)
+   ["/Sqrt_1"] "/Sqrt_1_output_0" = Sqrt ("/Cast_2_output_0")
+   ["/Mul"] "/Mul_output_0" = Mul (query, "/Sqrt_1_output_0")
+   ["/Sqrt_2"] "/Sqrt_2_output_0" = Sqrt ("/Cast_2_output_0")
+   ["/Mul_1"] "/Mul_1_output_0" = Mul ("/Transpose_output_0", "/Sqrt_2_output_0")
+   ["/MatMul"] "/MatMul_output_0" = MatMul ("/Mul_output_0", "/Mul_1_output_0")
+   ["/Softmax"] "/Softmax_output_0" = Softmax <axis: int = -1> ("/MatMul_output_0")
+   ["/MatMul_1"] output = MatMul ("/Softmax_output_0", value)
+}

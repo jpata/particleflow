@@ -1,0 +1,8 @@
+{
+  "canonical_models": 76,
+  "benchmark_rows": 578,
+  "svg_figures": 22,
+  "scope": "Attention microbenchmarks and actual export-wrapper validation; no trained full-MLPF end-to-end performance claim.",
+  "original_local_archive_sha256": "57185a3ad7978dc07918f718cc9bc2f04905a7dca0094d6ff5ea5dc56ec4e7be",
+  "archive_note": "Original local archive is not committed; hash identifies the original experimental bundle before publication edits."
+}

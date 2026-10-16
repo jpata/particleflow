@@ -1,0 +1,22 @@
+[
+  {
+    "ort": "1.23.2",
+    "softmax_precision": 0,
+    "finite": true,
+    "mae": 0.00018688963609747589,
+    "max_abs": 0.005882382392883301,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": false
+  },
+  {
+    "ort": "1.23.2",
+    "softmax_precision": 1,
+    "finite": true,
+    "mae": 0.00018688963609747589,
+    "max_abs": 0.005882382392883301,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": false
+  }
+]

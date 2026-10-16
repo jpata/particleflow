@@ -1,0 +1,44 @@
+[
+  {
+    "session": 0,
+    "session_ms": 915.0929200695828
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 4.766400088556111,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 0.3742469707503915,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 0.37780695129185915,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "placements": [
+      {
+        "name": "Attention24_kernel_time",
+        "op": "Attention",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "Attention24_kernel_time",
+        "op": "Attention",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "Attention24_kernel_time",
+        "op": "Attention",
+        "provider": "CUDAExecutionProvider"
+      }
+    ]
+  }
+]

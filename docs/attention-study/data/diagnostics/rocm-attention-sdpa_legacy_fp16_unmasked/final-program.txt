@@ -1,0 +1,8 @@
+module: "main"
+@0 = check_context::migraphx::gpu::context -> float_type, {}, {}
+main:#output_0 = @param:main:#output_0 -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+value = @param:value -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+query = @param:query -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+key = @param:key -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+@5 = gpu::code_object[code_object=14104,symbol_name=mlir_mul_transpose_mul_dot_convert_reshape_reduce_max_reshape_sub_exp_reshape_reduce_sum_reshape_div_convert_dot,global=32768,local=128,output_arg=3,](query,key,value,main:#output_0) -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+@6 = @return(@5)

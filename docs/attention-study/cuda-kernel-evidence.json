@@ -1,0 +1,175 @@
+[
+  {
+    "case": "cuda-sdpa_legacy_fp16_unmasked",
+    "kernels": [
+      {
+        "name": "void onnxruntime::cuda::_UnaryElementWise<__half, __half, onnxruntime::cuda::OP_Sqrt<__half>, (int)256, (int)4>(const T1 *, T2 *, T3, long)",
+        "calls": 6,
+        "total_us": 6.816000000000001
+      },
+      {
+        "name": "void onnxruntime::cuda::_UnaryElementWise<__half, float, onnxruntime::cuda::OP_Cast<__half, float>, (int)256, (int)4>(const T1 *, T2 *, T3, long)",
+        "calls": 3,
+        "total_us": 3.456
+      },
+      {
+        "name": "void onnxruntime::cuda::_BinaryElementWiseSimple<(bool)1, (bool)1, float, float, float, onnxruntime::cuda::OP_Div<float, float, float>, (int)256, (int)4, int>(const T4 *, const T5 *, T3 *, T6, T9)",
+        "calls": 3,
+        "total_us": 3.424
+      },
+      {
+        "name": "void onnxruntime::cuda::_UnaryElementWise<float, __half, onnxruntime::cuda::OP_Cast<float, __half>, (int)256, (int)4>(const T1 *, T2 *, T3, long)",
+        "calls": 3,
+        "total_us": 3.2
+      },
+      {
+        "name": "void onnxruntime::cuda::Transpose3DKernel<short, (unsigned int)32>(long, long, long, const T1 *, T1 *)",
+        "calls": 3,
+        "total_us": 7.295999999999999
+      },
+      {
+        "name": "void onnxruntime::cuda::_BinaryElementWiseSimple<(bool)1, (bool)0, __half, __half, __half, onnxruntime::cuda::OP_Mul<__half, __half, __half>, (int)256, (int)4, int>(const T4 *, const T5 *, T3 *, T6, T9)",
+        "calls": 6,
+        "total_us": 10.752
+      },
+      {
+        "name": "ampere_fp16_s16816gemm_fp16_128x64_ldg8_f2f_nn",
+        "calls": 3,
+        "total_us": 60.512
+      },
+      {
+        "name": "void onnxruntime::cuda::softmax_warp_forward<__half, __half, float, (int)9, (bool)0>(T2 *, const T1 *, int, int, int)",
+        "calls": 3,
+        "total_us": 145.313
+      },
+      {
+        "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_f16_s161616gemm_f16_16x16_128x2_nn_align8>(T1::Params)",
+        "calls": 3,
+        "total_us": 72.258
+      }
+    ],
+    "has_flash_named_kernel": false,
+    "has_memory_efficient_kernel": false
+  },
+  {
+    "case": "cuda-attention24_dense_fp16_unmasked",
+    "kernels": [
+      {
+        "name": "void onnxruntime::contrib::cuda::TransposeCtx<float2>(int, bool, const T1 *, T1 *)",
+        "calls": 3,
+        "total_us": 7.008000000000001
+      },
+      {
+        "name": "void onnxruntime::flash::flash_fwd_kernel<onnxruntime::flash::Flash_fwd_kernel_traits<(int)32, (int)128, (int)128, (int)4, (bool)0, (bool)0, cutlass::half_t, onnxruntime::flash::Flash_kernel_traits<(int)32, (int)128, (int)128, (int)4, cutlass::half_t>>, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0>(onnxruntime::flash::Flash_fwd_params)",
+        "calls": 3,
+        "total_us": 45.633
+      },
+      {
+        "name": "void onnxruntime::contrib::cuda::TransposeQKV<float2>(int, bool, const T1 *, T1 *, int)",
+        "calls": 3,
+        "total_us": 6.464
+      }
+    ],
+    "has_flash_named_kernel": true,
+    "has_memory_efficient_kernel": false
+  },
+  {
+    "case": "cuda-attention24_dense_fp16_padding",
+    "kernels": [
+      {
+        "name": "void onnxruntime::cuda::_UnaryElementWise<int, __half, onnxruntime::cuda::OP_Cast<int, __half>, (int)256, (int)4>(const T1 *, T2 *, T3, long)",
+        "calls": 3,
+        "total_us": 3.616
+      },
+      {
+        "name": "void onnxruntime::cuda::_UnaryElementWise<int, bool, onnxruntime::cuda::OP_Cast<int, bool>, (int)256, (int)4>(const T1 *, T2 *, T3, long)",
+        "calls": 3,
+        "total_us": 3.4560000000000004
+      },
+      {
+        "name": "void onnxruntime::cuda::ExpandKernel<unsigned char, (int)256, (int)4>(int, int, const T1 *, T1 *, onnxruntime::cuda::TArray<onnxruntime::cuda::DivMod<int>, (int)8>, onnxruntime::cuda::TArray<long, (int)8>)",
+        "calls": 3,
+        "total_us": 8.608
+      },
+      {
+        "name": "void onnxruntime::contrib::cuda::TransposeCtx<float2>(int, bool, const T1 *, T1 *)",
+        "calls": 3,
+        "total_us": 6.496
+      },
+      {
+        "name": "void onnxruntime::cuda::ConvertBoolMaskToAttentionBiasKernel<__half>(const bool *, T1 *, long, float)",
+        "calls": 3,
+        "total_us": 13.122
+      },
+      {
+        "name": "void attention_kernel_batched_impl<AttentionKernel<cutlass::half_t, cutlass::arch::Sm80, (bool)1, (int)64, (int)64, (int)64, (bool)0, (bool)1, DefaultToBatchHook>>(T1::Params)",
+        "calls": 3,
+        "total_us": 125.312
+      },
+      {
+        "name": "void onnxruntime::cuda::ZeroFullyMaskedRowsKernel<__half>(T1 *, const T1 *, const int *, int, int, int, int, int, bool, bool, int, int, float)",
+        "calls": 3,
+        "total_us": 6.720000000000001
+      },
+      {
+        "name": "void onnxruntime::contrib::cuda::TransposeQKV<float2>(int, bool, const T1 *, T1 *, int)",
+        "calls": 3,
+        "total_us": 6.784000000000001
+      },
+      {
+        "name": "void onnxruntime::cuda::_BinaryElementWise<__half, __half, __half, onnxruntime::cuda::OP_Mul<__half, __half, __half>, (bool)0, (bool)1, (int)256, (int)4, int>(int, onnxruntime::cuda::TArray<long, (int)8>, const T2 *, onnxruntime::cuda::TArray<long, (int)8>, const T3 *, onnxruntime::cuda::TArray<onnxruntime::cuda::DivMod<int>, (int)8>, T1 *, const T4 &, T9)",
+        "calls": 3,
+        "total_us": 7.263999999999999
+      }
+    ],
+    "has_flash_named_kernel": false,
+    "has_memory_efficient_kernel": true
+  },
+  {
+    "case": "cuda-attention24_lengths_fp16_padding",
+    "kernels": [
+      {
+        "name": "void onnxruntime::cuda::_UnaryElementWise<int, __half, onnxruntime::cuda::OP_Cast<int, __half>, (int)256, (int)4>(const T1 *, T2 *, T3, long)",
+        "calls": 3,
+        "total_us": 3.648
+      },
+      {
+        "name": "void onnxruntime::cuda::_UnaryElementWise<int, long, onnxruntime::cuda::OP_Cast<int, long>, (int)256, (int)4>(const T1 *, T2 *, T3, long)",
+        "calls": 3,
+        "total_us": 3.552
+      },
+      {
+        "name": "void onnxruntime::cuda::detail::reduce_sum_nd_kernel<long, (int)256>(const T1 *, T1 *, onnxruntime::cuda::detail::ReduceSumNdMetadata)",
+        "calls": 3,
+        "total_us": 24.257
+      },
+      {
+        "name": "void onnxruntime::contrib::cuda::TransposeCtx<float2>(int, bool, const T1 *, T1 *)",
+        "calls": 3,
+        "total_us": 6.496
+      },
+      {
+        "name": "onnxruntime::cuda::ConvertNonpadKvSeqlenToFlashSeqlensKKernel(const long *, int *, int, int)",
+        "calls": 3,
+        "total_us": 3.008
+      },
+      {
+        "name": "void onnxruntime::flash::flash_fwd_kernel<onnxruntime::flash::Flash_fwd_kernel_traits<(int)32, (int)128, (int)128, (int)4, (bool)0, (bool)0, cutlass::half_t, onnxruntime::flash::Flash_kernel_traits<(int)32, (int)128, (int)128, (int)4, cutlass::half_t>>, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0>(onnxruntime::flash::Flash_fwd_params)",
+        "calls": 3,
+        "total_us": 28.799999999999997
+      },
+      {
+        "name": "void onnxruntime::contrib::cuda::TransposeQKV<float2>(int, bool, const T1 *, T1 *, int)",
+        "calls": 3,
+        "total_us": 6.497
+      },
+      {
+        "name": "void onnxruntime::cuda::_BinaryElementWise<__half, __half, __half, onnxruntime::cuda::OP_Mul<__half, __half, __half>, (bool)0, (bool)1, (int)256, (int)4, int>(int, onnxruntime::cuda::TArray<long, (int)8>, const T2 *, onnxruntime::cuda::TArray<long, (int)8>, const T3 *, onnxruntime::cuda::TArray<onnxruntime::cuda::DivMod<int>, (int)8>, T1 *, const T4 &, T9)",
+        "calls": 3,
+        "total_us": 6.879999999999999
+      }
+    ],
+    "has_flash_named_kernel": true,
+    "has_memory_efficient_kernel": false
+  }
+]

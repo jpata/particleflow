@@ -1,0 +1,42 @@
+[
+  {
+    "mode": "empty",
+    "dtype": "<class 'numpy.float32'>",
+    "explicit_safe": {
+      "finite": true,
+      "mae": 0.0,
+      "max_abs": 0.0,
+      "correct": true
+    }
+  },
+  {
+    "mode": "empty",
+    "dtype": "<class 'numpy.float16'>",
+    "explicit_safe": {
+      "finite": true,
+      "mae": 3.4123757359338924e-05,
+      "max_abs": 0.0008602142333984375,
+      "correct": false
+    }
+  },
+  {
+    "mode": "holes",
+    "dtype": "<class 'numpy.float32'>",
+    "explicit_safe": {
+      "finite": true,
+      "mae": 0.0,
+      "max_abs": 0.0,
+      "correct": true
+    }
+  },
+  {
+    "mode": "holes",
+    "dtype": "<class 'numpy.float16'>",
+    "explicit_safe": {
+      "finite": true,
+      "mae": 5.2401483117137104e-05,
+      "max_abs": 0.0007047653198242188,
+      "correct": false
+    }
+  }
+]

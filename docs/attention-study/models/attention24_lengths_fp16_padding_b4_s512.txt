@@ -1,0 +1,16 @@
+<
+   ir_version: 10,
+   opset_import: ["" : 24]
+>
+attention24_lengths (float16[4,16,512,16] query, float16[4,16,512,16] key, float16[4,16,512,16] value, int32[4,512] mask) => (float16[4,16,512,16] output)
+   <int64[4,512] mask64, int64[1] sum_axis, int64[4] lengths, float16[4,16,512,16] raw, float16[4,512] mask_float, int64[2] query_axes, float16[4,1,512,1] query_mask>
+{
+   mask64 = Cast <to: int = 7> (mask)
+   sum_axis = Constant <value: tensor = int64[1] sum_axis {1}> ()
+   lengths = ReduceSum <keepdims: int = 0> (mask64, sum_axis)
+   [Attention24] raw = Attention <is_causal: int = 0, softmax_precision: int = 1> (query, key, value, "", "", "", lengths)
+   mask_float = Cast <to: int = 10> (mask)
+   query_axes = Constant <value: tensor = int64[2] query_axes {1,3}> ()
+   query_mask = Unsqueeze (mask_float, query_axes)
+   output = Mul (raw, query_mask)
+}

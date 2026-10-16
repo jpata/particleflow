@@ -41,6 +41,7 @@ project:
         - file: validation/key4hep.md
         - file: validation/cms.md
         - file: validation/onnx.md
+        - file: attention-study/index.md
     - title: Reference
       children:
         - file: reference/artifacts-and-directories.md

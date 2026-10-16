@@ -1,0 +1,2978 @@
+[
+  {
+    "kind": "pytorch_math",
+    "dtype": "fp32",
+    "mode": "unmasked",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "status": "ok",
+    "lengths": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "valid_tokens": 2048,
+    "provider": "cpu",
+    "timing": "native",
+    "first_call_ms": 118.33210696931928,
+    "median_ms": 108.05546899791807,
+    "p95_ms": 117.45083215064369,
+    "samples_ms": [
+      107.20122908242047,
+      107.23768908064812,
+      118.26266499701887,
+      114.82291098218411,
+      107.10927611216903,
+      116.06175499036908,
+      114.60137600079179,
+      107.16016800142825,
+      107.90128109510988,
+      107.49954299535602,
+      107.64775599818677,
+      108.11779496725649,
+      107.14419698342681,
+      108.95672102924436,
+      106.96634405758232,
+      107.99314302857965,
+      114.63270802050829,
+      120.44029601383954,
+      108.79374796058983,
+      108.4074410609901,
+      108.62632398493588,
+      107.25404904223979,
+      107.56612499244511,
+      107.00337507296354,
+      110.40211806539446,
+      116.45859200507402,
+      116.03577295318246,
+      106.60831700079143,
+      106.73587897326797,
+      108.96253201644868
+    ],
+    "trial_samples_ms": [
+      [
+        107.20122908242047,
+        107.23768908064812,
+        118.26266499701887,
+        114.82291098218411,
+        107.10927611216903,
+        116.06175499036908,
+        114.60137600079179,
+        107.16016800142825,
+        107.90128109510988,
+        107.49954299535602
+      ],
+      [
+        107.64775599818677,
+        108.11779496725649,
+        107.14419698342681,
+        108.95672102924436,
+        106.96634405758232,
+        107.99314302857965,
+        114.63270802050829,
+        120.44029601383954,
+        108.79374796058983,
+        108.4074410609901
+      ],
+      [
+        108.62632398493588,
+        107.25404904223979,
+        107.56612499244511,
+        107.00337507296354,
+        110.40211806539446,
+        116.45859200507402,
+        116.03577295318246,
+        106.60831700079143,
+        106.73587897326797,
+        108.96253201644868
+      ]
+    ],
+    "trial_medians_ms": [
+      107.70041204523295,
+      108.26261801412329,
+      108.0962244886905
+    ],
+    "finite": true,
+    "mae": 0.0,
+    "max_abs": 0.0,
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "correct": true
+  },
+  {
+    "kind": "sdpa_legacy",
+    "dtype": "fp32",
+    "mode": "unmasked",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "sdpa_legacy_fp32_unmasked_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Shape": 1,
+      "Constant": 3,
+      "Slice": 1,
+      "Cast": 2,
+      "Sqrt": 3,
+      "Div": 1,
+      "Transpose": 1,
+      "Mul": 2,
+      "MatMul": 2,
+      "Softmax": 1
+    },
+    "sha256": "81b1a20fad2a6fe28c3b98447d653ca5448be02e37c95a8e5bc7742b4d2de48c",
+    "lengths": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "valid_tokens": 2048,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 2.8044929495081306,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float)",
+    "first_call_ms": 41.611499967984855,
+    "median_ms": 17.404741025529802,
+    "p95_ms": 18.46840995713137,
+    "samples_ms": [
+      17.505067982710898,
+      17.383264959789813,
+      17.393096000887454,
+      17.400135984644294,
+      17.407627077773213,
+      17.407635925337672,
+      17.412986024282873,
+      17.41205609869212,
+      18.683189991861582,
+      17.65994995366782,
+      17.342815059237182,
+      17.38675602246076,
+      17.310634022578597,
+      17.386246006935835,
+      17.375155934132636,
+      17.40185497328639,
+      17.386025981977582,
+      17.337584984488785,
+      17.425116966478527,
+      17.3879450885579,
+      17.393526039086282,
+      17.44352700188756,
+      17.396486015059054,
+      17.414645990356803,
+      17.41252699866891,
+      17.43046601768583,
+      17.4005760345608,
+      17.41292595397681,
+      18.205901025794446,
+      20.970743033103645
+    ],
+    "trial_samples_ms": [
+      [
+        17.505067982710898,
+        17.383264959789813,
+        17.393096000887454,
+        17.400135984644294,
+        17.407627077773213,
+        17.407635925337672,
+        17.412986024282873,
+        17.41205609869212,
+        18.683189991861582,
+        17.65994995366782
+      ],
+      [
+        17.342815059237182,
+        17.38675602246076,
+        17.310634022578597,
+        17.386246006935835,
+        17.375155934132636,
+        17.40185497328639,
+        17.386025981977582,
+        17.337584984488785,
+        17.425116966478527,
+        17.3879450885579
+      ],
+      [
+        17.393526039086282,
+        17.44352700188756,
+        17.396486015059054,
+        17.414645990356803,
+        17.41252699866891,
+        17.43046601768583,
+        17.4005760345608,
+        17.41292595397681,
+        18.205901025794446,
+        20.970743033103645
+      ]
+    ],
+    "trial_medians_ms": [
+      17.409846012014896,
+      17.38613599445671,
+      17.413785972166806
+    ],
+    "finite": true,
+    "mae": 2.108421348623324e-08,
+    "max_abs": 8.344650268554688e-07,
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "correct": true,
+    "profile_file": "sdpa_legacy_fp32_unmasked_b4_s512_2026-10-16_13-38-37.json",
+    "node_placement": [
+      {
+        "name": "/MatMul/MatMulScaleFusion//MatmulTransposeFusion/_kernel_time",
+        "op": "FusedMatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "explicit_safe",
+    "dtype": "fp32",
+    "mode": "unmasked",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "explicit_safe_fp32_unmasked_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Constant": 4,
+      "Pow": 2,
+      "Mul": 2,
+      "Transpose": 1,
+      "MatMul": 2,
+      "Cast": 2,
+      "Softmax": 1
+    },
+    "sha256": "ba164a8ac12b4fca5e095966ad248a12eab0a91f7797f9b6bac1f7bef057e9a2",
+    "lengths": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "valid_tokens": 2048,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 1.1763819493353367,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float)",
+    "first_call_ms": 41.09243908897042,
+    "median_ms": 17.350585025269538,
+    "p95_ms": 17.427537532057613,
+    "samples_ms": [
+      17.353925039060414,
+      17.42697600275278,
+      17.330945003777742,
+      17.390435910783708,
+      17.313704011030495,
+      17.369856010191143,
+      17.49350700993091,
+      17.287794034928083,
+      17.318614991381764,
+      17.407855950295925,
+      17.33636495191604,
+      17.321154940873384,
+      17.420636024326086,
+      17.339874990284443,
+      17.427996965125203,
+      17.32087496202439,
+      17.3730660462752,
+      17.327714012935758,
+      17.388336011208594,
+      17.355034942738712,
+      17.369374982081354,
+      17.347245011478662,
+      17.318555037491024,
+      17.36097503453493,
+      17.346814973279834,
+      17.401966033503413,
+      17.388175940141082,
+      17.338505014777184,
+      17.336445045657456,
+      17.331773997284472
+    ],
+    "trial_samples_ms": [
+      [
+        17.353925039060414,
+        17.42697600275278,
+        17.330945003777742,
+        17.390435910783708,
+        17.313704011030495,
+        17.369856010191143,
+        17.49350700993091,
+        17.287794034928083,
+        17.318614991381764,
+        17.407855950295925
+      ],
+      [
+        17.33636495191604,
+        17.321154940873384,
+        17.420636024326086,
+        17.339874990284443,
+        17.427996965125203,
+        17.32087496202439,
+        17.3730660462752,
+        17.327714012935758,
+        17.388336011208594,
+        17.355034942738712
+      ],
+      [
+        17.369374982081354,
+        17.347245011478662,
+        17.318555037491024,
+        17.36097503453493,
+        17.346814973279834,
+        17.401966033503413,
+        17.388175940141082,
+        17.338505014777184,
+        17.336445045657456,
+        17.331773997284472
+      ]
+    ],
+    "trial_medians_ms": [
+      17.361890524625778,
+      17.347454966511577,
+      17.347029992379248
+    ],
+    "finite": true,
+    "mae": 2.108421348623324e-08,
+    "max_abs": 8.344650268554688e-07,
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "correct": true,
+    "profile_file": "explicit_safe_fp32_unmasked_b4_s512_2026-10-16_13-38-38.json",
+    "node_placement": [
+      {
+        "name": "/MatMul/MatMulScaleFusion//MatmulTransposeFusion/_kernel_time",
+        "op": "FusedMatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "attention24_dense",
+    "dtype": "fp32",
+    "mode": "unmasked",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "attention24_dense_fp32_unmasked_b4_s512.onnx",
+    "status": "failed",
+    "nodes": {
+      "Attention": 1
+    },
+    "sha256": "6bdc2925130f2baa003ad3e3a97aa02b6ec0627fa7e6401b82fb9c88e9c091ae",
+    "lengths": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "valid_tokens": 2048,
+    "provider": "cpu",
+    "timing": "host_io",
+    "error": "Fail: [ONNXRuntimeError] : 1 : FAIL : Load model from results/attention-study/bundle/attention24_dense_fp32_unmasked_b4_s512.onnx failed:/onnxruntime_src/onnxruntime/core/graph/model_load_utils.h:46 void onnxruntime::model_load_utils::ValidateOpsetForDomain(const std::unordered_map<std::__cxx11::basic_string<char>, int>&, const onnxruntime::logging::Logger&, bool, const std::string&, int) ONNX Runtime only *guarantees* support for models stamped with official released onnx opset versions. Opset 24 is under development and support for this is limited. The operator schemas and or other functionality may change before next ONNX release and in this case ONNX Runtime will not guarantee backward compatibility. Current official support for domain ai.onnx is till opset 23.\n"
+  },
+  {
+    "kind": "pytorch_math",
+    "dtype": "fp32",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "status": "ok",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "native",
+    "first_call_ms": 119.38683700282127,
+    "median_ms": 113.71327500091866,
+    "p95_ms": 119.328709540423,
+    "samples_ms": [
+      117.21570591907948,
+      113.99776604957879,
+      116.67874595150352,
+      109.82262692414224,
+      110.22684501949698,
+      110.01242103520781,
+      110.14812404755503,
+      117.59730300400406,
+      110.18674389924854,
+      113.44288499094546,
+      117.23949597217143,
+      111.89957603346556,
+      116.57231394201517,
+      117.05006193369627,
+      108.65605506114662,
+      109.85554801300168,
+      109.62759400717914,
+      110.38070800714195,
+      109.0512330411002,
+      113.98366501089185,
+      119.31970599107444,
+      117.34937806613743,
+      117.47077095787972,
+      117.38048901315778,
+      110.21033499855548,
+      110.37640704307705,
+      112.65464103780687,
+      116.95150099694729,
+      119.3360760807991,
+      121.72390008345246
+    ],
+    "trial_samples_ms": [
+      [
+        117.21570591907948,
+        113.99776604957879,
+        116.67874595150352,
+        109.82262692414224,
+        110.22684501949698,
+        110.01242103520781,
+        110.14812404755503,
+        117.59730300400406,
+        110.18674389924854,
+        113.44288499094546
+      ],
+      [
+        117.23949597217143,
+        111.89957603346556,
+        116.57231394201517,
+        117.05006193369627,
+        108.65605506114662,
+        109.85554801300168,
+        109.62759400717914,
+        110.38070800714195,
+        109.0512330411002,
+        113.98366501089185
+      ],
+      [
+        119.31970599107444,
+        117.34937806613743,
+        117.47077095787972,
+        117.38048901315778,
+        110.21033499855548,
+        110.37640704307705,
+        112.65464103780687,
+        116.95150099694729,
+        119.3360760807991,
+        121.72390008345246
+      ]
+    ],
+    "trial_medians_ms": [
+      111.83486500522122,
+      111.14014202030376,
+      117.36493353964761
+    ],
+    "finite": true,
+    "mae": 0.0,
+    "max_abs": 0.0,
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "correct": true
+  },
+  {
+    "kind": "sdpa_legacy",
+    "dtype": "fp32",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "sdpa_legacy_fp32_padding_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Cast": 4,
+      "Constant": 10,
+      "Unsqueeze": 4,
+      "Shape": 1,
+      "Slice": 1,
+      "Sqrt": 3,
+      "Div": 1,
+      "Transpose": 1,
+      "Mul": 3,
+      "MatMul": 2,
+      "Where": 2,
+      "Add": 1,
+      "Softmax": 1,
+      "IsNaN": 1
+    },
+    "sha256": "96e811c8f4c46a87d76369863805fa70e46b6abaecfb4b235eb1e190f227b274",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 2.2025220096111298,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float)",
+    "first_call_ms": 141.504961065948,
+    "median_ms": 36.04573494521901,
+    "p95_ms": 37.73664680775254,
+    "samples_ms": [
+      35.83995206281543,
+      35.98347399383783,
+      36.006634938530624,
+      36.25715896487236,
+      35.99698399193585,
+      35.969723016023636,
+      36.13789705559611,
+      36.32866102270782,
+      35.863952012732625,
+      36.21924796607345,
+      36.12239705398679,
+      36.12639696802944,
+      36.06002498418093,
+      36.12123697530478,
+      36.022834945470095,
+      35.989244002848864,
+      35.82271095365286,
+      36.11371701117605,
+      38.82530704140663,
+      39.528911001980305,
+      36.259128944948316,
+      35.92854295857251,
+      36.33948089554906,
+      35.95587401650846,
+      35.785810090601444,
+      36.406062077730894,
+      36.103995982557535,
+      35.97743401769549,
+      35.98439390771091,
+      36.03144490625709
+    ],
+    "trial_samples_ms": [
+      [
+        35.83995206281543,
+        35.98347399383783,
+        36.006634938530624,
+        36.25715896487236,
+        35.99698399193585,
+        35.969723016023636,
+        36.13789705559611,
+        36.32866102270782,
+        35.863952012732625,
+        36.21924796607345
+      ],
+      [
+        36.12239705398679,
+        36.12639696802944,
+        36.06002498418093,
+        36.12123697530478,
+        36.022834945470095,
+        35.989244002848864,
+        35.82271095365286,
+        36.11371701117605,
+        38.82530704140663,
+        39.528911001980305
+      ],
+      [
+        36.259128944948316,
+        35.92854295857251,
+        36.33948089554906,
+        35.95587401650846,
+        35.785810090601444,
+        36.406062077730894,
+        36.103995982557535,
+        35.97743401769549,
+        35.98439390771091,
+        36.03144490625709
+      ]
+    ],
+    "trial_medians_ms": [
+      36.00180946523324,
+      36.117476993240416,
+      36.007919406984
+    ],
+    "finite": true,
+    "mae": 1.3045595714800129e-08,
+    "max_abs": 5.960464477539062e-07,
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "correct": true,
+    "edge_cases": {
+      "empty": {
+        "finite": true,
+        "mae": 8.536805928827107e-09,
+        "max_abs": 5.960464477539062e-07,
+        "atol": 0.0001,
+        "rtol": 0.0001,
+        "correct": true
+      },
+      "holes": {
+        "finite": true,
+        "mae": 8.756363634176978e-09,
+        "max_abs": 7.152557373046875e-07,
+        "atol": 0.0001,
+        "rtol": 0.0001,
+        "correct": true
+      }
+    },
+    "profile_file": "sdpa_legacy_fp32_padding_b4_s512_2026-10-16_13-38-47.json",
+    "node_placement": [
+      {
+        "name": "/Unsqueeze_2_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_3_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_3_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul/MatMulScaleFusion//MatmulTransposeFusion/_kernel_time",
+        "op": "FusedMatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_1_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Add_kernel_time",
+        "op": "Add",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/IsNaN_kernel_time",
+        "op": "IsNaN",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_1_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_2_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "explicit_safe",
+    "dtype": "fp32",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "explicit_safe_fp32_padding_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Cast": 7,
+      "Constant": 12,
+      "Unsqueeze": 4,
+      "Pow": 2,
+      "Mul": 4,
+      "Transpose": 1,
+      "MatMul": 2,
+      "ReduceSum": 1,
+      "Greater": 1,
+      "Not": 2,
+      "And": 1,
+      "Or": 1,
+      "Where": 1,
+      "Softmax": 1
+    },
+    "sha256": "f8c619a4f49d75b79f29661990e2c0c8f0ced27b8dd783804734a1f6a76ef7d9",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 2.0557590760290623,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float)",
+    "first_call_ms": 101.49417095817626,
+    "median_ms": 24.82763002626598,
+    "p95_ms": 25.64177400781773,
+    "samples_ms": [
+      25.648380047641695,
+      25.51768801640719,
+      25.56837908923626,
+      25.48737800680101,
+      25.60836006887257,
+      25.58908995706588,
+      25.499357958324254,
+      25.633699959143996,
+      25.484137004241347,
+      25.536738918162882,
+      25.601239991374314,
+      27.349942014552653,
+      25.567108998075128,
+      25.496628019027412,
+      24.700541980564594,
+      24.853975046426058,
+      24.753874051384628,
+      24.72330303862691,
+      24.8012850061059,
+      24.749443982727826,
+      24.778014980256557,
+      24.766493937931955,
+      24.72078299615532,
+      24.700752110220492,
+      24.681802024133503,
+      24.708613054826856,
+      24.792524054646492,
+      24.759594001807272,
+      24.766554008238018,
+      24.706752970814705
+    ],
+    "trial_samples_ms": [
+      [
+        25.648380047641695,
+        25.51768801640719,
+        25.56837908923626,
+        25.48737800680101,
+        25.60836006887257,
+        25.58908995706588,
+        25.499357958324254,
+        25.633699959143996,
+        25.484137004241347,
+        25.536738918162882
+      ],
+      [
+        25.601239991374314,
+        27.349942014552653,
+        25.567108998075128,
+        25.496628019027412,
+        24.700541980564594,
+        24.853975046426058,
+        24.753874051384628,
+        24.72330303862691,
+        24.8012850061059,
+        24.749443982727826
+      ],
+      [
+        24.778014980256557,
+        24.766493937931955,
+        24.72078299615532,
+        24.700752110220492,
+        24.681802024133503,
+        24.708613054826856,
+        24.792524054646492,
+        24.759594001807272,
+        24.766554008238018,
+        24.706752970814705
+      ]
+    ],
+    "trial_medians_ms": [
+      25.55255900369957,
+      24.82763002626598,
+      24.740188498981297
+    ],
+    "finite": true,
+    "mae": 1.3045595714800129e-08,
+    "max_abs": 5.960464477539062e-07,
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "correct": true,
+    "edge_cases": {
+      "empty": {
+        "finite": true,
+        "mae": 8.536805928827107e-09,
+        "max_abs": 5.960464477539062e-07,
+        "atol": 0.0001,
+        "rtol": 0.0001,
+        "correct": true
+      },
+      "holes": {
+        "finite": true,
+        "mae": 8.756363634176978e-09,
+        "max_abs": 7.152557373046875e-07,
+        "atol": 0.0001,
+        "rtol": 0.0001,
+        "correct": true
+      }
+    },
+    "profile_file": "explicit_safe_fp32_padding_b4_s512_2026-10-16_13-38-49.json",
+    "node_placement": [
+      {
+        "name": "/Unsqueeze_2_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_3_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_6_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_1_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/ReduceSum_kernel_time",
+        "op": "ReduceSum",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Greater_kernel_time",
+        "op": "Greater",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_5_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul/MatMulScaleFusion//MatmulTransposeFusion/_kernel_time",
+        "op": "FusedMatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Not_kernel_time",
+        "op": "Not",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/And_kernel_time",
+        "op": "And",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Or_kernel_time",
+        "op": "Or",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Not_1_kernel_time",
+        "op": "Not",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_2_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_3_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "attention24_dense",
+    "dtype": "fp32",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "attention24_dense_fp32_padding_b4_s512.onnx",
+    "status": "failed",
+    "nodes": {
+      "Cast": 2,
+      "Constant": 5,
+      "Unsqueeze": 2,
+      "Shape": 1,
+      "Gather": 2,
+      "Concat": 1,
+      "Expand": 1,
+      "Attention": 1,
+      "Mul": 1
+    },
+    "sha256": "0e949b15fded6a89b8013d1318c140abb4709ed5912f4c606c236c1f4a56b018",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "error": "Fail: [ONNXRuntimeError] : 1 : FAIL : Load model from results/attention-study/bundle/attention24_dense_fp32_padding_b4_s512.onnx failed:/onnxruntime_src/onnxruntime/core/graph/model_load_utils.h:46 void onnxruntime::model_load_utils::ValidateOpsetForDomain(const std::unordered_map<std::__cxx11::basic_string<char>, int>&, const onnxruntime::logging::Logger&, bool, const std::string&, int) ONNX Runtime only *guarantees* support for models stamped with official released onnx opset versions. Opset 24 is under development and support for this is limited. The operator schemas and or other functionality may change before next ONNX release and in this case ONNX Runtime will not guarantee backward compatibility. Current official support for domain ai.onnx is till opset 23.\n"
+  },
+  {
+    "kind": "attention24_lengths",
+    "dtype": "fp32",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "attention24_lengths_fp32_padding_b4_s512.onnx",
+    "status": "failed",
+    "nodes": {
+      "Cast": 2,
+      "Constant": 2,
+      "ReduceSum": 1,
+      "Attention": 1,
+      "Unsqueeze": 1,
+      "Mul": 1
+    },
+    "sha256": "e1bf0981f945a39625e20d96164f493dee9dc7b423b5bd430a39003cd423b4d7",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "error": "Fail: [ONNXRuntimeError] : 1 : FAIL : Load model from results/attention-study/bundle/attention24_lengths_fp32_padding_b4_s512.onnx failed:/onnxruntime_src/onnxruntime/core/graph/model_load_utils.h:46 void onnxruntime::model_load_utils::ValidateOpsetForDomain(const std::unordered_map<std::__cxx11::basic_string<char>, int>&, const onnxruntime::logging::Logger&, bool, const std::string&, int) ONNX Runtime only *guarantees* support for models stamped with official released onnx opset versions. Opset 24 is under development and support for this is limited. The operator schemas and or other functionality may change before next ONNX release and in this case ONNX Runtime will not guarantee backward compatibility. Current official support for domain ai.onnx is till opset 23.\n"
+  },
+  {
+    "kind": "pytorch_math",
+    "dtype": "fp16",
+    "mode": "unmasked",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "status": "ok",
+    "lengths": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "valid_tokens": 2048,
+    "provider": "cpu",
+    "timing": "native",
+    "first_call_ms": 123.58773604501039,
+    "median_ms": 123.71084798360243,
+    "p95_ms": 133.15028675133362,
+    "samples_ms": [
+      129.0770579362288,
+      123.05553606711328,
+      129.83290199190378,
+      122.42980301380157,
+      122.76644899975508,
+      124.41797100473195,
+      133.75997601542622,
+      136.16546103730798,
+      123.35252098273486,
+      122.2180399345234,
+      130.24033000692725,
+      123.22584795765579,
+      132.40511098410934,
+      131.71713706105947,
+      123.38817201089114,
+      123.28539893496782,
+      126.46797008346766,
+      123.11253603547812,
+      122.95266299042851,
+      126.33795593865216,
+      128.8128129672259,
+      126.50265998672694,
+      123.31141997128725,
+      123.19344794377685,
+      123.37037094403058,
+      123.62606602255255,
+      123.87102993670851,
+      124.41532092634588,
+      123.79562994465232,
+      123.601965024136
+    ],
+    "trial_samples_ms": [
+      [
+        129.0770579362288,
+        123.05553606711328,
+        129.83290199190378,
+        122.42980301380157,
+        122.76644899975508,
+        124.41797100473195,
+        133.75997601542622,
+        136.16546103730798,
+        123.35252098273486,
+        122.2180399345234
+      ],
+      [
+        130.24033000692725,
+        123.22584795765579,
+        132.40511098410934,
+        131.71713706105947,
+        123.38817201089114,
+        123.28539893496782,
+        126.46797008346766,
+        123.11253603547812,
+        122.95266299042851,
+        126.33795593865216
+      ],
+      [
+        128.8128129672259,
+        126.50265998672694,
+        123.31141997128725,
+        123.19344794377685,
+        123.37037094403058,
+        123.62606602255255,
+        123.87102993670851,
+        124.41532092634588,
+        123.79562994465232,
+        123.601965024136
+      ]
+    ],
+    "trial_medians_ms": [
+      123.8852459937334,
+      124.86306397477165,
+      123.71084798360243
+    ],
+    "finite": true,
+    "mae": 1.0240176379738841e-05,
+    "max_abs": 0.00022864341735839844,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": true
+  },
+  {
+    "kind": "sdpa_legacy",
+    "dtype": "fp16",
+    "mode": "unmasked",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "sdpa_legacy_fp16_unmasked_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Shape": 1,
+      "Constant": 3,
+      "Slice": 1,
+      "Cast": 3,
+      "Sqrt": 3,
+      "Div": 1,
+      "Transpose": 1,
+      "Mul": 2,
+      "MatMul": 2,
+      "Softmax": 1
+    },
+    "sha256": "456ba582eac89e7d524874d3c6f4efab5758b15771ba5ee509785d5f1f5b7246",
+    "lengths": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "valid_tokens": 2048,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 2.185460994951427,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float16)",
+    "first_call_ms": 75.91929205227643,
+    "median_ms": 26.314642978832126,
+    "p95_ms": 26.49537096149288,
+    "samples_ms": [
+      26.22197091113776,
+      26.286751963198185,
+      26.3739840593189,
+      26.274193078279495,
+      26.260121958330274,
+      26.451515033841133,
+      26.249711983837187,
+      26.216540951281786,
+      26.28968295175582,
+      26.3024220475927,
+      26.26154199242592,
+      26.332812965847552,
+      30.11432394850999,
+      26.233031996525824,
+      26.19544102344662,
+      26.426646043546498,
+      26.302383048459888,
+      26.36661403812468,
+      26.351363980211318,
+      26.316232979297638,
+      26.374944020062685,
+      26.401974027976394,
+      26.313052978366613,
+      26.388214086182415,
+      26.293303002603352,
+      26.5010769944638,
+      26.309652952477336,
+      26.349573046900332,
+      26.48839692119509,
+      26.36713394895196
+    ],
+    "trial_samples_ms": [
+      [
+        26.22197091113776,
+        26.286751963198185,
+        26.3739840593189,
+        26.274193078279495,
+        26.260121958330274,
+        26.451515033841133,
+        26.249711983837187,
+        26.216540951281786,
+        26.28968295175582,
+        26.3024220475927
+      ],
+      [
+        26.26154199242592,
+        26.332812965847552,
+        30.11432394850999,
+        26.233031996525824,
+        26.19544102344662,
+        26.426646043546498,
+        26.302383048459888,
+        26.36661403812468,
+        26.351363980211318,
+        26.316232979297638
+      ],
+      [
+        26.374944020062685,
+        26.401974027976394,
+        26.313052978366613,
+        26.388214086182415,
+        26.293303002603352,
+        26.5010769944638,
+        26.309652952477336,
+        26.349573046900332,
+        26.48839692119509,
+        26.36713394895196
+      ]
+    ],
+    "trial_medians_ms": [
+      26.28047252073884,
+      26.324522972572595,
+      26.371038984507322
+    ],
+    "finite": true,
+    "mae": 1.0240223673463333e-05,
+    "max_abs": 0.00022864341735839844,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": true,
+    "profile_file": "sdpa_legacy_fp16_unmasked_b4_s512_2026-10-16_13-38-57.json",
+    "node_placement": [
+      {
+        "name": "InsertedPrecisionFreeCast_value_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Transpose_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_query_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "ReduceMax_15_kernel_time",
+        "op": "ReduceMax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Sub_16_kernel_time",
+        "op": "Sub",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Exp_17_kernel_time",
+        "op": "Exp",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "ReduceSum_18_kernel_time",
+        "op": "ReduceSum",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Div_19_kernel_time",
+        "op": "Div",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_output_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "explicit_safe",
+    "dtype": "fp16",
+    "mode": "unmasked",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "explicit_safe_fp16_unmasked_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Constant": 4,
+      "Pow": 2,
+      "Cast": 4,
+      "Mul": 2,
+      "Transpose": 1,
+      "MatMul": 2,
+      "Softmax": 1
+    },
+    "sha256": "fc0be3ce5ad2f1e85189bd1a4e7ee707e6ddb8244ef479dc935db771b56302cf",
+    "lengths": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "valid_tokens": 2048,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 1.3424850767478347,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float16)",
+    "first_call_ms": 40.16529198270291,
+    "median_ms": 18.317888025194407,
+    "p95_ms": 18.396022520028055,
+    "samples_ms": [
+      18.35763396229595,
+      18.31611292436719,
+      18.44035496469587,
+      18.329393002204597,
+      18.270501983352005,
+      18.289892002940178,
+      18.337853951379657,
+      18.333213054575026,
+      18.320383969694376,
+      18.306243000552058,
+      18.30493309535086,
+      18.30079301726073,
+      18.3171930257231,
+      18.325682962313294,
+      18.301142961718142,
+      18.310092971660197,
+      18.342194030992687,
+      18.292061984539032,
+      18.250591005198658,
+      18.32021400332451,
+      18.263992038555443,
+      18.276522983796895,
+      18.318583024665713,
+      18.385204020887613,
+      18.331964034587145,
+      18.296021968126297,
+      18.306054058484733,
+      18.40487401932478,
+      18.342074006795883,
+      18.332113977521658
+    ],
+    "trial_samples_ms": [
+      [
+        18.35763396229595,
+        18.31611292436719,
+        18.44035496469587,
+        18.329393002204597,
+        18.270501983352005,
+        18.289892002940178,
+        18.337853951379657,
+        18.333213054575026,
+        18.320383969694376,
+        18.306243000552058
+      ],
+      [
+        18.30493309535086,
+        18.30079301726073,
+        18.3171930257231,
+        18.325682962313294,
+        18.301142961718142,
+        18.310092971660197,
+        18.342194030992687,
+        18.292061984539032,
+        18.250591005198658,
+        18.32021400332451
+      ],
+      [
+        18.263992038555443,
+        18.276522983796895,
+        18.318583024665713,
+        18.385204020887613,
+        18.331964034587145,
+        18.296021968126297,
+        18.306054058484733,
+        18.40487401932478,
+        18.342074006795883,
+        18.332113977521658
+      ]
+    ],
+    "trial_medians_ms": [
+      18.324888485949486,
+      18.30751303350553,
+      18.32527352962643
+    ],
+    "finite": true,
+    "mae": 1.0240219125989825e-05,
+    "max_abs": 0.00022864341735839844,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": true,
+    "profile_file": "explicit_safe_fp16_unmasked_b4_s512_2026-10-16_13-38-59.json",
+    "node_placement": [
+      {
+        "name": "InsertedPrecisionFreeCast_value_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Cast_1_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Transpose_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_query_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_output_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "attention24_dense",
+    "dtype": "fp16",
+    "mode": "unmasked",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "attention24_dense_fp16_unmasked_b4_s512.onnx",
+    "status": "failed",
+    "nodes": {
+      "Attention": 1
+    },
+    "sha256": "cfbaef754033f670b54b69c3638fe666d1d142bf9796d76e66e292afb5f3fe0a",
+    "lengths": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "valid_tokens": 2048,
+    "provider": "cpu",
+    "timing": "host_io",
+    "error": "Fail: [ONNXRuntimeError] : 1 : FAIL : Load model from results/attention-study/bundle/attention24_dense_fp16_unmasked_b4_s512.onnx failed:/onnxruntime_src/onnxruntime/core/graph/model_load_utils.h:46 void onnxruntime::model_load_utils::ValidateOpsetForDomain(const std::unordered_map<std::__cxx11::basic_string<char>, int>&, const onnxruntime::logging::Logger&, bool, const std::string&, int) ONNX Runtime only *guarantees* support for models stamped with official released onnx opset versions. Opset 24 is under development and support for this is limited. The operator schemas and or other functionality may change before next ONNX release and in this case ONNX Runtime will not guarantee backward compatibility. Current official support for domain ai.onnx is till opset 23.\n"
+  },
+  {
+    "kind": "pytorch_math",
+    "dtype": "fp16",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "status": "ok",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "native",
+    "first_call_ms": 129.24478098284453,
+    "median_ms": 127.96496198279783,
+    "p95_ms": 133.84240706800483,
+    "samples_ms": [
+      127.29773507453501,
+      128.65182000678033,
+      132.04564398620278,
+      125.22907601669431,
+      128.5663889721036,
+      124.98937093187124,
+      126.24344497453421,
+      131.79556897375733,
+      125.35043805837631,
+      126.93619797937572,
+      127.93244596105069,
+      126.68187299277633,
+      133.78730695694685,
+      133.5791921010241,
+      114.48280501645058,
+      129.16454998776317,
+      132.52048194408417,
+      126.02551095187664,
+      125.6077439757064,
+      131.388560985215,
+      125.61276298947632,
+      132.72549700923264,
+      127.99747800454497,
+      132.5204719323665,
+      133.25963693205267,
+      125.23582600988448,
+      127.81642400659621,
+      125.79220591578633,
+      134.37414693180472,
+      133.88748897705227
+    ],
+    "trial_samples_ms": [
+      [
+        127.29773507453501,
+        128.65182000678033,
+        132.04564398620278,
+        125.22907601669431,
+        128.5663889721036,
+        124.98937093187124,
+        126.24344497453421,
+        131.79556897375733,
+        125.35043805837631,
+        126.93619797937572
+      ],
+      [
+        127.93244596105069,
+        126.68187299277633,
+        133.78730695694685,
+        133.5791921010241,
+        114.48280501645058,
+        129.16454998776317,
+        132.52048194408417,
+        126.02551095187664,
+        125.6077439757064,
+        131.388560985215
+      ],
+      [
+        125.61276298947632,
+        132.72549700923264,
+        127.99747800454497,
+        132.5204719323665,
+        133.25963693205267,
+        125.23582600988448,
+        127.81642400659621,
+        125.79220591578633,
+        134.37414693180472,
+        133.88748897705227
+      ]
+    ],
+    "trial_medians_ms": [
+      127.11696652695537,
+      128.54849797440693,
+      130.25897496845573
+    ],
+    "finite": true,
+    "mae": 8.43361976876622e-06,
+    "max_abs": 0.00034296512603759766,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": true
+  },
+  {
+    "kind": "sdpa_legacy",
+    "dtype": "fp16",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "sdpa_legacy_fp16_padding_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Cast": 8,
+      "Constant": 10,
+      "Unsqueeze": 4,
+      "Shape": 1,
+      "Slice": 1,
+      "Sqrt": 3,
+      "Div": 1,
+      "Transpose": 1,
+      "Mul": 3,
+      "MatMul": 2,
+      "Where": 2,
+      "Add": 1,
+      "Softmax": 1,
+      "IsNaN": 1
+    },
+    "sha256": "f1a0cdf87756c9645667bfbf14442ccb34a002366ec11eda41ab7ce49791e3f5",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 2.5715279625728726,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float)",
+    "first_call_ms": 142.18760398216546,
+    "median_ms": 36.206857941579074,
+    "p95_ms": 37.168512801872566,
+    "samples_ms": [
+      39.67850294429809,
+      36.45234298892319,
+      36.22525802347809,
+      36.209107958711684,
+      36.14318696781993,
+      36.078145960345864,
+      36.2666790606454,
+      36.23182896990329,
+      36.14428697619587,
+      36.256588995456696,
+      36.24637902248651,
+      36.13604698330164,
+      36.18965798523277,
+      36.17496800143272,
+      36.3495210185647,
+      36.32472001481801,
+      36.204607924446464,
+      36.21449903585017,
+      36.00009495858103,
+      36.18768707383424,
+      36.188077996484935,
+      36.55572503339499,
+      37.55845397245139,
+      36.157157039269805,
+      36.69191803783178,
+      35.99402401596308,
+      36.08154598623514,
+      36.037055077031255,
+      36.06030601076782,
+      36.31481004413217
+    ],
+    "trial_samples_ms": [
+      [
+        39.67850294429809,
+        36.45234298892319,
+        36.22525802347809,
+        36.209107958711684,
+        36.14318696781993,
+        36.078145960345864,
+        36.2666790606454,
+        36.23182896990329,
+        36.14428697619587,
+        36.256588995456696
+      ],
+      [
+        36.24637902248651,
+        36.13604698330164,
+        36.18965798523277,
+        36.17496800143272,
+        36.3495210185647,
+        36.32472001481801,
+        36.204607924446464,
+        36.21449903585017,
+        36.00009495858103,
+        36.18768707383424
+      ],
+      [
+        36.188077996484935,
+        36.55572503339499,
+        37.55845397245139,
+        36.157157039269805,
+        36.69191803783178,
+        35.99402401596308,
+        36.08154598623514,
+        36.037055077031255,
+        36.06030601076782,
+        36.31481004413217
+      ]
+    ],
+    "trial_medians_ms": [
+      36.22854349669069,
+      36.19713295483962,
+      36.17261751787737
+    ],
+    "finite": true,
+    "mae": 1.3106550511565729e-08,
+    "max_abs": 5.066394805908203e-07,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": true,
+    "edge_cases": {
+      "empty": {
+        "finite": true,
+        "mae": 8.573914911380598e-09,
+        "max_abs": 5.066394805908203e-07,
+        "atol": 0.002,
+        "rtol": 0.002,
+        "correct": true
+      },
+      "holes": {
+        "finite": true,
+        "mae": 8.757537806047822e-09,
+        "max_abs": 8.344650268554688e-07,
+        "atol": 0.002,
+        "rtol": 0.002,
+        "correct": true
+      }
+    },
+    "profile_file": "sdpa_legacy_fp16_padding_b4_s512_2026-10-16_13-39-08.json",
+    "node_placement": [
+      {
+        "name": "/Unsqueeze_2_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_3_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_6_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_7_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_5_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_1_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Transpose_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_query_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Add_kernel_time",
+        "op": "Add",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/IsNaN_kernel_time",
+        "op": "IsNaN",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_1_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_2_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "explicit_safe",
+    "dtype": "fp16",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "explicit_safe_fp16_padding_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Cast": 9,
+      "Constant": 12,
+      "Unsqueeze": 4,
+      "Pow": 2,
+      "Mul": 4,
+      "Transpose": 1,
+      "MatMul": 2,
+      "ReduceSum": 1,
+      "Greater": 1,
+      "Not": 2,
+      "And": 1,
+      "Or": 1,
+      "Where": 1,
+      "Softmax": 1
+    },
+    "sha256": "f85eb82303b6e6f0de235e016855c47ce6e48b2fb946ec8bc58acc097fa9c62f",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 2.5682570412755013,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float16)",
+    "first_call_ms": 99.56488502211869,
+    "median_ms": 26.353353983722627,
+    "p95_ms": 26.56512206303887,
+    "samples_ms": [
+      26.40162396710366,
+      26.23438194859773,
+      25.89839498978108,
+      26.175379985943437,
+      26.402774965390563,
+      26.346494094468653,
+      26.416065986268222,
+      26.547107961960137,
+      26.571957976557314,
+      26.496305945329368,
+      26.573817944154143,
+      26.43306495156139,
+      26.262701954692602,
+      26.194441015832126,
+      26.55676705762744,
+      26.493866927921772,
+      25.966075947508216,
+      25.971636991016567,
+      26.478815940208733,
+      26.37782390229404,
+      26.109708938747644,
+      26.288822991773486,
+      26.467075920663774,
+      26.255971984937787,
+      26.367473998107016,
+      26.34034294169396,
+      26.206950889900327,
+      26.35067398659885,
+      26.356033980846405,
+      26.262362021952868
+    ],
+    "trial_samples_ms": [
+      [
+        26.40162396710366,
+        26.23438194859773,
+        25.89839498978108,
+        26.175379985943437,
+        26.402774965390563,
+        26.346494094468653,
+        26.416065986268222,
+        26.547107961960137,
+        26.571957976557314,
+        26.496305945329368
+      ],
+      [
+        26.573817944154143,
+        26.43306495156139,
+        26.262701954692602,
+        26.194441015832126,
+        26.55676705762744,
+        26.493866927921772,
+        25.966075947508216,
+        25.971636991016567,
+        26.478815940208733,
+        26.37782390229404
+      ],
+      [
+        26.109708938747644,
+        26.288822991773486,
+        26.467075920663774,
+        26.255971984937787,
+        26.367473998107016,
+        26.34034294169396,
+        26.206950889900327,
+        26.35067398659885,
+        26.356033980846405,
+        26.262362021952868
+      ]
+    ],
+    "trial_medians_ms": [
+      26.40219946624711,
+      26.405444426927716,
+      26.314582966733724
+    ],
+    "finite": true,
+    "mae": 8.433641596639063e-06,
+    "max_abs": 0.00034296512603759766,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": true,
+    "edge_cases": {
+      "empty": {
+        "finite": true,
+        "mae": 6.00681687501492e-06,
+        "max_abs": 0.00034296512603759766,
+        "atol": 0.002,
+        "rtol": 0.002,
+        "correct": true
+      },
+      "holes": {
+        "finite": true,
+        "mae": 6.787697202526033e-06,
+        "max_abs": 0.00024300813674926758,
+        "atol": 0.002,
+        "rtol": 0.002,
+        "correct": true
+      }
+    },
+    "profile_file": "explicit_safe_fp16_padding_b4_s512_2026-10-16_13-39-10.json",
+    "node_placement": [
+      {
+        "name": "/Unsqueeze_2_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_3_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Cast_8_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_1_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_3_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/ReduceSum_kernel_time",
+        "op": "ReduceSum",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Greater_kernel_time",
+        "op": "Greater",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Cast_7_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_value_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Not_kernel_time",
+        "op": "Not",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/And_kernel_time",
+        "op": "And",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Or_kernel_time",
+        "op": "Or",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Not_1_kernel_time",
+        "op": "Not",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Cast_2_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Transpose_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_query_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_2_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_3_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_output_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "attention24_dense",
+    "dtype": "fp16",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "attention24_dense_fp16_padding_b4_s512.onnx",
+    "status": "failed",
+    "nodes": {
+      "Cast": 2,
+      "Constant": 5,
+      "Unsqueeze": 2,
+      "Shape": 1,
+      "Gather": 2,
+      "Concat": 1,
+      "Expand": 1,
+      "Attention": 1,
+      "Mul": 1
+    },
+    "sha256": "86d5df5a43fffedf03a4e653abdd5efe432952632e1ed65f5b17013937be78a2",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "error": "Fail: [ONNXRuntimeError] : 1 : FAIL : Load model from results/attention-study/bundle/attention24_dense_fp16_padding_b4_s512.onnx failed:/onnxruntime_src/onnxruntime/core/graph/model_load_utils.h:46 void onnxruntime::model_load_utils::ValidateOpsetForDomain(const std::unordered_map<std::__cxx11::basic_string<char>, int>&, const onnxruntime::logging::Logger&, bool, const std::string&, int) ONNX Runtime only *guarantees* support for models stamped with official released onnx opset versions. Opset 24 is under development and support for this is limited. The operator schemas and or other functionality may change before next ONNX release and in this case ONNX Runtime will not guarantee backward compatibility. Current official support for domain ai.onnx is till opset 23.\n"
+  },
+  {
+    "kind": "attention24_lengths",
+    "dtype": "fp16",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "model": "attention24_lengths_fp16_padding_b4_s512.onnx",
+    "status": "failed",
+    "nodes": {
+      "Cast": 2,
+      "Constant": 2,
+      "ReduceSum": 1,
+      "Attention": 1,
+      "Unsqueeze": 1,
+      "Mul": 1
+    },
+    "sha256": "33bc7764e6c151bf3eb08823e8ae16dfcdf28d6723248f3c414121691d3e1bbe",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "error": "Fail: [ONNXRuntimeError] : 1 : FAIL : Load model from results/attention-study/bundle/attention24_lengths_fp16_padding_b4_s512.onnx failed:/onnxruntime_src/onnxruntime/core/graph/model_load_utils.h:46 void onnxruntime::model_load_utils::ValidateOpsetForDomain(const std::unordered_map<std::__cxx11::basic_string<char>, int>&, const onnxruntime::logging::Logger&, bool, const std::string&, int) ONNX Runtime only *guarantees* support for models stamped with official released onnx opset versions. Opset 24 is under development and support for this is limited. The operator schemas and or other functionality may change before next ONNX release and in this case ONNX Runtime will not guarantee backward compatibility. Current official support for domain ai.onnx is till opset 23.\n"
+  },
+  {
+    "kind": "sdpa_dynamo",
+    "dtype": "fp32",
+    "mode": "unmasked",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "opset": 23,
+    "model": "sdpa_dynamo_fp32_unmasked_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Attention": 1
+    },
+    "sha256": "732e937a216286106275222ec48c254bca232cfe0bcb2edfc3858f20318ec56e",
+    "lengths": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "valid_tokens": 2048,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 0.6987429223954678,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float)",
+    "first_call_ms": 39.28537596948445,
+    "median_ms": 17.198972520418465,
+    "p95_ms": 17.353855003602803,
+    "samples_ms": [
+      17.162632080726326,
+      17.152630956843495,
+      17.151982057839632,
+      17.21225189976394,
+      17.19753199722618,
+      17.301535001024604,
+      17.283153953030705,
+      17.49309804290533,
+      17.356195021420717,
+      17.24847301375121,
+      17.35099498182535,
+      17.25615293253213,
+      17.28676399216056,
+      17.277484061196446,
+      17.261432949453592,
+      17.199601978063583,
+      17.277093953453004,
+      17.161570955067873,
+      17.166071920655668,
+      17.159751965664327,
+      17.1725609106943,
+      17.15144095942378,
+      17.207922996021807,
+      17.268873983994126,
+      17.198343062773347,
+      17.1709320275113,
+      17.151531064882874,
+      17.152040963992476,
+      17.14538095984608,
+      17.193022998981178
+    ],
+    "trial_samples_ms": [
+      [
+        17.162632080726326,
+        17.152630956843495,
+        17.151982057839632,
+        17.21225189976394,
+        17.19753199722618,
+        17.301535001024604,
+        17.283153953030705,
+        17.49309804290533,
+        17.356195021420717,
+        17.24847301375121
+      ],
+      [
+        17.35099498182535,
+        17.25615293253213,
+        17.28676399216056,
+        17.277484061196446,
+        17.261432949453592,
+        17.199601978063583,
+        17.277093953453004,
+        17.161570955067873,
+        17.166071920655668,
+        17.159751965664327
+      ],
+      [
+        17.1725609106943,
+        17.15144095942378,
+        17.207922996021807,
+        17.268873983994126,
+        17.198343062773347,
+        17.1709320275113,
+        17.151531064882874,
+        17.152040963992476,
+        17.14538095984608,
+        17.193022998981178
+      ]
+    ],
+    "trial_medians_ms": [
+      17.230362456757575,
+      17.258792940992862,
+      17.1717464691028
+    ],
+    "finite": true,
+    "mae": 2.108421348623324e-08,
+    "max_abs": 8.344650268554688e-07,
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "correct": true,
+    "profile_file": "sdpa_dynamo_fp32_unmasked_b4_s512_2026-10-16_13-39-11.json",
+    "node_placement": [
+      {
+        "name": "node_scaled_dot_product_attention_kernel_time",
+        "op": "Attention",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "sdpa_dynamo",
+    "dtype": "fp32",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "opset": 23,
+    "model": "sdpa_dynamo_fp32_padding_b4_s512.onnx",
+    "status": "failed",
+    "nodes": {
+      "Cast": 2,
+      "Unsqueeze": 2,
+      "Attention": 1,
+      "Mul": 1
+    },
+    "sha256": "5264a51119028389993ee3c0cd57e31f77ca512c8b92f600afbcd65286bb9a4d",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 0.9127679513767362,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float)",
+    "error": "RuntimeException: [ONNXRuntimeError] : 6 : RUNTIME_EXCEPTION : Non-zero status code returned while running Attention node. Name:'node_scaled_dot_product_attention' Status Message: /onnxruntime_src/onnxruntime/core/providers/cpu/llm/attention_helper.cc:78 onnxruntime::common::Status onnxruntime::attention_helper::ComputeOutputShapeForAttention(const onnxruntime::Tensor*, const onnxruntime::Tensor*, const onnxruntime::Tensor*, const onnxruntime::Tensor*, const onnxruntime::Tensor*, const onnxruntime::Tensor*, bool, float, int, QKMatMulOutputMode, int, int, float, AttentionParameters&, std::vector<long int>&, std::vector<long int>&, std::vector<long int>&, std::vector<long int>&) attn_mask == nullptr || attn_mask->Shape()[attn_mask->Shape().NumDimensions() - 2] == Q->Shape()[2] was false. inconsistent q_sequence_length (between attn_mask and Q)\n"
+  },
+  {
+    "kind": "sdpa_dynamo",
+    "dtype": "fp16",
+    "mode": "unmasked",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "opset": 23,
+    "model": "sdpa_dynamo_fp16_unmasked_b4_s512.onnx",
+    "status": "incorrect",
+    "nodes": {
+      "Attention": 1
+    },
+    "sha256": "8e19e50c83607765d497b44e144ad95576fc039f94358545d414c05f06ce7a7a",
+    "lengths": [
+      512,
+      512,
+      512,
+      512
+    ],
+    "valid_tokens": 2048,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 0.7737249834463,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float16)",
+    "first_call_ms": 3399.3107319111004,
+    "median_ms": 3398.761477030348,
+    "p95_ms": 3405.4721130698454,
+    "samples_ms": [
+      3397.3922410514206,
+      3400.7711050799116,
+      3401.427807053551,
+      3393.039630027488,
+      3395.511126029305,
+      3394.971236004494,
+      3399.3810788961127,
+      3397.854799986817,
+      3405.412981985137,
+      3394.5116269169375,
+      3402.8127130586654,
+      3398.9215700421482,
+      3395.8974230336025,
+      3399.0658320253715,
+      3400.842105038464,
+      3398.601384018548,
+      3399.299466982484,
+      3395.3688730252907,
+      3394.662891048938,
+      3397.271010093391,
+      3406.600243994035,
+      3403.3450529677793,
+      3395.0177669757977,
+      3403.7324599921703,
+      3404.4206520775333,
+      3394.4364059716463,
+      3402.568599092774,
+      3405.520493048243,
+      3392.6503519760445,
+      3395.922783995047
+    ],
+    "trial_samples_ms": [
+      [
+        3397.3922410514206,
+        3400.7711050799116,
+        3401.427807053551,
+        3393.039630027488,
+        3395.511126029305,
+        3394.971236004494,
+        3399.3810788961127,
+        3397.854799986817,
+        3405.412981985137,
+        3394.5116269169375
+      ],
+      [
+        3402.8127130586654,
+        3398.9215700421482,
+        3395.8974230336025,
+        3399.0658320253715,
+        3400.842105038464,
+        3398.601384018548,
+        3399.299466982484,
+        3395.3688730252907,
+        3394.662891048938,
+        3397.271010093391
+      ],
+      [
+        3406.600243994035,
+        3403.3450529677793,
+        3395.0177669757977,
+        3403.7324599921703,
+        3404.4206520775333,
+        3394.4364059716463,
+        3402.568599092774,
+        3405.520493048243,
+        3392.6503519760445,
+        3395.922783995047
+      ]
+    ],
+    "trial_medians_ms": [
+      3397.6235205191188,
+      3398.761477030348,
+      3402.9568260302767
+    ],
+    "finite": true,
+    "mae": 0.00018688963609747589,
+    "max_abs": 0.005882382392883301,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": false,
+    "profile_file": "sdpa_dynamo_fp16_unmasked_b4_s512_2026-10-16_13-42-05.json",
+    "node_placement": [
+      {
+        "name": "node_scaled_dot_product_attention_kernel_time",
+        "op": "Attention",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "sdpa_dynamo",
+    "dtype": "fp16",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "opset": 23,
+    "model": "sdpa_dynamo_fp16_padding_b4_s512.onnx",
+    "status": "failed",
+    "nodes": {
+      "Cast": 2,
+      "Unsqueeze": 2,
+      "Attention": 1,
+      "Mul": 1
+    },
+    "sha256": "f4ef1cfc1b5da99fd3ddfb8623e0fefd49bab9c65a31e37f9423043e02afd068",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 1.1495520593598485,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float16)",
+    "error": "RuntimeException: [ONNXRuntimeError] : 6 : RUNTIME_EXCEPTION : Non-zero status code returned while running Attention node. Name:'node_scaled_dot_product_attention' Status Message: /onnxruntime_src/onnxruntime/core/providers/cpu/llm/attention_helper.cc:78 onnxruntime::common::Status onnxruntime::attention_helper::ComputeOutputShapeForAttention(const onnxruntime::Tensor*, const onnxruntime::Tensor*, const onnxruntime::Tensor*, const onnxruntime::Tensor*, const onnxruntime::Tensor*, const onnxruntime::Tensor*, bool, float, int, QKMatMulOutputMode, int, int, float, AttentionParameters&, std::vector<long int>&, std::vector<long int>&, std::vector<long int>&, std::vector<long int>&) attn_mask == nullptr || attn_mask->Shape()[attn_mask->Shape().NumDimensions() - 2] == Q->Shape()[2] was false. inconsistent q_sequence_length (between attn_mask and Q)\n"
+  },
+  {
+    "kind": "sdpa_dynamo_expanded",
+    "dtype": "fp32",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "opset": 23,
+    "model": "sdpa_dynamo_expanded_fp32_padding_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Cast": 2,
+      "Unsqueeze": 2,
+      "Constant": 1,
+      "Expand": 1,
+      "Attention": 1,
+      "Mul": 1
+    },
+    "sha256": "11698c92f2ff953a39dcf22e3d1d12288e974fc30292b590fe5795cb7ad55dc6",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 1.087249955162406,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float)",
+    "first_call_ms": 44.57472497597337,
+    "median_ms": 20.30607545748353,
+    "p95_ms": 20.37378503009677,
+    "samples_ms": [
+      20.3067809343338,
+      20.33372106961906,
+      20.23033902514726,
+      20.342470961622894,
+      20.36490198224783,
+      20.30157099943608,
+      20.209838054142892,
+      20.30536998063326,
+      20.311371074058115,
+      20.299540017731488,
+      20.353741012513638,
+      20.283250021748245,
+      20.344520919024944,
+      20.274028996936977,
+      20.26483998633921,
+      20.21941903512925,
+      20.393712911754847,
+      20.282129989936948,
+      20.291569991968572,
+      20.317190908826888,
+      20.131536992266774,
+      20.38105297833681,
+      20.356740918941796,
+      20.295060006901622,
+      20.27354994788766,
+      20.30871098395437,
+      20.319290924817324,
+      20.343181095086038,
+      20.209399051964283,
+      20.32445091754198
+    ],
+    "trial_samples_ms": [
+      [
+        20.3067809343338,
+        20.33372106961906,
+        20.23033902514726,
+        20.342470961622894,
+        20.36490198224783,
+        20.30157099943608,
+        20.209838054142892,
+        20.30536998063326,
+        20.311371074058115,
+        20.299540017731488
+      ],
+      [
+        20.353741012513638,
+        20.283250021748245,
+        20.344520919024944,
+        20.274028996936977,
+        20.26483998633921,
+        20.21941903512925,
+        20.393712911754847,
+        20.282129989936948,
+        20.291569991968572,
+        20.317190908826888
+      ],
+      [
+        20.131536992266774,
+        20.38105297833681,
+        20.356740918941796,
+        20.295060006901622,
+        20.27354994788766,
+        20.30871098395437,
+        20.319290924817324,
+        20.343181095086038,
+        20.209399051964283,
+        20.32445091754198
+      ]
+    ],
+    "trial_medians_ms": [
+      20.30607545748353,
+      20.28741000685841,
+      20.314000954385847
+    ],
+    "finite": true,
+    "mae": 1.3045595714800129e-08,
+    "max_abs": 5.960464477539062e-07,
+    "atol": 0.0001,
+    "rtol": 0.0001,
+    "correct": true,
+    "edge_cases": {
+      "empty": {
+        "finite": false,
+        "mae": null,
+        "max_abs": null,
+        "atol": 0.0001,
+        "rtol": 0.0001,
+        "correct": false
+      },
+      "holes": {
+        "finite": true,
+        "mae": 8.756363634176978e-09,
+        "max_abs": 7.152557373046875e-07,
+        "atol": 0.0001,
+        "rtol": 0.0001,
+        "correct": true
+      }
+    },
+    "profile_file": "sdpa_dynamo_expanded_fp32_padding_b4_s512_2026-10-16_13-42-10.json",
+    "node_placement": [
+      {
+        "name": "node_Unsqueeze_6_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "node__to_copy_1_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "node__to_copy_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "node_Unsqueeze_4_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Expand_2_kernel_time",
+        "op": "Expand",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "node_scaled_dot_product_attention_kernel_time",
+        "op": "Attention",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "node_mul_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  },
+  {
+    "kind": "sdpa_dynamo_expanded",
+    "dtype": "fp16",
+    "mode": "padding",
+    "batch": 4,
+    "seq": 512,
+    "heads": 16,
+    "dim": 16,
+    "dynamic": false,
+    "opset": 23,
+    "model": "sdpa_dynamo_expanded_fp16_padding_b4_s512.onnx",
+    "status": "ok",
+    "nodes": {
+      "Cast": 2,
+      "Unsqueeze": 2,
+      "Constant": 1,
+      "Expand": 1,
+      "Attention": 1,
+      "Mul": 1
+    },
+    "sha256": "9f90ad1d17ba15cf7ff79e361ca4647f083dd5476334c98f2548956d508c8f38",
+    "lengths": [
+      448,
+      384,
+      320,
+      256
+    ],
+    "valid_tokens": 1408,
+    "provider": "cpu",
+    "timing": "host_io",
+    "session_ms": 1.163111999630928,
+    "session_providers": [
+      "CPUExecutionProvider"
+    ],
+    "output_type": "tensor(float16)",
+    "first_call_ms": 42.96046495437622,
+    "median_ms": 20.671562990173697,
+    "p95_ms": 20.756296574836597,
+    "samples_ms": [
+      20.61865699943155,
+      20.652416977100074,
+      20.696677966043353,
+      20.44821297749877,
+      20.67601797170937,
+      20.691558020189404,
+      20.652477047406137,
+      20.628555910661817,
+      20.809239940717816,
+      20.667977980338037,
+      20.52469493355602,
+      20.7087880698964,
+      20.7196680130437,
+      20.387672004289925,
+      20.499704987742007,
+      20.716488012112677,
+      20.530533976852894,
+      20.553814945742488,
+      20.705367904156446,
+      20.62176598701626,
+      20.680337911471725,
+      20.77976008877158,
+      20.598134957253933,
+      20.726147922687232,
+      20.727618946693838,
+      20.723407971672714,
+      20.675148000009358,
+      20.568304928019643,
+      20.628765923902392,
+      20.719888038001955
+    ],
+    "trial_samples_ms": [
+      [
+        20.61865699943155,
+        20.652416977100074,
+        20.696677966043353,
+        20.44821297749877,
+        20.67601797170937,
+        20.691558020189404,
+        20.652477047406137,
+        20.628555910661817,
+        20.809239940717816,
+        20.667977980338037
+      ],
+      [
+        20.52469493355602,
+        20.7087880698964,
+        20.7196680130437,
+        20.387672004289925,
+        20.499704987742007,
+        20.716488012112677,
+        20.530533976852894,
+        20.553814945742488,
+        20.705367904156446,
+        20.62176598701626
+      ],
+      [
+        20.680337911471725,
+        20.77976008877158,
+        20.598134957253933,
+        20.726147922687232,
+        20.727618946693838,
+        20.723407971672714,
+        20.675148000009358,
+        20.568304928019643,
+        20.628765923902392,
+        20.719888038001955
+      ]
+    ],
+    "trial_medians_ms": [
+      20.660227513872087,
+      20.587790466379374,
+      20.70011297473684
+    ],
+    "finite": true,
+    "mae": 8.433641596639063e-06,
+    "max_abs": 0.00034296512603759766,
+    "atol": 0.002,
+    "rtol": 0.002,
+    "correct": true,
+    "edge_cases": {
+      "empty": {
+        "finite": false,
+        "mae": null,
+        "max_abs": null,
+        "atol": 0.002,
+        "rtol": 0.002,
+        "correct": false
+      },
+      "holes": {
+        "finite": true,
+        "mae": 6.787697202526033e-06,
+        "max_abs": 0.00024300813674926758,
+        "atol": 0.002,
+        "rtol": 0.002,
+        "correct": true
+      }
+    },
+    "profile_file": "sdpa_dynamo_expanded_fp16_padding_b4_s512_2026-10-16_13-42-12.json",
+    "node_placement": [
+      {
+        "name": "node_Unsqueeze_6_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast__to_copy_1_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_value_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_key_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_query_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "node__to_copy_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "node_Unsqueeze_4_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "Expand_2_kernel_time",
+        "op": "Expand",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "node_scaled_dot_product_attention_kernel_time",
+        "op": "Attention",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "node_mul_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_output_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  }
+]

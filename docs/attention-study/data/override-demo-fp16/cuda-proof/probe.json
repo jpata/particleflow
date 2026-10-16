@@ -1,0 +1,149 @@
+[
+  {
+    "session": 0,
+    "session_ms": 750.7603180129081
+  },
+  {
+    "session": 0,
+    "seq": 128,
+    "run_ms": 63.915313920006156,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 128,
+    "run_ms": 0.24651503190398216,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 128,
+    "run_ms": 0.1499120844528079,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "placements": [
+      {
+        "name": "/Unsqueeze_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_1_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/ReduceSum_kernel_time",
+        "op": "ReduceSum",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Attention24_kernel_time",
+        "op": "Attention",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_1_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/ReduceSum_kernel_time",
+        "op": "ReduceSum",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Attention24_kernel_time",
+        "op": "Attention",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_1_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_2_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Cast_1_kernel_time",
+        "op": "Cast",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/ReduceSum_kernel_time",
+        "op": "ReduceSum",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Attention24_kernel_time",
+        "op": "Attention",
+        "provider": "CUDAExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CUDAExecutionProvider"
+      }
+    ]
+  }
+]

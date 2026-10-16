@@ -1,0 +1,58 @@
+[
+  {
+    "name": "sdpa-l40s",
+    "node": "ngt-003-l40s-roce-dqp5mga2hp3s-node-6",
+    "containers": [
+      {
+        "name": "container",
+        "image": "registry.cern.ch/ngt/lxplus-like:9",
+        "resources": {
+          "limits": {
+            "cpu": "62",
+            "memory": "360G",
+            "nvidia.com/gpu": "1"
+          },
+          "requests": {
+            "cpu": "62",
+            "memory": "360G",
+            "nvidia.com/gpu": "1"
+          }
+        }
+      }
+    ],
+    "status": [
+      {
+        "name": "container",
+        "imageID": "registry.cern.ch/ngt/lxplus-like@sha256:0939f4155c25de91c2c2a2715f0aca8fac54733f22ee9b90d6530715f45452b6"
+      }
+    ]
+  },
+  {
+    "name": "sdpa-w7900",
+    "node": "ngt-003-w7900-roc-x2mfskb45hrx-node-4",
+    "containers": [
+      {
+        "name": "container",
+        "image": "registry.cern.ch/ngt/lxplus-like:9",
+        "resources": {
+          "limits": {
+            "amd.com/gpu": "1",
+            "cpu": "62",
+            "memory": "180G"
+          },
+          "requests": {
+            "amd.com/gpu": "1",
+            "cpu": "62",
+            "memory": "180G"
+          }
+        }
+      }
+    ],
+    "status": [
+      {
+        "name": "container",
+        "imageID": "registry.cern.ch/ngt/lxplus-like@sha256:0939f4155c25de91c2c2a2715f0aca8fac54733f22ee9b90d6530715f45452b6"
+      }
+    ]
+  }
+]

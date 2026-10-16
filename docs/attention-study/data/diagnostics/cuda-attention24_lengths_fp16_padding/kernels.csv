@@ -1,0 +1,11 @@
+Generating SQLite file results/attention-study/diagnostics/cuda-attention24_lengths_fp16_padding/trace.sqlite from results/attention-study/diagnostics/cuda-attention24_lengths_fp16_padding/trace.nsys-rep
+Processing [results/attention-study/diagnostics/cuda-attention24_lengths_fp16_padding/trace.sqlite] with [/opt/nvidia/nsight-systems/2025.5.2/host-linux-x64/reports/cuda_gpu_kern_sum.py]...
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+34.6,28800,3,9600.0,9792.0,9216,9792,332.6,"void onnxruntime::flash::flash_fwd_kernel<onnxruntime::flash::Flash_fwd_kernel_traits<(int)32, (int)128, (int)128, (int)4, (bool)0, (bool)0, cutlass::half_t, onnxruntime::flash::Flash_kernel_traits<(int)32, (int)128, (int)128, (int)4, cutlass::half_t>>, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0, (bool)0>(onnxruntime::flash::Flash_fwd_params)"
+29.2,24257,3,8085.7,8001.0,7904,8352,235.7,"void onnxruntime::cuda::detail::reduce_sum_nd_kernel<long, (int)256>(const T1 *, T1 *, onnxruntime::cuda::detail::ReduceSumNdMetadata)"
+8.3,6880,3,2293.3,2304.0,2272,2304,18.5,"void onnxruntime::cuda::_BinaryElementWise<__half, __half, __half, onnxruntime::cuda::OP_Mul<__half, __half, __half>, (bool)0, (bool)1, (int)256, (int)4, int>(int, onnxruntime::cuda::TArray<long, (int)8>, const T2 *, onnxruntime::cuda::TArray<long, (int)8>, const T3 *, onnxruntime::cuda::TArray<onnxruntime::cuda::DivMod<int>, (int)8>, T1 *, const T4 &, T9)"
+7.8,6497,3,2165.7,2176.0,2144,2177,18.8,"void onnxruntime::contrib::cuda::TransposeQKV<float2>(int, bool, const T1 *, T1 *, int)"
+7.8,6496,3,2165.3,2144.0,2144,2208,37.0,"void onnxruntime::contrib::cuda::TransposeCtx<float2>(int, bool, const T1 *, T1 *)"
+4.4,3648,3,1216.0,1120.0,1088,1440,194.6,"void onnxruntime::cuda::_UnaryElementWise<int, __half, onnxruntime::cuda::OP_Cast<int, __half>, (int)256, (int)4>(const T1 *, T2 *, T3, long)"
+4.3,3552,3,1184.0,1088.0,1088,1376,166.3,"void onnxruntime::cuda::_UnaryElementWise<int, long, onnxruntime::cuda::OP_Cast<int, long>, (int)256, (int)4>(const T1 *, T2 *, T3, long)"
+3.6,3008,3,1002.7,992.0,992,1024,18.5,"onnxruntime::cuda::ConvertNonpadKvSeqlenToFlashSeqlensKKernel(const long *, int *, int, int)"

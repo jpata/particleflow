@@ -1,0 +1,389 @@
+[
+  {
+    "session": 0,
+    "session_ms": 251.1339751072228
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 181.38616206124425,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 77.41701602935791,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "seq": 512,
+    "run_ms": 35.69598076865077,
+    "finite": true
+  },
+  {
+    "session": 0,
+    "placements": [
+      {
+        "name": "/Unsqueeze_2_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_3_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_6_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_7_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_5_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_1_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Transpose_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_query_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Add_kernel_time",
+        "op": "Add",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/IsNaN_kernel_time",
+        "op": "IsNaN",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_1_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_2_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_2_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_3_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_6_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_7_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_5_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_1_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Transpose_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_query_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Add_kernel_time",
+        "op": "Add",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/IsNaN_kernel_time",
+        "op": "IsNaN",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_1_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_2_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_2_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_3_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_6_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_7_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_5_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Cast_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Unsqueeze_1_kernel_time",
+        "op": "Unsqueeze",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Transpose_kernel_time",
+        "op": "Transpose",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_/Transpose_output_0_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_kernel_time",
+        "op": "Sqrt",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Div_kernel_time",
+        "op": "Div",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Sqrt_2_kernel_time",
+        "op": "Sqrt",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_1_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "InsertedPrecisionFreeCast_query_kernel_time",
+        "op": "Cast",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Add_kernel_time",
+        "op": "Add",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Softmax_kernel_time",
+        "op": "Softmax",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/IsNaN_kernel_time",
+        "op": "IsNaN",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Where_1_kernel_time",
+        "op": "Where",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/MatMul_1_kernel_time",
+        "op": "MatMul",
+        "provider": "CPUExecutionProvider"
+      },
+      {
+        "name": "/Mul_2_kernel_time",
+        "op": "Mul",
+        "provider": "CPUExecutionProvider"
+      }
+    ]
+  }
+]

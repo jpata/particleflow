@@ -1,0 +1,13 @@
+module: "main"
+@0 = check_context::migraphx::gpu::context -> float_type, {}, {}
+@1 = hip::hip_allocate_memory[shape=int8_type, {67108864}, {1},id=main:scratch] -> int8_type, {67108864}, {1}
+@2 = load[offset=33554432,end=67108864](@1) -> half_type, {4, 16, 512, 512}, {4194304, 262144, 512, 1}
+query = @param:query -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+key = @param:key -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+@5 = gpu::code_object[code_object=6152,symbol_name=mlir_mul_transpose_mul_dot,global=262144,local=128,output_arg=2,](query,key,@2) -> half_type, {4, 16, 512, 512}, {4194304, 262144, 512, 1}
+@6 = load[offset=0,end=33554432](@1) -> half_type, {4, 16, 512, 512}, {4194304, 262144, 512, 1}
+@7 = gpu::code_object[code_object=6568,symbol_name=convert_reduce_max_sub_exp_reduce_sum_div_convert_kernel,global=4194304,local=128,](@5,@6) -> half_type, {4, 16, 512, 512}, {4194304, 262144, 512, 1}
+main:#output_0 = @param:main:#output_0 -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+value = @param:value -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+@10 = gpu::code_object[code_object=8496,symbol_name=mlir_dot,global=65536,local=64,output_arg=2,](@7,value,main:#output_0) -> half_type, {4, 16, 512, 16}, {131072, 8192, 16, 1}
+@11 = @return(@10)
