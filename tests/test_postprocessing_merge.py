@@ -130,6 +130,22 @@ def test_negative_weight_hit_is_never_claimed():
     assert gp_to_hit_idx.tolist() == [0, -1]
 
 
+def test_reassigns_hit_owner_to_keep_both_particles_represented():
+    # gp0 takes hit 0 first, leaving gp1 without a hit. gp0 can move to hit 1,
+    # while its track and gp1's cluster keep both particles in the target.
+    gpdata = dataclasses.replace(
+        _two_particle_event(([0, 0, 1], [0, 1, 0], [10.0, 0.2, 1.0]), n_hits=2, hit_clusters=[0, 0]),
+        track_features=ak.Array({"type": [0]}),
+        genparticle_to_track=(np.array([0], dtype=np.int32), np.array([0], dtype=np.int32), np.array([1.0])),
+    )
+
+    cleaned, gp_to_obj, gp_to_hit_idx, *_ = pp.assign_genparticles_to_obj_and_merge(gpdata)
+
+    assert len(cleaned.gen_features["PDG"]) == 2
+    assert gp_to_obj.tolist() == [[0, -1], [-1, 0]]
+    assert gp_to_hit_idx.tolist() == [1, 0]
+
+
 def test_unmatched_particle_with_only_negative_cluster_weight_is_dropped():
     # gp1 loses cluster 0 to gp0 and has no positive cluster weight, so there is no merge
     # host: it is dropped (and accounted), not merged into gp0.
