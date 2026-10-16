@@ -28,8 +28,9 @@ STYLES = {
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cpu-csv", type=Path, required=True)
-    parser.add_argument("--gpu-csv", type=Path, required=True)
+    parser.add_argument("--cpu-csv", type=Path, help="CPU results (legacy input option).")
+    parser.add_argument("--gpu-csv", type=Path, help="GPU results (legacy input option).")
+    parser.add_argument("--input", action="append", default=[], metavar="LABEL=CSV", help="Add labeled results, e.g. A100=path/summary.csv.")
     parser.add_argument("--outdir", type=Path, required=True)
     parser.add_argument("--include-int8", action="store_true")
     parser.add_argument("--sweep", choices=["sequence", "batch"], default="sequence")
@@ -65,11 +66,13 @@ def read_rows(path, device, include_int8):
             valid = sum(length - min(length - 1, int(nmasked * (i + offset) / batch)) for i in range(batch)) if masked else length * batch
         latency = float(row["p50_ms"])
         family = next((key for key in STYLES if variant.startswith(key)), variant)
+        export_shape = row.get("export_shape", "native" if family.startswith("pt_") else "dynamic")
         rows.append(
             {
                 "device": device,
                 "variant": variant,
                 "family": family,
+                "export_shape": export_shape,
                 "dtype": row.get("dtype", next((d for d in ["fp32", "fp16", "int8"] if d in variant), "unknown")),
                 "masked": masked,
                 "batch_size": batch,
@@ -85,25 +88,29 @@ def read_rows(path, device, include_int8):
 
 def plot_panel(ax, rows, xkey, metric, title):
     for family in sorted({r["family"] for r in rows}, key=lambda f: list(STYLES).index(f) if f in STYLES else len(STYLES)):
-        vals = sorted((r for r in rows if r["family"] == family), key=lambda r: r[xkey])
-        xs = [r[xkey] for r in vals]
-        if len(xs) != len(set(xs)):
-            raise ValueError("Multiple workloads at the same x value; split by batch size / mask mode before plotting")
-        label, color, marker, dash = STYLES.get(family, (family, "black", "x", "-"))
-        if family == "pt_flash" and vals[0]["masked"]:
-            label = "PyTorch varlen Flash"
-        ax.plot(
-            xs,
-            [r[metric] for r in vals],
-            label=label,
-            color=color,
-            marker=marker,
-            linestyle=dash,
-            linewidth=2.3,
-            markersize=10 if marker == "D" else (8 if marker == "o" else 6),
-            markerfacecolor="white",
-            markeredgewidth=1.7,
-        )
+        shapes = sorted({r["export_shape"] for r in rows if r["family"] == family})
+        for shape in shapes:
+            vals = sorted((r for r in rows if r["family"] == family and r["export_shape"] == shape), key=lambda r: r[xkey])
+            xs = [r[xkey] for r in vals]
+            if len(xs) != len(set(xs)):
+                raise ValueError("Multiple workloads at the same x value; split by batch size / mask mode before plotting")
+            label, color, marker, dash = STYLES.get(family, (family, "black", "x", "-"))
+            if family == "pt_flash" and vals[0]["masked"]:
+                label = "PyTorch varlen Flash"
+            if shape == "static" or len(shapes) > 1:
+                label += f" ({shape})"
+            ax.plot(
+                xs,
+                [r[metric] for r in vals],
+                label=label,
+                color=color,
+                marker=marker,
+                linestyle="-" if shape == "static" else dash,
+                linewidth=2.3,
+                markersize=10 if marker == "D" else (8 if marker == "o" else 6),
+                markerfacecolor=color if shape == "static" else "white",
+                markeredgewidth=1.7,
+            )
     ax.set_title(title, loc="left", fontweight="bold", fontsize=11)
     ticks = sorted({r[xkey] for r in rows})
     ax.set_xscale("log", base=2)
@@ -165,7 +172,24 @@ def make_figure(rows, sweep, metric, outdir):
 def main():
     args = parse_args()
     args.outdir.mkdir(parents=True, exist_ok=True)
-    rows = read_rows(args.cpu_csv, "CPU", args.include_int8) + read_rows(args.gpu_csv, "GPU", args.include_int8)
+    sources = []
+    if args.cpu_csv is not None:
+        sources.append(("CPU", args.cpu_csv))
+    if args.gpu_csv is not None:
+        sources.append(("GPU", args.gpu_csv))
+    for item in args.input:
+        label, separator, path = item.partition("=")
+        if not separator or not label or not path:
+            raise ValueError(f"Invalid --input {item!r}; expected LABEL=CSV")
+        sources.append((label, Path(path)))
+    if not sources:
+        raise ValueError("Provide --input LABEL=CSV or a legacy --cpu-csv/--gpu-csv input")
+    if len({label for label, _ in sources}) != len(sources):
+        raise ValueError("Input labels must be unique")
+    for _, path in sources:
+        if not path.exists():
+            raise FileNotFoundError(path)
+    rows = [row for label, path in sources for row in read_rows(path, label, args.include_int8)]
     if not rows:
         raise ValueError("No successful benchmark rows")
     for metric in ["latency", "throughput", "tokens", "memory"]:

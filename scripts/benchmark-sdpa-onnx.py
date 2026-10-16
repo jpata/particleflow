@@ -72,6 +72,7 @@ class Variant:
     masked: bool = False
     provider_option_sdpa_kernel: int | None = None
     use_tf32: bool | None = None
+    export_shape: str = "native"
 
 
 class SingleBatchCalibrationDataReader(CalibrationDataReader):
@@ -108,6 +109,12 @@ def parse_args():
     parser.add_argument("--profile", action="store_true", help="Enable ORT profiling.")
     parser.add_argument("--keep-models", action="store_true", help="Keep exported ONNX files.")
     parser.add_argument(
+        "--export-shapes",
+        choices=["dynamic", "static", "both"],
+        default="dynamic",
+        help="Export ONNX models with symbolic dimensions, fixed batch/sequence dimensions, or both.",
+    )
+    parser.add_argument(
         "--variants",
         nargs="+",
         default=None,
@@ -130,7 +137,7 @@ def dtype_from_name(name: str):
     return torch.float32, np.float32, TensorProto.FLOAT
 
 
-def make_variants(device: str, modes: list[str], selected: set[str] | None, provider_sdpa_kernel: int | None):
+def make_variants(device: str, modes: list[str], selected: set[str] | None, provider_sdpa_kernel: int | None, export_shapes: str):
     variants = [
         Variant("pt_math_fp32", "pytorch", "fp32", "math"),
         Variant("onnx_sdpa_export_fp32", "onnx_export", "fp32"),
@@ -161,11 +168,20 @@ def make_variants(device: str, modes: list[str], selected: set[str] | None, prov
     expanded = []
     for variant in variants:
         for mode in modes:
-            v = Variant(**asdict(variant))
-            v.masked = mode == "masked"
-            v.name = f"{variant.name}_{mode}"
-            if selected is None or v.name in selected or variant.name in selected:
-                expanded.append(v)
+            if variant.engine == "pytorch":
+                shapes = ["native"]
+            elif export_shapes == "both":
+                shapes = ["dynamic", "static"]
+            else:
+                shapes = [export_shapes]
+            for shape in shapes:
+                v = Variant(**asdict(variant))
+                v.masked = mode == "masked"
+                v.export_shape = shape
+                shape_base = f"{variant.name}{'_static' if shape == 'static' else ''}"
+                v.name = f"{shape_base}_{mode}"
+                if selected is None or any(name in selected for name in (v.name, f"{variant.name}_{mode}", shape_base, variant.name)):
+                    expanded.append(v)
     return expanded
 
 
@@ -227,12 +243,14 @@ def run_pytorch_variant(variant, query, key, value, mask, num_heads, head_dim):
         return module(query, key, value, mask)
 
 
-def export_sdpa_model(path, query, key, value, mask, num_heads, head_dim, masked):
+def export_sdpa_model(path, query, key, value, mask, num_heads, head_dim, masked, export_shape="dynamic"):
     module = SdpaModule(num_heads, head_dim, masked).eval().to(device=query.device)
     args = (query, key, value, mask) if masked else (query, key, value)
     input_names = ["query", "key", "value", "mask"] if masked else ["query", "key", "value"]
-    dynamic_axes = {name: {0: "batch", 1: "seq"} for name in input_names}
-    dynamic_axes["output"] = {0: "batch", 1: "seq"}
+    dynamic_axes = None
+    if export_shape == "dynamic":
+        dynamic_axes = {name: {0: "batch", 1: "seq"} for name in input_names}
+        dynamic_axes["output"] = {0: "batch", 1: "seq"}
     torch.onnx.export(
         module,
         args,
@@ -245,16 +263,17 @@ def export_sdpa_model(path, query, key, value, mask, num_heads, head_dim, masked
     )
 
 
-def make_mha_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked):
+def make_mha_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked, export_shape="dynamic"):
+    dims = ["batch", "seq"] if export_shape == "dynamic" else [batch, seq_len]
     inputs = ["query", "key", "value"]
     value_infos = [
-        helper.make_tensor_value_info("query", dtype_proto, ["batch", "seq", hidden]),
-        helper.make_tensor_value_info("key", dtype_proto, ["batch", "seq", hidden]),
-        helper.make_tensor_value_info("value", dtype_proto, ["batch", "seq", hidden]),
+        helper.make_tensor_value_info("query", dtype_proto, [*dims, hidden]),
+        helper.make_tensor_value_info("key", dtype_proto, [*dims, hidden]),
+        helper.make_tensor_value_info("value", dtype_proto, [*dims, hidden]),
     ]
     if masked:
         inputs.extend(["", "mask"])
-        value_infos.append(helper.make_tensor_value_info("mask", TensorProto.INT32, ["batch", "seq"]))
+        value_infos.append(helper.make_tensor_value_info("mask", TensorProto.INT32, dims))
 
     node = helper.make_node(
         "MultiHeadAttention",
@@ -269,7 +288,7 @@ def make_mha_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked)
         [node],
         "SDPA_MHA_Graph",
         value_infos,
-        [helper.make_tensor_value_info("output", dtype_proto, ["batch", "seq", hidden])],
+        [helper.make_tensor_value_info("output", dtype_proto, [*dims, hidden])],
     )
     model = helper.make_model(
         graph,
@@ -279,12 +298,13 @@ def make_mha_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked)
     onnx.save(model, path)
 
 
-def make_attention24_model(path, hidden, dtype_proto, num_heads, masked):
-    inputs = [helper.make_tensor_value_info(n, dtype_proto, ["batch", "seq", hidden]) for n in ("query", "key", "value")]
+def make_attention24_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked, export_shape="dynamic"):
+    dims = ["batch", "seq"] if export_shape == "dynamic" else [batch, seq_len]
+    inputs = [helper.make_tensor_value_info(n, dtype_proto, [*dims, hidden]) for n in ("query", "key", "value")]
     nodes = []
     attention_inputs = ["query", "key", "value"]
     if masked:
-        inputs.append(helper.make_tensor_value_info("mask", TensorProto.INT32, ["batch", "seq"]))
+        inputs.append(helper.make_tensor_value_info("mask", TensorProto.INT32, dims))
         nodes.extend(
             [
                 helper.make_node("Cast", ["mask"], ["mask64"], to=TensorProto.INT64),
@@ -306,7 +326,7 @@ def make_attention24_model(path, hidden, dtype_proto, num_heads, masked):
             ]
         )
     model = helper.make_model(
-        helper.make_graph(nodes, "Attention24", inputs, [helper.make_tensor_value_info("output", dtype_proto, ["batch", "seq", hidden])]),
+        helper.make_graph(nodes, "Attention24", inputs, [helper.make_tensor_value_info("output", dtype_proto, [*dims, hidden])]),
         opset_imports=[helper.make_opsetid("", 24)],
         ir_version=10,
     )
@@ -513,6 +533,7 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
     result = {
         "variant": variant.name,
         "engine": variant.engine,
+        "export_shape": variant.export_shape,
         "dtype": variant.dtype,
         "backend": variant.backend,
         "device": args.device,
@@ -562,11 +583,11 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
         else:
             model_path = model_dir / f"{variant.name}_s{seq_len}.onnx"
             if variant.engine == "onnx_export":
-                export_sdpa_model(model_path, query, key, value, mask, args.num_heads, args.head_dim, variant.masked)
+                export_sdpa_model(model_path, query, key, value, mask, args.num_heads, args.head_dim, variant.masked, variant.export_shape)
             elif variant.engine == "ort_attention24":
-                make_attention24_model(model_path, hidden, onnx_dtype, args.num_heads, variant.masked)
+                make_attention24_model(model_path, args.batch_size, seq_len, hidden, onnx_dtype, args.num_heads, variant.masked, variant.export_shape)
             elif variant.engine == "ort_mha":
-                make_mha_model(model_path, args.batch_size, seq_len, hidden, onnx_dtype, args.num_heads, variant.masked)
+                make_mha_model(model_path, args.batch_size, seq_len, hidden, onnx_dtype, args.num_heads, variant.masked, variant.export_shape)
             elif variant.engine == "onnx_static_quant":
                 fp32_model_path = model_dir / f"{variant.name}_s{seq_len}.fp32.onnx"
                 export_sdpa_model(
@@ -578,6 +599,7 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
                     args.num_heads,
                     args.head_dim,
                     variant.masked,
+                    variant.export_shape,
                 )
                 feeds = to_numpy_inputs(query, key, value, mask, variant)
                 result["source_graph_nodes"] = graph_stats(fp32_model_path)
@@ -694,6 +716,7 @@ def write_outputs(outdir, payload):
         "status",
         "device",
         "engine",
+        "export_shape",
         "dtype",
         "backend",
         "masked",
@@ -755,7 +778,7 @@ def main():
     provider_opts = provider_options_from_args(args)
     provider_sdpa_kernel = int(provider_opts["sdpa_kernel"]) if "sdpa_kernel" in provider_opts else None
     selected = set(args.variants) if args.variants else None
-    variants = make_variants(args.device, modes, selected, provider_sdpa_kernel)
+    variants = make_variants(args.device, modes, selected, provider_sdpa_kernel, args.export_shapes)
     if not variants:
         raise RuntimeError("No variants selected")
 
@@ -790,6 +813,7 @@ def main():
             "memory_sample_interval": args.memory_sample_interval,
             "mask_fraction": args.mask_fraction,
             "modes": modes,
+            "export_shapes": args.export_shapes,
         },
         "results": results,
     }

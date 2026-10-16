@@ -57,6 +57,12 @@ typed attention placeholders to `Attention-24`. The final file contains no custo
 MLPF operators or global SDPA overrides. Other architectures and decomposed math
 attention retain opset 20.
 
+ORT 1.29 places `Elu-22` on CPU in the opset-24 full-model export, including
+when CUDA runs `Attention-24`. The fused export lowers ELU into standard
+`Less`, `Exp`, `Sub`, and `Where` operations so that activations stay on CUDA.
+Provider profiling remains necessary: a CUDA session can still assign individual
+nodes to CPU.
+
 The relevant configurations are:
 
 | Configuration | Execution |
@@ -158,10 +164,29 @@ ORT_ENABLE_ATTENTION_KERNEL_DEBUG_INFO=1 uv run --project envs/ort-gpu \
 
 The regression tests check fresh full-model exports with different batch sizes
 and lengths, separate-event versus batched inference, padding contamination,
-FP32/mixed/FP16 precision, and CUDA Flash dispatch in both runtimes. GPU tests
-skip when the required hardware or provider is absent. The microbenchmark keeps
+FP32/mixed/FP16 precision, CUDA Flash dispatch in both runtimes, and the absence
+of `Elu` nodes in the fused export. GPU tests skip when the required hardware or
+provider is absent. The microbenchmark keeps
 the old `ort_mha_*` variants as comparisons; `ort_attention24_*` uses the new
 length-aware operator and varying per-event lengths.
+
+Use `--export-shapes both` with the benchmark to compare symbolic batch/sequence
+dimensions against a separate fixed-shape ONNX export for every `(batch, length)`
+workload. `--export-shapes static` runs only fixed-shape exports; the default
+remains `dynamic`. Results record `export_shape` in JSON/CSV, and static variants
+have `_static` in their names. `--keep-models` retains graphs for shape inspection.
+
+```bash
+uv run --project envs/ort-gpu python3 scripts/benchmark-sdpa-onnx.py \
+  --device cuda --batch-size 4 --seq-lens 512 --modes masked \
+  --variants ort_attention24_fp16 ort_mha_fp16 \
+  --provider-option sdpa_kernel=1 --export-shapes both \
+  --outdir onnx_validation/attention-static-comparison
+```
+
+The hand-built `ort_attention24_*` microbenchmark does not contain the full
+model's Q/K/V reshape chains, so this comparison does not measure their CPU
+shape-node overhead.
 
 Upgrade validation (2026-10-13): the CPU model/masking/export suite passed
 26 tests with 3 skips, and the CUDA regression confirmed FlashAttention in both
@@ -205,6 +230,9 @@ uv run --project envs/ort-cpu python3 scripts/plot-sdpa-onnx-summary.py \
   --gpu-csv onnx_validation/batch-gpu/summary.csv \
   --sweep batch --outdir onnx_validation/batch-plots
 ```
+
+To compare multiple GPU runs, pass each result as `--input LABEL=CSV` instead
+of the CPU/GPU flags, then run the plotter once for each sweep.
 
 The plotter produces separate median latency, event throughput, valid-element
 throughput, and process-memory figures (PNG/PDF). Panels separate device,

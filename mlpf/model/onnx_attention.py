@@ -40,6 +40,54 @@ def export_attention(query, key, value, valid):
     return _Attention24.apply(query, key, value, valid.to(torch.int64).sum(dim=-1))
 
 
+def _lower_elu_for_cuda(graph):
+    """Avoid ORT CUDA's CPU placement of Elu-22 after the opset-24 upgrade."""
+    import onnx
+    from onnx import TensorProto, helper
+
+    inferred = onnx.shape_inference.infer_shapes(graph)
+    types = {
+        value.name: value.type.tensor_type.elem_type
+        for value in (*inferred.graph.input, *inferred.graph.value_info, *inferred.graph.output)
+        if value.type.HasField("tensor_type")
+    }
+    constants = {}
+    nodes = []
+
+    def constant(dtype, value):
+        key = (dtype, value)
+        if key not in constants:
+            name = f"mlpf_elu_constant_{len(constants)}"
+            nodes.append(helper.make_node("Constant", [], [name], value=helper.make_tensor(name, dtype, [], [value])))
+            constants[key] = name
+        return constants[key]
+
+    for index, node in enumerate(graph.graph.node):
+        if node.domain or node.op_type != "Elu":
+            nodes.append(node)
+            continue
+        dtype = types.get(node.input[0])
+        if dtype not in (TensorProto.FLOAT, TensorProto.FLOAT16, TensorProto.DOUBLE):
+            raise ValueError(f"Cannot lower Elu input {node.input[0]!r} with ONNX type {dtype}")
+        alpha = next((attr.f for attr in node.attribute if attr.name == "alpha"), 1.0)
+        zero = constant(dtype, 0.0)
+        one = constant(dtype, 1.0)
+        prefix = f"mlpf_elu_{index}"
+        is_negative = f"{prefix}_negative"
+        exponent = f"{prefix}_exp"
+        negative_value = f"{prefix}_value"
+        nodes.append(helper.make_node("Less", [node.input[0], zero], [is_negative]))
+        nodes.append(helper.make_node("Exp", [node.input[0]], [exponent]))
+        nodes.append(helper.make_node("Sub", [exponent, one], [negative_value]))
+        if alpha != 1.0:
+            scaled = f"{prefix}_scaled"
+            nodes.append(helper.make_node("Mul", [negative_value, constant(dtype, alpha)], [scaled]))
+            negative_value = scaled
+        nodes.append(helper.make_node("Where", [is_negative, negative_value, node.input[0]], node.output, name=node.name))
+    del graph.graph.node[:]
+    graph.graph.node.extend(nodes)
+
+
 def export_mlpf(model, features, mask, path, *, attention_dtype=None):
     """Export an eval model; fused=True modules emit Attention-24.
 
@@ -81,6 +129,7 @@ def export_mlpf(model, features, mask, path, *, attention_dtype=None):
                 if node.domain == "mlpf" and node.op_type == "Attention24":
                     node.domain = ""
                     node.op_type = "Attention"
+            _lower_elu_for_cuda(graph)
             imports = [opset for opset in graph.opset_import if opset.domain != "mlpf"]
             del graph.opset_import[:]
             graph.opset_import.extend(imports)

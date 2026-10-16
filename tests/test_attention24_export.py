@@ -61,7 +61,7 @@ def test_full_model_attention24_dynamic_padding(tmp_path, dtype, attention_dtype
     attention = [n for n in graph.graph.node if n.op_type == "Attention"]
     assert attention
     assert all(n.domain == "" and len(n.input) == 7 and n.input[6] and not any(n.input[3:6]) for n in attention)
-    assert not any(n.op_type in ("ScatterND", "MultiHeadAttention", "SDPA") for n in graph.graph.node)
+    assert not any(n.op_type in ("ScatterND", "MultiHeadAttention", "SDPA", "Elu") for n in graph.graph.node)
     assert all(m.onnx_attention_dtype is None for m in model.modules() if isinstance(m, SimpleMultiheadAttention))
     runtime = create_session(path)
     # Deliberately differ from the export's batch size AND sequence length.
@@ -132,6 +132,7 @@ def test_cuda_flash_full_model_export(tmp_path, capfd):
     assert "SdpaKernel=FLASH_ATTENTION" in output.out + output.err
     profile = json.loads(open(session.end_profiling()).read())
     assert any(e.get("args", {}).get("op_name") == "Attention" and e["args"].get("provider") == "CUDAExecutionProvider" for e in profile)
+    assert not any(e.get("args", {}).get("op_name") == "Elu" and e["args"].get("provider") == "CPUExecutionProvider" for e in profile)
     config.model.attention.export_onnx_fused = False
     config.model.attention.attention_type = AttentionType.FLASH
     config.model.attention.use_jagged_attention = True
