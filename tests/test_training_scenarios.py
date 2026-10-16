@@ -22,6 +22,34 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_heptv2_model_scaling_preserves_baseline_except_size_and_checkpointing():
+    platform = load_platform_profile(ROOT / "configs/training/platforms/lumi_mi250x.yaml")
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_model_scaling_50k.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    default = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_default_50k.yaml")
+    reference = resolve_scenario_jobs(default, platform, spec_file=ROOT / "particleflow_spec.yaml")[0].resolved_config
+    assert len(jobs) == 3
+    for job, (width, backbone_layers, decoder_layers) in zip(jobs, ((256, 6, 4), (384, 9, 6), (512, 12, 8))):
+        config = job.resolved_config
+        assert job.global_batch_size == 128 and job.per_gpu_batch_size == 16
+        assert config.val_freq == config.checkpoint_freq == 1000
+        assert config.num_steps == reference.num_steps == 50000
+        assert config.lr == reference.lr and config.seed == reference.seed
+        assert config.optimizer == reference.optimizer and config.lr_schedule == reference.lr_schedule
+        assert config.model.heptv2.embedding_dim == config.model.heptv2.width == width
+        assert config.model.backbone.num_convs == config.model.heptv2.num_convs == backbone_layers
+        assert config.model.set_decoder.num_layers == decoder_layers
+        assert width % config.model.heptv2.num_heads == 0
+        assert width % config.model.set_decoder.num_heads == 0
+        assert config.model.heptv2.activation_checkpointing
+        model = config.model.model_dump()
+        for field in ("embedding_dim", "width", "num_convs", "activation_checkpointing"):
+            model["heptv2"][field] = getattr(reference.model.heptv2, field)
+        model["backbone"]["num_convs"] = reference.model.backbone.num_convs
+        model["set_decoder"]["num_layers"] = reference.model.set_decoder.num_layers
+        assert model == reference.model.model_dump()
+
+
 def test_tracker_momentum_ablation_changes_only_input_features():
     platform = load_platform_profile(ROOT / "configs/training/platforms/lumi_mi250x.yaml")
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_tracker_momentum_50k.yaml")
