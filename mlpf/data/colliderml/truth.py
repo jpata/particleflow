@@ -261,7 +261,11 @@ def compute_gen_tables(
     tracks_ev: Dict[str, Any],
     calibration: Dict[int, float],
     tracker_ev: Dict[str, Any],
-) -> Tuple[Dict[str, np.ndarray], SparseMatrixCOO, SparseMatrixCOO, Dict[str, np.ndarray]]:
+    return_rows: bool = False,
+) -> (
+    Tuple[Dict[str, np.ndarray], SparseMatrixCOO, SparseMatrixCOO, Dict[str, np.ndarray]]
+    | Tuple[Dict[str, np.ndarray], SparseMatrixCOO, SparseMatrixCOO, Dict[str, np.ndarray], np.ndarray]
+):
     """Return gen_features, gp_to_hit, gp_to_track, genref_features for one event.
 
     gen_features keys follow the MLPF target layout (pt/eta/phi + charge etc.). Only visible leaves
@@ -277,6 +281,9 @@ def compute_gen_tables(
     gp_to_track weights are per-track hit ownership fractions (key4hep SiTracksMCTruthLink
     analogue). gp_to_hit additionally carries zero-weight tracker-hit links (hit index is in the
     extended space: calo hits first, then tracker hits) feeding the hits-view PN marks.
+
+    return_rows=True also returns the particle-table rows of the gen_features entries (the
+    targets), in gen_features order.
     """
 
     pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles_ev)
@@ -421,4 +428,6 @@ def compute_gen_tables(
     # minima), minus the same neutrino / E>0 exclusions.
     measurable = ((agg > GENREF_DEPOSIT_MIN) | (trk_frac_max > GENREF_TRACK_FRACTION_MIN)) & ~nu_leaf & (E[leaf_indices] > 0.0)
     genref_features = {k: v[measurable] for k, v in leaf_feats.items()}
+    if return_rows:
+        return gen_features, gp_to_hit_filtered, gp_to_track_filtered, genref_features, leaf_indices[keep]
     return gen_features, gp_to_hit_filtered, gp_to_track_filtered, genref_features

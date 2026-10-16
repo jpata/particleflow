@@ -974,7 +974,7 @@ _PIPELINE_DATASETS = {
     "cms": _PipelineDatasetOverride("physical_pu", "cms_pf_ttbar", "3.2.0"),
     "cld": _PipelineDatasetOverride("physical", "cld_edm_ttbar_pf", "3.3.0", gpu_batch_multiplier=8),
     "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.3.0"),
-    "colliderml": _PipelineDatasetOverride("physical", "colliderml_ttbar_nopu_pf", "1.0.0", gpu_batch_multiplier=8),
+    "colliderml": _PipelineDatasetOverride("physical", "colliderml_ttbar_nopu_pf", "1.1.0", gpu_batch_multiplier=8),
     "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.1.0", gpu_batch_multiplier=1),
     "colliderml_hits": _PipelineDatasetOverride("physical", "colliderml_ttbar_hits", "1.0.0", gpu_batch_multiplier=8),
 }
@@ -1162,6 +1162,7 @@ class MLPFConfig(BaseModel):
     task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
     validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
+    validation_particle_metrics: bool = True  # matched-particle metrics (metrics/particle/*) in validation; slow on large (pu200) events
 
     # Flags
     train: bool = False

@@ -53,7 +53,7 @@ COLLIDERML_DISPLAY_PARQUET="$COLLIDERML_BUILD/parquet/train-00000-of-01000.parqu
     --parquet "colliderml=$COLLIDERML_BUILD/parquet" \
     --parquet "clic=$WORK/clic" --parquet "cld=$WORK/cld" --parquet "idea=$WORK/idea" \
     --parquet maia=local_test_data/maia_smoke/parquet \
-    --tfds "colliderml=$COLLIDERML_BUILD/tensorflow_datasets/colliderml_ttbar_nopu_pf/10/1.0.0" \
+    --tfds "colliderml=$COLLIDERML_BUILD/tensorflow_datasets/colliderml_ttbar_nopu_pf/10/1.1.0" \
     --tfds clic=/mnt/work/mlpf/tensorflow_datasets/clic/clic_edm_ttbar_pf/1/3.2.1 \
     --tfds cld=/mnt/work/mlpf/tensorflow_datasets/cld/cld_edm_ttbar_pf/1/3.2.1 \
     --tfds idea=/mnt/work/mlpf/tensorflow_datasets/idea/idea_edm_ttbar_pf/1/0.1.0 \

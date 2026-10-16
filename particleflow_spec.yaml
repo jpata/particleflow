@@ -442,11 +442,11 @@ productions:
     tfds_mapping:
       ttbar_pu0:
         builder_path: "mlpf/heptfds/colliderml_pf/ttbar"
-        version: "1.0.0"
+        version: "1.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ttbar_pu200:
         builder_path: "mlpf/heptfds/colliderml_pf/ttbar_pu200"
-        version: "1.0.0"
+        version: "1.1.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     tfds_hit_mapping:
@@ -1068,7 +1068,7 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_nopu_pf"
-            version: "1.0.0"
+            version: "1.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1076,12 +1076,12 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_nopu_pf"
-            version: "1.0.0"
+            version: "1.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "colliderml_ttbar_nopu_pf"
-        version: "1.0.0"
+        version: "1.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # Same recipe as pyg-colliderml-v1 but on the ~200-pileup dataset (ispu flag carried per
@@ -1110,7 +1110,7 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_pu200_pf"
-            version: "1.0.0"
+            version: "1.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1118,12 +1118,12 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_pu200_pf"
-            version: "1.0.0"
+            version: "1.1.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "colliderml_ttbar_pu200_pf"
-        version: "1.0.0"
+        version: "1.1.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # Hits view: TFDS builder mlpf/heptfds/colliderml_hits/ttbar.py -> colliderml_ttbar_hits
