@@ -41,11 +41,14 @@ def _output_padding(graph, output_widths):
         for i, name in enumerate(node.output):
             node.output[i] = names.get(name, name)
     return [
-        helper.make_node("Concat", list(names.values()), ["mlpf_export_joined"], axis=-1),
         _constant("mlpf_export_output_zero", next(iter(dtypes)), [0]),
-        helper.make_node("Where", ["mlpf_export_query_mask", "mlpf_export_joined", "mlpf_export_output_zero"], ["mlpf_export_masked"]),
-        _constant("mlpf_export_output_widths", TensorProto.INT64, widths, [4]),
-        helper.make_node("Split", ["mlpf_export_masked", "mlpf_export_output_widths"], list(names), axis=-1),
+        # A final Split exposes strided views of a shared output allocation.
+        # MIGraphX EP can bind those views to smaller contiguous ORT buffers,
+        # corrupting adjacent outputs. Materialize each masked head instead.
+        *[
+            helper.make_node("Where", ["mlpf_export_query_mask", prediction, "mlpf_export_output_zero"], [name])
+            for name, prediction in names.items()
+        ],
     ]
 
 

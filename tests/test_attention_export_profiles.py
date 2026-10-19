@@ -57,7 +57,8 @@ def assert_portable_graph(path, attention_format):
     assert not any(n.op_type in {"IsNaN", "IsInf", "ScatterND", "NonZero", "SDPA", "MultiHeadAttention"} for n in nodes)
     assert not any(n.domain == "mlpf" for n in nodes)
     assert [o.name for o in graph.graph.output] == OUTPUTS
-    assert nodes[-1].op_type == "Split" and list(nodes[-1].output) == OUTPUTS
+    assert all(node.op_type == "Where" for node in nodes[-4:])
+    assert [node.output[0] for node in nodes[-4:]] == OUTPUTS
     assert dict((p.key, p.value) for p in graph.metadata_props)["attention_format"] == attention_format
     if attention_format == "attention24":
         attention = [n for n in nodes if n.op_type == "Attention"]

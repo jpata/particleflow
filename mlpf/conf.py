@@ -820,6 +820,7 @@ class HEPTv2Config(BaseModel):
     block_size: int = 100
     n_hashes: int = 3
     num_regions: int = 140
+    deterministic_hashing: bool = True
     num_w_per_dist: int = 10
     mlp_ratio: float = 4.0
 

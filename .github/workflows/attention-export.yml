@@ -8,6 +8,7 @@ on:
       - "mlpf/conf.py"
       - "mlpf/utils.py"
       - "tests/test_attention*.py"
+      - "tests/test_heptv2_export.py"
       - "scripts/cms-validate-onnx.py"
       - "pyproject.toml"
       - ".github/workflows/attention-export.yml"
@@ -18,6 +19,7 @@ on:
       - "mlpf/conf.py"
       - "mlpf/utils.py"
       - "tests/test_attention*.py"
+      - "tests/test_heptv2_export.py"
       - "scripts/cms-validate-onnx.py"
       - "pyproject.toml"
       - ".github/workflows/attention-export.yml"
@@ -48,6 +50,7 @@ jobs:
         run: |
           mkdir -p onnx_validation
           python -m pytest tests/test_attention24_export.py tests/test_attention_export_profiles.py \
+            tests/test_heptv2_export.py tests/test_attention_runtime.py \
             -q --basetemp=onnx_validation/export-ci --junitxml=onnx_validation/export-junit.xml
       - name: Retain exported models and test reports
         if: always()

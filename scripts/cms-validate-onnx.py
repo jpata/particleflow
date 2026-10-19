@@ -35,6 +35,7 @@ os.environ.setdefault("HEPTV2_DIRECT_BUCKET_GATHER", "0")
 print("onnxruntime", rt.__path__)
 from mlpf.model.mlpf import MLPF  # noqa: E402
 from mlpf.model.onnx_attention import export_mlpf, validate_padding_mask  # noqa: E402
+from mlpf.model.onnx_runtime import create_session, finish_profile  # noqa: E402
 from mlpf.conf import MLPFConfig, ModelType, AttentionType  # noqa: E402
 from mlpf.model.utils import unpack_predictions  # noqa: E402
 from mlpf.plotting.plot_utils import ELEM_NAMES_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CLIC  # noqa: E402
@@ -102,6 +103,8 @@ def parse_args():
     parser.add_argument("--outdir", type=str, default="./onnx_validation", help="Output directory for ONNX and plots")
     parser.add_argument("--num-events", type=int, default=10, help="Number of events for validation")
     parser.add_argument("--device", type=str, default="cpu", help="Device to use (cpu or cuda)")
+    parser.add_argument("--ort-provider", choices=["cpu", "cuda", "migraphx"], default=None)
+    parser.add_argument("--require-full-gpu", action="store_true", help="Reject ONNX CPU compute fallback and retain provider profiles")
     parser.add_argument("--pad-bin-size", type=int, default=0, help="Pad events to the nearest multiple of this size")
     parser.add_argument(
         "--configs",
@@ -211,10 +214,11 @@ def main():
     args = parse_args()
     if args.batch_size < 1 or args.num_events < 1:
         raise ValueError("--batch-size and --num-events must be positive")
-    if args.device == "cuda":
-        rt.preload_dlls()
-        if not torch.cuda.is_available() or "CUDAExecutionProvider" not in rt.get_available_providers():
-            raise RuntimeError("CUDA validation requires CUDA PyTorch and ONNX Runtime; use envs/ort-gpu")
+    args.ort_provider = args.ort_provider or args.device
+    if args.require_full_gpu and args.ort_provider == "cpu":
+        raise ValueError("--require-full-gpu requires a GPU ONNX provider")
+    if args.device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("GPU PyTorch is unavailable; --device cuda also names ROCm devices")
 
     # Set seeds for reproducibility during model initialization and export
     torch.manual_seed(42)
@@ -402,13 +406,7 @@ def main():
     baseline_predictions = {}
     process = psutil.Process()
 
-    sess_options = rt.SessionOptions()
-    sess_options.intra_op_num_threads = args.num_threads
-    sess_options.inter_op_num_threads = args.num_threads
-    if args.profile:
-        sess_options.enable_profiling = True
-        sess_options.profile_file_prefix = os.path.join(args.outdir, "ort_profile")
-    execution_provider = "CPUExecutionProvider" if args.device == "cpu" else "CUDAExecutionProvider"
+    provider_profiles = {}
 
     for cfg in configs:
         print(f"Running validation for {cfg}...")
@@ -474,48 +472,16 @@ def main():
             model.load_state_dict(model_state["model_state_dict"], strict=True)
             model = model.to(device=args.device)
 
-        elif cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]:
-            print(f"Creating ONNX session for ATTN_MATH/HEPT/HEPTV2/GNNLSH FP32 using {execution_provider}...")
-            sess = rt.InferenceSession(
-                path_math_fp32,
-                sess_options,
-                providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
-            )
-
-        elif cfg == "ONNX_ATTN_OP_FP32":
-            print(f"Creating ONNX session for Fused FP32 using {execution_provider}...")
-            sess = rt.InferenceSession(
-                path_fused_fp32,
-                sess_options,
-                providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
-            )
-
-        elif cfg == "ONNX_ATTN_MATH_FP16":
-            print(f"Creating ONNX session for ATTN_MATH FP16 using {execution_provider}...")
-            sess = rt.InferenceSession(
-                path_math_fp16,
-                sess_options,
-                providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
-            )
-
-        elif cfg in ("ONNX_ATTN_FLASH_FP32_FP16", "ONNX_ATTN_MATH_FP32_FP16"):
-            print(f"Creating ONNX session for Mixed attention using {execution_provider}...")
-            sess = rt.InferenceSession(
+        elif cfg in paths:
+            sess = create_session(
                 paths[cfg],
-                sess_options,
-                providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
+                args.ort_provider,
+                threads=args.num_threads,
+                profile_prefix=os.path.join(args.outdir, cfg) if args.profile or args.require_full_gpu else None,
+                require_full_gpu=args.require_full_gpu,
+                flash="ONNX_ATTN_FLASH" in cfg,
             )
 
-        elif cfg == "ONNX_ATTN_FLASH_FP16":
-            print(f"Creating ONNX session for Fused FP16 using {execution_provider}...")
-            sess = rt.InferenceSession(
-                path_fused_fp16,
-                sess_options,
-                providers=[(execution_provider, {"sdpa_kernel": "1", "use_tf32": "0"})] if "ONNX_ATTN_FLASH" in cfg else [execution_provider],
-            )
-
-        if sess is not None and execution_provider not in sess.get_providers():
-            raise RuntimeError(f"Requested {execution_provider} but session selected {sess.get_providers()}")
         if model is not None and args.compile:
             if model_kwargs.model.type == ModelType.LITEPT:
                 print("Skipping PyTorch compilation for LitePT model...")
@@ -648,7 +614,7 @@ def main():
                 t1 = time.perf_counter()
 
                 if args.device == "cuda":
-                    mem_max = torch.cuda.max_memory_allocated() / (1024**2)  # In MiB
+                    mem_max = torch.cuda.max_memory_allocated() / (1024**2) if model is not None else None  # ORT memory is not sampled
                 else:
                     mem_max = process.memory_info().rss / (1024**2)  # In MiB
 
@@ -659,7 +625,8 @@ def main():
                     baseline_predictions[i] = (pred, m_cpu)
 
                 results[cfg]["runtime"].append(t1 - t0)
-                results[cfg]["memory_max"].append(mem_max)
+                if mem_max is not None:
+                    results[cfg]["memory_max"].append(mem_max)
                 results[cfg]["event_size"].append(num_elements)
                 results[cfg]["runs"].append(
                     {
@@ -725,8 +692,8 @@ def main():
         if model is not None:
             del model
         if sess is not None:
-            if args.profile:
-                print(f"ORT profile: {sess.end_profiling()}")
+            if args.profile or args.require_full_gpu:
+                provider_profiles[cfg] = finish_profile(sess, args.ort_provider, require_full_gpu=args.require_full_gpu)
             del sess
         gc.collect()
         print(f"Finished validation for {cfg}.")
@@ -923,6 +890,9 @@ def main():
         "batch_size": args.batch_size,
         "pad_bin_size": pad_size,
         "runtime_unit": "seconds_per_batch",
+        "ort_provider": args.ort_provider,
+        "provider_profiles": provider_profiles,
+        "require_full_gpu": args.require_full_gpu,
         "train_loss": train_loss,
         "valid_loss": valid_loss,
         "system": {
