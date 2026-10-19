@@ -1,28 +1,52 @@
 """Render the aggregate table and embedded scaling figures as a portable HTML report."""
+
 import argparse
 import html
 import json
 from pathlib import Path
 
 p = argparse.ArgumentParser(description=__doc__)
-p.add_argument('root', type=Path)
+p.add_argument("root", type=Path)
 a = p.parse_args()
-d = json.loads((a.root / 'summary.json').read_text())
+d = json.loads((a.root / "summary.json").read_text())
+
+
 def fmt(value):
-    return '—' if value is None else f'{value:.3g}'
-rows = ''.join('<tr>' + ''.join(f'<td>{html.escape(str(v))}</td>' for v in [
-    r['machine'], r['model'], r['batch'], r['slots_per_event'], r['valid_inputs'],
-    fmt(r['p50_ms']), fmt(r['p95_ms']), fmt(r['max_abs']), fmt(r['max_relative_l2']),
-    fmt(r['inference_vram_delta_mib']), fmt(r['inference_rss_mib']),
-    fmt(r['session_seconds']), fmt(r['first_run_seconds']), 'PASS' if r['passed'] else 'FAIL']) + '</tr>' for r in d['rows'])
-figures = ''
-for sweep in ['sequence', 'batch', 'numerical']:
-    path = a.root / f'{sweep}-scaling.svg'
+    return "—" if value is None else f"{value:.3g}"
+
+
+rows = "".join(
+    "<tr>"
+    + "".join(
+        f"<td>{html.escape(str(v))}</td>"
+        for v in [
+            r["machine"],
+            r["model"],
+            r["batch"],
+            r["slots_per_event"],
+            r["valid_inputs"],
+            fmt(r["p50_ms"]),
+            fmt(r["p95_ms"]),
+            fmt(r["max_abs"]),
+            fmt(r["max_relative_l2"]),
+            fmt(r["inference_vram_delta_mib"]),
+            fmt(r["inference_rss_mib"]),
+            fmt(r["session_seconds"]),
+            fmt(r["first_run_seconds"]),
+            "PASS" if r["passed"] else "FAIL",
+        ]
+    )
+    + "</tr>"
+    for r in d["rows"]
+)
+figures = ""
+for sweep in ["sequence", "batch", "numerical"]:
+    path = a.root / f"{sweep}-scaling.svg"
     if path.exists():
         svg = path.read_text()
-        figures += svg[svg.index('<svg'):]
+        figures += svg[svg.index("<svg") :]
 status = f"{d['completed_cells']}/{d['expected_cells']} complete; {len(d['failed'])} failed"
-body = f'''<!doctype html><html lang="en"><meta charset="utf-8"><title>MLPF full-model export evidence</title>
+body = f"""<!doctype html><html lang="en"><meta charset="utf-8"><title>MLPF full-model export evidence</title>
 <style>body{{font:16px system-ui;margin:2rem;max-width:1600px;color:#18202b}}p{{max-width:1000px;line-height:1.5}}table{{border-collapse:collapse;font-size:13px}}th,td{{padding:7px;border-bottom:1px solid #ddd;text-align:right}}th:first-child,td:first-child{{text-align:left}}svg{{max-width:100%;height:auto}}.status{{padding:1rem;background:#eef2f7}}a{{color:#175ca0}}</style>
 <h1>MLPF full-model export evidence · 2026-10-19</h1><p class="status">{status}. Overall passed: {d['passed']}.</p>
 <p>Seeded, untrained attention and deterministic-hashing HEPTv2 full models. This package establishes numerical export correctness and runtime scaling, not trained physics performance. The NVIDIA GPU is <strong>L40S</strong>; AMD is W7900. CPU fallback runs on the L40S host with one ORT thread.</p>
@@ -33,6 +57,6 @@ body = f'''<!doctype html><html lang="en"><meta charset="utf-8"><title>MLPF full
 <table><thead><tr>{''.join('<th>'+v+'</th>' for v in ['Machine','Model','B','N slots','Valid inputs','p50 ms','p95 ms','Max abs','Rel L2','VRAM Δ MiB','RSS MiB','Session s','First s','Status'])}</tr></thead><tbody>{rows}</tbody></table>
 <h2>Retained evidence</h2><p><a href="measurements.csv">CSV</a> · <a href="summary.json">Aggregate JSON</a> · <a href="provenance.json">Source provenance</a> · <a href="shared-inputs.json">Shared input hashes</a> · <a href="amd-fusion-verification.json">AMD fusion verification</a> · <a href="l40s-machine.txt">L40S machine</a> · <a href="w7900-machine.txt">W7900 machine</a>. Model/reference manifests and per-case raw latency samples, per-head errors, memory traces, placement profiles and logs are retained in the adjacent model and results directories. Software stacks differ: CUDA uses ORT 1.29; AMD uses native ORT 1.23.2 with MIGraphX 2.18 userspace libraries and recorded integer/compiler workarounds. These are complete-stack measurements.</p>
 <p>Single runs characterize this setup; p99 from 100 samples is descriptive, not a precise tail estimate. No kernel-only latency or trained-model accuracy claim is made. CPU affinity and compiler flags are retained in each result. See the repository's docs/validation/export-evidence.md for the reproduction protocol.</p>
-<p>Missing cells: {html.escape(', '.join(d['missing']) or 'none')}. Failed cells: {html.escape(', '.join(d['failed']) or 'none')}.</p></html>'''
-(a.root / 'report.html').write_text(body)
-print(a.root / 'report.html')
+<p>Missing cells: {html.escape(', '.join(d['missing']) or 'none')}. Failed cells: {html.escape(', '.join(d['failed']) or 'none')}.</p></html>"""
+(a.root / "report.html").write_text(body)
+print(a.root / "report.html")

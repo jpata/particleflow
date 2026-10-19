@@ -436,7 +436,9 @@ class HEPTv2Attention(nn.Module):
                 hashed = hashed + shifts
                 # CUDA TopK may select padded implementation lanes when real
                 # sort keys are +inf and the sequence length is not a power of two.
-                hashed = hashed.masked_fill(invalid_expanded if is_batched else invalid, HASH_PADDING_KEY if self.deterministic_hashing else torch.finfo(hashed.dtype).max)
+                hashed = hashed.masked_fill(
+                    invalid_expanded if is_batched else invalid, HASH_PADDING_KEY if self.deterministic_hashing else torch.finfo(hashed.dtype).max
+                )
                 positions = stable_argsort(hashed)
         else:
             hashed_flat = lsh_coords(self.e2lsh_new, coords2_flat, self.num_heads)
@@ -462,7 +464,9 @@ class HEPTv2Attention(nn.Module):
             shifts = get_geo_shift_single(regions_h, hash_shift, region_indices, active_hashes)
 
             hashed = hashed + shifts
-            hashed = hashed.masked_fill(invalid_expanded if is_batched else invalid, HASH_PADDING_KEY if self.deterministic_hashing else torch.finfo(hashed.dtype).max)
+            hashed = hashed.masked_fill(
+                invalid_expanded if is_batched else invalid, HASH_PADDING_KEY if self.deterministic_hashing else torch.finfo(hashed.dtype).max
+            )
             positions = stable_argsort(hashed)
 
         if is_batched:

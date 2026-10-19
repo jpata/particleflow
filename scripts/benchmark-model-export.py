@@ -4,6 +4,7 @@ Run once per case/provider. Timing has no ORT profiling; use --placement in a
 separate process to collect strict placement evidence. Inputs/outputs are on
 host, so session.run latency includes transfers and output allocation.
 """
+
 import argparse
 import ctypes
 import importlib.util
@@ -37,13 +38,16 @@ def vram_reader(provider):
     handle = ctypes.c_void_p()
     if lib.nvmlDeviceGetHandleByIndex_v2(0, ctypes.byref(handle)) != 0:
         raise RuntimeError("NVML device lookup failed")
+
     class Memory(ctypes.Structure):
         _fields_ = [(name, ctypes.c_ulonglong) for name in ("total", "free", "used")]
+
     def read():
         info = Memory()
         if lib.nvmlDeviceGetMemoryInfo(handle, ctypes.byref(info)) != 0:
             raise RuntimeError("NVML memory query failed")
         return info.used
+
     return read, "NVML device 0 used bytes"
 
 
@@ -68,6 +72,7 @@ def main():
     a.outdir.mkdir(parents=True, exist_ok=True)
     import onnxruntime as ort
     from mlpf.model.onnx_runtime import create_session, finish_profile
+
     manifest = json.loads((a.bundle / "manifest.json").read_text())
     assert qualification.digest(a.bundle / "model.onnx") == manifest["model_sha256"]
     case = next(c for c in manifest["cases"] if c["file"] == a.case)
@@ -82,6 +87,7 @@ def main():
     samples, failures = [], []
     stop = threading.Event()
     phase = ["session"]
+
     def sample():
         while not stop.is_set():
             try:
@@ -90,13 +96,19 @@ def main():
                 failures.append(str(exc))
                 return
             stop.wait(0.01)
+
     sampler = threading.Thread(target=sample, daemon=True)
     sampler.start()
     try:
         start = time.perf_counter()
-        session = create_session(path, a.provider, threads=a.threads,
+        session = create_session(
+            path,
+            a.provider,
+            threads=a.threads,
             profile_prefix=a.outdir / "placement" if a.placement else None,
-            require_full_gpu=a.provider != "cpu", flash=a.flash)
+            require_full_gpu=a.provider != "cpu",
+            flash=a.flash,
+        )
         creation = time.perf_counter() - start
         phase[0] = "first_run"
         start = time.perf_counter()
@@ -117,10 +129,12 @@ def main():
             target = data[name]
             delta = value[valid].astype(np.float64) - target[valid]
             errors[name] = {
-                "max_abs": float(np.max(abs(delta))), "mae": float(np.mean(abs(delta))),
-                "rmse": float(np.sqrt(np.mean(delta ** 2))),
+                "max_abs": float(np.max(abs(delta))),
+                "mae": float(np.mean(abs(delta))),
+                "rmse": float(np.sqrt(np.mean(delta**2))),
                 "relative_l2": float(np.linalg.norm(delta) / max(np.linalg.norm(target[valid]), 1e-12)),
-                "finite": bool(np.isfinite(value).all()), "padding_zero": bool(np.all(value[~valid] == 0)),
+                "finite": bool(np.isfinite(value).all()),
+                "padding_zero": bool(np.all(value[~valid] == 0)),
                 "close": bool(np.allclose(value[valid], target[valid], atol=1e-3, rtol=3e-3)),
             }
         placement = finish_profile(session, a.provider, require_full_gpu=a.provider != "cpu") if a.placement else None
@@ -129,23 +143,40 @@ def main():
         sampler.join()
     if failures:
         raise RuntimeError(f"Memory sampler failed: {failures}")
+
     def peak(key, phases):
         vals = [s[key] for s in samples if s["phase"] in phases and s[key] is not None]
         return max(vals) if vals else None
+
     result = {
-        "case": case, "provider": a.provider, "model_sha256": manifest["model_sha256"],
-        "scope": manifest["scope"], "ort": ort.__version__, "python": platform.python_version(),
-        "host": platform.node(), "cpu_affinity": sorted(os.sched_getaffinity(0)), "threads": a.threads,
+        "case": case,
+        "provider": a.provider,
+        "model_sha256": manifest["model_sha256"],
+        "scope": manifest["scope"],
+        "ort": ort.__version__,
+        "python": platform.python_version(),
+        "host": platform.node(),
+        "cpu_affinity": sorted(os.sched_getaffinity(0)),
+        "threads": a.threads,
         "compiler_environment": {k: v for k, v in os.environ.items() if k.startswith("MIGRAPHX_")},
-        "session_seconds": creation, "first_run_seconds": first, "warmup": a.warmup,
+        "session_seconds": creation,
+        "first_run_seconds": first,
+        "warmup": a.warmup,
         "latency_ms": {"samples": durations, **{f"p{q}": float(np.percentile(durations, q)) for q in [50, 90, 95, 99]}},
-        "outputs": errors, "placement": placement, "profiling_enabled": a.placement, "flash_requested": a.flash,
-        "memory": {"baseline": baseline, "vram_source": source, "sampling_interval_seconds": 0.01,
+        "outputs": errors,
+        "placement": placement,
+        "profiling_enabled": a.placement,
+        "flash_requested": a.flash,
+        "memory": {
+            "baseline": baseline,
+            "vram_source": source,
+            "sampling_interval_seconds": 0.01,
             "rss_lifetime_high_water_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,
             "session_peak_rss_bytes": peak("rss_bytes", ["session", "first_run"]),
             "session_peak_vram_bytes": peak("vram_bytes", ["session", "first_run"]),
             "inference_peak_rss_bytes": peak("rss_bytes", ["warmup", "timing"]),
-            "inference_peak_vram_bytes": peak("vram_bytes", ["warmup", "timing"])},
+            "inference_peak_vram_bytes": peak("vram_bytes", ["warmup", "timing"]),
+        },
         "passed": all(e["finite"] and e["padding_zero"] and e["close"] for e in errors.values()),
     }
     (a.outdir / "memory-samples.json").write_text(json.dumps(samples))

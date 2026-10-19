@@ -45,10 +45,7 @@ def _output_padding(graph, output_widths):
         # A final Split exposes strided views of a shared output allocation.
         # MIGraphX EP can bind those views to smaller contiguous ORT buffers,
         # corrupting adjacent outputs. Materialize each masked head instead.
-        *[
-            helper.make_node("Where", ["mlpf_export_query_mask", prediction, "mlpf_export_output_zero"], [name])
-            for name, prediction in names.items()
-        ],
+        *[helper.make_node("Where", ["mlpf_export_query_mask", prediction, "mlpf_export_output_zero"], [name]) for name, prediction in names.items()],
     ]
 
 

@@ -1,4 +1,5 @@
 """Run only ORT inference so rocprof traces exclude PyTorch reference kernels."""
+
 import argparse
 from pathlib import Path
 

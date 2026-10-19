@@ -141,7 +141,7 @@ def test_exported_sort_resolves_large_tied_integer_keys(tmp_path, size):
 
     generator = torch.Generator().manual_seed(19)
     values = torch.randint(-20, 20, (2, size), generator=generator) * (1 << 40)
-    values[:, -max(1, size // 8):] = HASH_PADDING_KEY
+    values[:, -max(1, size // 8) :] = HASH_PADDING_KEY
     path = tmp_path / "sort.onnx"
     torch.onnx.export(Sort(), (values,), path, opset_version=20, input_names=["values"], dynamo=False)
     graph = onnx.load(path)
