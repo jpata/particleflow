@@ -38,6 +38,7 @@ class Command(Enum):
     TEST = "test"
     RAY_TRAIN = "ray-train"
     RAY_HPO = "ray-hpo"
+    LR_FIND = "lr-find"
 
 
 _config_help = None
@@ -145,6 +146,15 @@ def get_parser():
         "test", parents=[common_parser], help="Run evaluation", formatter_class=argparse.RawDescriptionHelpFormatter, epilog=config_help
     )
 
+    # --- 'lr-find' command parser ---
+    subparsers.add_parser(
+        "lr-find",
+        parents=[common_parser],
+        help="Run an LR range test (exponential lr ramp, settings under --lr_finder.*) instead of training",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=config_help,
+    )
+
     # --- 'ray-train' command parser ---
     parser_ray = subparsers.add_parser(
         "ray-train",
@@ -198,6 +208,12 @@ def main():
         args.test = True
         args.hpo = None
         args.ray_train = False
+    elif cmd == Command.LR_FIND:
+        args.train = True  # builds the training datasets, optimizer and logging of a training run
+        args.test = False
+        args.hpo = None
+        args.ray_train = False
+        args.lr_find = True
         loglevel = logging.INFO
         logging.getLogger().setLevel(loglevel)
     elif cmd == Command.RAY_TRAIN:
@@ -247,7 +263,7 @@ def main():
 
         if cmd == Command.RAY_TRAIN:
             run_ray_training(config, args, experiment_dir, loglevel=loglevel)
-        elif cmd in [Command.TRAIN, Command.TEST]:
+        elif cmd in [Command.TRAIN, Command.TEST, Command.LR_FIND]:
             world_size = config_obj.gpus if config_obj.gpus > 0 else 1
             device_agnostic_run(config_obj, world_size, experiment_dir, loglevel=loglevel)
 
