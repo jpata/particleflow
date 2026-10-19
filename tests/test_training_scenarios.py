@@ -69,6 +69,33 @@ def test_backbone_comparison_scenario_keeps_elementwise_output_and_depth_fixed()
     assert jobs[1].resolved_config.model.heptv2.block_size == 128
 
 
+def test_cms_backbone_scenario_pins_all_datasets_and_resolves_global_batch():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cms_backbone_comparison.yaml")
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+    platform.data_dir = "/tmp/cms-tfds"
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+
+    assert [job.resolved_config.model.type.value for job in jobs] == ["attention", "heptv2"]
+    for job in jobs:
+        config = job.resolved_config
+        assert config.dataset.value == "cms"
+        assert config.model.output_mode.value == "elementwise"
+        assert config.model.backbone.num_convs == 3
+        assert config.pad_to_multiple_elements == 100
+        assert config.seed == 12345
+        assert job.per_gpu_batch_size * platform.gpus == 32
+        for datasets in (config.train_dataset["cms"], config.valid_dataset["cms"]):
+            assert {dataset.batch_size for dataset in datasets.values()} == {1}
+            assert sum(len(dataset.samples) for dataset in datasets.values()) == 6
+            assert {sample.version for dataset in datasets.values() for sample in dataset.samples.values()} == {"2.8.0"}
+            assert all(sample.splits == [str(i) for i in range(1, 11)] for dataset in datasets.values() for sample in dataset.samples.values())
+        assert len(config.test_dataset) == 3
+        assert {sample.version for sample in config.test_dataset.values()} == {"2.8.0"}
+    assert jobs[0].resolved_config.model.attention.num_heads == 8
+    assert jobs[1].resolved_config.model.heptv2.block_size == 100
+    assert jobs[1].resolved_config.model.heptv2.deterministic_hashing
+
+
 def test_pf_hits_comparison_scenario_resolves_three_40k_variants():
     scenario = load_training_scenario(PF_HITS_SCENARIO)
     platform = load_platform_profile(PLATFORMS / "local.yaml")

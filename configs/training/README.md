@@ -11,6 +11,28 @@ uv run python3 scripts/training/run_scenario.py \
   --dry-run
 ```
 
+`cms_backbone_comparison` trains CMS on TFDS version **2.8.0**, selecting either
+`--variant attention` or `--variant heptv2`. It retains the PU/no-PU ttbar, QCD
+and Z→ττ training/validation samples and the PU test samples. Both variants use
+three backbone layers, eight heads, the same seed and a global batch of 32;
+HEPTv2 uses deterministic hashing and block size 100. The schedule is 100,000
+steps at learning rate 0.0004. Dataset versions are pinned in the scenario.
+
+Supply the CMS TFDS directory explicitly when the platform profile only maps
+CLD/CLIC data paths:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/cms_backbone_comparison.yaml \
+  --platform configs/training/platforms/local.yaml \
+  --data-dir /path/to/cms/tfds \
+  --variant attention \
+  --dry-run
+```
+
+Use `--variant heptv2` for HEPTv2; omit `--variant` to run both. Remove
+`--dry-run` to start training.
+
 The scenario declares a global batch size. The runner derives
 `gpu_batch_multiplier` from the number of GPUs and the dataset batch size, and rejects
 non-integral combinations. It also resolves every variant through `MLPFConfig` and
