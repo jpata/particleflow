@@ -1173,6 +1173,7 @@ class MLPFConfig(BaseModel):
     sampler_mode: DatasetSamplerMode = DatasetSamplerMode.SHARD_CONSECUTIVE
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
     relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
+    load_weights_only: bool = False  # load only the model weights from --load; optimizer, LR schedule, RNG, sampler and step start fresh
     sampler_from_scratch: bool = False  # start the sampler from scratch (without resuming the sampler state)
 
     # Logging

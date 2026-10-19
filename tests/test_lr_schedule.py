@@ -2,6 +2,9 @@
 Spec: Ensures 'CosineDecay' and other learning rate schedules can be resumed via 'load_lr_schedule'. Key assertions: Verifies that a scheduler restored from a checkpoint (containing 'last_epoch' and 'state_dict') produces the same LR sequence as one that ran uninterrupted. Tests against a known bug where incorrect 'last_batch' initialization led to LR jumps.
 """
 
+import copy
+
+import pytest
 from mlpf.conf import LRSchedule
 import torch
 from torch.optim import SGD
@@ -45,8 +48,7 @@ def test_lr_schedule_restoration():
     incorrect_scheduler = get_lr_schedule(config, optimizer, total_steps, last_batch=50)
 
     # 6. Load checkpoint (this step is actually redundant if we initialize with last_batch, but keeping it for analogy)
-    # The load_lr_schedule function also sets last_epoch, so this is effectively what happens.
-    load_lr_schedule(incorrect_scheduler, checkpoint, 50)
+    load_lr_schedule(incorrect_scheduler, checkpoint)
 
     # 7. Simulate training (Part 2)
     incorrect_lrs = []
@@ -69,7 +71,7 @@ def test_lr_schedule_restoration():
     correct_scheduler = get_lr_schedule(config, optimizer, total_steps)
 
     # 10. Load checkpoint
-    load_lr_schedule(correct_scheduler, checkpoint, 50)
+    load_lr_schedule(correct_scheduler, checkpoint)
 
     # 11. Simulate training (Correct)
     correct_lrs = []
@@ -81,3 +83,40 @@ def test_lr_schedule_restoration():
     assert original_lrs[50:] == correct_lrs
 
     os.remove(checkpoint_path)
+
+
+def _run(schedule, total_steps, num_steps, checkpoint=None):
+    """Mirrors run()/train_all_steps(): lrs used by each step's update, the scheduler stepped once per step.
+
+    With checkpoint, a fresh optimizer + scheduler are restored from it first. Returns the lrs, the scheduler and a
+    checkpoint of the final state.
+    """
+    optimizer = SGD(torch.nn.Linear(10, 2).parameters(), lr=0.1)
+    scheduler = get_lr_schedule(MockConfig(lr_schedule=schedule, lr=0.1), optimizer, total_steps)
+    if checkpoint is not None:
+        load_lr_schedule(scheduler, checkpoint)
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    lrs = []
+    for _ in range(num_steps):
+        lrs.append(optimizer.param_groups[0]["lr"])
+        optimizer.step()
+        scheduler.step()
+    final = {
+        "optimizer_state_dict": copy.deepcopy(optimizer.state_dict()),
+        "extra_state": {"lr_schedule_state_dict": copy.deepcopy(scheduler.state_dict())},
+    }
+    return lrs, scheduler, final
+
+
+@pytest.mark.parametrize("schedule", [LRSchedule.COSINEDECAY, LRSchedule.CONSTANT, LRSchedule.ONECYCLE])
+def test_lr_schedule_resume_matches_uninterrupted(schedule):
+    """A run checkpointed after step N and resumed at step N + 1 follows the uninterrupted lr sequence bit-exactly
+    (the saved last_epoch already counts step N; OneCycleLR used to crash on its final step when it was set to N + 1)."""
+    total_steps, saved_step = 100, 40
+    uninterrupted, _, _ = _run(schedule, total_steps, total_steps)
+    _, _, checkpoint = _run(schedule, total_steps, saved_step)
+    assert checkpoint["extra_state"]["lr_schedule_state_dict"]["last_epoch"] == saved_step
+
+    resumed, scheduler, _ = _run(schedule, total_steps, total_steps - saved_step, checkpoint)
+    assert resumed == uninterrupted[saved_step:]
+    assert scheduler.last_epoch == total_steps
