@@ -44,6 +44,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`inference.py`**: Utilities for running model inference and generating predictions.
 - **`plots.py`**: Confusion matrix logging and model performance plotting during training.
 - **`utils.py`**: Model-level utility functions including target unpacking, object-condensation clustering helpers, learning rate schedules, and metric computation.
+- **`tracker_momentum_readout.py`**: Optional tracker-only momentum residual and sparse differentiable hit-to-slot pooling; see [the small-model ablation](tracker_momentum_readout.md).
 - **`distributed_ray.py`**: Integration with Ray for distributed training and HPO.
 
 ## 5. Validation, Plotting & Monitoring

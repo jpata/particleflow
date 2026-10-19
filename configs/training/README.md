@@ -224,3 +224,14 @@ truth-circle compatibility loss, differentiable curvature loss, and both losses.
 All retain the learned inference readout. See
 [the experiment design](../../docs/tracker_fit_loss_experiments.md) for objectives,
 local commands and acceptance criteria.
+
+## Small-model tracker readout and sparse association
+
+`cld_pf_heptv2_tracker_readout_50k` compares the unchanged small scaling baseline,
+a tracker-specific momentum residual, sparse top-4 differentiable hit-to-slot
+pooling, and both additions. It retains batch 128, 50k steps, and validation and
+checkpoint intervals of 1,000. See [implementation and comparison details](../../docs/tracker_momentum_readout.md).
+
+```bash
+scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_readout_50k mi250x --dry-run
+```
