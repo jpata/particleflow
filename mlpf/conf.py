@@ -937,6 +937,24 @@ class TaskLossWeights(BaseModel):
         return self
 
 
+class LRFinderConfig(BaseModel):
+    """LR range test (`mlpf/pipeline.py lr-find`): exponential lr ramp, loss recorded per step."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_lr: float = Field(default=1e-7, gt=0.0)
+    end_lr: float = Field(default=1e-1, gt=0.0)
+    num_steps: int = Field(default=1000, ge=2)  # ramp length, after the task-weight calibration steps
+    smoothing: float = Field(default=0.98, ge=0.0, lt=1.0)  # EMA factor of the recorded loss
+    divergence_factor: float = Field(default=4.0, gt=1.0)  # stop once the smoothed loss exceeds this x its minimum
+
+    @model_validator(mode="after")
+    def validate_lr_range(self):
+        if self.start_lr >= self.end_lr:
+            raise ValueError("lr_finder.start_lr must be below lr_finder.end_lr")
+        return self
+
+
 class DatasetSample(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: str
@@ -1160,12 +1178,14 @@ class MLPFConfig(BaseModel):
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
     task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
+    lr_finder: LRFinderConfig = Field(default_factory=LRFinderConfig)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
     validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
     validation_particle_metrics: bool = True  # matched-particle metrics (metrics/particle/*) in validation; slow on large (pu200) events
 
     # Flags
     train: bool = False
+    lr_find: bool = False  # run the LR range test instead of the training loop (set by the lr-find command)
     test: bool = False
     compile: bool = False
     make_plots: bool = True
