@@ -83,7 +83,7 @@ def test_cms_backbone_scenario_pins_all_datasets_and_resolves_global_batch():
         assert config.model.backbone.num_convs == 3
         assert config.pad_to_multiple_elements == 100
         assert config.seed == 12345
-        assert job.per_gpu_batch_size * platform.gpus == 32
+        assert job.per_gpu_batch_size * platform.gpus == 64
         for datasets in (config.train_dataset["cms"], config.valid_dataset["cms"]):
             assert {dataset.batch_size for dataset in datasets.values()} == {1}
             assert sum(len(dataset.samples) for dataset in datasets.values()) == 6
