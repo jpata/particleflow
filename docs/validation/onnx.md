@@ -383,6 +383,7 @@ inference. The lightweight environment does not need TensorFlow, flash-attn,
 or a GPU. The workflow is `.github/workflows/attention-export.yml`.
 
 ```bash
+mkdir -p onnx_validation
 PYTHONPATH=. python -m pytest \
   tests/test_attention24_export.py tests/test_attention_export_profiles.py \
   -q --basetemp=onnx_validation/export-ci
@@ -400,6 +401,7 @@ and flash-attn are not prerequisites. Install the appropriate ORT provider and
 native GPU libraries. The qualification runtime must be ORT 1.30 or newer:
 
 ```bash
+mkdir -p onnx_validation
 ORT_ENABLE_ATTENTION_KERNEL_DEBUG_INFO=1 MLPF_TEST_PROVIDER=cuda \
 PYTHONPATH=. python -m pytest tests/test_attention_export_profiles.py \
   -k real_device -q --basetemp=onnx_validation/export-cuda

@@ -46,6 +46,7 @@ jobs:
           python -m pip install 'numpy==1.26.4' 'onnx==1.19.1' 'onnxruntime==1.30.0' 'pytest>=8,<10' 'pydantic>=2,<3' 'PyYAML>=6,<7' 'comet-ml>=3,<4' 'einops>=0.8,<0.9' 'psutil>=6,<8'
       - name: Check both formats and numerical contracts on CPU
         run: |
+          mkdir -p onnx_validation
           python -m pytest tests/test_attention24_export.py tests/test_attention_export_profiles.py \
             -q --basetemp=onnx_validation/export-ci --junitxml=onnx_validation/export-junit.xml
       - name: Retain exported models and test reports
