@@ -437,6 +437,24 @@ PYTHONPATH=. python -m pytest tests/test_attention_export_profiles.py \
   -k offline_compile -q --basetemp=onnx_validation/export-offline
 ```
 
+Local qualification on 2026-10-19 used the AMD wheel
+`migraphx-libs==2.18.0+rocm10.1.0` (driver reports
+`2.18.0.20250912-17-754-g95672916e`) and the ROCm 10.1.0
+`rocm-sdk-core`, `rocm-sdk-libraries`, and `rocm-sdk-devel` userspace packages
+unpacked under `/tmp`. The driver needs the core and library directories on
+`LD_LIBRARY_PATH` even for offline compilation: its executable links HIP,
+MIOpen, rocBLAS, and hipBLASLt. This does not mean those library backends can
+execute without a GPU. The test's named dimension arguments must use
+`--input-dim @Xfeat_normed 2 128 55 --input-dim @mask 2 128`.
+
+With those arguments, the driver parses the exported model and forms MLIR
+attention regions, but this packaged build aborts during `gpu::lowering` with
+`get_device_id: No device`. The offline test therefore **has not passed** on
+this CPU host. Intermediate MLIR regions are not final compiled-kernel or
+execution evidence. A compiler build that completes this model's device-free
+lowering is still required; the test retains this failure rather than skipping
+it. No host GPU driver or system ROCm installation was changed.
+
 This compiles a static test shape for `gfx1100`, checking that a fused attention
 code object is present. It does not allocate GPU buffers, run kernels, test ORT
 EP integration, or validate GPU numerical results. Cross-compilation supports
