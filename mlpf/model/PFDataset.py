@@ -517,7 +517,8 @@ class ResumableSampler(torch.utils.data.Sampler):
         return len(self.sampler) - self.start_index
 
     def load_state_dict(self, state_dict):
-        self.start_index = state_dict["start_index"]
+        # start_index counts whole batches, so a restored partial last batch would point past the end
+        self.start_index = min(state_dict["start_index"], len(self.sampler))
         _logger.info(f"ResumableSampler {self.name} loading state: start_index={self.start_index}")
 
     def reset(self):
@@ -551,7 +552,6 @@ class InterleavedIterator(object):
         # cursor to keep track which data loader index to yield from
         self.cur_index = 0
         self.batches_yielded_per_loader = [0] * len(self.data_loaders)
-        self._len = None
         self.name = ""
 
         _logger.debug(f"InterleavedIterator at {self.cur_index}/{len(self.loader_ds_indices)}")
@@ -596,15 +596,8 @@ class InterleavedIterator(object):
         return ret
 
     def __len__(self):
-        if self._len:
-            return self._len
-        else:
-            # compute and cache the length
-            len_ = 0
-            for loader in self.data_loaders:
-                len_ += len(loader)
-            self._len = len_
-            return len_
+        # batches per epoch; unlike the lengths of the data loaders, it does not shrink when the state is restored mid-epoch
+        return len(self.loader_ds_indices)
 
     def state_dict(self):
         return {
@@ -662,11 +655,11 @@ class EndlessIterator(object):
     def load_state_dict(self, state_dict):
         self.epoch = state_dict["epoch"]
         _logger.info(f"EndlessIterator {self.name} setting epoch={self.epoch}")
-        _logger.info(f"EndlessIterator {self.name} loading state.")
-        self.data_loader.load_state_dict(state_dict["loader_state_dict"])
         for sampler in self.samplers:
             sampler.set_epoch(self.epoch)
-        self.iterator = iter(self.data_loader)
+        _logger.info(f"EndlessIterator {self.name} loading state.")
+        self.data_loader.load_state_dict(state_dict["loader_state_dict"])
+        self.iterator = self.data_loader
 
 
 def set_worker_sharing_strategy(worker_id: int) -> None:
