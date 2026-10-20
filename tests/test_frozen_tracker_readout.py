@@ -6,7 +6,7 @@ from mlpf.conf import Y_FEATURES
 from mlpf.model.PFDataset import PFBatch
 from mlpf.model.tracker_momentum_readout import TrackerMomentumReadout
 from scripts.studies.frozen_tracker_pooling import pool_hit_associations
-from scripts.studies.train_frozen_tracker_readout import oracle_associations, correction_loss, ownership_diagnostics
+from scripts.studies.train_frozen_tracker_readout import oracle_associations, correction_loss
 
 
 def test_oracle_uses_fixed_slot_matching_and_rejects_background():
