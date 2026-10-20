@@ -4,6 +4,11 @@ import torch
 from mlpf.conf import OutputMode
 from mlpf.model.PFDataset import PFBatch
 from mlpf.model.validation_metrics import (
+    MATCH_COST_CAP,
+    MATCH_DR,
+    MATCH_LOG_PT,
+    MATCH_REL_PT,
+    _matching_cost,
     compute_set_slot_metrics,
     compute_validation_particle_metrics,
     validation_particle_collections,
@@ -151,6 +156,30 @@ def test_elementwise_validation_reconstructs_targets_without_cached_values():
     torch.testing.assert_close(targets["energy"], torch.tensor([[12.0, 18.0]]))
 
 
+def test_matching_keeps_acceptable_pair_instead_of_balancing_unacceptable_ones():
+    # P1 sits on T1; P2 and T2 are 0.11 on either side, so only P1-T1 passes the delta-R cut.
+    # Uncapped, keeping P1-T1 costs 0 + (0.22 / 0.1)^2 = 4.84, while swapping to P1-T2 + P2-T1
+    # costs 1.21 + 1.21 = 2.42, so the assignment would drop the only acceptable match.
+    targets = make_collection(cls_id=[1, 1], pt=[10.0, 10.0], eta=[0.0, 0.11], phi=[0.0, 0.0], energy=[10.0, 10.0])
+    predictions = make_collection(cls_id=[1, 1], pt=[10.0, 10.0], eta=[0.0, -0.11], phi=[0.0, 0.0], energy=[10.0, 10.0])
+    mask = torch.ones(1, 2, dtype=torch.bool)
+
+    values = finalized(compute_validation_particle_metrics(targets, mask, predictions, mask, num_classes=6))
+
+    assert values["matching/efficiency"] == 0.5
+    assert values["matching/purity"] == 0.5
+    assert values["matched/delta_r_mean"] == 0
+
+
+def test_matching_cost_cap_never_changes_an_acceptable_pair():
+    delta_r = torch.linspace(0.0, MATCH_DR * (1 - 1e-4), 101)
+    pt_ratio = torch.linspace((1 - MATCH_REL_PT) * (1 + 1e-4), (1 + MATCH_REL_PT) * (1 - 1e-4), 101)
+    delta_r, log_pt_ratio = torch.meshgrid(delta_r, torch.log(pt_ratio).abs(), indexing="ij")
+    uncapped = (delta_r / MATCH_DR).square() + (log_pt_ratio / MATCH_LOG_PT).square()
+
+    assert uncapped.max() < MATCH_COST_CAP
+    torch.testing.assert_close(_matching_cost(delta_r, log_pt_ratio), uncapped)
+    assert _matching_cost(torch.tensor([3.0]), torch.tensor([0.0])).item() == MATCH_COST_CAP
 def test_set_slot_metrics_separate_slot_coverage_from_presence_and_measure_regression():
     targets = make_collection(
         cls_id=[1, 2],

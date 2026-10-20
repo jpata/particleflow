@@ -46,7 +46,7 @@ def test_prepare_pipeline_file_adds_provenance_and_oracle_candidates(tmp_path):
     source = ak.Record(
         {
             "X_track": ak.Array([np.ones((1, 16), dtype=np.float32)]),
-            "X_cluster": ak.Array([np.ones((1, 17), dtype=np.float32)]),
+            "X_cluster": ak.Array([np.ones((1, 19), dtype=np.float32)]),
             "ytarget_track": ak.Array([target_track]),
             "ytarget_cluster": ak.Array([np.zeros((1, 14), dtype=np.float32)]),
             "targetjet": ak.Array([np.zeros((0, 4), dtype=np.float32)]),
@@ -79,7 +79,7 @@ def test_current_idea_100_parquet_loads_into_mlpf_contract():
 
     assert len(examples) == 3
     for example in examples:
-        assert example["X"].ndim == 2 and example["X"].shape[1] == 17
+        assert example["X"].ndim == 2 and example["X"].shape[1] == 19
         assert example["ytarget"].shape == example["ycand"].shape
         assert example["ytarget"].shape == (len(example["X"]), 14)
         assert np.all(np.isfinite(example["X"]))
@@ -96,7 +96,7 @@ def test_real_spec_builds_idea_pipeline_config():
     config = MLPFConfig.from_spec(REPOSITORY_ROOT / "particleflow_spec.yaml", "pyg-idea-pipeline-v1", "idea")
 
     assert config.dataset is Dataset.IDEA
-    assert config.input_dim == 17
+    assert config.input_dim == 19
     assert config.num_classes == 6
     assert config.ntrain is None
     assert config.nvalid is None

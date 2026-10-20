@@ -1,8 +1,9 @@
 """Scheme-independent particle metrics for validation.
 
-Matching minimizes a fixed combination of delta-R and absolute log-pT ratio. A
-match is accepted for efficiency/purity when delta-R < 0.1 and relative pT error
-< 0.5. Neither model's native target association or training cost is used.
+Matching minimizes a fixed combination of delta-R and absolute log-pT ratio,
+capped per pair at MATCH_COST_CAP. A match is accepted for efficiency/purity when
+delta-R < 0.1 and relative pT error < 0.5. Neither model's native target
+association or training cost is used.
 """
 
 import math
@@ -20,6 +21,12 @@ MATCH_LOG_PT = math.log(2.0)
 MATCH_REL_PT = 0.5
 STRICT_DR = 0.05
 STRICT_REL_PT = 0.2
+# Every pair that passes the acceptance cut costs less than this: delta-R < MATCH_DR keeps the
+# delta-R term below 1, and a relative pT error < MATCH_REL_PT keeps |log pT ratio| below
+# log(2) = MATCH_LOG_PT, so the pT term is below 1 too. Capping the cost here makes every pair
+# that cannot pass the cut equally expensive, so the assignment never breaks up an acceptable
+# pair just to make an unacceptable one less bad.
+MATCH_COST_CAP = 2.0
 
 
 def validation_particle_collections(batch, predictions, output_mode):
@@ -117,6 +124,11 @@ def _pairwise_geometry(targets, predictions):
     return delta_eta, delta_phi, delta_r, log_pt_ratio, relative_pt
 
 
+def _matching_cost(delta_r, log_pt_ratio):
+    cost = (delta_r / MATCH_DR).square() + (log_pt_ratio / MATCH_LOG_PT).square()
+    return cost.clamp(max=MATCH_COST_CAP)
+
+
 def _accumulate_event_metrics(metrics, targets, predictions, num_classes, detailed=False):
     num_targets = len(targets["pt"])
     num_predictions = len(predictions["pt"])
@@ -130,7 +142,7 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes, detail
     delta_eta = delta_phi = delta_r = log_pt_ratio = pairwise_relative_pt = None
     if num_targets and num_predictions:
         delta_eta, delta_phi, delta_r, log_pt_ratio, pairwise_relative_pt = _pairwise_geometry(targets, predictions)
-        cost = (delta_r / MATCH_DR).square() + (log_pt_ratio / MATCH_LOG_PT).square()
+        cost = _matching_cost(delta_r, log_pt_ratio)
         prediction_indices, target_indices = linear_sum_assignment(cost.numpy())
         matched_prediction_indices = torch.as_tensor(prediction_indices, dtype=torch.long)
         matched_target_indices = torch.as_tensor(target_indices, dtype=torch.long)

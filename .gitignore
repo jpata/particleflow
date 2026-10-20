@@ -59,6 +59,10 @@ build
 
 /docs/_build/
 
+.env
+
+logs_slurm/
+
 # Local validation and analysis artifacts
 .chart-data-*/
 data/tfds_validation_cld_hits/

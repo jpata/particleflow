@@ -99,6 +99,19 @@ def test_set_config_populates_decoder_defaults():
     assert config.model.set_decoder.matcher.dr_scale == 0.1
 
 
+def test_set_config_accepts_colliderml_hits():
+    config = MLPFConfig.model_validate(
+        {
+            "dataset": "colliderml_hits",
+            "data_dir": "/tmp",
+            "model": {"type": "heptv2", "output_mode": "set", "heptv2": {}},
+            "conv_type": "heptv2",
+        }
+    )
+
+    assert config.model.set_decoder is not None
+
+
 def test_set_config_rejects_local_attention_for_global_queries():
     with pytest.raises(ValueError, match="local_attention_radius requires"):
         make_config(local_attention_radius=0.4)
@@ -253,7 +266,7 @@ def test_set_config_rejects_object_formation_for_global_queries(override):
 
 
 def test_set_config_rejects_non_hit_datasets():
-    with pytest.raises(ValueError, match="supported only for CLD/CLIC hit datasets"):
+    with pytest.raises(ValueError, match="supported only for the CLD/CLIC/ColliderML hit datasets"):
         MLPFConfig.model_validate(
             {
                 "dataset": "cld",
@@ -875,3 +888,29 @@ def test_bounded_tracker_correction_configuration():
         make_config(tracker_fit_correction=True)
     with pytest.raises(ValueError):
         make_config(tracker_fit_max_log_correction=0)
+
+
+@pytest.mark.parametrize("grouping", [False, True])
+def test_particle_metrics_disabled_preserves_set_diagnostics(grouping, monkeypatch):
+    from mlpf.model.training import evaluate
+
+    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=grouping, hit_grouping_dim=8)
+    config.validation_diagnostics_batches = 1
+    config.make_plots = False
+    model = MLPF(config)
+    features = torch.zeros(1, 5, config.input_dim)
+    features[..., 0] = torch.tensor([1, 1, 2, 2, 2])
+    features[..., 1] = 1
+    features[..., 4] = 1
+    features[..., 5] = 1
+    hit_targets = torch.zeros(1, 5, 14)
+    hit_targets[0, :, 13] = torch.tensor([1, 1, 2, 2, 0])
+    batch = PFBatch(X=features, ytarget=hit_targets, ytarget_set=make_target_tensor())
+    config.validation_particle_metrics = False
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("Disabled particle matching was called")
+    monkeypatch.setattr("mlpf.model.training.compute_validation_particle_metrics", fail_if_called)
+    metrics = evaluate("cpu", 1, model, [batch], 1, config, device_type="cpu")
+    assert not any(key.startswith("metrics/particle/") for key in metrics)
+    assert any(key.startswith("metrics/set_slot/") for key in metrics)
+    assert any(key.startswith("metrics/hit_grouping/") for key in metrics) == grouping
