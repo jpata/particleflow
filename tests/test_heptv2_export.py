@@ -177,3 +177,27 @@ def test_integer_coordinates_export_exactly(tmp_path):
     torch.onnx.export(Coordinates(), (features,), path, opset_version=20, input_names=["features"], dynamo=False)
     session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
     np.testing.assert_array_equal(session.run(None, {"features": features.numpy()})[0], expected.numpy())
+
+
+@pytest.mark.parametrize("size", [1, 4900, 14700])
+def test_exported_inverse_permutation_avoids_large_topk(tmp_path, size):
+    from mlpf.model.heptv2 import invert_permutation
+    from mlpf.model.onnx_runtime import create_session, finish_profile
+
+    class Inverse(torch.nn.Module):
+        def forward(self, permutation):
+            return invert_permutation(permutation)
+
+    generator = torch.Generator().manual_seed(23)
+    permutation = torch.argsort(torch.rand(3, 2, size, generator=generator), dim=-1)
+    path = tmp_path / "inverse.onnx"
+    torch.onnx.export(Inverse(), (permutation,), path, opset_version=20, input_names=["permutation"], dynamo=False)
+    graph = onnx.load(path)
+    onnx.checker.check_model(graph, full_check=True)
+    assert not any(node.op_type == "TopK" for node in graph.graph.node)
+    assert any(node.op_type == "ScatterElements" for node in graph.graph.node)
+    provider = os.environ.get("MLPF_TEST_PROVIDER", "cpu")
+    session = create_session(path, provider, profile_prefix=tmp_path / "inverse", require_full_gpu=provider != "cpu")
+    actual = session.run(None, {"permutation": permutation.numpy()})[0]
+    np.testing.assert_array_equal(actual, torch.argsort(permutation, dim=-1).numpy())
+    finish_profile(session, provider, require_full_gpu=provider != "cpu")

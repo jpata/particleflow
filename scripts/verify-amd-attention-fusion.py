@@ -22,7 +22,7 @@ def main():
     proofs, missing = [], []
     for case in manifest['cases']:
         dest = a.root / 'supplementary' / profile / Path(case['file']).stem / 'placement'
-        if not (dest / 'result.json').exists() or not (dest / 'exit-code.txt').exists() or (dest / 'exit-code.txt').read_text().strip() != '0':
+        if not (dest / 'result.json').exists() or not (dest / 'exit-code.txt').exists():
             missing.append(case['file'])
             continue
         log = dest / 'run.log'
@@ -37,6 +37,7 @@ def main():
         static = dest / 'static.onnx'
         proof = {'model_sha256': manifest['model_sha256'], 'case': case['file'],
             'verified': True, 'expected_attention_operations': expected,
+            'numerical_passed': json.loads((dest / 'result.json').read_text())['passed'],
             'fused_attention_code_objects': len(objects), 'quadratic_attention_allocations': quadratic,
             'static_model_sha256': hashlib.sha256(static.read_bytes()).hexdigest(),
             'program_sha256': hashlib.sha256(final.encode()).hexdigest(),

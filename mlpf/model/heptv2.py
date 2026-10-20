@@ -249,7 +249,9 @@ def get_regions(num_regions, num_or_hashes, num_heads, num_and_hashes=2):
 
 
 def invert_permutation(perm: torch.Tensor) -> torch.Tensor:
-    if os.environ.get("HEPTV2_SCATTER_INVERT_PERM", "0").lower() in {"1", "true", "yes", "on"}:
+    # Inverting a permutation needs no sort. In ONNX, scatter also avoids
+    # MIGraphX TopK kernel limits for flattened multi-event sequences.
+    if torch.onnx.is_in_onnx_export() or os.environ.get("HEPTV2_SCATTER_INVERT_PERM", "0").lower() in {"1", "true", "yes", "on"}:
         arange = torch.arange(perm.shape[-1], device=perm.device, dtype=perm.dtype).expand_as(perm)
         return torch.zeros_like(perm).scatter(-1, perm, arange)
     if os.environ.get("HEPTV2_FAST_INVERT_PERM", "0").lower() in {"1", "true", "yes", "on"}:

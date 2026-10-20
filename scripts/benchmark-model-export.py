@@ -120,6 +120,9 @@ def main():
                 "max_abs": float(np.max(abs(delta))), "mae": float(np.mean(abs(delta))),
                 "rmse": float(np.sqrt(np.mean(delta ** 2))),
                 "relative_l2": float(np.linalg.norm(delta) / max(np.linalg.norm(target[valid]), 1e-12)),
+                "violating_elements": int(np.count_nonzero(abs(delta) > 1e-3 + 3e-3 * abs(target[valid]))),
+                "max_tolerance_ratio": float(np.max(abs(delta) / (1e-3 + 3e-3 * abs(target[valid])))),
+                "argmax_disagreements": int(np.count_nonzero(value[valid].argmax(-1) != target[valid].argmax(-1))) if name in {"bid", "id", "pu"} else None,
                 "finite": bool(np.isfinite(value).all()), "padding_zero": bool(np.all(value[~valid] == 0)),
                 "close": bool(np.allclose(value[valid], target[valid], atol=1e-3, rtol=3e-3)),
             }
@@ -135,6 +138,7 @@ def main():
     result = {
         "case": case, "provider": a.provider, "model_sha256": manifest["model_sha256"],
         "scope": manifest["scope"], "ort": ort.__version__, "python": platform.python_version(),
+        "checkpoint": manifest.get("checkpoint"), "dataset_sources": manifest.get("dataset_sources"),
         "host": platform.node(), "cpu_affinity": sorted(os.sched_getaffinity(0)), "threads": a.threads,
         "compiler_environment": {k: v for k, v in os.environ.items() if k.startswith("MIGRAPHX_")},
         "session_seconds": creation, "first_run_seconds": first, "warmup": a.warmup,

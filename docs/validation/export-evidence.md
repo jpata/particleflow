@@ -165,3 +165,115 @@ measured 2.54 ms and 534 MiB sampled VRAM above baseline, versus 13.36 ms
 and 1419 MiB for the FP32 baseline. Maximum absolute error at this shape was
 3.16e-4. The compiler and actual kernel traces confirm fused masked attention
 without materialized quadratic score buffers.
+
+## Trained checkpoint qualification (2026-10-20)
+
+Artifacts are separate from the seeded study, under
+`onnx_validation/trained-checkpoint-evidence/2026-10-20/`. Attention uses
+`attention_seed12345_20261019_162509_766691/checkpoints/checkpoint-100000.pth`;
+HEPTv2 uses `heptv2_seed12345_20261020_094300_545202/checkpoints/checkpoint-20000.pth`
+from `experiments/cms_backbone_comparison/`. Architectures come from their saved
+`model_kwargs.pkl`; HEPTv2 width is 256. Load model weights strictly, omitting
+only named training-only `task_loss_weighter.*` buffers. The independent
+reference uses CPU FP32 MATH attention. Checkpoint/config hashes and exact
+checkpoint inputs are retained. These checkpoints have different training
+durations and are not a matched physics comparison.
+
+Use `scripts/export-checkpoint-onnx.py --experiment EXPERIMENT --bundle BUNDLE
+--data-dir /eos/user/j/jpata/mlpf/cms/20260204_cmssw_15_0_5_117d32/tfds`. The
+checkpoints were trained on CMS 2.8.0; the user approved qualification using
+available EOS CMS 3.0.0 test events. The default exporter takes two actual test
+events each from ttbar, QCD and Ztt plus a mixed three-event batch. It removes
+zero element-type rows, uses the saved feature width and sorting configuration,
+and pads without truncating or repeating inputs. The seven cases span
+N=3100–4900; the mixed batch has B=3,N=4900. Length and event content both vary,
+so these are observed scaling measurements rather than a controlled length
+sweep. Dataset, split, index and metadata hashes are recorded per case. The inputs
+use raw TFDS X features; the training loader's CMS HO pT correction and target
+transformations are not applied. This scope validates numerical export
+equivalence, not the full training/evaluation preprocessing pipeline.
+
+Export attention again with `--attention-format attention24 --attention-dtype
+float16` for NVIDIA and `--attention-format decomposed --attention-dtype
+float16` for AMD. Both optimized profiles use the same FP32 reference arrays.
+The trained attention graph has three attention operations; derive fusion
+counts from the graph rather than assuming the seeded model's five. Keep
+`atol=1e-3, rtol=3e-3` unchanged and report violating elements and binary/PID
+argmax changes. A successfully dispatched fused kernel does not establish
+FP32 numerical equivalence. `scripts/diagnose-attention-precision.py` compares
+the ONNX outputs with PyTorch evaluations of the same mixed-precision export
+operations to help separate precision drift from additional runtime differences.
+
+The initial W7900 HEPTv2 mixed batch exposed a MIGraphX TopK compiler limit
+while sorting a flattened 14,700-element permutation to invert it. The ONNX
+export now computes that inverse with exact integer ScatterElements. This
+changes neither model weights nor the eager computation; the regenerated
+graph is requalified on CUDA, MIGraphX and CPU. Preserve the original graphs
+and failure logs under `revisions/`. The inverse-permutation regression includes
+sizes 1, 4900 and 14700.
+
+Use the uv environments documented in `ngt/README.md`. Run the same timing,
+placement, hashing, static-model retention and kernel-trace protocol as above.
+The HTML report and CSV retain numerical failures explicitly. The strict
+`--require-complete` gate deliberately exits nonzero when any profile fails,
+even if every measurement has been collected.
+
+All 56 trained measurements were collected. The portable FP32 baseline passes
+42/42 cases, including the corrected W7900 mixed batch. Both fused FP16
+profiles execute entirely on their requested GPU and dispatch the expected
+fused kernels, but fail the unchanged FP32 tolerance in all seven cases each
+(0/14 accepted). Across these FP16 cases, maximum absolute error is about
+0.039; binary argmax decisions change for 1–5 valid inputs per case, while PID
+argmax decisions are unchanged. These optimized profiles remain unqualified
+under the stated numerical criterion. The strict gate returns exit code 1,
+which is retained alongside the complete report.
+
+### FP16 fusion precision control
+
+`scripts/compare-attention-fusion.py PACKAGE_ROOT --provider cuda|migraphx
+--outdir OUTPUT` runs each retained case twice in fresh processes, using the
+same FP16 ONNX graph, weights, inputs and FP32 references. This is a precision
+diagnostic, not an additional timing benchmark. CUDA selects `sdpa_kernel=1`
+(FlashAttention) versus `sdpa_kernel=16` (MATH). MIGraphX keeps MLIR enabled
+and switches `MIGRAPHX_MLIR_USE_SPECIFIC_OPS` from `attention` to `!attention`.
+Disabling all MLIR would also change the surrounding projection GEMMs and is
+therefore not the attention-only control. Use the same documented runtime
+libraries for both sides.
+
+The runner verifies identical specialized graph hashes, full GPU placement,
+all three CUDA attention dispatches, and AMD final compiler programs with
+three fused attention objects versus zero and materialized quadratic score
+buffers. It retains outputs, per-head error metrics, tolerance violations,
+binary/PID argmax disagreements and execution evidence. Compare fused FP16
+against FP32, unfused FP16 against FP32, and fused FP16 against unfused FP16;
+the first two failing does not by itself establish that fusion adds no error.
+Representative Nsight/rocprofv3 traces supplement per-case execution evidence.
+Results are retained separately under the package's `fusion-precision/`.
+
+All seven pairs per GPU were collected and their execution paths verified.
+The maximum absolute errors across cases and output heads are:
+
+| Comparison | NVIDIA L40S | AMD W7900 |
+|---|---:|---:|
+| Fused FP16 vs FP32 | 0.03785 | 0.03887 |
+| Unfused FP16 vs FP32 | 0.03916 | 0.09872 |
+| Fused FP16 vs unfused FP16 | 0.01879 | 0.08217 |
+
+Every comparison fails the unchanged tolerance in every case (0/7 for each
+row and GPU). Thus FP16 precision failure also occurs without attention
+fusion, but fusion-dependent numerical differences are not negligible under
+this criterion. On AMD, fused attention is closer to FP32 by maximum absolute
+error in all seven cases. Binary argmax differences between fused and unfused
+total 5 on NVIDIA and 32 on AMD across the seven cases; PID decisions agree.
+These are casewise totals, including repeated events in the mixed batch.
+All outputs are finite and padded outputs remain exactly zero. The evidence
+does not support attributing every deviation exclusively to FP16 input casts
+or declaring the fused and unfused implementations numerically equivalent.
+
+Nsight confirms FlashAttention versus `UnfusedSoftmaxKernel` with separate
+GEMMs. AMD rocprofv3 traces confirm fused attention kernels versus separate
+GEMM and normalization kernels; these traces include compilation/tuning as
+well as inference, so dispatch counts are not inference operation counts.
+Per-case final programs establish the three attention operations and retained
+MLIR GEMMs. The `fusion-precision/report.html` appendix links the aggregate and
+per-case metrics, with independently checksummed outputs and execution evidence.

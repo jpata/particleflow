@@ -17,7 +17,7 @@ fi
 mkdir -p "$out"
 status=0
 for model in "${models[@]}"; do
-    for case in "$root/$model"/sweep_*.npz; do
+    for case in "$root/$model"/*.npz; do
         name=$(basename "$case" .npz)
         for mode in timing placement; do
             dest="$out/$model/$name/$mode"

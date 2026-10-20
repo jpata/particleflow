@@ -3,6 +3,7 @@
 set -euo pipefail
 : "${NGT_VENV:=/tmp/sdpa-w7900-venv}"
 : "${ROCM_PATH:=/opt/rocm}"
+: "${UV_BIN:=uv}"
 export PATH="$ROCM_PATH/bin:$PATH"
 export LD_LIBRARY_PATH="$ROCM_PATH/lib:$ROCM_PATH/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 if [[ ! -x "$ROCM_PATH/bin/rocminfo" ]]; then
@@ -15,17 +16,16 @@ if ! rg_output=$(grep -E 'gfx1100' /tmp/sdpa-rocminfo.txt); then
     exit 1
 fi
 printf '%s\n' "$rg_output"
-if ! command -v python3.12 >/dev/null; then
-    echo "Python 3.12 is required. In the NGT Alma9 image: sudo dnf install -y python3.12 python3.12-pip" >&2
+if ! command -v "$UV_BIN" >/dev/null; then
+    echo "Install uv as described in ngt/README.md, or set UV_BIN to its executable." >&2
     exit 1
 fi
-python3.12 -m venv "$NGT_VENV"
-"$NGT_VENV/bin/python" -m pip install --upgrade pip
-"$NGT_VENV/bin/python" -m pip install 'numpy==1.26.4' 'onnx==1.19.1' psutil
-"$NGT_VENV/bin/python" -m pip install \
+"$UV_BIN" venv --python 3.12 "$NGT_VENV"
+"$UV_BIN" pip install --python "$NGT_VENV/bin/python" 'numpy==1.26.4' 'onnx==1.19.1' psutil
+"$UV_BIN" pip install --python "$NGT_VENV/bin/python" \
     'torch==2.9.1+rocm7.2.1.lw.gitff65f5bc' 'onnxruntime-migraphx==1.23.2' \
     --find-links https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.1/
-"$NGT_VENV/bin/python" -m pip check
+"$UV_BIN" pip check --python "$NGT_VENV/bin/python"
 "$NGT_VENV/bin/python" - <<'PY'
 import torch
 import onnxruntime as ort

@@ -35,6 +35,83 @@ If the pod stays Pending, inspect it with the same explicit kubeconfig,
 context and namespace; GPU capacity may be exhausted. A shell exit leaves the
 session running. Stop it explicitly when finished.
 
+## Python environments on the pods: uv
+
+Use `uv venv` and `uv pip install --python ...` for pod environments. Keep Python,
+package caches and environments in `/tmp` so they are session-local:
+
+```bash
+curl --fail --location https://astral.sh/uv/install.sh -o /tmp/install-uv.sh
+UV_INSTALL_DIR=/tmp/uv-bin UV_NO_MODIFY_PATH=1 sh /tmp/install-uv.sh
+export PATH="/tmp/uv-bin:$PATH"
+export UV_CACHE_DIR=/tmp/uv-cache UV_PYTHON_INSTALL_DIR=/tmp/uv-python UV_LINK_MODE=copy
+uv --version
+```
+
+The trained-checkpoint qualification used uv 0.11.8, also available from the
+existing extracted ParticleFlow image as `/tmp/mlpf-image/root/.local/bin/uv`.
+It can be copied to `/tmp/uv` on both pods; run `chmod +x /tmp/uv` after a
+`kubectl cp`. `uv venv --python 3.12 ENV` selects an installed interpreter or
+downloads one if necessary. Record the selected Python and package versions
+with each qualification run.
+
+### CUDA container overlay
+
+The existing ParticleFlow image supplies PyTorch, ONNX and TFDS. It does not
+include pip or ONNX Runtime. Extract it once, then create a uv environment
+inside it rather than unpacking the 11 GB SIF for every command:
+
+```bash
+singularity build --sandbox /tmp/mlpf-image /eos/user/j/jpata/www/particleflow-29042026-de861d.sif
+singularity exec --bind /tmp:/tmp /tmp/mlpf-image bash
+export PATH="/tmp/uv-bin:$PATH"
+uv venv --python /opt/particleflow/.venv/bin/python3 /tmp/qualification/cuda-venv
+echo /opt/particleflow/.venv/lib/python3.11/site-packages > /tmp/qualification/cuda-venv/lib/python3.11/site-packages/particleflow-container.pth
+uv pip install --python /tmp/qualification/cuda-venv/bin/python --no-deps \
+  onnxruntime-gpu==1.29.0 \
+  --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/
+uv pip install --python /tmp/qualification/cuda-venv/bin/python coloredlogs
+```
+
+The `.pth` file explicitly reuses the container's existing dependency set;
+a nested venv does not automatically inherit another venv's packages. Run this
+environment through `singularity exec --nv` for CUDA and without `--nv` for
+CPU fallback. Set `PYTHON_BIN=/tmp/qualification/cuda-venv/bin/python` when
+using the evidence runner.
+
+### Qualified W7900 inference environment
+
+Use the native ORT provider with newer userspace compiler libraries, as in the
+HEPTv2 qualification below. The plugin provider is a separate implementation
+and is not substituted into this environment:
+
+```bash
+uv venv --python 3.12 /tmp/heptv2-native-venv
+uv pip install --python /tmp/heptv2-native-venv/bin/python numpy==1.26.4 onnx==1.19.1
+uv pip install --python /tmp/heptv2-native-venv/bin/python onnxruntime-migraphx==1.23.2 \
+  --find-links https://repo.radeon.com/rocm/manylinux/rocm-rel-7.2.1/
+uv venv --python 3.11 /tmp/heptv2-venv
+uv pip install --python /tmp/heptv2-venv/bin/python --no-deps \
+  migraphx-libs==2.18.0+rocm10.1.0 --index-url https://stable.repo.amd.com/rocm/migraphx/whl-next/
+uv pip install --python /tmp/heptv2-native-venv/bin/python --target /tmp/qualification/sdk \
+  rocm-sdk-core==10.1.0 rocm-sdk-libraries==10.1.0 rocm-sdk-devel==10.1.0 \
+  --index-url https://stable.repo.amd.com/rocm/whl-next/
+```
+
+Alma9's default C++ runtime lacks symbols required by the native ORT wheel.
+Restore the checksummed userspace library without changing system packages:
+
+```bash
+uv run --no-project --python 3.12 ngt/setup-qualification-cxx.py
+export LD_LIBRARY_PATH="/tmp/qualification/cxx/lib:/tmp/heptv2-venv/lib/python3.11/site-packages/migraphx_libs:/tmp/qualification/sdk/_rocm_sdk_core/lib:/tmp/qualification/sdk/_rocm_sdk_libraries/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+```
+
+The helper uses the `zstd` executable supplied by the NGT image and records
+the package URL and SHA256 under the selected prefix. The SDK
+packages come from AMD's index, not PyPI; see the
+[ROCm installation guide](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/index.html).
+Host GPU drivers are unchanged.
+
 ## Configure the environment inside the pod
 
 The checked-in NGT docs report ROCm 7.2.4 (and 6.4.3 as an alternative).
@@ -53,7 +130,6 @@ ls -d /opt/rocm*
 rpm -qa | grep -Ei 'migraphx|rocm|half'
 # Use the actual installed 7.2.x path if /opt/rocm points elsewhere:
 export ROCM_PATH=/opt/rocm
-sudo dnf install -y python3.12 python3.12-pip
 cd /tmp/particleflow
 bash ngt/setup-w7900.sh
 ```
@@ -227,7 +303,8 @@ On the L40S, the existing extracted CUDA image and ORT overlay can run it as:
 
 ```bash
 singularity exec --nv --bind /tmp:/tmp /tmp/mlpf-image \
-  env PYTHONPATH=/tmp/qualification/python:/tmp/particleflow \
+  env PYTHONPATH=/tmp/particleflow \
+  PYTHON_BIN=/tmp/qualification/cuda-venv/bin/python \
   bash /tmp/particleflow/ngt/run-heptv2-onnx.sh \
   cuda /path/to/bundle /tmp/particleflow/results/heptv2-l40s
 ```
@@ -252,7 +329,8 @@ The evidence package also includes two separately labeled optimized profiles:
 `MIGRAPHX_MLIR_USE_SPECIFIC_OPS=attention`. Both keep FP32 public I/O and reuse
 the exact FP32 reference arrays. Nsight and rocprofv3 kernel traces verify the
 actual fused paths. The AMD profile additionally retains every shape's final
-compiled program and verifies all five attention operations are fused.
+compiled program and verifies every attention operation is fused (the count
+comes from the exported graph; seeded and trained models can differ).
 See the protocol's optimized-profile reproduction commands for compiler flags
 and `scripts/verify-amd-attention-fusion.py` usage.
 

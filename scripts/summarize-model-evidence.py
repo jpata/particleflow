@@ -65,12 +65,15 @@ def main():
             mem = timing["memory"]
             gpu = mem["inference_peak_vram_bytes"]
             gpu_base = mem["baseline"]["vram_bytes"]
-            rows.append({"machine": machine, "model": model, "batch": case["shape"][0], "slots_per_event": case["shape"][1],
+            rows.append({"machine": machine, "model": model, "case": case["file"], "batch": case["shape"][0], "slots_per_event": case["shape"][1],
                 "valid_inputs": sum(case["lengths"]), "passed": ok,
                 "p50_ms": timing["latency_ms"]["p50"], "p95_ms": timing["latency_ms"]["p95"],
                 "session_seconds": timing["session_seconds"], "first_run_seconds": timing["first_run_seconds"],
                 "max_abs": max(e["max_abs"] for e in timing["outputs"].values()),
                 "max_relative_l2": max(e["relative_l2"] for e in timing["outputs"].values()),
+                "violating_elements": sum(e.get("violating_elements", 0) for e in timing["outputs"].values()),
+                "max_tolerance_ratio": max(e.get("max_tolerance_ratio", 0) for e in timing["outputs"].values()),
+                **{name + "_argmax_disagreements": timing["outputs"][name].get("argmax_disagreements") for name in ["bid", "id", "pu"]},
                 "inference_vram_mib": gpu / 2**20 if gpu is not None else None,
                 "inference_vram_delta_mib": (gpu - gpu_base) / 2**20 if gpu is not None else None,
                 "inference_rss_mib": mem["inference_peak_rss_bytes"] / 2**20,
@@ -87,12 +90,15 @@ def main():
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        batch_lengths = [r["slots_per_event"] for r in rows if r["batch"] > 1]
+        batch_length = max(set(batch_lengths), key=batch_lengths.count) if batch_lengths else 1000
+        trained = "checkpoint" in json.loads((a.root / "attention/manifest.json").read_text())
         for sweep in ["sequence", "batch"]:
             fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
             for machine in ["l40s", "w7900", "cpu-l40s-host"]:
                 for model, style in [("attention", "-"), ("heptv2", "--"), ("attention24-fp16", "-."), ("attention-decomposed-fp16", ":")]:
                     selected = [r for r in rows if r["machine"] == machine and r["model"] == model
-                        and (r["batch"] == 1 if sweep == "sequence" else r["slots_per_event"] == 1000)]
+                        and (r["batch"] == 1 if sweep == "sequence" else r["slots_per_event"] == batch_length)]
                     selected.sort(key=lambda r: r["slots_per_event"] if sweep == "sequence" else r["batch"])
                     x = [r["slots_per_event"] if sweep == "sequence" else r["batch"] for r in selected]
                     for ax, key in zip(axes, ["p50_ms", "inference_vram_delta_mib", "inference_rss_mib"]):
@@ -101,12 +107,12 @@ def main():
                             ax.plot(*zip(*points), style, marker="o", label=f"{model} / {machine}")
             for ax, title in zip(axes, ["Median session.run latency (ms)", "Sampled VRAM above baseline (MiB)", "Sampled process RSS (MiB)"]):
                 ax.set_title(title)
-                ax.set_xlabel("Input slots per event (B=1)" if sweep == "sequence" else "Batch size (N=1000)")
+                ax.set_xlabel("Input slots per event (B=1)" if sweep == "sequence" else f"Batch size (N={batch_length})")
                 ax.grid(alpha=0.3)
             axes[0].set_yscale("log")
             handles, labels = axes[0].get_legend_handles_labels()
             fig.legend(handles, labels, loc="lower center", ncol=3, fontsize=8)
-            fig.suptitle("Seeded full models · FP32 baseline + labeled FP16 profiles · host transfers included")
+            fig.suptitle(("Trained checkpoints" if trained else "Seeded full models") + " · FP32 baseline + labeled FP16 profiles · host transfers included")
             fig.tight_layout(rect=[0, 0.15, 1, 0.94])
             for suffix in ["png", "pdf", "svg"]:
                 fig.savefig(a.root / f"{sweep}-scaling.{suffix}", dpi=160)
