@@ -88,9 +88,14 @@ def export_bundle(args):
             mask = (torch.arange(size)[None, :] < valid_length).expand(batch, -1).clone()
             x[~mask] = 0
             cases.append((f"sweep_b{batch}_s{size}", x, mask.float()))
-    export_mlpf(model, cases[0][1], cases[0][2], args.bundle / "model.onnx",
-                attention_format=args.attention_format,
-                attention_dtype=torch.float16 if args.attention_dtype == "float16" else None)
+    export_mlpf(
+        model,
+        cases[0][1],
+        cases[0][2],
+        args.bundle / "model.onnx",
+        attention_format=args.attention_format,
+        attention_dtype=torch.float16 if args.attention_dtype == "float16" else None,
+    )
     manifest = {
         "scope": f"Export correctness with seeded untrained {args.model_type} weights; not physics performance",
         "seed": 42,

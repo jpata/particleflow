@@ -25,12 +25,13 @@ seeds: [12345]
 
 training:
   # The runner derives the per-GPU batch from the platform GPU count.
-  global_batch_size: 32
+  global_batch_size: 64
   parameters:
     lr: 0.0004
     num_steps: 100000
     val_freq: 10000
     checkpoint_freq: 10000
+    tensorboard_step_freq: 1000
     nvalid: 512
     ntest: 512
     sampler_mode: interleaved-shards
