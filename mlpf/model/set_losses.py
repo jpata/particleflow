@@ -197,6 +197,8 @@ def set_mlpf_loss(
     hit_grouping_chunk_size=1024,
     hit_grouping_background_weight=0.1,
     hit_grouping_detector_balanced=False,
+    hit_grouping_tracker_particle_balanced=False,
+    tracker_overlap_loss_weight=0.0,
     tracker_geometry_loss_weight=0.0,
     tracker_curvature_loss_weight=0.0,
     tracker_loss_max_hits=64,
@@ -237,9 +239,20 @@ def set_mlpf_loss(
             hit_grouping, batch, matches, chunk_size=hit_grouping_chunk_size,
             background_weight=hit_grouping_background_weight,
             detector_balanced=hit_grouping_detector_balanced,
+            tracker_particle_balanced=hit_grouping_tracker_particle_balanced,
         )
         losses["HitGrouping"] = hit_grouping_loss_weight * grouping_loss
         loss_opt = loss_opt + losses["HitGrouping"]
+
+    if tracker_overlap_loss_weight > 0:
+        if hit_grouping is None:
+            raise ValueError("tracker overlap loss requires learned hit grouping")
+        overlap = tracker_overlap_loss(hit_grouping, batch, matches, chunk_size=hit_grouping_chunk_size)
+        losses["TrackerOverlap"] = tracker_overlap_loss_weight * overlap["loss"]
+        loss_opt = loss_opt + losses["TrackerOverlap"]
+        losses["TrackerOverlapCount"] = overlap["count"]
+        losses["TrackerSoftPurity"] = overlap["purity"]
+        losses["TrackerSoftCompleteness"] = overlap["completeness"]
 
     if tracker_geometry_loss_weight > 0 or tracker_curvature_loss_weight > 0:
         from mlpf.model.tracker_fit_loss import tracker_fit_losses
@@ -291,13 +304,46 @@ def set_mlpf_loss(
     return loss_opt, detached_losses, diagnostics
 
 
-def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weight=0.1, detector_balanced=False):
+def _grouping_targets(batch, event_idx, match, num_slots):
+    """Full-hit labels and charged truth slots, independent of model selection."""
+    slot_indices, target_indices = match
+    pn_index = Y_FEATURES.index("particle_number")
+    targets = batch.ytarget_set[event_idx, batch.target_mask[event_idx]]
+    matched_pn = targets[target_indices, pn_index].long()
+    sorted_pn, order = matched_pn.sort()
+    sorted_slots = slot_indices[order]
+    hit_pn = batch.ytarget[event_idx, batch.mask[event_idx].bool(), pn_index].long()
+    labels = torch.full_like(hit_pn, num_slots)
+    if sorted_pn.numel():
+        position = torch.searchsorted(sorted_pn.contiguous(), hit_pn.contiguous()).clamp_max(sorted_pn.numel() - 1)
+        owned = (hit_pn > 0) & (sorted_pn[position] == hit_pn)
+        labels[owned] = sorted_slots[position[owned]]
+    cls = targets[target_indices, 0].long()
+    charged = torch.zeros(num_slots, dtype=torch.bool, device=labels.device)
+    charged[slot_indices] = (cls == 1) | (cls == 4) | (cls == 5)
+    return labels, charged
+
+
+def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weight=0.1, detector_balanced=False,
+                      tracker_particle_balanced=False):
     """Supervise event-local hit ownership without a dense hit-pair matrix."""
     hit_keys, slot_keys, background = grouping
     num_slots = slot_keys.shape[1]
     pn_index = Y_FEATURES.index("particle_number")
     total = hit_keys.sum() * 0.0 + slot_keys.sum() * 0.0 + background.sum() * 0.0
     weight_sum = hit_keys.new_zeros(())
+    tracker_counts = []
+    tracker_total = hit_keys.new_zeros((), dtype=torch.float32)
+    track_total = hit_keys.new_zeros((), dtype=torch.float32)
+    if tracker_particle_balanced:
+        for event_idx, match in enumerate(matches):
+            labels, charged = _grouping_targets(batch, event_idx, match, num_slots)
+            detector = batch.X[event_idx, batch.mask[event_idx].bool(), 0]
+            selected = (detector == 1) & (labels < num_slots) & charged[labels.clamp_max(num_slots - 1)]
+            counts = torch.bincount(labels[selected], minlength=num_slots)
+            tracker_counts.append((counts, selected))
+            tracker_total += selected.sum()
+            track_total += (counts > 0).sum()
     detector_denominators = None
     if detector_balanced:
         # Compute denominators over the batch before chunking. Include background
@@ -314,21 +360,18 @@ def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weig
                 detector_denominators[index] += weights[detector == kind].sum()
     for event_idx, (slot_indices, target_indices) in enumerate(matches):
         hit_mask = batch.mask[event_idx].bool()
-        target_pn = batch.ytarget_set[event_idx, batch.target_mask[event_idx], pn_index].long()
-        matched_pn = target_pn[target_indices]
-        sorted_pn, order = matched_pn.sort()
-        sorted_slots = slot_indices[order]
-        hit_pn = batch.ytarget[event_idx, hit_mask, pn_index].long()
-        labels = torch.full_like(hit_pn, num_slots)
-        if sorted_pn.numel():
-            position = torch.searchsorted(sorted_pn.contiguous(), hit_pn.contiguous()).clamp_max(sorted_pn.numel() - 1)
-            owned = (hit_pn > 0) & (sorted_pn[position] == hit_pn)
-            labels[owned] = sorted_slots[position[owned]]
+        labels, _ = _grouping_targets(batch, event_idx, (slot_indices, target_indices), num_slots)
         weight_sum = weight_sum + torch.where(labels == num_slots, background_weight, 1.0).sum()
         event_hit_keys = hit_keys[event_idx, hit_mask]
         event_background = background[event_idx, hit_mask]
         event_slot_keys = slot_keys[event_idx]
         hit_weights = torch.where(labels == num_slots, background_weight, 1.0)
+        if tracker_particle_balanced:
+            counts, selected = tracker_counts[event_idx]
+            # Redistribute the original charged-tracker foreground weight, keeping
+            # its total unchanged. Calorimeter/background weights stay unchanged.
+            per_track = tracker_total / track_total.clamp_min(1)
+            hit_weights[selected] = per_track / counts[labels[selected]].clamp_min(1)
         if detector_denominators is not None:
             detector = batch.X[event_idx, hit_mask, 0]
             normalization = torch.zeros_like(hit_weights)
@@ -360,6 +403,55 @@ def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weig
                 part = chunk_loss(keys_chunk, event_slot_keys, background_chunk, labels_chunk, weights_chunk)
             total = total + part
     return total if detector_balanced else total / weight_sum.clamp_min(1.0)
+
+
+def tracker_overlap_loss(grouping, batch, matches, chunk_size=1024):
+    """Mean charged-track soft Dice over full slot-plus-background probabilities.
+
+    All valid tracker hits contribute to predicted mass, including background and
+    hits belonging to other particles. Eligibility depends only on truth support.
+    Chunk checkpointing retains O(chunks * slots) reductions, not O(hits * slots)
+    softmax activations. Reductions and probabilities remain FP32 under autocast.
+    """
+    hit_keys, slot_keys, background = grouping
+    num_slots = slot_keys.shape[1]
+    with torch.autocast(device_type=hit_keys.device.type, enabled=False):
+        zero = (hit_keys.float().sum() + slot_keys.float().sum() + background.float().sum()) * 0
+        total, purity, completeness = zero, zero, zero
+        count = zero.detach().clone()
+        for event_idx, match in enumerate(matches):
+            labels, charged = _grouping_targets(batch, event_idx, match, num_slots)
+            tracker = batch.X[event_idx, batch.mask[event_idx].bool(), 0] == 1
+            truth_labels = labels[tracker]
+            truth_count = torch.bincount(truth_labels, minlength=num_slots + 1)[:num_slots].float()
+            eligible = charged & (truth_count > 0)
+            keys = hit_keys[event_idx, batch.mask[event_idx].bool()][tracker]
+            bg = background[event_idx, batch.mask[event_idx].bool()][tracker]
+            tp = zero + torch.zeros(num_slots, device=hit_keys.device)
+            mass = zero + torch.zeros_like(tp)
+
+            def chunk_sums(k, s, b, lab):
+                with torch.autocast(device_type=k.device.type, enabled=False):
+                    probabilities = torch.cat([10.0 * (k.float() @ s.float().T), b.float()], -1).softmax(-1)[:, :num_slots]
+                    owned = lab < num_slots
+                    correct = probabilities[owned].gather(1, lab[owned, None]).squeeze(1)
+                    true_mass = probabilities.new_zeros(num_slots).index_add(0, lab[owned], correct)
+                    return true_mass, probabilities.sum(0)
+
+            for kc, bc, lc in zip(keys.split(chunk_size), bg.split(chunk_size), truth_labels.split(chunk_size)):
+                if torch.is_grad_enabled() and any(v.requires_grad for v in (kc, slot_keys, bc)):
+                    tpc, mc = checkpoint(chunk_sums, kc, slot_keys[event_idx], bc, lc, use_reentrant=True)
+                else:
+                    tpc, mc = chunk_sums(kc, slot_keys[event_idx], bc, lc)
+                tp, mass = tp + tpc, mass + mc
+            dice = (2 * tp + 1e-6) / (truth_count + mass + 1e-6)
+            total = total + (1 - dice[eligible]).sum()
+            purity = purity + (tp / mass.clamp_min(1e-8))[eligible].sum()
+            completeness = completeness + (tp / truth_count.clamp_min(1))[eligible].sum()
+            count = count + eligible.sum()
+        denominator = count.clamp_min(1)
+        return {"loss": total / denominator, "count": count,
+                "purity": purity / denominator, "completeness": completeness / denominator}
 
 
 def event_consistency_loss(targets, predictions, target_mask):

@@ -320,6 +320,8 @@ def _set_loss_kwargs(model_module, raw_predictions):
         "hit_grouping_chunk_size": config.hit_grouping_chunk_size,
         "hit_grouping_background_weight": config.hit_grouping_background_weight,
         "hit_grouping_detector_balanced": config.hit_grouping_detector_balanced,
+        "hit_grouping_tracker_particle_balanced": config.hit_grouping_tracker_particle_balanced,
+        "tracker_overlap_loss_weight": config.tracker_overlap_loss_weight,
         "tracker_geometry_loss_weight": config.tracker_geometry_loss_weight,
         "tracker_curvature_loss_weight": config.tracker_curvature_loss_weight,
         "tracker_loss_max_hits": config.tracker_loss_max_hits,
