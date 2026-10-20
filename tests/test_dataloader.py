@@ -2,12 +2,14 @@
 Spec: Ensures the training dataloader state is correctly saved and restored via 'get_interleaved_dataloaders'. Mocks 'PFDataset' to isolate dataloader logic. Key assertions: Verifies that a 'restored' dataloader yields a sequence of data identical to an uninterrupted 'ground truth' run, even across epoch boundaries and partial batch exhaustion.
 """
 
+import copy
 import os
 import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
 
+import pytest
 import torch
 import torch.optim as optim
 from tests.mock_data import MockDictDataset
@@ -365,3 +367,71 @@ class TestDataloaderRestoration(unittest.TestCase):
         # instead of continuing from batch 3.
         self.assertTrue(torch.equal(run2_data[0], gt_data[0]))
         self.assertTrue(torch.equal(run2_data[1], gt_data[1]))
+
+
+def _mock_loader_config(MockPFDataset, size, **kwargs):
+    MockPFDataset.return_value.ds = MockDictDataset(size=size, keys=("X", "ytarget", "genmet"), shapes=((1, 2), (1, 2), (1,)))
+    split_config = {"cms": {"type1": {"batch_size": 2, "samples": {"sample1": {"version": "1.0.0", "splits": ["split1"]}}}}}
+    return MLPFConfig.model_validate(
+        {
+            "dataset": "cms",
+            "data_dir": "/tmp/dummy_data",
+            "model": {"type": "attention", "attention": {"num_convs": 2}},
+            "conv_type": "attention",
+            "train_dataset": split_config,
+            "valid_dataset": split_config,
+            **kwargs,
+        }
+    )
+
+
+@pytest.mark.parametrize("sampler_mode", ["shard-consecutive", "interleaved-shards"])
+@pytest.mark.parametrize("num_workers", [0, 2])
+@pytest.mark.parametrize("stop_at_batch", [3, 5, 7, 10])  # 5 batches per epoch: mid/end of epoch 0, mid/end of epoch 1
+@patch("mlpf.model.PFDataset.PFDataset")
+def test_shuffled_restoration_matches_uninterrupted(MockPFDataset, stop_at_batch, num_workers, sampler_mode):
+    """A shuffled train loader resumed after any batch, also mid-epoch or exactly at the end of a later epoch, yields
+    the same batches and epoch as the uninterrupted loader (as in run(): the state is restored into a fresh loader)."""
+    config = _mock_loader_config(MockPFDataset, 10, num_workers=num_workers, prefetch_factor=2, sampler_mode=sampler_mode)
+    num_batches = 18
+
+    def train_loader():
+        loaders, _ = get_interleaved_dataloaders(1, 0, config, use_cuda=False, use_ray=False)
+        return loaders["train"]
+
+    uninterrupted = train_loader()
+    gt_data = [next(uninterrupted).X.clone() for _ in range(num_batches)]
+
+    interrupted = train_loader()
+    data = [next(interrupted).X.clone() for _ in range(stop_at_batch)]
+    state = copy.deepcopy(interrupted.state_dict())
+
+    resumed = train_loader()
+    resumed.load_state_dict(state)
+    assert len(resumed) == len(uninterrupted) == 5
+    data += [next(resumed).X.clone() for _ in range(num_batches - stop_at_batch)]
+
+    assert not all(torch.equal(a, b) for a, b in zip(gt_data[0:5], gt_data[5:10]))  # the epochs are shuffled differently
+    for i, (batch, gt_batch) in enumerate(zip(data, gt_data)):
+        assert torch.equal(batch, gt_batch), f"batch {i} differs"
+    assert resumed.epoch == uninterrupted.epoch
+
+
+@pytest.mark.parametrize("size", [10, 11])  # full / partial last validation batch
+@patch("mlpf.model.PFDataset.PFDataset")
+def test_validation_loader_restored_after_a_validation_pass(MockPFDataset, size):
+    """Checkpoints are saved between validation passes, so they hold an exhausted valid loader state. The restored loader
+    reports and yields a full pass (its len() was 0, or raised ValueError with a partial last batch)."""
+    config = _mock_loader_config(MockPFDataset, size, num_workers=0)
+    loader = get_interleaved_dataloaders(1, 0, config, use_cuda=False, use_ray=False)[0]["valid"]
+    gt_data = [batch.X.clone() for batch in loader]
+    state = copy.deepcopy(loader.state_dict())
+    assert state["cur_index"] == len(gt_data)
+
+    restored = get_interleaved_dataloaders(1, 0, config, use_cuda=False, use_ray=False)[0]["valid"]
+    restored.load_state_dict(state)
+    assert len(restored) == len(gt_data)
+    assert len(restored.data_loaders[0]) == 0  # nothing left in the restored pass, even after a partial last batch
+    data = [batch.X.clone() for batch in restored]
+    assert len(data) == len(gt_data)
+    assert all(torch.equal(a, b) for a, b in zip(data, gt_data))
