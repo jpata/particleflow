@@ -67,9 +67,7 @@ def _streaming_attention(query, key, value, dropout_p=0.0, query_chunk_size=128,
             old_scale = torch.exp(maximum - new_maximum)
             probabilities = torch.exp(scores - new_maximum)
             denominator = denominator * old_scale + probabilities.sum(dim=-1, keepdim=True)
-            numerator = numerator * old_scale + torch.matmul(
-                F.dropout(probabilities, p=dropout_p, training=dropout_p > 0), value_chunk.float()
-            )
+            numerator = numerator * old_scale + torch.matmul(F.dropout(probabilities, p=dropout_p, training=dropout_p > 0), value_chunk.float())
             maximum = new_maximum
         outputs.append((numerator / denominator.clamp_min(1.0e-12)).to(query.dtype))
     return torch.cat(outputs, dim=-2)
@@ -553,7 +551,8 @@ class ParticleSetDecoder(nn.Module):
                 # when the backbone/decoder run under BF16 autocast.
                 with torch.autocast(device_type=slots.device.type, enabled=False):
                     correction = F.linear(
-                        normalized_slots.float(), self.tracker_pt_correction.weight.float(),
+                        normalized_slots.float(),
+                        self.tracker_pt_correction.weight.float(),
                         self.tracker_pt_correction.bias.float(),
                     ).squeeze(-1)
                     fitted_pt = log_pt.float() + self.tracker_fit_max_log_correction * correction.tanh()
@@ -623,9 +622,7 @@ class ParticleSetDecoder(nn.Module):
                     event_selected.append(selected)
                     event_destinations.append(flat)
                 selected_by_event.append(torch.cat(event_selected) if event_selected else valid_indices[:0])
-                destination_by_event.append(
-                    torch.cat(event_destinations) if event_destinations else valid_indices[:0]
-                )
+                destination_by_event.append(torch.cat(event_destinations) if event_destinations else valid_indices[:0])
         # Only O(number of hits) selected indices are retained. The reduction
         # remains differentiable with respect to hit embeddings, while the hard
         # membership is trained separately by the supervised grouping loss.
@@ -637,19 +634,21 @@ class ParticleSetDecoder(nn.Module):
             deposit = input_features[event_idx, selected, 5].float().clamp_min(0)
             energy[event_idx].view(-1).index_add_(0, flat, deposit)
         mean = pooled.float() / counts.clamp_min(1).unsqueeze(-1)
-        summary = torch.cat(
-            [mean[:, :, 0], mean[:, :, 1], torch.log1p(counts), torch.log1p(energy[:, :, 1:2])], dim=-1
-        )
+        summary = torch.cat([mean[:, :, 0], mean[:, :, 1], torch.log1p(counts), torch.log1p(energy[:, :, 1:2])], dim=-1)
         slots = slots + self.hit_grouping_projection(summary.to(slots.dtype))
         tracker_geometry = None
         if self.tracker_group_readout:
             geometry = []
             for event_idx, (selected, flat) in enumerate(zip(selected_by_event, destination_by_event)):
                 tracker = flat.remainder(2) == 0
-                geometry.append(tracker_group_geometry(
-                    input_features[event_idx, selected[tracker]], flat[tracker] // 2,
-                    self.num_slots, self.tracker_group_magnetic_field,
-                ))
+                geometry.append(
+                    tracker_group_geometry(
+                        input_features[event_idx, selected[tracker]],
+                        flat[tracker] // 2,
+                        self.num_slots,
+                        self.tracker_group_magnetic_field,
+                    )
+                )
             summaries, log_pt, fit_valid = (torch.stack(values) for values in zip(*geometry))
             slots = slots + self.tracker_group_projection(summaries.to(slots.dtype))
             tracker_geometry = (log_pt, fit_valid)
@@ -717,8 +716,14 @@ class ParticleSetDecoder(nn.Module):
         for layer_index, layer in enumerate(self.layers):
             if self.attention_mode == "sectorized":
                 slots = layer(
-                    slots, memory, memory_mask, references, reference_mask, memory_positions,
-                    num_sectors=self.num_sectors, sector_neighbors=self.sector_neighbors,
+                    slots,
+                    memory,
+                    memory_mask,
+                    references,
+                    reference_mask,
+                    memory_positions,
+                    num_sectors=self.num_sectors,
+                    sector_neighbors=self.sector_neighbors,
                 )
             else:
                 slots = layer(slots, memory, memory_mask)

@@ -7,7 +7,9 @@ against drift. Only association selection is replaced with fixed memberships.
 import torch
 
 from mlpf.model.tracker_momentum_readout import (
-    RADIAL_BINS, GEOMETRY_DIM, pool_hit_associations as model_pool_hit_associations,
+    RADIAL_BINS,
+    GEOMETRY_DIM,
+    pool_hit_associations as model_pool_hit_associations,
 )
 
 
@@ -18,7 +20,9 @@ def pool_hit_associations(*args, fixed_associations=None, **kwargs):
     return pool_fixed_associations(*args, fixed_associations=fixed_associations, **kwargs)
 
 
-def pool_fixed_associations(memory, memory_mask, features, grouping, num_slots, chunk_size, topk, temperature, sparse, tracker_summary=False, *, fixed_associations):
+def pool_fixed_associations(
+    memory, memory_mask, features, grouping, num_slots, chunk_size, topk, temperature, sparse, tracker_summary=False, *, fixed_associations
+):
     """Pool diagnostic memberships with the same reductions as production pooling.
 
     The unused candidate-selection arguments retain the production call shape.

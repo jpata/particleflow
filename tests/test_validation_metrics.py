@@ -180,6 +180,8 @@ def test_matching_cost_cap_never_changes_an_acceptable_pair():
     assert uncapped.max() < MATCH_COST_CAP
     torch.testing.assert_close(_matching_cost(delta_r, log_pt_ratio), uncapped)
     assert _matching_cost(torch.tensor([3.0]), torch.tensor([0.0])).item() == MATCH_COST_CAP
+
+
 def test_set_slot_metrics_separate_slot_coverage_from_presence_and_measure_regression():
     targets = make_collection(
         cls_id=[1, 2],

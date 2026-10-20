@@ -236,7 +236,10 @@ def set_mlpf_loss(
 
     if hit_grouping is not None:
         grouping_loss = hit_grouping_loss(
-            hit_grouping, batch, matches, chunk_size=hit_grouping_chunk_size,
+            hit_grouping,
+            batch,
+            matches,
+            chunk_size=hit_grouping_chunk_size,
             background_weight=hit_grouping_background_weight,
             detector_balanced=hit_grouping_detector_balanced,
             tracker_particle_balanced=hit_grouping_tracker_particle_balanced,
@@ -260,8 +263,12 @@ def set_mlpf_loss(
         if hit_grouping is None:
             raise ValueError("Tracker fit supervision requires learned hit grouping")
         fit_losses = tracker_fit_losses(
-            hit_grouping, batch, matches, magnetic_field=tracker_group_magnetic_field,
-            max_hits=tracker_loss_max_hits, chunk_size=hit_grouping_chunk_size,
+            hit_grouping,
+            batch,
+            matches,
+            magnetic_field=tracker_group_magnetic_field,
+            max_hits=tracker_loss_max_hits,
+            chunk_size=hit_grouping_chunk_size,
         )
         for name, weight in (("TrackerGeometry", tracker_geometry_loss_weight), ("TrackerCurvature", tracker_curvature_loss_weight)):
             losses[name] = weight * fit_losses[name]
@@ -324,8 +331,7 @@ def _grouping_targets(batch, event_idx, match, num_slots):
     return labels, charged
 
 
-def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weight=0.1, detector_balanced=False,
-                      tracker_particle_balanced=False):
+def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weight=0.1, detector_balanced=False, tracker_particle_balanced=False):
     """Supervise event-local hit ownership without a dense hit-pair matrix."""
     hit_keys, slot_keys, background = grouping
     num_slots = slot_keys.shape[1]
@@ -450,8 +456,7 @@ def tracker_overlap_loss(grouping, batch, matches, chunk_size=1024):
             completeness = completeness + (tp / truth_count.clamp_min(1))[eligible].sum()
             count = count + eligible.sum()
         denominator = count.clamp_min(1)
-        return {"loss": total / denominator, "count": count,
-                "purity": purity / denominator, "completeness": completeness / denominator}
+        return {"loss": total / denominator, "count": count, "purity": purity / denominator, "completeness": completeness / denominator}
 
 
 def event_consistency_loss(targets, predictions, target_mask):

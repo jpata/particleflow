@@ -17,11 +17,13 @@ from mlpf.model.mlpf import MLPF
 MODEL_NAME = "pyg-cld-hits-heptv2-sector-set-v1"
 HIT_COUNTS = (1024, 4096, 16384, 32768, 65536, 100000)
 SLOT_COUNTS = (256, 512, 1024, 2048, 4096, 8192, 10000)
-CASES = tuple(dict.fromkeys(
-    [*((num_hits, 256) for num_hits in HIT_COUNTS)]
-    + [*((16384, num_slots) for num_slots in SLOT_COUNTS)]
-    + [(32768, 10000), (100000, 4096), (100000, 10000)]
-))
+CASES = tuple(
+    dict.fromkeys(
+        [*((num_hits, 256) for num_hits in HIT_COUNTS)]
+        + [*((16384, num_slots) for num_slots in SLOT_COUNTS)]
+        + [(32768, 10000), (100000, 4096), (100000, 10000)]
+    )
+)
 
 
 def synthetic_hits(num_hits, input_dim, block_size, device):
@@ -134,7 +136,13 @@ def main():
         command = [
             sys.executable,
             str(Path(__file__).resolve()),
-            "--worker", "--hits", str(num_hits), "--slots", str(num_slots), "--repeats", str(args.repeats),
+            "--worker",
+            "--hits",
+            str(num_hits),
+            "--slots",
+            str(num_slots),
+            "--repeats",
+            str(args.repeats),
         ]
         try:
             process = subprocess.run(command, capture_output=True, text=True, timeout=args.timeout, check=False)

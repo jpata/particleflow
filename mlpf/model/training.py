@@ -916,7 +916,9 @@ def evaluate(
                 model_module = model.module if hasattr(model, "module") else model
                 ypred_particles = model_module.predict_particles(batch.X, batch.mask)
                 metric_collections = validation_particle_collections(
-                    batch, ypred_particles, model_module.output_mode,
+                    batch,
+                    ypred_particles,
+                    model_module.output_mode,
                 )
                 if config.validation_particle_metrics:
                     particle_metrics = compute_validation_particle_metrics(
@@ -939,17 +941,23 @@ def evaluate(
                         _add_accumulator(diagnostic_accum, "metrics/set_slot/tracker_fits_per_event", fits.sum(), count=fits.shape[0])
                     if ypred_raw.hit_grouping is not None and ival < config.validation_diagnostics_batches:
                         matches = hungarian_match(
-                            ytarget, ypred, batch.target_mask,
+                            ytarget,
+                            ypred,
+                            batch.target_mask,
                             SetMatcherWeights(**model_module.config.set_decoder.matcher.model_dump()),
                         )
                         grouping_metrics = compute_hit_grouping_metrics(
-                            ypred_raw.hit_grouping, batch, matches,
+                            ypred_raw.hit_grouping,
+                            batch,
+                            matches,
                             chunk_size=model_module.config.set_decoder.hit_grouping_chunk_size,
                         )
                         for metric_name, (metric_total, metric_count) in grouping_metrics.items():
                             _add_accumulator(
-                                diagnostic_accum, f"metrics/hit_grouping/{metric_name}",
-                                torch.as_tensor(metric_total, device=batch.X.device), count=metric_count,
+                                diagnostic_accum,
+                                f"metrics/hit_grouping/{metric_name}",
+                                torch.as_tensor(metric_total, device=batch.X.device),
+                                count=metric_count,
                             )
                     slot_fields = ("cls_binary", "cls_id_onehot", "pt", "eta", "sin_phi", "cos_phi", "energy")
                     raw_slots = {name: ypred[name].detach().to(torch.float32) for name in slot_fields}
