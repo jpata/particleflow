@@ -940,6 +940,12 @@ def evaluate(
     return eval_loss
 
 
+def get_train_epoch(train_loader):
+    """Fractional epoch of the training data seen so far: completed epochs plus the fraction of batches consumed in the current one."""
+    interleaved = train_loader.data_loader
+    return train_loader.epoch + interleaved.cur_index / len(interleaved.loader_ds_indices)
+
+
 def _log_and_checkpoint_step(
     rank,
     world_size,
@@ -963,10 +969,12 @@ def _log_and_checkpoint_step(
     """Helper function to log training information and save periodic checkpoints."""
 
     log_this_step = step % tensorboard_step_freq == 0
+    epoch = get_train_epoch(train_loader)
 
     # Log training losses to TensorBoard and CometML on the main process
     if log_this_step and ((rank == 0) or (rank == "cpu")):
         log_start = time.perf_counter()
+        tensorboard_writer_train.add_scalar("step/epoch", epoch, step)
         # Log training losses
         for loss, value in losses_train.items():
             tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
@@ -980,6 +988,8 @@ def _log_and_checkpoint_step(
     if comet_experiment:
         comet_start = time.perf_counter()
         comet_experiment.log_metrics(losses_train, prefix="step_train_loss", step=step)
+        # a float metric, so that comet panels can use it as a custom x-axis (the epoch= argument of log_metrics only takes ints)
+        comet_experiment.log_metric("epoch", epoch, step=step)
         if log_this_step and ((rank == 0) or (rank == "cpu")):
             tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_comet_logging", time.perf_counter() - comet_start, step)
 
@@ -1093,6 +1103,7 @@ def _run_validation_cycle(
         history_path = Path(outdir) / "history"
         history_path.mkdir(parents=True, exist_ok=True)
         stats = {
+            "epoch": get_train_epoch(train_loader),
             "train": losses_train,
             "valid": losses_valid,
             "step_train_time": train_time,
