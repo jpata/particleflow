@@ -1686,6 +1686,11 @@ def run(  # noqa: C901
         for split in loaders.keys():
             _logger.info("loader split={} rank={} len={}".format(split, rank, len(loaders[split])))
 
+    if config.train and config.lr_find:
+        from mlpf.model.lr_finder import lr_range_test  # local import: lr_finder imports this module
+
+        lr_range_test(rank, world_size, model, optimizer, loaders["train"], config, outdir, dtype=dtype, comet_experiment=comet_experiment)
+    elif config.train:
         train_all_steps(
             rank,
             world_size,
@@ -1728,7 +1733,9 @@ def run(  # noqa: C901
 
 # Run either single GPU or single-node multi-GPU using pytorch DDP
 def device_agnostic_run(config: MLPFConfig, world_size, outdir, loglevel: int = logging.INFO):
-    if config.train:
+    if config.lr_find:
+        logfile = f"{outdir}/lr_find.log"
+    elif config.train:
         logfile = f"{outdir}/train.log"
     else:
         logfile = f"{outdir}/test.log"

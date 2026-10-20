@@ -21,7 +21,7 @@ Complex data production and training pipelines are managed using Snakemake or si
   - **`produce_snakemake.py`**: Generates workflows for generation, postprocessing, TFDS creation, and training.
   - **`produce_cms_validation_snakemake.py`**: Orchestrates validation workflows specifically for CMS.
   - **`produce_validation_snakemake.py`**: Orchestrates validation workflows for Key4Hep detectors (CLD, CLIC).
-- **`mlpf/pipeline.py`**: The main CLI for training, testing, and hyperparameter optimization. Supports standard and Ray-based execution.
+- **`mlpf/pipeline.py`**: The main CLI for training, testing, LR range tests (`lr-find`), and hyperparameter optimization. Supports standard and Ray-based execution.
 - **`scripts/training/run_scenario.py`**: Resolves a generic scientific training scenario against a hardware profile, validates comparison invariants and global batch size, and launches reproducible seeded jobs.
 
 ## 3. Data Production & Preprocessing
@@ -40,6 +40,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`PFDataset.py`**: Advanced data loading logic, including dataset interleaving and multi-file handling.
 - **`training.py`**: Core training loop implementation, supporting DDP and Ray-based distributed training, TensorBoard loss logging, and per-step data-load/model-forward timing.
 - **`losses.py`**: Specialized loss functions for particle classification and energy regression.
+- **`lr_finder.py`**: LR range test behind `pipeline.py lr-find`: exponential lr ramp after the task-weight calibration steps, smoothed loss, divergence stop, lr suggestions, `lr_find/lr_find.{json,png}` in the experiment dir.
 - **`inference.py`**: Utilities for running model inference and generating predictions.
 - **`plots.py`**: Confusion matrix logging and model performance plotting during training.
 - **`utils.py`**: Model-level utility functions including target unpacking, object-condensation clustering helpers, learning rate schedules, and metric computation.
