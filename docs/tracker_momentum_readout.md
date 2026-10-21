@@ -99,8 +99,10 @@ scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_readout_50k mi250x
 Tests check dense-reference weights and pooling gradients, background rejection,
 chunk/order/padding invariance, empty events, neutral/no-tracker fallback,
 zero-initialization compatibility, BF16 forward/backward and scenario invariants.
-Target-device full-occupancy throughput/memory and physics performance still need
-measurement. Compare at common checkpoints, including charged-hadron width,
+Completed 50k physics results are summarized in [the evidence summary](cld_hit_results.md):
+the hard-pooled head improves momentum widths/tails modestly, while sparse
+variants regress. Isolated target-device throughput and inference memory still
+need measurement. Compare at common checkpoints, including charged-hadron width,
 efficiency and tails together; the earlier fit study showed that width alone can
 improve while reconstruction quality deteriorates.
 

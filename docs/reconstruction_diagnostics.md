@@ -5,7 +5,9 @@ parameters to enable these checks on the first N validation batches **per rank**
 Zero disables them. The 50k grouping and momentum scenarios already set 4.
 These diagnostics are observational: they do not change predictions, losses,
 matching, or gradients. They use the validation population, not the test dumps.
-Ordinary particle metrics continue to cover the complete validation pass.
+When `validation_particle_metrics` is true, ordinary particle metrics cover
+the complete validation pass. Setting it false also disables the detailed
+particle-momentum metrics, but not the set-slot or hit-grouping diagnostics.
 
 Metrics are stored in each `history/step_*.json` under `valid` and sent through
 the existing TensorBoard/Comet logging. TensorBoard strips the `metrics/` prefix
@@ -23,7 +25,10 @@ Slices are `all`, `class_1` through the last physical class, and disjoint absolu
 eta bins `abs_eta_lt1`, `abs_eta_1to2`, `abs_eta_ge2`. CLD classes 1–5 are charged
 hadrons, neutral hadrons, photons, electrons, and muons. Boundaries belong to the
 upper bin. No extra matching is done: the diagnostic reuses the standard
-Hungarian geometry/log-pT assignment.
+Hungarian geometry/log-pT assignment. The current validation implementation
+caps each assignment cost at 2.0; historical October study results use the
+archived uncapped estimator. Do not mix their absolute values without rescoring
+all models with the same definition.
 
 Each slice reports:
 
@@ -66,6 +71,9 @@ refinement**. Scores are reconstructed in chunks using `hit_grouping_chunk_size`
 no full hit-by-slot matrix is retained or exported. The training Hungarian
 assignment maps slot IDs to target particle numbers from the same forward pass.
 This additional assignment calculation is restricted to diagnostic batches.
+
+For sparse pooling, these remain hard-argmax ownership diagnostics; they do not
+measure the fractional memberships used by the readout.
 
 Tracker (element type 1) and calorimeter (type 2) are evaluated separately:
 

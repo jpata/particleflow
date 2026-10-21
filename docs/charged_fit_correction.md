@@ -1,6 +1,7 @@
 # Charged pT from a tracker fit with a learned correction
 
-Enable these set-decoder settings on a CLD/CLIC hit model:
+Enable these set-decoder settings on a hit model. The example uses the CLD
+2 T field; for CLIC set `tracker_group_magnetic_field: 4.0` explicitly:
 
 ```yaml
 query_init: input-conditioned
@@ -52,8 +53,8 @@ fit and hard membership remain detached; the correction and ordinary heads
 train jointly with the existing losses, and hit ownership learns through its
 supervised grouping objective. This is not a differentiable track fitter.
 `tracker_fit_fraction` and `tracker_fits_per_event` count eligible geometrical
-fits before the charged-PID gate, not the number of final charged predictions
-that use them.
+fits after excluding slots with calorimeter anchors and before the charged-PID
+gate, not the number of final charged predictions that use them.
 
 ## Comparison
 
@@ -66,3 +67,7 @@ Evaluate fit coverage, charged-particle efficiency, uncensored momentum tails,
 and central residual widths versus truth pT and eta. Compare with truth-owned
 hit fits before interpreting limitations as detector resolution. No training
 result is implied by the synthetic fit and forward/backward tests.
+
+The completed 50k comparison found small width gains accompanied by lower charged
+efficiency and higher tails. This branch remains experimental; see
+[the evidence summary](cld_hit_results.md) for matched results.

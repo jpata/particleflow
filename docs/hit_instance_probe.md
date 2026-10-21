@@ -4,8 +4,9 @@ Run four independent probes: tracker/raw, tracker/embedding,
 calorimeter/raw, and calorimeter/embedding. The default frozen checkpoint is
 `cld_pf_heptv2_hit_grouping_50k/hit_heptv2_grouped_seed12345_20261009_164038_591219/checkpoints/checkpoint-50000.pth`.
 This is the completed grouped model with three-process test particle F1 0.7262
-and mean jet-response IQR 0.1181 in the October comparison. The newer tracking
-ablation campaign only has 5k intermediate validation results at implementation time.
+and mean jet-response IQR 0.1181 in the October comparison. This probe deliberately retains that historical checkpoint; it is not a probe
+of the later tracker-neighborhood or tracker-head models. See
+[the current evidence summary](cld_hit_results.md) for subsequent campaigns.
 
 ## What is being tested
 

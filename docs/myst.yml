@@ -46,6 +46,7 @@ project:
         - file: reference/artifacts-and-directories.md
     - title: Science and project status
       children:
+        - file: cld_hit_results.md
         - file: science/publications.md
         - file: science/capabilities.md
         - file: science/roadmap.md
