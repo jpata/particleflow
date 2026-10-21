@@ -36,7 +36,8 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`gnnlsh.py`**: GNN layers with Locality-Sensitive Hashing (LSH) for scalable graph processing, including multi-hash binning, attention kernels, RMSNorm/SwiGLU blocks, and inter-bin attention.
 - **`hept.py`**: Implementation of the Hashing-based Efficient Particle Transformer (HEPT).
 - **`heptv2.py`**: HEPTv2 point encoder layer with hash-bucketed attention, learned positional encoding over eta/phi coordinates, Qwen-style RMSNorm/MLP blocks, and environment switches for attention/hash implementation variants.
-- **HEPTv2 activation checkpointing**: Optional per-layer training recomputation in `MLPF._run_backbone` and a batch-512 comparison recipe. See [`heptv2_checkpointing.md`](heptv2_checkpointing.md) for local memory measurements and target-platform validation.
+- **HEPTv2 activation checkpointing**: Optional per-layer training recomputation in `MLPF._run_backbone` and a batch-384 comparison recipe (historical filename `batch512`). See [`heptv2_checkpointing.md`](heptv2_checkpointing.md) for local memory measurements and target-platform validation.
+- **CLD hit-model evidence**: Current recommendation, completed and partial ablations, and historical metric/dataset caveats: [`cld_hit_results.md`](cld_hit_results.md).
 - **Tracker momentum features**: Optional conformal curvature/quality, longitudinal moments and bounded cross-surface doublets for hit inputs. See [`tracker_momentum_features.md`](tracker_momentum_features.md) for definitions, ablations and measured cost.
 - **`litept.py`**: Integration for the LitePT (Lightweight Point Transformer) architecture.
 - **`PFDataset.py`**: Advanced data loading logic, including dataset interleaving and multi-file handling.
@@ -48,6 +49,8 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`utils.py`**: Model-level utility functions including target unpacking, object-condensation clustering helpers, learning rate schedules, and metric computation.
 - **`tracker_momentum_readout.py`**: Optional tracker-only momentum residual and sparse differentiable hit-to-slot pooling; see [the small-model ablation](tracker_momentum_readout.md).
 - **Tracker grouping losses**: Particle-balanced tracker CE and soft tracker overlap supervision; see [the from-scratch small-model factorial](tracker_grouping_loss_experiments.md).
+- **Tracker width scaling**: Four fixed-depth widths and three seeds with tracker momentum readout and balanced CE; see [the scaling recipe](tracker_width_scaling.md).
+- **`scripts/studies/train_frozen_tracker_readout.py`**: Local head-only hard/soft/oracle momentum comparison with cached frozen-backbone summaries; see [the experiment and resume instructions](frozen_tracker_readout.md).
 - **`distributed_ray.py`**: Integration with Ray for distributed training and HPO.
 
 ## 5. Validation, Plotting & Monitoring

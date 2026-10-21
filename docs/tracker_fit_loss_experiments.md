@@ -1,6 +1,6 @@
 # Tracker-fit supervision experiments
 
-The next controlled experiment is `cld_pf_heptv2_fit_loss_50k`. It builds on
+The controlled experiment is `cld_pf_heptv2_fit_loss_50k`. It builds on
 `pyg-cld-hits-heptv2-set-v1`, the current grouped HEPTv2 model with tracker
 neighborhood features. It adds training-only supervision of learned ownership;
 all four variants keep the existing learned momentum, energy and direction
@@ -108,7 +108,8 @@ NUM_STEPS=2000 VAL_FREQ=500 CHECKPOINT_FREQ=500 \
 Repeat for the other three variant names. Local batch defaults to one; this is a
 pilot with its own paired baseline, not a batch-64 comparison. Resolve the same
 scenario against the intended cluster platform for the full batch-64 suite.
-No full training runs were launched when creating this suite.
+The launch examples describe the configured recipe. The archived campaign has
+partial results; see [the dated evidence summary](cld_hit_results.md).
 
 At common steps compare charged-hadron and muon pT central 68% half-width, bias,
 MAE and >50% tails by truth pT and eta, plus charged efficiency, neutral metrics,
@@ -124,8 +125,8 @@ event bootstrap uncertainty. Do not promote a model based only on a narrower
 core when jet/event metrics or fit coverage deteriorate. Confirm a winner with
 additional seeds before making it the default.
 
-If auxiliary supervision succeeds, the next separate experiment should introduce
-confidence-gated fitted momentum with a bounded learned correction. Longitudinal
+The separate [bounded fit-correction experiment](charged_fit_correction.md) has
+also been evaluated and did not establish an overall reconstruction improvement. Longitudinal
 helix consistency and a broader candidate pool are separate follow-ups so that
 this first suite isolates the effect of fitting supervision.
 

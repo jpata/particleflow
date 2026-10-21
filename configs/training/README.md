@@ -16,9 +16,15 @@ The recipe uses learning rate 0.001, global batch 64 and seed 12345; the local
 launcher applies its usual short-run overrides and global batch 1.
 
 On the study's 1,536 test events, charged pT residual half-width improved from
-16.53% to 14.89% and charged matching efficiency from 77.16% to 78.40% versus
+16.53% to 14.89% and charged matching efficiency from 77.34% to 78.40% versus
 the previous grouped reference. This is the single-seed result evaluated on
 2026-10-13. Historical sector and comparison presets remain unchanged.
+
+For the latest archived outcomes, incomplete-run limits and historical dataset/metric
+differences, see [the evidence summary](../../docs/cld_hit_results.md). The
+[three-seed width-only study](../../docs/tracker_width_scaling.md) and
+[grouping-loss factorial](../../docs/tracker_grouping_loss_experiments.md) are
+separate from the older joint width/depth campaign below.
 
 Scientific comparisons live under `scenarios/`; machine-dependent paths and runtime
 tuning live under `platforms/`. Run a scenario locally with:
@@ -38,14 +44,15 @@ while retaining the previous baseline's 154 input channels: geometry, tracker
 neighborhoods and calorimeter neighborhoods. The new tracker momentum and doublet
 features are explicitly disabled.
 
-| Variant | Embedding / encoder width | Backbone layers | Decoder layers | Parameters |
-|---|---:|---:|---:|---:|
-| `hit_heptv2_small` | 256 | 6 | 4 | 12,732,407 |
-| `hit_heptv2_medium` | 384 | 9 | 6 | 42,114,141 |
-| `hit_heptv2_large` | 512 | 12 | 8 | 98,898,211 |
+| Variant | Embedding / encoder width | Backbone layers | Decoder layers | Total parameters | Trainable parameters |
+|---|---:|---:|---:|---:|---:|
+| `hit_heptv2_small` | 256 | 6 | 4 | 12,732,407 | 12,709,139 |
+| `hit_heptv2_medium` | 384 | 9 | 6 | 42,114,141 | 42,063,111 |
+| `hit_heptv2_large` | 512 | 12 | 8 | 98,898,211 | 98,808,667 |
 
 Parameter counts are from instantiated MLPF models, excluding any training-time
-loss weighter. Decoder embedding width follows the backbone embedding width;
+loss weighter. Total counts include frozen HEPTv2 parameters; study scaling plots
+use trainable counts. Decoder embedding width follows the backbone embedding width;
 HEPTv2's internal MLP width follows its unchanged `mlp_ratio=4`. Head counts stay
 at 16 for the backbone and 8 for the decoder, and all variants retain 256 slots,
 the same proposal scheme, supervised hit grouping and objective. The small model
@@ -71,8 +78,10 @@ Submit with `scripts/lumi/train_scenario.sh cld_pf_heptv2_model_scaling_50k mi25
 The local launcher uses global batch 1 and its usual short-run overrides,
 including validation/checkpoint intervals of 200 unless overridden. To retain
 the scenario's requested intervals locally, set `VAL_FREQ=1000 CHECKPOINT_FREQ=1000`.
-All three models passed a finite CPU forward check on 128 synthetic hits; full
-occupancy memory and throughput on the target accelerator have not been measured.
+All three models passed a finite CPU forward check on 128 synthetic hits. The
+21 October archive includes matched 42k particle and resource measurements;
+small remains the practical reference, while large improves jets but worsens
+inclusive charged momentum. See [the evidence summary](../../docs/cld_hit_results.md).
 
 The scenario declares a global batch size. The runner derives
 `gpu_batch_multiplier` from the number of GPUs and the dataset batch size, and rejects
@@ -133,10 +142,14 @@ scripts/lumi/train_scenario.sh cld_set_hits_heptv2_sector_comparison mi250x --dr
 scripts/lumi/train_scenario.sh cld_set_hits_heptv2_sector_comparison mi250x
 ```
 
-The Tallinn worker runs the repository's `uv` environment directly. The LUMI
-submitter uses `particleflow-env` (override its interpreter with
-`PYTHON_EXECUTABLE`) and the worker executes that environment in the standard
-PyTorch ROCm container (override the image with `IMG`).
+The Tallinn worker runs the repository's `uv` environment directly. LUMI uses
+Local-LAIF and an overlay created with `bash scripts/lumi/setup_env.sh`. Both
+submitter and worker activate `LUMI_VENV` (default `particleflow-laif-env` in the
+repository) inside the LAIF container (`IMG` overrides its path). The submitter
+resolves configurations in the container, then invokes host `sbatch`;
+`PYTHON_EXECUTABLE` overrides its container-side interpreter. Even LUMI
+`--list`/`--dry-run` requires that environment. For a portable configuration-only
+preview, use `scripts/training/run_scenario.py --dry-run` with a platform file.
 
 Use repeated `--set KEY=VALUE` options only for explicit one-off overrides. Every
 resolved run writes `scenario-manifest.json` containing the scenario, platform,
@@ -178,7 +191,9 @@ slot eta to the decoder's learned residual scale head. Existing calorimeter
 seed anchors are retained. Unreliable groups keep their learned scales; their
 geometric summaries can still inform the decoder. Validation reports
 `metrics/set_slot/tracker_fit_fraction` (over all slots) and
-`tracker_fits_per_event` on diagnostic batches to show how often anchors apply.
+`tracker_fits_per_event` on diagnostic batches. These count valid fits after
+excluding slots with calorimeter anchors, but before the charged-PID gate; they
+are not counts of final predictions using fitted momentum.
 
 Event consistency uses the final slots' soft presence probabilities to sum
 visible px, py, pz and energy. Momentum residuals are normalized by the target
@@ -219,7 +234,7 @@ features and embeddings. Their default per-rank split is 8 fitting, 4 threshold
 calibration and 4 evaluation events; TensorBoard tags end in `/raw/ari` and
 `/embedding/ari`. Calibration and final evaluation are disjoint.
 
-The next tracker-feature ablation is `cld_pf_heptv2_fit_loss_50k`: baseline,
+The tracker-fit loss ablation is `cld_pf_heptv2_fit_loss_50k`: baseline,
 truth-circle compatibility loss, differentiable curvature loss, and both losses.
 All retain the learned inference readout. See
 [the experiment design](../../docs/tracker_fit_loss_experiments.md) for objectives,

@@ -116,6 +116,24 @@ uv run python3 mlpf/pipeline.py \
 
 Memory use depends on event size, attention implementation, precision, and batch accumulation. Lower `--gpu_batch_multiplier` first if the process runs out of GPU memory. Assess physics quality with the held-out checks in the [validation overview](../validation/overview.md).
 
+## Experimental CLD hit-set model
+
+The recommended global-attention preset is `pyg-cld-hits-heptv2-set-v1`, with supervised hard hit grouping and tracker-neighborhood features. Use the `cld_pf_heptv2_default_50k` scenario described in the [scenario guide](../../configs/training/README.md). The sectorized variant below is experimental and is not the recommended default.
+
+The `pyg-cld-hits-heptv2-sector-set-v1` recipe uses a HEPTv2 hit backbone and an input-conditioned particle-set decoder. Decoder slots are assigned to periodic azimuthal sectors from their current reference direction. Each slot cross-attends only to hits in its sector and `sector_neighbors` sectors on either side; slot self-attention is also sector-local. This avoids dense slot-by-hit masks and global slot self-attention. A sector with no nearby hits uses its nearest hit so attention is always defined.
+
+The recipe starts with 32 sectors, one neighboring sector on each side, and 256 slots. These settings can be overridden with `model.set_decoder.num_sectors`, `model.set_decoder.sector_neighbors`, and `model.set_decoder.num_slots`. In this mode, `local_attention_radius` limits the reference update per decoder layer; it is not an exact geometric cross-attention cutoff. The model requires hit counts padded to a multiple of the HEPTv2 block size (128 in this recipe).
+
+HEPTv2 GPU bucket attention requires compiled `torch.nn.attention.flex_attention` and never falls back to materializing attention scores. Bucket counts use a dynamic batch dimension so varying padded event lengths do not create a separate compiled kernel for every number of buckets. Failures retain the original exception and report the input shape, dtype, and PyTorch/ROCm versions; the explicit score calculation is used only on CPU.
+
+On an allocated GPU with the training environment activated, check fused attention and checkpoint replay before a campaign:
+
+```bash
+python -m pytest -q tests/test_heptv2.py tests/test_heptv2_checkpointing.py
+```
+
+These tests check fused outputs and gradients, including log-normalizers used to weight hashes, and checkpoint replay. GPU cases skip when no GPU is visible. They do not measure full training memory or distributed throughput. For a LUMI environment and RCCL check, submit `scripts/lumi/smoke_test.sh`; for training memory measurements, see [HEPTv2 checkpointing](../heptv2_checkpointing.md).
+
 ## Train CMS or CLIC
 
 The command shape is the same, but the production, model recipe, data root, dataset version, and locally available samples must agree:
