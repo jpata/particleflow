@@ -25,12 +25,13 @@ FIXME
 
 
 class CldEdmQqHits(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.1"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.2"))
     RELEASE_NOTES = {
         "3.1.0": "Hit-level version with separated tracker and calorimeter hits",
         "3.1.1": "New generation with v1.2.5_key4hep_2025-05-29, 1M events",
         "3.2.0": "Added particle_number target for Object Condensation",
         "3.2.1": "Corrected tracker hit elemtype, updated target and truth definitions, and fixed energy accounting",
+        "3.2.2": "Reassign hit representatives so retained particles can keep unique hit targets",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     For the raw input files in ROOT EDM4HEP format, please see the citation above.

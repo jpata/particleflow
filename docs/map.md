@@ -21,11 +21,11 @@ Complex data production and training pipelines are managed using Snakemake or si
   - **`produce_snakemake.py`**: Generates workflows for generation, postprocessing, TFDS creation, and training.
   - **`produce_cms_validation_snakemake.py`**: Orchestrates validation workflows specifically for CMS.
   - **`produce_validation_snakemake.py`**: Orchestrates validation workflows for Key4Hep detectors (CLD, CLIC).
-- **`mlpf/pipeline.py`**: The main CLI for training, testing, and hyperparameter optimization. Supports standard and Ray-based execution.
+- **`mlpf/pipeline.py`**: The main CLI for training, testing, LR range tests (`lr-find`), and hyperparameter optimization. Supports standard and Ray-based execution.
 - **`scripts/training/run_scenario.py`**: Resolves a generic scientific training scenario against a hardware profile, validates comparison invariants and global batch size, and launches reproducible seeded jobs.
 
 ## 3. Data Production & Preprocessing
-- **`mlpf/data/`**: Simulator-specific code for generating and preprocessing data.
+- **`mlpf/data/`**: Simulator-specific code for generating and preprocessing data. ColliderML: `colliderml/clustering.py` (`cluster_event` dispatcher + the properties every clusterer enforces; algorithms in `colliderml/radius_graph.py` (radius-graph bfs/union_find) and `colliderml/clue.py` (CLUE), shared helpers in `colliderml/cluster_common.py`), `colliderml/cluster_eval.py` (decodes/caches ColliderML events and their per-hit truth, scores clustering settings and the v20 Pandora clusters with `cluster_metrics.py`). Shared across detectors: `cluster_metrics.py` (truth-based clustering metrics, detector- and clusterer-agnostic).
   - **`cms/`**: Scripts for CMSSW-based generation (`genjob_pu.sh`), postprocessing (`postprocessing2.py`), validation (`valjob.sh`, `valjob_data.sh`), and plotting (`plot_cms.py`).
   - **`key4hep/`**: Scripts for Key4Hep-based generation (`gen/`) and postprocessing (`postprocessing.py`).
 - **`mlpf/heptfds/`**: TFDS (TensorFlow Datasets) builders for various datasets (CMS, CLD, CLIC), including support for both cluster-based and raw hits-based data (`cld_pf_edm4hep_hits`, `clic_pf_edm4hep_hits`). Shared EDM4Hep utilities in `edm4hep_utils/`. ColliderML support: `colliderml_pf/ttbar.py` (clustered view), `colliderml_hits/{ttbar,ttbar_pu200}.py` (hits view)
@@ -40,6 +40,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`PFDataset.py`**: Advanced data loading logic, including dataset interleaving and multi-file handling.
 - **`training.py`**: Core training loop implementation, supporting DDP and Ray-based distributed training, TensorBoard loss logging, and per-step data-load/model-forward timing.
 - **`losses.py`**: Specialized loss functions for particle classification and energy regression.
+- **`lr_finder.py`**: LR range test behind `pipeline.py lr-find`: exponential lr ramp after the task-weight calibration steps, smoothed loss, divergence stop, lr suggestions, `lr_find/lr_find.{json,png}` in the experiment dir.
 - **`inference.py`**: Utilities for running model inference and generating predictions.
 - **`plots.py`**: Confusion matrix logging and model performance plotting during training.
 - **`utils.py`**: Model-level utility functions including target unpacking, object-condensation clustering helpers, learning rate schedules, and metric computation.

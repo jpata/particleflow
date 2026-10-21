@@ -79,6 +79,11 @@ def test_leaf_primary_selection_excludes_neutrinos_and_invisible():
     # invisible e+ are excluded
     assert len(gen["PDG"]) == 3
     assert sorted(gen["PDG"].tolist()) == [22, 22, 211]
+    # return_rows: the same tables plus each target's particle-table row (pi+, the two photons)
+    *same, rows = compute_gen_tables(particles, calo, tracks, DEFAULT_CALIBRATION, tracker_ev=tracker, return_rows=True)
+    assert rows.tolist() == [0, 3, 4]
+    np.testing.assert_array_equal(same[0]["energy"], gen["energy"])
+    np.testing.assert_allclose(gen["energy"], np.asarray(particles["energy"])[rows])
     assert not any(abs(int(p)) in NEUTRINO_PDGS for p in gen["PDG"])
     # each photon is a target with its own kinematics and its own deposit
     photons = gen["PDG"] == 22

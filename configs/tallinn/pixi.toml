@@ -7,14 +7,15 @@ platforms = ["linux-64"]
 
 [dependencies]
 python = ">=3.10"
+numpy = ">=2.4.5,<3"
 snakemake = ">=8.0"
 snakemake-executor-plugin-cluster-generic = "*"
-snakemake-executor-plugin-slurm = "*"
 pyyaml = "*"
 huggingface_hub = "*"
 
 [pypi-dependencies]
 comet-ml = "*"
+snakemake-executor-plugin-slurm = { git = "https://github.com/snakemake/snakemake-executor-plugin-slurm.git", rev = "8c2af56eb7dd1e0b78866691d6981f1d8327e0db" }
 
 [activation]
 env = { SITE = "tallinn", PROFILE = ".profiles/tallinn", APPTAINER_ARGS = "-B /local -B /cvmfs -B /scratch/local -B /scratch/local/joosep/tmp:/tmp -B /scratch/persistent --nv --writable-tmpfs" }

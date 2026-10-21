@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=64
 #SBATCH --cpus-per-task=1
-#SBATCH --time=12:00:00
+#SBATCH --time=16:00:00
 #SBATCH --output=logs_slurm/colliderml_convert_%j.out
 #SBATCH --error=logs_slurm/colliderml_convert_%j.err
 #SBATCH --export=NONE
@@ -21,10 +21,13 @@
 #   sbatch scripts/flatiron/colliderml_convert.sh 0 64 pu0 /path/outdir  # custom output dir
 #
 # Third arg is the pileup label (default pu0); the sample is ttbar_${PU} and output goes to
-# mlpf_parquet/clustered/ttbar_${PU}/ unless a 4th arg overrides it.
+# mlpf_parquet/clue/ttbar_${PU}/ unless a 4th arg overrides it (the pre-CLUE bfs parquet stays
+# in mlpf_parquet/clustered/).
 # The per-rank shard arithmetic uses SLURM_NTASKS, so override --ntasks to taste.
 # pu200 events are memory-heavy (~10-20 GB/rank); if the node OOMs, give ranks a larger
 # memory slice, e.g. --ntasks=32 --cpus-per-task=2.
+# Walltime: the full 1000-shard ttbar_pu200 CLUE run takes ~10 h on 64 ranks (job 7210413;
+# pu0 ~1.5 h), hence 16 h.
 #
 
 set -euo pipefail
@@ -63,27 +66,19 @@ export KERAS_BACKEND=torch
 
 SAMPLE="ttbar_${PU}"
 SOURCE_DIR="/mnt/ceph/users/ewulff/data/colliderml/CERN__ColliderML-Release-1"
-# COLLIDERML_OUT_DIR overrides the output root (default: the production clustered dir);
+# COLLIDERML_OUT_DIR overrides the output root (default: the production CLUE dir);
 # the optional 4th positional arg wins over it.
-OUT_DIR="${OUTDIR_ARG:-${COLLIDERML_OUT_DIR:-/mnt/ceph/users/ewulff/data/colliderml/mlpf_parquet/clustered/${SAMPLE}}}"
+OUT_DIR="${OUTDIR_ARG:-${COLLIDERML_OUT_DIR:-/mnt/ceph/users/ewulff/data/colliderml/mlpf_parquet/clue/${SAMPLE}}}"
 mkdir -p "${OUT_DIR}"
 LOGDIR="/mnt/home/ewulff/repositories/particleflow/logs_slurm"
 mkdir -p "$LOGDIR"
 
-# Clustering settings per pileup (tuned 2026-10-05; see colliderml_convert_array.sh for the
-# full comment): pu200 disables the fragment merge (cascades into mega-clusters through the
-# dense pileup-linked graph) and tightens the link radii.
-if [ "${PU}" = "pu200" ]; then
-  ALGO="bfs"
-  MERGE_FRAC="0"
-  RADII_ECAL="16.25"
-  RADII_HCAL="36"
-else
-  ALGO="bfs_merge"
-  MERGE_FRAC="0.25"
-  RADII_ECAL="25"
-  RADII_HCAL="90"
-fi
+# Clustering: CLUE with the per-pileup preset of clue.CLUE_PRESETS (pu0 = the CLUE defaults,
+# pu200 = the 2026-10-08 "middle setting"); see colliderml_convert_array.sh for the full comment.
+case "${PU}" in
+  pu0|pu200) CLUE_PRESET="${PU}" ;;
+  *) echo "no CLUE preset for pileup label '${PU}' (known: pu0, pu200)" >&2; exit 2 ;;
+esac
 
 # rank r starts after r*PER_RANK shards plus the extra shards handed to ranks < r
 # --export=NONE leaves PATH unset in the job environment, so srun cannot resolve `bash`;
@@ -98,10 +93,8 @@ srun --kill-on-bad-exit=1 /bin/bash -c "
     --sample '$SAMPLE' \
     --outpath '$OUT_DIR' \
     --shards \"\$START:\$END\" \
-    --algorithm $ALGO \
-    --merge-frac $MERGE_FRAC \
-    --radii-ecal $RADII_ECAL \
-    --radii-hcal $RADII_HCAL \
+    --algorithm clue \
+    --clue-preset $CLUE_PRESET \
     > \"${LOGDIR}/colliderml_convert.${SLURM_JOB_ID}.rank\${RANK}.out\"
 "
 echo "done"

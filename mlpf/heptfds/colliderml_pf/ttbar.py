@@ -8,7 +8,7 @@ from mlpf.heptfds.colliderml_utils.utils import NUM_SPLITS, generate_examples, s
 
 _DESCRIPTION = """
 ColliderML Release 1 (ttbar, no pileup) converted for MLPF training.
-Clustered view: reconstructed ACTS tracks + spatial clusters derived from raw calo hits.
+Clustered view: reconstructed ACTS tracks + CLUE clusters derived from raw calo hits.
 """
 
 _CITATION = """
@@ -41,8 +41,13 @@ assert len(_X_FEATURES) == 17
 
 
 class CollidermlTtbarNopuPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.0.0"))
-    RELEASE_NOTES = {"1.0.0": "Initial release."}
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.2.0"))
+    RELEASE_NOTES = {
+        "1.0.0": "Initial release (bfs_merge clustering, merge-frac 0.25, radii ECAL 25 mm / HCAL 90 mm).",
+        "1.1.0": "CLUE clustering (converter --algorithm clue --clue-preset pu0, i.e. the CLUE defaults).",
+        "1.2.0": "Surrogate ancestors in the truth (key4hep parity): generator-decayed particles that "
+        "interacted before decaying become targets, recovering their deposits. Clustering as in 1.1.0.",
+    }
     DESCRIPTION = _DESCRIPTION
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     ColliderML release 1 is downloaded on Ceph under

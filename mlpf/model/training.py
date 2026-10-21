@@ -60,6 +60,7 @@ from mlpf.model.utils import (
     unpack_predictions,
     unpack_target,
     load_checkpoint,
+    load_model_weights,
     save_checkpoint,
     save_HPs,
     get_lr_schedule,
@@ -87,6 +88,7 @@ from mlpf.model.PFDataset import (
     set_worker_sharing_strategy,
 )
 from mlpf.model.losses import (
+    LOSS_TASKS,
     REGRESSION_FEATURES,
     make_task_loss_weighter,
     mlpf_loss,
@@ -99,6 +101,7 @@ from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
 
 UNIT_REGRESSION_WEIGHTS = {feature: 1.0 for feature in REGRESSION_FEATURES}
+UNWEIGHTED_TOTAL = "Total_unweighted"
 JET_VALIDATION_METRICS = (
     "med",
     "iqr",
@@ -287,6 +290,15 @@ def _finalize_diagnostics(accum, world_size):
             value = torch.sqrt(torch.clamp(value, min=0.0))
         finalized[key] = value.cpu().item()
     return finalized
+
+
+def _add_unweighted_total(losses):
+    """Log-only plain sum of the rank-averaged raw task losses.
+
+    Unlike "Total", whose task weights are calibrated per run, this is a fixed scalarization
+    comparable across runs.
+    """
+    losses[UNWEIGHTED_TOTAL] = sum(losses[task] for task in LOSS_TASKS)
 
 
 def _get_task_loss_weighter(model):
@@ -643,6 +655,7 @@ def train_step(
             if log_this_step:
                 diagnostics["time"][f"loss_{loss_name}_all_reduce"] = time.perf_counter() - phase_start
         step_loss[loss_name] = step_loss[loss_name].cpu().item() / num_steps.cpu().item()
+    _add_unweighted_total(step_loss)
 
     if log_this_step:
         _collect_step_memory(rank, "train_step_end", diagnostics)
@@ -876,22 +889,23 @@ def evaluate(
 
                 model_module = model.module if hasattr(model, "module") else model
                 ypred_particles = model_module.predict_particles(batch.X, batch.mask)
-                metric_collections = validation_particle_collections(
-                    batch,
-                    ypred_particles,
-                    model_module.output_mode,
-                )
-                particle_metrics = compute_validation_particle_metrics(
-                    *metric_collections,
-                    num_classes=config.num_classes,
-                )
-                for metric_name, (metric_total, metric_count) in particle_metrics.items():
-                    _add_accumulator(
-                        diagnostic_accum,
-                        f"metrics/particle/{metric_name}",
-                        torch.as_tensor(metric_total, device=batch.X.device),
-                        count=metric_count,
+                if config.validation_particle_metrics:
+                    metric_collections = validation_particle_collections(
+                        batch,
+                        ypred_particles,
+                        model_module.output_mode,
                     )
+                    particle_metrics = compute_validation_particle_metrics(
+                        *metric_collections,
+                        num_classes=config.num_classes,
+                    )
+                    for metric_name, (metric_total, metric_count) in particle_metrics.items():
+                        _add_accumulator(
+                            diagnostic_accum,
+                            f"metrics/particle/{metric_name}",
+                            torch.as_tensor(metric_total, device=batch.X.device),
+                            count=metric_count,
+                        )
 
                 if model_module.output_mode == OutputMode.ELEMENTWISE and ival == 0 and (rank == 0 or rank == "cpu"):
                     print_event_table(batch, ytarget, ypred_particles, config)
@@ -929,6 +943,7 @@ def evaluate(
         if world_size > 1:
             torch.distributed.all_reduce(eval_loss[loss_name])
         eval_loss[loss_name] = eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
+    _add_unweighted_total(eval_loss)
 
     eval_loss.update(_finalize_diagnostics(diagnostic_accum, world_size))
 
@@ -936,6 +951,12 @@ def evaluate(
         dist.barrier()
 
     return eval_loss
+
+
+def get_train_epoch(train_loader):
+    """Fractional epoch of the training data seen so far: completed epochs plus the fraction of batches consumed in the current one."""
+    interleaved = train_loader.data_loader
+    return train_loader.epoch + interleaved.cur_index / len(interleaved.loader_ds_indices)
 
 
 def _log_and_checkpoint_step(
@@ -961,10 +982,12 @@ def _log_and_checkpoint_step(
     """Helper function to log training information and save periodic checkpoints."""
 
     log_this_step = step % tensorboard_step_freq == 0
+    epoch = get_train_epoch(train_loader)
 
     # Log training losses to TensorBoard and CometML on the main process
     if log_this_step and ((rank == 0) or (rank == "cpu")):
         log_start = time.perf_counter()
+        tensorboard_writer_train.add_scalar("step/epoch", epoch, step)
         # Log training losses
         for loss, value in losses_train.items():
             tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
@@ -978,6 +1001,8 @@ def _log_and_checkpoint_step(
     if comet_experiment:
         comet_start = time.perf_counter()
         comet_experiment.log_metrics(losses_train, prefix="step_train_loss", step=step)
+        # a float metric, so that comet panels can use it as a custom x-axis (the epoch= argument of log_metrics only takes ints)
+        comet_experiment.log_metric("epoch", epoch, step=step)
         if log_this_step and ((rank == 0) or (rank == "cpu")):
             tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_comet_logging", time.perf_counter() - comet_start, step)
 
@@ -1091,6 +1116,7 @@ def _run_validation_cycle(
         history_path = Path(outdir) / "history"
         history_path.mkdir(parents=True, exist_ok=True)
         stats = {
+            "epoch": get_train_epoch(train_loader),
             "train": losses_train,
             "valid": losses_valid,
             "step_train_time": train_time,
@@ -1110,6 +1136,8 @@ def _run_validation_cycle(
             f"VALIDATION | Step={step}/{num_steps} | "
             f"Train Loss={losses_train['Total']:.4f} | "
             f"Valid Loss={losses_valid['Total']:.4f} | "
+            f"Train Loss Unweighted={losses_train[UNWEIGHTED_TOTAL]:.4f} | "
+            f"Valid Loss Unweighted={losses_valid[UNWEIGHTED_TOTAL]:.4f} | "
             f"Stale={stale_steps} | "
             f"ETA={eta:.1f}m"
         )
@@ -1305,7 +1333,9 @@ def train_all_steps(
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
             train_loss_components = " | ".join(
-                f"{loss_name}: {loss_value:.4f}" for loss_name, loss_value in sorted(losses_train.items()) if loss_name != "Total"
+                f"{loss_name}: {loss_value:.4f}"
+                for loss_name, loss_value in sorted(losses_train.items())
+                if loss_name not in ("Total", UNWEIGHTED_TOTAL)
             )
             diagnostics = task_loss_diagnostics or {}
             task_weight_components = _format_task_diagnostic(diagnostics.get("weight", {}))
@@ -1313,6 +1343,7 @@ def train_all_steps(
             _logger.info(
                 f"Step {step}/{num_steps} rank{rank} | "
                 f"Train Loss: {losses_train['Total']:.4f} | "
+                f"Train Loss Unweighted: {losses_train[UNWEIGHTED_TOTAL]:.4f} | "
                 f"Train Loss Components: {train_loss_components} | "
                 f"Task Weights: {task_weight_components} | "
                 f"Task Weighted Losses: {task_weighted_loss_components} | "
@@ -1492,6 +1523,69 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         dist.barrier()  # block until all workers finished executing run_predictions()
 
 
+def restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config: MLPFConfig, weights_only=False):
+    """Loads the model weights from checkpoint and, unless weights_only, the training state (optimizer, RNG, LR schedule).
+
+    Returns the step to start training from: the one after the checkpoint's, or 1 (as for a fresh run) if weights_only.
+    """
+    model_module = model.module if hasattr(model, "module") else model
+    model_state_dict = model_module.state_dict()
+    checkpoint_state_dict = checkpoint["model_state_dict"]
+    missing_keys, strict = [], True
+    for k in model_state_dict.keys():
+        shp0 = model_state_dict[k].shape
+        try:
+            shp1 = checkpoint_state_dict[k].shape
+        except KeyError:
+            missing_keys.append(k)
+            continue
+        if shp0 != shp1:
+            raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
+
+    unexpected_keys = [key for key in checkpoint_state_dict if key not in model_state_dict]
+    obsolete_task_weight_keys = [key for key in unexpected_keys if key.startswith("task_loss_weighter.")]
+    if obsolete_task_weight_keys and len(obsolete_task_weight_keys) == len(unexpected_keys):
+        _logger.warning("Checkpoint contains obsolete learned task weights; recalibrating task weights", color="bold")
+        strict = False
+
+    if len(missing_keys) > 0:
+        _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
+        missing_task_loss_weight_keys = [key for key in missing_keys if key.startswith("task_loss_weighter.")]
+        missing_non_task_loss_weight_keys = [key for key in missing_keys if not key.startswith("task_loss_weighter.")]
+        if missing_task_loss_weight_keys and not missing_non_task_loss_weight_keys:
+            _logger.warning("Task loss calibration state missing from checkpoint; starting calibration from scratch", color="bold")
+            strict = False
+        elif config.relaxed_load:
+            _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
+            strict = False
+        else:
+            _logger.warning("Use option --relaxed-load if you insist to ignore the missing parameters")
+            raise KeyError
+
+    if weights_only:
+        load_model_weights(checkpoint, model, strict)
+        _logger.info("Loaded only the model weights, starting training from step 1", color="bold")
+        return 1
+
+    start_step = checkpoint["extra_state"]["step"] + 1
+    _logger.info(f"Restoring training from step {start_step}")
+    ckpt_base_lrs = checkpoint["extra_state"].get("lr_schedule_state_dict", {}).get("base_lrs")
+    if ckpt_base_lrs is not None and list(ckpt_base_lrs) != [config.lr]:
+        _logger.warning(f"A resume continues the checkpoint's learning rate {ckpt_base_lrs[0]}, ignoring config lr {config.lr}", color="red")
+    load_lr_schedule(lr_schedule, checkpoint)
+    load_checkpoint(checkpoint, model, optimizer, strict)
+    return start_step
+
+
+def restore_loader_states(loaders, checkpoint, config: MLPFConfig):
+    """Restores the train and valid loader (sampler) states from checkpoint, unless config.sampler_from_scratch."""
+    if config.sampler_from_scratch:
+        return
+    for split in ("train", "valid"):
+        if f"{split}_loader_state_dict" in checkpoint["extra_state"]:
+            loaders[split].load_state_dict(checkpoint["extra_state"][f"{split}_loader_state_dict"])
+
+
 def run(  # noqa: C901
     rank: int | str,
     world_size: int,
@@ -1552,46 +1646,8 @@ def run(  # noqa: C901
 
     if config.load:
         checkpoint = torch.load(config.load, map_location=torch.device(rank))
-        start_step = checkpoint["extra_state"]["step"] + 1
-
-        model_state_dict = model.state_dict()
-        checkpoint_state_dict = checkpoint["model_state_dict"]
-        missing_keys, strict = [], True
-        for k in model_state_dict.keys():
-            shp0 = model_state_dict[k].shape
-            try:
-                shp1 = checkpoint_state_dict[k].shape
-            except KeyError:
-                missing_keys.append(k)
-                continue
-            if shp0 != shp1:
-                raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
-
-        unexpected_keys = [key for key in checkpoint_state_dict if key not in model_state_dict]
-        obsolete_task_weight_keys = [key for key in unexpected_keys if key.startswith("task_loss_weighter.")]
-        if obsolete_task_weight_keys and len(obsolete_task_weight_keys) == len(unexpected_keys):
-            _logger.warning("Checkpoint contains obsolete learned task weights; recalibrating task weights", color="bold")
-            strict = False
-
-        if len(missing_keys) > 0:
-            _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
-            missing_task_loss_weight_keys = [key for key in missing_keys if key.startswith("task_loss_weighter.")]
-            missing_non_task_loss_weight_keys = [key for key in missing_keys if not key.startswith("task_loss_weighter.")]
-            if missing_task_loss_weight_keys and not missing_non_task_loss_weight_keys:
-                _logger.warning("Task loss calibration state missing from checkpoint; starting calibration from scratch", color="bold")
-                strict = False
-            elif config.relaxed_load:
-                _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
-                strict = False
-            else:
-                _logger.warning("Use option --relaxed-load if you insist to ignore the missing parameters")
-                raise KeyError
-
+        start_step = restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config, weights_only=config.load_weights_only)
         _logger.info("Loaded model weights from {}".format(config.load), color="bold")
-        _logger.info(f"Restoring training from step {start_step}")
-
-        load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
-        model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
     if config.compile:
         _logger.info("Compiling model")
@@ -1653,18 +1709,17 @@ def run(  # noqa: C901
         )
         _logger.info("Got dataloaders")
 
-        if config.load and checkpoint:
-            train_loader = loaders["train"]
-            valid_loader = loaders["valid"]
-            if not config.sampler_from_scratch:
-                if "train_loader_state_dict" in checkpoint["extra_state"]:
-                    train_loader.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
-                if "valid_loader_state_dict" in checkpoint["extra_state"]:
-                    valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
+        if config.load and not config.load_weights_only:
+            restore_loader_states(loaders, checkpoint, config)
 
         for split in loaders.keys():
             _logger.info("loader split={} rank={} len={}".format(split, rank, len(loaders[split])))
 
+    if config.train and config.lr_find:
+        from mlpf.model.lr_finder import lr_range_test  # local import: lr_finder imports this module
+
+        lr_range_test(rank, world_size, model, optimizer, loaders["train"], config, outdir, dtype=dtype, comet_experiment=comet_experiment)
+    elif config.train:
         train_all_steps(
             rank,
             world_size,
@@ -1707,7 +1762,9 @@ def run(  # noqa: C901
 
 # Run either single GPU or single-node multi-GPU using pytorch DDP
 def device_agnostic_run(config: MLPFConfig, world_size, outdir, loglevel: int = logging.INFO):
-    if config.train:
+    if config.lr_find:
+        logfile = f"{outdir}/lr_find.log"
+    elif config.train:
         logfile = f"{outdir}/train.log"
     else:
         logfile = f"{outdir}/test.log"
