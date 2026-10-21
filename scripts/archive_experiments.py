@@ -70,17 +70,24 @@ def select_entries(experiment, live=False):
     """Walk without following symlinks; prune older periodic artifacts per parent."""
     entries = []
     selections = []
-    runs = [p for p in sorted(experiment.iterdir())
-            if p.is_dir() and not p.is_symlink()
-            and ((p / "checkpoints").is_dir() or (p / "train-config.yaml").is_file()
-                 or (p / "hyperparameters.json").is_file()
-                 or any(p.glob("preds_step_*")))]
+    runs = [
+        p
+        for p in sorted(experiment.iterdir())
+        if p.is_dir()
+        and not p.is_symlink()
+        and (
+            (p / "checkpoints").is_dir()
+            or (p / "train-config.yaml").is_file()
+            or (p / "hyperparameters.json").is_file()
+            or any(p.glob("preds_step_*"))
+        )
+    ]
     common_steps = None
     for run in runs:
-        checkpoints = {int(match[1]) for p in (run / "checkpoints").glob("checkpoint-*.pth")
-                       for match in [CHECKPOINT.fullmatch(p.name)] if match and p.is_file()}
-        predictions = {int(match[2]) for p in run.glob("preds_step_*")
-                       for match in [PERIODIC.fullmatch(p.name)] if match and p.is_dir()}
+        checkpoints = {
+            int(match[1]) for p in (run / "checkpoints").glob("checkpoint-*.pth") for match in [CHECKPOINT.fullmatch(p.name)] if match and p.is_file()
+        }
+        predictions = {int(match[2]) for p in run.glob("preds_step_*") for match in [PERIODIC.fullmatch(p.name)] if match and p.is_dir()}
         paired_steps = checkpoints & predictions
         common_steps = paired_steps if common_steps is None else common_steps & paired_steps
     common_step = max(common_steps) if common_steps else None
@@ -103,8 +110,7 @@ def select_entries(experiment, live=False):
         for kind, candidates in groups.items():
             ordered = sorted(candidates, key=lambda item: (item[0], item[1].name))
             kept = {}
-            if common_step is not None and ((kind == "checkpoint" and directory.parent in runs)
-                                             or (kind == "preds" and directory in runs)):
+            if common_step is not None and ((kind == "checkpoint" and directory.parent in runs) or (kind == "preds" and directory in runs)):
                 for step, path in candidates:
                     if step == common_step:
                         kept[path] = ["scenario-common"]
@@ -115,8 +121,7 @@ def select_entries(experiment, live=False):
                 kept.setdefault(latest, []).append("previous" if use_previous else "latest")
             excluded.update(path for _, path in candidates if path not in kept)
             for path, reasons in sorted(kept.items()):
-                selections.append({"kind": kind, "path": str(path.relative_to(experiment.parent.parent)),
-                                   "reasons": reasons})
+                selections.append({"kind": kind, "path": str(path.relative_to(experiment.parent.parent)), "reasons": reasons})
         entries.append(directory)
         for child in children:
             if child in excluded:
@@ -144,7 +149,9 @@ def main():
     parser.add_argument("--experiment", action="append", help="Immediate experiment folder name; repeat to select several")
     parser.add_argument("--dry-run", action="store_true", help="Print selections and sizes without writing anything")
     parser.add_argument("--overwrite", action="store_true", help="Replace existing archives after a successful tar")
-    parser.add_argument("--live", action="store_true", help="Use latest outputs for completed runs, previous outputs otherwise; accept tar file-change exit code 1")
+    parser.add_argument(
+        "--live", action="store_true", help="Use latest outputs for completed runs, previous outputs otherwise; accept tar file-change exit code 1"
+    )
     args = parser.parse_args()
     root = args.experiments_dir.resolve(strict=True)
     output = args.output_dir.resolve()
@@ -186,10 +193,21 @@ def main():
                 members.write(os.fsencode(entry.relative_to(root.parent)) + b"\0")
             members.flush()
             partial = archive.with_suffix(".tar.partial")
-            result = subprocess.run([
-                "tar", "--create", "--file", str(partial), "--directory", str(root.parent),
-                "--no-recursion", "--null", "--verbatim-files-from", "--files-from", members.name,
-            ])
+            result = subprocess.run(
+                [
+                    "tar",
+                    "--create",
+                    "--file",
+                    str(partial),
+                    "--directory",
+                    str(root.parent),
+                    "--no-recursion",
+                    "--null",
+                    "--verbatim-files-from",
+                    "--files-from",
+                    members.name,
+                ]
+            )
             check_tar_result(result, args.live)
             partial.replace(archive)
     if not args.dry_run:
