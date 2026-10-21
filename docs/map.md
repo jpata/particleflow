@@ -36,6 +36,8 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`gnnlsh.py`**: GNN layers with Locality-Sensitive Hashing (LSH) for scalable graph processing, including multi-hash binning, attention kernels, RMSNorm/SwiGLU blocks, and inter-bin attention.
 - **`hept.py`**: Implementation of the Hashing-based Efficient Particle Transformer (HEPT).
 - **`heptv2.py`**: HEPTv2 point encoder layer with hash-bucketed attention, learned positional encoding over eta/phi coordinates, Qwen-style RMSNorm/MLP blocks, and environment switches for attention/hash implementation variants.
+- **HEPTv2 activation checkpointing**: Optional per-layer training recomputation in `MLPF._run_backbone` and a batch-512 comparison recipe. See [`heptv2_checkpointing.md`](heptv2_checkpointing.md) for local memory measurements and target-platform validation.
+- **Tracker momentum features**: Optional conformal curvature/quality, longitudinal moments and bounded cross-surface doublets for hit inputs. See [`tracker_momentum_features.md`](tracker_momentum_features.md) for definitions, ablations and measured cost.
 - **`litept.py`**: Integration for the LitePT (Lightweight Point Transformer) architecture.
 - **`PFDataset.py`**: Advanced data loading logic, including dataset interleaving and multi-file handling.
 - **`training.py`**: Core training loop implementation, supporting DDP and Ray-based distributed training, TensorBoard loss logging, and per-step data-load/model-forward timing.
@@ -53,6 +55,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`scripts/studies/probe_calo_continuation.py`**: Cross-layer, distance-matched calorimeter continuation probes with equal particle weighting. See [`calo_continuation_probe.md`](calo_continuation_probe.md).
 - **`scripts/studies/probe_hit_instances.py`**: Frozen linear pair-affinity probes comparing raw hit features and HEPTv2 embeddings for separate tracker/calorimeter instance segmentation. See [`hit_instance_probe.md`](hit_instance_probe.md).
 - **`mlpf/model/reconstruction_diagnostics.py`**: Optional validation diagnostics for hit-grouping purity/completeness and momentum errors by class and eta. Enable with `validation_diagnostics_batches`; definitions and output paths are in [`reconstruction_diagnostics.md`](reconstruction_diagnostics.md).
+- **Charged fit correction**: An opt-in charged-pT branch in `set_decoder.py` combines `tracker_group_readout.py` circle fits with a bounded learned correction; configuration and limits are in [`charged_fit_correction.md`](charged_fit_correction.md).
 - **`mlpf/plotting/`**: Comprehensive suite of plotting tools.
   - **`plot_validation.py` / `plot_met_validation.py`**: Standard validation plots for jets and MET.
   - **`corrections.py`**: Derivation of jet energy corrections.

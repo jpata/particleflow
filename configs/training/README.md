@@ -1,5 +1,25 @@
 # Reusable training scenarios
 
+The recommended CLD hit-model default is `pyg-cld-hits-heptv2-set-v1` in
+`particleflow_spec.yaml`. Use `cld_pf_heptv2_default_50k` for its training recipe:
+
+```bash
+scripts/lumi/train_scenario.sh cld_pf_heptv2_default_50k mi250x --dry-run
+scripts/local/train_scenario.sh cld_pf_heptv2_default_50k --dry-run
+```
+
+This promotes the 50k `hit_heptv2_grouped_tracker_features` result: six HEPTv2
+layers, four global Flash decoder layers, 256 slots, supervised hit grouping,
+and tracker-neighborhood features. Circle-fit readout, bounded fit correction,
+detector-balanced grouping loss and event-consistency loss are disabled.
+The recipe uses learning rate 0.001, global batch 64 and seed 12345; the local
+launcher applies its usual short-run overrides and global batch 1.
+
+On the study's 1,536 test events, charged pT residual half-width improved from
+16.53% to 14.89% and charged matching efficiency from 77.16% to 78.40% versus
+the previous grouped reference. This is the single-seed result evaluated on
+2026-10-13. Historical sector and comparison presets remain unchanged.
+
 Scientific comparisons live under `scenarios/`; machine-dependent paths and runtime
 tuning live under `platforms/`. Run a scenario locally with:
 
@@ -10,6 +30,49 @@ uv run python3 scripts/training/run_scenario.py \
   --global-batch-size 8 \
   --dry-run
 ```
+
+## HEPTv2 model-size scaling (50k)
+
+`scenarios/cld_pf_heptv2_model_scaling_50k.yaml` scales width and depth together
+while retaining the previous baseline's 154 input channels: geometry, tracker
+neighborhoods and calorimeter neighborhoods. The new tracker momentum and doublet
+features are explicitly disabled.
+
+| Variant | Embedding / encoder width | Backbone layers | Decoder layers | Parameters |
+|---|---:|---:|---:|---:|
+| `hit_heptv2_small` | 256 | 6 | 4 | 12,732,407 |
+| `hit_heptv2_medium` | 384 | 9 | 6 | 42,114,141 |
+| `hit_heptv2_large` | 512 | 12 | 8 | 98,898,211 |
+
+Parameter counts are from instantiated MLPF models, excluding any training-time
+loss weighter. Decoder embedding width follows the backbone embedding width;
+HEPTv2's internal MLP width follows its unchanged `mlp_ratio=4`. Head counts stay
+at 16 for the backbone and 8 for the decoder, and all variants retain 256 slots,
+the same proposal scheme, supervised hit grouping and objective. The small model
+matches the baseline architecture, with backbone activation checkpointing enabled
+for all three sizes. This is a joint width/depth comparison, not an ablation that
+separately identifies the contribution of each.
+
+All runs use global batch **128** (16 per GPU on eight-GPU LUMI), seed 12345,
+50,000 steps, LAMB, LR 0.001 and cosine decay. Validation and checkpoint intervals
+are both **1,000 steps**. Validation/test sample sizes remain 512, with four
+diagnostic batches and validation linear probes enabled. The batch increase from
+the previous default's 64 gives 6.4M event presentations over the full schedule.
+
+Preview the three resolved commands without submitting training:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/cld_pf_heptv2_model_scaling_50k.yaml \
+  --platform configs/training/platforms/lumi_mi250x.yaml --dry-run
+```
+
+Submit with `scripts/lumi/train_scenario.sh cld_pf_heptv2_model_scaling_50k mi250x`.
+The local launcher uses global batch 1 and its usual short-run overrides,
+including validation/checkpoint intervals of 200 unless overridden. To retain
+the scenario's requested intervals locally, set `VAL_FREQ=1000 CHECKPOINT_FREQ=1000`.
+All three models passed a finite CPU forward check on 128 synthetic hits; full
+occupancy memory and throughput on the target accelerator have not been measured.
 
 The scenario declares a global batch size. The runner derives
 `gpu_batch_multiplier` from the number of GPUs and the dataset batch size, and rejects
@@ -145,7 +208,19 @@ history JSON and `VALIDATION_PROBE` log lines report accuracy, coverage and
 support. See `docs/calo_continuation_probe.md`. Local batch-one runs need at least
 eight diagnostic batches for sufficient fit/evaluation events.
 
+The `cld_pf_heptv2_fit_correction_50k` scenario compares ordinary grouped
+regression, legacy tracker anchors and a bounded learned correction to fitted
+charged-particle pT. See [charged fit correction](../../docs/charged_fit_correction.md)
+for fit gates, fallback behavior and limitations. It does not start training
+automatically.
+
 The same diagnostics also report tracker and calorimeter instance ARI for raw
 features and embeddings. Their default per-rank split is 8 fitting, 4 threshold
 calibration and 4 evaluation events; TensorBoard tags end in `/raw/ari` and
 `/embedding/ari`. Calibration and final evaluation are disjoint.
+
+The next tracker-feature ablation is `cld_pf_heptv2_fit_loss_50k`: baseline,
+truth-circle compatibility loss, differentiable curvature loss, and both losses.
+All retain the learned inference readout. See
+[the experiment design](../../docs/tracker_fit_loss_experiments.md) for objectives,
+local commands and acceptance criteria.

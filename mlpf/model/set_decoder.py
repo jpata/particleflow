@@ -278,6 +278,8 @@ class ParticleSetDecoder(nn.Module):
         self.hit_grouping_chunk_size = config.hit_grouping_chunk_size
         self.hit_grouping_dim = config.hit_grouping_dim
         self.tracker_group_readout = config.tracker_group_readout
+        self.tracker_fit_correction = config.tracker_fit_correction
+        self.tracker_fit_max_log_correction = config.tracker_fit_max_log_correction
         self.tracker_group_magnetic_field = config.tracker_group_magnetic_field
         self.queries = nn.Parameter(torch.empty(1, config.num_slots, embedding_dim))
         nn.init.trunc_normal_(self.queries, std=0.02)
@@ -301,6 +303,10 @@ class ParticleSetDecoder(nn.Module):
             nn.init.zeros_(self.tracker_group_projection.bias)
         self.presence_head = nn.Linear(embedding_dim, 2)
         self.pid_head = nn.Linear(embedding_dim, num_classes)
+        if self.tracker_fit_correction:
+            self.tracker_pt_correction = nn.Linear(embedding_dim, 1)
+            nn.init.zeros_(self.tracker_pt_correction.weight)
+            nn.init.zeros_(self.tracker_pt_correction.bias)
 
         if self.query_init == "input-conditioned":
             self.seed_projection = nn.Linear(embedding_dim, embedding_dim)
@@ -515,7 +521,7 @@ class ParticleSetDecoder(nn.Module):
             reference_mask[event_idx, :num_selected] = True
         return slots, references, reference_mask, scale_anchors, scale_anchor_mask
 
-    def _predict(self, slots, references=None, scale_anchors=None, scale_anchor_mask=None):
+    def _predict(self, slots, references=None, scale_anchors=None, scale_anchor_mask=None, tracker_fit=None):
         normalized_slots = self.output_norm(slots)
         presence = self.presence_head(normalized_slots)
         pid = self.pid_head(normalized_slots)
@@ -527,6 +533,23 @@ class ParticleSetDecoder(nn.Module):
             scales = self.scale_head(normalized_slots)
             if scale_anchors is not None:
                 scales = torch.where(scale_anchor_mask.unsqueeze(-1), scales + scale_anchors.to(scales.dtype), scales)
+            if self.tracker_fit_correction and tracker_fit is not None:
+                log_pt, fit_valid = tracker_fit
+                # Match inference's physical PID selection. A reliable tracker
+                # fit must not override a photon/neutral-hadron prediction.
+                physical_pid = pid[..., 1:].argmax(dim=-1) + 1
+                charged = (physical_pid == 1) | (physical_pid == 4) | (physical_pid == 5)
+                # Preserve the fit's precision through the final addition, even
+                # when the backbone/decoder run under BF16 autocast.
+                with torch.autocast(device_type=slots.device.type, enabled=False):
+                    correction = F.linear(
+                        normalized_slots.float(),
+                        self.tracker_pt_correction.weight.float(),
+                        self.tracker_pt_correction.bias.float(),
+                    ).squeeze(-1)
+                    fitted_pt = log_pt.float() + self.tracker_fit_max_log_correction * correction.tanh()
+                    pt = torch.where(fit_valid & charged, fitted_pt, scales[..., 0].float())
+                    scales = torch.stack((pt, scales[..., 1].float()), dim=-1)
             momentum = torch.stack(
                 [
                     scales[..., 0],
@@ -607,6 +630,7 @@ class ParticleSetDecoder(nn.Module):
         references = reference_mask = memory_positions = None
         scale_anchors = scale_anchor_mask = None
         tracker_fit_valid = None
+        tracker_fit = None
         if self.query_init == "input-conditioned":
             slots, references, reference_mask, scale_anchors, scale_anchor_mask = self._input_conditioned_queries(memory, memory_mask, input_features)
             grouping = None
@@ -614,12 +638,17 @@ class ParticleSetDecoder(nn.Module):
                 slots, grouping, tracker_geometry = self._group_hits(slots, memory, memory_mask, input_features)
                 if tracker_geometry is not None:
                     log_pt, fit_valid = tracker_geometry
-                    # Keep calorimeter seed anchors. Reliable tracker groups use
-                    # a circle-fit pT prior and a massless seed energy estimate.
+                    # Keep calorimeter seed anchors in both readout modes.
                     fit_valid = fit_valid & ~scale_anchor_mask
-                    tracker_anchors = torch.stack((log_pt, log_pt + torch.log(torch.cosh(references[..., 0].clamp(-10, 10)))), dim=-1)
-                    scale_anchors = torch.where(fit_valid[..., None], tracker_anchors, scale_anchors)
-                    scale_anchor_mask = scale_anchor_mask | fit_valid
+                    if self.tracker_fit_correction:
+                        # Keep the ordinary readout for invalid fits and neutral
+                        # predictions, including its independently learned energy.
+                        tracker_fit = (log_pt, fit_valid)
+                    else:
+                        # Legacy mode supplies pT and massless seed energy priors.
+                        tracker_anchors = torch.stack((log_pt, log_pt + torch.log(torch.cosh(references[..., 0].clamp(-10, 10)))), dim=-1)
+                        scale_anchors = torch.where(fit_valid[..., None], tracker_anchors, scale_anchors)
+                        scale_anchor_mask = scale_anchor_mask | fit_valid
                     tracker_fit_valid = fit_valid
             memory_positions = torch.stack(
                 [
@@ -661,7 +690,7 @@ class ParticleSetDecoder(nn.Module):
                 references = torch.stack([eta, torch.atan2(torch.sin(phi), torch.cos(phi))], dim=-1)
             is_final_layer = layer_index == len(self.layers) - 1
             if self.use_auxiliary_losses or is_final_layer:
-                outputs.append(self._predict(slots, references, scale_anchors, scale_anchor_mask))
+                outputs.append(self._predict(slots, references, scale_anchors, scale_anchor_mask, tracker_fit))
 
         auxiliary_predictions = tuple(outputs[:-1]) if self.use_auxiliary_losses else ()
         return ParticleSetDecoderOutput(

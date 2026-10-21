@@ -20,6 +20,114 @@ from mlpf.training_scenarios import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_heptv2_model_scaling_preserves_baseline_except_size_and_checkpointing():
+    platform = load_platform_profile(ROOT / "configs/training/platforms/lumi_mi250x.yaml")
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_model_scaling_50k.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    default = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_default_50k.yaml")
+    reference = resolve_scenario_jobs(default, platform, spec_file=ROOT / "particleflow_spec.yaml")[0].resolved_config
+    assert len(jobs) == 3
+    for job, (width, backbone_layers, decoder_layers) in zip(jobs, ((256, 6, 4), (384, 9, 6), (512, 12, 8))):
+        config = job.resolved_config
+        assert job.global_batch_size == 128 and job.per_gpu_batch_size == 16
+        assert config.val_freq == config.checkpoint_freq == 1000
+        assert config.num_steps == reference.num_steps == 50000
+        assert config.lr == reference.lr and config.seed == reference.seed
+        assert config.optimizer == reference.optimizer and config.lr_schedule == reference.lr_schedule
+        assert config.model.heptv2.embedding_dim == config.model.heptv2.width == width
+        assert config.model.backbone.num_convs == config.model.heptv2.num_convs == backbone_layers
+        assert config.model.set_decoder.num_layers == decoder_layers
+        assert width % config.model.heptv2.num_heads == 0
+        assert width % config.model.set_decoder.num_heads == 0
+        assert config.model.heptv2.activation_checkpointing
+        model = config.model.model_dump()
+        for field in ("embedding_dim", "width", "num_convs", "activation_checkpointing"):
+            model["heptv2"][field] = getattr(reference.model.heptv2, field)
+        model["backbone"]["num_convs"] = reference.model.backbone.num_convs
+        model["set_decoder"]["num_layers"] = reference.model.set_decoder.num_layers
+        assert model == reference.model.model_dump()
+
+
+def test_tracker_momentum_ablation_changes_only_input_features():
+    platform = load_platform_profile(ROOT / "configs/training/platforms/lumi_mi250x.yaml")
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_tracker_momentum_50k.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    assert len(jobs) == 3
+    flags = [job.resolved_config.model.hit_feature_engineering for job in jobs]
+    assert [(f.tracker_momentum, f.tracker_doublets) for f in flags] == [(False, False), (True, False), (True, True)]
+    assert all(job.global_batch_size == 384 and job.per_gpu_batch_size == 48 for job in jobs)
+    assert all(job.resolved_config.model.heptv2.activation_checkpointing for job in jobs)
+
+
+@pytest.mark.parametrize("platform_name", ["flatiron_h100", "lumi_mi250x"])
+def test_heptv2_batch512_uses_reduced_batch_for_memory_headroom(platform_name):
+    platform = load_platform_profile(ROOT / f"configs/training/platforms/{platform_name}.yaml")
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_batch512_50k.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    pf, hits = (job.resolved_config for job in jobs)
+    assert all(job.global_batch_size == 384 and job.gpu_batch_multiplier == 48 for job in jobs)
+    for config in (pf, hits):
+        assert config.num_steps == 50000
+        assert config.lr == 0.001
+        assert config.optimizer.value == "lamb"
+        assert config.lr_schedule.value == "cosinedecay"
+        assert config.seed == 12345
+        assert config.val_freq == config.checkpoint_freq == 5000
+        assert config.model.backbone.num_convs == 6
+    assert hits.model.heptv2.activation_checkpointing
+    assert hits.model.hit_feature_engineering.tracker_neighborhood
+    assert hits.model.set_decoder.hit_grouping
+    assert not hits.model.set_decoder.tracker_group_readout
+    assert not hits.model.set_decoder.tracker_fit_correction
+    default_scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_default_50k.yaml")
+    default = resolve_scenario_jobs(default_scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")[0].resolved_config
+    assert not default.model.heptv2.activation_checkpointing
+    default.model.heptv2.activation_checkpointing = True
+    default.model.backbone.num_convs = 6
+    assert hits.model.model_dump() == default.model.model_dump()
+
+
+def test_cld_default_matches_winning_tracker_feature_configuration():
+    platform = load_platform_profile(ROOT / "configs/training/platforms/local.yaml")
+    configs = []
+    for name in ("cld_pf_heptv2_default_50k", "cld_pf_heptv2_grouped_tracking_50k"):
+        scenario = load_training_scenario(ROOT / f"configs/training/scenarios/{name}.yaml")
+        jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml", global_batch_size=8)
+        if name == "cld_pf_heptv2_default_50k":
+            assert len(jobs) == 1
+        configs.append(next(job.resolved_config for job in jobs if job.variant_name == "hit_heptv2_grouped_tracker_features"))
+    default, winner = configs
+    assert default.model.model_dump() == winner.model.model_dump()
+    for field in ("lr", "num_steps", "val_freq", "checkpoint_freq", "nvalid", "ntest", "sampler_mode", "seed"):
+        assert getattr(default, field) == getattr(winner, field)
+    assert default.model.hit_feature_engineering.tracker_neighborhood
+    assert default.model.set_decoder.hit_grouping
+    assert not default.model.set_decoder.tracker_group_readout
+    assert not default.model.set_decoder.tracker_fit_correction
+
+
+def test_training_scenario_rejects_empty_variants():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_default_50k.yaml")
+    payload = scenario.model_dump()
+    payload["variants"] = {}
+    with pytest.raises(ValueError, match="at least one variant"):
+        type(scenario).model_validate(payload)
+
+
+def test_fit_correction_scenario_resolves_three_controlled_variants():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_fit_correction_50k.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/local.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml", global_batch_size=8)
+    assert len(jobs) == 3
+    configs = [job.resolved_config for job in jobs]
+    assert {c.num_steps for c in configs} == {50000}
+    assert [c.model.set_decoder.tracker_group_readout for c in configs] == [False, True, True]
+    assert [c.model.set_decoder.tracker_fit_correction for c in configs] == [False, False, True]
+    assert configs[-1].model.set_decoder.tracker_fit_max_log_correction == pytest.approx(0.4054651081081644)
+
+
 SCENARIO = ROOT / "configs/training/scenarios/cld_hits_output_comparison.yaml"
 BACKBONE_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
 PF_HITS_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_hits_comparison.yaml"
@@ -635,3 +743,24 @@ def test_grouped_tracking_scenario_isolates_each_mechanism():
         assert variant[change[0]][change[1]] != baseline[change[0]][change[1]]
         variant[change[0]][change[1]] = baseline[change[0]][change[1]]
         assert variant == baseline
+
+
+def test_tracker_fit_loss_ablation_changes_only_auxiliary_weights():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_fit_loss_50k.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/local.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml", global_batch_size=8)
+    assert len(jobs) == 4
+    reference = None
+    weights = []
+    for job in jobs:
+        config = job.resolved_config
+        assert config.num_steps == 50000
+        assert config.model.hit_feature_engineering.tracker_neighborhood
+        decoder = config.model.set_decoder
+        assert decoder.hit_grouping and not decoder.tracker_group_readout and not decoder.tracker_fit_correction
+        model = config.model.model_dump()
+        weights.append((model["set_decoder"].pop("tracker_geometry_loss_weight"), model["set_decoder"].pop("tracker_curvature_loss_weight")))
+        if reference is None:
+            reference = model
+        assert model == reference
+    assert weights == [(0.0, 0.0), (0.01, 0.0), (0.0, 0.1), (0.01, 0.1)]
