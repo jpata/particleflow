@@ -611,3 +611,27 @@ def test_pipeline_command_uses_platform_python_environment(profile, expected):
     job = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")[0]
     command = _pipeline_command(job, scenario, platform, ROOT / "particleflow_spec.yaml", Path("experiment"))
     assert command[: len(expected)] == expected
+
+
+def test_grouped_tracking_scenario_isolates_each_mechanism():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_grouped_tracking_50k.yaml")
+    platform = load_platform_profile(PLATFORMS / "lumi_mi250x.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    assert len(jobs) == 5
+    assert all(job.seed == 12345 and job.resolved_config.num_steps == 50000 for job in jobs)
+    assert all(job.resolved_config.validation_diagnostics_batches == 4 for job in jobs)
+    baseline = jobs[0].resolved_config.model.model_dump()
+    old = resolve_scenario_jobs(load_training_scenario(HEPTV2_GROUPING_SCENARIO), platform, spec_file=ROOT / "particleflow_spec.yaml")[1]
+    assert baseline == old.resolved_config.model.model_dump()
+    expected = [
+        None,
+        ("hit_feature_engineering", "tracker_neighborhood"),
+        ("set_decoder", "hit_grouping_detector_balanced"),
+        ("set_decoder", "tracker_group_readout"),
+        ("set_decoder", "event_consistency_loss_weight"),
+    ]
+    for job, change in zip(jobs[1:], expected[1:]):
+        variant = job.resolved_config.model.model_dump()
+        assert variant[change[0]][change[1]] != baseline[change[0]][change[1]]
+        variant[change[0]][change[1]] = baseline[change[0]][change[1]]
+        assert variant == baseline

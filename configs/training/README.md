@@ -79,3 +79,73 @@ Use repeated `--set KEY=VALUE` options only for explicit one-off overrides. Ever
 resolved run writes `scenario-manifest.json` containing the scenario, platform,
 seed, final configuration, command, and git revision. Runs are grouped as
 `<experiments_dir>/<scenario_name>/<variant>_seed<seed>_<timestamp>/`.
+
+## Grouped HEPTv2 tracking follow-up (50k)
+
+`scenarios/cld_pf_heptv2_grouped_tracking_50k.yaml` defines five runs, all with
+seed 12345, global batch 64, learning rate 0.001, 50,000 steps, and reconstruction
+diagnostics on four validation batches per rank. Every variant changes one
+mechanism from the completed grouped HEPTv2 model:
+
+| Variant suffix | Change from `hit_heptv2_grouped_baseline` |
+|---|---|
+| `tracker_features` | Enable existing tracker-neighborhood features |
+| `balanced` | Average tracker and calorimeter grouping losses with equal detector weight |
+| `tracker_readout` | Add predicted-group geometric summaries and reliable circle-fit momentum anchors |
+| `event_consistency` | Add visible event momentum/energy consistency, weight 0.1 |
+
+Detector balancing preserves the background weight of 0.1 within each detector,
+normalizes over the local training batch, and averages only detector populations
+present in that batch. It does not rebalance individual particles.
+
+The tracker readout uses predicted groups only. It fits transverse circles with
+three Huber-reweighted least-squares iterations, in double precision, and passes
+nine summaries to a zero-initialized learned slot projection: hit and surface
+counts, radial and longitudinal spans, transverse spatial scale, fitted log-pT,
+relative fit residual, conditioning, and a validity flag. A valid fit requires
+at least four hits, three distinct (system, side, layer) surfaces, 100 mm radial
+span, a Gram-matrix eigenvalue ratio above 1e-7, a radial RMS residual below 2%
+of that span, and fitted pT in (0.1, 10,000) GeV. The conversion assumes unit
+charge magnitude and the CLD 2 T solenoid, set explicitly by
+`tracker_group_magnetic_field`. It is a geometric prior rather than a full
+material-aware track fit.
+
+Reliable fits supply log-pT and a massless energy estimate from the initial
+slot eta to the decoder's learned residual scale head. Existing calorimeter
+seed anchors are retained. Unreliable groups keep their learned scales; their
+geometric summaries can still inform the decoder. Validation reports
+`metrics/set_slot/tracker_fit_fraction` (over all slots) and
+`tracker_fits_per_event` on diagnostic batches to show how often anchors apply.
+
+Event consistency uses the final slots' soft presence probabilities to sum
+visible px, py, pz and energy. Momentum residuals are normalized by the target
+scalar momentum sum; energy residuals by target total energy, both floored at
+1 GeV. Smooth-L1 momentum and energy terms are added with the configured weight,
+outside automatic task weighting. The target visible momentum need not vanish.
+This is a weak auxiliary objective; compare jet widths, vector closure, class
+momentum errors, efficiencies, and count bias rather than total training loss.
+
+Resolve all production jobs without launching training:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/cld_pf_heptv2_grouped_tracking_50k.yaml \
+  --platform configs/training/platforms/lumi_mi250x.yaml --dry-run
+```
+
+Submit on LUMI using the same scenario through `scripts/lumi/train_scenario.sh`.
+For local smoke runs, `scripts/local/train_scenario.sh
+cld_pf_heptv2_grouped_tracking_50k` uses global batch 1 by default to accommodate
+local GPU memory; it is not the production batch-64 comparison.
+
+The grouped tracking scenario also enables `validation_linear_probe` with a
+16-event cap per rank. It fits fresh raw/embedding calorimeter continuation
+rankers on diagnostic events and evaluates on disjoint events. TensorBoard,
+history JSON and `VALIDATION_PROBE` log lines report accuracy, coverage and
+support. See `docs/calo_continuation_probe.md`. Local batch-one runs need at least
+eight diagnostic batches for sufficient fit/evaluation events.
+
+The same diagnostics also report tracker and calorimeter instance ARI for raw
+features and embeddings. Their default per-rank split is 8 fitting, 4 threshold
+calibration and 4 evaluation events; TensorBoard tags end in `/raw/ari` and
+`/embedding/ari`. Calibration and final evaluation are disjoint.

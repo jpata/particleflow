@@ -196,6 +196,8 @@ def set_mlpf_loss(
     hit_grouping_loss_weight=0.0,
     hit_grouping_chunk_size=1024,
     hit_grouping_background_weight=0.1,
+    hit_grouping_detector_balanced=False,
+    event_consistency_loss_weight=0.0,
 ):
     """Compute the set-prediction objective with the standard task names."""
 
@@ -233,9 +235,14 @@ def set_mlpf_loss(
             matches,
             chunk_size=hit_grouping_chunk_size,
             background_weight=hit_grouping_background_weight,
+            detector_balanced=hit_grouping_detector_balanced,
         )
         losses["HitGrouping"] = hit_grouping_loss_weight * grouping_loss
         loss_opt = loss_opt + losses["HitGrouping"]
+
+    if event_consistency_loss_weight > 0:
+        losses["EventConsistency"] = event_consistency_loss_weight * event_consistency_loss(targets, predictions, batch.target_mask)
+        loss_opt = loss_opt + losses["EventConsistency"]
 
     if auxiliary_predictions and auxiliary_loss_weight > 0:
         auxiliary_losses = []
@@ -268,13 +275,27 @@ def set_mlpf_loss(
     return loss_opt, detached_losses, diagnostics
 
 
-def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weight=0.1):
+def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weight=0.1, detector_balanced=False):
     """Supervise event-local hit ownership without a dense hit-pair matrix."""
     hit_keys, slot_keys, background = grouping
     num_slots = slot_keys.shape[1]
     pn_index = Y_FEATURES.index("particle_number")
     total = hit_keys.sum() * 0.0 + slot_keys.sum() * 0.0 + background.sum() * 0.0
     weight_sum = hit_keys.new_zeros(())
+    detector_denominators = None
+    if detector_balanced:
+        # Compute denominators over the batch before chunking. Include background
+        # with its usual weight, and average only detector types present here.
+        detector_denominators = hit_keys.new_zeros(2)
+        for event_idx, (_, target_indices) in enumerate(matches):
+            mask = batch.mask[event_idx].bool()
+            pn = batch.ytarget[event_idx, mask, pn_index].long()
+            target_pn = batch.ytarget_set[event_idx, batch.target_mask[event_idx], pn_index].long()[target_indices]
+            owned = (pn > 0) & torch.isin(pn, target_pn)
+            weights = torch.where(owned, 1.0, background_weight)
+            detector = batch.X[event_idx, mask, 0]
+            for index, kind in enumerate((1, 2)):
+                detector_denominators[index] += weights[detector == kind].sum()
     for event_idx, (slot_indices, target_indices) in enumerate(matches):
         hit_mask = batch.mask[event_idx].bool()
         target_pn = batch.ytarget_set[event_idx, batch.target_mask[event_idx], pn_index].long()
@@ -291,14 +312,20 @@ def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weig
         event_hit_keys = hit_keys[event_idx, hit_mask]
         event_background = background[event_idx, hit_mask]
         event_slot_keys = slot_keys[event_idx]
-        for keys_chunk, background_chunk, labels_chunk in zip(
-            event_hit_keys.split(chunk_size), event_background.split(chunk_size), labels.split(chunk_size)
+        hit_weights = torch.where(labels == num_slots, background_weight, 1.0)
+        if detector_denominators is not None:
+            detector = batch.X[event_idx, hit_mask, 0]
+            normalization = torch.zeros_like(hit_weights)
+            for index, kind in enumerate((1, 2)):
+                normalization[detector == kind] = detector_denominators[index].clamp_min(1e-8).reciprocal()
+            hit_weights = hit_weights * normalization / (detector_denominators > 0).sum().clamp_min(1)
+        for keys_chunk, background_chunk, labels_chunk, weights_chunk in zip(
+            event_hit_keys.split(chunk_size), event_background.split(chunk_size), labels.split(chunk_size), hit_weights.split(chunk_size)
         ):
 
-            def chunk_loss(keys, slots, bg, targets):
+            def chunk_loss(keys, slots, bg, targets, weights):
                 scores = torch.cat([10.0 * (keys @ slots.T), bg], dim=-1)
                 per_hit = F.cross_entropy(scores, targets, reduction="none")
-                weights = torch.where(targets == num_slots, background_weight, 1.0)
                 return (per_hit * weights).sum()
 
             if torch.is_grad_enabled() and (keys_chunk.requires_grad or event_slot_keys.requires_grad or background_chunk.requires_grad):
@@ -310,9 +337,36 @@ def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weig
                     event_slot_keys,
                     background_chunk,
                     labels_chunk,
+                    weights_chunk,
                     use_reentrant=True,
                 )
             else:
-                part = chunk_loss(keys_chunk, event_slot_keys, background_chunk, labels_chunk)
+                part = chunk_loss(keys_chunk, event_slot_keys, background_chunk, labels_chunk, weights_chunk)
             total = total + part
-    return total / weight_sum.clamp_min(1.0)
+    return total if detector_balanced else total / weight_sum.clamp_min(1.0)
+
+
+def event_consistency_loss(targets, predictions, target_mask):
+    """Soft-presence visible momentum/energy closure relative to target sums.
+
+    Each residual is divided by the true scalar momentum or energy sum (floor
+    1 GeV). The event momentum need not be zero. Only final slots participate.
+    """
+
+    def physical(collection):
+        pt = collection["pt"].float().clamp(-20, 20).exp()
+        eta = collection["eta"].float().clamp(-10, 10)
+        phi = torch.atan2(collection["sin_phi"].float(), collection["cos_phi"].float())
+        p3 = torch.stack((pt * phi.cos(), pt * phi.sin(), pt * eta.sinh()), dim=-1)
+        energy = collection["energy"].float().clamp(-20, 20).exp()
+        return p3, energy
+
+    truth_p, truth_e = physical(targets)
+    pred_p, pred_e = physical(predictions)
+    mask = target_mask.float()
+    presence = predictions["cls_binary"].float().softmax(-1)[..., 1]
+    p_scale = (truth_p.norm(dim=-1) * mask).sum(1).clamp_min(1)
+    e_scale = (truth_e * mask).sum(1).clamp_min(1)
+    dp = ((pred_p * presence[..., None]).sum(1) - (truth_p * mask[..., None]).sum(1)) / p_scale[:, None]
+    de = ((pred_e * presence).sum(1) - (truth_e * mask).sum(1)) / e_scale
+    return F.smooth_l1_loss(dp, torch.zeros_like(dp)) + F.smooth_l1_loss(de, torch.zeros_like(de))

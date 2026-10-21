@@ -6,6 +6,7 @@ from typing import overload
 import torch
 from torch import nn
 from torch.nn import functional as F
+from mlpf.model.tracker_group_readout import SUMMARY_DIM, tracker_group_geometry
 
 try:
     from flash_attn import flash_attn_varlen_func
@@ -27,6 +28,7 @@ class ParticleSetDecoderOutput(Sequence[torch.Tensor]):
     predictions: PredictionTensors
     auxiliary_predictions: tuple[PredictionTensors, ...] = ()
     hit_grouping: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
+    tracker_group_fit_valid: torch.Tensor | None = None
 
     @overload
     def __getitem__(self, index: int) -> torch.Tensor: ...
@@ -275,6 +277,8 @@ class ParticleSetDecoder(nn.Module):
         self.hit_grouping = config.hit_grouping
         self.hit_grouping_chunk_size = config.hit_grouping_chunk_size
         self.hit_grouping_dim = config.hit_grouping_dim
+        self.tracker_group_readout = config.tracker_group_readout
+        self.tracker_group_magnetic_field = config.tracker_group_magnetic_field
         self.queries = nn.Parameter(torch.empty(1, config.num_slots, embedding_dim))
         nn.init.trunc_normal_(self.queries, std=0.02)
         ffn_dim = int(config.ffn_multiplier * embedding_dim)
@@ -291,6 +295,10 @@ class ParticleSetDecoder(nn.Module):
             self.hit_grouping_projection = nn.Linear(2 * embedding_dim + 3, embedding_dim)
             nn.init.zeros_(self.hit_grouping_projection.weight)
             nn.init.zeros_(self.hit_grouping_projection.bias)
+        if self.tracker_group_readout:
+            self.tracker_group_projection = nn.Linear(SUMMARY_DIM, embedding_dim)
+            nn.init.zeros_(self.tracker_group_projection.weight)
+            nn.init.zeros_(self.tracker_group_projection.bias)
         self.presence_head = nn.Linear(embedding_dim, 2)
         self.pid_head = nn.Linear(embedding_dim, num_classes)
 
@@ -575,17 +583,44 @@ class ParticleSetDecoder(nn.Module):
             energy[event_idx].view(-1).index_add_(0, flat, deposit)
         mean = pooled.float() / counts.clamp_min(1).unsqueeze(-1)
         summary = torch.cat([mean[:, :, 0], mean[:, :, 1], torch.log1p(counts), torch.log1p(energy[:, :, 1:2])], dim=-1)
-        return slots + self.hit_grouping_projection(summary.to(slots.dtype)), (hit_keys, slot_keys, background)
+        slots = slots + self.hit_grouping_projection(summary.to(slots.dtype))
+        tracker_geometry = None
+        if self.tracker_group_readout:
+            geometry = []
+            for event_idx, (selected, flat) in enumerate(zip(selected_by_event, destination_by_event)):
+                tracker = flat.remainder(2) == 0
+                geometry.append(
+                    tracker_group_geometry(
+                        input_features[event_idx, selected[tracker]],
+                        flat[tracker] // 2,
+                        self.num_slots,
+                        self.tracker_group_magnetic_field,
+                    )
+                )
+            summaries, log_pt, fit_valid = (torch.stack(values) for values in zip(*geometry))
+            slots = slots + self.tracker_group_projection(summaries.to(slots.dtype))
+            tracker_geometry = (log_pt, fit_valid)
+        return slots, (hit_keys, slot_keys, background), tracker_geometry
 
     def forward(self, memory, memory_mask, input_features=None):
         memory_mask = memory_mask.bool()
         references = reference_mask = memory_positions = None
         scale_anchors = scale_anchor_mask = None
+        tracker_fit_valid = None
         if self.query_init == "input-conditioned":
             slots, references, reference_mask, scale_anchors, scale_anchor_mask = self._input_conditioned_queries(memory, memory_mask, input_features)
             grouping = None
             if self.hit_grouping:
-                slots, grouping = self._group_hits(slots, memory, memory_mask, input_features)
+                slots, grouping, tracker_geometry = self._group_hits(slots, memory, memory_mask, input_features)
+                if tracker_geometry is not None:
+                    log_pt, fit_valid = tracker_geometry
+                    # Keep calorimeter seed anchors. Reliable tracker groups use
+                    # a circle-fit pT prior and a massless seed energy estimate.
+                    fit_valid = fit_valid & ~scale_anchor_mask
+                    tracker_anchors = torch.stack((log_pt, log_pt + torch.log(torch.cosh(references[..., 0].clamp(-10, 10)))), dim=-1)
+                    scale_anchors = torch.where(fit_valid[..., None], tracker_anchors, scale_anchors)
+                    scale_anchor_mask = scale_anchor_mask | fit_valid
+                    tracker_fit_valid = fit_valid
             memory_positions = torch.stack(
                 [
                     torch.nan_to_num(
@@ -633,4 +668,5 @@ class ParticleSetDecoder(nn.Module):
             predictions=outputs[-1],
             auxiliary_predictions=auxiliary_predictions,
             hit_grouping=grouping,
+            tracker_group_fit_valid=tracker_fit_valid,
         )
