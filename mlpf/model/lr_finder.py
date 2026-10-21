@@ -29,7 +29,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from mlpf.conf import LRFinderConfig, MLPFConfig
 from mlpf.logger import _logger
-from mlpf.model.training import UNIT_REGRESSION_WEIGHTS, train_step
+from mlpf.model.training import UNIT_REGRESSION_WEIGHTS, UNWEIGHTED_TOTAL, train_step
 
 MIN_STEPS_BEFORE_STOP = 10  # the bias-corrected EMA is still noisy over the first few steps
 SAVE_FREQ = 50  # steps between intermediate result dumps (kept if a later step crashes)
@@ -81,7 +81,7 @@ class LRRangeTest:
         loss = float(losses["Total"])
         self.lrs.append(float(lr))
         self.losses.append(loss)
-        self.components.append({name: float(value) for name, value in losses.items() if name != "Total"})
+        self.components.append({name: float(value) for name, value in losses.items() if name not in ("Total", UNWEIGHTED_TOTAL)})
         if not math.isfinite(loss):
             self.smoothed.append(math.nan)
             self.stop_reason = f"non-finite loss {loss} at lr={lr:.3e}"

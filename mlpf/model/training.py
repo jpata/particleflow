@@ -88,6 +88,7 @@ from mlpf.model.PFDataset import (
     set_worker_sharing_strategy,
 )
 from mlpf.model.losses import (
+    LOSS_TASKS,
     REGRESSION_FEATURES,
     make_task_loss_weighter,
     mlpf_loss,
@@ -100,6 +101,7 @@ from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
 
 UNIT_REGRESSION_WEIGHTS = {feature: 1.0 for feature in REGRESSION_FEATURES}
+UNWEIGHTED_TOTAL = "Total_unweighted"
 JET_VALIDATION_METRICS = (
     "med",
     "iqr",
@@ -288,6 +290,15 @@ def _finalize_diagnostics(accum, world_size):
             value = torch.sqrt(torch.clamp(value, min=0.0))
         finalized[key] = value.cpu().item()
     return finalized
+
+
+def _add_unweighted_total(losses):
+    """Log-only plain sum of the rank-averaged raw task losses.
+
+    Unlike "Total", whose task weights are calibrated per run, this is a fixed scalarization
+    comparable across runs.
+    """
+    losses[UNWEIGHTED_TOTAL] = sum(losses[task] for task in LOSS_TASKS)
 
 
 def _get_task_loss_weighter(model):
@@ -644,6 +655,7 @@ def train_step(
             if log_this_step:
                 diagnostics["time"][f"loss_{loss_name}_all_reduce"] = time.perf_counter() - phase_start
         step_loss[loss_name] = step_loss[loss_name].cpu().item() / num_steps.cpu().item()
+    _add_unweighted_total(step_loss)
 
     if log_this_step:
         _collect_step_memory(rank, "train_step_end", diagnostics)
@@ -931,6 +943,7 @@ def evaluate(
         if world_size > 1:
             torch.distributed.all_reduce(eval_loss[loss_name])
         eval_loss[loss_name] = eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
+    _add_unweighted_total(eval_loss)
 
     eval_loss.update(_finalize_diagnostics(diagnostic_accum, world_size))
 
@@ -1123,6 +1136,8 @@ def _run_validation_cycle(
             f"VALIDATION | Step={step}/{num_steps} | "
             f"Train Loss={losses_train['Total']:.4f} | "
             f"Valid Loss={losses_valid['Total']:.4f} | "
+            f"Train Loss Unweighted={losses_train[UNWEIGHTED_TOTAL]:.4f} | "
+            f"Valid Loss Unweighted={losses_valid[UNWEIGHTED_TOTAL]:.4f} | "
             f"Stale={stale_steps} | "
             f"ETA={eta:.1f}m"
         )
@@ -1318,7 +1333,9 @@ def train_all_steps(
             # Get the current learning rate, handling the case of multiple parameter groups
             current_lr = lr_schedule.get_last_lr()[0]
             train_loss_components = " | ".join(
-                f"{loss_name}: {loss_value:.4f}" for loss_name, loss_value in sorted(losses_train.items()) if loss_name != "Total"
+                f"{loss_name}: {loss_value:.4f}"
+                for loss_name, loss_value in sorted(losses_train.items())
+                if loss_name not in ("Total", UNWEIGHTED_TOTAL)
             )
             diagnostics = task_loss_diagnostics or {}
             task_weight_components = _format_task_diagnostic(diagnostics.get("weight", {}))
@@ -1326,6 +1343,7 @@ def train_all_steps(
             _logger.info(
                 f"Step {step}/{num_steps} rank{rank} | "
                 f"Train Loss: {losses_train['Total']:.4f} | "
+                f"Train Loss Unweighted: {losses_train[UNWEIGHTED_TOTAL]:.4f} | "
                 f"Train Loss Components: {train_loss_components} | "
                 f"Task Weights: {task_weight_components} | "
                 f"Task Weighted Losses: {task_weighted_loss_components} | "
