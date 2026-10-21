@@ -49,6 +49,11 @@ See the user documentation to [choose a dataset](https://jpata.github.io/particl
 
 The [training guide](https://jpata.github.io/particleflow/training/train) provides a verified CPU check, a bounded GPU example, expected outputs, and checkpoint continuation.
 
+For CLD hit-based reconstruction, the recommended model is `pyg-cld-hits-heptv2-set-v1`
+(grouped HEPTv2 with tracker-neighborhood features), using the
+[`cld_pf_heptv2_default_50k` training scenario](configs/training/scenarios/cld_pf_heptv2_default_50k.yaml).
+See the [scenario guide](configs/training/README.md) for launch commands.
+
 ### **Model Upload**
 
 To upload a trained model to the Hugging Face Hub:

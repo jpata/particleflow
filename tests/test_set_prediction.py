@@ -157,10 +157,17 @@ def test_hit_grouping_uses_predicted_membership_and_event_local_truth():
     assert model.set_decoder.hit_grouping_background.weight.grad is not None
 
 
-def test_hit_grouping_is_included_in_set_training_loss():
+@pytest.mark.parametrize("fit_weight", [0.0, 0.1])
+def test_hit_grouping_is_included_in_set_training_loss(fit_weight):
     from mlpf.model.training import model_step
 
-    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=True)
+    config = make_config(
+        num_slots=4,
+        query_init="input-conditioned",
+        hit_grouping=True,
+        tracker_geometry_loss_weight=fit_weight,
+        tracker_curvature_loss_weight=fit_weight,
+    )
     model = MLPF(config)
     features = torch.zeros(1, 5, config.input_dim)
     features[..., 0] = torch.tensor([1, 1, 2, 2, 2])
@@ -173,6 +180,8 @@ def test_hit_grouping_is_included_in_set_training_loss():
     batch = PFBatch(X=features, ytarget=hit_target, ytarget_set=target)
     loss, losses, _, _, _, _ = model_step(batch, model, None, REGRESSION_WEIGHTS)
     assert losses["HitGrouping"] > 0
+    assert ("TrackerGeometry" in losses) == (fit_weight > 0)
+    assert ("TrackerCurvature" in losses) == (fit_weight > 0)
     loss.backward()
     assert model.set_decoder.hit_grouping_projection.weight.grad is not None
 
@@ -765,6 +774,7 @@ def test_evaluate_reconstruction_diagnostics_respect_batch_limit(grouping):
     [
         {"hit_grouping_detector_balanced": True},
         {"tracker_group_readout": True},
+        {"tracker_group_readout": True, "tracker_fit_correction": True},
         {"event_consistency_loss_weight": 0.1},
     ],
 )
@@ -783,6 +793,8 @@ def test_grouped_tracking_variants_forward_backward(overrides):
     assert torch.isfinite(loss)
     loss.backward()
     assert model.set_decoder.scale_head.weight.grad is not None
+    if overrides.get("tracker_fit_correction"):
+        assert model.set_decoder.tracker_pt_correction.weight.grad is not None
     if overrides.get("tracker_group_readout"):
         assert model.set_decoder.tracker_group_projection.weight.grad is not None
         from mlpf.model.training import evaluate
@@ -818,6 +830,76 @@ def test_group_readout_and_balancing_require_grouping():
     for kwargs in ({"tracker_group_readout": True}, {"hit_grouping_detector_balanced": True}):
         with pytest.raises(ValueError, match="require hit_grouping"):
             make_config(**kwargs)
+
+
+def test_bounded_tracker_correction_preserves_fit_fallback_and_gradients():
+    config = make_config(query_init="input-conditioned", hit_grouping=True, tracker_group_readout=True, tracker_fit_correction=True)
+    decoder = MLPF(config).set_decoder
+    slots = torch.randn(1, 3, decoder.output_norm.normalized_shape[0], requires_grad=True)
+    references = torch.zeros(1, 3, 2)
+    anchors = torch.zeros(1, 3, 2)
+    mask = torch.zeros(1, 3, dtype=torch.bool)
+    fits = (torch.tensor([[2.123456, 3.0, 4.0]]), torch.tensor([[True, False, True]]))
+    with torch.no_grad():
+        decoder.pid_head.weight.zero_()
+        decoder.pid_head.bias.zero_()
+        decoder.pid_head.bias[1] = 10
+        decoder.scale_head.weight.zero_()
+        decoder.scale_head.bias.fill_(0.7)
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        ordinary = decoder._predict(slots, references, anchors, mask)[2]
+        fitted = decoder._predict(slots, references, anchors, mask, fits)[2]
+    assert fitted.dtype == torch.float32
+    torch.testing.assert_close(fitted[0, [0, 2], 0], fits[0][0, [0, 2]], rtol=0, atol=1e-7)
+    torch.testing.assert_close(fitted[..., 4], ordinary[..., 4])
+    torch.testing.assert_close(fitted[:, 1], ordinary[:, 1])
+    fitted[..., 0].sum().backward()
+    assert decoder.tracker_pt_correction.weight.grad is not None
+    assert decoder.tracker_pt_correction.bias.grad.abs().sum() > 0
+    assert decoder.scale_head.bias.grad[0] > 0  # invalid fit fallback learns
+    assert torch.isfinite(slots.grad).all()
+    with torch.no_grad():
+        decoder.tracker_pt_correction.bias.fill_(100)
+    upper = decoder._predict(slots, references, anchors, mask, fits)[2]
+    torch.testing.assert_close(upper[0, [0, 2], 0] - fits[0][0, [0, 2]], torch.full((2,), config.model.set_decoder.tracker_fit_max_log_correction))
+    with torch.no_grad():
+        decoder.tracker_pt_correction.bias.fill_(-100)
+    lower = decoder._predict(slots, references, anchors, mask, fits)[2]
+    torch.testing.assert_close(lower[0, [0, 2], 0] - fits[0][0, [0, 2]], torch.full((2,), -config.model.set_decoder.tracker_fit_max_log_correction))
+    for pid in (2, 3):
+        with torch.no_grad():
+            decoder.pid_head.bias.zero_()
+            decoder.pid_head.bias[pid] = 10
+        fallback = decoder._predict(slots, references, anchors, mask, fits)[2]
+        expected = decoder._predict(slots, references, anchors, mask)[2]
+        torch.testing.assert_close(fallback, expected)
+
+
+def test_bounded_tracker_correction_is_wired_into_forward(monkeypatch):
+    import mlpf.model.set_decoder as module
+
+    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=True, tracker_group_readout=True, tracker_fit_correction=True)
+    model = MLPF(config)
+    with torch.no_grad():
+        model.set_decoder.pid_head.weight.zero_()
+        model.set_decoder.pid_head.bias.zero_()
+        model.set_decoder.pid_head.bias[1] = 10
+
+    def fit(features, groups, num_slots, magnetic_field):
+        return torch.zeros(num_slots, 9), torch.full((num_slots,), 2.123456), torch.ones(num_slots, dtype=torch.bool)
+
+    monkeypatch.setattr(module, "tracker_group_geometry", fit)
+    output = model(torch.ones(1, 8, 15), torch.ones(1, 8, dtype=torch.bool))
+    torch.testing.assert_close(output.predictions[2][..., 0], torch.full((1, 4), 2.123456))
+    output.predictions[2][..., 0].sum().backward()
+    assert model.set_decoder.tracker_pt_correction.bias.grad.abs().sum() > 0
+
+
+def test_bounded_tracker_correction_configuration():
+    with pytest.raises(ValueError, match="requires tracker_group_readout"):
+        make_config(tracker_fit_correction=True)
+    with pytest.raises(ValueError):
+        make_config(tracker_fit_max_log_correction=0)
 
 
 @pytest.mark.parametrize("grouping", [False, True])

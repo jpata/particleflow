@@ -810,6 +810,7 @@ class HEPTConfig(BaseModel):
 
 class HEPTv2Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    activation_checkpointing: bool = False
     embedding_dim: int = 128
     width: int = 512
     num_convs: int = 6
@@ -847,7 +848,15 @@ class HitFeatureEngineeringConfig(BaseModel):
     enabled: bool = True
     geometry: bool = True
     tracker_neighborhood: bool = False
+    tracker_momentum: bool = False
+    tracker_doublets: bool = False
     calorimeter_neighborhood: bool = True
+
+    @model_validator(mode="after")
+    def validate_tracker_momentum(self):
+        if self.tracker_momentum and not self.tracker_neighborhood:
+            raise ValueError("tracker_momentum requires tracker_neighborhood")
+        return self
 
 
 class SetMatcherConfig(BaseModel):
@@ -899,7 +908,12 @@ class SetDecoderConfig(BaseModel):
     hit_grouping_loss_weight: float = Field(default=0.1, ge=0.0)
     hit_grouping_background_weight: float = Field(default=0.1, gt=0.0)
     hit_grouping_detector_balanced: bool = False
+    tracker_geometry_loss_weight: float = Field(default=0.0, ge=0.0)
+    tracker_curvature_loss_weight: float = Field(default=0.0, ge=0.0)
+    tracker_loss_max_hits: int = Field(default=64, ge=4)
     tracker_group_readout: bool = False
+    tracker_fit_correction: bool = False
+    tracker_fit_max_log_correction: float = Field(default=0.4054651081081644, gt=0.0)  # log(1.5)
     tracker_group_magnetic_field: float = Field(default=2.0, gt=0.0)  # tesla; CLD solenoid
     event_consistency_loss_weight: float = Field(default=0.0, ge=0.0)
     matcher: SetMatcherConfig = Field(default_factory=SetMatcherConfig)
@@ -920,6 +934,10 @@ class SetDecoderConfig(BaseModel):
             raise ValueError("set decoder hit grouping requires a positive hit_grouping_loss_weight")
         if (self.tracker_group_readout or self.hit_grouping_detector_balanced) and not self.hit_grouping:
             raise ValueError("tracker group readout and detector balancing require hit_grouping")
+        if (self.tracker_geometry_loss_weight or self.tracker_curvature_loss_weight) and not self.hit_grouping:
+            raise ValueError("tracker fit losses require hit_grouping")
+        if self.tracker_fit_correction and not self.tracker_group_readout:
+            raise ValueError("tracker_fit_correction requires tracker_group_readout")
         return self
 
 
