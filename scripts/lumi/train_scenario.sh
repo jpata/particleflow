@@ -6,9 +6,7 @@ REPO_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
 cd "$REPO_ROOT"
 export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
-echo "purge"
 module --force purge
-echo "load"
 module load Local-LAIF lumi-aif-singularity-bindings
 export PYTHONNOUSERSITE=1
 
@@ -21,7 +19,6 @@ fi
 # The old particleflow-env points to the previous container's Conda Python.
 # Use an overlay built in LAIF with access to its GPU packages.
 export LUMI_VENV=${LUMI_VENV:-$REPO_ROOT/particleflow-laif-env}
-echo "activate"
 if [[ -n "$LUMI_VENV" && ! -f "$LUMI_VENV/bin/activate" ]]; then
   echo "Python environment activation script is missing at '$LUMI_VENV/bin/activate'" >&2
   echo "Run bash scripts/lumi/setup_env.sh to create the LAIF overlay" >&2
@@ -31,7 +28,6 @@ fi
 export IMG=$(readlink -f "$IMG")
 
 # Resolve configs with container Python, then submit using the host Slurm client.
-echo "submission"
 SUBMISSION_SCRIPT=$(mktemp /tmp/mlpf-lumi-submit.XXXXXX)
 trap 'rm -f "$SUBMISSION_SCRIPT"' EXIT
 singularity run \

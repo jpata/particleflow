@@ -65,8 +65,7 @@ NTEST=${NTEST:-100}
 DEFAULT_GLOBAL_BATCH_SIZE=8
 case $(basename "$SCENARIO_FILE" .yaml) in
   cld_set_hits_heptv2_sector_comparison) DEFAULT_GLOBAL_BATCH_SIZE=2 ;;
-  cld_pf_heptv2_tracker_momentum_50k|cld_pf_heptv2_model_scaling_50k) DEFAULT_GLOBAL_BATCH_SIZE=1 ;;
-  cld_pf_heptv2_fit_loss_50k|cld_pf_heptv2_default_50k|cld_pf_heptv2_batch512_50k|cld_pf_heptv2_hit_grouping_50k|cld_pf_heptv2_grouped_tracking_50k|cld_pf_heptv2_fit_correction_50k) DEFAULT_GLOBAL_BATCH_SIZE=1 ;;
+  cld_pf_heptv2_*) DEFAULT_GLOBAL_BATCH_SIZE=1 ;;
 esac
 GLOBAL_BATCH_SIZE=${GLOBAL_BATCH_SIZE:-${GPU_BATCH_MULTIPLIER:-$DEFAULT_GLOBAL_BATCH_SIZE}}
 NUM_WORKERS=${NUM_WORKERS:-8}

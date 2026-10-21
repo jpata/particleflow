@@ -3,7 +3,7 @@ gpus: 8
 # The LAIF wrapper activates the environment before launching the scenario.
 python_command: [python3]
 data_dir: /scratch/project_465001293/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
-experiments_dir: /scratch/project_465001293/joosep/particleflow/experiments
+experiments_dir: /scratch/project_465001293/${USER}/particleflow/experiments
 environment:
   MIOPEN_USER_DB_PATH: /tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
   MIOPEN_CUSTOM_CACHE_DIR: /tmp/${USER}-${SLURM_JOB_ID}-miopen-cache

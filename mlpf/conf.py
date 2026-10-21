@@ -1250,7 +1250,7 @@ class MLPFConfig(BaseModel):
 
     validation_linear_probe: bool = False  # frozen hit-instance ARI and calo continuation probes on diagnostic batches
     validation_linear_probe_max_events: int = Field(default=16, ge=8)  # per rank; every fourth event is held out
-    validation_particle_metrics: bool = True  # matched-particle metrics in validation
+    validation_particle_metrics: bool = True  # matched-particle metrics (metrics/particle/*) in validation; slow on large (pu200) events
 
     # Flags
     train: bool = False
