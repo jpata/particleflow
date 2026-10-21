@@ -1,7 +1,7 @@
 # This file contains the structure of the MLPF configuration and some generic defaults.
 # Dataset-specific overrides are in particleflow_spec.yaml
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Literal, Tuple
 from dataclasses import dataclass, fields
 import os
 from enum import Enum
@@ -876,18 +876,35 @@ class SetDecoderConfig(BaseModel):
     ffn_multiplier: float = Field(default=4.0, gt=0.0)
     dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
     query_init: SetQueryInit = SetQueryInit.LEARNED
-    local_attention_radius: Optional[float] = Field(default=None, gt=0.0)
+    local_attention_radius: Optional[float] = Field(
+        default=None, gt=0.0, description="Legacy name for the per-layer query reference update scale; attention remains unmasked."
+    )
+    attention_mode: Literal["global-flash", "sectorized"] = "global-flash"
+    num_sectors: int = Field(default=32, gt=0)
+    sector_neighbors: int = Field(default=1, ge=0)
     tracker_query_fraction: float = Field(default=0.5, ge=0.0, le=1.0)
+    proposal_mode: Literal["topk", "grid-diverse"] = "topk"
+    proposal_grid_size: float = Field(default=0.1, gt=0.0)
+    use_aggregate_anchors: bool = False
+    aggregate_grid_size: float = Field(default=0.1, gt=0.0)
     presence_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
     no_object_weight: float = Field(default=1.0, gt=0.0)
     cardinality_loss_weight: float = Field(default=0.0, ge=0.0)
     auxiliary_loss_weight: float = Field(default=0.0, ge=0.0)
+    momentum_loss: Literal["mse", "huber"] = "mse"
+    momentum_huber_delta: float = Field(default=0.2, gt=0.0)
     matcher: SetMatcherConfig = Field(default_factory=SetMatcherConfig)
 
     @model_validator(mode="after")
     def validate_query_locality(self):
+        if self.attention_mode == "sectorized" and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder sectorized attention requires query_init='input-conditioned'")
         if self.local_attention_radius is not None and self.query_init != SetQueryInit.INPUT_CONDITIONED:
             raise ValueError("set decoder local_attention_radius requires query_init='input-conditioned'")
+        if self.proposal_mode != "topk" and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder proposal_mode requires query_init='input-conditioned'")
+        if self.use_aggregate_anchors and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder aggregate anchors require query_init='input-conditioned'")
         return self
 
 
@@ -995,6 +1012,7 @@ _PIPELINE_DATASETS = {
     "colliderml": _PipelineDatasetOverride("physical", "colliderml_ttbar_nopu_pf", "1.2.0", gpu_batch_multiplier=8),
     "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.1.0", gpu_batch_multiplier=1),
     "colliderml_hits": _PipelineDatasetOverride("physical", "colliderml_ttbar_hits", "1.0.0", gpu_batch_multiplier=8),
+    "cld_hits": _PipelineDatasetOverride("physical", "cld_edm_ttbar_hits", "3.2.2"),
 }
 
 
