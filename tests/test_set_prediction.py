@@ -773,6 +773,9 @@ def test_evaluate_reconstruction_diagnostics_respect_batch_limit(grouping):
     "overrides",
     [
         {"hit_grouping_detector_balanced": True},
+        {"hit_grouping_tracker_particle_balanced": True},
+        {"tracker_overlap_loss_weight": 0.05},
+        {"hit_grouping_tracker_particle_balanced": True, "tracker_overlap_loss_weight": 0.05},
         {"tracker_group_readout": True},
         {"tracker_group_readout": True, "tracker_fit_correction": True},
         {"event_consistency_loss_weight": 0.1},
@@ -793,6 +796,9 @@ def test_grouped_tracking_variants_forward_backward(overrides):
     assert torch.isfinite(loss)
     loss.backward()
     assert model.set_decoder.scale_head.weight.grad is not None
+    if overrides.get("tracker_overlap_loss_weight"):
+        assert values["TrackerOverlap"] > 0
+        assert values["TrackerOverlapCount"] == 1
     if overrides.get("tracker_fit_correction"):
         assert model.set_decoder.tracker_pt_correction.weight.grad is not None
     if overrides.get("tracker_group_readout"):
