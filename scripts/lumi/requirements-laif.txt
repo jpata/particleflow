@@ -1,0 +1,10 @@
+array-record~=0.8.3
+awkward
+colorhash
+# Overlay for CLD/CLIC training; keep PyTorch, ROCm and Flash Attention from LAIF.
+comet-ml
+fastjet
+mplhep
+tabulate
+tensorflow-datasets~=4.9.9
+vector
