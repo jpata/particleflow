@@ -908,6 +908,8 @@ class SetDecoderConfig(BaseModel):
     hit_grouping_loss_weight: float = Field(default=0.1, ge=0.0)
     hit_grouping_background_weight: float = Field(default=0.1, gt=0.0)
     hit_grouping_detector_balanced: bool = False
+    hit_grouping_tracker_particle_balanced: bool = False
+    tracker_overlap_loss_weight: float = Field(default=0.0, ge=0.0)
     hit_grouping_sparse: bool = False
     hit_grouping_topk: int = Field(default=4, gt=0)
     hit_grouping_temperature: float = Field(default=1.0, gt=0.0)
@@ -939,6 +941,8 @@ class SetDecoderConfig(BaseModel):
             raise ValueError("set decoder hit grouping requires a positive hit_grouping_loss_weight")
         if (self.tracker_group_readout or self.hit_grouping_detector_balanced) and not self.hit_grouping:
             raise ValueError("tracker group readout and detector balancing require hit_grouping")
+        if (self.hit_grouping_tracker_particle_balanced or self.tracker_overlap_loss_weight) and not self.hit_grouping:
+            raise ValueError("tracker particle balancing and overlap loss require hit_grouping")
         if (self.tracker_geometry_loss_weight or self.tracker_curvature_loss_weight) and not self.hit_grouping:
             raise ValueError("tracker fit losses require hit_grouping")
         if (self.hit_grouping_sparse or self.tracker_momentum_readout) and not self.hit_grouping:

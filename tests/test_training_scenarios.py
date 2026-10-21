@@ -791,3 +791,32 @@ def test_tracker_readout_scenario_preserves_small_baseline():
             model["set_decoder"][key] = False
         assert model == reference.model.model_dump()
         assert (config.lr, config.lr_schedule, config.optimizer) == (reference.lr, reference.lr_schedule, reference.optimizer)
+
+
+def test_tracker_grouping_losses_scenario_is_from_scratch_small_factorial():
+    platform = load_platform_profile(ROOT / "configs/training/platforms/lumi_mi250x.yaml")
+    reference = resolve_scenario_jobs(
+        load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_model_scaling_50k.yaml"),
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+    )[0].resolved_config
+    jobs = resolve_scenario_jobs(
+        load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_tracker_grouping_losses_50k.yaml"),
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+    )
+    assert len(jobs) == 4
+    assert [
+        (j.resolved_config.model.set_decoder.hit_grouping_tracker_particle_balanced, j.resolved_config.model.set_decoder.tracker_overlap_loss_weight)
+        for j in jobs
+    ] == [(False, 0), (True, 0), (False, 0.05), (True, 0.05)]
+    for job in jobs:
+        c = job.resolved_config
+        assert c.load is None and c.model.trainable == "all"
+        assert job.global_batch_size == 128 and job.per_gpu_batch_size == 16
+        assert c.num_steps == 50000 and c.val_freq == c.checkpoint_freq == 1000
+        model = c.model.model_dump()
+        model["set_decoder"]["hit_grouping_tracker_particle_balanced"] = False
+        model["set_decoder"]["tracker_overlap_loss_weight"] = 0.0
+        assert model == reference.model.model_dump()
+        assert (c.lr, c.lr_schedule, c.optimizer) == (reference.lr, reference.lr_schedule, reference.optimizer)
