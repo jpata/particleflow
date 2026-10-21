@@ -34,6 +34,7 @@ def main():
     local_datasets = {
         "pyg-cld-hits-v1": ("cld_hits", "cld_edm_ttbar_hits", args.hit_version, args.hit_splits),
         "pyg-cld-hits-set-v1": ("cld_hits", "cld_edm_ttbar_hits", args.hit_version, args.hit_splits),
+        "pyg-cld-hits-heptv2-sector-set-v1": ("cld_hits", "cld_edm_ttbar_hits", args.hit_version, args.hit_splits),
         "pyg-clic-hits-v1": ("clic_hits", "clic_edm_ttbar_hits", args.hit_version, args.hit_splits),
         "pyg-clic-hits-set-v1": ("clic_hits", "clic_edm_ttbar_hits", args.hit_version, args.hit_splits),
         "pyg-cld-v1": ("cld", "cld_edm_ttbar_pf", args.pf_version, args.pf_splits),
