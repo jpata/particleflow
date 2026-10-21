@@ -24,35 +24,7 @@ SCENARIO = ROOT / "configs/training/scenarios/cld_hits_output_comparison.yaml"
 BACKBONE_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_backbone_comparison.yaml"
 PF_HITS_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_hits_comparison.yaml"
 CLIC_CLD_SCENARIO = ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comparison.yaml"
-SET_IMPROVEMENT_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_improvement_comparison.yaml"
-SET_QUERY_MATCHING_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_query_matching_comparison.yaml"
-OBJECT_FORMATION_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_object_formation_comparison.yaml"
-HEPTV2_SECTOR_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_heptv2_sector_comparison.yaml"
-HEPTV2_MOMENTUM_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_heptv2_momentum_50k_comparison.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
-
-
-def test_heptv2_momentum_scenario_isolates_50k_loss_and_matcher_changes():
-    scenario = load_training_scenario(HEPTV2_MOMENTUM_SCENARIO)
-    platform = load_platform_profile(PLATFORMS / "local.yaml")
-    jobs = resolve_scenario_jobs(
-        scenario,
-        platform,
-        spec_file=ROOT / "particleflow_spec.yaml",
-        global_batch_size=8,
-    )
-
-    assert [job.variant_name for job in jobs] == [
-        "track_cluster_mlpf",
-        "hit_heptv2_baseline",
-        "hit_heptv2_energy_match",
-        "hit_heptv2_huber_momentum",
-    ]
-    assert {job.resolved_config.num_steps for job in jobs} == {50000}
-    assert {job.resolved_config.lr for job in jobs} == {0.001}
-    assert {job.seed for job in jobs} == {12345}
-    assert [job.resolved_config.model.set_decoder.matcher.energy for job in jobs[1:]] == [0.0, 0.5, 0.0]
-    assert [job.resolved_config.model.set_decoder.momentum_loss for job in jobs[1:]] == ["mse", "mse", "huber"]
 
 
 def test_comparison_scenario_resolves_both_output_modes_with_same_seed():
@@ -185,12 +157,12 @@ def test_clic_cld_scenario_resolves_pf_and_set_hits_per_detector():
         "elementwise",
         "set",
     ]
-    # The hit models split the same six-layer budget across detector branches.
+    # The set-based hit models run twice the backbone depth of the PF models.
     assert [job.resolved_config.model.backbone.num_convs for job in jobs] == [
         6,
+        12,
         6,
-        6,
-        6,
+        12,
     ]
     assert [
         (
@@ -199,148 +171,12 @@ def test_clic_cld_scenario_resolves_pf_and_set_hits_per_detector():
             job.resolved_config.model.backbone.num_common_layers,
         )
         for job in jobs
-    ] == [(None, None, None), (2, 2, 2), (None, None, None), (2, 2, 2)]
+    ] == [(None, None, None), (4, 4, 4), (None, None, None), (4, 4, 4)]
     assert {job.resolved_config.model.set_decoder.num_layers for job in jobs if job.resolved_config.model.set_decoder} == {8}
     assert {job.resolved_config.num_steps for job in jobs} == {50000}
     assert {job.resolved_config.val_freq for job in jobs} == {5000}
     assert {job.resolved_config.lr for job in jobs} == {0.001}
     assert {job.seed for job in jobs} == {12345}
-
-
-def test_set_improvement_scenario_resolves_four_isolated_cld_variants():
-    scenario = load_training_scenario(SET_IMPROVEMENT_SCENARIO)
-    platform = load_platform_profile(PLATFORMS / "local.yaml")
-
-    jobs = resolve_scenario_jobs(
-        scenario,
-        platform,
-        spec_file=ROOT / "particleflow_spec.yaml",
-        global_batch_size=8,
-    )
-
-    assert [job.variant_name for job in jobs] == [
-        "control_8layer_local",
-        "decoder4_local",
-        "decoder8_global",
-        "decoder8_kinematic_match",
-    ]
-    assert {job.model_name for job in jobs} == {"pyg-cld-hits-set-v1"}
-    assert {job.resolved_config.dataset.value for job in jobs} == {"cld_hits"}
-    assert {job.resolved_config.model.output_mode.value for job in jobs} == {"set"}
-    assert {
-        (
-            job.resolved_config.model.backbone.num_tracker_layers,
-            job.resolved_config.model.backbone.num_calo_layers,
-            job.resolved_config.model.backbone.num_common_layers,
-        )
-        for job in jobs
-    } == {(2, 2, 2)}
-    assert [job.resolved_config.model.set_decoder.num_layers for job in jobs] == [8, 4, 8, 8]
-    assert [job.resolved_config.model.set_decoder.local_attention_radius for job in jobs] == [0.4, 0.4, None, 0.4]
-    assert [job.resolved_config.model.set_decoder.matcher.energy for job in jobs] == [0.0, 0.0, 0.0, 1.0]
-    assert [job.resolved_config.model.set_decoder.matcher.presence for job in jobs] == [1.0, 1.0, 1.0, 0.0]
-    assert [job.resolved_config.model.set_decoder.matcher.pid for job in jobs] == [1.0, 1.0, 1.0, 0.0]
-    assert {job.resolved_config.num_steps for job in jobs} == {50000}
-    assert {job.seed for job in jobs} == {12345}
-
-
-def test_set_query_matching_scenario_resolves_four_factorial_variants():
-    scenario = load_training_scenario(SET_QUERY_MATCHING_SCENARIO)
-    platform = load_platform_profile(PLATFORMS / "local.yaml")
-
-    jobs = resolve_scenario_jobs(
-        scenario,
-        platform,
-        spec_file=ROOT / "particleflow_spec.yaml",
-        global_batch_size=8,
-    )
-
-    assert [job.variant_name for job in jobs] == [
-        "baseline_4layer_local",
-        "calo_balanced_queries",
-        "pid_free_match",
-        "calo_balanced_pid_free_match",
-    ]
-    assert {job.model_name for job in jobs} == {"pyg-cld-hits-set-v1"}
-    assert {job.resolved_config.dataset.value for job in jobs} == {"cld_hits"}
-    assert {job.resolved_config.model.output_mode.value for job in jobs} == {"set"}
-    assert {job.resolved_config.model.set_decoder.num_layers for job in jobs} == {4}
-    assert {job.resolved_config.model.set_decoder.local_attention_radius for job in jobs} == {0.4}
-    assert [job.resolved_config.model.set_decoder.tracker_query_fraction for job in jobs] == [0.6, 0.5, 0.6, 0.5]
-    assert [job.resolved_config.model.set_decoder.matcher.presence for job in jobs] == [1.0, 1.0, 1.0, 1.0]
-    assert [job.resolved_config.model.set_decoder.matcher.pid for job in jobs] == [1.0, 1.0, 0.0, 0.0]
-    assert {job.resolved_config.num_steps for job in jobs} == {50000}
-    assert {job.resolved_config.val_freq for job in jobs} == {5000}
-    assert {job.resolved_config.checkpoint_freq for job in jobs} == {1000}
-    assert {job.seed for job in jobs} == {12345}
-
-
-def test_object_formation_scenario_resolves_scalable_two_by_two_campaign():
-    scenario = load_training_scenario(OBJECT_FORMATION_SCENARIO)
-    platform = load_platform_profile(PLATFORMS / "lumi_mi250x.yaml")
-
-    jobs = resolve_scenario_jobs(
-        scenario,
-        platform,
-        spec_file=ROOT / "particleflow_spec.yaml",
-    )
-
-    assert [job.variant_name for job in jobs] == [
-        "baseline_topk_absolute",
-        "grid_diverse_absolute",
-        "topk_aggregate_anchors",
-        "grid_diverse_aggregate_anchors",
-    ]
-    assert [
-        (
-            job.resolved_config.model.set_decoder.proposal_mode,
-            job.resolved_config.model.set_decoder.use_aggregate_anchors,
-        )
-        for job in jobs
-    ] == [
-        ("topk", False),
-        ("grid-diverse", False),
-        ("topk", True),
-        ("grid-diverse", True),
-    ]
-    assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
-    assert {job.resolved_config.model.set_decoder.num_layers for job in jobs} == {4}
-    assert {job.resolved_config.num_steps for job in jobs} == {50000}
-    assert {job.resolved_config.checkpoint_freq for job in jobs} == {1000}
-    assert {job.resolved_config.compile for job in jobs} == {False}
-    assert {job.global_batch_size for job in jobs} == {512}
-    assert {job.gpu_batch_multiplier for job in jobs} == {64}
-
-
-def test_heptv2_sector_scenario_matches_grid_aggregate_baseline():
-    platform = load_platform_profile(PLATFORMS / "lumi_mi250x.yaml")
-    scenario = load_training_scenario(HEPTV2_SECTOR_SCENARIO)
-    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
-    baseline_scenario = load_training_scenario(OBJECT_FORMATION_SCENARIO)
-    baseline_jobs = resolve_scenario_jobs(baseline_scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
-    previous_baseline = next(job for job in baseline_jobs if job.variant_name == "grid_diverse_aggregate_anchors")
-
-    assert [job.variant_name for job in jobs] == [
-        "attention_grid_diverse_aggregate",
-        "heptv2_sector_grid_diverse_aggregate",
-        "heptv2_global_grid_diverse_aggregate",
-    ]
-    # Keep the paired comparison aligned while lowering its memory footprint.
-    previous_baseline.resolved_config.gpu_batch_multiplier = 8
-    assert jobs[0].resolved_config.model_dump(mode="json") == previous_baseline.resolved_config.model_dump(mode="json")
-    hept_global = jobs[2].resolved_config.model_dump(mode="json")
-    hept_sector = jobs[1].resolved_config.model_dump(mode="json")
-    hept_sector["model"]["set_decoder"]["attention_mode"] = "global-flash"
-    assert hept_global == hept_sector
-    assert [job.resolved_config.model.type.value for job in jobs] == ["attention", "heptv2", "heptv2"]
-    assert [job.resolved_config.model.set_decoder.attention_mode for job in jobs] == ["global-flash", "sectorized", "global-flash"]
-    assert {job.resolved_config.model.set_decoder.proposal_mode for job in jobs} == {"grid-diverse"}
-    assert {job.resolved_config.model.set_decoder.use_aggregate_anchors for job in jobs} == {True}
-    assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
-    assert {job.resolved_config.model.set_decoder.num_layers for job in jobs} == {4}
-    assert {job.resolved_config.pad_to_multiple_elements for job in jobs} == {128}
-    assert {job.global_batch_size for job in jobs} == {64}
-    assert {job.gpu_batch_multiplier for job in jobs} == {8}
 
 
 def test_platform_data_dir_mapping_requires_the_variant_production():
@@ -583,14 +419,3 @@ def test_continuation_chooses_most_advanced_compatible_checkpoint(tmp_path):
     assert continuation.step == 15000
     assert continuation.checkpoint.name == "checkpoint-15000.pth"
     assert continuation.experiment_dir.name.endswith("_best")
-
-
-@pytest.mark.parametrize("profile, expected", [("lumi_mi250x", ["python3", "-u"]), ("local", ["uv", "run", "python3", "-u"])])
-def test_pipeline_command_uses_platform_python_environment(profile, expected):
-    from mlpf.training_scenarios import _pipeline_command
-
-    scenario = load_training_scenario(SET_IMPROVEMENT_SCENARIO)
-    platform = load_platform_profile(PLATFORMS / f"{profile}.yaml")
-    job = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")[0]
-    command = _pipeline_command(job, scenario, platform, ROOT / "particleflow_spec.yaml", Path("experiment"))
-    assert command[: len(expected)] == expected

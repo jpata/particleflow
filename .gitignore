@@ -73,6 +73,3 @@ experiments.tgz
 log_*.err
 *.log
 **/tensorboard/
-
-# Previously tracked study READMEs and event-display SVGs stay tracked.
-/notebooks/studies/**
