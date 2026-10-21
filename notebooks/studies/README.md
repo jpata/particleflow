@@ -9,6 +9,16 @@ Use this directory for dated, reproducible analyses and presentations. A study
 should remain renderable after its source experiment directory has been moved or
 deleted.
 
+## Historical snapshots
+
+Dated study READMEs describe their archived runs, code revisions, datasets and
+analysis conventions. Statements about running jobs, proposed follow-ups and
+local paths are historical, not current status or fresh-checkout guarantees.
+Later matched-checkpoint analyses supersede early snapshots; preserve the older
+record rather than silently replacing its results. See the tracked
+[CLD evidence summary](../../docs/cld_hit_results.md) for current recommendations
+and the distinction between historical and current matching/dataset defaults.
+
 ## Directory layout
 
 Name a study `YYYYMMDD_short_description` and use this layout:

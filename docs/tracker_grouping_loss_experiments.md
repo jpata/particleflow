@@ -68,8 +68,11 @@ uv run --no-sync python3 scripts/training/run_scenario.py \
   --platform configs/training/platforms/lumi_mi250x.yaml --dry-run
 ```
 
-Remove `--dry-run` to launch on the configured platform. Global batch 128 resolves
-to 16 events per GPU with this eight-GPU profile.
+The generic runner executes jobs on the current machine; it does not allocate
+a Slurm node. To submit on LUMI, use
+`scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_grouping_losses_50k mi250x`.
+Global batch 128 resolves to 16 events per GPU with this eight-GPU profile.
+Partial matched-32k results are in [the evidence summary](cld_hit_results.md).
 
 Compare all four arms at identical steps and on identical evaluation events.
 Use charged-hadron momentum bias, resolution and tails alongside particle F1,

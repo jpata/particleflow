@@ -104,8 +104,9 @@ NVALID=4 NTEST=4 NUM_WORKERS=0 VALIDATION_DIAGNOSTICS_BATCHES=1 \
   --variant hit_heptv2_tracker_momentum_doublets
 ```
 
-As with the comparison scenario, the reduced batch of 48 events per device
-still needs target-platform memory/ROCm/DDP validation.
+The archived LUMI campaign ran at 48 events per device through the matched 10k
+snapshot. This demonstrates operation on the observed batches, not memory
+headroom across every possible occupancy or a completed 50k schedule.
 
 ## Local tests and cost, 2026-10-14
 
@@ -142,6 +143,7 @@ use `--batch-size 4 --checkpointing`, adding `--tracker-momentum` and optionally
 `--tracker-doublets`; add `--features-only` for the fixed-batch feature benchmark.
 Use a separate `--output` JSON for each mode and avoid competing GPU workloads.
 
-The next physics test is the full ablation: charged momentum core widths and
-tails versus pT/eta, together with particle-finding F1 and jet/MET metrics. A
-short smoke test does not establish that these features improve reconstruction.
+The matched 10k physics snapshot found worse charged widths and efficiency for
+both additions; neither is promoted. See [the dated evidence summary](cld_hit_results.md).
+A completed schedule and seed repeats are still needed before a final judgment.
+The local smoke measurements above establish cost/correctness, not physics gains.

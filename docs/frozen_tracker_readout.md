@@ -36,7 +36,7 @@ The predicted charged-PID and tracker-support gates remain unchanged.
 
 ## Local data and budget
 
-Only CLD dataset configuration `1:3.2.1` is installed on this machine. Each process
+The original local diagnostic used only CLD dataset configuration `1:3.2.1`. Each process
 (ttbar, WW fullhad, qq) contributes 4,096 randomly selected **train-split** events,
 for 12,288 cached training events. Sampling is without replacement within each
 batch; batches repeat the finite cache over 640,000 event presentations. This is
