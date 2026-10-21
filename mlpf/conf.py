@@ -1,7 +1,7 @@
 # This file contains the structure of the MLPF configuration and some generic defaults.
 # Dataset-specific overrides are in particleflow_spec.yaml
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any, Tuple, Literal
 from dataclasses import dataclass, fields
 import os
 from enum import Enum
@@ -19,8 +19,11 @@ class Dataset(Enum):
     CLIC = "clic"
     CLD = "cld"
     IDEA = "idea"
+    MAIA = "maia"
     CLIC_HITS = "clic_hits"
     CLD_HITS = "cld_hits"
+    COLLIDERML = "colliderml"
+    COLLIDERML_HITS = "colliderml_hits"
 
 
 class ModelType(Enum):
@@ -67,6 +70,8 @@ SOURCE_IDS = {
     Dataset.CLIC.value: 2,
     Dataset.CLD.value: 3,
     Dataset.IDEA.value: 4,
+    Dataset.COLLIDERML.value: 5,
+    Dataset.MAIA.value: 6,
 }
 SOURCE_LABELS = {source_id: source_name for source_name, source_id in SOURCE_IDS.items()}
 
@@ -198,6 +203,10 @@ class EDM4HEP:
         sigma_x: Any
         sigma_y: Any
         sigma_z: Any
+        # Muon-system hits in the cluster, selected by collection (Detector.muon_collections).
+        # Appended last so the existing columns keep their indices.
+        num_muon_hits: Any
+        energy_muon: Any
 
         @classmethod
         def get_names(cls):
@@ -210,6 +219,15 @@ class EDM4HEP:
         name: str
         b_field: float
         hit_collections: List[str]
+        # Tracker hits are decoded into system/side/layer from the per-collection
+        # CellIDEncoding in the podio metadata, and a missing encoding is an error. Files
+        # converted from LCIO carry no collection metadata at all, so detectors produced that
+        # way opt out and get zeros for those three fields instead.
+        require_cellid_encoding: bool = True
+        # Hit collections from the muon system. Cluster muon features count these by
+        # collection rather than by subdetector, because subdetector 2 also holds other
+        # systems (LumiCal on CLIC).
+        muon_collections: Tuple[str, ...] = ()
 
     # Registry of supported key4hep detector scenarios. Add new detectors here;
     # mlpf/data/key4hep/postprocessing.py and tests/validate_parquet.py pick up
@@ -241,6 +259,7 @@ class EDM4HEP:
                 "VXDTrackerHits",
                 "VXDEndcapTrackerHits",
             ],
+            muon_collections=("MUON",),
         ),
         "cld": Detector(
             name="cld",
@@ -259,6 +278,7 @@ class EDM4HEP:
                 "VXDTrackerHits",
                 "VXDEndcapTrackerHits",
             ],
+            muon_collections=("MUON",),
         ),
         "maia": Detector(
             name="maia",
@@ -276,6 +296,20 @@ class EDM4HEP:
                 "VBTrackerHits",
                 "VETrackerHits",
             ],
+            # MAIA samples are converted from LCIO with an empty podio metadata tree, so no
+            # CellIDEncoding is available for any collection.
+            require_cellid_encoding=False,
+            muon_collections=("MUON",),
+        ),
+        # OpenDataDetector as released by ColliderML release 1; not EDM4hep geometry, but the
+        # registry is the single place the B-field comes from for downstream tools, so the
+        # entry is included here for the colliderml detector option as well. hit_collections
+        # is unused for ColliderML (we read a release parquet that already contains raw
+        # positions/energies).
+        "colliderml": Detector(
+            name="colliderml",
+            b_field=3.0,
+            hit_collections=[],
         ),
     }
 
@@ -329,8 +363,11 @@ ELEM_TYPES = {
     Dataset.CLIC.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.CLD.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.IDEA.value: [0, 1, 2],  # 1 - truth-seeded proxy track, 2 - cluster
+    Dataset.MAIA.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.CLIC_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
     Dataset.CLD_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
+    Dataset.COLLIDERML.value: [0, 1, 2],  # 1 - track, 2 - cluster
+    Dataset.COLLIDERML_HITS.value: [0, 1, 2],  # 1 - track, 2 - calorimeter hit
 }
 
 # Some element types are defined, but do not exist in the dataset at all or should be excluded for physics reasons
@@ -339,8 +376,11 @@ ELEM_TYPES_NONZERO = {
     Dataset.CLIC.value: [1, 2],
     Dataset.CLD.value: [1, 2],
     Dataset.IDEA.value: [1, 2],
+    Dataset.MAIA.value: [1, 2],
     Dataset.CLIC_HITS.value: [1, 2],
     Dataset.CLD_HITS.value: [1, 2],
+    Dataset.COLLIDERML.value: [1, 2],
+    Dataset.COLLIDERML_HITS.value: [1, 2],
 }
 
 CLASS_LABELS = {
@@ -358,8 +398,11 @@ CLASS_LABELS = {
     Dataset.CLIC.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLD.value: [0, 211, 130, 22, 11, 13],
     Dataset.IDEA.value: [0, 211, 130, 22, 11, 13],
+    Dataset.MAIA.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLIC_HITS.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLD_HITS.value: [0, 211, 130, 22, 11, 13],
+    Dataset.COLLIDERML.value: [0, 211, 130, 22, 11, 13],
+    Dataset.COLLIDERML_HITS.value: [0, 211, 130, 22, 11, 13],
 }
 
 CLASS_NAMES_LATEX = {
@@ -414,6 +457,9 @@ CLASS_NAMES_LATEX = {
         r"$e^\pm$",
         r"$\mu^\pm$",
     ],
+    Dataset.MAIA.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    Dataset.COLLIDERML.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    Dataset.COLLIDERML_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
     Dataset.CMS.value: [
@@ -430,8 +476,11 @@ CLASS_NAMES = {
     Dataset.CLIC.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLD.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.IDEA.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.MAIA.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLIC_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLD_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.COLLIDERML.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.COLLIDERML_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
     Dataset.CMS.value: [
@@ -485,6 +534,9 @@ CLASS_NAMES_CAPITALIZED = {
         "Electron",
         "Muon",
     ],
+    Dataset.MAIA.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    Dataset.COLLIDERML.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    Dataset.COLLIDERML_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
 X_FEATURES = {
@@ -548,8 +600,31 @@ X_FEATURES = {
     Dataset.CLIC.value: get_edm4hep_x_features(),
     Dataset.CLD.value: get_edm4hep_x_features(),
     Dataset.IDEA.value: get_edm4hep_x_features(),
+    Dataset.MAIA.value: get_edm4hep_x_features(),
     Dataset.CLIC_HITS.value: EDM4HEP.HitFeatures.get_names(),
     Dataset.CLD_HITS.value: EDM4HEP.HitFeatures.get_names(),
+    Dataset.COLLIDERML.value: [
+        "type | elemtype",
+        "pt | et",
+        "eta | eta",
+        "sin_phi | sin_phi",
+        "cos_phi | cos_phi",
+        "p | energy",
+        "d0 | position.x",
+        "z0 | position.y",
+        "theta | position.z",
+        "qop | iTheta",
+        "tanLambda | energy_ecal",
+        "omega | energy_hcal",
+        "radiusOfInnermostHit | energy_other",
+        "n_meas | num_hits",
+        "Null | sigma_x",
+        "Null | sigma_y",
+        "Null | sigma_z",
+    ],
+    # ColliderML hits view mirrors the key4hep hits view (edm4hep_utils/utils_hits.py):
+    # hits in the 15-wide EDM4hep hit layout carry targets directly.
+    Dataset.COLLIDERML_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
 
@@ -564,6 +639,14 @@ class JetConfig:
 
 
 JET_CONFIG = {
+    Dataset.MAIA.value: JetConfig(
+        algorithm="ee_genkt_algorithm",
+        radius=0.4,
+        p=-1.0,
+        pt_cut=5.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
     Dataset.CMS.value: JetConfig(
         algorithm="antikt_algorithm",
         radius=0.4,
@@ -611,7 +694,22 @@ JET_CONFIG = {
         match_dr=0.1,
         match_rel_pt=0.5,
     ),
+    Dataset.COLLIDERML.value: JetConfig(
+        algorithm="antikt_algorithm",
+        radius=0.4,
+        pt_cut=3.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
+    Dataset.COLLIDERML_HITS.value: JetConfig(
+        algorithm="antikt_algorithm",
+        radius=0.4,
+        pt_cut=3.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
 }
+
 
 Y_FEATURES = ParticleFeatures.get_names()
 
@@ -904,6 +1002,24 @@ class TaskLossWeights(BaseModel):
         return self
 
 
+class LRFinderConfig(BaseModel):
+    """LR range test (`mlpf/pipeline.py lr-find`): exponential lr ramp, loss recorded per step."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_lr: float = Field(default=1e-7, gt=0.0)
+    end_lr: float = Field(default=1e-1, gt=0.0)
+    num_steps: int = Field(default=1000, ge=2)  # ramp length, after the task-weight calibration steps
+    smoothing: float = Field(default=0.98, ge=0.0, lt=1.0)  # EMA factor of the recorded loss
+    divergence_factor: float = Field(default=4.0, gt=1.0)  # stop once the smoothed loss exceeds this x its minimum
+
+    @model_validator(mode="after")
+    def validate_lr_range(self):
+        if self.start_lr >= self.end_lr:
+            raise ValueError("lr_finder.start_lr must be below lr_finder.end_lr")
+        return self
+
+
 class DatasetSample(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: str
@@ -939,9 +1055,12 @@ class _PipelineDatasetOverride:
 
 _PIPELINE_DATASETS = {
     "cms": _PipelineDatasetOverride("physical_pu", "cms_pf_ttbar", "3.2.0"),
-    "cld": _PipelineDatasetOverride("physical", "cld_edm_ttbar_pf", "3.2.1", gpu_batch_multiplier=8),
-    "cld_hits": _PipelineDatasetOverride("physical", "cld_edm_ttbar_hits", "3.2.1"),
-    "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.2.1"),
+    "cld": _PipelineDatasetOverride("physical", "cld_edm_ttbar_pf", "3.3.0", gpu_batch_multiplier=8),
+    "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.3.0"),
+    "colliderml": _PipelineDatasetOverride("physical", "colliderml_ttbar_nopu_pf", "1.2.0", gpu_batch_multiplier=8),
+    "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.1.0", gpu_batch_multiplier=1),
+    "colliderml_hits": _PipelineDatasetOverride("physical", "colliderml_ttbar_hits", "1.0.0", gpu_batch_multiplier=8),
+    "cld_hits": _PipelineDatasetOverride("physical", "cld_edm_ttbar_hits", "3.2.2"),
 }
 
 
@@ -1125,14 +1244,17 @@ class MLPFConfig(BaseModel):
     lr_schedule: LRSchedule = LRSchedule.COSINEDECAY
     lr_schedule_config: Dict[str, Any] = Field(default_factory=dict)
     task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
+    lr_finder: LRFinderConfig = Field(default_factory=LRFinderConfig)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
     validation_diagnostics_batches: int = 0  # batches per rank for domain, momentum, and hit-grouping diagnostics; 0 disables extras
 
     validation_linear_probe: bool = False  # frozen hit-instance ARI and calo continuation probes on diagnostic batches
     validation_linear_probe_max_events: int = Field(default=16, ge=8)  # per rank; every fourth event is held out
+    validation_particle_metrics: bool = True  # matched-particle metrics in validation
 
     # Flags
     train: bool = False
+    lr_find: bool = False  # run the LR range test instead of the training loop (set by the lr-find command)
     test: bool = False
     compile: bool = False
     make_plots: bool = True
@@ -1140,6 +1262,7 @@ class MLPFConfig(BaseModel):
     sampler_mode: DatasetSamplerMode = DatasetSamplerMode.SHARD_CONSECUTIVE
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
     relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
+    load_weights_only: bool = False  # load only the model weights from --load; optimizer, LR schedule, RNG, sampler and step start fresh
     sampler_from_scratch: bool = False  # start the sampler from scratch (without resuming the sampler state)
 
     # Logging
@@ -1183,8 +1306,8 @@ class MLPFConfig(BaseModel):
             if self.elemtypes_nonzero is None:
                 self.elemtypes_nonzero = ELEM_TYPES_NONZERO[self.dataset.value]
         if self.model.output_mode == OutputMode.SET:
-            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS):
-                raise ValueError("model.output_mode='set' is currently supported only for CLD/CLIC hit datasets")
+            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.COLLIDERML_HITS):
+                raise ValueError("model.output_mode='set' is currently supported only for the CLD/CLIC/ColliderML hit datasets")
             if self.model.set_decoder is None:
                 self.model.set_decoder = SetDecoderConfig()
             if self.model.backbone.mode != BackboneMode.SHARED:

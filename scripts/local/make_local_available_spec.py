@@ -19,9 +19,9 @@ def main():
     parser.add_argument("output_spec", type=Path)
     parser.add_argument("--hit-version", default="3.2.1")
     parser.add_argument("--hit-splits", nargs="+", default=["1"])
-    parser.add_argument("--pf-version", default="3.2.1")
+    parser.add_argument("--pf-version", default="3.3.0")
     parser.add_argument("--pf-splits", nargs="+", default=[str(i) for i in range(1, 11)])
-    parser.add_argument("--idea-version", default="0.1.0")
+    parser.add_argument("--idea-version", default="0.2.0")
     parser.add_argument("--idea-splits", nargs="+", default=["1"])
     args = parser.parse_args()
 

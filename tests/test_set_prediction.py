@@ -99,6 +99,19 @@ def test_set_config_populates_decoder_defaults():
     assert config.model.set_decoder.matcher.dr_scale == 0.1
 
 
+def test_set_config_accepts_colliderml_hits():
+    config = MLPFConfig.model_validate(
+        {
+            "dataset": "colliderml_hits",
+            "data_dir": "/tmp",
+            "model": {"type": "heptv2", "output_mode": "set", "heptv2": {}},
+            "conv_type": "heptv2",
+        }
+    )
+
+    assert config.model.set_decoder is not None
+
+
 def test_set_config_rejects_local_attention_for_global_queries():
     with pytest.raises(ValueError, match="local_attention_radius requires"):
         make_config(local_attention_radius=0.4)
@@ -111,8 +124,11 @@ def test_set_config_rejects_sectorized_attention_for_global_queries():
 
 def test_hit_grouping_uses_predicted_membership_and_event_local_truth():
     config = make_config(
-        num_slots=4, query_init="input-conditioned", hit_grouping=True,
-        hit_grouping_dim=8, hit_grouping_chunk_size=2,
+        num_slots=4,
+        query_init="input-conditioned",
+        hit_grouping=True,
+        hit_grouping_dim=8,
+        hit_grouping_chunk_size=2,
     )
     model = MLPF(config)
     features = torch.zeros(1, 6, config.input_dim)
@@ -129,8 +145,10 @@ def test_hit_grouping_uses_predicted_membership_and_event_local_truth():
     assert output.hit_grouping is not None
     assert output[2].shape == (1, 4, 5)
     grouping_loss = hit_grouping_loss(
-        output.hit_grouping, batch,
-        [(torch.tensor([3, 1]), torch.tensor([0, 1]))], chunk_size=2,
+        output.hit_grouping,
+        batch,
+        [(torch.tensor([3, 1]), torch.tensor([0, 1]))],
+        chunk_size=2,
     )
     assert torch.isfinite(grouping_loss)
     grouping_loss.backward()
@@ -143,8 +161,13 @@ def test_hit_grouping_uses_predicted_membership_and_event_local_truth():
 def test_hit_grouping_is_included_in_set_training_loss(fit_weight):
     from mlpf.model.training import model_step
 
-    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=True,
-                         tracker_geometry_loss_weight=fit_weight, tracker_curvature_loss_weight=fit_weight)
+    config = make_config(
+        num_slots=4,
+        query_init="input-conditioned",
+        hit_grouping=True,
+        tracker_geometry_loss_weight=fit_weight,
+        tracker_curvature_loss_weight=fit_weight,
+    )
     model = MLPF(config)
     features = torch.zeros(1, 5, config.input_dim)
     features[..., 0] = torch.tensor([1, 1, 2, 2, 2])
@@ -169,9 +192,9 @@ def test_hit_grouping_labels_are_local_to_each_event():
     hit_targets = torch.zeros(2, 3, 14)
     hit_targets[..., 13] = torch.tensor([[1, 2, 0], [1, 2, 0]])
     batch = PFBatch(X=features, ytarget=hit_targets, ytarget_set=targets)
-    hit_keys = torch.tensor([[[1., 0.], [0., 1.], [0., 0.]]] * 2)
-    slot_keys = torch.tensor([[[1., 0.], [0., 1.]], [[0., 1.], [1., 0.]]])
-    background = torch.tensor([[[-10.], [-10.], [10.]]] * 2)
+    hit_keys = torch.tensor([[[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]] * 2)
+    slot_keys = torch.tensor([[[1.0, 0.0], [0.0, 1.0]], [[0.0, 1.0], [1.0, 0.0]]])
+    background = torch.tensor([[[-10.0], [-10.0], [10.0]]] * 2)
     matches = [
         (torch.tensor([0, 1]), torch.tensor([0, 1])),
         (torch.tensor([1, 0]), torch.tensor([0, 1])),
@@ -191,10 +214,14 @@ def test_global_set_attention_matches_unmasked_attention_without_dense_pairwise_
     memory = torch.randn(2, 9, 16, requires_grad=True)
     mask = torch.ones(2, 9, dtype=torch.bool)
     mask[1, 6:] = False
-    expected = torch.stack([
-        module(queries[index:index + 1], memory[index:index + 1, mask[index]], memory[index:index + 1, mask[index]], need_weights=False)[0][0]
-        for index in range(2)
-    ])
+    expected = torch.stack(
+        [
+            module(queries[index : index + 1], memory[index : index + 1, mask[index]], memory[index : index + 1, mask[index]], need_weights=False)[0][
+                0
+            ]
+            for index in range(2)
+        ]
+    )
 
     def reject_dense_attention(*args, **kwargs):
         raise AssertionError("Set decoder called dense MultiheadAttention.forward")
@@ -253,7 +280,7 @@ def test_set_config_rejects_object_formation_for_global_queries(override):
 
 
 def test_set_config_rejects_non_hit_datasets():
-    with pytest.raises(ValueError, match="supported only for CLD/CLIC hit datasets"):
+    with pytest.raises(ValueError, match="supported only for the CLD/CLIC/ColliderML hit datasets"):
         MLPFConfig.model_validate(
             {
                 "dataset": "cld",
@@ -615,8 +642,12 @@ def test_huber_momentum_caps_large_log_residuals_without_changing_geometry():
 
     mse, _ = set_event_loss(targets, predictions, target_mask, REGRESSION_WEIGHTS)
     huber, _ = set_event_loss(
-        targets, predictions, target_mask, REGRESSION_WEIGHTS,
-        momentum_loss="huber", momentum_huber_delta=0.2,
+        targets,
+        predictions,
+        target_mask,
+        REGRESSION_WEIGHTS,
+        momentum_loss="huber",
+        momentum_huber_delta=0.2,
     )
 
     torch.testing.assert_close(huber["Regression_pt"], 0.36 * mse["Regression_pt"])
@@ -773,6 +804,7 @@ def test_grouped_tracking_variants_forward_backward(overrides):
     if overrides.get("tracker_group_readout"):
         assert model.set_decoder.tracker_group_projection.weight.grad is not None
         from mlpf.model.training import evaluate
+
         config.validation_diagnostics_batches = 1
         config.make_plots = False
         metrics = evaluate("cpu", 1, model, [batch], 1, config, device_type="cpu")
@@ -807,20 +839,19 @@ def test_group_readout_and_balancing_require_grouping():
 
 
 def test_bounded_tracker_correction_preserves_fit_fallback_and_gradients():
-    config = make_config(query_init="input-conditioned", hit_grouping=True,
-                         tracker_group_readout=True, tracker_fit_correction=True)
+    config = make_config(query_init="input-conditioned", hit_grouping=True, tracker_group_readout=True, tracker_fit_correction=True)
     decoder = MLPF(config).set_decoder
     slots = torch.randn(1, 3, decoder.output_norm.normalized_shape[0], requires_grad=True)
     references = torch.zeros(1, 3, 2)
     anchors = torch.zeros(1, 3, 2)
     mask = torch.zeros(1, 3, dtype=torch.bool)
-    fits = (torch.tensor([[2.123456, 3., 4.]]), torch.tensor([[True, False, True]]))
+    fits = (torch.tensor([[2.123456, 3.0, 4.0]]), torch.tensor([[True, False, True]]))
     with torch.no_grad():
         decoder.pid_head.weight.zero_()
         decoder.pid_head.bias.zero_()
         decoder.pid_head.bias[1] = 10
         decoder.scale_head.weight.zero_()
-        decoder.scale_head.bias.fill_(.7)
+        decoder.scale_head.bias.fill_(0.7)
     with torch.autocast("cpu", dtype=torch.bfloat16):
         ordinary = decoder._predict(slots, references, anchors, mask)[2]
         fitted = decoder._predict(slots, references, anchors, mask, fits)[2]
@@ -836,13 +867,11 @@ def test_bounded_tracker_correction_preserves_fit_fallback_and_gradients():
     with torch.no_grad():
         decoder.tracker_pt_correction.bias.fill_(100)
     upper = decoder._predict(slots, references, anchors, mask, fits)[2]
-    torch.testing.assert_close(upper[0, [0, 2], 0] - fits[0][0, [0, 2]],
-                               torch.full((2,), config.model.set_decoder.tracker_fit_max_log_correction))
+    torch.testing.assert_close(upper[0, [0, 2], 0] - fits[0][0, [0, 2]], torch.full((2,), config.model.set_decoder.tracker_fit_max_log_correction))
     with torch.no_grad():
         decoder.tracker_pt_correction.bias.fill_(-100)
     lower = decoder._predict(slots, references, anchors, mask, fits)[2]
-    torch.testing.assert_close(lower[0, [0, 2], 0] - fits[0][0, [0, 2]],
-                               torch.full((2,), -config.model.set_decoder.tracker_fit_max_log_correction))
+    torch.testing.assert_close(lower[0, [0, 2], 0] - fits[0][0, [0, 2]], torch.full((2,), -config.model.set_decoder.tracker_fit_max_log_correction))
     for pid in (2, 3):
         with torch.no_grad():
             decoder.pid_head.bias.zero_()
@@ -854,15 +883,17 @@ def test_bounded_tracker_correction_preserves_fit_fallback_and_gradients():
 
 def test_bounded_tracker_correction_is_wired_into_forward(monkeypatch):
     import mlpf.model.set_decoder as module
-    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=True,
-                         tracker_group_readout=True, tracker_fit_correction=True)
+
+    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=True, tracker_group_readout=True, tracker_fit_correction=True)
     model = MLPF(config)
     with torch.no_grad():
         model.set_decoder.pid_head.weight.zero_()
         model.set_decoder.pid_head.bias.zero_()
         model.set_decoder.pid_head.bias[1] = 10
+
     def fit(features, groups, num_slots, magnetic_field):
         return torch.zeros(num_slots, 9), torch.full((num_slots,), 2.123456), torch.ones(num_slots, dtype=torch.bool)
+
     monkeypatch.setattr(module, "tracker_group_geometry", fit)
     output = model(torch.ones(1, 8, 15), torch.ones(1, 8, dtype=torch.bool))
     torch.testing.assert_close(output.predictions[2][..., 0], torch.full((1, 4), 2.123456))
@@ -875,3 +906,31 @@ def test_bounded_tracker_correction_configuration():
         make_config(tracker_fit_correction=True)
     with pytest.raises(ValueError):
         make_config(tracker_fit_max_log_correction=0)
+
+
+@pytest.mark.parametrize("grouping", [False, True])
+def test_particle_metrics_disabled_preserves_set_diagnostics(grouping, monkeypatch):
+    from mlpf.model.training import evaluate
+
+    config = make_config(num_slots=4, query_init="input-conditioned", hit_grouping=grouping, hit_grouping_dim=8)
+    config.validation_diagnostics_batches = 1
+    config.make_plots = False
+    model = MLPF(config)
+    features = torch.zeros(1, 5, config.input_dim)
+    features[..., 0] = torch.tensor([1, 1, 2, 2, 2])
+    features[..., 1] = 1
+    features[..., 4] = 1
+    features[..., 5] = 1
+    hit_targets = torch.zeros(1, 5, 14)
+    hit_targets[0, :, 13] = torch.tensor([1, 1, 2, 2, 0])
+    batch = PFBatch(X=features, ytarget=hit_targets, ytarget_set=make_target_tensor())
+    config.validation_particle_metrics = False
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("Disabled particle matching was called")
+
+    monkeypatch.setattr("mlpf.model.training.compute_validation_particle_metrics", fail_if_called)
+    metrics = evaluate("cpu", 1, model, [batch], 1, config, device_type="cpu")
+    assert not any(key.startswith("metrics/particle/") for key in metrics)
+    assert any(key.startswith("metrics/set_slot/") for key in metrics)
+    assert any(key.startswith("metrics/hit_grouping/") for key in metrics) == grouping

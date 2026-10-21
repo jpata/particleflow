@@ -44,11 +44,7 @@ def empty_metrics():
         "seconds_per_rank",
     ]
     keys += ["coverage/" + k for k in SUPPORT[1:]]
-    keys += [
-        f"{m}/{k}"
-        for m in METHODS
-        for k in ("triplet_accuracy", "top1_competing", "top1_all_candidate_anchors")
-    ]
+    keys += [f"{m}/{k}" for m in METHODS for k in ("triplet_accuracy", "top1_competing", "top1_all_candidate_anchors")]
     keys += ["embedding_minus_raw/triplet_accuracy"]
     metrics = {PREFIX + k: [0.0, 0.0] for k in keys}
     metrics.update(empty_ari_metrics("calorimeter"))
@@ -67,9 +63,7 @@ class ValidationCaloProbe:
     def capture(self, model, batch):
         """Capture decoder input on the existing forward, then always remove hook."""
         holder = []
-        hook = model.set_decoder.register_forward_pre_hook(
-            lambda module, inputs: holder.append(inputs[0].detach())
-        )
+        hook = model.set_decoder.register_forward_pre_hook(lambda module, inputs: holder.append(inputs[0].detach()))
         try:
             yield
         finally:
@@ -83,9 +77,7 @@ class ValidationCaloProbe:
         for i in range(len(batch.X)):
             if len(self.events) >= self.max_events:
                 break
-            mask = (
-                batch.mask[i] & (batch.X[i, :, 0] == 2) & (batch.ytarget[i, :, pn] > 0)
-            )
+            mask = batch.mask[i] & (batch.X[i, :, 0] == 2) & (batch.ytarget[i, :, pn] > 0)
             if not mask.any():
                 continue
             event = dict(
@@ -93,10 +85,7 @@ class ValidationCaloProbe:
                 embedding=embedding[i, mask].detach().float().cpu().numpy(),
                 labels=batch.ytarget[i, mask, pn].detach().long().cpu().numpy(),
             )
-            if (
-                not np.isfinite(event["raw"]).all()
-                or not np.isfinite(event["embedding"]).all()
-            ):
+            if not np.isfinite(event["raw"]).all() or not np.isfinite(event["embedding"]).all():
                 continue
             # Guard against repeated validation records crossing the fit/eval split.
             digest = hashlib.blake2b(digest_size=16)
@@ -106,9 +95,7 @@ class ValidationCaloProbe:
             if identity in self.seen_events:
                 continue
             self.seen_events.add(identity)
-            tracker_mask = (
-                batch.mask[i] & (batch.X[i, :, 0] == 1) & (batch.ytarget[i, :, pn] > 0)
-            )
+            tracker_mask = batch.mask[i] & (batch.X[i, :, 0] == 1) & (batch.ytarget[i, :, pn] > 0)
             event["tracker"] = dict(
                 raw=batch.X[i, tracker_mask].detach().float().cpu().numpy(),
                 embedding=embedding[i, tracker_mask].detach().float().cpu().numpy(),
@@ -123,9 +110,7 @@ class ValidationCaloProbe:
         with threadpool_limits(limits=1):
             self._compute(metrics)
             metrics.update(compute_instance_ari(self.events, "calorimeter"))
-            metrics.update(
-                compute_instance_ari([e.get("tracker") for e in self.events], "tracker")
-            )
+            metrics.update(compute_instance_ari([e.get("tracker") for e in self.events], "tracker"))
         metrics[PREFIX + "seconds_per_rank"] = [
             self.seconds + time.perf_counter() - start,
             1.0,
@@ -139,10 +124,7 @@ class ValidationCaloProbe:
             slot[1] += float(count)
 
         add("collected_event_samples", len(self.events))
-        prepared = [
-            (e, *build_candidates(e["raw"], e["labels"], seed=12345 + i))
-            for i, e in enumerate(self.events)
-        ]
+        prepared = [(e, *build_candidates(e["raw"], e["labels"], seed=12345 + i)) for i, e in enumerate(self.events)]
         # Whole events: every fourth event is probe evaluation. Never fit scalers
         # or classifier weights on these events. Refit from scratch each cycle.
         training = [e for i, e in enumerate(prepared) if i % 4 != 3 and len(e[2])]
@@ -187,17 +169,11 @@ def fit_ranker(training, rep):
         pos, neg = differences(event[rep], triples)
         weight = particle_weights(event["labels"][triples[:, 0]])
         pairs.append((pos, neg, weight))
-        scaler.partial_fit(
-            np.concatenate([pos, neg]), sample_weight=np.tile(weight / 2, 2)
-        )
-    design = np.concatenate(
-        [scaler.transform(p) - scaler.transform(n) for p, n, _ in pairs]
-    )
+        scaler.partial_fit(np.concatenate([pos, neg]), sample_weight=np.tile(weight / 2, 2))
+    design = np.concatenate([scaler.transform(p) - scaler.transform(n) for p, n, _ in pairs])
     weight = np.concatenate([w for _, _, w in pairs])
     weight *= len(weight) / weight.sum()
-    model = LogisticRegression(
-        C=0.1, fit_intercept=False, max_iter=200, tol=1e-4, solver="lbfgs"
-    )
+    model = LogisticRegression(C=0.1, fit_intercept=False, max_iter=200, tol=1e-4, solver="lbfgs")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", ConvergenceWarning)
         model.fit(
@@ -226,13 +202,7 @@ def retrieval_metrics(event, candidates, method, fit):
         competing.append(positive.any() and not positive.all())
         start += len(c)
     top, competing = np.array(top), np.array(competing)
-    ret = dict(
-        top1_all_candidate_anchors=float(
-            particle_weights(event["labels"][anchors]) @ top
-        )
-    )
+    ret = dict(top1_all_candidate_anchors=float(particle_weights(event["labels"][anchors]) @ top))
     if competing.any():
-        ret["top1_competing"] = float(
-            particle_weights(event["labels"][anchors[competing]]) @ top[competing]
-        )
+        ret["top1_competing"] = float(particle_weights(event["labels"][anchors[competing]]) @ top[competing])
     return ret

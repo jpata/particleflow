@@ -1,5 +1,5 @@
 default_language_version:
-    python: python3
+    python: python3.12
 exclude: ^(images)|^(mlpf/data/key4hep/gen/clic/clicRec_e4h_input.py)|^(mlpf/data/key4hep/gen/clic/CLICPerformance/clicConfig/clic_steer.py)|^(mlpf/data/key4hep/gen/clic/pythia.py)|^(mlpf/data/cms/prepare_args.py)|^(scripts/tallinn/.*txt)|^(data/)|^(snakemake_jobs/)|^(docs/myst.doi.bib)
 
 repos:

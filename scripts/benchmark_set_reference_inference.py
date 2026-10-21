@@ -20,8 +20,15 @@ from mlpf.training_scenarios import load_platform_profile, load_training_scenari
 SCENARIO = Path("configs/training/scenarios/cld_set_hits_heptv2_sector_comparison.yaml")
 PLATFORM = Path("configs/training/platforms/lumi_mi250x.yaml")
 CASES = (
-    (512, 256), (2048, 256), (8192, 256), (32768, 256),
-    (2048, 64), (2048, 1024), (8192, 1024), (8192, 4096), (32768, 4096),
+    (512, 256),
+    (2048, 256),
+    (8192, 256),
+    (32768, 256),
+    (2048, 64),
+    (2048, 1024),
+    (8192, 1024),
+    (8192, 4096),
+    (32768, 4096),
 )
 
 

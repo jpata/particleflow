@@ -61,6 +61,7 @@ from mlpf.model.utils import (
     unpack_predictions,
     unpack_target,
     load_checkpoint,
+    load_model_weights,
     save_checkpoint,
     save_HPs,
     get_lr_schedule,
@@ -919,18 +920,19 @@ def evaluate(
                     ypred_particles,
                     model_module.output_mode,
                 )
-                particle_metrics = compute_validation_particle_metrics(
-                    *metric_collections,
-                    num_classes=config.num_classes,
-                    detailed=ival < config.validation_diagnostics_batches,
-                )
-                for metric_name, (metric_total, metric_count) in particle_metrics.items():
-                    _add_accumulator(
-                        diagnostic_accum,
-                        f"metrics/particle/{metric_name}",
-                        torch.as_tensor(metric_total, device=batch.X.device),
-                        count=metric_count,
+                if config.validation_particle_metrics:
+                    particle_metrics = compute_validation_particle_metrics(
+                        *metric_collections,
+                        num_classes=config.num_classes,
+                        detailed=ival < config.validation_diagnostics_batches,
                     )
+                    for metric_name, (metric_total, metric_count) in particle_metrics.items():
+                        _add_accumulator(
+                            diagnostic_accum,
+                            f"metrics/particle/{metric_name}",
+                            torch.as_tensor(metric_total, device=batch.X.device),
+                            count=metric_count,
+                        )
 
                 if model_module.output_mode == OutputMode.SET:
                     if ypred_raw.tracker_group_fit_valid is not None and ival < config.validation_diagnostics_batches:
@@ -939,17 +941,23 @@ def evaluate(
                         _add_accumulator(diagnostic_accum, "metrics/set_slot/tracker_fits_per_event", fits.sum(), count=fits.shape[0])
                     if ypred_raw.hit_grouping is not None and ival < config.validation_diagnostics_batches:
                         matches = hungarian_match(
-                            ytarget, ypred, batch.target_mask,
+                            ytarget,
+                            ypred,
+                            batch.target_mask,
                             SetMatcherWeights(**model_module.config.set_decoder.matcher.model_dump()),
                         )
                         grouping_metrics = compute_hit_grouping_metrics(
-                            ypred_raw.hit_grouping, batch, matches,
+                            ypred_raw.hit_grouping,
+                            batch,
+                            matches,
                             chunk_size=model_module.config.set_decoder.hit_grouping_chunk_size,
                         )
                         for metric_name, (metric_total, metric_count) in grouping_metrics.items():
                             _add_accumulator(
-                                diagnostic_accum, f"metrics/hit_grouping/{metric_name}",
-                                torch.as_tensor(metric_total, device=batch.X.device), count=metric_count,
+                                diagnostic_accum,
+                                f"metrics/hit_grouping/{metric_name}",
+                                torch.as_tensor(metric_total, device=batch.X.device),
+                                count=metric_count,
                             )
                     slot_fields = ("cls_binary", "cls_id_onehot", "pt", "eta", "sin_phi", "cos_phi", "energy")
                     raw_slots = {name: ypred[name].detach().to(torch.float32) for name in slot_fields}
@@ -1019,6 +1027,12 @@ def evaluate(
     return eval_loss
 
 
+def get_train_epoch(train_loader):
+    """Fractional epoch of the training data seen so far: completed epochs plus the fraction of batches consumed in the current one."""
+    interleaved = train_loader.data_loader
+    return train_loader.epoch + interleaved.cur_index / len(interleaved.loader_ds_indices)
+
+
 def _log_and_checkpoint_step(
     rank,
     world_size,
@@ -1042,10 +1056,12 @@ def _log_and_checkpoint_step(
     """Helper function to log training information and save periodic checkpoints."""
 
     log_this_step = step % tensorboard_step_freq == 0
+    epoch = get_train_epoch(train_loader)
 
     # Log training losses to TensorBoard and CometML on the main process
     if log_this_step and ((rank == 0) or (rank == "cpu")):
         log_start = time.perf_counter()
+        tensorboard_writer_train.add_scalar("step/epoch", epoch, step)
         # Log training losses
         for loss, value in losses_train.items():
             tensorboard_writer_train.add_scalar(f"step/loss_{loss}", value, step)
@@ -1059,6 +1075,8 @@ def _log_and_checkpoint_step(
     if comet_experiment:
         comet_start = time.perf_counter()
         comet_experiment.log_metrics(losses_train, prefix="step_train_loss", step=step)
+        # a float metric, so that comet panels can use it as a custom x-axis (the epoch= argument of log_metrics only takes ints)
+        comet_experiment.log_metric("epoch", epoch, step=step)
         if log_this_step and ((rank == 0) or (rank == "cpu")):
             tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_comet_logging", time.perf_counter() - comet_start, step)
 
@@ -1172,6 +1190,7 @@ def _run_validation_cycle(
         history_path = Path(outdir) / "history"
         history_path.mkdir(parents=True, exist_ok=True)
         stats = {
+            "epoch": get_train_epoch(train_loader),
             "train": losses_train,
             "valid": losses_valid,
             "step_train_time": train_time,
@@ -1575,6 +1594,69 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         dist.barrier()  # block until all workers finished executing run_predictions()
 
 
+def restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config: MLPFConfig, weights_only=False):
+    """Loads the model weights from checkpoint and, unless weights_only, the training state (optimizer, RNG, LR schedule).
+
+    Returns the step to start training from: the one after the checkpoint's, or 1 (as for a fresh run) if weights_only.
+    """
+    model_module = model.module if hasattr(model, "module") else model
+    model_state_dict = model_module.state_dict()
+    checkpoint_state_dict = checkpoint["model_state_dict"]
+    missing_keys, strict = [], True
+    for k in model_state_dict.keys():
+        shp0 = model_state_dict[k].shape
+        try:
+            shp1 = checkpoint_state_dict[k].shape
+        except KeyError:
+            missing_keys.append(k)
+            continue
+        if shp0 != shp1:
+            raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
+
+    unexpected_keys = [key for key in checkpoint_state_dict if key not in model_state_dict]
+    obsolete_task_weight_keys = [key for key in unexpected_keys if key.startswith("task_loss_weighter.")]
+    if obsolete_task_weight_keys and len(obsolete_task_weight_keys) == len(unexpected_keys):
+        _logger.warning("Checkpoint contains obsolete learned task weights; recalibrating task weights", color="bold")
+        strict = False
+
+    if len(missing_keys) > 0:
+        _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
+        missing_task_loss_weight_keys = [key for key in missing_keys if key.startswith("task_loss_weighter.")]
+        missing_non_task_loss_weight_keys = [key for key in missing_keys if not key.startswith("task_loss_weighter.")]
+        if missing_task_loss_weight_keys and not missing_non_task_loss_weight_keys:
+            _logger.warning("Task loss calibration state missing from checkpoint; starting calibration from scratch", color="bold")
+            strict = False
+        elif config.relaxed_load:
+            _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
+            strict = False
+        else:
+            _logger.warning("Use option --relaxed-load if you insist to ignore the missing parameters")
+            raise KeyError
+
+    if weights_only:
+        load_model_weights(checkpoint, model, strict)
+        _logger.info("Loaded only the model weights, starting training from step 1", color="bold")
+        return 1
+
+    start_step = checkpoint["extra_state"]["step"] + 1
+    _logger.info(f"Restoring training from step {start_step}")
+    ckpt_base_lrs = checkpoint["extra_state"].get("lr_schedule_state_dict", {}).get("base_lrs")
+    if ckpt_base_lrs is not None and list(ckpt_base_lrs) != [config.lr]:
+        _logger.warning(f"A resume continues the checkpoint's learning rate {ckpt_base_lrs[0]}, ignoring config lr {config.lr}", color="red")
+    load_lr_schedule(lr_schedule, checkpoint)
+    load_checkpoint(checkpoint, model, optimizer, strict)
+    return start_step
+
+
+def restore_loader_states(loaders, checkpoint, config: MLPFConfig):
+    """Restores the train and valid loader (sampler) states from checkpoint, unless config.sampler_from_scratch."""
+    if config.sampler_from_scratch:
+        return
+    for split in ("train", "valid"):
+        if f"{split}_loader_state_dict" in checkpoint["extra_state"]:
+            loaders[split].load_state_dict(checkpoint["extra_state"][f"{split}_loader_state_dict"])
+
+
 def run(  # noqa: C901
     rank: int | str,
     world_size: int,
@@ -1635,46 +1717,8 @@ def run(  # noqa: C901
 
     if config.load:
         checkpoint = torch.load(config.load, map_location=torch.device(rank))
-        start_step = checkpoint["extra_state"]["step"] + 1
-
-        model_state_dict = model.state_dict()
-        checkpoint_state_dict = checkpoint["model_state_dict"]
-        missing_keys, strict = [], True
-        for k in model_state_dict.keys():
-            shp0 = model_state_dict[k].shape
-            try:
-                shp1 = checkpoint_state_dict[k].shape
-            except KeyError:
-                missing_keys.append(k)
-                continue
-            if shp0 != shp1:
-                raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
-
-        unexpected_keys = [key for key in checkpoint_state_dict if key not in model_state_dict]
-        obsolete_task_weight_keys = [key for key in unexpected_keys if key.startswith("task_loss_weighter.")]
-        if obsolete_task_weight_keys and len(obsolete_task_weight_keys) == len(unexpected_keys):
-            _logger.warning("Checkpoint contains obsolete learned task weights; recalibrating task weights", color="bold")
-            strict = False
-
-        if len(missing_keys) > 0:
-            _logger.warning(f"The following parameters are missing in the checkpoint file {missing_keys}", color="red")
-            missing_task_loss_weight_keys = [key for key in missing_keys if key.startswith("task_loss_weighter.")]
-            missing_non_task_loss_weight_keys = [key for key in missing_keys if not key.startswith("task_loss_weighter.")]
-            if missing_task_loss_weight_keys and not missing_non_task_loss_weight_keys:
-                _logger.warning("Task loss calibration state missing from checkpoint; starting calibration from scratch", color="bold")
-                strict = False
-            elif config.relaxed_load:
-                _logger.warning("Optimizer checkpoint will not be loaded", color="bold")
-                strict = False
-            else:
-                _logger.warning("Use option --relaxed-load if you insist to ignore the missing parameters")
-                raise KeyError
-
+        start_step = restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config, weights_only=config.load_weights_only)
         _logger.info("Loaded model weights from {}".format(config.load), color="bold")
-        _logger.info(f"Restoring training from step {start_step}")
-
-        load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
-        model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict)
 
     if config.compile:
         _logger.info("Compiling model")
@@ -1736,18 +1780,17 @@ def run(  # noqa: C901
         )
         _logger.info("Got dataloaders")
 
-        if config.load and checkpoint:
-            train_loader = loaders["train"]
-            valid_loader = loaders["valid"]
-            if not config.sampler_from_scratch:
-                if "train_loader_state_dict" in checkpoint["extra_state"]:
-                    train_loader.load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
-                if "valid_loader_state_dict" in checkpoint["extra_state"]:
-                    valid_loader.load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
+        if config.load and not config.load_weights_only:
+            restore_loader_states(loaders, checkpoint, config)
 
         for split in loaders.keys():
             _logger.info("loader split={} rank={} len={}".format(split, rank, len(loaders[split])))
 
+    if config.train and config.lr_find:
+        from mlpf.model.lr_finder import lr_range_test  # local import: lr_finder imports this module
+
+        lr_range_test(rank, world_size, model, optimizer, loaders["train"], config, outdir, dtype=dtype, comet_experiment=comet_experiment)
+    elif config.train:
         train_all_steps(
             rank,
             world_size,
@@ -1790,7 +1833,9 @@ def run(  # noqa: C901
 
 # Run either single GPU or single-node multi-GPU using pytorch DDP
 def device_agnostic_run(config: MLPFConfig, world_size, outdir, loglevel: int = logging.INFO):
-    if config.train:
+    if config.lr_find:
+        logfile = f"{outdir}/lr_find.log"
+    elif config.train:
         logfile = f"{outdir}/train.log"
     else:
         logfile = f"{outdir}/test.log"

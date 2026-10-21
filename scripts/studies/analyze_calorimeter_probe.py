@@ -14,11 +14,7 @@ from scripts.studies.probe_hit_instances import pair_features, read
 
 def graph_edges(coords, k=16):
     n = len(coords)
-    nn = (
-        NearestNeighbors(n_neighbors=min(k + 1, n))
-        .fit(coords)
-        .kneighbors(coords, return_distance=False)
-    )
+    nn = NearestNeighbors(n_neighbors=min(k + 1, n)).fit(coords).kneighbors(coords, return_distance=False)
     edges = np.sort(np.stack([np.repeat(np.arange(n), nn.shape[1]), nn.ravel()], 1), 1)
     return np.unique(edges[edges[:, 0] != edges[:, 1]], axis=0)
 
@@ -36,9 +32,7 @@ def ranking(y, score):
 
 
 def analyze(root):
-    fits = {
-        r: joblib.load(root / f"calorimeter_{r}.joblib") for r in ("raw", "embedding")
-    }
+    fits = {r: joblib.load(root / f"calorimeter_{r}.joblib") for r in ("raw", "embedding")}
     rows = []
     for path in sorted((root / "cache/calorimeter/test").glob("*.npz")):
         d = read(path)
@@ -47,9 +41,7 @@ def analyze(root):
         y = labels[a] == labels[b]
         row = dict(event=path.stem, edges=len(y), positive_fraction=float(y.mean()))
         counts = np.unique(labels, return_counts=True)[1]
-        row["all_pairs_positive_fraction"] = float(
-            np.sum(counts * (counts - 1)) / (len(labels) * (len(labels) - 1))
-        )
+        row["all_pairs_positive_fraction"] = float(np.sum(counts * (counts - 1)) / (len(labels) * (len(labels) - 1)))
         spatial = graph_edges(x[:, 6:9])
         direction = graph_edges(x[:, [2, 3, 4]])
         spatial_keys = spatial[:, 0] * len(labels) + spatial[:, 1]
@@ -65,9 +57,7 @@ def analyze(root):
             ("direction_only", dm & ~sm),
         ]:
             row[f"{name}/edge_fraction"] = float(mask.mean())
-            row[f"{name}/positive_fraction"] = (
-                float(y[mask].mean()) if mask.any() else 0
-            )
+            row[f"{name}/positive_fraction"] = float(y[mask].mean()) if mask.any() else 0
         boundary = np.zeros(len(labels), dtype=bool)
         boundary[edges[~y].ravel()] = True
         hard = boundary[a] & boundary[b]
@@ -76,14 +66,10 @@ def analyze(root):
         row["boundary/positive_fraction"] = float(y[hard].mean())
         scores = {
             "xyz_distance": -np.linalg.norm(x[a, 6:9] - x[b, 6:9], axis=1),
-            "direction_distance": -np.linalg.norm(
-                x[a][:, [2, 3, 4]] - x[b][:, [2, 3, 4]], axis=1
-            ),
+            "direction_distance": -np.linalg.norm(x[a][:, [2, 3, 4]] - x[b][:, [2, 3, 4]], axis=1),
         }
         for rep, fit in fits.items():
-            scores[rep] = fit["model"].predict_proba(
-                fit["scaler"].transform(pair_features(d, rep, edges))
-            )[:, 1]
+            scores[rep] = fit["model"].predict_proba(fit["scaler"].transform(pair_features(d, rep, edges)))[:, 1]
             keep = scores[rep] >= fit["threshold"]
             row[f"{rep}/selected_precision"] = float(y[keep].mean())
             row[f"{rep}/selected_recall"] = float(keep[y].mean())
@@ -91,9 +77,7 @@ def analyze(root):
             row[f"{rep}/false_edges"] = int((keep & ~y).sum())
             row[f"{rep}/joined_truth_pairs"] = len(
                 np.unique(
-                    np.sort(
-                        np.stack([labels[a[keep & ~y]], labels[b[keep & ~y]]], 1), 1
-                    ),
+                    np.sort(np.stack([labels[a[keep & ~y]], labels[b[keep & ~y]]], 1), 1),
                     axis=0,
                 )
             )
@@ -120,7 +104,5 @@ if __name__ == "__main__":
     )
     args = p.parse_args()
     result = analyze(args.experiment)
-    (args.experiment / "calorimeter_edge_audit.json").write_text(
-        json.dumps(result, indent=2)
-    )
+    (args.experiment / "calorimeter_edge_audit.json").write_text(json.dumps(result, indent=2))
     print(json.dumps(result["mean"], indent=2))

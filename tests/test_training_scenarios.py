@@ -145,11 +145,17 @@ def test_heptv2_momentum_scenario_isolates_50k_loss_and_matcher_changes():
     scenario = load_training_scenario(HEPTV2_MOMENTUM_SCENARIO)
     platform = load_platform_profile(PLATFORMS / "local.yaml")
     jobs = resolve_scenario_jobs(
-        scenario, platform, spec_file=ROOT / "particleflow_spec.yaml", global_batch_size=8,
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=8,
     )
 
     assert [job.variant_name for job in jobs] == [
-        "track_cluster_mlpf", "hit_heptv2_baseline", "hit_heptv2_energy_match", "hit_heptv2_huber_momentum",
+        "track_cluster_mlpf",
+        "hit_heptv2_baseline",
+        "hit_heptv2_energy_match",
+        "hit_heptv2_huber_momentum",
     ]
     assert {job.resolved_config.num_steps for job in jobs} == {50000}
     assert {job.resolved_config.lr for job in jobs} == {0.001}
@@ -162,7 +168,10 @@ def test_heptv2_grouping_scenario_changes_only_hit_grouping():
     scenario = load_training_scenario(HEPTV2_GROUPING_SCENARIO)
     platform = load_platform_profile(PLATFORMS / "local.yaml")
     jobs = resolve_scenario_jobs(
-        scenario, platform, spec_file=ROOT / "particleflow_spec.yaml", global_batch_size=8,
+        scenario,
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=8,
     )
     assert [job.variant_name for job in jobs] == ["hit_heptv2_baseline", "hit_heptv2_grouped"]
     baseline, grouped = (job.resolved_config for job in jobs)
@@ -754,7 +763,7 @@ def test_tracker_fit_loss_ablation_changes_only_auxiliary_weights():
         if reference is None:
             reference = model
         assert model == reference
-    assert weights == [(0., 0.), (.01, 0.), (0., .1), (.01, .1)]
+    assert weights == [(0.0, 0.0), (0.01, 0.0), (0.0, 0.1), (0.01, 0.1)]
 
 
 def test_tracker_readout_scenario_preserves_small_baseline():
@@ -785,23 +794,29 @@ def test_tracker_readout_scenario_preserves_small_baseline():
 
 
 def test_tracker_grouping_losses_scenario_is_from_scratch_small_factorial():
-    platform=load_platform_profile(ROOT/'configs/training/platforms/lumi_mi250x.yaml')
-    reference=resolve_scenario_jobs(
-        load_training_scenario(ROOT/'configs/training/scenarios/cld_pf_heptv2_model_scaling_50k.yaml'),
-        platform,spec_file=ROOT/'particleflow_spec.yaml')[0].resolved_config
-    jobs=resolve_scenario_jobs(
-        load_training_scenario(ROOT/'configs/training/scenarios/cld_pf_heptv2_tracker_grouping_losses_50k.yaml'),
-        platform,spec_file=ROOT/'particleflow_spec.yaml')
-    assert len(jobs)==4
-    assert [(j.resolved_config.model.set_decoder.hit_grouping_tracker_particle_balanced,
-             j.resolved_config.model.set_decoder.tracker_overlap_loss_weight) for j in jobs]==[(False,0),(True,0),(False,.05),(True,.05)]
+    platform = load_platform_profile(ROOT / "configs/training/platforms/lumi_mi250x.yaml")
+    reference = resolve_scenario_jobs(
+        load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_model_scaling_50k.yaml"),
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+    )[0].resolved_config
+    jobs = resolve_scenario_jobs(
+        load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_tracker_grouping_losses_50k.yaml"),
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+    )
+    assert len(jobs) == 4
+    assert [
+        (j.resolved_config.model.set_decoder.hit_grouping_tracker_particle_balanced, j.resolved_config.model.set_decoder.tracker_overlap_loss_weight)
+        for j in jobs
+    ] == [(False, 0), (True, 0), (False, 0.05), (True, 0.05)]
     for job in jobs:
-        c=job.resolved_config
-        assert c.load is None and c.model.trainable=='all'
-        assert job.global_batch_size==128 and job.per_gpu_batch_size==16
-        assert c.num_steps==50000 and c.val_freq==c.checkpoint_freq==1000
-        model=c.model.model_dump()
-        model['set_decoder']['hit_grouping_tracker_particle_balanced']=False
-        model['set_decoder']['tracker_overlap_loss_weight']=0.
-        assert model==reference.model.model_dump()
-        assert (c.lr,c.lr_schedule,c.optimizer)==(reference.lr,reference.lr_schedule,reference.optimizer)
+        c = job.resolved_config
+        assert c.load is None and c.model.trainable == "all"
+        assert job.global_batch_size == 128 and job.per_gpu_batch_size == 16
+        assert c.num_steps == 50000 and c.val_freq == c.checkpoint_freq == 1000
+        model = c.model.model_dump()
+        model["set_decoder"]["hit_grouping_tracker_particle_balanced"] = False
+        model["set_decoder"]["tracker_overlap_loss_weight"] = 0.0
+        assert model == reference.model.model_dump()
+        assert (c.lr, c.lr_schedule, c.optimizer) == (reference.lr, reference.lr_schedule, reference.optimizer)

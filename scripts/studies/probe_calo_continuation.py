@@ -27,9 +27,7 @@ def evaluate(paths, prepared, rep, fit):
         candidates, triplets, support = prepared[path]
         row = dict(event=path.stem, **support)
         if len(triplets):
-            row["particle_macro_triplet_accuracy"] = ranking_metric(
-                event, triplets, rep, fit
-            )
+            row["particle_macro_triplet_accuracy"] = ranking_metric(event, triplets, rep, fit)
         anchors = np.array(list(candidates), dtype=np.int64)
         if not len(anchors):
             rows.append(row)
@@ -52,17 +50,13 @@ def evaluate(paths, prepared, rep, fit):
             np.array(compete),
             np.array(has_positive),
         )
-        row["top1_all_candidate_anchors"] = float(
-            particle_weights(event["labels"][anchors]) @ top
-        )
+        row["top1_all_candidate_anchors"] = float(particle_weights(event["labels"][anchors]) @ top)
         for name, mask in [
             ("competing", compete),
             ("positive_available", has_positive),
         ]:
             if mask.any():
-                row["top1_" + name] = float(
-                    particle_weights(event["labels"][anchors[mask]]) @ top[mask]
-                )
+                row["top1_" + name] = float(particle_weights(event["labels"][anchors[mask]]) @ top[mask])
         rows.append(row)
     keys = set().union(*(r.keys() for r in rows)) - {"event"}
     return dict(
@@ -72,10 +66,7 @@ def evaluate(paths, prepared, rep, fit):
 
 
 def train(args):
-    paths = {
-        s: sorted((args.source / "cache/calorimeter" / s).glob("*.npz"))
-        for s in ("train", "valid", "test")
-    }
+    paths = {s: sorted((args.source / "cache/calorimeter" / s).glob("*.npz")) for s in ("train", "valid", "test")}
     if any(not v for v in paths.values()):
         raise ValueError("All three cached event splits are required")
     ids = [set(p.stem for p in paths[s]) for s in paths]
@@ -101,17 +92,11 @@ def train(args):
                 triplets=triplets,
                 anchors=np.array(list(candidates)),
                 lengths=np.array([len(v) for v in candidates.values()]),
-                neighbors=np.concatenate(list(candidates.values()))
-                if candidates
-                else np.empty(0, dtype=np.int64),
+                neighbors=np.concatenate(list(candidates.values())) if candidates else np.empty(0, dtype=np.int64),
             )
             print(split, path.stem, support, flush=True)
-    if any(
-        not any(len(prepared[path][1]) for path in files) for files in paths.values()
-    ):
-        raise ValueError(
-            "Each split needs at least one admissible distance-matched triplet"
-        )
+    if any(not any(len(prepared[path][1]) for path in files) for files in paths.values()):
+        raise ValueError("Each split needs at least one admissible distance-matched triplet")
     results = {}
     for rep in ("xyz_distance", "direction_distance"):
         results[rep] = evaluate(paths["test"], prepared, rep, None)
@@ -124,9 +109,7 @@ def train(args):
                 continue
             pos, neg = differences(event[rep], triples)
             weights = particle_weights(event["labels"][triples[:, 0]])
-            scaler.partial_fit(
-                np.concatenate([pos, neg]), sample_weight=np.tile(weights / 2, 2)
-            )
+            scaler.partial_fit(np.concatenate([pos, neg]), sample_weight=np.tile(weights / 2, 2))
         designs, weights = [], []
         for path in paths["train"]:
             event = read(path)
@@ -146,9 +129,7 @@ def train(args):
         w = np.tile(weight, 2)
         best, sweep = None, []
         for c in args.c_values:
-            model = LogisticRegression(
-                C=c, fit_intercept=False, max_iter=1000, tol=1e-6, solver="lbfgs"
-            )
+            model = LogisticRegression(C=c, fit_intercept=False, max_iter=1000, tol=1e-6, solver="lbfgs")
             model.fit(x, y, sample_weight=w)
             if model.n_iter_[0] >= model.max_iter:
                 raise RuntimeError("Probe optimizer did not converge")
@@ -159,9 +140,7 @@ def train(args):
                 if len(triples):
                     vals.append(ranking_metric(read(path), triples, rep, fit))
             val = float(np.mean(vals))
-            sweep.append(
-                dict(C=c, validation_accuracy=val, iterations=int(model.n_iter_[0]))
-            )
+            sweep.append(dict(C=c, validation_accuracy=val, iterations=int(model.n_iter_[0])))
             if best is None or val > best[0]:
                 best = val, fit, c
             print(rep, sweep[-1], flush=True)
@@ -199,9 +178,7 @@ def plot_results(results, output):
         ["Distance-matched triplet accuracy", "Top-1 on full competing candidate sets"],
     ):
         values = [100 * results[m]["mean"][key] for m in methods]
-        bars = ax.bar(
-            labels, values, color=["#87959c", "#a9b3b9", "#277DA1", "#13A895"]
-        )
+        bars = ax.bar(labels, values, color=["#87959c", "#a9b3b9", "#277DA1", "#13A895"])
         ax.bar_label(bars, fmt="%.1f%%", padding=3)
         ax.set(ylim=(0, 108), ylabel="Accuracy [%]", title=title)
         if key == "particle_macro_triplet_accuracy":
@@ -224,27 +201,17 @@ def main():
     parser.add_argument("--layer-gap", type=int, default=1)
     parser.add_argument("--distance-ratio", type=float, default=1.25)
     parser.add_argument("--seed", type=int, default=12345)
-    parser.add_argument(
-        "--c-values", type=float, nargs="+", default=[0.01, 0.1, 1.0, 10.0]
-    )
+    parser.add_argument("--c-values", type=float, nargs="+", default=[0.01, 0.1, 1.0, 10.0])
     args = parser.parse_args()
     if args.output.exists():
         parser.error("Use a fresh output directory")
-    if (
-        min(args.neighbors, args.layer_gap, *args.c_values) <= 0
-        or args.distance_ratio < 1
-    ):
+    if min(args.neighbors, args.layer_gap, *args.c_values) <= 0 or args.distance_ratio < 1:
         parser.error("Invalid graph or fitting parameters")
     args.output.mkdir(parents=True)
     manifest = dict(
-        arguments={
-            k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
-        },
+        arguments={k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
         source_manifest=json.loads((args.source / "manifest.json").read_text()),
-        source_cache_sha256={
-            str(p): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted((args.source / "cache/calorimeter").glob("*/*.npz"))
-        },
+        source_cache_sha256={str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted((args.source / "cache/calorimeter").glob("*/*.npz"))},
     )
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2))
     plot_results(train(args), args.output)

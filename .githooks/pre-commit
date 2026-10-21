@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+# Match pre-commit/action@v3.0.1 in .github/workflows/pre-commit.yml.
+uvx --python 3.12 pre-commit run --show-diff-on-failure --color=always --all-files

@@ -115,8 +115,7 @@ def print_optimizer_stats(optimizer, stage):
                     print(f"    {key}: {value}")
 
 
-def load_checkpoint(checkpoint, model, optimizer, strict=True, start_step=0):
-    logging.info(f"Loading checkpoint with strict={strict}")
+def load_model_weights(checkpoint, model, strict=True):
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         msg = model.module.load_state_dict(checkpoint["model_state_dict"], strict=strict)
     else:
@@ -126,6 +125,13 @@ def load_checkpoint(checkpoint, model, optimizer, strict=True, start_step=0):
         logging.warning(f"Missing keys in model state dict: {msg.missing_keys}")
     if len(msg.unexpected_keys) > 0:
         logging.warning(f"Unexpected keys in model state dict: {msg.unexpected_keys}")
+
+    return model
+
+
+def load_checkpoint(checkpoint, model, optimizer, strict=True, start_step=0):
+    logging.info(f"Loading checkpoint with strict={strict}")
+    model = load_model_weights(checkpoint, model, strict)
 
     if strict:
         print_optimizer_stats(optimizer, "Before loading optimizer state")
@@ -156,12 +162,13 @@ def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
     )
 
 
-def load_lr_schedule(lr_schedule, checkpoint, start_step=0):
-    """Loads the lr_schedule's state dict from checkpoint and sets the last_epoch to start_step"""
+def load_lr_schedule(lr_schedule, checkpoint):
+    """Loads the lr_schedule's state dict from checkpoint.
+
+    The state dict already holds last_epoch (the number of scheduler steps taken), so the resumed
+    schedule continues exactly where the saved one stopped."""
     if "lr_schedule_state_dict" in checkpoint["extra_state"].keys():
-        state_dict = checkpoint["extra_state"]["lr_schedule_state_dict"]
-        lr_schedule.load_state_dict(state_dict)
-        lr_schedule.last_epoch = start_step
+        lr_schedule.load_state_dict(checkpoint["extra_state"]["lr_schedule_state_dict"])
     else:
         raise KeyError("Couldn't find LR schedule state dict in checkpoint. extra_state contains: {}".format(checkpoint["extra_state"].keys()))
 

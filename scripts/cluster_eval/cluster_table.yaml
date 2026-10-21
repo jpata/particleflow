@@ -1,0 +1,168 @@
+# Spec for scripts/cluster_eval/cluster_table.py: the calorimeter-clustering comparison table (markdown).
+# Add / remove / reorder entries under `columns` and `rows` freely: only new or changed columns
+# are computed, everything else comes from results_dir (shared with cluster_plots.yaml: a column
+# defined identically in both is computed once). Metric keys: see the header of
+# mlpf/data/cluster_metrics.py (plus n_targets / clusters_per_target /
+# elements_per_target / merged_frac* / n_massive from its allocator_metrics). `fmt` is a python format string, or
+# "count" (2924, 17.3k). Several keys in one row are shown as "a / b". `pct` (optional, one per
+# key) names fraction keys shown in percent after each value, "a (x%) / b (y%)" (`pct_fmt`, default
+# "{:.2f}"); `best` compares the `keys` values only.
+
+defaults:
+  cache_dir: /mnt/ceph/users/ewulff/data/colliderml/cluster_study_cache  # decoded ColliderML events
+  results_dir: /mnt/ceph/users/ewulff/data/colliderml/cluster_eval_results  # one json (+ npz) per column
+
+columns:
+  # ---- ColliderML ttbar, PU0: v20 events 500-549 (= the CLUE tuning's pu0 val range;
+  # the presets were selected on the tune events 0-49 only, so these stay held out)
+  # - {label: "ColliderML pu0 bfs_merge", source: colliderml, sample: hard_scatter, events: [500, 10], config: bfs_merge_pu0}
+  - {label: "ColliderML pu0 CLUE `pu0`", bold: true, source: colliderml, sample: hard_scatter, events: [500, 50], config: clue}
+  # the same with CLUE's energy cut (drop_E: clusters below 0.1 GeV are removed, hits and all)
+#   - {label: "ColliderML pu0 CLUE `pu0` drop E<0.1", source: colliderml, sample: hard_scatter, events: [500, 10], config: clue_dropE0p1}
+  # single-hit-dropping variant of the CLUE columns; parked 2026-10-09 in favour of drop E<0.1:
+  # - {label: "ColliderML pu0 CLUE `pu0` no single-hit", source: colliderml, sample: hard_scatter, events: [500, 10], config: clue_no1hit}
+  # - {label: "ColliderML pu200 CLUE `pu200` no single-hit", source: colliderml, sample: full_pileup, events: [50, 3], config: clue_pu200_no1hit}
+  # CLUEstering cross-check columns (need `module load boost/1.87.0` if recomputed); parked 2026-10-09:
+  # - label: "ColliderML pu0 CLUEstering `pu0`"
+  #   source: colliderml
+  #   sample: hard_scatter
+  #   events: [500, 10]
+  #   config: {algorithm: clue, clue_options: {core: cluestering}}  # needs `module load boost/1.87.0`
+  # cross-pileup CLUE sanity column (pu200 preset on pu0 data); parked 2026-10-09:
+  # - {label: "ColliderML pu0 CLUE `pu200`", source: colliderml, sample: hard_scatter, events: [500, 10], config: clue_pu200}
+  - {label: "ColliderML pu0 Pandora", source: colliderml, sample: hard_scatter, events: [500, 50], config: pandora}
+  # ---- ColliderML ttbar, PU200: v20 events 50-99 (50-69 = the tuning's pu200 val range,
+  # 70-99 never entered the tuning); ~6 GB peak per event to decode
+  # - {label: "ColliderML pu200 bfs 16.25/36", source: colliderml, sample: full_pileup, events: [50, 3], config: bfs_pu200}
+  - {label: "ColliderML pu200 CLUE `pu200`", bold: true, source: colliderml, sample: full_pileup, events: [50, 50], config: clue_pu200}
+#   - {label: "ColliderML pu200 CLUE `pu200` drop E<0.1", source: colliderml, sample: full_pileup, events: [50, 3], config: clue_pu200_dropE0p1}
+  # - {label: "ColliderML pu200 CLUE `pu0`", source: colliderml, sample: full_pileup, events: [50, 3], config: clue}
+  # - label: "ColliderML pu200 CLUEstering `pu200`"
+  #   source: colliderml
+  #   sample: full_pileup
+  #   events: [50, 3]
+  #   config:
+  #     algorithm: clue
+  #     clue_params:
+  #       {9: {rhoc: 0.2, seed_dc: 15, dm: 20}, 10: {rhoc: 0.2, seed_dc: 15, dm: 20}, 11: {rhoc: 0.2, seed_dc: 15, dm: 20},
+  #        12: {rhoc: 0.2, seed_dc: 80, dm: 100}, 13: {rhoc: 0.2, seed_dc: 80, dm: 100}, 14: {rhoc: 0.2, seed_dc: 80, dm: 100}}
+  #     clue_options: {min_cluster_E: 0.1, core: cluestering}
+  - {label: "ColliderML pu200 Pandora", source: colliderml, sample: full_pileup, events: [50, 50], config: pandora}
+  # ---- Key4hep (Pandora clusters, as in the MLPF CLD/CLIC datasets): jpata/particleflow on HF,
+  # root/<det>/ttbar/reco_p8_ee_ttbar_ecm*_300000.root (100 events each)
+  - label: "CLD ttbar Pandora"
+    source: key4hep
+    detector: cld
+    file: /mnt/ceph/users/ewulff/data/jpata_particleflow_hf/root/cld/ttbar/reco_p8_ee_ttbar_ecm365_300000.root
+    events: [0, 50]
+  - label: "CLIC ttbar Pandora"
+    source: key4hep
+    detector: clic
+    file: /mnt/ceph/users/ewulff/data/jpata_particleflow_hf/root/clic/ttbar/reco_p8_ee_ttbar_ecm380_300000.root
+    events: [0, 50]
+  # ---- CMS (PF clusters): test ntuple from scripts/fetch_test_data_cms.sh (truth at PF-cluster level), and the local cms_pf_ttbar TFDS 2.5.0 (counts only); both Run-3 ttbar, PU 55-75
+  - label: "CMS ttbar PF (ntuple)"
+    source: cms_ntuple
+    file: /mnt/ceph/users/ewulff/data/cms_ntuples/20240823_simcluster/pu55to75/TTbar_14TeV_TuneCUETP8M1_cfi/root/pfntuple_100000.root
+    events: [0, 50]
+    cms_targets: true  # run postprocessing2's own target building for the target rows (~3 s/event)
+    track_types: [1, 6]  # KF tracks, GSF tracks
+    cluster_types: [4, 5, 8, 9, 10, 11]  # ECAL, HCAL, HF-EM, HF-HAD, SC, HO
+  # superseded by the ntuple column with cms_targets (same target definition, same events as its other rows)
+  # - label: "CMS ttbar PF (TFDS 2.5.0)"
+  #   source: tfds
+  #   data_dir: /mnt/ceph/users/ewulff/tensorflow_datasets/cms/cms_pf_ttbar/1/2.5.0
+  #   split: test
+  #   events: [0, 100]
+  #   track_types: [1, 6]  # KF tracks, GSF tracks
+  #   cluster_types: [4, 5, 8, 9, 10, 11]  # ECAL, HCAL, HF-EM, HF-HAD, SC, HO
+
+rows:
+  # `expl` is printed in the "Rows" glossary below the table (exact definitions: the header of
+  # mlpf/data/cluster_metrics.py). `best: max|min` bolds the best value of the row,
+  # compared only between columns evaluated on the SAME dataset (same sample / file /
+  # data_dir+split+events); single-column datasets are never bolded. In the glossary,
+  # "particle" = a visible truth particle (a target), "deposit" = the calorimeter energy it
+  # left in the hits, and "its best cluster" = the cluster holding most of that deposit.
+  - {label: "clusters / event", keys: n_clusters, fmt: count,
+     expl: "Number of calorimeter clusters per event."}
+  - {label: "clusters with E > 0.1 GeV", keys: n_clusters_gt0p1, fmt: count,
+     expl: "Clusters per event with more than 0.1 GeV (sum of their hit energies)."}
+  - {label: "single-hit clusters / event", keys: n_clusters_1hit, fmt: count,
+     expl: "Clusters per event that consist of a single hit — usually isolated soft hits."}
+  - {label: "tracks / event", keys: n_tracks, fmt: count,
+     expl: "Reconstructed tracks per event (the other kind of input element besides clusters)."}
+  - {label: "visible particles / event", keys: n_visible, fmt: count,
+     expl: "Truth particles per event that left a measurable trace, i.e. the candidates for training targets, before they are matched to tracks and clusters."}
+  - {label: "targets / event", keys: n_targets, fmt: count,
+     expl: "The particles the model is trained to predict: each track or cluster can host only one target, so a visible particle that finds no free track or cluster is merged into a neighbouring target (or, rarely, dropped)."}
+  - {label: "clusters per visible particle", keys: clusters_per_visible, fmt: "{:.2f}",
+     expl: "Clusters / visible particles. Can be well below 1 without problems, because charged particles are matched to tracks first."}
+  - {label: "clusters + tracks per visible particle", keys: elements_per_visible, fmt: "{:.2f}",
+     expl: "(Clusters + tracks) / visible particles. Below 1 some particles must be merged, as there are not enough elements to host them all; above 1 merges can still happen locally."}
+  - {label: "clusters per target", keys: clusters_per_target, fmt: "{:.2f}",
+     expl: "Clusters / targets."}
+  - {label: "clusters + tracks per target", keys: elements_per_target, fmt: "{:.2f}",
+     expl: "(Clusters + tracks) / targets. Always >= 1, because every target owns one element; the excess is elements left without a target (fragments, noise)."}
+  - {label: "largest cluster hits / GeV", keys: [clu_nhit_max, clu_E_max], fmt: "{:.0f}", best: min,
+     expl: "Largest number of hits in one cluster / highest cluster energy (GeV), over all evaluated events (the two can come from different clusters). Flags giant merged clusters."}
+#   - {label: "dropped energy fraction", keys: dropped_E_frac, fmt: "{:.3f}",
+#      expl: "Share of the hit energy left in no cluster at all — discarded by dropping single-hit or soft (drop_E) clusters (0 for clusterers that keep every hit; for Pandora, its isolated soft cells)."}
+#   - {label: "removed hits / event: all / from a target", keys: [n_removed_hits, n_removed_hits_target], fmt: count,
+#      expl: "Calorimeter hits per event left in no cluster (dropped with a soft or single-hit cluster; for Pandora, its unclustered cells), and how many of them have a target particle as their main contributor. A target particle is a visible particle: its energy is what the model is trained to predict, in its own target or merged into another one (for CLD/CLIC: the main contributor among the visible particles, since the converter keeps truth links to those only)."}
+  - {label: "removed hits from a target: share of removed hits / of the targets' deposit", keys: [removed_hits_target_frac, removed_target_E_frac], fmt: "{:.3f}",
+     expl: "The removed hits whose main contributor is a target particle, as a share of all removed hits; and the targets' calorimeter deposit in removed hits as a share of their total deposit — the target energy the clustering throws away."}
+  - {label: "targets losing their best cluster / event: all (%) / with no cluster left (%)", keys: [n_targets_lost_best, n_targets_lost_all], fmt: "{:.1f}", best: min,
+     pct: [targets_lost_best_frac, targets_lost_all_frac], pct_fmt: "{:.3g}",
+     expl: "Target particles (with a calorimeter deposit) that lose their best match among the clusters to the removal: more of their deposit sits in removed hits than in any cluster that is kept (the removed hits counted as one unit) — and those that keep none of their deposit in any cluster. Tracks are not considered: a charged target can still be matched to its track. In brackets: as a share of all targets with a calorimeter deposit (summed over the events)."}
+  - {label: "share of targets losing their best cluster", keys: targets_lost_best_frac, fmt: "{:.4f}", best: min,
+     expl: "The first number of the previous row as a share of the targets with a calorimeter deposit."}
+  # ---- energy sharing without any matching
+  - {label: "purity_E / completeness_E", keys: [purity_E, completeness_E], fmt: "{:.2f}", best: max,
+     expl: "No matching involved. Purity: how much of a cluster's energy comes from its main particle (energy-weighted over all clusters). Completeness: how much of a particle's deposit is in its best cluster (energy-weighted over all particles). Merging lowers purity, splitting lowers completeness."}
+  # ---- clustering quality under two matching rules (calorimeter only; particles with a deposit
+  # above 1 GeV, clusters above 1 GeV for the fake rate). Rule 1 "double majority": a cluster and
+  # a particle match if the particle makes up >= 50% of the cluster's energy and the cluster holds
+  # >= 50% of the particle's deposit. Rule 2 "allocator": the converter's matching without tracks:
+  # particles in decreasing true energy each take their best still-free cluster, any share.
+  - {label: "efficiency: count / energy-weighted (double majority, E > 1 GeV)", keys: [eff_dm, eff_dm_E], fmt: "{:.2f}", best: max,
+     expl: "Share of particles (deposit > 1 GeV) matched to a cluster under the double-majority rule — the particle makes up at least half of the cluster's energy, and the cluster holds at least half of the particle's deposit. Counting each particle once / weighting each by its deposit (so energetic particles count more)."}
+  - {label: "fake rate (double majority, E > 1 GeV)", keys: fake_dm, fmt: "{:.2f}", best: min,
+     expl: "Share of clusters (E > 1 GeV) matched to no particle under the double-majority rule: fragments of a particle whose main cluster is elsewhere, or mixtures where no particle makes up half."}
+  - {label: "purity: energy / hits (double majority, E > 1 GeV)", keys: [purity_dm_E, purity_dm_hits], fmt: "{:.2f}", best: max,
+     expl: "Over matched pairs only: the share of the cluster that belongs to its matched particle, weighted by energy / by number of hits (a hit belongs to its largest contributor)."}
+  - {label: "recall: energy / hits (double majority, E > 1 GeV)", keys: [recall_dm_E, recall_dm_hits], fmt: "{:.2f}", best: max,
+     expl: "Over matched pairs only: the share of the particle captured by its matched cluster, by energy / by number of hits."}
+  - {label: "efficiency (allocator, clusters only, E > 1 GeV)", keys: eff_alloc, fmt: "{:.2f}", best: max,
+     expl: "Share of particles (deposit > 1 GeV) that get a cluster from the converter's matching rule run without tracks: particles in decreasing true energy each take their best still-free cluster, whatever share of it they make up."}
+  - {label: "fake rate (allocator, clusters only, E > 1 GeV)", keys: fake_alloc, fmt: "{:.2f}", best: min,
+     expl: "Share of clusters (E > 1 GeV) that no particle takes under that rule."}
+  - {label: "purity: energy / hits (allocator, clusters only, E > 1 GeV)", keys: [purity_alloc_E, purity_alloc_hits], fmt: "{:.2f}", best: max,
+     expl: "As for the double majority, over the pairs this rule forms."}
+  - {label: "recall: energy / hits (allocator, clusters only, E > 1 GeV)", keys: [recall_alloc_E, recall_alloc_hits], fmt: "{:.2f}", best: max,
+     expl: "As for the double majority, over the pairs this rule forms."}
+  # ---- training view: the converter's full matching, tracks first, then clusters, on all
+  # visible particles (exactly what the training targets are built from)
+  - {label: "efficiency (allocator, tracks + clusters)", keys: eff_pp, fmt: "{:.2f}", best: max,
+     expl: "Share of visible particles that get a track or a cluster of their own in the converter's matching; the rest are merged into another target or dropped."}
+  - {label: "fake rate (allocator, tracks + clusters, E/p > 1 GeV)", keys: fake_pp, fmt: "{:.2f}", best: min,
+     expl: "Share of elements (clusters E > 1 GeV, tracks p > 1 GeV) left without a target: what the model must learn to predict as no particle. Includes the clusters of charged particles that took their track instead."}
+  - {label: "purity: clusters energy / clusters hits / tracks hits (allocator, tracks + clusters)", keys: [purity_pp_clu_E, purity_pp_clu_hits, purity_pp_trk_hits], fmt: "{:.2f}", best: max,
+     expl: "Over the assigned pairs: for clusters, the share belonging to the assigned particle by energy / by hits; for tracks, the share of the track's hits from the assigned particle (tracker hits carry no energy in ColliderML, so tracks have no energy version)."}
+  - {label: "recall: clusters energy / clusters hits / tracks hits (allocator, tracks + clusters)", keys: [recall_pp_clu_E, recall_pp_clu_hits, recall_pp_trk_hits], fmt: "{:.2f}", best: max,
+     expl: "Over the assigned pairs: for clusters, the share of the particle's calorimeter deposit captured by energy / by hits; for tracks, the share of the particle's tracker hits on its track."}
+  - {label: "allocator: merged count / E / hard scatter", keys: [merged_frac, merged_frac_E, merged_frac_hs], fmt: "{:.2f}", best: min,
+     expl: "Share of targets that the matching had to merge into another target (no free track or cluster): by number / by energy / by number among hard-scatter targets."}
+  - {label: "allocator: massive targets / event", keys: n_massive, fmt: "{:.1f}", best: min,
+     expl: "Targets per event with mass above 5 GeV after merging: merges of particles going in different directions, which no longer look like a single particle (mostly in the forward region)."}
+  - {label: "time / event (s)", keys: time_s, fmt: "{:.1f}", best: min,
+     expl: "Clustering time per event in seconds (data loading and metrics excluded; several events run in parallel, so treat as indicative)."}
+
+# Printed as a "Caveats" section at the end of the output (one bullet each).
+caveats:
+  - "CMS ntuple column: the ntuple has no per-hit truth, so each PF cluster is scored as one unit against the caloparticles (caloparticle_to_element_cmp: each caloparticle's energy in the cluster, GeV)."
+  - "CMS ntuple column: a particle's \"deposit\" counts only its energy inside PF clusters — unclustered deposits are not recorded, so the clustered and dropped energy fractions are not defined (–)."
+  - "CMS ntuple column: superclusters (type 10) count in the cluster totals but are left out of the truth metrics, since they are built from ECAL clusters and would double-count energy."
+  - "CMS ntuple column: targets come from CMS's own target building (postprocessing2.make_graph + prepare_normalized_table, then the TFDS builder's PS/brem mask), i.e. exactly as in the CMS TFDS; the shared-allocator rows stay empty since CMS does not use that allocator. Visible particles = caloparticles with energy in a PF cluster or a linked track, close to but not exactly the caloparticle set CMS's target building starts from (it also splits a caloparticle across several nearby tracks)."
+  - "CMS ntuple column: a high fake rate and low recall are expected — CMS PF clusters are per subdetector (ECAL, HCAL, HF), so one particle's shower is split over several of them, which PF links only in a later step. Hit-count purity/recall are not shown: each unit is a whole PF cluster."
+  - "CMS: CMS's target building merges each caloparticle without an element of its own into its best element, so visible particles -> targets drops by ~1/3 (mostly pileup). The CMS TFDS 2.5.0 column (commented out in the spec) gave the same per-target ratio, 1.29, on different events."

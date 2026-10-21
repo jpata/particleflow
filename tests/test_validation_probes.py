@@ -49,9 +49,7 @@ def test_insufficient_events_keep_static_keys_without_fake_accuracy():
     assert set(result) == set(empty_metrics())
     assert result[PREFIX + "fit_success_fraction"] == [0, 1]
     assert result[PREFIX + "embedding/triplet_accuracy"] == [0, 0]
-    finalized = _finalize_diagnostics(
-        {k: [torch.tensor(a), torch.tensor(b)] for k, (a, b) in result.items()}, 1
-    )
+    finalized = _finalize_diagnostics({k: [torch.tensor(a), torch.tensor(b)] for k, (a, b) in result.items()}, 1)
     assert PREFIX + "embedding/triplet_accuracy" not in finalized
 
 
@@ -60,9 +58,7 @@ def test_capture_detaches_and_removes_hook_on_success_and_exception():
     x = torch.tensor(event["raw"])[None]
     targets = torch.zeros(1, 8, len(Y_FEATURES))
     targets[0, :, Y_FEATURES.index("particle_number")] = torch.tensor(event["labels"])
-    batch = SimpleNamespace(
-        X=x, ytarget=targets, mask=torch.ones(1, 8, dtype=torch.bool)
-    )
+    batch = SimpleNamespace(X=x, ytarget=targets, mask=torch.ones(1, 8, dtype=torch.bool))
     model = SimpleNamespace(set_decoder=torch.nn.Identity())
     p = ValidationCaloProbe()
     embedding = torch.tensor(event["embedding"], requires_grad=True)[None]
@@ -82,9 +78,5 @@ def test_capture_detaches_and_removes_hook_on_success_and_exception():
 def test_tensorboard_probe_tag():
     calls = []
     writer = SimpleNamespace(add_scalar=lambda *args: calls.append(args))
-    _log_validation_results_to_tensorboard(
-        writer, {PREFIX + "raw/triplet_accuracy": 0.6}, 5000
-    )
-    assert calls == [
-        ("validation/linear_probe/calorimeter/raw/triplet_accuracy", 0.6, 5000)
-    ]
+    _log_validation_results_to_tensorboard(writer, {PREFIX + "raw/triplet_accuracy": 0.6}, 5000)
+    assert calls == [("validation/linear_probe/calorimeter/raw/triplet_accuracy", 0.6, 5000)]

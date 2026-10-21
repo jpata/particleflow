@@ -13,15 +13,13 @@ from mlpf.model.mlpf import MLPF
 from mlpf.logger import _logger, _configLogger
 from mlpf.model.PFDataset import get_interleaved_dataloaders
 from mlpf.utils import create_comet_experiment
-from mlpf.model.training import get_optimizer, seed_everything, train_all_steps
+from mlpf.model.training import get_optimizer, restore_checkpoint, restore_loader_states, seed_everything, train_all_steps
 from mlpf.conf import MLPFConfig
 
 from mlpf.model.utils import (
-    load_checkpoint,
     save_HPs,
     get_lr_schedule,
     count_parameters,
-    load_lr_schedule,
 )
 
 
@@ -341,18 +339,19 @@ def train_ray_trial(config, args, outdir=None):
     start_step = 1
     checkpoint = ray.train.get_checkpoint()
     if checkpoint:
+        # this run's own checkpoint, reported before a worker failure: always a full resume
         with checkpoint.as_directory() as _checkpoint_dir:
             checkpoint_path = Path(_checkpoint_dir) / "checkpoint.pth"
             _logger.info(f"Loading checkpoint from {checkpoint_path}")
             checkpoint = torch.load(checkpoint_path, map_location=torch.device(rank))
-            load_lr_schedule(lr_schedule, checkpoint, start_step=start_step)
-            model, optimizer = load_checkpoint(checkpoint, model, optimizer, strict=True)
-            start_step = checkpoint["extra_state"]["step"] + 1
-            if not mlpf_config.sampler_from_scratch:
-                if "train_loader_state_dict" in checkpoint["extra_state"]:
-                    loaders["train"].load_state_dict(checkpoint["extra_state"]["train_loader_state_dict"])
-                if "valid_loader_state_dict" in checkpoint["extra_state"]:
-                    loaders["valid"].load_state_dict(checkpoint["extra_state"]["valid_loader_state_dict"])
+            start_step = restore_checkpoint(checkpoint, model, optimizer, lr_schedule, mlpf_config)
+            restore_loader_states(loaders, checkpoint, mlpf_config)
+    elif mlpf_config.load:
+        _logger.info(f"Loading checkpoint from {mlpf_config.load}")
+        checkpoint = torch.load(mlpf_config.load, map_location=torch.device(rank))
+        start_step = restore_checkpoint(checkpoint, model, optimizer, lr_schedule, mlpf_config, weights_only=mlpf_config.load_weights_only)
+        if not mlpf_config.load_weights_only:
+            restore_loader_states(loaders, checkpoint, mlpf_config)
 
     train_all_steps(
         rank,

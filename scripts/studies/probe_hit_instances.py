@@ -54,14 +54,10 @@ def prepare(args):
     from mlpf.model.PFDataset import PFDataset
 
     torch.manual_seed(args.seed)
-    config = MLPFConfig.model_validate(
-        yaml.safe_load((args.run / "train-config.yaml").read_text())
-    )
+    config = MLPFConfig.model_validate(yaml.safe_load((args.run / "train-config.yaml").read_text()))
     config.model.attention.use_flash_attn_varlen = False
     model = MLPF(config)
-    model.task_loss_weighter = make_task_loss_weighter(
-        config.task_loss_weights.model_dump()
-    )
+    model.task_loss_weighter = make_task_loss_weighter(config.task_loss_weights.model_dump())
     checkpoint = args.run / "checkpoints" / f"checkpoint-{args.step}.pth"
     state = torch.load(checkpoint, map_location="cpu", weights_only=False)
     model.load_state_dict(state["model_state_dict"], strict=True)
@@ -80,36 +76,22 @@ def prepare(args):
         raise ValueError("Requested event range exceeds dataset")
     # Disjoint probe events from TFDS test: excluded from backbone gradient updates,
     # but possibly used for backbone validation/model selection.
-    indices = np.random.default_rng(args.seed).permutation(
-        np.arange(args.offset, args.offset + total)
-    )
+    indices = np.random.default_rng(args.seed).permutation(np.arange(args.offset, args.offset + total))
     manifest = dict(
-        arguments={
-            k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()
-        },
+        arguments={k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
         checkpoint=str(checkpoint.resolve()),
         checkpoint_bytes=checkpoint.stat().st_size,
-        checkpoint_sha256=hashlib.file_digest(
-            checkpoint.open("rb"), "sha256"
-        ).hexdigest(),
+        checkpoint_sha256=hashlib.file_digest(checkpoint.open("rb"), "sha256").hexdigest(),
         event_indices=indices.tolist(),
         backbone_split="test",
         foreground_only=True,
     )
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2))
     for j, idx in enumerate(indices):
-        split = (
-            "train"
-            if j < args.train_events
-            else "valid"
-            if j < args.train_events + args.valid_events
-            else "test"
-        )
+        split = "train" if j < args.train_events else "valid" if j < args.train_events + args.valid_events else "test"
         record = dataset[int(idx)]
         x = np.asarray(record["X"], dtype=np.float32)
-        labels = record["ytarget"][:, Y_FEATURES.index("particle_number")].astype(
-            np.int64
-        )
+        labels = record["ytarget"][:, Y_FEATURES.index("particle_number")].astype(np.int64)
         tensor = torch.as_tensor(x, device=args.device)[None]
         with (
             torch.inference_mode(),
@@ -119,12 +101,7 @@ def prepare(args):
                 enabled=args.device.startswith("cuda"),
             ),
         ):
-            embedding = (
-                model.encode_backbone(tensor, tensor[..., 0] != 0)[0]
-                .float()
-                .cpu()
-                .numpy()
-            )
+            embedding = model.encode_backbone(tensor, tensor[..., 0] != 0)[0].float().cpu().numpy()
         if not np.isfinite(embedding).all() or not np.isfinite(x).all():
             raise ValueError(f"Nonfinite features in event {idx}")
         for detector, kind in [("tracker", 1), ("calorimeter", 2)]:
@@ -155,13 +132,9 @@ def evaluate(paths, representation, scaler, model, threshold):
         event = read(path)
         edges, labels = event["edges"], event["labels"]
         target = labels[edges[:, 0]] == labels[edges[:, 1]]
-        scores = model.predict_proba(
-            scaler.transform(pair_features(event, representation, edges))
-        )[:, 1]
+        scores = model.predict_proba(scaler.transform(pair_features(event, representation, edges)))[:, 1]
         row = instance_metrics(labels, cluster(len(labels), edges, scores >= threshold))
-        row["oracle_graph_ari"] = instance_metrics(
-            labels, cluster(len(labels), edges, target)
-        )["ari"]
+        row["oracle_graph_ari"] = instance_metrics(labels, cluster(len(labels), edges, target))["ari"]
         row["edge_positive_fraction"] = float(target.mean())
         if len(np.unique(target)) == 2:
             row["edge_ap"] = average_precision_score(target, scores)
@@ -178,10 +151,7 @@ def evaluate(paths, representation, scaler, model, threshold):
 def train(args):
     results = {}
     for detector in ("tracker", "calorimeter"):
-        paths = {
-            s: sorted((args.output / "cache" / detector / s).glob("*.npz"))
-            for s in ("train", "valid", "test")
-        }
+        paths = {s: sorted((args.output / "cache" / detector / s).glob("*.npz")) for s in ("train", "valid", "test")}
         if any(not p for p in paths.values()):
             raise ValueError(f"Missing events for {detector}")
         for representation in ("raw", "embedding"):
@@ -192,11 +162,7 @@ def train(args):
             for path in paths["train"]:
                 event = read(path)
                 edges = event["edges"]
-                edges = edges[
-                    rng.choice(
-                        len(edges), min(args.pairs_per_event, len(edges)), replace=False
-                    )
-                ]
+                edges = edges[rng.choice(len(edges), min(args.pairs_per_event, len(edges)), replace=False)]
                 samples.append((path, edges))
                 scaler.partial_fit(pair_features(event, representation, edges))
             model = SGDClassifier(
@@ -210,9 +176,7 @@ def train(args):
             training_pairs = []
             for path, edges in samples:
                 event = read(path)
-                y = (
-                    event["labels"][edges[:, 0]] == event["labels"][edges[:, 1]]
-                ).astype(int)
+                y = (event["labels"][edges[:, 0]] == event["labels"][edges[:, 1]]).astype(int)
                 z = scaler.transform(pair_features(event, representation, edges))
                 freq = np.bincount(y, minlength=2)
                 weights = len(y) / (2 * np.maximum(freq[y], 1))
@@ -225,9 +189,7 @@ def train(args):
             # Tune segmentation, not edge accuracy, using validation events only.
             sweep = {}
             for threshold in (0.3, 0.5, 0.7, 0.85, 0.95, 0.98, 0.995):
-                sweep[threshold] = evaluate(
-                    paths["valid"], representation, scaler, model, threshold
-                )["mean"]["ari"]
+                sweep[threshold] = evaluate(paths["valid"], representation, scaler, model, threshold)["mean"]["ari"]
             threshold = max(sweep, key=sweep.get)
             key = f"{detector}_{representation}"
             result = dict(
@@ -260,10 +222,7 @@ def plot_results(results, output):
         ("Same-particle edge average precision", "Instance adjusted Rand index"),
     ):
         for j, representation in enumerate(("raw", "embedding")):
-            values = [
-                results[f"{detector}_{representation}"]["test"]["mean"][metric]
-                for detector in ("tracker", "calorimeter")
-            ]
+            values = [results[f"{detector}_{representation}"]["test"]["mean"][metric] for detector in ("tracker", "calorimeter")]
             bars = ax.bar(
                 np.arange(2) + (j - 0.5) * 0.34,
                 values,
@@ -297,14 +256,10 @@ def main():
     p.add_argument(
         "--run",
         type=Path,
-        default=Path(
-            "experiments/cld_pf_heptv2_hit_grouping_50k/hit_heptv2_grouped_seed12345_20261009_164038_591219"
-        ),
+        default=Path("experiments/cld_pf_heptv2_hit_grouping_50k/hit_heptv2_grouped_seed12345_20261009_164038_591219"),
     )
     p.add_argument("--step", type=int, default=50000)
-    p.add_argument(
-        "--data-dir", type=Path, default=Path("/mnt/work/mlpf/tensorflow_datasets/cld")
-    )
+    p.add_argument("--data-dir", type=Path, default=Path("/mnt/work/mlpf/tensorflow_datasets/cld"))
     p.add_argument("--dataset", default="cld_edm_ttbar_hits/1:3.2.1")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--device", default="cuda")
@@ -319,9 +274,7 @@ def main():
     p.add_argument("--seed", type=int, default=12345)
     args = p.parse_args()
     if args.output.exists():
-        p.error(
-            "Output already exists; use a fresh directory to prevent mixing event caches"
-        )
+        p.error("Output already exists; use a fresh directory to prevent mixing event caches")
     args.output.mkdir(parents=True)
     if (
         min(
@@ -335,9 +288,7 @@ def main():
         <= 0
         or args.offset < 0
     ):
-        p.error(
-            "Event counts, neighbors, pair count and epochs must be positive; offset must be nonnegative"
-        )
+        p.error("Event counts, neighbors, pair count and epochs must be positive; offset must be nonnegative")
     prepare(args)
     plot_results(train(args), args.output)
 

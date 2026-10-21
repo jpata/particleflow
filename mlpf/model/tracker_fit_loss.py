@@ -4,6 +4,7 @@ Candidate selection and quality decisions are detached; continuous ownership
 weights and the normalized double-precision least-squares solve are trainable.
 No truth-selected hits enter the predicted fit or inference readout.
 """
+
 import torch
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
@@ -34,11 +35,11 @@ def weighted_circle(xy, weights):
 def _supported(features):
     if len(features) < 4:
         return False
-    rho = features[:, 6:8].double().norm(dim=-1) * .001
-    return bool((rho.max() - rho.min() >= .1) & (torch.unique(features[:, 12:15], dim=0).shape[0] >= 3))
+    rho = features[:, 6:8].double().norm(dim=-1) * 0.001
+    return bool((rho.max() - rho.min() >= 0.1) & (torch.unique(features[:, 12:15], dim=0).shape[0] >= 3))
 
 
-def tracker_fit_losses(grouping, batch, matches, magnetic_field=2., max_hits=64, chunk_size=1024):
+def tracker_fit_losses(grouping, batch, matches, magnetic_field=2.0, max_hits=64, chunk_size=1024):
     """Equal-object auxiliary losses on Hungarian-matched hadrons and muons.
 
     Geometry targets come from detached truth-owned circles (supervision only).
@@ -90,28 +91,28 @@ def tracker_fit_losses(grouping, batch, matches, magnetic_field=2., max_hits=64,
                     weights = checkpoint(ownership, *args, use_reentrant=True)
                 else:
                     weights = ownership(*args)
-                xy = features[:, 6:8].double() * .001
+                xy = features[:, 6:8].double() * 0.001
                 centre, radius, valid = weighted_circle(xy, weights)
                 if bool(valid):
-                    inverse_pt = 1 / (.299792458 * magnetic_field * radius)
+                    inverse_pt = 1 / (0.299792458 * magnetic_field * radius)
                     truth_inverse_pt = (-target[2].double()).exp()
                     # Relative curvature error with a floor above 50 GeV. Avoid
                     # conversion to pT, whose derivative diverges for straight tracks.
-                    error = (inverse_pt - truth_inverse_pt) / truth_inverse_pt.clamp_min(.02)
-                    curvature.append(F.smooth_l1_loss(error, torch.zeros_like(error), beta=.2))
+                    error = (inverse_pt - truth_inverse_pt) / truth_inverse_pt.clamp_min(0.02)
+                    curvature.append(F.smooth_l1_loss(error, torch.zeros_like(error), beta=0.2))
                 truth_mask = batch.ytarget[event, indices, pn_index] == target[pn_index]
                 truth_features = x[truth_mask]
                 if not _supported(truth_features):
                     continue
                 with torch.no_grad():
-                    truth_xy = truth_features[:, 6:8].double() * .001
+                    truth_xy = truth_features[:, 6:8].double() * 0.001
                     truth_centre, truth_radius, truth_valid = weighted_circle(truth_xy, torch.ones(len(truth_xy), device=xy.device))
                     truth_residual = ((truth_xy - truth_centre).norm(dim=-1) - truth_radius).abs()
                     # Reject bad truth circles (interactions/looping/mixed trajectories).
-                    truth_valid &= truth_residual.square().mean().sqrt() < .001
+                    truth_valid &= truth_residual.square().mean().sqrt() < 0.001
                 if bool(truth_valid):
-                    residual = ((xy - truth_centre).norm(dim=-1) - truth_radius) / .001
-                    per_hit = F.smooth_l1_loss(residual, torch.zeros_like(residual), beta=1., reduction="none")
+                    residual = ((xy - truth_centre).norm(dim=-1) - truth_radius) / 0.001
+                    per_hit = F.smooth_l1_loss(residual, torch.zeros_like(residual), beta=1.0, reduction="none")
                     geometry.append((weights.double() * per_hit).sum() / weights.double().sum().clamp_min(1e-12))
     return {
         "TrackerGeometry": torch.stack(geometry).mean().float() if geometry else zero,

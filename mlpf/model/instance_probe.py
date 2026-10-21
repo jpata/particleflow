@@ -18,25 +18,15 @@ def candidate_edges(x, k):
         return np.empty((0, 2), dtype=np.int64)
     blocks = []
     for coords in (x[:, 6:9], x[:, [2, 3, 4]]):
-        indices = (
-            NearestNeighbors(n_neighbors=min(k + 1, n))
-            .fit(coords)
-            .kneighbors(coords, return_distance=False)
-        )
-        blocks.append(
-            np.stack(
-                (np.repeat(np.arange(n), indices.shape[1]), indices.ravel()), axis=1
-            )
-        )
+        indices = NearestNeighbors(n_neighbors=min(k + 1, n)).fit(coords).kneighbors(coords, return_distance=False)
+        blocks.append(np.stack((np.repeat(np.arange(n), indices.shape[1]), indices.ravel()), axis=1))
     edges = np.sort(np.concatenate(blocks), axis=1)
     return np.unique(edges[edges[:, 0] != edges[:, 1]], axis=0)
 
 
 def cluster(n, edges, keep):
     selected = edges[keep]
-    graph = coo_matrix(
-        (np.ones(len(selected)), (selected[:, 0], selected[:, 1])), shape=(n, n)
-    ).tocsr()
+    graph = coo_matrix((np.ones(len(selected)), (selected[:, 0], selected[:, 1])), shape=(n, n)).tocsr()
     return connected_components(graph, directed=False)[1]
 
 
@@ -101,20 +91,12 @@ def fit_affinity(events, rep):
 def edge_probabilities(event, edges, rep, fit):
     scaler, model = fit
     return np.concatenate(
-        [
-            model.predict_proba(
-                scaler.transform(pair_features(event, rep, edges[start : start + 8192]))
-            )[:, 1]
-            for start in range(0, len(edges), 8192)
-        ]
+        [model.predict_proba(scaler.transform(pair_features(event, rep, edges[start : start + 8192])))[:, 1] for start in range(0, len(edges), 8192)]
     )
 
 
 def select_threshold(calibration, rep, fit):
-    scores = [
-        (event, edges, edge_probabilities(event, edges, rep, fit))
-        for event, edges in calibration
-    ]
+    scores = [(event, edges, edge_probabilities(event, edges, rep, fit)) for event, edges in calibration]
     values = [
         np.mean(
             [
@@ -139,11 +121,7 @@ def compute_instance_ari(events, detector):
         result[prefix + name][0] += float(total)
         result[prefix + name][1] += float(count)
 
-    prepared = [
-        (i, event, candidate_edges(event["raw"], 16))
-        for i, event in enumerate(events)
-        if event is not None and len(event["labels"]) >= 2
-    ]
+    prepared = [(i, event, candidate_edges(event["raw"], 16)) for i, event in enumerate(events) if event is not None and len(event["labels"]) >= 2]
     training = [(e, edges) for i, e, edges in prepared if i % 4 in (0, 1)]
     calibration = [(e, edges) for i, e, edges in prepared if i % 4 == 2]
     testing = [(e, edges) for i, e, edges in prepared if i % 4 == 3]
@@ -156,9 +134,7 @@ def compute_instance_ari(events, detector):
     success = len(fits) == 2 and all(f is not None for f in fits.values())
     add("ari_fit_success_fraction", success)
     if success:
-        thresholds = {
-            rep: select_threshold(calibration, rep, fits[rep]) for rep in fits
-        }
+        thresholds = {rep: select_threshold(calibration, rep, fits[rep]) for rep in fits}
         for rep, threshold in thresholds.items():
             add(rep + "/ari_threshold", threshold)
     for event, edges in testing:
@@ -170,9 +146,7 @@ def compute_instance_ari(events, detector):
         values = {}
         for rep, fit in fits.items():
             scores = edge_probabilities(event, edges, rep, fit)
-            values[rep] = adjusted_rand_score(
-                y, cluster(len(y), edges, scores >= thresholds[rep])
-            )
+            values[rep] = adjusted_rand_score(y, cluster(len(y), edges, scores >= thresholds[rep]))
             add(rep + "/ari", values[rep])
         add("embedding_minus_raw/ari", values["embedding"] - values["raw"])
     return result

@@ -17,14 +17,18 @@ from mlpf.training_scenarios import load_platform_profile, load_training_scenari
 
 HIT_COUNTS = (4096, 16384, 32768, 65536, 100000)
 SLOT_COUNTS = (256, 512, 1024, 2048, 4096, 8192, 10000)
-CASES = tuple(dict.fromkeys([
-    *((hits, 256) for hits in HIT_COUNTS),
-    *((4096, slots) for slots in SLOT_COUNTS),
-    (32768, 10000),
-    (100000, 4096),
-    (100000, 8192),
-    (100000, 10000),
-]))
+CASES = tuple(
+    dict.fromkeys(
+        [
+            *((hits, 256) for hits in HIT_COUNTS),
+            *((4096, slots) for slots in SLOT_COUNTS),
+            (32768, 10000),
+            (100000, 4096),
+            (100000, 8192),
+            (100000, 10000),
+        ]
+    )
+)
 
 
 def measure_forward(model, hits, mask):
@@ -120,10 +124,14 @@ def main():
                 sys.executable,
                 str(Path(__file__).resolve()),
                 "--worker",
-                "--variant", variant,
-                "--hits", str(num_hits),
-                "--slots", str(num_slots),
-                "--repeats", str(args.repeats),
+                "--variant",
+                variant,
+                "--hits",
+                str(num_hits),
+                "--slots",
+                str(num_slots),
+                "--repeats",
+                str(args.repeats),
             ]
             try:
                 process = subprocess.run(command, capture_output=True, text=True, timeout=args.timeout, check=False)
