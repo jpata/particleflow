@@ -764,3 +764,30 @@ def test_tracker_fit_loss_ablation_changes_only_auxiliary_weights():
             reference = model
         assert model == reference
     assert weights == [(0.0, 0.0), (0.01, 0.0), (0.0, 0.1), (0.01, 0.1)]
+
+
+def test_tracker_readout_scenario_preserves_small_baseline():
+    platform = load_platform_profile(ROOT / "configs/training/platforms/lumi_mi250x.yaml")
+    reference = resolve_scenario_jobs(
+        load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_model_scaling_50k.yaml"),
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+    )[0].resolved_config
+    jobs = resolve_scenario_jobs(
+        load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_tracker_readout_50k.yaml"),
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+    )
+    assert len(jobs) == 4
+    assert [
+        (j.resolved_config.model.set_decoder.tracker_momentum_readout, j.resolved_config.model.set_decoder.hit_grouping_sparse) for j in jobs
+    ] == [(False, False), (True, False), (False, True), (True, True)]
+    for job in jobs:
+        config = job.resolved_config
+        assert job.global_batch_size == 128 and job.per_gpu_batch_size == 16
+        assert config.num_steps == 50000 and config.val_freq == config.checkpoint_freq == 1000
+        model = config.model.model_dump()
+        for key in ["tracker_momentum_readout", "hit_grouping_sparse"]:
+            model["set_decoder"][key] = False
+        assert model == reference.model.model_dump()
+        assert (config.lr, config.lr_schedule, config.optimizer) == (reference.lr, reference.lr_schedule, reference.optimizer)

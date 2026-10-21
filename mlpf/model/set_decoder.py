@@ -7,6 +7,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from mlpf.model.tracker_group_readout import SUMMARY_DIM, tracker_group_geometry
+from mlpf.model.tracker_momentum_readout import TrackerMomentumReadout, pool_hit_associations
 
 try:
     from flash_attn import flash_attn_varlen_func
@@ -277,6 +278,10 @@ class ParticleSetDecoder(nn.Module):
         self.hit_grouping = config.hit_grouping
         self.hit_grouping_chunk_size = config.hit_grouping_chunk_size
         self.hit_grouping_dim = config.hit_grouping_dim
+        self.hit_grouping_sparse = config.hit_grouping_sparse
+        self.hit_grouping_topk = config.hit_grouping_topk
+        self.hit_grouping_temperature = config.hit_grouping_temperature
+        self.tracker_momentum_readout = config.tracker_momentum_readout
         self.tracker_group_readout = config.tracker_group_readout
         self.tracker_fit_correction = config.tracker_fit_correction
         self.tracker_fit_max_log_correction = config.tracker_fit_max_log_correction
@@ -334,6 +339,9 @@ class ParticleSetDecoder(nn.Module):
             self.scale_head = None
             self.aggregate_projection = None
             self.momentum_head = nn.Linear(embedding_dim, 5)
+
+        if self.tracker_momentum_readout:
+            self.tracker_momentum_head = TrackerMomentumReadout(embedding_dim, config.tracker_momentum_max_log_correction)
 
     @staticmethod
     def _take_topk(scores, candidates, count):
@@ -521,7 +529,7 @@ class ParticleSetDecoder(nn.Module):
             reference_mask[event_idx, :num_selected] = True
         return slots, references, reference_mask, scale_anchors, scale_anchor_mask
 
-    def _predict(self, slots, references=None, scale_anchors=None, scale_anchor_mask=None, tracker_fit=None):
+    def _predict(self, slots, references=None, scale_anchors=None, scale_anchor_mask=None, tracker_fit=None, tracker_summary=None):
         normalized_slots = self.output_norm(slots)
         presence = self.presence_head(normalized_slots)
         pid = self.pid_head(normalized_slots)
@@ -560,6 +568,12 @@ class ParticleSetDecoder(nn.Module):
                 ],
                 dim=-1,
             )
+        if tracker_summary is not None:
+            physical_pid = pid[..., 1:].argmax(-1) + 1
+            charged = (physical_pid == 1) | (physical_pid == 4) | (physical_pid == 5)
+            correction = self.tracker_momentum_head(tracker_summary)
+            pt = momentum[..., 0].float() + charged.float() * correction
+            momentum = torch.cat((pt[..., None], momentum[..., 1:].float()), -1)
         pileup = torch.zeros_like(presence)
         return presence, pid, momentum, pileup
 
@@ -568,6 +582,21 @@ class ParticleSetDecoder(nn.Module):
         hit_keys = F.normalize(self.hit_grouping_hit(memory).float(), dim=-1)
         slot_keys = F.normalize(self.hit_grouping_slot(slots).float(), dim=-1)
         background = self.hit_grouping_background(memory).float()
+        if self.hit_grouping_sparse:
+            summary, tracker_summary = pool_hit_associations(
+                memory,
+                memory_mask,
+                input_features,
+                (hit_keys, slot_keys, background),
+                self.num_slots,
+                self.hit_grouping_chunk_size,
+                self.hit_grouping_topk,
+                self.hit_grouping_temperature,
+                self.hit_grouping_sparse,
+                self.tracker_momentum_readout,
+            )
+            slots = slots + self.hit_grouping_projection(summary.to(slots.dtype))
+            return slots, (hit_keys, slot_keys, background), None, tracker_summary
         batch_size, _, width = memory.shape
         pooled = memory.new_zeros((batch_size, self.num_slots, 2, width))
         counts = memory.new_zeros((batch_size, self.num_slots, 2), dtype=torch.float32)
@@ -623,7 +652,23 @@ class ParticleSetDecoder(nn.Module):
             summaries, log_pt, fit_valid = (torch.stack(values) for values in zip(*geometry))
             slots = slots + self.tracker_group_projection(summaries.to(slots.dtype))
             tracker_geometry = (log_pt, fit_valid)
-        return slots, (hit_keys, slot_keys, background), tracker_geometry
+        tracker_summary = None
+        if self.tracker_momentum_readout:
+            # Preserve the legacy hard-pooling path exactly for the readout-only
+            # ablation, including its accumulation dtype and seeded modules.
+            _, tracker_summary = pool_hit_associations(
+                memory,
+                memory_mask,
+                input_features,
+                (hit_keys, slot_keys, background),
+                self.num_slots,
+                self.hit_grouping_chunk_size,
+                self.hit_grouping_topk,
+                self.hit_grouping_temperature,
+                False,
+                True,
+            )
+        return slots, (hit_keys, slot_keys, background), tracker_geometry, tracker_summary
 
     def forward(self, memory, memory_mask, input_features=None):
         memory_mask = memory_mask.bool()
@@ -631,11 +676,12 @@ class ParticleSetDecoder(nn.Module):
         scale_anchors = scale_anchor_mask = None
         tracker_fit_valid = None
         tracker_fit = None
+        tracker_summary = None
         if self.query_init == "input-conditioned":
             slots, references, reference_mask, scale_anchors, scale_anchor_mask = self._input_conditioned_queries(memory, memory_mask, input_features)
             grouping = None
             if self.hit_grouping:
-                slots, grouping, tracker_geometry = self._group_hits(slots, memory, memory_mask, input_features)
+                slots, grouping, tracker_geometry, tracker_summary = self._group_hits(slots, memory, memory_mask, input_features)
                 if tracker_geometry is not None:
                     log_pt, fit_valid = tracker_geometry
                     # Keep calorimeter seed anchors in both readout modes.
@@ -690,7 +736,7 @@ class ParticleSetDecoder(nn.Module):
                 references = torch.stack([eta, torch.atan2(torch.sin(phi), torch.cos(phi))], dim=-1)
             is_final_layer = layer_index == len(self.layers) - 1
             if self.use_auxiliary_losses or is_final_layer:
-                outputs.append(self._predict(slots, references, scale_anchors, scale_anchor_mask, tracker_fit))
+                outputs.append(self._predict(slots, references, scale_anchors, scale_anchor_mask, tracker_fit, tracker_summary))
 
         auxiliary_predictions = tuple(outputs[:-1]) if self.use_auxiliary_losses else ()
         return ParticleSetDecoderOutput(

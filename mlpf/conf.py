@@ -908,6 +908,11 @@ class SetDecoderConfig(BaseModel):
     hit_grouping_loss_weight: float = Field(default=0.1, ge=0.0)
     hit_grouping_background_weight: float = Field(default=0.1, gt=0.0)
     hit_grouping_detector_balanced: bool = False
+    hit_grouping_sparse: bool = False
+    hit_grouping_topk: int = Field(default=4, gt=0)
+    hit_grouping_temperature: float = Field(default=1.0, gt=0.0)
+    tracker_momentum_readout: bool = False
+    tracker_momentum_max_log_correction: float = Field(default=0.4054651081081644, gt=0.0)
     tracker_geometry_loss_weight: float = Field(default=0.0, ge=0.0)
     tracker_curvature_loss_weight: float = Field(default=0.0, ge=0.0)
     tracker_loss_max_hits: int = Field(default=64, ge=4)
@@ -936,6 +941,12 @@ class SetDecoderConfig(BaseModel):
             raise ValueError("tracker group readout and detector balancing require hit_grouping")
         if (self.tracker_geometry_loss_weight or self.tracker_curvature_loss_weight) and not self.hit_grouping:
             raise ValueError("tracker fit losses require hit_grouping")
+        if (self.hit_grouping_sparse or self.tracker_momentum_readout) and not self.hit_grouping:
+            raise ValueError("sparse association and tracker momentum readout require hit_grouping")
+        if self.hit_grouping_sparse and self.hit_grouping_topk > self.num_slots:
+            raise ValueError("hit_grouping_topk must not exceed num_slots")
+        if (self.hit_grouping_sparse or self.tracker_momentum_readout) and self.tracker_group_readout:
+            raise ValueError("new association/readout cannot be combined with legacy tracker_group_readout")
         if self.tracker_fit_correction and not self.tracker_group_readout:
             raise ValueError("tracker_fit_correction requires tracker_group_readout")
         return self
