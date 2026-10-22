@@ -9,6 +9,7 @@ from mlpf.model.validation_metrics import (
     MATCH_LOG_PT,
     MATCH_REL_PT,
     _matching_cost,
+    compute_set_slot_metrics,
     compute_validation_particle_metrics,
     validation_particle_collections,
 )
@@ -179,3 +180,37 @@ def test_matching_cost_cap_never_changes_an_acceptable_pair():
     assert uncapped.max() < MATCH_COST_CAP
     torch.testing.assert_close(_matching_cost(delta_r, log_pt_ratio), uncapped)
     assert _matching_cost(torch.tensor([3.0]), torch.tensor([0.0])).item() == MATCH_COST_CAP
+
+
+def test_set_slot_metrics_separate_slot_coverage_from_presence_and_measure_regression():
+    targets = make_collection(
+        cls_id=[1, 2],
+        pt=[10.0, 20.0],
+        eta=[0.0, 1.0],
+        phi=[0.0, 0.5],
+        energy=[12.0, 24.0],
+    )
+    predictions = make_collection(
+        cls_id=[1, 2, 3],
+        pt=[10.0, 40.0, 5.0],
+        eta=[0.0, 1.0, 3.0],
+        phi=[0.0, 0.5, 2.0],
+        energy=[12.0, 48.0, 6.0],
+    )
+    predictions["cls_binary"] = torch.tensor([[[0.0, 4.0], [4.0, 0.0], [4.0, 0.0]]])
+    predictions["cls_id_onehot"] = torch.zeros(1, 3, 6)
+    values = finalized(
+        compute_set_slot_metrics(
+            targets,
+            torch.ones(1, 2, dtype=torch.bool),
+            predictions,
+            presence_threshold=0.5,
+        )
+    )
+
+    assert values["angular_recall_selected_dr0p10"] == 0.5
+    assert values["angular_recall_all_dr0p10"] == 1.0
+    assert values["all_angular_matched/pt_abs_log_error"] == pytest.approx(torch.log(torch.tensor(2.0)).item() / 2)
+    assert values["all_angular_matched/energy_abs_log_error"] == pytest.approx(torch.log(torch.tensor(2.0)).item() / 2)
+    expected_soft_count_bias = torch.sigmoid(torch.tensor(4.0)).item() + 2 * torch.sigmoid(torch.tensor(-4.0)).item() - 2
+    assert values["soft_count_bias_mean"] == pytest.approx(expected_soft_count_bias)

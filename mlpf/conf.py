@@ -1,7 +1,7 @@
 # This file contains the structure of the MLPF configuration and some generic defaults.
 # Dataset-specific overrides are in particleflow_spec.yaml
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, Literal
 from dataclasses import dataclass, fields
 import os
 from enum import Enum
@@ -810,6 +810,7 @@ class HEPTConfig(BaseModel):
 
 class HEPTv2Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    activation_checkpointing: bool = False
     embedding_dim: int = 128
     width: int = 512
     num_convs: int = 6
@@ -847,7 +848,15 @@ class HitFeatureEngineeringConfig(BaseModel):
     enabled: bool = True
     geometry: bool = True
     tracker_neighborhood: bool = False
+    tracker_momentum: bool = False
+    tracker_doublets: bool = False
     calorimeter_neighborhood: bool = True
+
+    @model_validator(mode="after")
+    def validate_tracker_momentum(self):
+        if self.tracker_momentum and not self.tracker_neighborhood:
+            raise ValueError("tracker_momentum requires tracker_neighborhood")
+        return self
 
 
 class SetMatcherConfig(BaseModel):
@@ -876,18 +885,74 @@ class SetDecoderConfig(BaseModel):
     ffn_multiplier: float = Field(default=4.0, gt=0.0)
     dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
     query_init: SetQueryInit = SetQueryInit.LEARNED
-    local_attention_radius: Optional[float] = Field(default=None, gt=0.0)
+    local_attention_radius: Optional[float] = Field(
+        default=None, gt=0.0, description="Legacy name for the per-layer query reference update scale; attention remains unmasked."
+    )
+    attention_mode: Literal["global-flash", "sectorized"] = "global-flash"
+    num_sectors: int = Field(default=32, gt=0)
+    sector_neighbors: int = Field(default=1, ge=0)
     tracker_query_fraction: float = Field(default=0.5, ge=0.0, le=1.0)
+    proposal_mode: Literal["topk", "grid-diverse"] = "topk"
+    proposal_grid_size: float = Field(default=0.1, gt=0.0)
+    use_aggregate_anchors: bool = False
+    aggregate_grid_size: float = Field(default=0.1, gt=0.0)
     presence_threshold: float = Field(default=0.5, gt=0.0, lt=1.0)
     no_object_weight: float = Field(default=1.0, gt=0.0)
     cardinality_loss_weight: float = Field(default=0.0, ge=0.0)
     auxiliary_loss_weight: float = Field(default=0.0, ge=0.0)
+    momentum_loss: Literal["mse", "huber"] = "mse"
+    momentum_huber_delta: float = Field(default=0.2, gt=0.0)
+    hit_grouping: bool = False
+    hit_grouping_dim: int = Field(default=32, gt=0)
+    hit_grouping_chunk_size: int = Field(default=1024, gt=0)
+    hit_grouping_loss_weight: float = Field(default=0.1, ge=0.0)
+    hit_grouping_background_weight: float = Field(default=0.1, gt=0.0)
+    hit_grouping_detector_balanced: bool = False
+    hit_grouping_tracker_particle_balanced: bool = False
+    tracker_overlap_loss_weight: float = Field(default=0.0, ge=0.0)
+    hit_grouping_sparse: bool = False
+    hit_grouping_topk: int = Field(default=4, gt=0)
+    hit_grouping_temperature: float = Field(default=1.0, gt=0.0)
+    tracker_momentum_readout: bool = False
+    tracker_momentum_max_log_correction: float = Field(default=0.4054651081081644, gt=0.0)
+    tracker_geometry_loss_weight: float = Field(default=0.0, ge=0.0)
+    tracker_curvature_loss_weight: float = Field(default=0.0, ge=0.0)
+    tracker_loss_max_hits: int = Field(default=64, ge=4)
+    tracker_group_readout: bool = False
+    tracker_fit_correction: bool = False
+    tracker_fit_max_log_correction: float = Field(default=0.4054651081081644, gt=0.0)  # log(1.5)
+    tracker_group_magnetic_field: float = Field(default=2.0, gt=0.0)  # tesla; CLD solenoid
+    event_consistency_loss_weight: float = Field(default=0.0, ge=0.0)
     matcher: SetMatcherConfig = Field(default_factory=SetMatcherConfig)
 
     @model_validator(mode="after")
     def validate_query_locality(self):
+        if self.attention_mode == "sectorized" and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder sectorized attention requires query_init='input-conditioned'")
         if self.local_attention_radius is not None and self.query_init != SetQueryInit.INPUT_CONDITIONED:
             raise ValueError("set decoder local_attention_radius requires query_init='input-conditioned'")
+        if self.proposal_mode != "topk" and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder proposal_mode requires query_init='input-conditioned'")
+        if self.use_aggregate_anchors and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder aggregate anchors require query_init='input-conditioned'")
+        if self.hit_grouping and self.query_init != SetQueryInit.INPUT_CONDITIONED:
+            raise ValueError("set decoder hit grouping requires query_init='input-conditioned'")
+        if self.hit_grouping and self.hit_grouping_loss_weight == 0:
+            raise ValueError("set decoder hit grouping requires a positive hit_grouping_loss_weight")
+        if (self.tracker_group_readout or self.hit_grouping_detector_balanced) and not self.hit_grouping:
+            raise ValueError("tracker group readout and detector balancing require hit_grouping")
+        if (self.hit_grouping_tracker_particle_balanced or self.tracker_overlap_loss_weight) and not self.hit_grouping:
+            raise ValueError("tracker particle balancing and overlap loss require hit_grouping")
+        if (self.tracker_geometry_loss_weight or self.tracker_curvature_loss_weight) and not self.hit_grouping:
+            raise ValueError("tracker fit losses require hit_grouping")
+        if (self.hit_grouping_sparse or self.tracker_momentum_readout) and not self.hit_grouping:
+            raise ValueError("sparse association and tracker momentum readout require hit_grouping")
+        if self.hit_grouping_sparse and self.hit_grouping_topk > self.num_slots:
+            raise ValueError("hit_grouping_topk must not exceed num_slots")
+        if (self.hit_grouping_sparse or self.tracker_momentum_readout) and self.tracker_group_readout:
+            raise ValueError("new association/readout cannot be combined with legacy tracker_group_readout")
+        if self.tracker_fit_correction and not self.tracker_group_readout:
+            raise ValueError("tracker_fit_correction requires tracker_group_readout")
         return self
 
 
@@ -995,6 +1060,7 @@ _PIPELINE_DATASETS = {
     "colliderml": _PipelineDatasetOverride("physical", "colliderml_ttbar_nopu_pf", "1.2.0", gpu_batch_multiplier=8),
     "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.1.0", gpu_batch_multiplier=1),
     "colliderml_hits": _PipelineDatasetOverride("physical", "colliderml_ttbar_hits", "1.0.0", gpu_batch_multiplier=8),
+    "cld_hits": _PipelineDatasetOverride("physical", "cld_edm_ttbar_hits", "3.2.2"),
 }
 
 
@@ -1180,7 +1246,10 @@ class MLPFConfig(BaseModel):
     task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
     lr_finder: LRFinderConfig = Field(default_factory=LRFinderConfig)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
-    validation_diagnostics_batches: int = 0  # number of validation batches for optional domain diagnostics; 0 disables extra diagnostics
+    validation_diagnostics_batches: int = 0  # batches per rank for domain, momentum, and hit-grouping diagnostics; 0 disables extras
+
+    validation_linear_probe: bool = False  # frozen hit-instance ARI and calo continuation probes on diagnostic batches
+    validation_linear_probe_max_events: int = Field(default=16, ge=8)  # per rank; every fourth event is held out
     validation_particle_metrics: bool = True  # matched-particle metrics (metrics/particle/*) in validation; slow on large (pu200) events
 
     # Flags

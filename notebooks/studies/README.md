@@ -1,8 +1,23 @@
 # Reproducible notebook studies
 
+Only existing `README.md` files and event-display SVGs in this directory are
+tracked by Git. Notebooks, scripts, other inputs, and outputs are local
+artifacts; rendering a study requires its local files in addition to the
+tracked description and displays.
+
 Use this directory for dated, reproducible analyses and presentations. A study
 should remain renderable after its source experiment directory has been moved or
 deleted.
+
+## Historical snapshots
+
+Dated study READMEs describe their archived runs, code revisions, datasets and
+analysis conventions. Statements about running jobs, proposed follow-ups and
+local paths are historical, not current status or fresh-checkout guarantees.
+Later matched-checkpoint analyses supersede early snapshots; preserve the older
+record rather than silently replacing its results. See the tracked
+[CLD evidence summary](../../docs/cld_hit_results.md) for current recommendations
+and the distinction between historical and current matching/dataset defaults.
 
 ## Directory layout
 

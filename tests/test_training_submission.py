@@ -115,6 +115,35 @@ def test_lumi_submission_uses_task_gpus_account_and_container_worker():
     assert str(worker) in command
 
 
+def test_set_query_matching_scenario_submits_four_lumi_nodes():
+    scenario = resolve_scenario_path("cld_set_hits_query_matching_comparison", ROOT)
+    profile_path = resolve_platform_profile_path("mi250x", ROOT, "lumi")
+    profile = load_platform_profile(profile_path)
+    worker = ROOT / "scripts/lumi/run_scenario.sh"
+
+    command, jobs = build_slurm_submission(
+        scenario,
+        profile_path,
+        ROOT,
+        worker=worker,
+    )
+
+    assert [job.variant_name for job in jobs] == [
+        "baseline_4layer_local",
+        "calo_balanced_queries",
+        "pid_free_match",
+        "calo_balanced_pid_free_match",
+    ]
+    assert command[command.index("--array") + 1] == "0-3"
+    assert command[command.index("--gpus-per-task") + 1] == "8"
+    assert {job.global_batch_size for job in jobs} == {512}
+    assert {job.per_gpu_batch_size for job in jobs} == {64}
+    assert {job.gpu_batch_multiplier for job in jobs} == {64}
+    assert {job.resolved_config.compile for job in jobs} == {False}
+    assert {job.resolved_config.model.attention.use_flash_attn_varlen for job in jobs} == {True}
+    assert profile.environment["OMP_NUM_THREADS"] == "4"
+
+
 def test_picker_discovers_site_specific_accelerators():
     _, tallinn_accelerators = available_choices(ROOT, "tallinn")
     _, lumi_accelerators = available_choices(ROOT, "lumi")
