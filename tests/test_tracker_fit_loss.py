@@ -44,7 +44,11 @@ def fixture():
     batch = SimpleNamespace(
         X=x, mask=torch.ones(1, 12, dtype=torch.bool), ytarget=hit_target, ytarget_set=target, target_mask=torch.ones(1, 1, dtype=torch.bool)
     )
-    keys = torch.full((1, 12, 2), 0.1, requires_grad=True)
+    keys = torch.full((1, 12, 2), 0.1)
+    # Identical hit keys make slot changes rescale all ownership weights equally,
+    # which cancels in the normalized circle fit and gives zero slot gradients.
+    keys[0, :, 0] += torch.linspace(0, 0.1, 12)
+    keys.requires_grad_()
     slots = torch.tensor([[[1.0, 0.0], [0.0, -1.0]]], requires_grad=True)
     bg = torch.zeros(1, 12, 1, requires_grad=True)
     return (keys, slots, bg), batch, [(torch.tensor([0]), torch.tensor([0]))]
