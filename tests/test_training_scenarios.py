@@ -22,6 +22,51 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("platform_name", ["local", "lumi_mi250x", "flatiron_h100"])
+def test_clic_cld_benchmark_pairs_and_recommended_hit_recipe(platform_name):
+    platform = load_platform_profile(ROOT / f"configs/training/platforms/{platform_name}.yaml")
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/clic_cld_backbone_benchmark.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    reference = resolve_scenario_jobs(
+        load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_default_50k.yaml"),
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+    )[0].resolved_config
+    by_name = {job.variant_name: job for job in jobs}
+    assert len(jobs) == 8
+    for job in jobs:
+        config = job.resolved_config
+        assert job.global_batch_size == 128
+        assert config.num_steps == 50000 and config.seed == 12345
+        assert config.val_freq == config.checkpoint_freq == 1000
+        assert config.lr == 0.001 and config.load is None
+        assert config.optimizer == reference.optimizer and config.lr_schedule == reference.lr_schedule
+        assert config.model.backbone.num_convs == 6
+    for detector in ("cld", "clic"):
+        for representation in ("pf", "hits"):
+            attention_job = by_name[f"{detector}_{representation}_attention"]
+            heptv2_job = by_name[f"{detector}_{representation}_heptv2"]
+            attention = attention_job.resolved_config
+            heptv2 = heptv2_job.resolved_config
+            assert attention.dataset.value == (detector if representation == "pf" else f"{detector}_hits")
+            assert attention.model.type.value == "attention"
+            assert heptv2.model.type.value == "heptv2"
+            assert attention.model.attention.num_heads * attention.model.attention.head_dim == heptv2.model.heptv2.embedding_dim == 256
+            # The broad campaign allowlist must not hide differences within a
+            # backbone pair: data, objective and training budget stay identical.
+            validate_variant_invariants(
+                [attention_job, heptv2_job], ["conv_type", "model.type", "model.attention", "model.heptv2"]
+            )
+            if representation == "hits":
+                expected_decoder = reference.model.set_decoder.model_copy(update={"tracker_momentum_readout": True})
+                assert heptv2.model.set_decoder == expected_decoder
+                assert heptv2.model.hit_feature_engineering == reference.model.hit_feature_engineering
+                backbone = heptv2.model.heptv2.model_copy(update={"activation_checkpointing": False})
+                assert backbone == reference.model.heptv2
+            else:
+                assert heptv2.model.output_mode.value == "elementwise"
+
+
 def test_heptv2_model_scaling_preserves_baseline_except_size_and_checkpointing():
     platform = load_platform_profile(ROOT / "configs/training/platforms/lumi_mi250x.yaml")
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_model_scaling_50k.yaml")
