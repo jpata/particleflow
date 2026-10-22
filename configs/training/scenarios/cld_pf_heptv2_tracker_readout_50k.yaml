@@ -1,0 +1,63 @@
+# Factorial ablation on the exact small scaling architecture and training recipe.
+name: cld_pf_heptv2_tracker_readout_50k
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  hit_heptv2_small_baseline:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides: {}
+  hit_heptv2_tracker_readout:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides:
+      model.set_decoder.tracker_momentum_readout: true
+  hit_heptv2_sparse_association:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides:
+      model.set_decoder.hit_grouping_sparse: true
+  hit_heptv2_tracker_readout_sparse:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides:
+      model.set_decoder.tracker_momentum_readout: true
+      model.set_decoder.hit_grouping_sparse: true
+seeds:
+- 12345
+training:
+  global_batch_size: 128
+  parameters:
+    optimizer: lamb
+    lr: 0.001
+    lr_schedule: cosinedecay
+    num_steps: 50000
+    val_freq: 1000
+    checkpoint_freq: 1000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    validation_linear_probe: true
+    validation_linear_probe_max_events: 16
+    pad_to_multiple_elements: 128
+    make_plots: true
+common_overrides:
+  model.heptv2.activation_checkpointing: true
+  model.hit_feature_engineering.enabled: true
+  model.hit_feature_engineering.geometry: true
+  model.hit_feature_engineering.calorimeter_neighborhood: true
+  model.hit_feature_engineering.tracker_neighborhood: true
+  model.hit_feature_engineering.tracker_momentum: false
+  model.hit_feature_engineering.tracker_doublets: false
+  model.heptv2.embedding_dim: 256
+  model.heptv2.width: 256
+  model.heptv2.num_convs: 6
+  model.backbone.num_convs: 6
+  model.set_decoder.num_layers: 4
+  model.set_decoder.hit_grouping: true
+  model.set_decoder.hit_grouping_sparse: false
+  model.set_decoder.tracker_momentum_readout: false
+  model.set_decoder.hit_grouping_topk: 4
+  model.set_decoder.hit_grouping_temperature: 1.0
+  model.set_decoder.tracker_group_readout: false
+  model.set_decoder.tracker_fit_correction: false
+allowed_variant_differences:
+- model.set_decoder.tracker_momentum_readout
+- model.set_decoder.hit_grouping_sparse

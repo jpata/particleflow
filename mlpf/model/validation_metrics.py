@@ -13,6 +13,7 @@ from scipy.optimize import linear_sum_assignment
 
 from mlpf.conf import OutputMode
 from mlpf.model.utils import unpack_target
+from mlpf.model.reconstruction_diagnostics import accumulate_momentum_metrics, empty_momentum_metrics
 
 
 MATCH_DR = 0.1
@@ -128,7 +129,7 @@ def _matching_cost(delta_r, log_pt_ratio):
     return cost.clamp(max=MATCH_COST_CAP)
 
 
-def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
+def _accumulate_event_metrics(metrics, targets, predictions, num_classes, detailed=False):
     num_targets = len(targets["pt"])
     num_predictions = len(predictions["pt"])
     _add(metrics, "count/target_mean", num_targets, 1)
@@ -150,6 +151,10 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
     relative_pt = pairwise_relative_pt[matched_prediction_indices, matched_target_indices] if pairwise_relative_pt is not None else torch.empty(0)
     accepted = (matched_dr < MATCH_DR) & (relative_pt < MATCH_REL_PT)
     num_accepted = int(accepted.sum())
+    if detailed:
+        accumulate_momentum_metrics(
+            metrics, targets, predictions, matched_prediction_indices, matched_target_indices, accepted, matched_dr, num_classes
+        )
 
     _add(
         metrics,
@@ -278,10 +283,16 @@ def _accumulate_event_metrics(metrics, targets, predictions, num_classes):
     _add(metrics, "event/met_abs_error", torch.abs(prediction_met - target_met), 1)
 
 
-def compute_validation_particle_metrics(targets, target_mask, predictions, prediction_mask, num_classes):
-    """Compute additive, scheme-independent particle metrics for one batch."""
+def compute_validation_particle_metrics(targets, target_mask, predictions, prediction_mask, num_classes, detailed=False):
+    """Compute additive particle metrics; detailed=True adds momentum slices.
+
+    Detailed metrics reuse the same assignment and include uncensored pairs
+    and event sums, so the ordinary accepted-match errors retain their meaning.
+    """
 
     metrics = _empty_metrics(num_classes)
+    if detailed:
+        metrics.update(empty_momentum_metrics(num_classes))
     for event_idx in range(target_mask.shape[0]):
         event_targets = _clean_kinematics(
             {name: value[event_idx] for name, value in targets.items()},
@@ -291,5 +302,76 @@ def compute_validation_particle_metrics(targets, target_mask, predictions, predi
             {name: value[event_idx] for name, value in predictions.items()},
             prediction_mask[event_idx],
         )
-        _accumulate_event_metrics(metrics, event_targets, event_predictions, num_classes)
+        _accumulate_event_metrics(metrics, event_targets, event_predictions, num_classes, detailed=detailed)
+    return {name: tuple(values) for name, values in metrics.items()}
+
+
+def compute_set_slot_metrics(targets, target_mask, predictions, presence_threshold):
+    """Return a small set of threshold/representation diagnostics for set output.
+
+    Unlike the standard particle metrics, matching here is angular-only.  Running
+    it once with all slots and once with threshold-selected slots separates slot
+    formation from the presence decision.  Regression errors are conditioned on
+    an accepted all-slot angular match so missing particles cannot improve them.
+    """
+
+    metrics = {
+        "angular_recall_selected_dr0p10": [0.0, 0.0],
+        "angular_recall_all_dr0p10": [0.0, 0.0],
+        "all_angular_matched/pt_abs_log_error": [0.0, 0.0],
+        "all_angular_matched/energy_abs_log_error": [0.0, 0.0],
+        "soft_count_bias_mean": [0.0, 0.0],
+    }
+    presence_probability = torch.softmax(predictions["cls_binary"].float(), dim=-1)[..., 1]
+
+    for event_idx in range(target_mask.shape[0]):
+        event_targets = _clean_kinematics(
+            {name: value[event_idx] for name, value in targets.items()},
+            target_mask[event_idx],
+        )
+        event_predictions = _clean_kinematics(
+            {name: value[event_idx] for name, value in predictions.items()},
+            torch.ones_like(presence_probability[event_idx], dtype=torch.bool),
+        )
+        num_targets = len(event_targets["pt"])
+        _add(metrics, "soft_count_bias_mean", presence_probability[event_idx].sum().cpu() - num_targets, 1)
+
+        if num_targets == 0:
+            continue
+
+        _, _, delta_r, _, _ = _pairwise_geometry(event_targets, event_predictions)
+
+        def angular_matches(slot_mask):
+            slot_indices = torch.nonzero(slot_mask, as_tuple=False).squeeze(1).cpu()
+            if len(slot_indices) == 0:
+                return slot_indices, torch.empty(0, dtype=torch.long)
+            local_slot_indices, target_indices = linear_sum_assignment(delta_r[slot_indices].numpy())
+            slot_indices = slot_indices[torch.as_tensor(local_slot_indices, dtype=torch.long)]
+            target_indices = torch.as_tensor(target_indices, dtype=torch.long)
+            accepted = delta_r[slot_indices, target_indices] < MATCH_DR
+            return slot_indices[accepted], target_indices[accepted]
+
+        selected_slots, _ = angular_matches(presence_probability[event_idx].cpu() >= presence_threshold)
+        all_slots, all_targets = angular_matches(torch.ones_like(presence_probability[event_idx], dtype=torch.bool))
+        _add(metrics, "angular_recall_selected_dr0p10", len(selected_slots), num_targets)
+        _add(metrics, "angular_recall_all_dr0p10", len(all_slots), num_targets)
+
+        if len(all_slots):
+            target_pt = event_targets["pt"][all_targets].clamp_min(1.0e-8)
+            target_energy = event_targets["energy"][all_targets].clamp_min(1.0e-8)
+            prediction_pt = event_predictions["pt"][all_slots].clamp_min(1.0e-8)
+            prediction_energy = event_predictions["energy"][all_slots].clamp_min(1.0e-8)
+            _add(
+                metrics,
+                "all_angular_matched/pt_abs_log_error",
+                torch.abs(torch.log(prediction_pt) - torch.log(target_pt)).sum(),
+                len(all_slots),
+            )
+            _add(
+                metrics,
+                "all_angular_matched/energy_abs_log_error",
+                torch.abs(torch.log(prediction_energy) - torch.log(target_energy)).sum(),
+                len(all_slots),
+            )
+
     return {name: tuple(values) for name, values in metrics.items()}

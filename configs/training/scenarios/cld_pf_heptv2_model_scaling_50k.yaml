@@ -1,0 +1,62 @@
+# Width and depth scaling with the previous tracker-neighborhood features (154 inputs).
+# Keep head counts, slots, objective and training exposure fixed.
+name: cld_pf_heptv2_model_scaling_50k
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  hit_heptv2_small:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides:
+      model.heptv2.embedding_dim: 256
+      model.heptv2.width: 256
+      model.heptv2.num_convs: 6
+      model.backbone.num_convs: 6
+      model.set_decoder.num_layers: 4
+  hit_heptv2_medium:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides:
+      model.heptv2.embedding_dim: 384
+      model.heptv2.width: 384
+      model.heptv2.num_convs: 9
+      model.backbone.num_convs: 9
+      model.set_decoder.num_layers: 6
+  hit_heptv2_large:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides:
+      model.heptv2.embedding_dim: 512
+      model.heptv2.width: 512
+      model.heptv2.num_convs: 12
+      model.backbone.num_convs: 12
+      model.set_decoder.num_layers: 8
+seeds: [12345]
+training:
+  global_batch_size: 128
+  parameters:
+    optimizer: lamb
+    lr: 0.001
+    lr_schedule: cosinedecay
+    num_steps: 50000
+    val_freq: 1000
+    checkpoint_freq: 1000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    validation_linear_probe: true
+    validation_linear_probe_max_events: 16
+    pad_to_multiple_elements: 128
+    make_plots: true
+common_overrides:
+  model.heptv2.activation_checkpointing: true
+  model.hit_feature_engineering.enabled: true
+  model.hit_feature_engineering.geometry: true
+  model.hit_feature_engineering.calorimeter_neighborhood: true
+  model.hit_feature_engineering.tracker_neighborhood: true
+  model.hit_feature_engineering.tracker_momentum: false
+  model.hit_feature_engineering.tracker_doublets: false
+allowed_variant_differences:
+  - model.heptv2.embedding_dim
+  - model.heptv2.width
+  - model.heptv2.num_convs
+  - model.backbone.num_convs
+  - model.set_decoder.num_layers

@@ -38,6 +38,7 @@ import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import gc
+from contextlib import nullcontext
 import tqdm
 import yaml
 import json
@@ -94,8 +95,9 @@ from mlpf.model.losses import (
     mlpf_loss,
     particle_loss,
 )
-from mlpf.model.set_losses import SetMatcherWeights, set_mlpf_loss
-from mlpf.model.validation_metrics import compute_validation_particle_metrics, validation_particle_collections
+from mlpf.model.set_losses import SetMatcherWeights, hungarian_match, set_mlpf_loss
+from mlpf.model.reconstruction_diagnostics import compute_hit_grouping_metrics
+from mlpf.model.validation_metrics import compute_set_slot_metrics, compute_validation_particle_metrics, validation_particle_collections
 from mlpf.utils import create_comet_experiment
 from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
@@ -279,10 +281,18 @@ def _accumulate_domain_losses_and_stats(batch, ytarget, ypred, regression_weight
 
 def _finalize_diagnostics(accum, world_size):
     finalized = {}
-    for key, (value_sum, count_sum) in accum.items():
-        if world_size > 1:
-            torch.distributed.all_reduce(value_sum)
-            torch.distributed.all_reduce(count_sum)
+    if not accum:
+        return finalized
+    # Reduce all additive sums/counts together rather than issuing two
+    # collectives for each of the detailed reconstruction metrics.
+    keys = sorted(accum)
+    packed = torch.stack([torch.stack(accum[key]) for key in keys])
+    if world_size > 1:
+        torch.distributed.all_reduce(packed)
+    for key, (value_sum, count_sum) in zip(keys, packed):
+        if key.endswith("samples"):
+            finalized[key] = value_sum.cpu().item()
+            continue
         if count_sum.item() <= 0:
             continue
         value = value_sum / count_sum
@@ -315,6 +325,20 @@ def _set_loss_kwargs(model_module, raw_predictions):
         "cardinality_loss_weight": config.cardinality_loss_weight,
         "auxiliary_predictions": auxiliary_predictions,
         "auxiliary_loss_weight": config.auxiliary_loss_weight,
+        "momentum_loss": config.momentum_loss,
+        "momentum_huber_delta": config.momentum_huber_delta,
+        "hit_grouping": raw_predictions.hit_grouping,
+        "hit_grouping_loss_weight": config.hit_grouping_loss_weight,
+        "hit_grouping_chunk_size": config.hit_grouping_chunk_size,
+        "hit_grouping_background_weight": config.hit_grouping_background_weight,
+        "hit_grouping_detector_balanced": config.hit_grouping_detector_balanced,
+        "hit_grouping_tracker_particle_balanced": config.hit_grouping_tracker_particle_balanced,
+        "tracker_overlap_loss_weight": config.tracker_overlap_loss_weight,
+        "tracker_geometry_loss_weight": config.tracker_geometry_loss_weight,
+        "tracker_curvature_loss_weight": config.tracker_curvature_loss_weight,
+        "tracker_loss_max_hits": config.tracker_loss_max_hits,
+        "tracker_group_magnetic_field": config.tracker_group_magnetic_field,
+        "event_consistency_loss_weight": config.event_consistency_loss_weight,
     }
 
 
@@ -331,6 +355,12 @@ def _log_validation_results_to_tensorboard(tensorboard_writer, validation_result
         else:
             tag = f"step/loss_{name}"
         tensorboard_writer.add_scalar(tag, value, step)
+
+
+def _log_validation_probe_results(values, step):
+    for name, value in sorted(values.items()):
+        if name.startswith("metrics/linear_probe/"):
+            _logger.info("VALIDATION_PROBE | Step=%s | %s=%.6g", step, name.removeprefix("metrics/"), value)
 
 
 def _format_compact_diagnostic(values, keys):
@@ -863,6 +893,12 @@ def evaluate(
     model.eval()
     eval_loss = {}
     diagnostic_accum = {}
+    model_module = model.module if hasattr(model, "module") else model
+    probe = None
+    if config.validation_linear_probe and config.validation_diagnostics_batches > 0 and model_module.output_mode == OutputMode.SET:
+        from mlpf.model.validation_probes import ValidationCaloProbe
+
+        probe = ValidationCaloProbe(config.validation_linear_probe_max_events)
 
     # Only show progress bar on rank 0
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
@@ -880,29 +916,76 @@ def evaluate(
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
-                _, loss, _, ypred_raw, ypred, ytarget = model_step(
-                    batch,
-                    model,
-                    mlpf_loss,
-                    UNIT_REGRESSION_WEIGHTS,
-                )
+                capture_probe = probe is not None and ival < config.validation_diagnostics_batches and len(probe.events) < probe.max_events
+                with probe.capture(model_module, batch) if capture_probe else nullcontext():
+                    _, loss, _, ypred_raw, ypred, ytarget = model_step(
+                        batch,
+                        model,
+                        mlpf_loss,
+                        UNIT_REGRESSION_WEIGHTS,
+                    )
 
                 model_module = model.module if hasattr(model, "module") else model
                 ypred_particles = model_module.predict_particles(batch.X, batch.mask)
+                metric_collections = validation_particle_collections(
+                    batch,
+                    ypred_particles,
+                    model_module.output_mode,
+                )
                 if config.validation_particle_metrics:
-                    metric_collections = validation_particle_collections(
-                        batch,
-                        ypred_particles,
-                        model_module.output_mode,
-                    )
                     particle_metrics = compute_validation_particle_metrics(
                         *metric_collections,
                         num_classes=config.num_classes,
+                        detailed=ival < config.validation_diagnostics_batches,
                     )
                     for metric_name, (metric_total, metric_count) in particle_metrics.items():
                         _add_accumulator(
                             diagnostic_accum,
                             f"metrics/particle/{metric_name}",
+                            torch.as_tensor(metric_total, device=batch.X.device),
+                            count=metric_count,
+                        )
+
+                if model_module.output_mode == OutputMode.SET:
+                    if ypred_raw.tracker_group_fit_valid is not None and ival < config.validation_diagnostics_batches:
+                        fits = ypred_raw.tracker_group_fit_valid
+                        _add_accumulator(diagnostic_accum, "metrics/set_slot/tracker_fit_fraction", fits.sum(), count=fits.numel())
+                        _add_accumulator(diagnostic_accum, "metrics/set_slot/tracker_fits_per_event", fits.sum(), count=fits.shape[0])
+                    if ypred_raw.hit_grouping is not None and ival < config.validation_diagnostics_batches:
+                        matches = hungarian_match(
+                            ytarget,
+                            ypred,
+                            batch.target_mask,
+                            SetMatcherWeights(**model_module.config.set_decoder.matcher.model_dump()),
+                        )
+                        grouping_metrics = compute_hit_grouping_metrics(
+                            ypred_raw.hit_grouping,
+                            batch,
+                            matches,
+                            chunk_size=model_module.config.set_decoder.hit_grouping_chunk_size,
+                        )
+                        for metric_name, (metric_total, metric_count) in grouping_metrics.items():
+                            _add_accumulator(
+                                diagnostic_accum,
+                                f"metrics/hit_grouping/{metric_name}",
+                                torch.as_tensor(metric_total, device=batch.X.device),
+                                count=metric_count,
+                            )
+                    slot_fields = ("cls_binary", "cls_id_onehot", "pt", "eta", "sin_phi", "cos_phi", "energy")
+                    raw_slots = {name: ypred[name].detach().to(torch.float32) for name in slot_fields}
+                    raw_slots["pt"] = torch.exp(raw_slots["pt"].clamp(-20.0, 20.0))
+                    raw_slots["energy"] = torch.exp(raw_slots["energy"].clamp(-20.0, 20.0))
+                    raw_slots["cls_id"] = torch.argmax(raw_slots["cls_id_onehot"][..., 1:], dim=-1) + 1
+                    slot_metrics = compute_set_slot_metrics(
+                        metric_collections[0],
+                        metric_collections[1],
+                        raw_slots,
+                        model_module.config.set_decoder.presence_threshold,
+                    )
+                    for metric_name, (metric_total, metric_count) in slot_metrics.items():
+                        _add_accumulator(
+                            diagnostic_accum,
+                            f"metrics/set_slot/{metric_name}",
                             torch.as_tensor(metric_total, device=batch.X.device),
                             count=metric_count,
                         )
@@ -944,6 +1027,10 @@ def evaluate(
             torch.distributed.all_reduce(eval_loss[loss_name])
         eval_loss[loss_name] = eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
     _add_unweighted_total(eval_loss)
+
+    if probe is not None:
+        for name, (total, count) in probe.finalize().items():
+            _add_accumulator(diagnostic_accum, name, torch.as_tensor(total, device=rank), count=count)
 
     eval_loss.update(_finalize_diagnostics(diagnostic_accum, world_size))
 
@@ -1141,6 +1228,8 @@ def _run_validation_cycle(
             f"Stale={stale_steps} | "
             f"ETA={eta:.1f}m"
         )
+
+        _log_validation_probe_results(losses_valid, step)
 
         tensorboard_writer_valid.flush()
 

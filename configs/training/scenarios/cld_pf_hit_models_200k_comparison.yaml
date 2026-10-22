@@ -1,0 +1,115 @@
+name: cld_pf_hit_models_200k_comparison
+spec_file: particleflow_spec.yaml
+production_name: cld
+
+# The September track+cluster MLPF and the two completed October hit models.
+# All three start a fresh 200k-step cosine schedule with equal event exposure.
+# At batch 64 this is 12.8M event presentations per run; the September MLPF
+# reference saw 25.6M presentations at 50k steps with batch 512.
+variants:
+  track_cluster_mlpf:
+    model_name: pyg-cld-v1
+    overrides:
+      model.attention.use_jagged_attention: true
+
+  hit_attention_global:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      model.backbone.num_tracker_layers: 2
+      model.backbone.num_calo_layers: 2
+      model.backbone.num_common_layers: 2
+      model.attention.use_jagged_attention: true
+      model.set_decoder.attention_mode: global-flash
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.num_layers: 4
+      model.set_decoder.num_slots: 256
+      model.set_decoder.proposal_mode: grid-diverse
+      model.set_decoder.proposal_grid_size: 0.1
+      model.set_decoder.use_aggregate_anchors: true
+      model.set_decoder.aggregate_grid_size: 0.1
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+
+  hit_heptv2_global:
+    model_name: pyg-cld-hits-heptv2-sector-set-v1
+    overrides:
+      model.heptv2.num_convs: 6
+      model.binary_classification_focal_gamma: 2.0
+      model.set_decoder.attention_mode: global-flash
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.num_layers: 4
+      model.set_decoder.num_slots: 256
+      model.set_decoder.proposal_mode: grid-diverse
+      model.set_decoder.proposal_grid_size: 0.1
+      model.set_decoder.use_aggregate_anchors: true
+      model.set_decoder.aggregate_grid_size: 0.1
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+
+seeds: [12345]
+
+training:
+  global_batch_size: 64
+  parameters:
+    lr: 0.001
+    num_steps: 200000
+    # Forty checkpoints across 200k steps; HEPTv2 may need a second 48-hour allocation.
+    val_freq: 5000
+    checkpoint_freq: 5000
+    patience: 200000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 128
+    make_plots: true
+
+common_overrides:
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+
+allowed_variant_differences:
+  - conv_type
+  - data_dir
+  - dataset
+  - elemtypes_nonzero
+  - enabled_test_datasets
+  - hyperparameters.lr
+  - input_dim
+  - model.type
+  - model.binary_classification_focal_gamma
+  - model.attention
+  - model.heptv2
+  - model.backbone.num_tracker_layers
+  - model.backbone.num_calo_layers
+  - model.backbone.num_common_layers
+  - model.output_mode
+  - model.set_decoder
+  - train_dataset
+  - valid_dataset
+  - test_dataset
