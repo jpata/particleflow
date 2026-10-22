@@ -6,17 +6,19 @@ variants:
   attention:
     model_name: pyg-cms-v1
     overrides:
-      # Match the attention dimensions used in the full-model export study.
-      model.attention.num_heads: 8
-      model.attention.head_dim: 16
+      # Match the width-512 CMS default: 16 heads with 32 channels each.
+      model.attention.num_heads: 16
+      model.attention.head_dim: 32
   heptv2:
     model_name: pyg-cms-v1
     overrides:
       model.type: heptv2
       model.attention: null
-      model.heptv2.embedding_dim: 128
+      model.heptv2.embedding_dim: 512
       model.heptv2.width: 512
-      model.heptv2.num_heads: 8
+      model.heptv2.num_convs: 3
+      model.heptv2.num_heads: 16
+      model.heptv2.dropout_ff: 0.0
       model.heptv2.block_size: 100
       model.heptv2.n_hashes: 3
       model.heptv2.deterministic_hashing: true

@@ -106,9 +106,14 @@ but does not verify data availability or GPU memory usage.
 `cms_backbone_comparison` trains CMS on TFDS version **2.8.0**, selecting either
 `--variant attention` or `--variant heptv2`. It retains the PU/no-PU ttbar, QCD
 and Z→ττ training/validation samples and the PU test samples. Both variants use
-three backbone layers, eight heads, the same seed and a global batch of 64;
+three backbone layers, embedding width 512, 16 heads, zero dropout, the same seed
+and a global batch of 64;
 HEPTv2 uses deterministic hashing and block size 100. The schedule is 100,000
 steps at learning rate 0.0004. Dataset versions are pinned in the scenario.
+
+The default CMS attention model also uses width 512 (16 heads × 32 channels).
+The comparison disables task queries for both backbones and pins TFDS 2.8.0;
+the default model specification still selects TFDS 3.2.0.
 
 Supply the CMS TFDS directory explicitly when the platform profile only maps
 CLD/CLIC data paths:

@@ -292,7 +292,16 @@ def test_cms_backbone_scenario_pins_all_datasets_and_resolves_global_batch():
             assert all(sample.splits == [str(i) for i in range(1, 11)] for dataset in datasets.values() for sample in dataset.samples.values())
         assert len(config.test_dataset) == 3
         assert {sample.version for sample in config.test_dataset.values()} == {"2.8.0"}
-    assert jobs[0].resolved_config.model.attention.num_heads == 8
+    from mlpf.conf import MLPFConfig
+
+    default = MLPFConfig.from_spec(str(ROOT / "particleflow_spec.yaml"), "pyg-cms-v1", "cms_run3")
+    attention = jobs[0].resolved_config.model.attention
+    heptv2 = jobs[1].resolved_config.model.heptv2
+    assert default.model.attention.num_heads == attention.num_heads == heptv2.num_heads == 16
+    assert default.model.attention.head_dim == attention.head_dim == 32
+    assert attention.num_heads * attention.head_dim == heptv2.embedding_dim == heptv2.width == 512
+    assert attention.num_convs == heptv2.num_convs == 3
+    assert attention.dropout_ff == attention.dropout_conv_id_ff == attention.dropout_conv_id_mha == heptv2.dropout_ff == 0.0
     assert jobs[1].resolved_config.model.heptv2.block_size == 100
     assert jobs[1].resolved_config.model.heptv2.deterministic_hashing
 
