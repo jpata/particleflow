@@ -42,6 +42,9 @@ def test_clic_cld_benchmark_pairs_and_recommended_hit_recipe(platform_name):
         assert config.lr == 0.001 and config.load is None
         assert config.optimizer == reference.optimizer and config.lr_schedule == reference.lr_schedule
         assert config.model.backbone.num_convs == 6
+        expected_gpus = 1 if "_pf_" in job.variant_name else platform.gpus
+        assert config.gpus == expected_gpus
+        assert job.per_gpu_batch_size == 128 // expected_gpus
     for detector in ("cld", "clic"):
         for representation in ("pf", "hits"):
             attention_job = by_name[f"{detector}_{representation}_attention"]
@@ -892,3 +895,29 @@ def test_tracker_grouping_losses_scenario_is_from_scratch_small_factorial():
         model["set_decoder"]["tracker_overlap_loss_weight"] = 0.0
         assert model == reference.model.model_dump()
         assert (c.lr, c.lr_schedule, c.optimizer) == (reference.lr, reference.lr_schedule, reference.optimizer)
+
+
+def test_single_gpu_benchmark_worker_checks_selected_job_allocation(monkeypatch):
+    import mlpf.training_scenarios as runner
+
+    executed = []
+    monkeypatch.setenv("SLURM_GPUS_PER_NODE", "1")
+    monkeypatch.setattr(runner, "run_scenario_job", lambda job, *args, **kwargs: executed.append(job))
+    args = [
+        "--scenario",
+        str(ROOT / "configs/training/scenarios/clic_cld_backbone_benchmark.yaml"),
+        "--platform",
+        str(PLATFORMS / "flatiron_h100.yaml"),
+        "--spec-file",
+        str(ROOT / "particleflow_spec.yaml"),
+        "--task-index",
+        "0",
+    ]
+    runner.main(args)
+    assert len(executed) == 1
+    assert executed[0].resolved_config.gpus == 1
+    assert executed[0].per_gpu_batch_size == 128
+    args[-1] = "2"
+    with pytest.raises(ValueError, match="Slurm allocated 1"):
+        runner.main(args)
+    assert len(executed) == 1

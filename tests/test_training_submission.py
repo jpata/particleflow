@@ -9,6 +9,7 @@ import yaml
 from mlpf.training_submission import (
     available_choices,
     build_slurm_submission,
+    build_slurm_submissions,
     resolve_flatiron_profile_path,
     resolve_platform_profile_path,
     resolve_scenario_path,
@@ -201,7 +202,8 @@ def test_continue_submission_selects_only_unfinished_original_array_indices(tmp_
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
-def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, monkeypatch, dry_run):
+@pytest.mark.parametrize("num_groups", [1, 2])
+def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, monkeypatch, dry_run, num_groups):
     import mlpf.training_submission as submission
 
     scenario_path = tmp_path / "scenario.yaml"
@@ -212,7 +214,7 @@ def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, m
     monkeypatch.setattr(submission, "available_choices", lambda *args: ([], []))
     monkeypatch.setattr(submission, "resolve_scenario_path", lambda *args: scenario_path)
     monkeypatch.setattr(submission, "resolve_platform_profile_path", lambda *args: profile_path)
-    monkeypatch.setattr(submission, "build_slurm_submission", lambda *args, **kwargs: (command, [object()]))
+    monkeypatch.setattr(submission, "build_slurm_submissions", lambda *args, **kwargs: [(command, [object()])] * num_groups)
     monkeypatch.setattr(Path, "mkdir", lambda *args, **kwargs: None)
 
     # Preparing a container submission must never invoke sbatch itself.
@@ -227,4 +229,45 @@ def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, m
         assert not script_path.exists()
     else:
         result = subprocess.run(["bash", str(script_path)], check=True, capture_output=True, text=True)
-        assert result.stdout == payload
+        assert result.stdout == payload * num_groups
+
+
+@pytest.mark.parametrize(
+    "site,profile_name,gpu_flag",
+    [("flatiron", "h100", "--gpus-per-node"), ("lumi", "mi250x", "--gpus-per-task")],
+)
+def test_benchmark_submits_separate_resource_arrays(site, profile_name, gpu_flag):
+    from mlpf.training_scenarios import _pipeline_command
+
+    scenario_path = resolve_scenario_path("clic_cld_backbone_benchmark", ROOT)
+    profile_path = resolve_platform_profile_path(profile_name, ROOT, site)
+    scenario = load_training_scenario(scenario_path)
+    profile = load_platform_profile(profile_path)
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, seed=2468)
+    assert len(submissions) == 2
+    for (command, jobs), count, indices in zip(submissions, (1, 8), ("0,1,4,5", "2,3,6,7")):
+        assert command[command.index(gpu_flag) + 1] == str(count)
+        assert command[command.index("--array") + 1] == indices
+        assert len(jobs) == 4
+        for job in jobs:
+            assert job.seed == 2468
+            assert job.resolved_config.gpus == count
+            assert job.per_gpu_batch_size * count == job.global_batch_size == 128
+            pipeline = _pipeline_command(job, scenario, profile, ROOT / scenario.spec_file, Path("experiment"))
+            assert pipeline[pipeline.index("--gpus") + 1] == str(count)
+
+
+def test_benchmark_continue_preserves_indices_across_resource_groups(tmp_path):
+    scenario_path = resolve_scenario_path("clic_cld_backbone_benchmark", ROOT)
+    profile_data = yaml.safe_load(resolve_flatiron_profile_path("h100", ROOT).read_text())
+    profile_data["experiments_dir"] = str(tmp_path / "experiments")
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(yaml.safe_dump(profile_data))
+    scenario = load_training_scenario(scenario_path)
+    profile = load_platform_profile(profile_path)
+    jobs = resolve_scenario_jobs(scenario, profile, spec_file=ROOT / scenario.spec_file)
+    for index, job in enumerate(jobs):
+        _write_scenario_run(Path(profile.experiments_dir), scenario, profile, job, 40000 if index in {1, 6} else 50000)
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, continue_run=True)
+    assert [command[command.index("--array") + 1] for command, _ in submissions] == ["1", "6"]
+    assert [command[command.index("--gpus-per-node") + 1] for command, _ in submissions] == ["1", "8"]

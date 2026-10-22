@@ -45,6 +45,14 @@ Variant names are `{cld,clic}_{pf,hits}_{attention,heptv2}`. The older
 `clic_cld_pf_set_hits_comparison` contains only attention models and retains its
 historical recipe.
 
+Track/cluster variants request **one GPU per job**; hit variants use the platform
+GPU count (eight on H100 and MI250X). With global batch 128, this gives 128 events
+on the single PF GPU and 16 events per GPU for eight-GPU hit jobs. Submission
+automatically creates separate arrays: indices `0,1,4,5` request one GPU, while
+`2,3,6,7` use the platform count. GPU counts, batch resolution, and worker allocation
+checks follow each variant. Other Slurm resources still come from the platform;
+in particular, LUMI's 480G host-memory request remains unchanged.
+
 All eight models train from scratch for 50,000 steps at global batch 128 with
 LAMB, LR 0.001 and cosine decay (6.4M event presentations each). Validation and
 checkpoints run every 1,000 steps, matching the completed readout study. Seed 12345 is

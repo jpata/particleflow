@@ -9,8 +9,10 @@ production_name: cld
 variants:
   cld_pf_attention:
     model_name: pyg-cld-v1
+    gpus: 1
   cld_pf_heptv2:
     model_name: pyg-cld-v1
+    gpus: 1
     overrides: &heptv2
       model.type: heptv2
       model.attention: null
@@ -75,9 +77,11 @@ variants:
       <<: [*hits, *heptv2]
   clic_pf_attention:
     model_name: pyg-clic-v1
+    gpus: 1
     production_name: clic
   clic_pf_heptv2:
     model_name: pyg-clic-v1
+    gpus: 1
     production_name: clic
     overrides: *heptv2
   clic_hits_attention:
