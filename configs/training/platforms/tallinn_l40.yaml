@@ -1,6 +1,7 @@
 name: tallinn_l40
 gpus: 2
 data_dir:
+  cms_run3: /store/user/jpata/mlpf/tensorflow_datasets/2.8.0/
   cld: /local/${USER}/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
   clic: /local/${USER}/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds
 experiments_dir: /home/${USER}/particleflow/experiments

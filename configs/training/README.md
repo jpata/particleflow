@@ -37,6 +37,99 @@ uv run python3 scripts/training/run_scenario.py \
   --dry-run
 ```
 
+## CLIC and CLD backbone benchmark
+
+[`clic_cld_backbone_benchmark`](scenarios/clic_cld_backbone_benchmark.yaml) runs
+eight models per seed: CLIC/CLD × tracks-and-clusters/raw-hits × attention/HEPTv2.
+Variant names are `{cld,clic}_{pf,hits}_{attention,heptv2}`. The older
+`clic_cld_pf_set_hits_comparison` contains only attention models and retains its
+historical recipe.
+
+Track/cluster variants request **one GPU per job**; hit variants use the platform
+GPU count (eight on H100 and MI250X). With global batch 128, this gives 128 events
+on the single PF GPU and 16 events per GPU for eight-GPU hit jobs. Submission
+automatically creates separate arrays: indices `0,1,4,5` request one GPU, while
+`2,3,6,7` use the platform count. GPU counts, batch resolution, and worker allocation
+checks follow each variant. Other Slurm resources still come from the platform;
+in particular, LUMI's 480G host-memory request remains unchanged.
+
+All eight models train from scratch for 50,000 steps at global batch 128 with
+LAMB, LR 0.001 and cosine decay (6.4M event presentations each). Validation and
+checkpoints run every 1,000 steps, matching the completed readout study. Seed 12345 is
+the initial benchmark; repeat with `--seed` for training-seed uncertainty.
+Both backbones have six layers and embedding width 256, with 16 heads.
+HEPTv2 uses block size 128, deterministic hashing and activation checkpointing.
+This matches event exposure and embedding width, not parameter count or compute.
+
+The four hit models share the small-model recipe with the tracker momentum head
+from the completed readout campaign in
+[`20261021_cld_tracker_losses_readout`](../../notebooks/studies/20261021_cld_tracker_losses_readout/cld_tracker_losses_readout.ipynb): four global Flash
+decoder layers, 256 slots, grid-diverse aggregate proposals, supervised hard
+hit grouping, and geometry plus calorimeter/tracker-neighborhood features.
+The decoder and input features match `cld_pf_heptv2_default_50k` with
+`tracker_momentum_readout: true` for both backbones. In the matched 50k campaign,
+the head improved charged width from 12.78% to 12.40%, tails from 3.69% to 3.38%,
+and jet IQR from 0.10316 to 0.09815. Its +0.15 percentage-point F1 change has a
+paired 95% interval spanning zero; the tail reduction interval excludes zero.
+This is the best-supported current benchmark candidate, not a multi-seed proven
+replacement for the conservative default in the [evidence summary](../../docs/cld_hit_results.md).
+Sparse pooling, momentum/doublet inputs, fitted readouts, balanced CE, and auxiliary
+fit/overlap losses stay off. The loss campaign only has matched 32k results;
+combining balanced CE with the head is untested. The scaling study favors keeping
+width 256 and depths 6/4 for particle reconstruction, although large improves jets.
+CLIC and attention transfer of this recipe are new benchmark measurements, not previously
+validated wins. Track/cluster models retain elementwise output.
+
+The spec currently selects PF TFDS **3.3.0** and hits **3.2.2** for both detectors.
+These are fresh comparisons, not reproductions of archived CLD **3.2.1** results.
+Use common evaluation definitions and matched checkpoints, and compare momentum
+resolution/tails, efficiency, jets and event closure alongside particle F1.
+
+Preview all eight jobs without launching training:
+
+```bash
+uv run --no-sync python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/clic_cld_backbone_benchmark.yaml \
+  --platform configs/training/platforms/flatiron_h100.yaml --dry-run
+```
+
+Submit with `scripts/flatiron/train_scenario.sh clic_cld_backbone_benchmark h100`.
+Use `--variant clic_hits_heptv2` to select a single model. The local and Flatiron
+profiles map data paths separately for CLIC and CLD. The existing LUMI profile
+has one CLD directory for all productions; before using it for the full benchmark,
+provide a platform with `data_dir: {cld: /path/to/cld, clic: /path/to/clic}` or a
+shared TFDS root containing both detectors. A dry run resolves configurations
+but does not verify data availability or GPU memory usage.
+
+## CMS backbone comparison
+
+`cms_backbone_comparison` trains CMS on TFDS version **2.8.0**, selecting either
+`--variant attention` or `--variant heptv2`. It retains the PU/no-PU ttbar, QCD
+and Z→ττ training/validation samples and the PU test samples. Both variants use
+three backbone layers, embedding width 512, 16 heads, zero dropout, the same seed
+and a global batch of 64;
+HEPTv2 uses deterministic hashing and block size 100. The schedule is 100,000
+steps at learning rate 0.0004. Dataset versions are pinned in the scenario.
+
+The default CMS attention model also uses width 512 (16 heads × 32 channels).
+The comparison disables task queries for both backbones and pins TFDS 2.8.0;
+the default model specification still selects TFDS 3.2.0.
+
+Supply the CMS TFDS directory explicitly when the platform profile only maps
+CLD/CLIC data paths:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/cms_backbone_comparison.yaml \
+  --platform configs/training/platforms/local.yaml \
+  --data-dir /path/to/cms/tfds \
+  --variant attention \
+  --dry-run
+```
+
+Use `--variant heptv2` for HEPTv2; omit `--variant` to run both. Remove
+`--dry-run` to start training.
+
 ## HEPTv2 model-size scaling (50k)
 
 `scenarios/cld_pf_heptv2_model_scaling_50k.yaml` scales width and depth together

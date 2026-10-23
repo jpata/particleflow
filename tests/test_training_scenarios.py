@@ -22,6 +22,54 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("platform_name", ["local", "lumi_mi250x", "flatiron_h100"])
+def test_clic_cld_benchmark_pairs_and_recommended_hit_recipe(platform_name):
+    platform = load_platform_profile(ROOT / f"configs/training/platforms/{platform_name}.yaml")
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/clic_cld_backbone_benchmark.yaml")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    reference = resolve_scenario_jobs(
+        load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_default_50k.yaml"),
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+    )[0].resolved_config
+    by_name = {job.variant_name: job for job in jobs}
+    assert len(jobs) == 8
+    for job in jobs:
+        config = job.resolved_config
+        assert job.global_batch_size == 128
+        assert config.num_steps == 50000 and config.seed == 12345
+        assert config.val_freq == config.checkpoint_freq == 1000
+        assert config.lr == 0.001 and config.load is None
+        assert config.optimizer == reference.optimizer and config.lr_schedule == reference.lr_schedule
+        assert config.model.backbone.num_convs == 6
+        expected_gpus = 1 if "_pf_" in job.variant_name else platform.gpus
+        assert config.gpus == expected_gpus
+        assert job.per_gpu_batch_size == 128 // expected_gpus
+    for detector in ("cld", "clic"):
+        for representation in ("pf", "hits"):
+            attention_job = by_name[f"{detector}_{representation}_attention"]
+            heptv2_job = by_name[f"{detector}_{representation}_heptv2"]
+            attention = attention_job.resolved_config
+            heptv2 = heptv2_job.resolved_config
+            assert attention.dataset.value == (detector if representation == "pf" else f"{detector}_hits")
+            assert attention.model.type.value == "attention"
+            assert heptv2.model.type.value == "heptv2"
+            assert attention.model.attention.num_heads * attention.model.attention.head_dim == heptv2.model.heptv2.embedding_dim == 256
+            # The broad campaign allowlist must not hide differences within a
+            # backbone pair: data, objective and training budget stay identical.
+            validate_variant_invariants(
+                [attention_job, heptv2_job], ["conv_type", "model.type", "model.attention", "model.heptv2"]
+            )
+            if representation == "hits":
+                expected_decoder = reference.model.set_decoder.model_copy(update={"tracker_momentum_readout": True})
+                assert heptv2.model.set_decoder == expected_decoder
+                assert heptv2.model.hit_feature_engineering == reference.model.hit_feature_engineering
+                backbone = heptv2.model.heptv2.model_copy(update={"activation_checkpointing": False})
+                assert backbone == reference.model.heptv2
+            else:
+                assert heptv2.model.output_mode.value == "elementwise"
+
+
 def test_heptv2_model_scaling_preserves_baseline_except_size_and_checkpointing():
     platform = load_platform_profile(ROOT / "configs/training/platforms/lumi_mi250x.yaml")
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_model_scaling_50k.yaml")
@@ -220,6 +268,42 @@ def test_backbone_comparison_scenario_keeps_elementwise_output_and_depth_fixed()
     assert {job.resolved_config.model.output_mode.value for job in jobs} == {"elementwise"}
     assert {job.resolved_config.model.backbone.num_convs for job in jobs} == {6}
     assert jobs[1].resolved_config.model.heptv2.block_size == 128
+
+
+def test_cms_backbone_scenario_pins_all_datasets_and_resolves_global_batch():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cms_backbone_comparison.yaml")
+    platform = load_platform_profile(PLATFORMS / "local.yaml")
+    platform.data_dir = "/tmp/cms-tfds"
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+
+    assert [job.resolved_config.model.type.value for job in jobs] == ["attention", "heptv2"]
+    for job in jobs:
+        config = job.resolved_config
+        assert config.dataset.value == "cms"
+        assert config.model.output_mode.value == "elementwise"
+        assert config.model.backbone.num_convs == 3
+        assert config.pad_to_multiple_elements == 100
+        assert config.seed == 12345
+        assert job.per_gpu_batch_size * platform.gpus == 64
+        for datasets in (config.train_dataset["cms"], config.valid_dataset["cms"]):
+            assert {dataset.batch_size for dataset in datasets.values()} == {1}
+            assert sum(len(dataset.samples) for dataset in datasets.values()) == 6
+            assert {sample.version for dataset in datasets.values() for sample in dataset.samples.values()} == {"2.8.0"}
+            assert all(sample.splits == [str(i) for i in range(1, 11)] for dataset in datasets.values() for sample in dataset.samples.values())
+        assert len(config.test_dataset) == 3
+        assert {sample.version for sample in config.test_dataset.values()} == {"2.8.0"}
+    from mlpf.conf import MLPFConfig
+
+    default = MLPFConfig.from_spec(str(ROOT / "particleflow_spec.yaml"), "pyg-cms-v1", "cms_run3")
+    attention = jobs[0].resolved_config.model.attention
+    heptv2 = jobs[1].resolved_config.model.heptv2
+    assert default.model.attention.num_heads == attention.num_heads == heptv2.num_heads == 16
+    assert default.model.attention.head_dim == attention.head_dim == 32
+    assert attention.num_heads * attention.head_dim == heptv2.embedding_dim == heptv2.width == 512
+    assert attention.num_convs == heptv2.num_convs == 3
+    assert attention.dropout_ff == attention.dropout_conv_id_ff == attention.dropout_conv_id_mha == heptv2.dropout_ff == 0.0
+    assert jobs[1].resolved_config.model.heptv2.block_size == 100
+    assert jobs[1].resolved_config.model.heptv2.deterministic_hashing
 
 
 def test_pf_hits_comparison_scenario_resolves_three_40k_variants():
@@ -820,3 +904,59 @@ def test_tracker_grouping_losses_scenario_is_from_scratch_small_factorial():
         model["set_decoder"]["tracker_overlap_loss_weight"] = 0.0
         assert model == reference.model.model_dump()
         assert (c.lr, c.lr_schedule, c.optimizer) == (reference.lr, reference.lr_schedule, reference.optimizer)
+
+
+def test_single_gpu_benchmark_worker_checks_selected_job_allocation(monkeypatch):
+    import mlpf.training_scenarios as runner
+
+    executed = []
+    monkeypatch.setenv("SLURM_GPUS_PER_NODE", "1")
+    monkeypatch.setattr(runner, "run_scenario_job", lambda job, *args, **kwargs: executed.append(job))
+    args = [
+        "--scenario",
+        str(ROOT / "configs/training/scenarios/clic_cld_backbone_benchmark.yaml"),
+        "--platform",
+        str(PLATFORMS / "flatiron_h100.yaml"),
+        "--spec-file",
+        str(ROOT / "particleflow_spec.yaml"),
+        "--task-index",
+        "0",
+    ]
+    runner.main(args)
+    assert len(executed) == 1
+    assert executed[0].resolved_config.gpus == 1
+    assert executed[0].per_gpu_batch_size == 128
+    args[-1] = "2"
+    with pytest.raises(ValueError, match="Slurm allocated 1"):
+        runner.main(args)
+    assert len(executed) == 1
+
+
+@pytest.mark.parametrize(
+    "environment,requested,valid",
+    [
+        ({"SLURM_GPUS_PER_TASK": "1", "SLURM_GPUS_ON_NODE": "8", "SLURM_GPUS_PER_NODE": "8"}, 1, True),
+        ({"SLURM_GPUS_PER_TASK": "1", "SLURM_GPUS_ON_NODE": "8"}, 8, False),
+        ({"SLURM_GPUS_ON_NODE": "8"}, 1, True),
+        ({"SLURM_GPUS_PER_NODE": "8"}, 1, True),
+        ({"SLURM_GPUS_PER_TASK": "8", "SLURM_GPUS_ON_NODE": "8"}, 8, True),
+        ({"SLURM_GPUS_ON_NODE": "1"}, 8, False),
+        ({"SLURM_GPUS_PER_TASK": "mi250:1", "SLURM_GPUS_ON_NODE": "8"}, 8, False),
+        ({"SLURM_GPUS_PER_NODE": "a100:1,h100:1"}, 2, True),
+        ({}, 1, True),
+    ],
+)
+def test_slurm_allocation_validates_task_capacity(monkeypatch, environment, requested, valid):
+    from mlpf.training_scenarios import _validate_slurm_allocation
+
+    for variable in ("SLURM_GPUS_PER_TASK", "SLURM_GPUS_ON_NODE", "SLURM_GPUS_PER_NODE"):
+        monkeypatch.delenv(variable, raising=False)
+    for variable, value in environment.items():
+        monkeypatch.setenv(variable, value)
+    profile = load_platform_profile(PLATFORMS / "lumi_mi250x.yaml")
+    profile.gpus = requested
+    if valid:
+        _validate_slurm_allocation(profile)
+    else:
+        with pytest.raises(ValueError, match="Slurm allocated"):
+            _validate_slurm_allocation(profile)

@@ -735,7 +735,7 @@ models:
       input_encoding: "split"
       attention:
         num_convs: 3
-        head_dim: 16
+        head_dim: 32
         num_heads: 16
 
   # Example: CLD Model

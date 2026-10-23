@@ -142,18 +142,97 @@ class E2LSH(nn.Module):
         return projection.permute(2, 0, 1)
 
 
-def quantile_partition(sorted_indices, num_regions):
-    total_elements = sorted_indices.shape[-1]
-    region_size = torch.ceil(total_elements / num_regions)
-    inverse_indices = torch.argsort(sorted_indices, dim=-1)
-    base = torch.arange(total_elements, device=sorted_indices.device)[None]
-    region_indices = base // region_size + 1
+HASH_COORD_SCALE = 1 << 20
+HASH_COEFF_SCALE = 1 << 12
+HASH_PADDING_KEY = 1 << 60
 
+
+def fixed_point_coordinates(features):
+    """Integer eta/phi coordinates; CORDIC avoids runtime-dependent trig ranks.
+
+    Eta is clipped to +/-32. Sin/cos are clipped to +/-32 before vectoring;
+    physical unit vectors are unchanged. Phi resolution is about 1 microradian.
+    """
+    eta = torch.round(features[..., 2].float().clamp(-32, 32) * HASH_COORD_SCALE).to(torch.int64)
+    y = torch.round(features[..., 3].float().clamp(-32, 32) * (1 << 28)).to(torch.int64)
+    x = torch.round(features[..., 4].float().clamp(-32, 32) * (1 << 28)).to(torch.int64)
+    left = x < 0
+    pi = round(math.pi * (1 << 30))
+    angle = torch.where(left, torch.where(y >= 0, pi, -pi), 0)
+    x, y = torch.where(left, -x, x), torch.where(left, -y, y)
+    for bit in range(26):
+        direction = (y > 0).to(torch.int64) - (y < 0).to(torch.int64)
+        x_step = torch.div(x, 1 << bit, rounding_mode="trunc")
+        y_step = torch.div(y, 1 << bit, rounding_mode="trunc")
+        x, y = x + direction * y_step, y - direction * x_step
+        angle = angle + direction * round(math.atan(2.0**-bit) * (1 << 30))
+    angle_sign = (angle > 0).to(torch.int64) - (angle < 0).to(torch.int64)
+    phi = angle_sign * torch.div(torch.abs(angle) + 512, 1024, rounding_mode="trunc")
+    return torch.stack((eta, phi), dim=-1)
+
+
+def fixed_point_projection(alpha, coords):
+    """Project two integer coordinates without a floating-point GEMM."""
+    coeff = torch.round(alpha.float().clamp(-16, 16) * HASH_COEFF_SCALE).to(torch.int64)
+    return coords[:, 0][None, None, :] * coeff[:, 0, :].t()[:, :, None] + coords[:, 1][None, None, :] * coeff[:, 1, :].t()[:, :, None]
+
+
+class _StableArgsort(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, values):
+        return torch.argsort(values, dim=-1, stable=True)
+
+    @staticmethod
+    def symbolic(g, values):
+        # Some GPU TopK implementations do not preserve the specified index
+        # order for ties at large sequence lengths. Sort once to identify equal
+        # value groups, then sort unique (group, original index) integer keys.
+        # Group IDs bound the composite key by length**2, independent of the
+        # coordinate/hash range (including the large padding sentinel).
+        last_axis = g.op("Constant", value_t=torch.tensor([-1], dtype=torch.int64))
+        length = g.op("Gather", g.op("Shape", values), last_axis, axis_i=0)
+        sorted_values, indices = g.op("TopK", values, length, axis_i=-1, largest_i=0, sorted_i=1, outputs=2)
+        zero = g.op("Constant", value_t=torch.tensor([0], dtype=torch.int64))
+        one = g.op("Constant", value_t=torch.tensor([1], dtype=torch.int64))
+        end = g.op("Constant", value_t=torch.tensor([torch.iinfo(torch.int64).max], dtype=torch.int64))
+        previous = g.op("Slice", sorted_values, zero, last_axis, last_axis)
+        following = g.op("Slice", sorted_values, one, end, last_axis)
+        changed = g.op("Cast", g.op("Not", g.op("Equal", previous, following)), to_i=7)
+        first = g.op("Slice", indices, zero, one, last_axis)
+        zeros = g.op("Sub", first, first)
+        changes = g.op("Concat", zeros, changed, axis_i=-1)
+        axis = g.op("Constant", value_t=torch.tensor(-1, dtype=torch.int64))
+        groups = g.op("CumSum", changes, axis)
+        keys = g.op("Add", g.op("Mul", groups, length), indices)
+        sorted_keys, order = g.op("TopK", keys, length, axis_i=-1, largest_i=0, sorted_i=1, outputs=2)
+        # Keep both required TopK outputs connected. Older MIGraphX EPs expose
+        # unused node outputs as partition outputs, which can overflow their
+        # output-buffer naming convention. Integer subtraction is exact.
+        order = g.op("Add", order, g.op("Sub", sorted_keys, sorted_keys))
+        result = g.op("GatherElements", indices, order, axis_i=-1)
+        return result.setType(values.type().with_dtype(torch.int64))
+
+
+def stable_argsort(values):
+    if torch.onnx.is_in_onnx_export():
+        return _StableArgsort.apply(values)
+    return torch.argsort(values, dim=-1, stable=True)
+
+
+def quantile_partition(sorted_indices, num_regions, deterministic=True):
+    total_elements = sorted_indices.shape[-1]
+    if deterministic:
+        thirds = torch.round(num_regions * 3).to(torch.int64)
+        region_size = torch.div(total_elements * 3 + thirds - 1, thirds, rounding_mode="trunc")
+    else:
+        region_size = torch.ceil(total_elements / num_regions)
+    inverse_indices = stable_argsort(sorted_indices)
+    # Selecting floor(rank / region_size) from a precomputed table is exactly
+    # floor(inverse_rank / region_size). Compute it directly to avoid a large
+    # broadcasted GatherElements and its intermediate table.
     if sorted_indices.dim() == 2:
-        region_indices = region_indices.unsqueeze(1).expand(-1, sorted_indices.shape[0], -1)
-        inverse_indices_expanded = inverse_indices.unsqueeze(0).expand(region_indices.shape[0], -1, -1)
-        return torch.gather(region_indices, -1, inverse_indices_expanded)
-    return region_indices[:, inverse_indices]
+        return torch.div(inverse_indices.unsqueeze(0), region_size.unsqueeze(1), rounding_mode="trunc" if deterministic else "floor") + 1
+    return torch.div(inverse_indices.unsqueeze(0), region_size, rounding_mode="trunc" if deterministic else "floor") + 1
 
 
 def get_regions(num_regions, num_or_hashes, num_heads, num_and_hashes=2):
@@ -170,13 +249,15 @@ def get_regions(num_regions, num_or_hashes, num_heads, num_and_hashes=2):
 
 
 def invert_permutation(perm: torch.Tensor) -> torch.Tensor:
-    if os.environ.get("HEPTV2_SCATTER_INVERT_PERM", "0").lower() in {"1", "true", "yes", "on"}:
+    # Inverting a permutation needs no sort. In ONNX, scatter also avoids
+    # MIGraphX TopK kernel limits for flattened multi-event sequences.
+    if torch.onnx.is_in_onnx_export() or os.environ.get("HEPTV2_SCATTER_INVERT_PERM", "0").lower() in {"1", "true", "yes", "on"}:
         arange = torch.arange(perm.shape[-1], device=perm.device, dtype=perm.dtype).expand_as(perm)
         return torch.zeros_like(perm).scatter(-1, perm, arange)
     if os.environ.get("HEPTV2_FAST_INVERT_PERM", "0").lower() in {"1", "true", "yes", "on"}:
         arange = torch.arange(perm.shape[-1], device=perm.device, dtype=perm.dtype).expand_as(perm)
         return torch.empty_like(perm).scatter_(-1, perm, arange)
-    return torch.argsort(perm, dim=-1)
+    return stable_argsort(perm)
 
 
 def batched_index_select(values: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
@@ -186,7 +267,7 @@ def batched_index_select(values: torch.Tensor, indices: torch.Tensor) -> torch.T
 
 
 def sort_to_buckets(x, perm, bucketsz):
-    if _HEPTV2_DIRECT_BUCKET_GATHER:
+    if _HEPTV2_DIRECT_BUCKET_GATHER and not torch.onnx.is_in_onnx_export():
         num_hashes = int(perm.shape[0])
         num_heads = int(perm.shape[1])
         seq_len = int(perm.shape[2])
@@ -220,7 +301,7 @@ def sort_qkv_to_buckets(q, k, v, perm, bucketsz):
 
 
 def unsort_from_buckets(s_x, perm_inverse):
-    if _HEPTV2_DIRECT_BUCKET_GATHER:
+    if _HEPTV2_DIRECT_BUCKET_GATHER and not torch.onnx.is_in_onnx_export():
         flat = s_x.reshape(s_x.shape[0], s_x.shape[1], -1, s_x.shape[-1])
         return flat.gather(2, perm_inverse[..., None].expand(*perm_inverse.shape, s_x.shape[-1]))
     b_x = rearrange(s_x, "h b nbuckets bucketsz d -> h b (nbuckets bucketsz) d")
@@ -272,11 +353,16 @@ def lsh_coords(e2lsh, coords2, num_heads):
 def get_geo_shift_single(regions_h, hash_shift, region_indices, num_or_hashes):
     region_indices_eta, region_indices_phi = region_indices
     hash_shift_eta = region_indices_eta * hash_shift
+    if hash_shift.dtype == torch.int64:
+        thirds = torch.round(regions_h[0] * 3).to(torch.int64)
+        region_multiplier = torch.div(thirds + 2, 3, rounding_mode="trunc") + 1
+    else:
+        region_multiplier = torch.ceil(regions_h[0]) + 1
     if region_indices_eta.dim() == 3:
-        hash_shift_phi = region_indices_phi * hash_shift * (torch.ceil(regions_h[0][:, None, None]) + 1)
+        hash_shift_phi = region_indices_phi * hash_shift * region_multiplier[:, None, None]
         return rearrange(hash_shift_phi + hash_shift_eta, "(c h) b n -> c h b n", c=num_or_hashes)
     else:
-        hash_shift_phi = region_indices_phi * hash_shift * (torch.ceil(regions_h[0][:, None]) + 1)
+        hash_shift_phi = region_indices_phi * hash_shift * region_multiplier[:, None]
         return rearrange(hash_shift_phi + hash_shift_eta, "(c h) n -> c h n", c=num_or_hashes)
 
 
@@ -284,6 +370,7 @@ class HEPTv2Attention(nn.Module):
     def __init__(self, hash_dim, **kwargs):
         super().__init__()
         self.num_heads = kwargs["num_heads"]
+        self.deterministic_hashing = kwargs.get("deterministic_hashing", True)
         self.dim_per_head = kwargs["head_dim"]
         self.model_dim = kwargs.get("model_dim", self.num_heads * self.dim_per_head)
         self.out_linear = nn.Linear(self.num_heads * self.dim_per_head, self.model_dim)
@@ -331,10 +418,12 @@ class HEPTv2Attention(nn.Module):
         active_width = int(active_hashes) * int(self.num_heads)
 
         # Hashing / projection
-        if _HEPTV2_ENCODER_HASH_FP32:
+        if _HEPTV2_ENCODER_HASH_FP32 or self.deterministic_hashing:
             with torch.amp.autocast(device_type="cuda", enabled=False):
-                coords2_f = coords2_flat.float()
-                hashed_flat = lsh_coords(self.e2lsh_new, coords2_f, self.num_heads)
+                if self.deterministic_hashing:
+                    hashed_flat = fixed_point_projection(self.e2lsh_new.alpha, kwargs["fixed_coords"].reshape(-1, 2))
+                else:
+                    hashed_flat = lsh_coords(self.e2lsh_new, coords2_flat.float(), self.num_heads)
                 if active_hashes < self.n_hashes:
                     hashed_flat = hashed_flat[:active_hashes]
 
@@ -342,24 +431,27 @@ class HEPTv2Attention(nn.Module):
                     hashed = hashed_flat.view(active_hashes, self.num_heads, B, S)
                     max_v = hashed.max(-1, keepdim=True).values
                     min_v = hashed.min(-1, keepdim=True).values
-                    hash_shift = max_v - min_v
+                    hash_shift = max_v - min_v + int(self.deterministic_hashing)
                     hash_shift = rearrange(hash_shift, "c h b d -> (c h) b d")
                     invalid_expanded = invalid.view(1, 1, B, S).expand(active_hashes, self.num_heads, -1, -1)
-                    hashed[invalid_expanded] = float("inf")
                 else:
                     hashed = hashed_flat
                     max_v = hashed.max(-1, keepdim=True).values
                     min_v = hashed.min(-1, keepdim=True).values
-                    hash_shift = max_v - min_v
+                    hash_shift = max_v - min_v + int(self.deterministic_hashing)
                     hash_shift = rearrange(hash_shift, "c h d -> (c h) d")
-                    hashed[..., invalid] = float("inf")
 
                 regions_h = kwargs["regions_h"].float()[:, :active_width]
                 region_indices = [idx[:active_width] for idx in kwargs["region_indices"]]
                 shifts = get_geo_shift_single(regions_h, hash_shift, region_indices, active_hashes)
 
                 hashed = hashed + shifts
-                positions = hashed.argsort(dim=-1)
+                # CUDA TopK may select padded implementation lanes when real
+                # sort keys are +inf and the sequence length is not a power of two.
+                hashed = hashed.masked_fill(
+                    invalid_expanded if is_batched else invalid, HASH_PADDING_KEY if self.deterministic_hashing else torch.finfo(hashed.dtype).max
+                )
+                positions = stable_argsort(hashed)
         else:
             hashed_flat = lsh_coords(self.e2lsh_new, coords2_flat, self.num_heads)
             if active_hashes < self.n_hashes:
@@ -372,21 +464,22 @@ class HEPTv2Attention(nn.Module):
                 hash_shift = max_v - min_v
                 hash_shift = rearrange(hash_shift, "c h b d -> (c h) b d")
                 invalid_expanded = invalid.view(1, 1, B, S).expand(active_hashes, self.num_heads, -1, -1)
-                hashed[invalid_expanded] = float("inf")
             else:
                 hashed = hashed_flat
                 max_v = hashed.max(-1, keepdim=True).values
                 min_v = hashed.min(-1, keepdim=True).values
                 hash_shift = max_v - min_v
                 hash_shift = rearrange(hash_shift, "c h d -> (c h) d")
-                hashed[..., invalid] = float("inf")
 
             regions_h = kwargs["regions_h"][:, :active_width]
             region_indices = [idx[:active_width] for idx in kwargs["region_indices"]]
             shifts = get_geo_shift_single(regions_h, hash_shift, region_indices, active_hashes)
 
             hashed = hashed + shifts
-            positions = hashed.argsort(dim=-1)
+            hashed = hashed.masked_fill(
+                invalid_expanded if is_batched else invalid, HASH_PADDING_KEY if self.deterministic_hashing else torch.finfo(hashed.dtype).max
+            )
+            positions = stable_argsort(hashed)
 
         if is_batched:
             batch_offsets = torch.arange(B, device=positions.device).view(1, 1, B, 1) * S
@@ -448,6 +541,9 @@ class HEPTv2Layer(nn.Module):
         self.block_size = kwargs.get("block_size", 100)
         self.n_hashes = kwargs.get("n_hashes", 3)
         self.num_regions = kwargs.get("num_regions", 140)
+        self.deterministic_hashing = kwargs.get("deterministic_hashing", True)
+        if self.deterministic_hashing and not 1 <= self.num_regions <= 4096:
+            raise ValueError("Deterministic HEPTv2 hashing requires 1 <= num_regions <= 4096")
         self.num_w_per_dist = kwargs.get("num_w_per_dist", 10)
         self.mlp_ratio = kwargs.get("mlp_ratio", 4.0)
 
@@ -508,10 +604,20 @@ class HEPTv2Layer(nn.Module):
         if mask is not None:
             x = x * mask_
 
-        # Extract eta and phi for hashing, explicitly in float32 for safety
-        eta = X_features[..., 2:3].float()
-        phi = torch.atan2(X_features[..., 3:4].float(), X_features[..., 4:5].float())
-        coords = torch.cat([eta, phi], dim=-1)  # [B, S, 2]
+        if self.deterministic_hashing:
+            fixed_coords = fixed_point_coordinates(X_features)
+            coords = fixed_coords.to(torch.float32) / HASH_COORD_SCALE
+            sort_coords = fixed_coords
+            padding_key = HASH_PADDING_KEY
+        else:
+            fixed_coords = None
+            eta = X_features[..., 2:3].float()
+            sin_phi = X_features[..., 3:4].float()
+            cos_phi = X_features[..., 4:5].float()
+            cos_phi = torch.where((sin_phi == 0) & (cos_phi == 0), torch.ones_like(cos_phi), cos_phi)
+            coords = torch.cat((eta, torch.atan2(sin_phi, cos_phi)), dim=-1)
+            sort_coords = coords
+            padding_key = torch.finfo(coords.dtype).max
 
         x_flat = x.view(B * S, D)
         coords_flat = coords.view(B * S, 2)
@@ -520,11 +626,11 @@ class HEPTv2Layer(nn.Module):
 
         # Hashing preparation
         with torch.no_grad():
-            coords_for_sort = coords.clone()
+            coords_for_sort = sort_coords.clone()
             if mask is not None:
                 coords_for_sort = torch.where(
                     mask.unsqueeze(-1) == 0,
-                    torch.tensor(float("inf"), device=device),
+                    torch.tensor(padding_key, dtype=sort_coords.dtype, device=device),
                     coords_for_sort,
                 )
                 valid_mask = mask
@@ -532,11 +638,11 @@ class HEPTv2Layer(nn.Module):
             else:
                 valid_mask = torch.ones_like(coords[..., 0], dtype=torch.bool)
 
-            sorted_eta_idx = torch.argsort(coords_for_sort[..., 0], dim=-1)
-            sorted_phi_idx = torch.argsort(coords_for_sort[..., 1], dim=-1)
+            sorted_eta_idx = stable_argsort(coords_for_sort[..., 0])
+            sorted_phi_idx = stable_argsort(coords_for_sort[..., 1])
             regions_h = rearrange(self.regions, "c a h -> a (c h)")
-            region_indices_eta = quantile_partition(sorted_eta_idx, regions_h[0][:, None])
-            region_indices_phi = quantile_partition(sorted_phi_idx, regions_h[1][:, None])
+            region_indices_eta = quantile_partition(sorted_eta_idx, regions_h[0][:, None], self.deterministic_hashing)
+            region_indices_phi = quantile_partition(sorted_phi_idx, regions_h[1][:, None], self.deterministic_hashing)
             region_indices = [region_indices_eta, region_indices_phi]
 
         # Positional embedding
@@ -567,6 +673,7 @@ class HEPTv2Layer(nn.Module):
             k,
             v,
             coords=coords,
+            fixed_coords=fixed_coords,
             regions_h=regions_h,
             region_indices=region_indices,
             raw_size=raw_size,

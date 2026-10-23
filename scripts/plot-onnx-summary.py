@@ -22,6 +22,7 @@ def parse_args():
 def load_data(indir):
     all_data = {}
     model_metadata = {}
+    system_info = {}
     # Iterate over subdirectories (e.g., math, linear, gnn-lsh)
     for subdir in sorted(os.listdir(indir)):
         summary_path = os.path.join(indir, subdir, "summary.json")
@@ -35,7 +36,7 @@ def load_data(indir):
 
                 for scenario, runs in data.get("scenarios", {}).items():
                     # Combine model and scenario for a unique label
-                    full_label = f"{subdir}: {scenario}"
+                    full_label = f"{subdir}: {scenario} (B={data.get('batch_size', 1)}, pad={data.get('pad_bin_size', 0)})"
                     if full_label not in all_data:
                         all_data[full_label] = {
                             "sizes": [],
@@ -83,7 +84,7 @@ def plot_memory_scaling(data, outdir, system_info):
             idx = np.argsort(sizes)
             plt.scatter(sizes[idx], mems[idx], label=full_label, color=color, marker=marker, alpha=0.6, s=30)
 
-    plt.xlabel("Event size (number of elements)")
+    plt.xlabel("Batch size (total valid elements)")
     plt.ylabel("Peak Memory [MiB]")
     plt.title(f"Peak Memory Scaling vs. Event Size ({system_info.get('device', 'Unknown')})", y=1.05)
 
@@ -120,12 +121,13 @@ def plot_mae_vs_runtime(data, outdir, system_info):
         if not model_scenarios:
             continue
 
-        # Find the fastest scenario (lowest mean runtime)
+        # Compare the fastest ONNX run with its PyTorch baseline. Including the
+        # baseline here can hide the ONNX error when PyTorch is faster.
         best_scenario_key = None
         min_mean_rt = float("inf")
 
         for key, vals in model_scenarios.items():
-            if len(vals["runtimes"]) > 0:
+            if vals["scenario"].startswith("ONNX_") and vals["runtimes"] and vals["maes"]:
                 mean_rt = np.mean(vals["runtimes"])
                 if mean_rt < min_mean_rt:
                     min_mean_rt = mean_rt
@@ -138,8 +140,8 @@ def plot_mae_vs_runtime(data, outdir, system_info):
                     {
                         "Model": model,
                         "Fastest Scenario": vals["scenario"],
-                        "Avg Runtime [ms]": np.mean(vals["runtimes"]),
-                        "Std Runtime [ms]": np.std(vals["runtimes"]),
+                        "Avg Batch runtime [ms]": np.mean(vals["runtimes"]),
+                        "Std Batch runtime [ms]": np.std(vals["runtimes"]),
                         "Avg MAE": np.mean(vals["maes"]),
                         "Std MAE": np.std(vals["maes"]),
                     }
@@ -160,9 +162,9 @@ def plot_mae_vs_runtime(data, outdir, system_info):
 
     for i, row in df.iterrows():
         plt.errorbar(
-            row["Avg Runtime [ms]"],
+            row["Avg Batch runtime [ms]"],
             row["Avg MAE"],
-            xerr=row["Std Runtime [ms]"],
+            xerr=row["Std Batch runtime [ms]"],
             yerr=row["Std MAE"],
             fmt="o",
             markersize=10,
@@ -173,7 +175,7 @@ def plot_mae_vs_runtime(data, outdir, system_info):
 
         # Annotate points
         plt.text(
-            row["Avg Runtime [ms]"],
+            row["Avg Batch runtime [ms]"],
             row["Avg MAE"],
             f" {row['Model']}\n ({row['Fastest Scenario']})",
             verticalalignment="bottom",
@@ -186,13 +188,13 @@ def plot_mae_vs_runtime(data, outdir, system_info):
     by_label = dict(zip(labels, handles))
     plt.legend(by_label.values(), by_label.keys())
 
-    plt.xlabel("Avg Runtime [ms]")
+    plt.xlabel("Avg Batch runtime [ms]")
     plt.ylabel("MAE")
     plt.title("Numerical Error (MAE) vs. Inference Runtime", y=1.05)
     plt.grid(True, linestyle="--", alpha=0.7)
 
-    # Log scales can be useful for error
-    plt.yscale("log")
+    # A zero MAE is valid and cannot be drawn on a logarithmic axis.
+    plt.yscale("symlog", linthresh=1e-8)
 
     # Add margins to ensure space for labels and error bars
     plt.margins(x=0.3, y=0.2)
@@ -251,8 +253,8 @@ def plot_loss_vs_runtime(data, model_metadata, outdir, system_info):
                     {
                         "Model": model,
                         "Fastest Scenario": data[best_scenario_key]["scenario"],
-                        "Avg Runtime [ms]": min_mean_rt,
-                        "Std Runtime [ms]": std_rt,
+                        "Avg Batch runtime [ms]": min_mean_rt,
+                        "Std Batch runtime [ms]": std_rt,
                         "Train Loss": train_loss,
                     }
                 )
@@ -272,9 +274,9 @@ def plot_loss_vs_runtime(data, model_metadata, outdir, system_info):
 
     for i, row in df.iterrows():
         plt.errorbar(
-            row["Avg Runtime [ms]"],
+            row["Avg Batch runtime [ms]"],
             row["Train Loss"],
-            xerr=row["Std Runtime [ms]"],
+            xerr=row["Std Batch runtime [ms]"],
             fmt="o",
             markersize=10,
             capsize=5,
@@ -284,7 +286,7 @@ def plot_loss_vs_runtime(data, model_metadata, outdir, system_info):
 
         # Annotate points
         plt.text(
-            row["Avg Runtime [ms]"],
+            row["Avg Batch runtime [ms]"],
             row["Train Loss"],
             f" {row['Model']}\n ({row['Fastest Scenario']})",
             verticalalignment="bottom",
@@ -298,12 +300,12 @@ def plot_loss_vs_runtime(data, model_metadata, outdir, system_info):
     plt.legend(by_label.values(), by_label.keys())
 
     # Set plot limits with generous margin for labels
-    max_x = (df["Avg Runtime [ms]"] + df["Std Runtime [ms]"]).max()
+    max_x = (df["Avg Batch runtime [ms]"] + df["Std Batch runtime [ms]"]).max()
     max_y = df["Train Loss"].max()
     plt.xlim(0, 1.8 * max_x)
     plt.ylim(0, 1.8 * max_y)
 
-    plt.xlabel("Avg Runtime [ms]")
+    plt.xlabel("Avg Batch runtime [ms]")
     plt.ylabel("Train Loss")
     plt.title("Train Loss vs. Inference Runtime", y=1.05)
     plt.grid(True, linestyle="--", alpha=0.7)
@@ -364,8 +366,8 @@ def collect_best_scenario_summary(data, model_metadata, require_loss=False):
             {
                 "Model": model,
                 "Best Scenario": vals["scenario"],
-                "Avg Runtime [ms]": np.mean(vals["runtimes"]),
-                "Std Runtime [ms]": np.std(vals["runtimes"]),
+                "Avg Batch runtime [ms]": np.mean(vals["runtimes"]),
+                "Std Batch runtime [ms]": np.std(vals["runtimes"]),
                 "Max Memory [MiB]": np.max(memory_maxs),
                 "Train Loss": train_loss,
             }
@@ -401,8 +403,8 @@ def plot_runtime_vs_memory(data, model_metadata, outdir, system_info):
     for _, row in df.iterrows():
         plt.errorbar(
             row["Max Memory [MiB]"],
-            row["Avg Runtime [ms]"],
-            yerr=row["Std Runtime [ms]"],
+            row["Avg Batch runtime [ms]"],
+            yerr=row["Std Batch runtime [ms]"],
             fmt="o",
             markersize=10,
             capsize=5,
@@ -411,7 +413,7 @@ def plot_runtime_vs_memory(data, model_metadata, outdir, system_info):
         )
         plt.text(
             row["Max Memory [MiB]"],
-            row["Avg Runtime [ms]"],
+            row["Avg Batch runtime [ms]"],
             f" {row['Model']}\n ({row['Best Scenario']})",
             verticalalignment="bottom",
             horizontalalignment="left",
@@ -423,7 +425,7 @@ def plot_runtime_vs_memory(data, model_metadata, outdir, system_info):
     plt.legend(by_label.values(), by_label.keys())
 
     plt.xlabel("Max Peak Memory [MiB]")
-    plt.ylabel("Avg Runtime [ms]")
+    plt.ylabel("Avg Batch runtime [ms]")
     plt.title("Inference Runtime vs. Max Peak Memory", y=1.05)
     plt.grid(True, linestyle="--", alpha=0.7)
     plt.xscale("log")
@@ -767,7 +769,7 @@ def main():
             oom_sizes = np.array(vals["ooms"])
             plt.scatter(oom_sizes, [plt.ylim()[1] * 0.95] * len(oom_sizes), marker="x", color=color, label=f"{full_label} (OOM)")
 
-    plt.xlabel("Event size (number of elements)")
+    plt.xlabel("Batch size (total valid elements)")
     plt.ylabel("Inference time [ms]")
     plt.title("Runtime Scaling vs. Event Size", y=1.05)
 

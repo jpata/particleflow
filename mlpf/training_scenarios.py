@@ -37,6 +37,8 @@ class ScenarioVariant(BaseModel):
     model_name: str
     # Defaults to the scenario-level production; set it to compare detectors.
     production_name: str | None = None
+    # Omit to use the hardware profile's GPU count (e.g. for large hit models).
+    gpus: int | None = Field(default=None, gt=0)
     overrides: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -276,6 +278,8 @@ def resolve_scenario_job(
     if variant_name not in scenario.variants:
         raise ValueError(f"Unknown variant {variant_name!r}; choose from {sorted(scenario.variants)}")
     variant = scenario.variants[variant_name]
+    if variant.gpus is not None:
+        platform = platform.model_copy(update={"gpus": variant.gpus})
     extra_overrides = extra_overrides or {}
     invalid = DERIVED_KEYS.intersection(extra_overrides)
     if invalid:
@@ -386,7 +390,7 @@ def resolve_scenario_jobs(
     ]
     for seed in scenario.seeds:
         seed_jobs = [job for job in jobs if job.seed == seed]
-        validate_variant_invariants(seed_jobs, scenario.allowed_variant_differences)
+        validate_variant_invariants(seed_jobs, [*scenario.allowed_variant_differences, "gpus", "gpu_batch_multiplier"])
     return jobs
 
 
@@ -408,7 +412,7 @@ def _pipeline_command(job, scenario, platform, spec_file, experiment_dir):
         str(experiment_dir),
         "train",
         "--gpus",
-        str(platform.gpus),
+        str(job.resolved_config.gpus),
     ]
     for name in sorted(KNOWN_VALUE_FLAGS):
         value = settings.pop(name, None)
@@ -541,9 +545,18 @@ def _parse_set_overrides(values):
 
 
 def _validate_slurm_allocation(platform):
-    allocated = os.environ.get("SLURM_GPUS_PER_NODE")
-    if allocated and allocated.isdigit() and int(allocated) != platform.gpus:
-        raise ValueError(f"Platform profile requests {platform.gpus} GPUs but Slurm allocated {allocated}")
+    # A whole-node allocation can expose eight GPUs while this task only uses
+    # one. Prefer the per-task request and reject insufficient capacity, not
+    # surplus GPUs. The pipeline still launches exactly config.gpus workers.
+    for variable in ("SLURM_GPUS_PER_TASK", "SLURM_GPUS_ON_NODE", "SLURM_GPUS_PER_NODE"):
+        allocated = os.environ.get(variable, "")
+        # Slurm also accepts typed counts such as "mi250:1" or "a100:1,h100:1".
+        if not re.fullmatch(r"(?:[^,:]+:)?\d+(?:,(?:[^,:]+:)?\d+)*", allocated):
+            continue
+        count = sum(int(item.rsplit(":", 1)[-1]) for item in allocated.split(","))
+        if count < platform.gpus:
+            raise ValueError(f"Training requests {platform.gpus} GPUs but Slurm allocated {count} ({variable}={allocated})")
+        return
 
 
 def main(argv=None):
@@ -579,7 +592,6 @@ def main(argv=None):
         platform.data_dir = args.data_dir
     if args.experiments_dir:
         platform.experiments_dir = args.experiments_dir
-    _validate_slurm_allocation(platform)
 
     spec_file = args.spec_file or scenario.spec_file
     jobs = resolve_scenario_jobs(
@@ -600,6 +612,7 @@ def main(argv=None):
             raise ValueError("No jobs matched the requested variant")
 
     for job in jobs:
+        _validate_slurm_allocation(platform.model_copy(update={"gpus": job.resolved_config.gpus}))
         if args.continue_run:
             continuation = find_scenario_continuation(job, platform)
             if continuation is None:

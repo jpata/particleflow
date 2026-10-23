@@ -751,7 +751,7 @@ class AttentionConfig(BaseModel):
     dropout_conv_id_mha: float = 0.0
     dropout_conv_id_ff: float = 0.0
     use_pre_layernorm: bool = True
-    use_jagged_attention: bool = False  # ensures attention is correct on variable-length sequences without a padding mask
+    use_jagged_attention: bool = False  # automatically enabled for native Flash; math attention can use a dense padding mask
     use_flash_attn_varlen: bool = False  # bypass PyTorch jagged SDPA and use flash_attn_varlen_func
     export_onnx_fused: bool = False
     save_attention: bool = False
@@ -821,6 +821,7 @@ class HEPTv2Config(BaseModel):
     block_size: int = 100
     n_hashes: int = 3
     num_regions: int = 140
+    deterministic_hashing: bool = True
     num_w_per_dist: int = 10
     mlp_ratio: float = 4.0
 
@@ -1354,6 +1355,11 @@ class MLPFConfig(BaseModel):
         _apply_extra_arg_overrides(config_dict, extra_args)
         _normalize_data_config(config_dict)
         _build_dataset_configs(config_dict, model_config, dataset_name)
+        # Dataset defaults are generated after ordinary overrides so data_config
+        # can filter splits. Reapply explicit dataset overrides to those defaults.
+        for key, value in parse_extra_args(extra_args or []).items():
+            if key.split(".", 1)[0] in {"train_dataset", "valid_dataset", "test_dataset"}:
+                set_nested_dict(config_dict, key, value)
         if getattr(args, "pipeline", False):
             _apply_pipeline_overrides(config_dict, dataset_name)
 

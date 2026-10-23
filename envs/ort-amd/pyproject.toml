@@ -1,0 +1,32 @@
+[project]
+name = "particleflow-ort-amd"
+version = "3.1.0"
+# Inference-only environment following AMD's Python 3.12 installation guide.
+# ROCm 10.1.0 must be installed on the host; GPU-specific ROCm extras are omitted.
+requires-python = "==3.12.*"
+dependencies = [
+    "numpy>=1.26,<3",
+    "onnx>=1.19,<1.24",
+    "onnxruntime==1.29.0",
+    "onnxruntime-ep-migraphx==1.0.0+rocm10.1.0",
+    "migraphx==2.18.0+rocm10.1.0",
+    "migraphx-libs==2.18.0+rocm10.1.0",
+]
+
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.sources]
+onnxruntime-ep-migraphx = { index = "amd-ort" }
+migraphx = { index = "amd-migraphx" }
+migraphx-libs = { index = "amd-migraphx" }
+
+[[tool.uv.index]]
+name = "amd-ort"
+url = "https://stable.repo.amd.com/rocm/onnxruntime/whl-next/"
+explicit = true
+
+[[tool.uv.index]]
+name = "amd-migraphx"
+url = "https://stable.repo.amd.com/rocm/migraphx/whl-next/"
+explicit = true
