@@ -271,3 +271,36 @@ def test_benchmark_continue_preserves_indices_across_resource_groups(tmp_path):
     submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, continue_run=True)
     assert [command[command.index("--array") + 1] for command, _ in submissions] == ["1", "6"]
     assert [command[command.index("--gpus-per-node") + 1] for command, _ in submissions] == ["1", "8"]
+
+
+@pytest.mark.parametrize("task_gpus,expected_visible", [("1", "3"), ("8", "unset")])
+def test_lumi_worker_preserves_single_gpu_binding(tmp_path, monkeypatch, task_gpus, expected_visible):
+    stub_bin = tmp_path / "bin"
+    stub_bin.mkdir()
+    for name, body in {
+        "module": "exit 0",
+        "rocm-smi": "exit 0",
+        "singularity": 'printf "TEST_VISIBLE=%s\\n" "${ROCR_VISIBLE_DEVICES-unset}"',
+    }.items():
+        executable = stub_bin / name
+        executable.write_text("#!/bin/bash\n" + body + "\n")
+        executable.chmod(0o755)
+    container = tmp_path / "container.sif"
+    container.touch()
+    overlay = tmp_path / "overlay"
+    (overlay / "bin").mkdir(parents=True)
+    (overlay / "bin/activate").touch()
+    monkeypatch.setenv("PATH", str(stub_bin) + ":/usr/bin:/bin")
+    monkeypatch.setenv("IMG", str(container))
+    monkeypatch.setenv("LUMI_VENV", str(overlay))
+    monkeypatch.setenv("MIOPEN_USER_DB_PATH", str(tmp_path / "miopen"))
+    monkeypatch.setenv("MLPF_REPO_ROOT", str(ROOT))
+    monkeypatch.setenv("SLURM_JOB_ID", "123")
+    monkeypatch.setenv("SLURM_GPUS_PER_TASK", task_gpus)
+    monkeypatch.setenv("SLURM_GPUS_ON_NODE", "8")
+    monkeypatch.setenv("ROCR_VISIBLE_DEVICES", "3")
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/lumi/run_scenario.sh"), "scenario.yaml", "profile.yaml"],
+        check=True, capture_output=True, text=True,
+    )
+    assert f"TEST_VISIBLE={expected_visible}" in result.stdout

@@ -545,9 +545,18 @@ def _parse_set_overrides(values):
 
 
 def _validate_slurm_allocation(platform):
-    allocated = os.environ.get("SLURM_GPUS_PER_NODE") or os.environ.get("SLURM_GPUS_ON_NODE") or os.environ.get("SLURM_GPUS_PER_TASK")
-    if allocated and allocated.isdigit() and int(allocated) != platform.gpus:
-        raise ValueError(f"Platform profile requests {platform.gpus} GPUs but Slurm allocated {allocated}")
+    # A whole-node allocation can expose eight GPUs while this task only uses
+    # one. Prefer the per-task request and reject insufficient capacity, not
+    # surplus GPUs. The pipeline still launches exactly config.gpus workers.
+    for variable in ("SLURM_GPUS_PER_TASK", "SLURM_GPUS_ON_NODE", "SLURM_GPUS_PER_NODE"):
+        allocated = os.environ.get(variable, "")
+        # Slurm also accepts typed counts such as "mi250:1" or "a100:1,h100:1".
+        if not re.fullmatch(r"(?:[^,:]+:)?\d+(?:,(?:[^,:]+:)?\d+)*", allocated):
+            continue
+        count = sum(int(item.rsplit(":", 1)[-1]) for item in allocated.split(","))
+        if count < platform.gpus:
+            raise ValueError(f"Training requests {platform.gpus} GPUs but Slurm allocated {count} ({variable}={allocated})")
+        return
 
 
 def main(argv=None):

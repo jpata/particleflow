@@ -930,3 +930,33 @@ def test_single_gpu_benchmark_worker_checks_selected_job_allocation(monkeypatch)
     with pytest.raises(ValueError, match="Slurm allocated 1"):
         runner.main(args)
     assert len(executed) == 1
+
+
+@pytest.mark.parametrize(
+    "environment,requested,valid",
+    [
+        ({"SLURM_GPUS_PER_TASK": "1", "SLURM_GPUS_ON_NODE": "8", "SLURM_GPUS_PER_NODE": "8"}, 1, True),
+        ({"SLURM_GPUS_PER_TASK": "1", "SLURM_GPUS_ON_NODE": "8"}, 8, False),
+        ({"SLURM_GPUS_ON_NODE": "8"}, 1, True),
+        ({"SLURM_GPUS_PER_NODE": "8"}, 1, True),
+        ({"SLURM_GPUS_PER_TASK": "8", "SLURM_GPUS_ON_NODE": "8"}, 8, True),
+        ({"SLURM_GPUS_ON_NODE": "1"}, 8, False),
+        ({"SLURM_GPUS_PER_TASK": "mi250:1", "SLURM_GPUS_ON_NODE": "8"}, 8, False),
+        ({"SLURM_GPUS_PER_NODE": "a100:1,h100:1"}, 2, True),
+        ({}, 1, True),
+    ],
+)
+def test_slurm_allocation_validates_task_capacity(monkeypatch, environment, requested, valid):
+    from mlpf.training_scenarios import _validate_slurm_allocation
+
+    for variable in ("SLURM_GPUS_PER_TASK", "SLURM_GPUS_ON_NODE", "SLURM_GPUS_PER_NODE"):
+        monkeypatch.delenv(variable, raising=False)
+    for variable, value in environment.items():
+        monkeypatch.setenv(variable, value)
+    profile = load_platform_profile(PLATFORMS / "lumi_mi250x.yaml")
+    profile.gpus = requested
+    if valid:
+        _validate_slurm_allocation(profile)
+    else:
+        with pytest.raises(ValueError, match="Slurm allocated"):
+            _validate_slurm_allocation(profile)
