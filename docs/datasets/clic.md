@@ -8,8 +8,8 @@ samples are `ttbar`, fully hadronic `WW`, and inclusive `qq`.
 | Tracks and clusters | `clic_edm_{ttbar,ww_fullhad,qq}_pf` | `pyg-clic-v1` |
 | Detector hits | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | `pyg-clic-hits-v1` |
 
-Both representations use dataset version 3.2.1 and configuration partitions
-1--10. The full corpus contains about one million events per sample, or three
+Current track/cluster recipes use version 3.3.0 and hit recipes use 3.2.2,
+with configuration partitions 1--10. The full corpus contains about one million events per sample, or three
 million events in total.
 
 ## Event view

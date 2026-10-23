@@ -124,7 +124,7 @@ Publishing changes a shared external repository. Authenticate with a Hugging Fac
 ```bash
 # One TFDS configuration and version
 uv run python scripts/upload_hf.py tfds clic 1 \
-  --version 3.2.1 \
+  --version 3.3.0 \
   --dry-run
 
 # At most two ROOT files from each configured CLIC sample

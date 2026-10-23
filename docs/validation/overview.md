@@ -33,6 +33,13 @@ Use [Key4HEP validation](key4hep.md) for CLD and CLIC. CMS validation requires t
 
 Exporting to ONNX changes the execution implementation. Compare outputs numerically on real, variable-size events before measuring speed. Then record latency, throughput, peak memory, precision, event-size distribution, warm-up policy, and hardware. See [ONNX validation](onnx.md).
 
+## Local detector comparison
+
+The [detector-comparison runbook](detector-comparison.md) covers feature checks,
+event displays, jet matching, cached data, and a real ColliderML training check.
+It records sample-size and detector-specific limitations; the plots do not rank
+detector performance.
+
 ## Minimum gate before sharing an artifact
 
 For a dataset, publish schema/provenance metadata and a passing integrity report on representative shards. For a checkpoint, keep its configuration and dataset version, demonstrate reload and held-out inference, provide particle-level validation, and explicitly list completed and pending physics and deployment checks.

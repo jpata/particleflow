@@ -1,6 +1,6 @@
 # Hit-based datasets
 
-Hit-based inputs are a research workflow for CLD and CLIC. The track-and-cluster datasets in the [catalog](catalog.md) provide the default path; studies of raw tracker and calorimeter measurements use the hit workflow described here.
+Hit-based inputs are a research workflow for CLD, CLIC, and ColliderML. This page describes the shared CLD/CLIC production path; ColliderML uses its own converter and builders listed in the [repository map](../map.md). The track-and-cluster datasets in the [catalog](catalog.md) provide the default path; studies of raw tracker and calorimeter measurements use the hit workflow described here.
 
 ## What changes
 
@@ -50,7 +50,7 @@ uv run python - <<'PY'
 import tensorflow_datasets as tfds
 
 builder = tfds.builder(
-    "cld_edm_ttbar_hits/1:3.2.1",
+    "cld_edm_ttbar_hits/1:3.2.2",
     data_dir="/path/to/cld-workspace/tfds",
 )
 event = builder.as_data_source(split="train")[0]

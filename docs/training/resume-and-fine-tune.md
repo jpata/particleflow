@@ -5,7 +5,7 @@
 - **Continue** an interrupted run in the same experiment directory.
 - **Fine-tune** from existing weights in a new experiment directory, usually with different data or a deliberate training change.
 
-In both cases, `--num_steps` gives the final step number. Loading `checkpoint-1000.pth` with `--num_steps 2000` therefore adds 1,000 updates by running steps 1001 through 2000.
+For a full resume, `--num_steps` gives the final step number. Loading `checkpoint-1000.pth` with `--num_steps 2000` therefore adds 1,000 updates by running steps 1001 through 2000. With `--load_weights_only true`, the step counter starts fresh at 1, so `--num_steps 2000` requests 2,000 new updates.
 
 ## Before loading a checkpoint
 
@@ -57,7 +57,7 @@ uv run python3 mlpf/pipeline.py \
   train \
   --data_config 1 \
   --load "$MLPF_CHECKPOINT" \
-  --sampler_from_scratch true \
+  --load_weights_only true \
   --gpus 1 \
   --dtype bfloat16 \
   --gpu_batch_multiplier 4 \
@@ -66,7 +66,9 @@ uv run python3 mlpf/pipeline.py \
   --checkpoint_freq 1000
 ```
 
-`--sampler_from_scratch true` restarts data iteration at the beginning and ignores the saved loader position. The checkpoint step, model, optimizer, and scheduler state are still loaded. A fine-tuning schedule that restarts its step count or optimizer needs a dedicated, reviewed recipe; `--load` is a continuation-oriented loader.
+`--load_weights_only true` restores model weights while starting a fresh optimizer, learning-rate schedule, random-number stream, loader state, and step count. The new recipe controls the learning rate and training duration.
+
+For a full resume that only restarts data iteration, use `--sampler_from_scratch true` instead. That option retains the checkpoint step, optimizer, and scheduler. A full resume also retains the saved learning-rate schedule; a changed configured learning rate is ignored with a warning. Simply extending `--num_steps` does not create a fresh schedule.
 
 ## Strict and relaxed loading
 
@@ -90,7 +92,7 @@ For cross-detector work, begin with the methodology and archived configuration a
 
 The log should state the loaded checkpoint and the restored starting step. Confirm that:
 
-- the first new step follows the checkpoint step;
+- a full resume starts after the checkpoint step, while weights-only fine-tuning starts at step 1;
 - the printed trainable and non-trainable parameter counts match the intended experiment;
 - new validation history and checkpoints appear in the selected experiment directory; and
 - validation loss is finite before interpreting longer-term trends.
