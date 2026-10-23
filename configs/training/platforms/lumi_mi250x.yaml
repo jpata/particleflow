@@ -4,8 +4,7 @@ gpus: 8
 python_command: [python3]
 data_dir:
   cld: /scratch/project_465001293/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
-  # Preserve the previous shared path for CLIC; verify CLIC samples exist here.
-  clic: /scratch/project_465001293/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
+  clic: /scratch/project_465001293/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds
   cms_run3: /scratch/project_465001293/joosep/mlpf/cms/2.8.0/
 experiments_dir: /scratch/project_465001293/${USER}/particleflow/experiments
 environment:
