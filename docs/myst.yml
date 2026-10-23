@@ -37,6 +37,7 @@ project:
     - title: Validation
       children:
         - file: validation/overview.md
+        - file: validation/detector-comparison.md
         - file: validation/dataset-validation.md
         - file: validation/key4hep.md
         - file: validation/cms.md

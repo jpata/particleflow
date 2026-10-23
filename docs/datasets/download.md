@@ -1,12 +1,12 @@
 # Download a dataset
 
-This guide downloads configuration 1 of the three CLD track-and-cluster datasets used by the standard model recipe and verifies that TensorFlow Datasets (TFDS) can open them. Choose another compatible selection from the [dataset catalog](catalog.md).
+This guide downloads historical version 3.2.1, configuration 1 of three CLD track-and-cluster datasets and verifies that TensorFlow Datasets (TFDS) can open them. As checked on 23 October 2026, these Hub directories do not yet contain the 3.3.0 data required by the current standard model recipe. Use [local production](generate.md) for current training, or an archived compatible code/configuration for these older data. Choose another compatible selection from the [dataset catalog](catalog.md).
 
 ## Prerequisites
 
 Complete the [main environment installation](../getting-started/installation.md). The commands below run from the repository root and use the Hugging Face CLI supplied by that environment. Public files support anonymous downloads.
 
-Choose a destination with enough free space. TFDS shards can be large, especially for hit inputs. The Hub dry run below currently reports 80 files totalling approximately 2.9 GB for this example. Treat that as a point-in-time value: the CLI's own report is authoritative for the revision you download.
+Choose a destination with enough free space. TFDS shards can be large, especially for hit inputs. Use the dry run below to inspect file counts and sizes for the revision you download.
 
 ## Download the three training datasets
 
@@ -58,7 +58,7 @@ for name in ("cld_edm_ttbar_pf", "cld_edm_ww_fullhad_pf", "cld_edm_qq_pf"):
 PY
 ```
 
-Success prints the full names of all three datasets and metadata for their `train` and `test` splits. The published `ttbar` metadata currently records 90,000 training and 10,000 test events in configuration 1. Then read one `ttbar` event through the same random-access path used by MLPF:
+Success prints the full names of all three datasets and metadata for their `train` and `test` splits. The historical 3.2.1 `ttbar` metadata records 90,000 training and 10,000 test events in configuration 1. Then read one `ttbar` event through the same random-access path used by MLPF:
 
 ```bash
 uv run python - <<'PY'
@@ -81,7 +81,7 @@ Change all four coupled fields together. A training recipe may require several d
 
 1. Hub detector directory, such as `cld` or `clic`;
 2. dataset name, such as `clic_edm_qq_pf`;
-3. configuration partition, currently `1` on the public Hub;
+3. configuration partition available on the Hub;
 4. version expected by the selected model recipe.
 
 Keep separate detector roots if downloading more than one detector:
@@ -92,7 +92,7 @@ data/tfds/tensorflow_datasets/
 └── clic/
 ```
 
-Pass one of those detector directories to MLPF as `--data-dir`. The successful event read above confirms that the downloaded dataset is ready for the [short CLD training example](../training/train.md) or evaluation.
+Pass one of those detector directories to MLPF as `--data-dir`. The event read confirms decoding only. The [current CLD training example](../training/train.md) requires version 3.3.0; do not rename an older dataset directory or change only its version string to satisfy that requirement.
 
 ## Common failures
 

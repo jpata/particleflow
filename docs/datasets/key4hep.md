@@ -21,7 +21,7 @@ CLD uses the detector configuration under `mlpf/data/key4hep/gen/cld/CLDConfig`.
 
 CLD also configures particle-gun and additional 91/240/365 GeV samples for detector studies. The `tfds_mapping` and `tfds_hit_mapping` entries restrict training-data production to the samples in the table.
 
-Track/cluster and hit builders use version 3.2.1 and configuration partitions 1--10. The default model recipes select `ttbar`, `WW`, and `qq`; CLD `ZZ` is available through an additional builder.
+Track/cluster builders use version 3.3.0 and hit builders use 3.2.2 and configuration partitions 1--10. The default model recipes select `ttbar`, `WW`, and `qq`; CLD `ZZ` is available through an additional builder.
 
 ## Detector commands and paths
 
