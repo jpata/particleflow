@@ -23,6 +23,7 @@ Complex data production and training pipelines are managed using Snakemake or si
   - **`produce_validation_snakemake.py`**: Orchestrates validation workflows for Key4Hep detectors (CLD, CLIC).
 - **`mlpf/pipeline.py`**: The main CLI for training, testing, LR range tests (`lr-find`), and hyperparameter optimization. Supports standard and Ray-based execution.
 - **`scripts/training/run_scenario.py`**: Resolves a generic scientific training scenario against a hardware profile, validates comparison invariants and global batch size (one value, or one per train group), and launches reproducible seeded jobs.
+- **`scripts/training/compare_scenario.py`**: Tabulates and plots the (per-group) validation losses of the runs of one scenario.
 
 ## 3. Data Production & Preprocessing
 - **`mlpf/data/`**: Simulator-specific code for generating and preprocessing data. ColliderML: `colliderml/clustering.py` (`cluster_event` dispatcher + the properties every clusterer enforces; algorithms in `colliderml/radius_graph.py` (radius-graph bfs/union_find) and `colliderml/clue.py` (CLUE), shared helpers in `colliderml/cluster_common.py`), `colliderml/cluster_eval.py` (decodes/caches ColliderML events and their per-hit truth, scores clustering settings and the v20 Pandora clusters with `cluster_metrics.py`). Shared across detectors: `cluster_metrics.py` (truth-based clustering metrics, detector- and clusterer-agnostic).
