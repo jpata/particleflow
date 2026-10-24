@@ -1041,6 +1041,7 @@ class TestDatasetEntry(BaseModel):
 
 
 _MODEL_DATASET_KEYS = {"architecture", "train_datasets", "validation_datasets", "test_datasets"}
+_DATASET_SECTIONS = ("train_dataset", "valid_dataset", "test_dataset")
 _ACTION_FLAGS = ("train", "test", "compile", "make_plots", "gpus", "load")
 _BACKBONE_TYPES = ("gnnlsh", "attention", "litept", "hept", "heptv2")
 
@@ -1105,10 +1106,12 @@ def _apply_namespace_overrides(config, args, valid_fields):
 
 
 def _apply_extra_arg_overrides(config, extra_args):
+    """Dot-notation overrides, except of the dataset sections: _apply_dataset_overrides applies those once they are built."""
     if not extra_args:
         return
     for key, value in parse_extra_args(extra_args).items():
-        set_nested_dict(config, key, value)
+        if key.split(".", 1)[0] not in _DATASET_SECTIONS:
+            set_nested_dict(config, key, value)
 
     index = 0
     while index < len(extra_args):
@@ -1120,6 +1123,24 @@ def _apply_extra_arg_overrides(config, extra_args):
             index += 1
         else:
             raise ValueError(f"Could not parse extra argument: {arg}")
+
+
+def _apply_dataset_overrides(config, extra_args):
+    """Dot-notation overrides of the dataset sections that _build_dataset_configs built from the model spec
+    (e.g. --train_dataset.clic.physical.batch_size 2, or a sample version). Every key but the last must already exist,
+    so that a misspelled detector, group or sample raises instead of adding a dataset."""
+    if not extra_args:
+        return
+    for key, value in parse_extra_args(extra_args).items():
+        if key.split(".", 1)[0] not in _DATASET_SECTIONS:
+            continue
+        node = config
+        path = key.split(".")[:-1]
+        for depth, name in enumerate(path):
+            if not isinstance(node, dict) or name not in node:
+                raise ValueError(f"--{key}: the model spec defines no {'.'.join(path[: depth + 1])}")
+            node = node[name]
+        set_nested_dict(config, key, value)
 
 
 def _normalize_data_config(config):
@@ -1354,6 +1375,7 @@ class MLPFConfig(BaseModel):
         _apply_extra_arg_overrides(config_dict, extra_args)
         _normalize_data_config(config_dict)
         _build_dataset_configs(config_dict, model_config, dataset_name)
+        _apply_dataset_overrides(config_dict, extra_args)
         if getattr(args, "pipeline", False):
             _apply_pipeline_overrides(config_dict, dataset_name)
 

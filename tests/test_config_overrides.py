@@ -100,6 +100,36 @@ class TestConfigOverrides(unittest.TestCase):
         self.assertEqual(config["num_steps"], 200)
         self.assertEqual(config["task_loss_weights"]["calibration_steps"], 20)
 
+    def test_dataset_section_overrides_survive_the_dataset_build(self):
+        args = argparse.Namespace(train=True, test_datasets=[])
+        extra_args = [
+            "--train_dataset.cms.physical_pu.batch_size",
+            "3",
+            "--train_dataset.cms.physical_pu.samples.cms_pf_ttbar.version",
+            "2.5.0",
+            "--valid_dataset.cms.physical_pu.batch_size",
+            "4",
+            "--test_dataset.cms_pf_ttbar.version",
+            "2.5.0",
+        ]
+        config = MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args, extra_args=extra_args)
+        train = config.train_dataset["cms"]["physical_pu"]
+        self.assertEqual(train.batch_size, 3)
+        self.assertEqual(train.samples["cms_pf_ttbar"].version, "2.5.0")
+        self.assertEqual(train.samples["cms_pf_ttbar"].splits, ["1"])
+        self.assertEqual(config.valid_dataset["cms"]["physical_pu"].batch_size, 4)
+        self.assertEqual(config.test_dataset["cms_pf_ttbar"].version, "2.5.0")
+
+    def test_dataset_section_overrides_must_name_existing_datasets(self):
+        args = argparse.Namespace(train=True, test_datasets=[])
+        for key in (
+            "--test_dataset.cms_pf_ttbar_typo.version",
+            "--train_dataset.cms.physical_typo.batch_size",
+            "--train_dataset.cms.physical_pu.samples.typo.version",
+        ):
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "the model spec defines no"):
+                MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args, extra_args=[key, "2"])
+
     def test_override_config_convenience_flags(self):
         args = argparse.Namespace()
         args.num_convs = 5
