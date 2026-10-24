@@ -504,9 +504,11 @@ class ResumableSampler(torch.utils.data.Sampler):
 class InterleavedIterator(object):
     """Will combine DataLoaders of different lengths and batch sizes."""
 
-    def __init__(self, data_loaders):
+    def __init__(self, data_loaders, names=None):
         _logger.info(f"Creating InterleavedIterator with {len(data_loaders)} data loaders.")
         self.data_loaders = data_loaders
+        self.names = list(names) if names is not None else [str(i) for i in range(len(data_loaders))]
+        self.last_loader_index = None  # loader of the most recently yielded batch
         self.data_loaders_iter = [iter(dl) for dl in data_loaders]
         dl_lens = [len(dl) for dl in data_loaders]
         _logger.debug(f"InterleavedIterator len(data_loaders)={dl_lens}")
@@ -564,6 +566,7 @@ class InterleavedIterator(object):
             raise e
         self.cur_index += 1
         self.batches_yielded_per_loader[iloader] += 1
+        self.last_loader_index = iloader
         return ret
 
     def __len__(self):
@@ -593,44 +596,149 @@ class InterleavedIterator(object):
         self.data_loaders_iter = [iter(dl) for dl in self.data_loaders]
 
 
-class EndlessIterator(object):
-    def __init__(self, data_loader, samplers, world_size):
-        _logger.info("Creating EndlessIterator.")
-        self.data_loader = data_loader
-        self.samplers = samplers
-        self.world_size = world_size
-        self.epoch = 0
-        self.iterator = iter(self.data_loader)
+def next_group(counts, weights):
+    """The group to draw the next batch from: the one furthest behind its share weights[i] / sum(weights).
+
+    Group i's next batch is due at (counts[i] + 0.5) / weights[i]; picking the earliest spreads every group's
+    batches evenly over the steps. Deterministic in the counts, so all DDP ranks pick the same group.
+    """
+    return min(range(len(weights)), key=lambda i: ((counts[i] + 0.5) / weights[i], i))
+
+
+class WeightedMixIterator(object):
+    """Endless training iterator over one DataLoader per dataset group.
+
+    Each step yields one batch from the group picked by next_group, so group i gets a weights[i] / sum(weights)
+    share of the steps (weights=None: proportional to each group's batches per epoch). Each group loops over its
+    own data and starts a new sampler epoch when exhausted. Empty groups are skipped.
+
+    State: each group's sampler position (epochs, batches_in_epoch) and its batches picked under the current
+    weights (scheduled). Resuming with other weights resets scheduled, so the new shares apply from then on.
+    """
+
+    def __init__(self, data_loaders, weights=None, names=None, world_size=1):
+        _logger.info(f"Creating WeightedMixIterator with {len(data_loaders)} data loaders.")
+        self.data_loaders = data_loaders
+        self.lens = [len(dl) for dl in data_loaders]
+        self.weights = list(weights) if weights is not None else [float(n) for n in self.lens]
+        if len(self.weights) != len(data_loaders):
+            raise ValueError(f"got {len(self.weights)} weights for {len(data_loaders)} data loaders")
+        self.names = list(names) if names is not None else [str(i) for i in range(len(data_loaders))]
+        self.events_per_batch = [dl.batch_size * world_size for dl in data_loaders]  # summed over ranks
+        self.active = [i for i, n in enumerate(self.lens) if n > 0]
+        for i, n in enumerate(self.lens):
+            if n == 0:
+                _logger.warning(f"WeightedMixIterator: group {self.names[i]} has no batches and is left out of the schedule")
+        self.scheduled = [0] * len(data_loaders)  # batches picked per loader under the current weights
+        self.batches_in_epoch = [0] * len(data_loaders)
+        self.epochs = [0] * len(data_loaders)
+        self.iterators = [None] * len(data_loaders)
+        self.last_loader_index = None  # group of the most recently yielded batch
         self.name = ""
 
+    @property
+    def batches(self):
+        """Batches yielded per loader over all epochs."""
+        return [e * n + b for e, n, b in zip(self.epochs, self.lens, self.batches_in_epoch)]
+
     def __iter__(self):
+        # start every group's workers together, rather than each at its group's first batch
+        for i in self.active:
+            if self.iterators[i] is None:
+                self._start(i)
         return self
 
-    def __next__(self):
+    def _start(self, i):
+        """A fresh iterator for group i, from its current epoch and batch."""
+        loader = self.data_loaders[i]
+        loader.sampler.set_epoch(self.epochs[i])
+        loader.sampler.load_state_dict({"start_index": self.batches_in_epoch[i] * loader.batch_size})
+        self.iterators[i] = iter(loader)
+
+    def _next_from(self, i):
+        if self.iterators[i] is None:
+            self._start(i)
         try:
-            return next(self.iterator)
+            return next(self.iterators[i])
         except StopIteration:
-            self.epoch += 1
-            _logger.info(f"EndlessIterator {self.name} caught StopIteration, advancing epoch to {self.epoch}")
-            for sampler in self.samplers:
-                sampler.set_epoch(self.epoch)
-            self.iterator = iter(self.data_loader)
-            return next(self.iterator)
+            self.epochs[i] += 1
+            self.batches_in_epoch[i] = 0
+            _logger.info(f"WeightedMixIterator {self.name}: group {self.names[i]} starts epoch {self.epochs[i]}")
+            self._start(i)
+            return next(self.iterators[i])
+
+    def __next__(self):
+        if not self.active:
+            raise RuntimeError(f"WeightedMixIterator {self.name}: every data loader is empty")
+        pick = next_group([self.scheduled[i] for i in self.active], [self.weights[i] for i in self.active])
+        i = self.active[pick]
+        batch = self._next_from(i)
+        self.scheduled[i] += 1
+        self.batches_in_epoch[i] += 1
+        self.last_loader_index = i
+        _logger.debug(f"WeightedMixIterator {self.name}: group {self.names[i]} batch {self.batches_in_epoch[i]} of epoch {self.epochs[i]}")
+        return batch
 
     def __len__(self):
-        return len(self.data_loader)
+        # batches in one pass over every group; the iterator itself never ends
+        return sum(self.lens)
+
+    def describe(self, num_steps):
+        """One line per group: weight, step share, batch size and the expected passes over its data."""
+        total = sum(self.weights[i] for i in self.active)
+        lines = []
+        for i in range(len(self.data_loaders)):
+            share = self.weights[i] / total if i in self.active else 0.0
+            passes = num_steps * share / self.lens[i] if self.lens[i] else 0.0
+            lines.append(
+                f"{self.names[i]}: weight={self.weights[i]:g} step_share={share:.3f} batches_per_epoch={self.lens[i]} "
+                f"events_per_step={self.events_per_batch[i]} expected_passes_in_{num_steps}_steps={passes:.2f}"
+            )
+        return lines
+
+    def stats(self):
+        """Per-group scalars for logging: step fraction so far, passes over its data, events seen."""
+        batches = self.batches
+        total = max(1, sum(batches))
+        out = {}
+        for i, name in enumerate(self.names):
+            out[f"{name}/step_fraction"] = batches[i] / total
+            out[f"{name}/passes"] = batches[i] / self.lens[i] if self.lens[i] else 0.0
+            out[f"{name}/events_seen"] = batches[i] * self.events_per_batch[i]
+        return out
 
     def state_dict(self):
-        return {"epoch": self.epoch, "loader_state_dict": self.data_loader.state_dict()}
+        return {
+            "batches_in_epoch": list(self.batches_in_epoch),
+            "epochs": list(self.epochs),
+            "scheduled": list(self.scheduled),
+            "weights": list(self.weights),
+        }
 
     def load_state_dict(self, state_dict):
-        self.epoch = state_dict["epoch"]
-        _logger.info(f"EndlessIterator {self.name} setting epoch={self.epoch}")
-        for sampler in self.samplers:
-            sampler.set_epoch(self.epoch)
-        _logger.info(f"EndlessIterator {self.name} loading state.")
-        self.data_loader.load_state_dict(state_dict["loader_state_dict"])
-        self.iterator = self.data_loader
+        if "loader_state_dict" in state_dict:
+            # checkpoint from the earlier EndlessIterator(InterleavedIterator): one shared epoch
+            in_epoch = list(state_dict["loader_state_dict"]["batches_yielded_per_loader"])
+            state_dict = {"batches_in_epoch": in_epoch, "epochs": [state_dict["epoch"]] * len(in_epoch)}
+            _logger.warning(f"WeightedMixIterator {self.name}: converted a pre-weighting loader state; the batch order changes from here on")
+        for key in ("batches_in_epoch", "epochs"):
+            if len(state_dict[key]) != len(self.data_loaders):
+                raise ValueError(f"loader state has {len(state_dict[key])} groups, this run has {len(self.data_loaders)}")
+        self.batches_in_epoch = list(state_dict["batches_in_epoch"])
+        self.epochs = list(state_dict["epochs"])
+        if state_dict.get("weights") == self.weights:
+            self.scheduled = list(state_dict["scheduled"])
+        else:
+            # other weights (or batches per epoch, with the default weights): next_group would catch up on the old counts
+            # with a long run of one group, so the schedule restarts and the new shares apply from this step on
+            _logger.warning(
+                f"WeightedMixIterator {self.name}: the loader state has step weights {state_dict.get('weights')}, this run "
+                f"{self.weights}; the step shares follow the new weights from here on"
+            )
+            self.scheduled = [0] * len(self.data_loaders)
+        _logger.info(f"WeightedMixIterator {self.name}: groups {self.names} resume at batches {self.batches_in_epoch} of epochs {self.epochs}")
+        # fresh iterators, started from the restored positions, with fresh workers and empty queues
+        self.iterators = [None] * len(self.data_loaders)
 
 
 def set_worker_sharing_strategy(worker_id: int) -> None:
@@ -644,6 +752,13 @@ def set_worker_sharing_strategy(worker_id: int) -> None:
             _logger.info(f"Worker 0 RLIMIT_NOFILE: soft={soft}, hard={hard}")
     except Exception:
         pass
+
+
+def _train_mix_iterator(physical_groups, data_loaders, world_size):
+    """WeightedMixIterator over the train groups, with their configured weights (all or none, see MLPFConfig)."""
+    names = list(physical_groups)
+    weights = [physical_groups[name].weight for name in names]
+    return WeightedMixIterator(data_loaders, weights=None if weights[0] is None else weights, names=names, world_size=world_size)
 
 
 def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, use_ray, shuffle_train=True):
@@ -745,9 +860,13 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             loaders[split].append(loader)
             samplers[split].append(sampler)
 
-        loaders[split] = InterleavedIterator(loaders[split])
         if split == "train":
-            loaders[split] = EndlessIterator(loaders[split], samplers[split], world_size)
-        loaders[split].name = f"{type_}:{split}"
+            loaders[split] = _train_mix_iterator(dataset_config[config.dataset.value], loaders[split], world_size)
+            if (rank == 0) or (rank == "cpu"):
+                for line in loaders[split].describe(config.num_steps):
+                    _logger.info(f"train mix: {line}")
+        else:
+            loaders[split] = InterleavedIterator(loaders[split], names=list(dataset_config[config.dataset.value]))
+        loaders[split].name = split
 
     return loaders, samplers

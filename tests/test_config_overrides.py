@@ -120,6 +120,27 @@ class TestConfigOverrides(unittest.TestCase):
         self.assertEqual(config.valid_dataset["cms"]["physical_pu"].batch_size, 4)
         self.assertEqual(config.test_dataset["cms_pf_ttbar"].version, "2.5.0")
 
+    def test_dataset_weights_on_all_train_groups_or_none_and_not_on_validation(self):
+        args = argparse.Namespace(train=True, test_datasets=[])
+        model = self.spec["models"]["test_model"]
+        second_group = {"samples": [{"name": "cms_pf_qcd", "version": "1.0.0", "splits": ["1"]}]}
+        model["train_datasets"]["physical_qcd"] = second_group
+        self.write_spec()
+        weighted = MLPFConfig.from_spec(
+            self.temp_spec.name,
+            "test_model",
+            "test_prod",
+            args=args,
+            extra_args=["--train_dataset.cms.physical_pu.weight", "3", "--train_dataset.cms.physical_qcd.weight", "1"],
+        )
+        self.assertEqual([group.weight for group in weighted.train_dataset["cms"].values()], [3.0, 1.0])
+        for extra_args, message in (
+            (["--train_dataset.cms.physical_pu.weight", "3"], "on every train_dataset.cms group or on none"),
+            (["--valid_dataset.cms.physical_pu.weight", "3"], "weight only applies to train groups"),
+        ):
+            with self.subTest(extra_args=extra_args), self.assertRaisesRegex(ValueError, message):
+                MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args, extra_args=extra_args)
+
     def test_dataset_section_overrides_must_name_existing_datasets(self):
         args = argparse.Namespace(train=True, test_datasets=[])
         for key in (

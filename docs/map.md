@@ -22,7 +22,7 @@ Complex data production and training pipelines are managed using Snakemake or si
   - **`produce_cms_validation_snakemake.py`**: Orchestrates validation workflows specifically for CMS.
   - **`produce_validation_snakemake.py`**: Orchestrates validation workflows for Key4Hep detectors (CLD, CLIC).
 - **`mlpf/pipeline.py`**: The main CLI for training, testing, LR range tests (`lr-find`), and hyperparameter optimization. Supports standard and Ray-based execution.
-- **`scripts/training/run_scenario.py`**: Resolves a generic scientific training scenario against a hardware profile, validates comparison invariants and global batch size, and launches reproducible seeded jobs.
+- **`scripts/training/run_scenario.py`**: Resolves a generic scientific training scenario against a hardware profile, validates comparison invariants and global batch size (one value, or one per train group), and launches reproducible seeded jobs.
 
 ## 3. Data Production & Preprocessing
 - **`mlpf/data/`**: Simulator-specific code for generating and preprocessing data. ColliderML: `colliderml/clustering.py` (`cluster_event` dispatcher + the properties every clusterer enforces; algorithms in `colliderml/radius_graph.py` (radius-graph bfs/union_find) and `colliderml/clue.py` (CLUE), shared helpers in `colliderml/cluster_common.py`), `colliderml/cluster_eval.py` (decodes/caches ColliderML events and their per-hit truth, scores clustering settings and the v20 Pandora clusters with `cluster_metrics.py`). Shared across detectors: `cluster_metrics.py` (truth-based clustering metrics, detector- and clusterer-agnostic).
@@ -40,8 +40,8 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **CLD hit-model evidence**: Current recommendation, completed and partial ablations, and historical metric/dataset caveats: [`cld_hit_results.md`](cld_hit_results.md).
 - **Tracker momentum features**: Optional conformal curvature/quality, longitudinal moments and bounded cross-surface doublets for hit inputs. See [`tracker_momentum_features.md`](tracker_momentum_features.md) for definitions, ablations and measured cost.
 - **`litept.py`**: Integration for the LitePT (Lightweight Point Transformer) architecture.
-- **`PFDataset.py`**: Advanced data loading logic, including dataset interleaving and multi-file handling.
-- **`training.py`**: Core training loop implementation, supporting DDP and Ray-based distributed training, TensorBoard loss logging, and per-step data-load/model-forward timing.
+- **`PFDataset.py`**: Advanced data loading logic and multi-file handling. Training mixes one loader per train group with `WeightedMixIterator` (smooth weighted round-robin over the groups' optional `weight`s; each group cycles through its own epochs); validation interleaves its groups with `InterleavedIterator`.
+- **`training.py`**: Core training loop implementation, supporting DDP and Ray-based distributed training, TensorBoard loss logging (also per dataset group), and per-step data-load/model-forward timing.
 - **`losses.py`**: Specialized loss functions for particle classification and energy regression.
 - **`lr_finder.py`**: LR range test behind `pipeline.py lr-find`: exponential lr ramp after the task-weight calibration steps, smoothed loss, divergence stop, lr suggestions, `lr_find/lr_find.{json,png}` in the experiment dir.
 - **`inference.py`**: Utilities for running model inference and generating predictions.

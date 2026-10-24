@@ -555,7 +555,6 @@ models:
     load: null
     num_steps: 100000
     comet: false
-    comet_step_freq: 10000
     tensorboard_step_freq: 100
     ntrain: null #use full train dataset for training
     nvalid: null #use full valid dataset for validation
@@ -1133,7 +1132,7 @@ models:
         version: "1.1.0"
         splits: ["10"]
 
-  pyg-colliderml-v1:
+  pyg-colliderml-v1: &pyg_colliderml_v1
     <<: *defaults
     dataset: colliderml
     gpu_batch_multiplier: 8
@@ -1211,6 +1210,47 @@ models:
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
+      - name: "colliderml_ttbar_pu200_pf"
+        version: "1.2.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  pyg-colliderml-pu0pu200-groups-v1:
+    <<: *pyg_colliderml_v1
+    gpu_batch_multiplier: 1
+
+    # Dataset Selection (two groups, per-group batch sizes)
+    train_datasets:
+      pu0:
+        batch_size: 12
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.2.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      pu200:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_pu200_pf"
+            version: "1.2.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      pu0:
+        batch_size: 12
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.2.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      pu200:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_pu200_pf"
+            version: "1.2.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "colliderml_ttbar_nopu_pf"
+        version: "1.2.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "colliderml_ttbar_pu200_pf"
         version: "1.2.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]

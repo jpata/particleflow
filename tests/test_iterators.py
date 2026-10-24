@@ -1,13 +1,13 @@
 """
-Spec: Validates 'InterleavedIterator' and 'EndlessIterator' in 'mlpf.model.PFDataset'. Key tests: Interleaving order across multiple dataloaders, state-dict saving/loading for resumable iteration, and error handling for empty dataloaders. Ensures that 'EndlessIterator' correctly resets and shuffles underlying samplers across epoch boundaries.
+Spec: Validates 'InterleavedIterator' (validation) and 'WeightedMixIterator' / 'next_group' (training) in 'mlpf.model.PFDataset'. Key tests: interleaving order, weighted step shares spread evenly over training, independent per-group epochs, state-dict saving/loading across epoch boundaries (incl. pre-weighting checkpoints), and empty dataloaders.
 """
 
 import unittest
+from types import SimpleNamespace
 import torch
 from torch.utils.data import TensorDataset, DataLoader, SequentialSampler
-from tests.mock_data import MockDictDataset
 
-from mlpf.model.PFDataset import InterleavedIterator, EndlessIterator, ResumableSampler
+from mlpf.model.PFDataset import InterleavedIterator, ResumableSampler, WeightedMixIterator, _train_mix_iterator, next_group
 
 
 class TestInterleavedIterator(unittest.TestCase):
@@ -108,114 +108,109 @@ class TestInterleavedIterator(unittest.TestCase):
         self.assertEqual(results1, results2)
 
 
-class TestEndlessIterator(unittest.TestCase):
-    def test_save_restore_with_endless(self):
-        """
-        Tests that the combination of EndlessIterator and InterleavedIterator
-        can be saved and restored correctly.
-        """
-        # --- Ground truth run ---
-        d1_gt = MockDictDataset(size=20, offset=0)
-        d2_gt = MockDictDataset(size=20, offset=100)
-        s1_gt = ResumableSampler(SequentialSampler(d1_gt))
-        s2_gt = ResumableSampler(SequentialSampler(d2_gt))
-        l1_gt = DataLoader(d1_gt, batch_size=2, sampler=s1_gt)
-        l2_gt = DataLoader(d2_gt, batch_size=2, sampler=s2_gt)
-        gt_iter = InterleavedIterator([l1_gt, l2_gt])
-        # We will run for 10 steps total, so we need the first 10 batches
-        gt_data = [batch["X"].clone() for i, batch in enumerate(gt_iter) if i < 10]
+def _loader(size, offset, batch_size=1, num_workers=0):
+    ds = TensorDataset(torch.arange(offset, offset + size))
+    sampler = ResumableSampler(SequentialSampler(ds))
+    return DataLoader(ds, batch_size=batch_size, sampler=sampler, num_workers=num_workers), sampler
 
-        # --- Interrupted Run (run1) ---
-        torch.manual_seed(0)
-        d1_1 = MockDictDataset(size=20, offset=0)
-        d2_1 = MockDictDataset(size=20, offset=100)
-        s1_1 = ResumableSampler(SequentialSampler(d1_1))
-        s2_1 = ResumableSampler(SequentialSampler(d2_1))
-        l1_1 = DataLoader(d1_1, batch_size=2, sampler=s1_1)
-        l2_1 = DataLoader(d2_1, batch_size=2, sampler=s2_1)
-        inter_iter1 = InterleavedIterator([l1_1, l2_1])
-        endless_iter1 = EndlessIterator(inter_iter1, samplers=[s1_1, s2_1], world_size=1)
 
-        run1_data = []
-        for i in range(5):
-            batch = next(endless_iter1)
-            run1_data.append(batch["X"].clone())
-        state = endless_iter1.state_dict()
+def _mix(sizes, weights=None, batch_size=1, num_workers=0):
+    pairs = [_loader(n, 1000 * i, batch_size, num_workers) for i, n in enumerate(sizes)]
+    return WeightedMixIterator([p[0] for p in pairs], weights=weights)
 
-        # --- Restored Run (run2) ---
-        torch.manual_seed(0)  # Re-seed to ensure loaders are identical before loading state
-        d1_2 = MockDictDataset(size=20, offset=0)
-        d2_2 = MockDictDataset(size=20, offset=100)
-        s1_2 = ResumableSampler(SequentialSampler(d1_2))
-        s2_2 = ResumableSampler(SequentialSampler(d2_2))
-        l1_2 = DataLoader(d1_2, batch_size=2, sampler=s1_2)
-        l2_2 = DataLoader(d2_2, batch_size=2, sampler=s2_2)
-        inter_iter2 = InterleavedIterator([l1_2, l2_2])
-        endless_iter2 = EndlessIterator(inter_iter2, samplers=[s1_2, s2_2], world_size=1)
-        endless_iter2.load_state_dict(state)
 
-        run2_data = []
-        for i in range(5):
-            batch = next(endless_iter2)
-            run2_data.append(batch["X"].clone())
+def _groups(it, n):
+    return [next(it)[0][0].item() // 1000 for _ in range(n)]
 
-        # --- Verification ---
-        combined_data = run1_data + run2_data
 
-        self.assertEqual(len(combined_data), len(gt_data))
-        for i in range(len(gt_data)):
-            self.assertTrue(torch.equal(combined_data[i], gt_data[i]))
+class TestNextGroup(unittest.TestCase):
+    def test_every_prefix_stays_within_one_batch_of_the_target_share(self):
+        weights = [3.0, 1.0, 0.5]
+        counts = [0, 0, 0]
+        for n in range(1, 901):
+            counts[next_group(counts, weights)] += 1
+            for c, w in zip(counts, weights):
+                self.assertLessEqual(abs(c - n * w / sum(weights)), 1.0)
+        self.assertEqual(counts, [600, 200, 100])
 
-    def test_endless_iterator_with_empty_dataloaders(self):
-        """
-        Tests that EndlessIterator wrapping an empty InterleavedIterator
-        (because all dataloaders are empty) does not result in an unhandled exception.
-        """
-        d1 = MockDictDataset(size=0)
-        d2 = MockDictDataset(size=0)
-        s1 = ResumableSampler(SequentialSampler(d1))
-        s2 = ResumableSampler(SequentialSampler(d2))
-        l1 = DataLoader(d1, batch_size=2, sampler=s1)
-        l2 = DataLoader(d2, batch_size=2, sampler=s2)
-        inter_iter = InterleavedIterator([l1, l2])
-        endless_iter = EndlessIterator(inter_iter, samplers=[s1, s2], world_size=1)
 
-        with self.assertRaises(Exception):
-            next(endless_iter)
+class TestWeightedMixIterator(unittest.TestCase):
+    def test_default_weights_give_one_pass_per_group_per_nominal_epoch(self):
+        it = _mix([2, 10])
+        self.assertEqual(len(it), 12)
+        groups = _groups(it, 12)
+        self.assertEqual(groups.count(0), 2)
+        self.assertEqual(groups.count(1), 10)
+        # the short group is spread over the epoch, not front-loaded
+        self.assertEqual([i for i, g in enumerate(groups) if g == 0], [2, 8])
 
-    def test_multiple_epochs(self):
-        """
-        Tests that EndlessIterator can iterate for more than one epoch over
-        an InterleavedIterator, verifying that the iterators are reset correctly.
-        """
-        d1 = MockDictDataset(size=10, offset=0)
-        d2 = MockDictDataset(size=10, offset=100)
-        s1 = ResumableSampler(SequentialSampler(d1))
-        s2 = ResumableSampler(SequentialSampler(d2))
-        # batch_size=2, so 5 batches from each loader, 10 total per epoch
-        l1 = DataLoader(d1, batch_size=2, sampler=s1)
-        l2 = DataLoader(d2, batch_size=2, sampler=s2)
-        inter_iter = InterleavedIterator([l1, l2])
-        endless_iter = EndlessIterator(inter_iter, samplers=[s1, s2], world_size=1)
+    def test_weights_set_the_step_share_and_short_groups_cycle(self):
+        it = _mix([2, 10], weights=[1.0, 1.0])
+        groups = _groups(it, 20)
+        self.assertEqual(groups, [0, 1] * 10)
+        self.assertEqual(it.epochs, [4, 0])  # 0-based pass index; rolls over on the next request
+        stats = it.stats()
+        self.assertAlmostEqual(stats["0/step_fraction"], 0.5)
+        self.assertAlmostEqual(stats["0/passes"], 5.0)
+        self.assertAlmostEqual(stats["1/passes"], 1.0)
 
-        total_batches_per_epoch = len(l1) + len(l2)  # 5 + 5 = 10
-        num_batches_to_iterate = int(total_batches_per_epoch * 1.5)  # 15 batches
+    def test_empty_groups_are_skipped_and_all_empty_raises(self):
+        it = _mix([0, 3], weights=[1.0, 1.0])
+        self.assertEqual(_groups(it, 4), [1, 1, 1, 1])
+        with self.assertRaises(RuntimeError):
+            next(_mix([0, 0]))
 
-        # Iterate for 1.5 epochs
-        results = []
-        for _ in range(num_batches_to_iterate):
-            batch = next(endless_iter)
-            results.append(batch["X"].clone())
+    def _run_save_restore(self, num_workers):
+        sizes, weights, n_steps, stop = [4, 6], [2.0, 1.0], 25, 11
+        uninterrupted = _mix(sizes, weights, 2, num_workers)
+        reference = [next(uninterrupted)[0].clone() for _ in range(n_steps)]
 
-        self.assertEqual(len(results), num_batches_to_iterate)
+        first = _mix(sizes, weights, 2, num_workers)
+        part1 = [next(first)[0].clone() for _ in range(stop)]
+        resumed = _mix(sizes, weights, 2, num_workers)
+        resumed.load_state_dict(first.state_dict())
+        part2 = [next(resumed)[0].clone() for _ in range(n_steps - stop)]
 
-        # Check that the data from the second epoch matches the data from the first
-        results_first_epoch_part = results[0:5]
-        results_second_epoch_part = results[total_batches_per_epoch : total_batches_per_epoch + 5]
+        for got, want in zip(part1 + part2, reference):
+            self.assertTrue(torch.equal(got, want))
 
-        self.assertEqual(len(results_first_epoch_part), len(results_second_epoch_part))
-        for i in range(len(results_first_epoch_part)):
-            self.assertTrue(torch.equal(results_first_epoch_part[i], results_second_epoch_part[i]))
+    def test_save_restore_across_epochs_single_worker(self):
+        self._run_save_restore(num_workers=0)
+
+    def test_save_restore_across_epochs_multi_worker(self):
+        self._run_save_restore(num_workers=2)
+
+    def test_loads_pre_weighting_state(self):
+        it = _mix([4, 2])
+        it.load_state_dict({"epoch": 1, "loader_state_dict": {"cur_index": 5, "batches_yielded_per_loader": [3, 2]}})
+        self.assertEqual(it.batches, [7, 4])
+        self.assertEqual(it.epochs, [1, 1])
+        self.assertEqual(it.scheduled, [0, 0])  # no weights in the old state: the schedule restarts
+        # group 0 resumes at its 4th (last) batch and then wraps; group 1 had used its epoch up,
+        # so its next batch is the first of epoch 2
+        self.assertEqual([next(it)[0][0].item() for _ in range(3)], [3, 1000, 0])
+        self.assertEqual(it.epochs, [2, 2])
+
+    def test_train_groups_pass_their_weights(self):
+        loaders = [_loader(4, 0), _loader(4, 1000)]
+        args = ([p[0] for p in loaders], 1)
+        it = _train_mix_iterator({"a": SimpleNamespace(weight=3.0), "b": SimpleNamespace(weight=1.0)}, *args)
+        self.assertEqual((it.names, it.weights), (["a", "b"], [3.0, 1.0]))
+        self.assertEqual(_train_mix_iterator({"a": SimpleNamespace(weight=None), "b": SimpleNamespace(weight=None)}, *args).weights, [4.0, 4.0])
+
+    def test_resuming_with_other_weights_restarts_the_schedule(self):
+        first = _mix([100, 100], weights=[1.0, 1.0])
+        _groups(first, 50)
+        resumed = _mix([100, 100], weights=[1.0, 3.0])
+        resumed.load_state_dict(first.state_dict())
+        self.assertEqual(resumed.scheduled, [0, 0])
+        # the 1:3 shares apply at once, rather than a catch-up run of group 1 over the old counts [25, 25]
+        self.assertEqual(_groups(resumed, 8), [1, 0, 1, 1, 1, 0, 1, 1])
+        self.assertEqual(resumed.batches, [27, 31])  # each group continues from its own sampler position
+
+    def test_mismatched_group_count_raises(self):
+        with self.assertRaises(ValueError):
+            _mix([2, 2]).load_state_dict({"batches_in_epoch": [1], "epochs": [0], "scheduled": [1], "weights": [2.0, 2.0]})
 
 
 if __name__ == "__main__":

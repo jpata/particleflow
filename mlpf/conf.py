@@ -1030,6 +1030,7 @@ class DatasetSample(BaseModel):
 class PhysicalDataset(BaseModel):
     model_config = ConfigDict(extra="forbid")
     batch_size: int = 1
+    weight: Optional[float] = Field(default=None, gt=0.0)
     samples: Dict[str, DatasetSample]
 
 
@@ -1174,6 +1175,7 @@ def _build_physical_dataset_config(dataset_input, dataset_name, config):
             samples[sample["name"]] = entry
         dataset_config[dataset_name][physical_name] = {
             "batch_size": physical_config.get("batch_size", config.get("batch_size", 1)),
+            "weight": physical_config.get("weight"),
             "samples": samples,
         }
     return dataset_config
@@ -1290,7 +1292,6 @@ class MLPFConfig(BaseModel):
     comet: bool = False
     comet_offline: bool = False
     comet_name: str = "particleflow"
-    comet_step_freq: int = 10000
     tensorboard_step_freq: int = 100
 
     raytune: Dict[str, Any] = Field(default_factory=dict)
@@ -1333,6 +1334,19 @@ class MLPFConfig(BaseModel):
                 self.model.set_decoder = SetDecoderConfig()
             if self.model.backbone.mode != BackboneMode.SHARED:
                 raise ValueError("model.output_mode='set' currently requires model.backbone.mode='shared'")
+        return self
+
+    @model_validator(mode="after")
+    def validate_dataset_weights(self) -> "MLPFConfig":
+        """Step weights go on every train group of a detector or on none, and never on validation groups."""
+        for detector, groups in (self.train_dataset or {}).items():
+            weights = {name: group.weight for name, group in groups.items()}
+            if len({weight is None for weight in weights.values()}) > 1:
+                raise ValueError(f"set weight on every train_dataset.{detector} group or on none, got {weights}")
+        for detector, groups in (self.valid_dataset or {}).items():
+            weighted = [name for name, group in groups.items() if group.weight is not None]
+            if weighted:
+                raise ValueError(f"weight only applies to train groups, but valid_dataset.{detector} sets it on {weighted}")
         return self
 
     def flatten_config(self, prefix=""):
