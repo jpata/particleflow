@@ -75,24 +75,24 @@ variants:
     model_name: pyg-cld-hits-set-v1
     overrides:
       <<: [*hits, *heptv2]
-#  clic_pf_attention:
-#    model_name: pyg-clic-v1
-#    gpus: 1
-#    production_name: clic
-#  clic_pf_heptv2:
-#    model_name: pyg-clic-v1
-#    gpus: 1
-#    production_name: clic
-#    overrides: *heptv2
-#  clic_hits_attention:
-#    model_name: pyg-clic-hits-set-v1
-#    production_name: clic
-#    overrides: *hits
-#  clic_hits_heptv2:
-#    model_name: pyg-clic-hits-set-v1
-#    production_name: clic
-#    overrides:
-#      <<: [*hits, *heptv2]
+  clic_pf_attention:
+    model_name: pyg-clic-v1
+    gpus: 1
+    production_name: clic
+  clic_pf_heptv2:
+    model_name: pyg-clic-v1
+    gpus: 1
+    production_name: clic
+    overrides: *heptv2
+  clic_hits_attention:
+    model_name: pyg-clic-hits-set-v1
+    production_name: clic
+    overrides: *hits
+  clic_hits_heptv2:
+    model_name: pyg-clic-hits-set-v1
+    production_name: clic
+    overrides:
+      <<: [*hits, *heptv2]
 
 seeds: [12345]
 

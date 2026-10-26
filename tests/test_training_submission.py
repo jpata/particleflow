@@ -249,6 +249,10 @@ def test_benchmark_submits_separate_resource_arrays(site, profile_name, gpu_flag
         assert command[command.index(gpu_flag) + 1] == str(count)
         assert command[command.index("--array") + 1] == indices
         assert len(jobs) == 4
+        representation = "pf" if count == 1 else "hits"
+        assert {job.variant_name for job in jobs} == {
+            f"{detector}_{representation}_{backbone}" for detector in ("cld", "clic") for backbone in ("attention", "heptv2")
+        }
         for job in jobs:
             assert job.seed == 2468
             assert job.resolved_config.gpus == count
@@ -301,6 +305,8 @@ def test_lumi_worker_preserves_single_gpu_binding(tmp_path, monkeypatch, task_gp
     monkeypatch.setenv("ROCR_VISIBLE_DEVICES", "3")
     result = subprocess.run(
         ["bash", str(ROOT / "scripts/lumi/run_scenario.sh"), "scenario.yaml", "profile.yaml"],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
     assert f"TEST_VISIBLE={expected_visible}" in result.stdout

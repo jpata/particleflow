@@ -34,6 +34,12 @@ def test_clic_cld_benchmark_pairs_and_recommended_hit_recipe(platform_name):
     )[0].resolved_config
     by_name = {job.variant_name: job for job in jobs}
     assert len(jobs) == 8
+    assert set(by_name) == {
+        f"{detector}_{representation}_{backbone}"
+        for detector in ("cld", "clic")
+        for representation in ("pf", "hits")
+        for backbone in ("attention", "heptv2")
+    }
     for job in jobs:
         config = job.resolved_config
         assert job.global_batch_size == 128
@@ -57,9 +63,7 @@ def test_clic_cld_benchmark_pairs_and_recommended_hit_recipe(platform_name):
             assert attention.model.attention.num_heads * attention.model.attention.head_dim == heptv2.model.heptv2.embedding_dim == 256
             # The broad campaign allowlist must not hide differences within a
             # backbone pair: data, objective and training budget stay identical.
-            validate_variant_invariants(
-                [attention_job, heptv2_job], ["conv_type", "model.type", "model.attention", "model.heptv2"]
-            )
+            validate_variant_invariants([attention_job, heptv2_job], ["conv_type", "model.type", "model.attention", "model.heptv2"])
             if representation == "hits":
                 expected_decoder = reference.model.set_decoder.model_copy(update={"tracker_momentum_readout": True})
                 assert heptv2.model.set_decoder == expected_decoder
