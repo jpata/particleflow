@@ -25,7 +25,8 @@ class TrackCaloBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     def _info(self):
         return tfds.core.DatasetInfo(
             builder=self,
-            description=f"{self.DETECTOR}: reconstructed tracks plus calorimeter hits, with independent PF targets.",
+            description=f"{self.DETECTOR}: tracks plus calorimeter hits, with independent PF targets. "
+            + ("Tracks are truth-seeded proxies, not a reconstruction baseline." if self.DETECTOR == "idea" else ""),
             features=tfds.features.FeaturesDict(
                 {
                     "X": tfds.features.Tensor(shape=(None, len(X_FEATURES)), dtype=np.float32),
@@ -43,11 +44,17 @@ class TrackCaloBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
                 x_features=X_FEATURES,
                 y_features=Y_FEATURES,
                 class_labels=CLASS_LABELS,
-                element_types={"0": "padding", "1": "reconstructed_track", "2": "calorimeter_hit"},
+                element_types={
+                    "0": "padding",
+                    "1": "truth_seeded_track" if self.DETECTOR == "idea" else "reconstructed_track",
+                    "2": "calorimeter_hit",
+                },
                 feature_availability=feature_availability(self.DETECTOR),
                 target_assignment="track_calo_v1",
                 input_schema="track_calo_25_v1",
                 has_reco_candidates=False,
+                track_source="truth_seeded" if self.DETECTOR == "idea" else "reconstructed",
+                calo_type_labels={"1": "cherenkov", "2": "scintillation"} if self.DETECTOR == "idea" else {},
                 units={"momentum_energy": "GeV", "position_D0_Z0_radius": "mm", "omega": "1/mm", "time": "ns"},
             ),
         )

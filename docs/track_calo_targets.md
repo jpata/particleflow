@@ -1,7 +1,7 @@
 # Reconstructed tracks plus calorimeter-hit targets
 
 The opt-in `--track-calo-targets` flag on the Key4hep and ColliderML postprocessors
-exports an additional target view. CLD, CLIC and MAIA use the Key4hep adapter;
+exports an additional target view. CLD, CLIC, MAIA and IDEA use Key4hep adapters;
 ColliderML uses its native release tables. Existing track/cluster and all-hit
 outputs keep their existing definitions. The new view is built before the legacy
 cluster allocator changes the particle population.
@@ -46,7 +46,7 @@ neither changes the input `EventData` nor modifies legacy outputs.
 | Field | Shape | Meaning |
 |---|---|---|
 | `ytarget_track_calo_track` | `[T,14]` | Targets aligned with `X_track` |
-| `ytarget_track_calo_hit` | `[Hcalo,14]` | Targets aligned with `X_hit_calo` |
+| `ytarget_track_calo_hit` | `[Hcalo,14]` | Targets aligned with `X_hit_calo` (IDEA: `X_track_calo_hit`) |
 | `track_calo_target_particles` | `[P,14]` | Unique final particle table, standard `ParticleFeatures` order |
 | `track_calo_original_to_target` | `[Pinput]` | Zero-based final row index or -1; input index refers to the reader's filtered PF truth table, **not** a raw MCParticle ID |
 | `track_calo_energy_accounting` | `[4]` | Input, newly invisible, dropped, final target energy in GeV |
@@ -59,7 +59,8 @@ source reader's ancestry/visibility selection, not from all simulated particles.
 Auxiliary source diagnostics such as `gp_to_cluster` retain the source values;
 they do not control the new assignment.
 
-Inputs remain `X_track` and `X_hit_calo`. Key4hep tracks have the 16-column EDM4hep
+Inputs are `X_track` and `X_hit_calo` (IDEA uses `X_track_calo_hit` to preserve its
+legacy empty raw-hit view). Key4hep tracks have the 16-column EDM4hep
 layout; ColliderML tracks retain their existing 17-column union layout. Do not
 assume they are identical schemas. The new TFDS builders map both into the common
 layout below; existing datasets keep their original layouts.
@@ -71,13 +72,13 @@ directory for comparison. When requested, the flag forces regeneration rather
 than accepting an existing legacy-only output as complete.
 
 The local smoke script uses the CLD/CLIC CI ROOT samples, the MAIA sample used by
-`scripts/local_test_maia.sh`, and the locally downloaded real ColliderML tables:
+`scripts/local_test_maia.sh`, the local IDEA ttbar ROOT sample, and the locally downloaded real ColliderML tables:
 
 ```bash
 NUM_EVENTS=3 bash scripts/local_test_track_calo_targets.sh
 ```
 
-Override `CLD_ROOT_FILE`, `CLIC_ROOT_FILE`, `MAIA_ROOT_FILE`, `COLLIDERML_SOURCE`,
+Override `CLD_ROOT_FILE`, `CLIC_ROOT_FILE`, `MAIA_ROOT_FILE`, `IDEA_ROOT_FILE`, `COLLIDERML_SOURCE`,
 `TRACK_CALO_OUTPUT`, or `TRACK_CALO_PYTHON` as needed. ColliderML source files are
 Parquet release tables, not ROOT. The script explicitly selects Uproot's local
 file reader to avoid the known FSSpec/PODIO metadata stall.
@@ -118,12 +119,13 @@ are not established by this smoke test.
 
 ## TFDS builders (2026-10-26)
 
-Four version-1.0.0 ArrayRecord builders share `mlpf/heptfds/track_calo_utils`:
+Five version-1.0.0 ArrayRecord builders share `mlpf/heptfds/track_calo_utils`:
 
 | Builder module | TFDS dataset name |
 |---|---|
 | `mlpf/heptfds/cld_track_calo/ttbar.py` | `cld_track_calo_ttbar` |
 | `mlpf/heptfds/clic_track_calo/ttbar.py` | `clic_track_calo_ttbar` |
+| `mlpf/heptfds/idea_track_calo/ttbar.py` | `idea_track_calo_ttbar` |
 | `mlpf/heptfds/maia_track_calo/ttbar.py` | `maia_track_calo_ttbar` |
 | `mlpf/heptfds/colliderml_track_calo/ttbar.py` | `colliderml_track_calo_ttbar` |
 
@@ -196,3 +198,51 @@ These builders do not yet enable model training with the new view: dataset/model
 configuration registration and a track/calo input encoder are separate work.
 The existing tracker-hit geometry encoder must not be used on reconstructed-track
 rows simply because their `elemtype` is also 1.
+
+
+## IDEA extension
+
+IDEA postprocessing now accepts `--track-calo-targets`, and its production spec
+turns the option on by default. Existing track/cluster outputs and the empty
+legacy raw-hit columns remain unchanged. A separate `X_track_calo_hit[N,15]`
+column holds positive-energy digitized signals from
+`DRcaloSiPMreadoutDigiHit` (Cherenkov) and
+`DRcaloSiPMreadoutDigiHit_scint` (scintillation). The IDEA TFDS builder explicitly
+requires that column. Zero-signal cells are omitted without using truth; positive
+unlinked signals remain as background inputs. Raw tracker hits are not included.
+
+Hit `type` is 1 for Cherenkov and 2 for scintillation; `subdetector` is 2 for the
+combined dual-readout calorimeter. System/side/layer are unknown and zero-filled.
+The channels remain separate measured signals, even when their positions or cell
+IDs coincide. Their energy sum is a response quantity, not a claim of calibrated
+particle-energy reconstruction. The shared visibility rule uses the combined
+attributed channel response; physical calibration/performance needs validation
+beyond these schema tests.
+
+`CaloHitMCParticleLinks` identifies hits by **collection ID and local index**.
+The adapter validates both endpoints and multiplies stored link fractions by the
+measured channel energy before ancestry propagation. It does not copy cluster
+labels to hits or renormalize inherited truth fractions. The target truth set is
+non-neutrino status-1 particles, then the common visibility/assignment rules apply.
+
+The input tracks are `TracksFromGenParticles`: **truth-seeded proxies**, not a
+measured track-finding baseline. TFDS metadata records `track_source=truth_seeded`,
+channel labels, and missing dE/dx fields. Only direct status-1 track associations
+are eligible representatives. Descendant tracks can retain PF membership in an
+ancestor, but cannot supply that ancestor's full kinematic target. An optional
+`representative_track_edges` argument in the shared allocator implements this
+separation; the other four detectors retain their previous default behavior.
+
+Three real IDEA ttbar events were converted and validated locally:
+
+- 339 new targets (165 track representatives, 174 calo representatives), versus
+  340 legacy targets.
+- 21,147 / 14,666 / 20,258 positive-energy input signals per event.
+- 0.550276 GeV removed by visibility; zero energy dropped by assignment.
+- Exact equality for all legacy fields with an unflagged conversion.
+- ArrayRecord build/readback passed with two train events and one test event at
+  `local_test_data/idea_track_calo_tfds/tensorflow_datasets/idea_track_calo_ttbar/10/1.0.0`.
+
+The numerical comparison is a small-sample consistency check, not tracking or PF
+performance evidence. IDEA does not gain an oracle PF candidate: `ycand` remains
+zero in the new builder, as for the other track/calo datasets.
