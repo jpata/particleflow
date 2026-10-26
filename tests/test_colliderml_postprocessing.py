@@ -137,3 +137,33 @@ def test_unsplit_pi0_target_is_a_photon():
     y = rec["ytarget_cluster"]
     classes = sorted(y[y[:, 0] != 0, 0].tolist())
     assert classes == [22.0, 22.0]
+
+
+def test_track_calo_view_preserves_legacy_fields():
+    particles, tracks, calo, tracker = _shared_hits_event()
+    legacy = _event_record_one(0, particles, tracks, calo, tracker)
+    hybrid = _event_record_one(0, particles, tracks, calo, tracker, track_calo_targets=True)
+    for name, value in legacy.items():
+        np.testing.assert_array_equal(hybrid[name], value, err_msg=name)
+    targets = hybrid["track_calo_target_particles"]
+    rows = np.concatenate((hybrid["ytarget_track_calo_track"], hybrid["ytarget_track_calo_hit"]))
+    assert len(targets) == 3
+    assert sorted(rows[rows[:, 0] != 0, PN]) == [1, 2, 3]
+    assert hybrid["ytarget_track_calo_track"][0, 0] == 211
+
+
+def test_track_calo_parquet_roundtrip(tmp_path):
+    make_fixture(tmp_path / "src", n_events=6)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    # Enabling the new view must regenerate even an existing complete legacy file.
+    process_one_file(*paths, ofn)
+    process_one_file(*paths, ofn, track_calo_targets=True)
+    result = ak.from_parquet(ofn)
+    assert "track_calo_target_particles" in result.fields
+    for event in result:
+        target = ak.to_numpy(event.track_calo_target_particles)
+        rows = np.concatenate((ak.to_numpy(event.ytarget_track_calo_track), ak.to_numpy(event.ytarget_track_calo_hit)))
+        assert sorted(rows[rows[:, 0] != 0, PN]) == list(range(1, len(target) + 1))
+        assert len(event.ytarget_track_calo_track) == len(event.X_track)
+        assert len(event.ytarget_track_calo_hit) == len(event.X_hit_calo)

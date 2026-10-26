@@ -18,6 +18,7 @@ from mlpf.data.target_building import (  # noqa: F401  (re-exported for existing
     assign_genparticles_to_obj_and_merge,
     visibility_mask,
 )
+from mlpf.data.track_calo_targets import build_track_calo_targets
 
 # Set these before importing numerical libraries to avoid OpenBLAS thread-init failures.
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -1651,10 +1652,13 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         )
 
 
-def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
+def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1, track_calo_targets: bool = False) -> None:
+
+    if track_calo_targets and detector == "idea":
+        raise ValueError("Track/calo targets are supported for CLD, CLIC and MAIA, not IDEA")
 
     # output exists, do not recreate
-    if os.path.isfile(ofn) and num_events == -1 and first_event == 0:
+    if os.path.isfile(ofn) and num_events == -1 and first_event == 0 and not track_calo_targets:
         print("{} exists".format(ofn))
         return
 
@@ -1681,7 +1685,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     collectionIDs_reverse = {v: k for (k, v) in collectionIDs.items()}
     cellid_encodings = get_cellid_encodings(fi)
     if detector == "maia" and not cellid_encodings:
-        print("MAIA has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero); use track/cluster inputs only.")
+        print("MAIA has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero).")
 
     prop_data = arrs.arrays(
         [
@@ -1882,6 +1886,17 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         except ValueError as e:
             print(f"Skipping event {iev} because it has no visible particles: {e}")
             continue
+
+        hybrid_targets = (
+            build_track_calo_targets(
+                gpdata,
+                np.asarray(gpdata.hit_features["subdetector"]) != 3,
+                jetdef=jetdef,
+                jet_ptcut=jet_ptcut,
+            )
+            if track_calo_targets
+            else {}
+        )
 
         # find the reconstructable genparticles and associate them to the best track/cluster
         (
@@ -2097,6 +2112,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
             "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
         }
+        this_ev.update(hybrid_targets)
         ret.append(this_ev)
 
     if len(ret) == 0:
@@ -2122,11 +2138,15 @@ def parse_args() -> Any:
     parser.add_argument("--first-event", type=int, default=0, help="first event to process")
     parser.add_argument("--num-events", type=int, default=-1, help="number of events to process")
 
+    parser.add_argument(
+        "--track-calo-targets", action="store_true", help="Export independent tracks + calorimeter-hit targets alongside legacy targets"
+    )
     args = parser.parse_args()
     return args
 
 
 def process(args: Any) -> None:
+    os.makedirs(args.outpath, exist_ok=True)
 
     if os.path.isdir(args.input) is True:
         print("Will process all files in " + args.input)
@@ -2134,11 +2154,11 @@ def process(args: Any) -> None:
         flist = glob.glob(args.input + "/*.root")
         for infile in flist:
             outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-            process_one_file(infile, outfile, args.detector, args.first_event, args.num_events)
+            process_one_file(infile, outfile, args.detector, args.first_event, args.num_events, getattr(args, "track_calo_targets", False))
     else:
         infile = args.input
         outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-        process_one_file(infile, outfile, args.detector, args.first_event, args.num_events)
+        process_one_file(infile, outfile, args.detector, args.first_event, args.num_events, getattr(args, "track_calo_targets", False))
 
 
 if __name__ == "__main__":
