@@ -306,6 +306,8 @@ class ShardConsecutiveSampler(torch.utils.data.Sampler):
     Samples elements consecutively from each sub-dataset in a ConcatDataset.
     This helps to minimize the number of open file descriptors when each sub-dataset
     is backed by a separate file and the file is opened lazily.
+    Batches then come from one sub-dataset at a time: for a group of several samples,
+    InterleavedShardSampler (sampler_mode interleaved-shards) mixes them in every batch.
     """
 
     def __init__(self, concat_dataset, shuffle=True, seed=0):

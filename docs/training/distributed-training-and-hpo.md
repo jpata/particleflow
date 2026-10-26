@@ -30,7 +30,14 @@ uv run python3 mlpf/pipeline.py \
   --num_steps 100000
 ```
 
-Each rank gets its own data-loader process and GPU. The effective event mix depends on dataset-group batch sizes, `gpu_batch_multiplier`, world size, and sampler behavior. Record all of these values alongside the nominal batch size. Use `interleaved-shards` when early mixing across several TFDS shards or domains is required:
+Each rank gets its own data-loader process and GPU. The effective event mix depends on dataset-group batch sizes, `gpu_batch_multiplier`, world size, and sampler behavior. Record all of these values alongside the nominal batch size.
+
+`sampler_mode` sets the event order within a dataset group, whose samples are concatenated as shards (one per sample and TFDS config):
+
+- `shard-consecutive` (default) reads the shards one after another, in a shuffled order that changes every epoch, which keeps few files open. Each rank takes a contiguous block of that order, so its batches come from one shard at a time, and the global batch mixes only the shards the ranks are currently on. A sample with few shards then reaches only the ranks whose blocks hold them, for long stretches, and on a single GPU the epoch is a sequence of single-sample stretches. Each event is still used once per epoch.
+- `interleaved-shards` spreads every shard over the whole epoch in proportion to its size, so every stretch of the epoch, and so every batch, holds the group's samples at their overall shares.
+
+Use `interleaved-shards` for groups that combine several samples (e.g. different physics processes or pileup conditions). `shard-consecutive` is fine when a group's shards are statistically alike, such as the TFDS configs of a single sample:
 
 ```bash
 ... train --gpus 4 --sampler_mode interleaved-shards
@@ -38,7 +45,7 @@ Each rank gets its own data-loader process and GPU. The effective event mix depe
 
 Each training step draws one batch from one dataset group (`train_datasets.<group>`). An optional `weight` per group sets its share of the steps, spread evenly over training; every group cycles through its own data independently. Set it on every train group or on none. Without weights, each group's share is its number of batches per epoch, so one nominal epoch is one pass over every group.
 
-Weights act on groups (the keys directly under `train_datasets`), not on the samples inside a group. The samples of one group are concatenated, and the group's sampler (`sampler_mode`) decides how they mix: with the default `shard-consecutive`, each GPU reads one sample's shard at a time, so its batches mostly come from a single sample; with `interleaved-shards`, every batch mixes the group's samples (more precisely its shards, one per sample and TFDS config) in proportion to their sizes, steadily over the whole epoch with no tail of only the largest ones. Either way each sample's share follows its number of events. To weight samples against each other, put each in its own group. For example, weighting a no-pileup group 3:1 against a pileup group:
+Weights act on groups (the keys directly under `train_datasets`), not on the samples inside a group. The samples of one group are concatenated and ordered by `sampler_mode` (see above), so each sample's share follows its number of events. To weight samples against each other, put each in its own group. For example, weighting a no-pileup group 3:1 against a pileup group:
 
 ```yaml
 train_datasets:
