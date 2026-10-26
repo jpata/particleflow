@@ -51,11 +51,7 @@ def load_runs(scenario_dir):
 def group_losses(record):
     # The unweighted group totals, so runs with different group step weights stay comparable;
     # fall back to the weighted Total for runs that predate per-group weighting.
-    losses = {
-        k.split("/")[1]: v
-        for k, v in record["valid"].items()
-        if k.startswith("group/") and k.endswith("/Total_unweighted")
-    }
+    losses = {k.split("/")[1]: v for k, v in record["valid"].items() if k.startswith("group/") and k.endswith("/Total_unweighted")}
     return losses or {k.split("/")[1]: v for k, v in record["valid"].items() if k.startswith("group/") and k.endswith("/Total")}
 
 
