@@ -49,7 +49,14 @@ def load_runs(scenario_dir):
 
 
 def group_losses(record):
-    return {k.split("/")[1]: v for k, v in record["valid"].items() if k.startswith("group/") and k.endswith("/Total")}
+    # The unweighted group totals, so runs with different group step weights stay comparable;
+    # fall back to the weighted Total for runs that predate per-group weighting.
+    losses = {
+        k.split("/")[1]: v
+        for k, v in record["valid"].items()
+        if k.startswith("group/") and k.endswith("/Total_unweighted")
+    }
+    return losses or {k.split("/")[1]: v for k, v in record["valid"].items() if k.startswith("group/") and k.endswith("/Total")}
 
 
 def jets(record):
@@ -114,7 +121,7 @@ def plot(runs, groups, variants, title, path):
         for side in ("left", "bottom"):
             ax.spines[side].set_color(AXIS)
         ax.set_xlabel("training step", fontsize=8, color=INK2)
-    axes[0].set_ylabel("validation loss (Total)", fontsize=8, color=INK2)
+    axes[0].set_ylabel("validation loss (Total, unweighted)", fontsize=8, color=INK2)
     handles, labels = axes[0].get_legend_handles_labels()
     if labels:
         fig.legend(handles, labels, loc="upper left", bbox_to_anchor=(0.005, 0.93), ncol=len(labels), frameon=False, fontsize=8, labelcolor=INK2)
