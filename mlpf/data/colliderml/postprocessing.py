@@ -167,6 +167,7 @@ def _event_record_one(
     assignment: str = DEFAULT_ASSIGNMENT,
     event_index: int = -1,
     shard_label: str = "",
+    track_calo_targets: bool = False,
 ) -> Dict[str, Any]:
     """Convert one ColliderML event into the MLPF record fields.
 
@@ -235,6 +236,17 @@ def _event_record_one(
         hit_to_cluster,
         (np.array([]), np.array([])),
     )
+    hybrid_targets = {}
+    if track_calo_targets:
+        from mlpf.data.track_calo_targets import build_track_calo_targets
+
+        hybrid_targets = build_track_calo_targets(
+            gpdata,
+            np.arange(n_hit + n_tracker) < n_hit,
+            jetdef=jetdef,
+            jet_ptcut=jet_ptcut,
+            pi0_as_photon=True,
+        )
     gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = (
         assign_genparticles_to_obj_and_merge(gpdata, assignment=assignment)
     )
@@ -504,6 +516,7 @@ def _event_record_one(
     ytarget_cluster[:, particle_feature_order.index("jet_idx")] = ytarget_constituents[len(ytarget_track) :]
 
     return {
+        **hybrid_targets,
         "event_id": int(event_id),
         "X_track": X_track,
         "X_cluster": X_cluster,
@@ -625,9 +638,10 @@ def process_one_file(
     clue_params: Dict[int, Dict[str, float]] | None = None,
     clue_options: Dict[str, Any] | None = None,
     assignment: str = DEFAULT_ASSIGNMENT,
+    track_calo_targets: bool = False,
 ) -> None:
     source_fns = [particles_fn, tracks_fn, calo_fn, tracker_fn]
-    if num_events == -1 and _shard_done(ofn, source_fns, assignment):
+    if num_events == -1 and not track_calo_targets and _shard_done(ofn, source_fns, assignment):
         print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} already exists, skipping")
         return
     if os.path.isfile(ofn) and num_events == -1:
@@ -707,6 +721,7 @@ def process_one_file(
                 assignment=assignment,
                 event_index=i,
                 shard_label=Path(ofn).name,
+                track_calo_targets=track_calo_targets,
             )
             out.append(event)
             del event
@@ -810,6 +825,9 @@ def main():
         "greedy = the former energy-ordered rule",
     )
     parser.add_argument("--num-events", type=int, default=-1, help="cap number of events per shard (for tests)")
+    parser.add_argument(
+        "--track-calo-targets", action="store_true", help="Export independent tracks + calorimeter-hit targets alongside legacy targets"
+    )
     args = parser.parse_args()
     from mlpf.data.colliderml.clue import resolve_clue_config
 
@@ -867,7 +885,7 @@ def main():
     for i, (p, t, c) in enumerate(zip(pa, tr, ch)):
         out_name = Path(args.outpath) / (p.stem + ".parquet")
         # --num-events is a debug cap: always (re)write, and never count a capped output as done
-        if args.num_events == -1 and _shard_done(out_name, [Path(p), Path(t), Path(c), Path(th[i])], args.assignment):
+        if args.num_events == -1 and not args.track_calo_targets and _shard_done(out_name, [Path(p), Path(t), Path(c), Path(th[i])], args.assignment):
             n_done += 1
             print(f"[shard {i + 1}/{n_files}] {out_name.name} already exists, skipping")
             continue
@@ -887,6 +905,7 @@ def main():
             clue_params=clue_params,
             clue_options=clue_options,
             assignment=args.assignment,
+            track_calo_targets=args.track_calo_targets,
         )
     print(f"all {n_files} shards accounted for ({n_done} already present, {n_files - n_done} newly converted)")
 
