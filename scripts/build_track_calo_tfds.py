@@ -8,18 +8,25 @@ import awkward as ak
 import numpy as np
 import tensorflow_datasets as tfds
 
-from mlpf.heptfds.track_calo_utils.utils import REQUIRED
+from mlpf.heptfds.track_calo_utils.utils import required_fields
 
-BUILDERS = {"cld": "CldTrackCaloTtbar", "clic": "ClicTrackCaloTtbar", "maia": "MaiaTrackCaloTtbar", "colliderml": "CollidermlTrackCaloTtbar"}
+BUILDERS = {
+    "idea": "IdeaTrackCaloTtbar",
+    "cld": "CldTrackCaloTtbar",
+    "clic": "ClicTrackCaloTtbar",
+    "maia": "MaiaTrackCaloTtbar",
+    "colliderml": "CollidermlTrackCaloTtbar",
+}
 
 
 def build(input_path, detector, output_dir):
+    required = required_fields(detector)
     table = ak.from_parquet(input_path)
-    missing = REQUIRED - set(table.fields)
+    missing = required - set(table.fields)
     if missing:
         raise ValueError(f"Missing {sorted(missing)}; regenerate input with --track-calo-targets")
     # Write only the new view, preserving event boundaries and original source index ranges.
-    table = ak.Array({name: table[name] for name in sorted(REQUIRED)})
+    table = ak.Array({name: table[name] for name in sorted(required)})
     if len(table) < 2:
         raise ValueError("At least two events are needed for disjoint train/test samples")
     boundary = max(1, min(len(table) - 1, int(0.9 * len(table))))

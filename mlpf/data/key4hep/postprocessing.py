@@ -1387,8 +1387,8 @@ def _idea_relation(prop_data: Any, name: str, iev: int) -> SparseMatrixCOO:
     return gp.astype(np.int32), obj.astype(np.int32), weight.astype(np.float32)
 
 
-def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: int = -1) -> None:
-    """Initial IDEA track/cluster post-processing without hits or PFOs."""
+def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: int = -1, track_calo_targets: bool = False) -> None:
+    """IDEA track/cluster output, optionally adding independent track/calo targets."""
     started = time.monotonic()
     print(f"idea_postprocessing: opening input={fn}", flush=True)
     # The default multithreaded local-file source can spend minutes waiting in
@@ -1401,7 +1401,8 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
     prefix = "events___CollectionTypeInfo/events___CollectionTypeInfo."
     names = metadata[prefix + "name"].array()[0]
     ids = metadata[prefix + "collectionID"].array()[0]
-    cell_collection_id = dict(zip(names, ids))["TopoClusterAllCells"]
+    collection_ids = dict(zip(names, ids))
+    cell_collection_id = collection_ids["TopoClusterAllCells"]
     stop = tree.num_entries if num_events == -1 else min(tree.num_entries, first_event + num_events)
     if first_event < 0 or first_event >= tree.num_entries or stop <= first_event:
         raise ValueError(f"Invalid IDEA event range [{first_event}, {stop}) for input with {tree.num_entries} events")
@@ -1436,6 +1437,10 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         "_ClusterMCParticleLinks_from/_ClusterMCParticleLinks_from.index",
         "_ClusterMCParticleLinks_to/_ClusterMCParticleLinks_to.index",
     ]
+    if track_calo_targets:
+        from mlpf.data.key4hep.idea_track_calo import required_branches
+
+        branches.extend(required_branches())
     load_started = time.monotonic()
     print(f"idea_postprocessing: loading {len(branches)} ROOT branch groups", flush=True)
     # Apply the event selection while uproot reads the ROOT file. Previously
@@ -1485,6 +1490,11 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         tracks = idea_track_to_features(prop_data, local_iev, b_field)
         clusters = idea_cluster_to_features(prop_data, local_iev, cell_collection_id)
         gp_to_track = _idea_relation(prop_data, "TracksFromGenParticlesAssociation", local_iev)
+        hybrid_targets = {}
+        if track_calo_targets:
+            from mlpf.data.key4hep.idea_track_calo import build_idea_track_calo
+
+            hybrid_targets = build_idea_track_calo(prop_data, local_iev, collection_ids, gen, tracks, gp_to_track, jetdef, jet_ptcut)
         gp_to_cluster = _idea_relation(prop_data, "ClusterMCParticleLinks", local_iev)
         # Propagate reconstructed-object links from generator descendants to
         # their status-1 ancestor, matching the existing target convention.
@@ -1620,6 +1630,7 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
             sanitize(arr)
         ret.append(
             {
+                **hybrid_targets,
                 "X_track": xtrack,
                 "X_cluster": xcluster,
                 "X_hit_tracker": empty_x_hit,
@@ -1654,16 +1665,13 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
 
 def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1, track_calo_targets: bool = False) -> None:
 
-    if track_calo_targets and detector == "idea":
-        raise ValueError("Track/calo targets are supported for CLD, CLIC and MAIA, not IDEA")
-
     # output exists, do not recreate
     if os.path.isfile(ofn) and num_events == -1 and first_event == 0 and not track_calo_targets:
         print("{} exists".format(ofn))
         return
 
     if detector == "idea":
-        process_one_file_idea(fn, ofn, first_event, num_events)
+        process_one_file_idea(fn, ofn, first_event, num_events, track_calo_targets)
         return
 
     print("loading {}".format(fn))

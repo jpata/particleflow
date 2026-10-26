@@ -32,8 +32,13 @@ REQUIRED = {
 }
 
 
+def required_fields(detector):
+    # IDEA's legacy hit columns remain empty for backward compatibility.
+    return (REQUIRED - {"X_hit_calo"}) | {"X_track_calo_hit"} if detector == "idea" else REQUIRED
+
+
 def track_mapping(detector):
-    if detector not in ("cld", "clic", "maia", "colliderml"):
+    if detector not in ("cld", "clic", "maia", "colliderml", "idea"):
         raise ValueError(f"Unsupported track/calo detector: {detector}")
     return COLLIDERML_TRACK_MAP if detector == "colliderml" else KEY4HEP_TRACK_MAP
 
@@ -45,9 +50,12 @@ def feature_availability(detector):
     for name in track_mapping(detector):
         tracks[X_FEATURES.index(name)] = True
     calo = [True] * 15 + [False] * len(TRACK_EXTRAS)
-    if detector in ("maia", "colliderml"):
+    if detector in ("maia", "colliderml", "idea"):
         for name in ("system", "side", "layer"):
             calo[X_FEATURES.index(name)] = False
+    if detector == "idea":
+        tracks[X_FEATURES.index("dEdx")] = False
+        tracks[X_FEATURES.index("dEdxError")] = False
     if detector == "colliderml":
         calo[X_FEATURES.index("time")] = False
         calo[X_FEATURES.index("type")] = False
@@ -68,7 +76,8 @@ def matrix(value, width, name):
 def input_features(event, detector):
     mapping = track_mapping(detector)
     track = matrix(event["X_track"], 17 if detector == "colliderml" else 16, "X_track")
-    calo = matrix(event["X_hit_calo"], 15, "X_hit_calo")
+    calo_name = "X_track_calo_hit" if detector == "idea" else "X_hit_calo"
+    calo = matrix(event[calo_name], 15, calo_name)
     if np.any(track[:, 0] != 1) or np.any(calo[:, 0] != 2):
         raise ValueError("Expected elemtype=1 for reconstructed tracks and elemtype=2 for calorimeter hits")
     xtrack = np.zeros((len(track), len(X_FEATURES)), dtype=np.float32)
@@ -118,17 +127,18 @@ def target_features(event, n_track, n_calo):
 
 
 def generate_examples(files, detector):
+    required = required_fields(detector)
     for filename in files:
-        missing = REQUIRED - set(ak.metadata_from_parquet(filename)["form"].fields)
+        missing = required - set(ak.metadata_from_parquet(filename)["form"].fields)
         if missing:
             raise ValueError(f"{filename}: missing {sorted(missing)}; regenerate Parquet with --track-calo-targets")
         # Avoid loading legacy targets, clusters and raw tracker hits.
-        data = ak.from_parquet(filename, columns=sorted(REQUIRED))
+        data = ak.from_parquet(filename, columns=sorted(required))
         n_events = len(data["X_track"])
-        if any(len(data[name]) != n_events for name in REQUIRED):
+        if any(len(data[name]) != n_events for name in required):
             raise ValueError(f"{filename}: event counts differ between columns")
         for index in range(n_events):
-            event = {name: data[name][index] for name in REQUIRED}
+            event = {name: data[name][index] for name in required}
             try:
                 track, calo = input_features(event, detector)
                 ytarget, jets = target_features(event, len(track), len(calo))

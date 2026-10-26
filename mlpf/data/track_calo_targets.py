@@ -70,14 +70,16 @@ def _match(candidates, order, n_elements):
     return representative, owner
 
 
-def build_track_calo_targets(gpdata, calo_mask, *, jetdef, jet_ptcut, pi0_as_photon=False):
+def build_track_calo_targets(gpdata, calo_mask, *, jetdef, jet_ptcut, pi0_as_photon=False, representative_track_edges=None):
     """Return additional Parquet fields; leave legacy EventData and targets intact.
 
     One full target row is placed on a track or a calorimeter hit. Other elements
     carry only particle_number. Unrepresentable visible particles merge only into
     a retained particle owning a calorimeter hit they actually contributed to;
     unsupported particles are explicitly dropped. Merged associations are summed
-    before inclusive ownership is computed. IDs are event-local, one-based (0 is
+    before inclusive ownership is computed. Optional representative_track_edges
+    restrict track anchors without removing inclusive membership (IDEA uses direct
+    status-1 links, excluding descendant-track anchors). IDs are event-local, one-based (0 is
     background); original_to_target uses zero-based rows, with -1 for removals.
     """
     names = ParticleFeatures.get_names()
@@ -90,14 +92,15 @@ def build_track_calo_targets(gpdata, calo_mask, *, jetdef, jet_ptcut, pi0_as_pho
         raise ValueError("calo_mask must align with EventData hits")
     n_calo = int(calo_mask.sum())
     tracks = _matrix(gpdata.genparticle_to_track, (n_gp, n_track))
+    representative_tracks = tracks if representative_track_edges is None else _matrix(representative_track_edges, (n_gp, n_track))
     hits = _matrix(gpdata.genparticle_to_hit, (n_gp, n_hit))[:, calo_mask].tocsr()
     energy = np.asarray(gpdata.gen_features["energy"], dtype=np.float64)
     charge = np.asarray(gpdata.gen_features["charge"], dtype=np.float64)
-    track_support = np.asarray(tracks.max(axis=1).toarray()).ravel() >= 0.2 if n_track and n_gp else np.zeros(n_gp, dtype=bool)
+    track_support = np.asarray(representative_tracks.max(axis=1).toarray()).ravel() >= 0.2 if n_track and n_gp else np.zeros(n_gp, dtype=bool)
     visible = visibility_mask(np.asarray(hits.sum(axis=1)).ravel(), energy, charge != 0, track_support)
     candidates = [[] for _ in range(n_gp)]
     for particle in np.flatnonzero(visible):
-        candidates[particle] = _ranked(tracks, particle, 0.2) + [n_track + h for h in _ranked(hits, particle)]
+        candidates[particle] = _ranked(representative_tracks, particle, 0.2) + [n_track + h for h in _ranked(hits, particle)]
     order = sorted(np.flatnonzero(visible), key=lambda i: (-energy[i], i))
     representative, owner = _match(candidates, order, n_track + n_calo)
     kept = np.flatnonzero(representative >= 0)

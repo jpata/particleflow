@@ -11,7 +11,13 @@ import tensorflow_datasets as tfds
 from mlpf.conf import INPUT_TYPE_IDS, dataset_input_type_id, dataset_source_id
 from mlpf.heptfds.track_calo_utils.utils import X_FEATURES, feature_availability, generate_examples, split_files
 
-DETECTORS = {"cld": "CldTrackCaloTtbar", "clic": "ClicTrackCaloTtbar", "maia": "MaiaTrackCaloTtbar", "colliderml": "CollidermlTrackCaloTtbar"}
+DETECTORS = {
+    "idea": "IdeaTrackCaloTtbar",
+    "cld": "CldTrackCaloTtbar",
+    "clic": "ClicTrackCaloTtbar",
+    "maia": "MaiaTrackCaloTtbar",
+    "colliderml": "CollidermlTrackCaloTtbar",
+}
 
 
 def example(detector):
@@ -26,7 +32,7 @@ def example(detector):
     target[:, 6] = [5, 10]
     target[:, 12] = -1
     target[:, 13] = [1, 2]
-    return dict(
+    result = dict(
         X_track=track,
         X_hit_calo=hit,
         ytarget_track_calo_track=target[:1],
@@ -38,6 +44,10 @@ def example(detector):
         genmet=2.0,
         genjet=np.zeros((0, 4)),
     )
+
+    if detector == "idea":
+        result["X_track_calo_hit"] = result.pop("X_hit_calo")
+    return result
 
 
 def write(path, events, record=False):
@@ -55,7 +65,7 @@ def test_features_and_targets(tmp_path, detector):
     assert key == "events.parquet:0"
     x = event["X"]
     assert x.shape == (2, 25)
-    np.testing.assert_array_equal(x[1, :15], raw["X_hit_calo"][0])
+    np.testing.assert_array_equal(x[1, :15], raw["X_track_calo_hit" if detector == "idea" else "X_hit_calo"][0])
     assert not x[0, 6:9].any()  # helix parameters must not become xyz
     assert not x[0, 10:15].any()  # no tracker-hit geometry on a fitted track
     if detector == "colliderml":
@@ -153,6 +163,9 @@ def test_array_record_roundtrip(tmp_path, detector):
     builder.download_and_prepare(download_config=tfds.download.DownloadConfig(manual_dir=manual, try_download_gcs=False))
     loaded = tfds.builder_from_directory(builder.data_dir)
     assert loaded.info.metadata["input_type"] == "track_calo"
+    if detector == "idea":
+        assert loaded.info.metadata["track_source"] == "truth_seeded"
+        assert loaded.info.metadata["calo_type_labels"] == {"1": "cherenkov", "2": "scintillation"}
     assert loaded.info.metadata["x_features"] == X_FEATURES
     assert loaded.info.splits["train"].num_examples == 1
     source = loaded.as_data_source(split="test")
