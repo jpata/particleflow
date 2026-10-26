@@ -1,0 +1,12 @@
+{
+  "source": "/cvmfs/sw.hsf.org/key4hep/releases/2025-05-29/x86_64-almalinux9-gcc14.2.0-opt/k4geo/00-22-ubhvqv/share/k4geo/FCCee/CLD/compact/CLD_o2_v07",
+  "source_sha256": "4ce7894a992a9aa708642453471a8bf30ccf567da6419fed2fc18c4fb67bbf0e",
+  "mode": "hcal",
+  "pitch_mm": 20.0,
+  "changed_files": [
+    "HCalBarrel_o1_v01_01.xml",
+    "HCalEndcap_o1_v01_01.xml"
+  ],
+  "ecal_step_limit_mm": 5.0,
+  "compact_file": "CLD_o2_v07.xml"
+}

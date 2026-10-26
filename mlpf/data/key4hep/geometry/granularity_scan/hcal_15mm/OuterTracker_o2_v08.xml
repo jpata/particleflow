@@ -1,0 +1,226 @@
+<lccdd>
+
+    <define>
+        <constant name="OuterTracker_Barrel_radius_0" value="1000*mm"/>
+        <constant name="OuterTracker_Barrel_radius_1" value="1568*mm"/>
+        <constant name="OuterTracker_Barrel_radius_2" value="2136*mm"/>
+
+        <constant name="OuterTracker_Barrel_half_length" value="1264.2*mm"/>
+
+        <constant name="OuterTracker_Endcap_outer_radius" value="2080*mm"/>
+        <constant name="OuterTracker_Endcap_inner_radius" value="718*mm"/>
+
+        <constant name="OuterTracker_Endcap_z_0" value="1310*mm"/>
+        <constant name="OuterTracker_Endcap_z_1" value="1617*mm"/>
+        <constant name="OuterTracker_Endcap_z_2" value="1883*mm"/>
+        <constant name="OuterTracker_Endcap_z_3" value="2190*mm"/>
+
+        <constant name="OuterTracker_Endcap_radius_0" value="718*mm"/>
+        <constant name="OuterTracker_Endcap_radius_1" value="988.9*mm"/>
+        <constant name="OuterTracker_Endcap_radius_2" value="1289.9*mm"/>
+        <constant name="OuterTracker_Endcap_radius_3" value="1530.6*mm"/>
+
+    </define>
+
+    <comment>Tracking detectors</comment>
+    <detectors>
+        <detector name="OuterTrackers" type="DD4hep_SubdetectorAssembly" vis="OTVis">
+            <shape name="OuterTrackersEnvelope" type="Tube" rmin="OuterTracker_inner_radius" rmax="OuterTracker_outer_radius" dz="OuterTracker_half_length" material="Air">
+            </shape>
+            <comment>Outer Tracker Assembly</comment>
+            <composite name="OuterTrackerBarrel"/>
+            <composite name="OuterTrackerEndcap"/>
+            <composite name="OuterTrackerBarrelSupport"/>
+	    <composite name="OuterTrackerEndcapSupport"/>
+        </detector>
+    </detectors>
+
+
+    <!--  Definition of the used visualization attributes    -->
+    <display>
+        <vis name="OuterTrackerLayerVis"   alpha="1.0" r="1.0" g="1.0" b="0.6" showDaughters="true" visible="true"/>
+        <vis name="OuterTrackerModuleVis"  alpha="0.1" r="0.0" g="1.0" b="0.6" showDaughters="false" visible="true"/>
+        <vis name="OuterTrackerForwardVis" alpha="1.0" r="0.8" g="0.1" b="0.1" showDaughters="false" visible="true"/>
+        <vis name="OuterTrackerInterlinkVis" alpha="1.0" r="0.078" g="0.12" b="0.59" showDaughters="true" visible="true"/>
+    </display>
+
+    <!--  Definition of the readout segmentation/definition  -->
+    <readouts>
+        <readout name="OuterTrackerBarrelCollection">
+            <id>${GlobalTrackerReadoutID}</id>
+        </readout>
+        <readout name="OuterTrackerEndcapCollection">
+            <id>${GlobalTrackerReadoutID}</id>
+        </readout>
+    </readouts>
+
+
+    <detectors>
+
+        <detector id="DetID_OT_Barrel" name="OuterTrackerBarrel" type="TrackerBarrel_o1_v06" readout="OuterTrackerBarrelCollection" region="OuterTrackerBarrelRegion">
+            <envelope vis="OTVis">
+                <shape type="Assembly"/>
+            </envelope>
+            <comment>Silicon Outer Tracker Barrel</comment>
+
+            <type_flags type=" DetType_TRACKER + DetType_BARREL"/>
+
+            <module name="OuterTrackerBarrelModule_In" vis="OuterTrackerModuleVis">
+                <module_envelope width="30.1*mm" length="30.1*mm"/>
+                <include ref="OuterTrackerBarrelModuleUp.xml"/>
+            </module>
+
+	        <module name="OuterTrackerBarrelModule_Out" vis="OuterTrackerModuleVis">
+                <module_envelope width="30.1*mm" length="30.1*mm"/>
+                <include ref="OuterTrackerBarrelModuleDown.xml"/>
+            </module>
+
+
+            <layer module="OuterTrackerBarrelModule_In" id="0" vis="OuterTrackerLayerVis" type="4">
+                <rphi_layout phi_tilt="0*deg" nphi="53*4" phi0="0" rc="OuterTracker_Barrel_radius_0" dr="5.5*mm"/>
+                <z_layout dr="0" z0="OuterTracker_Barrel_half_length-15.05*mm" nz="84"/>
+            </layer>
+            <layer module="OuterTrackerBarrelModule_In" id="1" vis="OuterTrackerLayerVis" type="4">
+                <rphi_layout phi_tilt="0*deg" nphi="83*4" phi0="0" rc="OuterTracker_Barrel_radius_1" dr="5.5*mm"/>
+                <z_layout dr="0" z0="OuterTracker_Barrel_half_length-15.05*mm" nz="84"/>
+            </layer>
+            <layer module="OuterTrackerBarrelModule_Out" id="2" vis="OuterTrackerLayerVis" type="4">
+                <rphi_layout phi_tilt="0*deg" nphi="113*4" phi0="0" rc="OuterTracker_Barrel_radius_2" dr="5.5*mm"/>
+                <z_layout dr="0" z0="OuterTracker_Barrel_half_length-15.05*mm" nz="84"/>
+            </layer>
+
+        </detector>
+
+
+        <detector id="DetID_OT_Endcap" name="OuterTrackerEndcap" type="TrackerEndcap_o2_v06" readout="OuterTrackerEndcapCollection" reflect="true" region="OuterTrackerEndcapRegion">
+            <envelope vis="OTVis">
+                <shape type="Assembly"/>
+            </envelope>
+            <comment>Silicon Outer Tracker Endcaps</comment>
+
+            <type_flags type=" DetType_TRACKER + DetType_ENDCAP"/>
+
+            <module name="OuterTrackerEndcapModule_0_In" vis="OuterTrackerModuleVis">
+                <trd x="125.3*mm" y="270.9*mm"/>
+                <include ref="TrackerDiskModuleIn.xml"/>
+            </module>
+            <module name="OuterTrackerEndcapModule_1_In" vis="OuterTrackerModuleVis">
+                <trd x="180.6*mm" y="301*mm"/>
+                <include ref="TrackerDiskModuleIn.xml"/>
+            </module>
+            <module name="OuterTrackerEndcapModule_2_In" vis="OuterTrackerModuleVis">
+                <trd x="240.7*mm" y="240.7*mm"/>
+                <include ref="TrackerDiskModuleIn.xml"/>
+            </module>
+            <module name="OuterTrackerEndcapModule_3_In" vis="OuterTrackerModuleVis">
+                <trd x="300*mm" y="549.4*mm"/>
+                <include ref="TrackerDiskModuleIn.xml"/>
+            </module>
+
+            <module name="OuterTrackerEndcapModule_0_Out" vis="OuterTrackerModuleVis">
+                <trd x="125.3*mm" y="270.9*mm"/>
+                <include ref="TrackerDiskModuleOut.xml"/>
+            </module>
+            <module name="OuterTrackerEndcapModule_1_Out" vis="OuterTrackerModuleVis">
+                <trd x="180.6*mm" y="301*mm"/>
+                <include ref="TrackerDiskModuleOut.xml"/>
+            </module>
+            <module name="OuterTrackerEndcapModule_2_Out" vis="OuterTrackerModuleVis">
+                <trd x="240.7*mm" y="240.7*mm"/>
+                <include ref="TrackerDiskModuleOut.xml"/>
+            </module>
+            <module name="OuterTrackerEndcapModule_3_Out" vis="OuterTrackerModuleVis">
+                <trd x="300*mm" y="549.4*mm"/>
+                <include ref="TrackerDiskModuleOut.xml"/>
+            </module>
+
+            <layer id="0">
+                <ring r="OuterTracker_Endcap_radius_0" zstart="OuterTracker_Endcap_z_0" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_0_In" phi0="0"/>
+                <ring r="OuterTracker_Endcap_radius_1" zstart="OuterTracker_Endcap_z_0" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_1_In" phi0="0"/>
+                <ring r="OuterTracker_Endcap_radius_2" zstart="OuterTracker_Endcap_z_0" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_2_In" phi0="0"/>
+                <ring r="OuterTracker_Endcap_radius_3" zstart="OuterTracker_Endcap_z_0" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_3_In" phi0="0"/>
+            </layer>
+            <layer id="1">
+                <ring r="OuterTracker_Endcap_radius_0" zstart="OuterTracker_Endcap_z_1" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_0_Out" phi0="0"/>
+                <ring r="OuterTracker_Endcap_radius_1" zstart="OuterTracker_Endcap_z_1" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_1_Out" phi0="0"/>
+                <ring r="OuterTracker_Endcap_radius_2" zstart="OuterTracker_Endcap_z_1" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_2_Out" phi0="0"/>
+		<ring r="OuterTracker_Endcap_radius_3" zstart="OuterTracker_Endcap_z_1" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_3_Out" phi0="0"/>
+            </layer>
+
+            <layer id="2">
+                <ring r="OuterTracker_Endcap_radius_0" zstart="OuterTracker_Endcap_z_2" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_0_In" phi0="0"/>
+                <ring r="OuterTracker_Endcap_radius_1" zstart="OuterTracker_Endcap_z_2" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_1_In" phi0="0"/>
+                <ring r="OuterTracker_Endcap_radius_2" zstart="OuterTracker_Endcap_z_2" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_2_In" phi0="0"/>
+		<ring r="OuterTracker_Endcap_radius_3" zstart="OuterTracker_Endcap_z_2" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_3_In" phi0="0"/>
+            </layer>
+
+            <layer id="3">
+                <ring r="OuterTracker_Endcap_radius_0" zstart="OuterTracker_Endcap_z_3" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_0_Out" phi0="0"/>
+                <ring r="OuterTracker_Endcap_radius_1" zstart="OuterTracker_Endcap_z_3" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_1_Out" phi0="0"/>
+                <ring r="OuterTracker_Endcap_radius_2" zstart="OuterTracker_Endcap_z_3" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_2_Out" phi0="0"/>
+		<ring r="OuterTracker_Endcap_radius_3" zstart="OuterTracker_Endcap_z_3" nmodules="48" dz="3*mm" module="OuterTrackerEndcapModule_3_Out" phi0="0"/>
+            </layer>
+
+        </detector>
+
+        <detector name="OuterTrackerBarrelSupport" type="TrackerBarrelSupport_o1_v01" id="0" reflect="true" region="OuterTrackerBarrelRegion">
+            <envelope>
+                <shape type="Assembly"/>
+            </envelope>
+            <layer id="0" inner_r="OuterTracker_Barrel_radius_0+1*cm" outer_z="OuterTracker_Barrel_half_length" vis="SupportVis">
+                <slice material="CarbonFiber" thickness="0.26/3.5959*cm" />
+            </layer>
+            <layer id="1" inner_r="OuterTracker_Barrel_radius_1+1*cm" outer_z="OuterTracker_Barrel_half_length" vis="SupportVis">
+                <slice material="CarbonFiber" thickness="0.125/3.5959*cm" />
+            </layer>
+            <layer id="2" inner_r="OuterTracker_Barrel_radius_2-1*cm" outer_z="OuterTracker_Barrel_half_length" vis="SupportVis">
+                <slice material="CarbonFiber" thickness="0.125/3.5959*cm" />
+            </layer>
+        </detector>
+
+
+	<detector name="OuterTrackerEndcapSupport" type="TrackerEndcapSupport_o1_v02" reflect="true" region="OuterTrackerEndcapRegion">
+	  <envelope>
+	    <shape type="Assembly"/>
+	  </envelope>
+
+	  <layer id="0" inner_r="OuterTracker_inner_radius" inner_z="OuterTracker_Endcap_z_0+1*cm" outer_r="OuterTracker_Endcap_outer_radius" vis="SupportVis">
+	    <slice material="CarbonFiber" thickness="0.365/3.5959*cm" />
+	  </layer>
+	  <layer id="1" inner_r="OuterTracker_inner_radius" inner_z="OuterTracker_Endcap_z_1-1*cm" outer_r="OuterTracker_Endcap_outer_radius" vis="SupportVis">
+	    <slice material="CarbonFiber" thickness="0.365/3.5959*cm" />
+	  </layer>
+	  <layer id="2" inner_r="OuterTracker_inner_radius" inner_z="OuterTracker_Endcap_z_2+1*cm" outer_r="OuterTracker_Endcap_outer_radius" vis="SupportVis">
+	    <slice material="CarbonFiber" thickness="0.365/3.5959*cm" />
+	  </layer>
+	  <layer id="3" inner_r="OuterTracker_inner_radius" inner_z="OuterTracker_Endcap_z_3-1*cm" outer_r="OuterTracker_Endcap_outer_radius" vis="SupportVis">
+	    <slice material="CarbonFiber" thickness="0.365/3.5959*cm" />
+	  </layer>
+	  <layer id="4" inner_r="OuterTracker_Barrel_radius_0-1*cm" inner_z="OuterTracker_Barrel_half_length+2*cm" outer_r="OuterTracker_Barrel_radius_1-0.5*cm" vis="OuterTrackerInterlinkVis">
+	    <slice material="CarbonFiber" thickness="0.6/3.5959*cm" />
+	  </layer>
+	  <layer id="5" inner_r="OuterTracker_Barrel_radius_1-0.5*cm" inner_z="OuterTracker_Barrel_half_length+2*cm" outer_r="OuterTracker_outer_radius" vis="OuterTrackerInterlinkVis">
+	    <slice material="CarbonFiber" thickness="0.6/3.5959*cm" />
+          </layer>
+	</detector>
+
+    </detectors>
+
+    <plugins>
+        <plugin name="DD4hep_GenericSurfaceInstallerPlugin">
+            <argument value="OuterTrackerBarrel"/>
+            <argument value="dimension=2"/>
+            <argument value="u_x=1."/>
+            <argument value="v_y=1."/>
+            <argument value="n_z=1."/>
+        </plugin>
+        <plugin name="DD4hep_GenericSurfaceInstallerPlugin">
+            <argument value="OuterTrackerEndcap"/>
+            <argument value="dimension=2"/>
+            <argument value="u_x=1."/>
+            <argument value="v_y=1."/>
+            <argument value="n_z=1."/>
+        </plugin>
+    </plugins>
+
+</lccdd>

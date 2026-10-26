@@ -1,0 +1,75 @@
+{
+  "sample": "p8_ee_ttbar_ecm365",
+  "seeds": [
+    300000,
+    300001,
+    300002,
+    300003,
+    300004,
+    300005,
+    300006,
+    300007,
+    300008,
+    300009
+  ],
+  "checks": {
+    "events": 1000,
+    "truth_photon_count_mismatch_events": 25,
+    "truth_photon_energy_max_abs_GeV": 0.03201501654292446
+  },
+  "definition": {
+    "truth": "MCParticles PDG 22, generatorStatus 1, propagated bit 0x0F000000, |cos(theta)|<0.98, E>=0.1 GeV for matching",
+    "reco": "PandoraPFOs PDG 22, |cos(theta)|<0.98, E>=0.5 GeV for matching",
+    "matching": "maximum-cardinality one-to-one deltaR<0.03; no energy-response cut",
+    "efficiency_denominator": "baseline truth photons E>=1 GeV for both reconstructions",
+    "unmatched_candidate_fraction": "unmatched Pandora photon PFOs / all photon PFOs, E>=1 GeV",
+    "response": "Pandora PFO energy / generator photon momentum magnitude; truth E>=1 GeV",
+    "isolation": "nearest other selected generator photon deltaR>0.1"
+  },
+  "arms": {
+    "5.1 mm": {
+      "n_gen_e_ge_1": 18362,
+      "n_matched_gen_e_ge_1": 14355,
+      "efficiency_e_ge_1": 0.781777584141161,
+      "n_reco_e_ge_1": 19540,
+      "n_unmatched_reco_e_ge_1": 4566,
+      "unmatched_candidate_fraction_e_ge_1": 0.23367451381780963,
+      "response": {
+        "n": 14355,
+        "median": 1.01610927468686,
+        "p16": 0.9045227425031438,
+        "p84": 1.1584433155714615,
+        "half_width_68": 0.12696028653415886
+      },
+      "isolated_response": {
+        "n": 4835,
+        "median": 1.0154942449781987,
+        "p16": 0.8998373385472489,
+        "p84": 1.1569655826034915,
+        "half_width_68": 0.12856412202812129
+      }
+    },
+    "2 mm": {
+      "n_gen_e_ge_1": 18362,
+      "n_matched_gen_e_ge_1": 13945,
+      "efficiency_e_ge_1": 0.7594488617797626,
+      "n_reco_e_ge_1": 18581,
+      "n_unmatched_reco_e_ge_1": 4561,
+      "unmatched_candidate_fraction_e_ge_1": 0.2454657983962112,
+      "response": {
+        "n": 13945,
+        "median": 0.9755053557053863,
+        "p16": 0.8320433323128655,
+        "p84": 1.1360009553419126,
+        "half_width_68": 0.15197881151452353
+      },
+      "isolated_response": {
+        "n": 4747,
+        "median": 0.9838198329677279,
+        "p16": 0.8587404428364813,
+        "p84": 1.1221098443972533,
+        "half_width_68": 0.13168470078038597
+      }
+    }
+  }
+}

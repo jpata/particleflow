@@ -1,0 +1,63 @@
+{
+  "point": "ecal_1p5",
+  "files": 100,
+  "events": 10000,
+  "truth_photons_e_ge_1": 18810,
+  "matched_photons_e_ge_1": 13601,
+  "photon_efficiency": 0.7230728335991494,
+  "reco_photons_e_ge_1": 20122,
+  "unmatched_reco_photons_e_ge_1": 6991,
+  "unmatched_candidate_fraction": 0.3474306728953384,
+  "photon_energy_response": {
+    "n": 13601,
+    "mean": 1.0983512401783493,
+    "median": 0.9429433229122213,
+    "p16": 0.7607514014458685,
+    "p84": 1.1625188170895402,
+    "half_width_68": 0.20088370782183584,
+    "rms": 1.1463653407726901
+  },
+  "pi0_pairs": 7216,
+  "resolved_pi0_pairs": 3605,
+  "pi0_pair_efficiency": 0.4995842572062084,
+  "pi0_angle_bins_rad": [
+    0.0,
+    0.01,
+    0.02,
+    0.03,
+    0.05,
+    0.08,
+    0.12,
+    0.2,
+    0.4,
+    1.0
+  ],
+  "pi0_angle_denominator": [
+    345,
+    1840,
+    1763,
+    2058,
+    945,
+    255,
+    10,
+    0,
+    0
+  ],
+  "pi0_angle_resolved": [
+    76,
+    650,
+    854,
+    1248,
+    604,
+    166,
+    7,
+    0,
+    0
+  ],
+  "definitions": {
+    "photon": "Previous ttbar photon study: status-1 propagated truth photon E>=1 GeV; Pandora PDG 22 E>=0.5 GeV; one-to-one \u0394R<0.03",
+    "pi0": "Direct pi0\u2192\u03b3\u03b3 daughters, both propagated in |cos\u03b8|<0.98 and E>=1 GeV; resolved when each has a distinct matched Pandora photon",
+    "jet": "Previous ttbar jet study: ee-genkt R=0.4 p=-1, pT>5 GeV; propagated visible truth vs Pandora PFO jets; one-to-one \u0394R<0.1; response=pT reco/truth",
+    "width": "(p84-p16)/2; no response cut; unchanged Pandora calibration"
+  }
+}
