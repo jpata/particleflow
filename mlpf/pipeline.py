@@ -121,6 +121,7 @@ def get_parser():
     parser.add_argument("--data-dir", type=str, help="Path to the `tensorflow_datasets/` directory")
     parser.add_argument("--experiments-dir", type=str, help="Base directory within which trainings are stored")
     parser.add_argument("--pipeline", action="store_true", help="Flag to indicate the script is running in a CI/CD pipeline")
+    parser.add_argument("--loglevel", choices=["debug", "info", "warning"], default="info", help="Log level, also of the per-rank train.log files")
 
     # --- Create subparsers for each command ---
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
@@ -193,7 +194,7 @@ def main():
     parser = get_parser()
     args, extra_args = parser.parse_known_args()
 
-    loglevel = logging.INFO
+    loglevel = getattr(logging, args.loglevel.upper())
     logging.basicConfig(level=loglevel)
 
     # --- Manually set action flags based on the command, for MLPFConfig.from_spec ---
@@ -214,8 +215,6 @@ def main():
         args.hpo = None
         args.ray_train = False
         args.lr_find = True
-        loglevel = logging.INFO
-        logging.getLogger().setLevel(loglevel)
     elif cmd == Command.RAY_TRAIN:
         args.train = True
         args.test = True
