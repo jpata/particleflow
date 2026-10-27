@@ -228,6 +228,9 @@ class EDM4HEP:
         # collection rather than by subdetector, because subdetector 2 also holds other
         # systems (LumiCal on CLIC).
         muon_collections: Tuple[str, ...] = ()
+        # Reco -> SimCalorimeterHit relations to follow for hit collections that CalohitMCTruthLink
+        # does not cover; the sim hits' CaloHitContributions name the MCParticles and their energies.
+        hit_truth_relations: Tuple[str, ...] = ()
 
     # Registry of supported key4hep detector scenarios. Add new detectors here;
     # mlpf/data/key4hep/postprocessing.py and tests/validate_parquet.py pick up
@@ -300,6 +303,9 @@ class EDM4HEP:
             # CellIDEncoding is available for any collection.
             require_cellid_encoding=False,
             muon_collections=("MUON",),
+            # MAIA's CalohitMCTruthLink covers the calorimeters only, so without this the muon-system
+            # hits have no truth contributor at all.
+            hit_truth_relations=("RelationMuonHit",),
         ),
         # OpenDataDetector as released by ColliderML release 1; not EDM4hep geometry, but the
         # registry is the single place the B-field comes from for downstream tools, so the

@@ -433,6 +433,77 @@ def get_hit_matrix_and_genadj(
     )
 
 
+CALOHIT_LINK_FIELDS = (
+    "CalohitMCTruthLink.weight",
+    "_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID",
+    "_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index",
+    "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID",
+    "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index",
+)
+
+
+def append_relation_truth_links(calohit_links: awkward.Array, arrs: Any, relation: str, collectionIDs: Dict[str, int], mcp_id: int) -> awkward.Array:
+    """Add CalohitMCTruthLink-style hit -> MCParticle links for hits whose only route to truth is a
+    reco -> SimCalorimeterHit relation, following each sim hit to its CaloHitContributions.
+
+    Each MCParticle is linked with the energy it contributed to the sim hit. get_hit_matrix_and_genadj
+    turns the weights into per-hit shares, so a hit must not get links from both sources: the two
+    weight conventions differ.
+    """
+    names = {v: k for k, v in collectionIDs.items()}
+
+    def flat_ids(arr):
+        return {names[int(c)] for c in np.unique(awkward.to_numpy(awkward.flatten(arr)))}
+
+    rel_keys = [f"_{relation}_{end}/_{relation}_{end}.{field}" for end in ("from", "to") for field in ("collectionID", "index")]
+    rel = arrs.arrays(rel_keys)
+    sim_names = flat_ids(rel[rel_keys[2]])
+    sim = {
+        n: arrs.arrays(
+            [
+                f"{n}.contributions_begin",
+                f"{n}.contributions_end",
+                f"_{n}_contributions/_{n}_contributions.collectionID",
+                f"_{n}_contributions/_{n}_contributions.index",
+            ]
+        )
+        for n in sim_names
+    }
+    contrib_names = set().union(*(flat_ids(sim[n][f"_{n}_contributions/_{n}_contributions.collectionID"]) for n in sim_names))
+    contrib = {
+        n: arrs.arrays([f"{n}.energy", f"_{n}_particle/_{n}_particle.collectionID", f"_{n}_particle/_{n}_particle.index"]) for n in contrib_names
+    }
+
+    already_linked = flat_ids(calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"])
+    overlap = flat_ids(rel[rel_keys[0]]) & already_linked
+    if overlap:
+        raise ValueError(f"{relation} would add truth links to {sorted(overlap)}, which CalohitMCTruthLink already links")
+
+    links = {k: [] for k in CALOHIT_LINK_FIELDS}
+    counts = []
+    for iev in range(len(rel)):
+        ev_sim = {n: [awkward.to_numpy(sim[n][k][iev]) for k in sim[n].fields] for n in sim_names}
+        ev_contrib = {n: [awkward.to_numpy(contrib[n][k][iev]) for k in contrib[n].fields] for n in contrib_names}
+        n_links = 0
+        for hit_cid, hit_idx, sim_cid, sim_idx in zip(*(awkward.to_numpy(rel[k][iev]) for k in rel_keys)):
+            begin, end, contrib_cid, contrib_idx = ev_sim[names[int(sim_cid)]]
+            for k in range(begin[sim_idx], end[sim_idx]):
+                energy, particle_cid, particle_idx = ev_contrib[names[int(contrib_cid[k])]]
+                ic = contrib_idx[k]
+                if particle_cid[ic] != mcp_id:
+                    continue
+                for key, value in zip(CALOHIT_LINK_FIELDS, (energy[ic], particle_cid[ic], particle_idx[ic], hit_cid, hit_idx)):
+                    links[key].append(value)
+                n_links += 1
+        counts.append(n_links)
+
+    merged = {}
+    for k in CALOHIT_LINK_FIELDS:
+        dtype = awkward.to_numpy(awkward.flatten(calohit_links[k])).dtype
+        merged[k] = awkward.concatenate([calohit_links[k], awkward.unflatten(np.asarray(links[k], dtype=dtype), counts)], axis=1)
+    return awkward.Array(merged)
+
+
 def hit_cluster_adj(
     prop_data: awkward.Record,
     hit_idx_local_to_global: Dict[Tuple[int, int], int],
@@ -1780,6 +1851,8 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     if unread_muon_collections:
         raise ValueError(f"Muon collections {unread_muon_collections} are not among the hit collections read for {detector}")
     muon_collection_ids = tuple(collectionIDs[c] for c in detector_cfg.muon_collections)
+    for relation in detector_cfg.hit_truth_relations:
+        calohit_links = append_relation_truth_links(calohit_links, arrs, relation, collectionIDs, mcp_id)
 
     hit_data = {}
     for k in hit_collections:
