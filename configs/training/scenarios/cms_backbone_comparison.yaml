@@ -14,8 +14,8 @@ variants:
     overrides:
       model.type: heptv2
       model.attention: null
-      model.heptv2.embedding_dim: 512
-      model.heptv2.width: 512
+      model.heptv2.embedding_dim: 256
+      model.heptv2.width: 256
       model.heptv2.num_convs: 3
       model.heptv2.num_heads: 16
       model.heptv2.dropout_ff: 0.0
