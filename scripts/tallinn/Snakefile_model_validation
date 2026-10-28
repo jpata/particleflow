@@ -1,32 +1,35 @@
 import os
-import subprocess
 import pickle as pkl
 import sys
+import yaml
 
 # Ensure mlpf is in the path for unpickling
 sys.path.append(os.getcwd())
 
 from mlpf.conf import MLPFConfig, ModelType
+from scripts.get_param import get_param
 
-CONFIGS = ["gnnlsh-bin32-attention-interbin", "attn", "hept", "heptv2"]
+CONFIGS = ["gnnlsh-bin32-attention-interbin", "attn", "heptv2"]
 DEVICES = ["cuda", "cpu"]
 #DEVICES = ["cuda"]
 
 MODEL_NAME = "pyg-cms-v1"
 DATASET = "cms_pf_ttbar"
 PRODUCTION = "cms_run3"
+DATASET_VERSION = "3.0.0"
 
 #MODEL_NAME = "pyg-cld-hits-v1"
 #DATASET = "cld_edm_ttbar_hits"
 #PRODUCTION = "cld"
 
-PF_SITE = "local"
+PF_SITE = os.environ.get("PF_SITE", "tallinn")
 NUM_STEPS = 2000
 CHECKPOINT_FREQ = 2000
 
 # Directory paths
 EXPERIMENTS_DIR = "experiments"
 ONNX_DIR = "onnx_validation"
+VALIDATION_SPEC = os.path.join(ONNX_DIR, f"particleflow_spec_{DATASET_VERSION}.yaml")
 
 def get_onnx_validate_extra_args(wildcards):
     extra_args = ""
@@ -48,14 +51,10 @@ def get_onnx_validate_extra_args(wildcards):
 def get_data_dir(production):
     if "data_dir" in config:
         return config["data_dir"]
-    try:
-        cmd = f"PF_SITE={PF_SITE} uv run python3 scripts/get_param.py particleflow_spec.yaml productions.{production}.workspace_dir"
-        workspace_dir = subprocess.check_output(cmd, shell=True).decode().strip()
-        return os.path.join(workspace_dir, "tfds/")
-    except Exception as e:
-        print(f"Error retrieving DATA_DIR: {e}")
-        prod_prefix = "cld" if "cld" in production else "cms"
-        return f"data/{prod_prefix}/tfds/" # Fallback default
+    workspace_dir = get_param("particleflow_spec.yaml", f"productions.{production}.workspace_dir")
+    if not workspace_dir:
+        raise ValueError(f"No workspace_dir configured for production {production}")
+    return os.path.join(workspace_dir, "tfds")
 
 DATA_DIR = get_data_dir(PRODUCTION)
 
@@ -67,25 +66,42 @@ rule all:
         expand(os.path.join(ONNX_DIR, "{device}", "plots", "runtime_vs_memory.png"), device=DEVICES),
         expand(os.path.join(ONNX_DIR, "{device}", "plots", "loss_vs_memory.png"), device=DEVICES)
 
+rule validation_spec:
+    input:
+        "particleflow_spec.yaml"
+    output:
+        VALIDATION_SPEC
+    run:
+        with open(input[0]) as f:
+            spec = yaml.safe_load(f)
+        model = spec["models"][MODEL_NAME]
+        for group_name in ("train_datasets", "validation_datasets"):
+            for group in model[group_name].values():
+                for sample in group["samples"]:
+                    sample["version"] = DATASET_VERSION
+        for sample in model["test_datasets"]:
+            sample["version"] = DATASET_VERSION
+        os.makedirs(os.path.dirname(output[0]), exist_ok=True)
+        with open(output[0], "w") as f:
+            yaml.safe_dump(spec, f, sort_keys=False)
+
 rule train:
+    input:
+        spec = VALIDATION_SPEC
     output:
         checkpoint = os.path.join(EXPERIMENTS_DIR, "training_{config}", "checkpoints", f"checkpoint-{NUM_STEPS}.pth"),
         model_kwargs = os.path.join(EXPERIMENTS_DIR, "training_{config}", "model_kwargs.pkl")
     params:
-        gpu_batch_multiplier = lambda wildcards: "1" if wildcards.config in ["hept", "heptv2"] else "6",
+        gpu_batch_multiplier = lambda wildcards: "1" if wildcards.config == "heptv2" else "6",
         extra_args = lambda wildcards: {
             "attn": "--model.attention.attention_type flash",
-            "hept": "--model.type hept --pad_to_multiple_elements 100",
-            "heptv2": "--model.type heptv2 --pad_to_multiple_elements 100",
-            "gnnlsh-bin32": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32",
-            "gnnlsh-bin128": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 128 --pad_to_multiple_elements 128",
-            "gnnlsh-bin32-attention": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32 --model.gnnlsh.kernel_type attention",
+            "heptv2": "--model.type heptv2 --model.heptv2.num_convs 3 --pad_to_multiple_elements 100",
             "gnnlsh-bin32-attention-interbin": "--model.type gnnlsh --model.gnnlsh.num_convs 3 --model.gnnlsh.bin_size 32 --pad_to_multiple_elements 32 --model.gnnlsh.kernel_type attention --model.gnnlsh.use_interbin_attention True"
         }[wildcards.config]
     shell:
         """
-        PF_SITE={PF_SITE} uv run python3 mlpf/pipeline.py \
-            --spec-file particleflow_spec.yaml \
+        PF_SITE={PF_SITE} TFDS_VERSION={DATASET_VERSION} uv run python3 mlpf/pipeline.py \
+            --spec-file {input.spec} \
             --model-name {MODEL_NAME} \
             --production {PRODUCTION} \
             --data-dir {DATA_DIR} \
@@ -107,20 +123,17 @@ rule onnx_validate:
         summary = os.path.join(ONNX_DIR, "{device}", "{config}", "summary.json")
     params:
         configs_args = lambda wildcards: {
-            "attn": "--configs PT_ATTN_MATH_FP32 ONNX_ATTN_MATH_FP32 ONNX_ATTN_FLASH_FP32 PT_ATTN_MATH_FP16 ONNX_ATTN_MATH_FP16 ONNX_ATTN_FLASH_FP16",
-            "hept": "--configs PT_HEPT_FP32 ONNX_HEPT_FP32",
-            "heptv2": "--configs PT_HEPT_FP32 ONNX_HEPT_FP32",
-            "gnnlsh-bin32": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
-            "gnnlsh-bin128": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
-            "gnnlsh-bin32-attention": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32",
+            "attn": "--configs PT_ATTN_MATH_FP32 ONNX_ATTN_MATH_FP32 ONNX_ATTN_OP_FP32"
+            + (" PT_ATTN_MATH_FP16 ONNX_ATTN_MATH_FP16 ONNX_ATTN_FLASH_FP32_FP16 ONNX_ATTN_FLASH_FP16" if wildcards.device == "cuda" else ""),
+            "heptv2": "--configs PT_HEPTV2_FP32 ONNX_HEPTV2_FP32",
             "gnnlsh-bin32-attention-interbin": "--configs PT_GNNLSH_FP32 ONNX_GNNLSH_FP32"
-        }.get(wildcards.config, ""),
+        }[wildcards.config],
         extra_args = get_onnx_validate_extra_args,
         num_events = lambda wildcards: 100 if wildcards.device == "cuda" else 10,
         uv_project = lambda wildcards: "envs/ort-gpu" if wildcards.device == "cuda" else "envs/ort-cpu"
     shell:
         """
-        PF_SITE={PF_SITE} uv run --project {params.uv_project} python3 scripts/cms-validate-onnx.py \
+        PF_SITE={PF_SITE} TFDS_VERSION={DATASET_VERSION} uv run --project {params.uv_project} python3 scripts/cms-validate-onnx.py \
             --checkpoint {input.checkpoint} \
             --model-kwargs {input.model_kwargs} \
             --dataset {DATASET} \

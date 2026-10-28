@@ -1,0 +1,76 @@
+name: cms_backbone_comparison
+spec_file: particleflow_spec.yaml
+production_name: cms_run3
+
+variants:
+  attention:
+    model_name: pyg-cms-v1
+    overrides:
+      # Match the width-512 CMS default: 16 heads with 32 channels each.
+      model.attention.num_heads: 16
+      model.attention.head_dim: 32
+  heptv2:
+    model_name: pyg-cms-v1
+    overrides:
+      model.type: heptv2
+      model.attention: null
+      model.heptv2.embedding_dim: 512
+      model.heptv2.width: 512
+      model.heptv2.num_convs: 3
+      model.heptv2.num_heads: 16
+      model.heptv2.dropout_ff: 0.0
+      model.heptv2.block_size: 100
+      model.heptv2.n_hashes: 3
+      model.heptv2.deterministic_hashing: true
+
+seeds: [12345]
+
+training:
+  # The runner derives the per-GPU batch from the platform GPU count.
+  global_batch_size: 64
+  parameters:
+    lr: 0.0004
+    num_steps: 100000
+    val_freq: 10000
+    checkpoint_freq: 10000
+    tensorboard_step_freq: 1000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    pad_to_multiple_elements: 100
+    make_plots: true
+
+common_overrides:
+  model.output_mode: elementwise
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 3
+
+  # Uniform dataset batches are required for global-batch resolution. Retain
+  # both PU and no-PU samples, rather than inheriting the no-PU batch of 16.
+  train_dataset.cms.physical_nopu.batch_size: 1
+  valid_dataset.cms.physical_nopu.batch_size: 1
+
+  # Pin every sample explicitly: pyg-cms-v1 otherwise selects version 3.2.0.
+  train_dataset.cms.physical_pu.samples.cms_pf_ttbar.version: "2.8.0"
+  train_dataset.cms.physical_pu.samples.cms_pf_qcd.version: "2.8.0"
+  train_dataset.cms.physical_pu.samples.cms_pf_ztt.version: "2.8.0"
+  train_dataset.cms.physical_nopu.samples.cms_pf_ttbar_nopu.version: "2.8.0"
+  train_dataset.cms.physical_nopu.samples.cms_pf_qcd_nopu.version: "2.8.0"
+  train_dataset.cms.physical_nopu.samples.cms_pf_ztt_nopu.version: "2.8.0"
+  valid_dataset.cms.physical_pu.samples.cms_pf_ttbar.version: "2.8.0"
+  valid_dataset.cms.physical_pu.samples.cms_pf_qcd.version: "2.8.0"
+  valid_dataset.cms.physical_pu.samples.cms_pf_ztt.version: "2.8.0"
+  valid_dataset.cms.physical_nopu.samples.cms_pf_ttbar_nopu.version: "2.8.0"
+  valid_dataset.cms.physical_nopu.samples.cms_pf_qcd_nopu.version: "2.8.0"
+  valid_dataset.cms.physical_nopu.samples.cms_pf_ztt_nopu.version: "2.8.0"
+  test_dataset.cms_pf_ttbar.version: "2.8.0"
+  test_dataset.cms_pf_qcd.version: "2.8.0"
+  test_dataset.cms_pf_ztt.version: "2.8.0"
+
+allowed_variant_differences:
+  - conv_type
+  - model.type
+  - model.attention
+  - model.heptv2

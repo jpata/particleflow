@@ -42,6 +42,7 @@ uv run python3 mlpf/pipeline.py \
   --num_steps 2 \
   --checkpoint_freq 1 \
   --gpus 0 \
+  --model.attention.attention_type math \
   --dtype float32 \
   --gpu_batch_multiplier 1 \
   --ntrain 10 --ntest 10 --nvalid 10 \
