@@ -25,10 +25,12 @@ performance or coverage of every configuration combination.
 | IDEA | Electron-positron detector concept | Truth-seeded proxy tracks and calorimeter clusters | 0.2.0 | **Partial**; pipeline validation with an oracle reference |
 
 Versions come from `particleflow_spec.yaml`; they are not a statement of public
-download availability. CLD configuration-1 track/cluster downloads still stop
-at 3.2.1 in the Hub directories checked on this date. IDEA builders default to
-0.2.1 while its model recipe selects 0.2.0. See the [catalog](../datasets/catalog.md)
-for recipe names, publication boundaries, and this version mismatch.
+download availability. As verified on 28 October 2026, the Hub provides
+configuration-1 CLD and CLIC track/cluster 3.3.0 and hit 3.2.2 data for the
+standard `ttbar`, `WW`, and `qq` recipes, plus ColliderML track/cluster 1.2.0
+and IDEA 0.2.0. IDEA builders default to 0.2.1 while its model recipe selects
+0.2.0. See the [catalog](../datasets/catalog.md) for the verified Hub snapshot,
+publication boundaries, and this version mismatch.
 
 ColliderML has radius-graph and CLUE calorimeter clustering, surrogate-ancestor
 truth targets, conversion to MLPF Parquet, and clustered/hit TFDS builders.

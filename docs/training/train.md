@@ -1,14 +1,14 @@
 # Train a model
 
-This guide trains the standard CLD track-and-cluster model on configuration 1, version 3.3.0 of the `ttbar`, `WW`, and `qq` datasets. The [catalog](../datasets/catalog.md) distinguishes current recipe versions from published historical data. Start with the two-step CPU run to check the complete path. Use the GPU example only after that check succeeds.
+This guide trains the standard CLD track-and-cluster model on configuration 1, version 3.3.0 of the `ttbar`, `WW`, and `qq` datasets. The [catalog](../datasets/catalog.md) lists compatible recipes and published versions. Start with the two-step CPU run to check the complete path. Use the GPU example only after that check succeeds.
 
 A **training step** updates the model once using one accumulated batch. A **validation cycle** pauses training to measure loss on a separate set of held-out events. A **checkpoint** is a saved model and training state from a particular step.
 
 ## Prerequisites
 
 - Complete the [main installation](../getting-started/installation.md).
-- Produce and verify configuration 1, version 3.3.0 of the three CLD training datasets using [Key4HEP production](../datasets/key4hep.md), or obtain matching current data from your production workspace. The historical 3.2.1 download example is insufficient.
-- Replace `data/tfds/tensorflow_datasets/cld` below with the directory containing those three dataset-name directories (typically `<workspace>/tfds`). For a small integration check without producing the full samples, use the [quickstart](../getting-started/quickstart.md).
+- [Download and verify](../datasets/download.md) configuration 1, version 3.3.0 of the three CLD training datasets. You can also produce matching data using [Key4HEP production](../datasets/key4hep.md).
+- The commands below use the download guide's data root, `data/tfds/tensorflow_datasets/cld`. For locally produced data, replace it with the directory containing the three dataset-name directories (typically `<workspace>/tfds`). For a small integration check without downloading the full partition, use the [quickstart](../getting-started/quickstart.md).
 - Run commands from the repository root.
 
 The standard `pyg-cld-v1` recipe selects these three event types from configurations 1 through 10. `--data_config 1` restricts all three to the downloaded configuration.

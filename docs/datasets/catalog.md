@@ -55,13 +55,22 @@ Pass the detector-level directory containing the dataset-name directories as `--
 
 ## Published availability
 
-On 23 October 2026, the public Hub configuration-1 directories for CLD
-`ttbar`, `WW`, and `qq` track/cluster data contain versions through `3.2.1`,
-not the current recipe's `3.3.0`. The [download guide](download.md) therefore
-retains an explicitly historical decoding example. Produce current data with
-[the generation workflow](generate.md), or use an archived code/configuration
-compatible with an older dataset. Publication availability for other selections
-must be checked independently.
+As checked on **28 October 2026**, the [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/d03df152669939dae26336f68de7c0af575bb12d/tensorflow_datasets) includes metadata, feature definitions, and all declared split shards for these current-recipe selections:
+
+| Detector | Published datasets | Version | Configuration |
+|---|---|---|---|
+| CLD | `cld_edm_{ttbar,ww_fullhad,qq,zz}_pf` | 3.3.0 | 1 |
+| CLD | `cld_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
+| CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_pf` | 3.3.0 | 1 |
+| CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
+| ColliderML | `colliderml_ttbar_nopu_pf`, `colliderml_ttbar_pu200_pf` | 1.2.0 | 1 |
+| IDEA | `idea_edm_{ttbar,ww_fullhad,qq}_pf` | 0.2.0 | 1 |
+
+The [download guide](download.md) now supplies the CLD 3.3.0 inputs required by
+[the training guide](../training/train.md). Only configuration `1` is published
+for the selections above; use `--data_config 1` rather than the standard
+ten-partition training selection. Produce additional partitions with
+[the generation workflow](generate.md).
 
 Treat the [live Hub tree](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) as the source of truth for publication availability. The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects. A usable dataset has a detector, name, configuration, and version that match in both contexts.
 
