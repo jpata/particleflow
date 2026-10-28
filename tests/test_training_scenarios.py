@@ -1,3 +1,4 @@
+import argparse
 import json
 import shlex
 from copy import deepcopy
@@ -10,7 +11,9 @@ from mlpf.training_scenarios import (
     PlatformProfile,
     ScenarioVariant,
     ScenarioTraining,
+    TrainingScenario,
     _experiment_path,
+    _global_batch_size_arg,
     find_scenario_continuation,
     load_platform_profile,
     load_training_scenario,
@@ -191,6 +194,83 @@ HEPTV2_SECTOR_SCENARIO = ROOT / "configs/training/scenarios/cld_set_hits_heptv2_
 HEPTV2_MOMENTUM_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_heptv2_momentum_50k_comparison.yaml"
 HEPTV2_GROUPING_SCENARIO = ROOT / "configs/training/scenarios/cld_pf_heptv2_hit_grouping_50k.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
+
+
+def _pileup_weighting_scenario():
+    """pu0 and pu200 trained together, one group each; the variants differ only in the groups' step weights."""
+    model = "pyg-colliderml-pu0pu200-groups-v1"
+    weights = ["train_dataset.colliderml.pu0.weight", "train_dataset.colliderml.pu200.weight"]
+    return TrainingScenario.model_validate(
+        {
+            "name": "colliderml_pileup_weighting",
+            "production_name": "colliderml",
+            "variants": {
+                "unweighted": {"model_name": model},
+                "w11": {"model_name": model, "overrides": dict(zip(weights, [1, 1]))},
+                "w13": {"model_name": model, "overrides": dict(zip(weights, [1, 3]))},
+            },
+            "seeds": [12345],
+            "training": {"global_batch_size": {"pu0": 768, "pu200": 64}, "parameters": {"num_steps": 20000}},
+            "allowed_variant_differences": weights,
+        }
+    )
+
+
+def _train_groups(job):
+    config = job.resolved_config
+    return {
+        name: (group.batch_size * config.gpu_batch_multiplier, group.weight, {sample.version for sample in group.samples.values()})
+        for name, group in config.train_dataset[config.dataset.value].items()
+    }
+
+
+def test_pileup_weighting_scenario_differs_only_in_step_weights():
+    scenario = _pileup_weighting_scenario()
+    jobs = resolve_scenario_jobs(scenario, load_platform_profile(PLATFORMS / "flatiron_h100.yaml"), spec_file=ROOT / "particleflow_spec.yaml")
+
+    assert [job.variant_name for job in jobs] == ["unweighted", "w11", "w13"]
+    assert {job.gpu_batch_multiplier for job in jobs} == {8}
+    assert all(job.global_batch_size == {"pu0": 768, "pu200": 64} for job in jobs)
+    assert all(job.per_gpu_batch_size == {"pu0": 96, "pu200": 8} for job in jobs)
+    assert [_train_groups(job) for job in jobs] == [
+        {"pu0": (96, None, {"1.2.0"}), "pu200": (8, None, {"1.2.0"})},
+        {"pu0": (96, 1.0, {"1.2.0"}), "pu200": (8, 1.0, {"1.2.0"})},
+        {"pu0": (96, 1.0, {"1.2.0"}), "pu200": (8, 3.0, {"1.2.0"})},
+    ]
+    assert all(list(job.resolved_config.valid_dataset["colliderml"]) == ["pu0", "pu200"] for job in jobs)
+
+
+@pytest.mark.parametrize(
+    "global_batch_size, error",
+    [
+        (32, "different dataset batch sizes"),
+        ({"pu0": 768}, "names groups"),
+        ({"pu0": 384, "pu200": 64}, "one multiplier serves all groups"),
+        ({"pu0": 768, "pu200": 68}, r"global_batch_size\[pu200\]=68 is not divisible"),
+    ],
+)
+def test_per_group_global_batch_must_match_the_groups(global_batch_size, error):
+    scenario = _pileup_weighting_scenario()
+    platform = load_platform_profile(PLATFORMS / "flatiron_h100.yaml")
+    scenario.training.global_batch_size = global_batch_size
+    with pytest.raises(ValueError, match=error):
+        resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+
+
+def test_global_batch_size_cli_takes_one_value_or_one_per_group():
+    assert _global_batch_size_arg("1536") == 1536
+    assert _global_batch_size_arg("pu0=768, pu200=64") == {"pu0": 768, "pu200": 64}
+    for bad in ("pu0=768,pu200", "big", "pu0=x"):
+        with pytest.raises(argparse.ArgumentTypeError):
+            _global_batch_size_arg(bad)
+    platform = load_platform_profile(PLATFORMS / "flatiron_h100.yaml")
+    jobs = resolve_scenario_jobs(
+        _pileup_weighting_scenario(),
+        platform,
+        spec_file=ROOT / "particleflow_spec.yaml",
+        global_batch_size=_global_batch_size_arg("pu0=1536,pu200=128"),
+    )
+    assert {job.gpu_batch_multiplier for job in jobs} == {16}
 
 
 def test_heptv2_momentum_scenario_isolates_50k_loss_and_matcher_changes():

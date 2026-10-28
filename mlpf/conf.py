@@ -1031,6 +1031,7 @@ class DatasetSample(BaseModel):
 class PhysicalDataset(BaseModel):
     model_config = ConfigDict(extra="forbid")
     batch_size: int = 1
+    weight: Optional[float] = Field(default=None, gt=0.0)
     samples: Dict[str, DatasetSample]
 
 
@@ -1042,6 +1043,7 @@ class TestDatasetEntry(BaseModel):
 
 
 _MODEL_DATASET_KEYS = {"architecture", "train_datasets", "validation_datasets", "test_datasets"}
+_DATASET_SECTIONS = ("train_dataset", "valid_dataset", "test_dataset")
 _ACTION_FLAGS = ("train", "test", "compile", "make_plots", "gpus", "load")
 _BACKBONE_TYPES = ("gnnlsh", "attention", "litept", "hept", "heptv2")
 
@@ -1106,10 +1108,12 @@ def _apply_namespace_overrides(config, args, valid_fields):
 
 
 def _apply_extra_arg_overrides(config, extra_args):
+    """Dot-notation overrides, except of the dataset sections: _apply_dataset_overrides applies those once they are built."""
     if not extra_args:
         return
     for key, value in parse_extra_args(extra_args).items():
-        set_nested_dict(config, key, value)
+        if key.split(".", 1)[0] not in _DATASET_SECTIONS:
+            set_nested_dict(config, key, value)
 
     index = 0
     while index < len(extra_args):
@@ -1121,6 +1125,24 @@ def _apply_extra_arg_overrides(config, extra_args):
             index += 1
         else:
             raise ValueError(f"Could not parse extra argument: {arg}")
+
+
+def _apply_dataset_overrides(config, extra_args):
+    """Dot-notation overrides of the dataset sections that _build_dataset_configs built from the model spec
+    (e.g. --train_dataset.clic.physical.batch_size 2, or a sample version). Every key but the last must already exist,
+    so that a misspelled detector, group or sample raises instead of adding a dataset."""
+    if not extra_args:
+        return
+    for key, value in parse_extra_args(extra_args).items():
+        if key.split(".", 1)[0] not in _DATASET_SECTIONS:
+            continue
+        node = config
+        path = key.split(".")[:-1]
+        for depth, name in enumerate(path):
+            if not isinstance(node, dict) or name not in node:
+                raise ValueError(f"--{key}: the model spec defines no {'.'.join(path[: depth + 1])}")
+            node = node[name]
+        set_nested_dict(config, key, value)
 
 
 def _normalize_data_config(config):
@@ -1154,6 +1176,7 @@ def _build_physical_dataset_config(dataset_input, dataset_name, config):
             samples[sample["name"]] = entry
         dataset_config[dataset_name][physical_name] = {
             "batch_size": physical_config.get("batch_size", config.get("batch_size", 1)),
+            "weight": physical_config.get("weight"),
             "samples": samples,
         }
     return dataset_config
@@ -1260,7 +1283,7 @@ class MLPFConfig(BaseModel):
     compile: bool = False
     make_plots: bool = True
     sort_data: bool = False
-    sampler_mode: DatasetSamplerMode = DatasetSamplerMode.SHARD_CONSECUTIVE
+    sampler_mode: DatasetSamplerMode = DatasetSamplerMode.SHARD_CONSECUTIVE  # use interleaved-shards for groups of several samples
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
     relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
     load_weights_only: bool = False  # load only the model weights from --load; optimizer, LR schedule, RNG, sampler and step start fresh
@@ -1270,7 +1293,6 @@ class MLPFConfig(BaseModel):
     comet: bool = False
     comet_offline: bool = False
     comet_name: str = "particleflow"
-    comet_step_freq: int = 10000
     tensorboard_step_freq: int = 100
 
     raytune: Dict[str, Any] = Field(default_factory=dict)
@@ -1313,6 +1335,19 @@ class MLPFConfig(BaseModel):
                 self.model.set_decoder = SetDecoderConfig()
             if self.model.backbone.mode != BackboneMode.SHARED:
                 raise ValueError("model.output_mode='set' currently requires model.backbone.mode='shared'")
+        return self
+
+    @model_validator(mode="after")
+    def validate_dataset_weights(self) -> "MLPFConfig":
+        """Step weights go on every train group of a detector or on none, and never on validation groups."""
+        for detector, groups in (self.train_dataset or {}).items():
+            weights = {name: group.weight for name, group in groups.items()}
+            if len({weight is None for weight in weights.values()}) > 1:
+                raise ValueError(f"set weight on every train_dataset.{detector} group or on none, got {weights}")
+        for detector, groups in (self.valid_dataset or {}).items():
+            weighted = [name for name, group in groups.items() if group.weight is not None]
+            if weighted:
+                raise ValueError(f"weight only applies to train groups, but valid_dataset.{detector} sets it on {weighted}")
         return self
 
     def flatten_config(self, prefix=""):
@@ -1360,6 +1395,7 @@ class MLPFConfig(BaseModel):
         for key, value in parse_extra_args(extra_args or []).items():
             if key.split(".", 1)[0] in {"train_dataset", "valid_dataset", "test_dataset"}:
                 set_nested_dict(config_dict, key, value)
+        _apply_dataset_overrides(config_dict, extra_args)
         if getattr(args, "pipeline", False):
             _apply_pipeline_overrides(config_dict, dataset_name)
 
