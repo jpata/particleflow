@@ -70,7 +70,6 @@ from mlpf.model.utils import (
 )
 from mlpf.model.monitoring import (
     log_step_to_tensorboard,
-    log_dataloader_to_tensorboard,
     log_open_files_to_tensorboard,
     log_gpu_utilization_to_tensorboard,
     log_gradients_to_tensorboard,
@@ -311,6 +310,62 @@ def _add_unweighted_total(losses):
     losses[UNWEIGHTED_TOTAL] = sum(losses[task] for task in LOSS_TASKS)
 
 
+class _GroupLossMeans:
+    """Per-dataset-group means of loss dicts: {group: {loss: mean}}, in the order of names, for the groups that added any."""
+
+    def __init__(self, names):
+        self.names = list(names)
+        self.reset()
+
+    def reset(self):
+        self.sums = {group: {} for group in self.names}
+        self.counts = dict.fromkeys(self.names, 0)
+
+    def add(self, group, losses):
+        """Adds the losses of one batch or step of group; skipped for None."""
+        if group is None:
+            return
+        self.counts[group] += 1
+        for name, value in losses.items():
+            self.sums[group][name] = self.sums[group].get(name, 0.0) + value
+
+    def means(self):
+        return {group: {name: value / self.counts[group] for name, value in self.sums[group].items()} for group in self.names if self.counts[group]}
+
+    def reduce(self, loss_names, rank, world_size):
+        """Sums over the ranks, as floats. One fixed-shape all_reduce, so the ranks cannot disagree on the keys even if a
+        group had no batch on some rank."""
+        device = rank if isinstance(rank, int) else "cpu"
+        # one row per group: its summed losses, then its count
+        packed = torch.zeros((len(self.names), len(loss_names) + 1), device=device, dtype=torch.float32)
+        for igroup, group in enumerate(self.names):
+            for iloss, name in enumerate(loss_names):
+                packed[igroup, iloss] = self.sums[group].get(name, 0.0)
+            packed[igroup, -1] = self.counts[group]
+        if world_size > 1:
+            torch.distributed.all_reduce(packed)
+        for group, (*sums, count) in zip(self.names, packed.tolist()):
+            self.sums[group], self.counts[group] = dict(zip(loss_names, sums)), int(count)
+
+
+def _last_group(loader):
+    """The group of the batch the loader yielded last; None unless it mixes several named groups."""
+    names = getattr(loader, "names", [])
+    return names[loader.last_loader_index] if len(names) > 1 else None
+
+
+def _validation_group_losses(group_losses, loss_names, rank, world_size):
+    """{"group/<group>/<loss>": batch average over all ranks}, with each group's unweighted total; only with several groups."""
+    if len(group_losses.names) < 2:
+        return {}
+    group_losses.reduce(loss_names, rank, world_size)
+    out = {}
+    for group, losses in group_losses.means().items():
+        _add_unweighted_total(losses)
+        out.update({f"group/{group}/{name}": value for name, value in losses.items()})
+    return out
+
+
 def _get_task_loss_weighter(model):
     model_module = model.module if hasattr(model, "module") else model
     return getattr(model_module, "task_loss_weighter", None)
@@ -355,6 +410,36 @@ def _log_validation_results_to_tensorboard(tensorboard_writer, validation_result
         else:
             tag = f"step/loss_{name}"
         tensorboard_writer.add_scalar(tag, value, step)
+
+
+def _split_group_losses(losses):
+    """Splits off the "group/<group>/<loss>" entries: (the other entries, {group: {loss: value}})."""
+    other, group_losses = {}, {}
+    for name, value in losses.items():
+        if name.startswith("group/"):
+            _, group, loss_name = name.split("/", 2)
+            group_losses.setdefault(group, {})[loss_name] = value
+        else:
+            other[name] = value
+    return other, group_losses
+
+
+def _log_group_losses_to_tensorboard(tensorboard_writer, group_losses, step):
+    """Per-dataset-group losses {group: {loss: value}} as group/<group>/loss_<loss>, the same tag in the train and valid
+    runs so that they overlay."""
+    for group, losses in group_losses.items():
+        for name, value in losses.items():
+            tensorboard_writer.add_scalar(f"group/{group}/loss_{name}", value, step)
+
+
+def _comet_group_metrics(group_losses, split):
+    """Per-dataset-group losses {group: {loss: value}} as Comet metrics <group>/<split>_loss_<loss>, one panel group per
+    dataset group."""
+    return {f"{group}/{split}_loss_{name}": value for group, losses in group_losses.items() for name, value in losses.items()}
+
+
+def _format_group_losses(group_losses):
+    return " | ".join(f"{group}: {losses[UNWEIGHTED_TOTAL]:.4f}" for group, losses in group_losses.items())
 
 
 def _log_validation_probe_results(values, step):
@@ -520,14 +605,12 @@ def train_step(
     step: int,
     regression_weights,
     tensorboard_writer=None,
-    comet_experiment=None,
-    comet_step_freq=None,
     tensorboard_step_freq=100,
     checkpoint_dir="",
     device_type="cuda",
     dtype=torch.float32,
     scaler=None,
-    loader_state_dict={},
+    loader_stats=None,
 ):
     """Run one training step
 
@@ -540,8 +623,6 @@ def train_step(
         lr_schedule: Learning rate scheduler
         step: Current step number
         tensorboard_writer: TensorBoard writer object
-        comet_experiment: Comet.ml experiment object
-        comet_step_freq: How often to log to comet
         tensorboard_step_freq: How often to log to TensorBoard
         checkpoint_dir: Directory to save checkpoints
         device_type: 'cuda' or 'cpu'
@@ -655,7 +736,8 @@ def train_step(
         log_open_files_to_tensorboard(tensorboard_writer, step)
         log_gpu_utilization_to_tensorboard(tensorboard_writer, step)
         log_step_to_tensorboard(batch, loss["Total"], lr_schedule, tensorboard_writer, step)
-        log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step)
+        if loader_stats:
+            log_diagnostics_to_tensorboard(tensorboard_writer, loader_stats, step, prefix="data")
         _log_batch_composition(batch, tensorboard_writer, step, "diagnostic/train_batch")
         log_gradients_to_tensorboard(model, tensorboard_writer, step)
         log_residuals_to_tensorboard(model, tensorboard_writer, step)
@@ -663,12 +745,6 @@ def train_step(
         phase_start = time.perf_counter()
         tensorboard_writer.flush()
         _record_phase_time(diagnostics["time"], "tensorboard_flush", phase_start, device_type)
-
-    if comet_experiment is not None and (step % comet_step_freq == 0):
-        phase_start = time.perf_counter()
-        comet_experiment.log_metrics(loss, prefix="train", step=step)
-        comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
-        _record_phase_time(diagnostics["time"], "comet_logging", phase_start, device_type)
 
     # Average losses across steps
     num_steps = torch.tensor(1.0, device=rank, dtype=torch.float32)
@@ -899,6 +975,7 @@ def evaluate(
         from mlpf.model.validation_probes import ValidationCaloProbe
 
         probe = ValidationCaloProbe(config.validation_linear_probe_max_events)
+    group_losses = _GroupLossMeans(getattr(valid_loader, "names", []))
 
     # Only show progress bar on rank 0
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
@@ -1016,6 +1093,7 @@ def evaluate(
             if loss_name not in eval_loss:
                 eval_loss[loss_name] = 0.0
             eval_loss[loss_name] += loss[loss_name]
+        group_losses.add(_last_group(valid_loader), loss)
 
     # Average losses across steps
     num_steps = torch.tensor(float(len(valid_loader)), device=rank, dtype=torch.float32)
@@ -1026,6 +1104,7 @@ def evaluate(
         if world_size > 1:
             torch.distributed.all_reduce(eval_loss[loss_name])
         eval_loss[loss_name] = eval_loss[loss_name].cpu().item() / num_steps.cpu().item()
+    eval_loss.update(_validation_group_losses(group_losses, sorted(eval_loss), rank, world_size))
     _add_unweighted_total(eval_loss)
 
     if probe is not None:
@@ -1041,9 +1120,9 @@ def evaluate(
 
 
 def get_train_epoch(train_loader):
-    """Fractional epoch of the training data seen so far: completed epochs plus the fraction of batches consumed in the current one."""
-    interleaved = train_loader.data_loader
-    return train_loader.epoch + interleaved.cur_index / len(interleaved.loader_ds_indices)
+    """Fractional epoch: batches yielded by all train groups over the batches of one pass over all of them (the per-group
+    passes are logged as data/<group>/passes)."""
+    return sum(train_loader.batches) / len(train_loader)
 
 
 def _log_and_checkpoint_step(
@@ -1065,8 +1144,13 @@ def _log_and_checkpoint_step(
     valid_sampler,
     num_patience,
     tensorboard_step_freq,
+    losses_train_group,
+    train_group,
 ):
-    """Helper function to log training information and save periodic checkpoints."""
+    """Helper function to log training information and save periodic checkpoints.
+
+    losses_train_group: per-train-group loss means since the last logging step (for TensorBoard).
+    train_group: the group of this step's batch, None with a single group (for Comet)."""
 
     log_this_step = step % tensorboard_step_freq == 0
     epoch = get_train_epoch(train_loader)
@@ -1083,13 +1167,18 @@ def _log_and_checkpoint_step(
                 for task, value in diagnostic_values.items():
                     tensorboard_writer_train.add_scalar(f"step/task_{diagnostic_name}_{task}", value, step)
 
+        _log_group_losses_to_tensorboard(tensorboard_writer_train, losses_train_group, step)
         tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_tensorboard_logging", time.perf_counter() - log_start, step)
 
     if comet_experiment:
         comet_start = time.perf_counter()
-        comet_experiment.log_metrics(losses_train, prefix="step_train_loss", step=step)
+        metrics = {f"step_train_loss_{name}": value for name, value in losses_train.items()}
         # a float metric, so that comet panels can use it as a custom x-axis (the epoch= argument of log_metrics only takes ints)
-        comet_experiment.log_metric("epoch", epoch, step=step)
+        metrics["epoch"] = epoch
+        metrics["learning_rate"] = lr_schedule.get_last_lr()[0]
+        if train_group is not None:
+            metrics.update(_comet_group_metrics({train_group: losses_train}, "train"))
+        comet_experiment.log_metrics(metrics, step=step)
         if log_this_step and ((rank == 0) or (rank == "cpu")):
             tensorboard_writer_train.add_scalar("diagnostic/log_and_checkpoint/time_comet_logging", time.perf_counter() - comet_start, step)
 
@@ -1153,8 +1242,9 @@ def _run_validation_cycle(
     train_loader,
     valid_sampler,
     train_sampler,
+    losses_train_group,
 ):
-    """Run the validation, testing, and plotting cycle."""
+    """Run the validation, testing, and plotting cycle. losses_train_group goes to the step history."""
 
     _logger.info(f"Running validation on rank{rank}")
     valid_loader.reset()
@@ -1175,6 +1265,7 @@ def _run_validation_cycle(
         dtype=dtype,
     )
     log_memory("evaluate_end", rank, tensorboard_writer_valid, step)
+    losses_valid_combined, losses_valid_group = _split_group_losses(losses_valid)
     valid_time = time.time() - train_time - t0_initial
     total_time = time.time() - t0_initial
 
@@ -1184,8 +1275,8 @@ def _run_validation_cycle(
 
     # Log validation metrics to CometML
     if comet_experiment:
-        comet_experiment.log_metrics(losses_valid, prefix="step_valid_loss", step=step)
-        comet_experiment.log_metric("learning_rate", lr_schedule.get_last_lr(), step=step)
+        metrics = {f"step_valid_loss_{name}": value for name, value in losses_valid_combined.items()}
+        comet_experiment.log_metrics({**metrics, **_comet_group_metrics(losses_valid_group, "valid")}, step=step)
 
     # All subsequent actions are only done on the main process
     if (rank == 0) or (rank == "cpu"):
@@ -1197,7 +1288,8 @@ def _run_validation_cycle(
             stale_steps += 1
 
         # Log validation losses to TensorBoard
-        _log_validation_results_to_tensorboard(tensorboard_writer_valid, losses_valid, step)
+        _log_validation_results_to_tensorboard(tensorboard_writer_valid, losses_valid_combined, step)
+        _log_group_losses_to_tensorboard(tensorboard_writer_valid, losses_valid_group, step)
 
         # Save step statistics to a JSON file
         history_path = Path(outdir) / "history"
@@ -1205,6 +1297,7 @@ def _run_validation_cycle(
         stats = {
             "epoch": get_train_epoch(train_loader),
             "train": losses_train,
+            "train_group": losses_train_group,
             "valid": losses_valid,
             "step_train_time": train_time,
             "step_valid_time": valid_time,
@@ -1219,12 +1312,14 @@ def _run_validation_cycle(
         eta = steps_remaining * time_per_step / 60
 
         # Log a summary of the validation step
+        group_summary = f"Group Valid Loss Unweighted: {_format_group_losses(losses_valid_group)} | " if losses_valid_group else ""
         _logger.info(
             f"VALIDATION | Step={step}/{num_steps} | "
             f"Train Loss={losses_train['Total']:.4f} | "
             f"Valid Loss={losses_valid['Total']:.4f} | "
             f"Train Loss Unweighted={losses_train[UNWEIGHTED_TOTAL]:.4f} | "
             f"Valid Loss Unweighted={losses_valid[UNWEIGHTED_TOTAL]:.4f} | "
+            f"{group_summary}"
             f"Stale={stale_steps} | "
             f"ETA={eta:.1f}m"
         )
@@ -1329,7 +1424,6 @@ def train_all_steps(
     use_ray=False,
     checkpoint_freq=None,
     comet_experiment=None,
-    comet_step_freq=None,
     val_freq=None,
     checkpoint_dir: str = "",
     train_sampler=None,
@@ -1373,6 +1467,9 @@ def train_all_steps(
             desc=f"Training on rank={rank}",
         )
 
+    # per-train-group loss means since the last logging step
+    train_group_losses = _GroupLossMeans(train_loader.names)
+
     # loop over the dataset
     for step in iterator:
         log_this_step = step % config.tensorboard_step_freq == 0
@@ -1396,18 +1493,21 @@ def train_all_steps(
             lr_schedule=lr_schedule,
             step=step,
             tensorboard_writer=tensorboard_writer_train,
-            comet_experiment=comet_experiment,
-            comet_step_freq=comet_step_freq,
             tensorboard_step_freq=config.tensorboard_step_freq,
             checkpoint_dir=checkpoint_dir,
             device_type=device_type,
             dtype=dtype,
             scaler=scaler,
-            loader_state_dict=train_loader.state_dict()["loader_state_dict"],
+            loader_stats=train_loader.stats() if (log_this_step and tensorboard_writer_train is not None) else None,
             regression_weights=UNIT_REGRESSION_WEIGHTS,
         )
         log_memory("train_step_end", rank, tensorboard_writer_train if log_this_step else None, step)
         model_forward_time = time.time() - model_forward_start
+        train_group = _last_group(train_loader)
+        train_group_losses.add(train_group, losses_train)
+        losses_train_group = train_group_losses.means()
+        if log_this_step:
+            train_group_losses.reset()
         train_time = time.time() - step_start_time
 
         step_time_summary = step_diagnostics.get("time", {}) if step_diagnostics else {}
@@ -1429,11 +1529,13 @@ def train_all_steps(
             diagnostics = task_loss_diagnostics or {}
             task_weight_components = _format_task_diagnostic(diagnostics.get("weight", {}))
             task_weighted_loss_components = _format_task_diagnostic(diagnostics.get("weighted_loss", {}))
+            group_summary = f"Group Train Loss Unweighted (window mean): {_format_group_losses(losses_train_group)} | " if losses_train_group else ""
             _logger.info(
                 f"Step {step}/{num_steps} rank{rank} | "
                 f"Train Loss: {losses_train['Total']:.4f} | "
                 f"Train Loss Unweighted: {losses_train[UNWEIGHTED_TOTAL]:.4f} | "
                 f"Train Loss Components: {train_loss_components} | "
+                f"{group_summary}"
                 f"Task Weights: {task_weight_components} | "
                 f"Task Weighted Losses: {task_weighted_loss_components} | "
                 f"LR: {current_lr:.2e} | "
@@ -1470,6 +1572,8 @@ def train_all_steps(
             valid_sampler,
             config.patience,
             config.tensorboard_step_freq,
+            losses_train_group=losses_train_group,
+            train_group=train_group,
         )
 
         # Run validation, testing, and plotting cycle at specified frequency, or at the last step
@@ -1499,6 +1603,7 @@ def train_all_steps(
                 train_loader,
                 valid_sampler,
                 train_sampler,
+                losses_train_group=losses_train_group,
             )
 
         # Check for early stopping
@@ -1827,7 +1932,6 @@ def run(  # noqa: C901
             use_ray=False,
             checkpoint_freq=config.checkpoint_freq,
             comet_experiment=comet_experiment,
-            comet_step_freq=config.comet_step_freq,
             val_freq=config.val_freq,
             checkpoint_dir=str(checkpoint_dir),
             train_sampler=samplers["train"],

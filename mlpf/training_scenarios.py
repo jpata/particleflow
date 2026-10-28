@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from mlpf.conf import MLPFConfig
 
@@ -37,6 +37,8 @@ class ScenarioVariant(BaseModel):
     model_name: str
     # Defaults to the scenario-level production; set it to compare detectors.
     production_name: str | None = None
+    # Omit to use the hardware profile's GPU count (e.g. for large hit models).
+    gpus: int | None = Field(default=None, gt=0)
     overrides: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -50,7 +52,9 @@ class ScenarioVariant(BaseModel):
 class ScenarioTraining(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    global_batch_size: int = Field(gt=0)
+    # Events per optimizer step, summed over all GPUs. Each step draws one batch from one train
+    # group, so with groups of different dataset batch sizes give one value per group.
+    global_batch_size: PositiveInt | dict[str, PositiveInt]
     parameters: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -158,8 +162,9 @@ class ResolvedScenarioJob(BaseModel):
     production_name: str
     data_dir: str
     seed: int
-    global_batch_size: int
-    per_gpu_batch_size: int
+    # one value, or one per train group when the scenario gives global_batch_size per group
+    global_batch_size: int | dict[str, int]
+    per_gpu_batch_size: int | dict[str, int]
     gpu_batch_multiplier: int
     settings: dict[str, Any]
     resolved_config: MLPFConfig
@@ -243,14 +248,44 @@ def _config_args(profile, settings, data_dir):
     )
 
 
-def _training_batch_size(config):
-    physical_datasets = config.train_dataset[config.dataset.value].values()
-    batch_sizes = {dataset.batch_size for dataset in physical_datasets}
-    if len(batch_sizes) != 1:
+def _train_group_batch_sizes(config):
+    return {name: group.batch_size for name, group in config.train_dataset[config.dataset.value].items()}
+
+
+def _gpu_batch_multiplier(target, group_batch_sizes, gpus):
+    """gpu_batch_multiplier for the target global batch size (events per step, summed over all GPUs).
+
+    A train group's global batch size is gpus * its dataset batch_size * multiplier. target is either
+    one value for all groups (only if they share a dataset batch_size) or a {group: value} dict.
+    Example: 8 GPUs, batch sizes {pu0: 12, pu200: 1} and target {pu0: 768, pu200: 64} give multiplier 8.
+    There is only one multiplier, so every group must give the same one, i.e. the target values must
+    have the same ratios as the dataset batch sizes.
+    """
+    per_group = isinstance(target, dict)
+    if not per_group:
+        if len(set(group_batch_sizes.values())) != 1:
+            raise ValueError(
+                f"train groups have different dataset batch sizes {group_batch_sizes}; give global_batch_size per group, "
+                f"e.g. {{{', '.join(f'{name}: {gpus * size}' for name, size in group_batch_sizes.items())}}} for multiplier 1"
+            )
+        target = dict.fromkeys(group_batch_sizes, target)
+
+    if set(target) != set(group_batch_sizes):
+        raise ValueError(f"global_batch_size names groups {sorted(target)}, but the train groups are {sorted(group_batch_sizes)}")
+    multipliers = {}
+    for name, events in target.items():
+        label = f"global_batch_size[{name}]" if per_group else "global_batch_size"
+        if events <= 0:
+            raise ValueError(f"{label} must be positive")
+        if events % (gpus * group_batch_sizes[name]):
+            raise ValueError(f"{label}={events} is not divisible by gpus={gpus} * dataset_batch_size={group_batch_sizes[name]}")
+        multipliers[name] = events // (gpus * group_batch_sizes[name])
+    if len(set(multipliers.values())) != 1:
         raise ValueError(
-            "Automatic global-batch resolution requires every physical training dataset " f"to use the same batch size, got {sorted(batch_sizes)}"
+            f"global_batch_size {target} implies gpu_batch_multiplier {multipliers}, but one multiplier serves all groups: "
+            f"keep the dataset batch_size ratios {group_batch_sizes} or override train_dataset.<detector>.<group>.batch_size"
         )
-    return next(iter(batch_sizes))
+    return next(iter(multipliers.values()))
 
 
 def _merge_settings(scenario, platform, variant, extra_overrides):
@@ -276,6 +311,8 @@ def resolve_scenario_job(
     if variant_name not in scenario.variants:
         raise ValueError(f"Unknown variant {variant_name!r}; choose from {sorted(scenario.variants)}")
     variant = scenario.variants[variant_name]
+    if variant.gpus is not None:
+        platform = platform.model_copy(update={"gpus": variant.gpus})
     extra_overrides = extra_overrides or {}
     invalid = DERIVED_KEYS.intersection(extra_overrides)
     if invalid:
@@ -296,16 +333,10 @@ def resolve_scenario_job(
         )
 
     target_global_batch = global_batch_size if global_batch_size is not None else scenario.training.global_batch_size
-    if target_global_batch <= 0:
-        raise ValueError("global_batch_size must be positive")
-    dataset_batch_size = _training_batch_size(config)
-    divisor = platform.gpus * dataset_batch_size
-    if target_global_batch % divisor:
-        raise ValueError(
-            f"global_batch_size={target_global_batch} is not divisible by " f"gpus={platform.gpus} * dataset_batch_size={dataset_batch_size}"
-        )
-    multiplier = target_global_batch // divisor
+    group_batch_sizes = _train_group_batch_sizes(config)
+    multiplier = _gpu_batch_multiplier(target_global_batch, group_batch_sizes, platform.gpus)
     settings["gpu_batch_multiplier"] = multiplier
+    per_gpu_batch_size = {name: size * multiplier for name, size in group_batch_sizes.items()}
 
     with _temporary_environment(platform.environment):
         config = MLPFConfig.from_spec(
@@ -325,7 +356,7 @@ def resolve_scenario_job(
         data_dir=data_dir,
         seed=seed,
         global_batch_size=target_global_batch,
-        per_gpu_batch_size=dataset_batch_size * multiplier,
+        per_gpu_batch_size=per_gpu_batch_size if isinstance(target_global_batch, dict) else next(iter(per_gpu_batch_size.values())),
         gpu_batch_multiplier=multiplier,
         settings=settings,
         resolved_config=config,
@@ -386,7 +417,7 @@ def resolve_scenario_jobs(
     ]
     for seed in scenario.seeds:
         seed_jobs = [job for job in jobs if job.seed == seed]
-        validate_variant_invariants(seed_jobs, scenario.allowed_variant_differences)
+        validate_variant_invariants(seed_jobs, [*scenario.allowed_variant_differences, "gpus", "gpu_batch_multiplier"])
     return jobs
 
 
@@ -408,7 +439,7 @@ def _pipeline_command(job, scenario, platform, spec_file, experiment_dir):
         str(experiment_dir),
         "train",
         "--gpus",
-        str(platform.gpus),
+        str(job.resolved_config.gpus),
     ]
     for name in sorted(KNOWN_VALUE_FLAGS):
         value = settings.pop(name, None)
@@ -540,10 +571,29 @@ def _parse_set_overrides(values):
     return overrides
 
 
+def _global_batch_size_arg(value):
+    """--global-batch-size: N for every train group, or one per group as GROUP=N,GROUP=N."""
+    try:
+        if "=" not in value:
+            return int(value)
+        return {name.strip(): int(size) for name, size in (item.split("=", 1) for item in value.split(","))}
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected N or GROUP=N,GROUP=N, got {value!r}") from None
+
+
 def _validate_slurm_allocation(platform):
-    allocated = os.environ.get("SLURM_GPUS_PER_NODE")
-    if allocated and allocated.isdigit() and int(allocated) != platform.gpus:
-        raise ValueError(f"Platform profile requests {platform.gpus} GPUs but Slurm allocated {allocated}")
+    # A whole-node allocation can expose eight GPUs while this task only uses
+    # one. Prefer the per-task request and reject insufficient capacity, not
+    # surplus GPUs. The pipeline still launches exactly config.gpus workers.
+    for variable in ("SLURM_GPUS_PER_TASK", "SLURM_GPUS_ON_NODE", "SLURM_GPUS_PER_NODE"):
+        allocated = os.environ.get(variable, "")
+        # Slurm also accepts typed counts such as "mi250:1" or "a100:1,h100:1".
+        if not re.fullmatch(r"(?:[^,:]+:)?\d+(?:,(?:[^,:]+:)?\d+)*", allocated):
+            continue
+        count = sum(int(item.rsplit(":", 1)[-1]) for item in allocated.split(","))
+        if count < platform.gpus:
+            raise ValueError(f"Training requests {platform.gpus} GPUs but Slurm allocated {count} ({variable}={allocated})")
+        return
 
 
 def main(argv=None):
@@ -555,7 +605,7 @@ def main(argv=None):
     selection.add_argument("--variant")
     selection.add_argument("--task-index", type=int)
     parser.add_argument("--seed", type=int)
-    parser.add_argument("--global-batch-size", type=int)
+    parser.add_argument("--global-batch-size", type=_global_batch_size_arg, metavar="N|GROUP=N,...")
     parser.add_argument("--data-dir")
     parser.add_argument("--experiments-dir")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
@@ -579,7 +629,6 @@ def main(argv=None):
         platform.data_dir = args.data_dir
     if args.experiments_dir:
         platform.experiments_dir = args.experiments_dir
-    _validate_slurm_allocation(platform)
 
     spec_file = args.spec_file or scenario.spec_file
     jobs = resolve_scenario_jobs(
@@ -600,6 +649,7 @@ def main(argv=None):
             raise ValueError("No jobs matched the requested variant")
 
     for job in jobs:
+        _validate_slurm_allocation(platform.model_copy(update={"gpus": job.resolved_config.gpus}))
         if args.continue_run:
             continuation = find_scenario_continuation(job, platform)
             if continuation is None:

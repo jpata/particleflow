@@ -370,7 +370,6 @@ def train_ray_trial(config, args, outdir=None):
         use_ray=True,
         checkpoint_freq=mlpf_config.checkpoint_freq,
         comet_experiment=comet_experiment,
-        comet_step_freq=mlpf_config.comet_step_freq,
         dtype=getattr(torch, mlpf_config.dtype),
         val_freq=mlpf_config.val_freq,
         checkpoint_dir=checkpoint_dir,

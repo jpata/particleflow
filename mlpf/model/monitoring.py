@@ -256,11 +256,6 @@ def log_diagnostics_to_tensorboard(tensorboard_writer, diagnostics, step, prefix
             tensorboard_writer.add_scalar(f"{prefix}/{group}", values, step)
 
 
-def log_dataloader_to_tensorboard(loader_state_dict, tensorboard_writer, step):
-    for k in ["cur_index"]:
-        tensorboard_writer.add_scalar("step/{}".format(k), loader_state_dict[k], step)
-
-
 def log_gradients_to_tensorboard(model, tensorboard_writer, step):
     """
     Logs the gradient norms to tensorboard.

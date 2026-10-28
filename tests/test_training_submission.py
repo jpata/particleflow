@@ -9,6 +9,7 @@ import yaml
 from mlpf.training_submission import (
     available_choices,
     build_slurm_submission,
+    build_slurm_submissions,
     resolve_flatiron_profile_path,
     resolve_platform_profile_path,
     resolve_scenario_path,
@@ -201,7 +202,8 @@ def test_continue_submission_selects_only_unfinished_original_array_indices(tmp_
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
-def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, monkeypatch, dry_run):
+@pytest.mark.parametrize("num_groups", [1, 2])
+def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, monkeypatch, dry_run, num_groups):
     import mlpf.training_submission as submission
 
     scenario_path = tmp_path / "scenario.yaml"
@@ -212,7 +214,7 @@ def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, m
     monkeypatch.setattr(submission, "available_choices", lambda *args: ([], []))
     monkeypatch.setattr(submission, "resolve_scenario_path", lambda *args: scenario_path)
     monkeypatch.setattr(submission, "resolve_platform_profile_path", lambda *args: profile_path)
-    monkeypatch.setattr(submission, "build_slurm_submission", lambda *args, **kwargs: (command, [object()]))
+    monkeypatch.setattr(submission, "build_slurm_submissions", lambda *args, **kwargs: [(command, [object()])] * num_groups)
     monkeypatch.setattr(Path, "mkdir", lambda *args, **kwargs: None)
 
     # Preparing a container submission must never invoke sbatch itself.
@@ -227,4 +229,84 @@ def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, m
         assert not script_path.exists()
     else:
         result = subprocess.run(["bash", str(script_path)], check=True, capture_output=True, text=True)
-        assert result.stdout == payload
+        assert result.stdout == payload * num_groups
+
+
+@pytest.mark.parametrize(
+    "site,profile_name,gpu_flag",
+    [("flatiron", "h100", "--gpus-per-node"), ("lumi", "mi250x", "--gpus-per-task")],
+)
+def test_benchmark_submits_separate_resource_arrays(site, profile_name, gpu_flag):
+    from mlpf.training_scenarios import _pipeline_command
+
+    scenario_path = resolve_scenario_path("clic_cld_backbone_benchmark", ROOT)
+    profile_path = resolve_platform_profile_path(profile_name, ROOT, site)
+    scenario = load_training_scenario(scenario_path)
+    profile = load_platform_profile(profile_path)
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, seed=2468)
+    assert len(submissions) == 2
+    for (command, jobs), count, indices in zip(submissions, (1, 8), ("0,1,4,5", "2,3,6,7")):
+        assert command[command.index(gpu_flag) + 1] == str(count)
+        assert command[command.index("--array") + 1] == indices
+        assert len(jobs) == 4
+        representation = "pf" if count == 1 else "hits"
+        assert {job.variant_name for job in jobs} == {
+            f"{detector}_{representation}_{backbone}" for detector in ("cld", "clic") for backbone in ("attention", "heptv2")
+        }
+        for job in jobs:
+            assert job.seed == 2468
+            assert job.resolved_config.gpus == count
+            assert job.per_gpu_batch_size * count == job.global_batch_size == 128
+            pipeline = _pipeline_command(job, scenario, profile, ROOT / scenario.spec_file, Path("experiment"))
+            assert pipeline[pipeline.index("--gpus") + 1] == str(count)
+
+
+def test_benchmark_continue_preserves_indices_across_resource_groups(tmp_path):
+    scenario_path = resolve_scenario_path("clic_cld_backbone_benchmark", ROOT)
+    profile_data = yaml.safe_load(resolve_flatiron_profile_path("h100", ROOT).read_text())
+    profile_data["experiments_dir"] = str(tmp_path / "experiments")
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(yaml.safe_dump(profile_data))
+    scenario = load_training_scenario(scenario_path)
+    profile = load_platform_profile(profile_path)
+    jobs = resolve_scenario_jobs(scenario, profile, spec_file=ROOT / scenario.spec_file)
+    for index, job in enumerate(jobs):
+        _write_scenario_run(Path(profile.experiments_dir), scenario, profile, job, 40000 if index in {1, 6} else 50000)
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, continue_run=True)
+    assert [command[command.index("--array") + 1] for command, _ in submissions] == ["1", "6"]
+    assert [command[command.index("--gpus-per-node") + 1] for command, _ in submissions] == ["1", "8"]
+
+
+@pytest.mark.parametrize("task_gpus,expected_visible", [("1", "3"), ("8", "unset")])
+def test_lumi_worker_preserves_single_gpu_binding(tmp_path, monkeypatch, task_gpus, expected_visible):
+    stub_bin = tmp_path / "bin"
+    stub_bin.mkdir()
+    for name, body in {
+        "module": "exit 0",
+        "rocm-smi": "exit 0",
+        "singularity": 'printf "TEST_VISIBLE=%s\\n" "${ROCR_VISIBLE_DEVICES-unset}"',
+    }.items():
+        executable = stub_bin / name
+        executable.write_text("#!/bin/bash\n" + body + "\n")
+        executable.chmod(0o755)
+    container = tmp_path / "container.sif"
+    container.touch()
+    overlay = tmp_path / "overlay"
+    (overlay / "bin").mkdir(parents=True)
+    (overlay / "bin/activate").touch()
+    monkeypatch.setenv("PATH", str(stub_bin) + ":/usr/bin:/bin")
+    monkeypatch.setenv("IMG", str(container))
+    monkeypatch.setenv("LUMI_VENV", str(overlay))
+    monkeypatch.setenv("MIOPEN_USER_DB_PATH", str(tmp_path / "miopen"))
+    monkeypatch.setenv("MLPF_REPO_ROOT", str(ROOT))
+    monkeypatch.setenv("SLURM_JOB_ID", "123")
+    monkeypatch.setenv("SLURM_GPUS_PER_TASK", task_gpus)
+    monkeypatch.setenv("SLURM_GPUS_ON_NODE", "8")
+    monkeypatch.setenv("ROCR_VISIBLE_DEVICES", "3")
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/lumi/run_scenario.sh"), "scenario.yaml", "profile.yaml"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert f"TEST_VISIBLE={expected_visible}" in result.stdout
