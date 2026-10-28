@@ -1391,10 +1391,7 @@ class MLPFConfig(BaseModel):
         _normalize_data_config(config_dict)
         _build_dataset_configs(config_dict, model_config, dataset_name)
         # Dataset defaults are generated after ordinary overrides so data_config
-        # can filter splits. Reapply explicit dataset overrides to those defaults.
-        for key, value in parse_extra_args(extra_args or []).items():
-            if key.split(".", 1)[0] in {"train_dataset", "valid_dataset", "test_dataset"}:
-                set_nested_dict(config_dict, key, value)
+        # can filter splits. Validate and apply explicit dataset overrides to those defaults.
         _apply_dataset_overrides(config_dict, extra_args)
         if getattr(args, "pipeline", False):
             _apply_pipeline_overrides(config_dict, dataset_name)
