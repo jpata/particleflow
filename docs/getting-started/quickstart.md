@@ -1,6 +1,6 @@
 # Quickstart
 
-The local test scripts are end-to-end software checks. Each script runs the unit tests, downloads two small ROOT files, converts the detector data, builds a TFDS split, and trains an MLPF model for two CPU steps.
+The local test scripts are end-to-end software checks. The CMS, CLD, and CLIC scripts download small ROOT samples, convert the detector data, build a TFDS split, and train an MLPF model for two CPU steps. Unit tests run separately in CI.
 
 :::{warning}
 The CLD and CLIC scripts delete `local_test_data/cld` or `local_test_data/clic` before downloading fresh inputs. All three scripts create or update generated directories such as `tensorflow_datasets/`, `experiments/`, and `plots/`. Run them from the repository root and keep unrelated work outside those paths.
@@ -21,7 +21,13 @@ uv run ./scripts/local_test_clic.sh
 uv run ./scripts/local_test_cms.sh
 ```
 
-The scripts run the full unit-test suite, so runtime depends on the machine and an existing dependency/download cache. The first run is slower than later runs.
+Runtime depends on the machine and dependency/download caches. To run the unit suite separately:
+
+```bash
+PYTHONPATH="$PWD" KERAS_BACKEND=torch uv run python3 -m pytest tests
+```
+
+The CI detector matrix also runs `bash scripts/local_test_colliderml.sh`, which creates an offline synthetic fixture, converts it, builds TFDS, and trains on CPU. Its validator runs in report mode, so inspect its findings separately from the script exit status. For real ColliderML data and the local MAIA smoke test, see the [detector-comparison runbook](../validation/detector-comparison.md).
 
 ## What success looks like
 

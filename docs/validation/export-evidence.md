@@ -1,9 +1,44 @@
 # Full-model export evidence protocol
 
-The study covers the attention and deterministic-hashing HEPTv2 full MLPF
-models using the new export path. The available NVIDIA machine is **L40S**,
-not L40; the AMD machine is W7900. Both existing NGT pods have a ten-hour
-lifetime. Preserve results locally before expiry.
+Use this protocol to qualify an elementwise attention or HEPTv2 export on a specific runtime. Start with the [ONNX guide](onnx.md) for the input contract and a CPU check. Qualification requires numerical agreement, provider-placement evidence, and reproducible measurements. A kernel dispatch or successful export alone is insufficient.
+
+## Current qualification boundary
+
+| Profile | Retained evidence | Interpretation |
+|---|---|---|
+| Portable FP32 attention and HEPTv2 | 42/42 trained-checkpoint cases pass across CPU, NVIDIA L40S, and AMD W7900. | Qualified for the recorded checkpoints, inputs, and runtime stacks. |
+| CUDA Attention-24 with FP16 attention | GPU placement and fused kernels verified; 0/7 trained cases pass the FP32 tolerance. | Executable, but not numerically qualified under that criterion. |
+| AMD decomposed FP16 attention with MLIR fusion | GPU placement and fused kernels verified; 0/7 trained cases pass the FP32 tolerance. | Executable, but not numerically qualified under that criterion. |
+| Particle-set output | No export contract in `export_mlpf`. | Requires separate implementation and validation. |
+
+The acceptance tolerance in these studies is `atol=1e-3, rtol=3e-3`. Evidence is artifact-specific; it does not establish reconstruction physics quality or qualify all model shapes and environments. Detailed measurements and provenance are retained below.
+
+## Runtime and compiler requirements
+
+The GPU evidence uses NVIDIA L40S with ORT CUDA 1.29 and AMD W7900 with native ORT MIGraphX 1.23.2, MIGraphX 2.18, and ROCm SDK libraries. This AMD stack differs from the packaged `envs/ort-amd` plugin environment. Follow [the GPU tooling guide](../../ngt/README.md) for exact library paths and worker setup; preserve outputs from temporary workers before they expire.
+
+HEPTv2 needs integer-preserving hashing and sorting. The qualification launcher `ngt/run-heptv2-onnx.sh` disables `eliminate_data_type` and retains `MIGRAPHX_GPU_OPTIMIZE=3` with `MIGRAPHX_GPU_HIP_FLAGS="-mllvm -enable-gvn-memdep=false"`. These settings avoid unsupported integer lowering and excessive compiler time; they do not establish optimized throughput. Older MIGraphX 2.15 lowering to FP32 is unsuitable. Load the qualified libraries ahead of system ROCm and retain the actual loaded-library paths.
+
+Use static specialization when full GPU placement is required. Dynamic exports can involve CPU shape operations. The provider helper rejects whole-session fallback; strict qualification additionally rejects profiled CPU compute nodes.
+
+## Opt-in regression checks
+
+The CPU workflow and its versions are described in [ONNX validation](onnx.md). Device profile tests require ORT 1.30 or newer and a configured provider. They use CPU PyTorch for export/reference and fail if a requested GPU provider cannot initialize:
+
+```bash
+mkdir -p onnx_validation
+ORT_ENABLE_ATTENTION_KERNEL_DEBUG_INFO=1 MLPF_TEST_PROVIDER=cuda \
+PYTHONPATH=. python -m pytest tests/test_attention_export_profiles.py \
+  -k real_device -q --basetemp=onnx_validation/export-cuda
+
+MIGRAPHX_MLIR_USE_SPECIFIC_OPS=attention MLPF_TEST_PROVIDER=migraphx \
+PYTHONPATH=. python -m pytest tests/test_attention_export_profiles.py \
+  -k real_device -q --basetemp=onnx_validation/export-migraphx
+```
+
+`MLPF_TEST_MIGRAPHX_LIBRARY` can select a separately built provider library. Tests retain graphs, profiles, versions, loaded-library evidence, and `validation.json`. CUDA qualification requires Flash dispatch; AMD fusion additionally requires `MLPF_TEST_REQUIRE_FUSION=1` and attention code objects in the final compiled program. Provider placement alone does not establish fusion.
+
+An offline MIGraphX compiler check is available with `MLPF_TEST_MIGRAPHX_DRIVER=/path/to/migraphx-driver` and `pytest tests/test_attention_export_profiles.py -k offline_compile`. It needs a compatible cross-compilation toolchain; its availability is not a claim of successful hardware execution. HEPTv2 GPU sort/output regressions use `MLPF_TEST_PROVIDER=cuda` or `migraphx` with `pytest tests/test_heptv2_export.py -k 'exported_sort or materializes'`.
 
 ## Baseline matrix
 
@@ -23,7 +58,7 @@ final compiled program must contain five fused attention code objects with
 no quadratic attention-score allocations. Both optimized profiles retain
 FP32 public inputs/outputs and the exact same FP32 PyTorch reference arrays.
 
-The initial models use seed 42 and untrained weights. Both have three backbone
+The controlled-sweep models use seed 42 and untrained weights. Both have three backbone
 layers and eight heads; attention head dimension is 16, while HEPTv2 uses
 embedding dimension 128, width 512, block size 100 and three hashes. Full
 configuration is retained in each bundle manifest. These are export correctness
@@ -82,7 +117,7 @@ CPU affinity. It is a reproducible fallback baseline, not a tuned CPU optimum.
 
 Run CUDA first and then CPU on the same host; AMD runs on its separate host.
 Record versions, CPU information, driver/device identity, compiler flags, source
-hashes, model hashes and input hashes. AMD uses the previously qualified native
+hashes, model hashes and input hashes. AMD uses the qualified native
 ORT 1.23.2 with MIGraphX 2.18/ROCm SDK libraries and the documented HEPT integer
 and compiler workarounds. This is a comparison of complete software stacks.
 
@@ -92,10 +127,10 @@ and compiler workarounds. This is a comparison of complete software stacks.
 bundles; `--inputs-bundle` reuses CMS inputs, and `--sweep` plus `--batches`
 generates the controlled shapes. `scripts/benchmark-model-export.py` measures
 one case. `ngt/run-model-evidence.sh PROVIDER BUNDLE_ROOT RESULT_ROOT` runs the
-matrix inside a configured runtime; see ngt/README.md for NVIDIA image and AMD
+matrix inside a configured runtime; see [the GPU tooling guide](../../ngt/README.md) for NVIDIA image and AMD
 library setup. It bounds each worker to 30 minutes and retains each exit code.
 
-Local artifacts belong under `onnx_validation/full-model-evidence/2026-10-19/`:
+Store each campaign under a distinct `onnx_validation/full-model-evidence/<campaign>/` directory:
 model/reference bundles, raw results and memory samples, placement profiles,
 logs, machine/source provenance, aggregate tables and scaling plots. The path
 is ignored by Git; retain source scripts and this protocol in Git separately.
@@ -104,7 +139,7 @@ and `scripts/render-model-evidence.py PACKAGE_ROOT` to build the final table,
 CSV, PNG/PDF/SVG figures and portable HTML report. The acceptance gate includes
 the supplementary profiles when their manifests are present (56 total cases).
 
-## Initial measurements
+## Controlled-sweep evidence
 
 The seeded 2026-10-19 package is under
 `onnx_validation/full-model-evidence/2026-10-19/`; open `report.html` for the
@@ -166,7 +201,7 @@ and 1419 MiB for the FP32 baseline. Maximum absolute error at this shape was
 3.16e-4. The compiler and actual kernel traces confirm fused masked attention
 without materialized quadratic score buffers.
 
-## Trained checkpoint qualification (2026-10-20)
+## Trained-checkpoint evidence
 
 Artifacts are separate from the seeded study, under
 `onnx_validation/trained-checkpoint-evidence/2026-10-20/`. Attention uses
@@ -179,11 +214,17 @@ reference uses CPU FP32 MATH attention. Checkpoint/config hashes and exact
 checkpoint inputs are retained. These checkpoints have different training
 durations and are not a matched physics comparison.
 
-Use `scripts/export-checkpoint-onnx.py --experiment EXPERIMENT --bundle BUNDLE
---data-dir /eos/user/j/jpata/mlpf/cms/20260204_cmssw_15_0_5_117d32/tfds`. The
-checkpoints were trained on CMS 2.8.0; the user approved qualification using
-available EOS CMS 3.0.0 test events. The default exporter takes two actual test
-events each from ttbar, QCD and Ztt plus a mixed three-event batch. It removes
+The exporter requires an elementwise CMS experiment, its saved configuration, and compatible TFDS inputs. Pass the dataset versions explicitly:
+
+```bash
+uv run --project envs/ort-cpu python3 scripts/export-checkpoint-onnx.py \
+  --experiment /path/to/cms/experiment \
+  --bundle onnx_validation/trained-checkpoint-evidence/my-campaign/bundles/attention \
+  --data-dir /path/to/cms/tfds \
+  --datasets cms_pf_ttbar/1:3.0.0 cms_pf_qcd/1:3.0.0 cms_pf_ztt/1:3.0.0
+```
+
+Success writes `model.onnx`, a checksummed `manifest.json`, and reference `.npz` cases. Choose datasets that match the checkpoint's feature schema; this example reproduces the retained study's input selection. Those checkpoints were trained on CMS 2.8.0 and qualified with CMS 3.0.0 test events. The default exporter takes two actual test events each from ttbar, QCD and Ztt plus a mixed three-event batch. It removes
 zero element-type rows, uses the saved feature width and sorting configuration,
 and pads without truncating or repeating inputs. The seven cases span
 N=3100–4900; the mixed batch has B=3,N=4900. Length and event content both vary,
@@ -204,13 +245,7 @@ FP32 numerical equivalence. `scripts/diagnose-attention-precision.py` compares
 the ONNX outputs with PyTorch evaluations of the same mixed-precision export
 operations to help separate precision drift from additional runtime differences.
 
-The initial W7900 HEPTv2 mixed batch exposed a MIGraphX TopK compiler limit
-while sorting a flattened 14,700-element permutation to invert it. The ONNX
-export now computes that inverse with exact integer ScatterElements. This
-changes neither model weights nor the eager computation; the regenerated
-graph is requalified on CUDA, MIGraphX and CPU. Preserve the original graphs
-and failure logs under `revisions/`. The inverse-permutation regression includes
-sizes 1, 4900 and 14700.
+HEPTv2 export inverts permutations with exact integer ScatterElements, avoiding a flattened TopK inversion. The inverse-permutation regression includes sizes 1, 4900, and 14700. Requalify regenerated graphs on every target provider and retain their hashes.
 
 Use the uv environments documented in `ngt/README.md`. Run the same timing,
 placement, hashing, static-model retention and kernel-trace protocol as above.
@@ -219,7 +254,7 @@ The HTML report and CSV retain numerical failures explicitly. The strict
 even if every measurement has been collected.
 
 All 56 trained measurements were collected. The portable FP32 baseline passes
-42/42 cases, including the corrected W7900 mixed batch. Both fused FP16
+42/42 cases, including the W7900 mixed batch. Both fused FP16
 profiles execute entirely on their requested GPU and dispatch the expected
 fused kernels, but fail the unchanged FP32 tolerance in all seven cases each
 (0/14 accepted). Across these FP16 cases, maximum absolute error is about

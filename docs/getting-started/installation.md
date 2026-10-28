@@ -58,8 +58,7 @@ The CPU and Nvidia projects pin ONNX Runtime **1.29.0**. The Nvidia project
 resolves `onnxruntime-gpu` exclusively from Microsoft's CUDA 12 package feed;
 its wheel reports CUDA **12.8** and needs a compatible host driver. Do not
 replace this with the default PyPI wheel: recent releases there use CUDA 13.
-1.29.0 is the newest stable CUDA 12 Python wheel verified in that feed for this
-upgrade. No manual copying of provider libraries is needed.
+Use the pinned environment for these commands. No manual copying of provider libraries is needed. The separate CPU export CI workflow uses ORT 1.30.0; its test dependencies are defined in `.github/workflows/attention-export.yml`.
 
 Check the [ORT releases](https://github.com/microsoft/onnxruntime/releases) and
 the [CUDA 12 wheel feed](https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/onnxruntime-gpu/)
@@ -69,9 +68,7 @@ stable CUDA 12 Python wheel.
 The AMD project is a separate Python **3.12** inference environment with
 **ONNX Runtime 1.29.0**, AMD's **onnxruntime-ep-migraphx 1.0.0+rocm10.1.0**
 plugin, and **MIGraphX / migraphx-libs 2.18.0+rocm10.1.0**. Packages resolve
-through explicit AMD indexes; ORT itself comes from PyPI. This replaces the
-older monolithic `onnxruntime-migraphx` 1.23.2 package. Run `uv sync` to remove
-that package and install the new stack.
+through explicit AMD indexes; ORT itself comes from PyPI. Keep this plugin environment separate from native `onnxruntime-migraphx` environments.
 
 The host needs ROCm **10.1.0** and a supported AMD GPU. This environment installs
 MIGraphX libraries but omits GPU-specific ROCm extras; it does not install the
@@ -84,7 +81,7 @@ selects the first available MIGraphX device, failing if initialization fails.
 The environment remains inference-only, without `particleflow`, PyTorch, TFDS,
 or CUDA packages. Export with the CPU/Nvidia environment and replay saved input
 batches using the [ONNX validation guide](../validation/onnx.md). Installation
-alone does not establish AMD GPU operator support.
+alone does not establish AMD GPU operator support. The retained W7900 qualification uses a separately configured native ORT MIGraphX 1.23.2 / MIGraphX 2.18 stack; see [Export qualification](../validation/export-evidence.md) for the tested environment and limits.
 
 ## Prepared container
 

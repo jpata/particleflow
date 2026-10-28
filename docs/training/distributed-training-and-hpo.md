@@ -26,42 +26,14 @@ uv run python3 mlpf/pipeline.py \
   --prefix cld-ddp- \
   train \
   --gpus 4 \
+  --sampler_mode interleaved-shards \
   --dtype bfloat16 \
   --num_steps 100000
 ```
 
 Each rank gets its own data-loader process and GPU. The effective event mix depends on dataset-group batch sizes, `gpu_batch_multiplier`, world size, and sampler behavior. Record all of these values alongside the nominal batch size.
 
-`sampler_mode` sets the event order within a dataset group, whose samples are concatenated as shards (one per sample and TFDS config):
-
-- `shard-consecutive` (default) reads the shards one after another, in a shuffled order that changes every epoch, which keeps few files open. Each rank takes a contiguous block of that order, so its batches come from one shard at a time, and the global batch mixes only the shards the ranks are currently on. A sample with few shards then reaches only the ranks whose blocks hold them, for long stretches, and on a single GPU the epoch is a sequence of single-sample stretches. Each event is still used once per epoch.
-- `interleaved-shards` spreads every shard over the whole epoch in proportion to its size, so every stretch of the epoch, and so every batch, holds the group's samples at their overall shares.
-
-Use `interleaved-shards` for groups that combine several samples (e.g. different physics processes or pileup conditions). `shard-consecutive` is fine when a group's shards are statistically alike, such as the TFDS configs of a single sample:
-
-```bash
-... train --gpus 4 --sampler_mode interleaved-shards
-```
-
-Each training step draws one batch from one dataset group (`train_datasets.<group>`). An optional `weight` per group sets its share of the steps, spread evenly over training; every group cycles through its own data independently. Set it on every train group or on none. Without weights, each group's share is its number of batches per epoch, so one nominal epoch is one pass over every group.
-
-Weights act on groups (the keys directly under `train_datasets`), not on the samples inside a group. The samples of one group are concatenated and ordered by `sampler_mode` (see above), so each sample's share follows its number of events. To weight samples against each other, put each in its own group. For example, weighting a no-pileup group 3:1 against a pileup group:
-
-```yaml
-train_datasets:
-  physical_nopu:
-    batch_size: 16
-    weight: 3
-    samples: [...]
-  physical_pu:
-    batch_size: 1
-    weight: 1
-    samples: [...]
-```
-
-At startup rank 0 logs one `train mix:` line per group with its step share, batches per epoch and expected passes over its data in `num_steps`. TensorBoard tracks `data/<group>/{step_fraction,passes,events_seen}` during training.
-
-Dataset sections accept dot-notation overrides like every other key, e.g. `--train_dataset.colliderml.pu200.weight 3` or `--test_dataset.clic_edm_ttbar_pf.version 2.5.0`. With several groups, the losses are also reported per group, next to the combined ones. Validation: each group's batch average. Training: every step trains on one group's batch, so the per-step loss jumps between the groups' loss levels. Comet logs every step under its group; TensorBoard, the terminal and the step history, which only see every `tensorboard_step_freq`-th step, log each group's mean over its steps since the last logging step. TensorBoard logs them as `group/<group>/loss_<loss>` in both the train and valid runs, Comet as `<group>/train_loss_<loss>` and `<group>/valid_loss_<loss>` (one Comet panel group per dataset group), the step history as `train_group` and `group/<group>/<loss>` in `valid`, and the terminal prints each group's unweighted total.
+Choose the event order and group step shares using [Dataset mixing and loss monitoring](data-mixing.md). These settings apply to both single-GPU and DDP training. For groups containing several physics samples, use `--sampler_mode interleaved-shards`.
 
 All ranks must see the same files and experiment directory. Typical failures are mismatched visible GPUs, NCCL networking, insufficient file-descriptor limits, and one rank running out of memory.
 
@@ -82,6 +54,7 @@ uv run python3 mlpf/pipeline.py \
   --ray-local \
   --ray-cpus 2 \
   --ray-gpus 0 \
+  --model.attention.attention_type math \
   --num_steps 2 \
   --ntrain 10 \
   --nvalid 10 \
@@ -107,6 +80,7 @@ uv run python3 mlpf/pipeline.py \
   --ray-local \
   --ray-cpus 2 \
   --ray-gpus 0 \
+  --model.attention.attention_type math \
   --raytune-num-samples 2 \
   --num_steps 2 \
   --ntrain 10 \

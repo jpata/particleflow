@@ -1,16 +1,16 @@
-# CLICdet datasets
+# CLICdet tracks and clusters
 
-CLICdet datasets use Key4HEP/EDM4hep production at 380 GeV. The configured
-samples are `ttbar`, fully hadronic `WW`, and inclusive `qq`.
+CLICdet track/cluster datasets use Key4HEP/EDM4hep production at 380 GeV. The schema version is **3.3.0**, and the standard model recipe is `pyg-clic-v1`.
 
-| Representation | Dataset names | Model recipe |
+## Physics samples
+
+| Physics sample | TFDS dataset | Training selection |
 |---|---|---|
-| Tracks and clusters | `clic_edm_{ttbar,ww_fullhad,qq}_pf` | `pyg-clic-v1` |
-| Detector hits | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | `pyg-clic-hits-v1` |
+| Top-quark pairs | `clic_edm_ttbar_pf` | Included in default recipe |
+| Fully hadronic WW | `clic_edm_ww_fullhad_pf` | Included in default recipe |
+| Inclusive quark pairs | `clic_edm_qq_pf` | Included in default recipe |
 
-Both representations use dataset version 3.2.1 and configuration partitions
-1--10. The full corpus contains about one million events per sample, or three
-million events in total.
+The recipes configure partitions 1--10; the [verified public selection](catalog.md#published-availability) provides configuration 1. Use `--data_config 1` for the download-based training path. The default recipe combines `ttbar`, `WW`, and `qq`; their ordering and relative exposure are described in [Dataset mixing](../training/data-mixing.md).
 
 ## Event view
 
@@ -23,8 +23,6 @@ representative `ttbar` event in the transverse plane.
 
 Target labels use $e$, $\mu$, $\tau$, $\nu$, $\gamma$, $\pi$, and $K^0$.
 
-## Production
+## Production and related inputs
 
-Use the [shared Key4HEP workflow](key4hep.md) with `PROD=clic`. Build the
-track/cluster representation with `pixi run tfds`, or follow [Hit-based
-datasets](hit-based.md) for detector-hit inputs.
+Use [shared Key4HEP production](key4hep.md) with `PROD=clic` and build this representation with `pixi run tfds`. For tracker and calorimeter measurements, use the separate [CLICdet hit datasets](clic-hits.md).

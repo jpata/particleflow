@@ -22,33 +22,46 @@ project:
     - title: Datasets
       children:
         - file: datasets/catalog.md
+        - file: datasets/track-cluster.md
+          children:
+            - file: datasets/cms.md
+            - file: datasets/cld.md
+            - file: datasets/clic.md
+            - file: datasets/colliderml.md
+            - file: datasets/maia.md
+            - file: datasets/idea.md
+        - file: datasets/hit-based.md
+          children:
+            - file: datasets/cld-hits.md
+            - file: datasets/clic-hits.md
+            - file: datasets/colliderml-hits.md
         - file: datasets/download.md
         - file: datasets/generate.md
-        - file: datasets/cms.md
-        - file: datasets/key4hep.md
-        - file: datasets/cld.md
-        - file: datasets/clic.md
-        - file: datasets/hit-based.md
+          children:
+            - file: datasets/key4hep.md
     - title: Training
       children:
         - file: training/train.md
+        - file: training/data-mixing.md
         - file: training/resume-and-fine-tune.md
         - file: training/distributed-training-and-hpo.md
     - title: Validation
       children:
         - file: validation/overview.md
+        - file: validation/detector-comparison.md
         - file: validation/dataset-validation.md
         - file: validation/key4hep.md
         - file: validation/cms.md
         - file: validation/onnx.md
+        - file: validation/export-evidence.md
     - title: Reference
       children:
         - file: reference/artifacts-and-directories.md
-    - title: Science and project status
+    - title: Capabilities and scientific evidence
       children:
-        - file: cld_hit_results.md
-        - file: science/publications.md
         - file: science/capabilities.md
+        - file: science/publications.md
+        - file: cld_hit_results.md
         - file: science/roadmap.md
     - title: Development
       children:
