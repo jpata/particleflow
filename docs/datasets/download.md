@@ -85,7 +85,7 @@ Success prints shapes for `X`, `ytarget`, `ycand`, `genmet`, `genjets`, and `tar
 
 ## Download a different selection
 
-Change all four coupled fields together. A training recipe may require several dataset names, as the standard CLD recipe does:
+Choose [tracks and clusters](track-cluster.md) or [hits](hit-based.md), then a detector and physics sample. Match all four fields below to that selection. A training recipe may require several dataset names, as the standard CLD recipe does:
 
 1. Hub detector directory, such as `cld` or `clic`;
 2. dataset name, such as `clic_edm_qq_pf`;

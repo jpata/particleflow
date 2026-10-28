@@ -68,6 +68,8 @@ Complex data production and training pipelines are managed using Snakemake or si
   - **`cmssw_validation_data.py`**: Validation scripts for CMS data.
   - **`cms_fwlite.py`**: CMS FWLite-based event analysis and plotting.
 - **`scripts/cms-validate-onnx.py`**: Exports PyTorch models to ONNX (supporting FP32, FP16, Fused Flash Attention, HEPT, HEPTv2, and GNNLSH) and validates inference with per-configuration PyTorch/ONNX sessions.
+- **`mlpf/model/onnx_attention.py`, `onnx_graph.py`, `onnx_runtime.py`**: Explicit Attention-24/decomposed export, padding and output rewrites, and provider selection/placement checks. See [ONNX validation](validation/onnx.md).
+- **`scripts/export-checkpoint-onnx.py`, `qualify-heptv2-onnx.py`, `benchmark-model-export.py`**: Trained CMS and seeded-model reference bundles, runtime qualification, and full-model measurements; see [Export qualification](validation/export-evidence.md).
 - **`scripts/plot-onnx-summary.py`**: Generates summary plots for ONNX validation results.
 - **`mlpf/model/monitoring.py`**: System resource monitoring and logging.
 

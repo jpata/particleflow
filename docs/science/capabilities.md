@@ -1,8 +1,6 @@
 # Current capabilities
 
-This page describes the development branch as of **23 October 2026**, through
-PR #541. It summarizes implemented paths and their validation boundaries.
-Checkpoint performance belongs to the corresponding validation results.
+This page summarizes the codebase prepared for **v3.2.0**. Use it to choose a maintained workflow and understand its validation limits. Checkpoint performance belongs to the corresponding validation results.
 
 **Supported** denotes a maintained configuration, documented user path, and
 software checks. **Research workflow** denotes experimental paths whose scientific
@@ -82,8 +80,11 @@ The [CLD evidence summary](../cld_hit_results.md) records completed and partial
 ablations, historical dataset versions, and changed metric definitions.
 
 Training supports full checkpoint resume, [weights-only fine-tuning](../training/resume-and-fine-tune.md),
-and the `lr-find` learning-rate range test. Per-step history includes fractional
-training epoch and unweighted total losses. Optional reconstruction diagnostics
+and the `lr-find` learning-rate range test. [Dataset mixing](../training/data-mixing.md)
+supports per-group step weights, independent data cycling, interleaved shards,
+and per-group losses and exposure metrics. Dataset-section overrides are applied
+after recipe expansion and reject unknown group/sample paths. Per-step history
+includes fractional training epoch and unweighted total losses. Optional reconstruction diagnostics
 and frozen-backbone probes support hit-model studies; see the [repository map](../map.md).
 
 Single-node distributed PyTorch training and scenario-based seeded job submission
@@ -91,6 +92,14 @@ are implemented. [Training scenarios](../../configs/training/README.md) separate
 scientific recipes from hardware profiles, including local, Flatiron, and LUMI
 execution. LUMI execution uses LAIF containers and has a site smoke check.
 Ray Train and Ray Tune remain research workflows requiring cluster-specific setup.
+
+## Attention and deployment
+
+Native Flash attention packs valid elements automatically; dense math attention masks padded keys and supports CPU execution. HEPTv2 defaults to deterministic integer hashing with stable sorting. Both changes can alter predictions from older checkpoints and require held-out validation.
+
+The elementwise ONNX exporter supports decomposed opset-20 attention and standard Attention-24 with valid key lengths. Exported outputs are zero on padding, and batch/sequence dimensions are dynamic. Set-decoder export requires a separate output contract and is not supported by this helper.
+
+CPU export CI checks numerical and padding contracts for attention and HEPTv2. GPU qualification separately checks runtime placement, precision, and kernel execution. Retained trained-checkpoint evidence qualifies the portable FP32 matrix on CPU, NVIDIA L40S, and AMD W7900 in the recorded environments; optimized FP16 attention executes but fails the same numerical tolerance. These checks establish export behavior for those artifacts, not physics quality for all checkpoints. See [ONNX validation](../validation/onnx.md) and [export evidence](../validation/export-evidence.md).
 
 ## Validation and compatibility boundaries
 

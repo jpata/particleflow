@@ -2,7 +2,7 @@
 
 This guide trains the standard CLD track-and-cluster model on configuration 1, version 3.3.0 of the `ttbar`, `WW`, and `qq` datasets. The [catalog](../datasets/catalog.md) lists compatible recipes and published versions. Start with the two-step CPU run to check the complete path. Use the GPU example only after that check succeeds.
 
-A **training step** updates the model once using one accumulated batch. A **validation cycle** pauses training to measure loss on a separate set of held-out events. A **checkpoint** is a saved model and training state from a particular step.
+A **training step** updates the model once using one dataset-group batch. A **validation cycle** pauses training to measure loss on a separate set of held-out events. A **checkpoint** is a saved model and training state from a particular step.
 
 ## Prerequisites
 
@@ -108,6 +108,7 @@ uv run python3 mlpf/pipeline.py \
   --gpus 1 \
   --dtype bfloat16 \
   --gpu_batch_multiplier 4 \
+  --sampler_mode interleaved-shards \
   --num_workers 2 \
   --prefetch_factor 2 \
   --num_steps 2000 \
@@ -115,7 +116,15 @@ uv run python3 mlpf/pipeline.py \
   --checkpoint_freq 1000
 ```
 
-Memory use depends on event size, attention implementation, precision, and batch accumulation. Lower `--gpu_batch_multiplier` first if the process runs out of GPU memory. Assess physics quality with the held-out checks in the [validation overview](../validation/overview.md).
+Memory use depends on event size, attention implementation, precision, and per-rank batch size. Lower `--gpu_batch_multiplier` first if the process runs out of GPU memory. Assess physics quality with the held-out checks in the [validation overview](../validation/overview.md).
+
+## Attention and padding
+
+Native Flash attention automatically packs valid elements into a jagged representation so padding does not enter attention. It requires a compatible GPU and a head dimension divisible by 8, between 8 and 256. Use `--model.attention.attention_type math` for CPU runs; dense math attention applies a key-padding mask. `model.attention.use_flash_attn_varlen` optionally selects the external FlashAttention variable-length kernel and requires the matching package.
+
+Keep the configured padding multiple for HEPTv2 and other block-based models. HEPTv2 uses deterministic integer hashing by default (`model.heptv2.deterministic_hashing: true`) and stable tie ordering. Its coordinates and bucket assignments can differ from older floating-point hashing, so validate older checkpoints before resuming or comparing predictions.
+
+For sample ordering, weighted groups, and per-group losses, see [Dataset mixing](data-mixing.md). The [ONNX guide](../validation/onnx.md) describes the separate export contract and runtime profiles.
 
 ## Experimental CLD hit-set model
 

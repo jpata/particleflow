@@ -84,4 +84,8 @@ Site-specific scripts are useful examples, but do not describe their paths or sc
 
 ## Updating status pages
 
-Date changes to [Current capabilities](../science/capabilities.md) and the [Roadmap](../science/roadmap.md). A feature should move to **Supported** only when there is a maintained configuration, a tested user path, and enough documentation to run it.
+Describe the present behavior in [Current capabilities](../science/capabilities.md) and remaining work in [Limitations and development priorities](../science/roadmap.md). Organize by user task or capability, not merge dates or PR numbers. Remove obsolete limitations when the code changes, and reconcile duplicated statements across installation, training, and validation guides.
+
+Keep benchmark dates, artifact hashes, and checkpoint-specific outcomes in evidence pages. Date external publication inventories when their availability was checked. Release versions, dataset schemas, and model artifact versions are independent; do not renumber datasets to match a software release.
+
+A feature should move to **Supported** only when there is a maintained configuration, a tested user path, and enough documentation to run it.

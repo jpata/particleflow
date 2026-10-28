@@ -36,6 +36,7 @@ uv run python3 mlpf/pipeline.py \
   --gpus 1 \
   --dtype bfloat16 \
   --gpu_batch_multiplier 4 \
+  --sampler_mode interleaved-shards \
   --num_steps 2000 \
   --val_freq 1000 \
   --checkpoint_freq 1000
@@ -61,6 +62,7 @@ uv run python3 mlpf/pipeline.py \
   --gpus 1 \
   --dtype bfloat16 \
   --gpu_batch_multiplier 4 \
+  --sampler_mode interleaved-shards \
   --num_steps 2000 \
   --val_freq 1000 \
   --checkpoint_freq 1000
@@ -69,6 +71,12 @@ uv run python3 mlpf/pipeline.py \
 `--load_weights_only true` restores model weights while starting a fresh optimizer, learning-rate schedule, random-number stream, loader state, and step count. The new recipe controls the learning rate and training duration.
 
 For a full resume that only restarts data iteration, use `--sampler_from_scratch true` instead. That option retains the checkpoint step, optimizer, and scheduler. A full resume also retains the saved learning-rate schedule; a changed configured learning rate is ignored with a warning. Simply extending `--num_steps` does not create a fresh schedule.
+
+## Dataset and model compatibility
+
+For weighted dataset groups, full resume restores each group's data position. Changing weights restarts the group scheduling counters while preserving those positions. Keep group identities and ordering compatible; see [Dataset mixing](data-mixing.md).
+
+A successful weight load does not establish identical predictions across model implementations. Current attention excludes padded keys, and HEPTv2 defaults to deterministic integer hashing. Revalidate checkpoints trained with earlier padding or hashing behavior on held-out events before interpreting continuation or deployment results.
 
 ## Strict and relaxed loading
 

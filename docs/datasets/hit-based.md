@@ -1,8 +1,20 @@
-# Hit-based datasets
+# Hits
 
-Hit-based inputs are a research workflow for CLD, CLIC, and ColliderML. This page describes the shared CLD/CLIC production path; ColliderML uses its own converter and builders listed in the [repository map](../map.md). The track-and-cluster datasets in the [catalog](catalog.md) provide the default path; studies of raw tracker and calorimeter measurements use the hit workflow described here.
+Hit datasets use tracker and calorimeter measurements as input elements and require dedicated model recipes. They are research workflows with substantially larger events than [tracks and clusters](track-cluster.md).
 
-## What changes
+## Choose a detector and physics sample
+
+| Detector or dataset family | Physics samples | Details |
+|---|---|---|
+| [CLD, 365 GeV](cld-hits.md) | Top pairs, fully hadronic WW, inclusive qq, ZZ | Standard hit and experimental particle-set recipes |
+| [CLICdet, 380 GeV](clic-hits.md) | Top pairs, fully hadronic WW, inclusive qq | Dedicated hit recipe |
+| [ColliderML Release 1](colliderml-hits.md) | Top pairs without pileup and with approximately 200 pileup interactions | No-pileup recipes; pileup-200 builder only |
+
+Open the detector page for exact dataset names, schema versions, and recipe coverage. Public availability is recorded in the [catalog](catalog.md#published-availability).
+
+The production and representation comparison below applies to **CLD and CLIC**. ColliderML uses its own converter and builders.
+
+## CLD and CLIC representation
 
 | Property | Track/cluster (`*_pf`) | Hit (`*_hits`) |
 |---|---|---|
@@ -15,27 +27,7 @@ Hit-based inputs are a research workflow for CLD, CLIC, and ColliderML. This pag
 
 Both representations are derived from the same validated Key4HEP Parquet files. The hit builder combines tracker and calorimeter hits into the input array `X`. The feature metadata identifies each element's type and geometry, and `ytarget` contains the corresponding particle target for each input row. Generator missing momentum and generator/target jets remain event-level fields.
 
-## Event views
-
-Raw detector hits and target particles for the same representative `ttbar`
-event are shown in the transverse plane. Tracker hits are red, ECAL hits blue,
-HCAL hits green, and muon-system hits orange.
-
-### CLD
-
-| Raw hits | Target particles |
-|:---:|:---:|
-| ![CLD tracker, calorimeter, and muon-system hits.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/cld_event_5_hits_5x5cm.svg) | ![CLD target particles.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/cld_event_5_targets_5x5cm.svg) |
-
-### CLICdet
-
-| Raw hits | Target particles |
-|:---:|:---:|
-| ![CLIC tracker, calorimeter, and muon-system hits.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/clic_event_5_hits_5x5cm.svg) | ![CLIC target particles.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/clic_event_5_targets_5x5cm.svg) |
-
-The [catalog](catalog.md) lists the available hit datasets, versions, and model recipes.
-
-## Production and validation
+## CLD and CLIC production and validation
 
 Follow [shared Key4HEP production](key4hep.md) through strict Parquet validation, then build the hit representation:
 
@@ -70,6 +62,6 @@ Before a large run:
 2. build and decode one TFDS configuration;
 3. run a short training with the dedicated hit recipe;
 4. measure peak host and accelerator memory;
-5. scale workers, open-reader limits, padding, and batch accumulation from that measurement.
+5. scale workers, open-reader limits, padding, and batch size from that measurement.
 
 Start with the smaller `gpu_batch_multiplier` values in the checked-in hit recipe for the matching detector, then tune them from measured memory use.

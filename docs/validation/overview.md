@@ -19,7 +19,7 @@ Passing these checks establishes that the produced representation satisfies the 
 
 ## 2. Model behavior
 
-A short training checks loading, tensor shapes, forward and backward passes, and checkpoint writing. Longer training should monitor total and task losses on both training and validation data. Reload at least one checkpoint and run inference on held-out events.
+A short training run checks loading, tensor shapes, forward and backward passes, and checkpoint writing. Longer training should monitor total and task losses on both training and validation data. Reload at least one checkpoint and run inference on held-out events. For multiple dataset groups, monitor per-group validation losses and data exposure as described in [Dataset mixing](../training/data-mixing.md).
 
 A decreasing loss establishes optimization progress. Particle species, multiplicity, kinematics, and failure/outlier populations establish whether that progress produces well-formed reconstruction behavior.
 
@@ -31,7 +31,7 @@ Use [Key4HEP validation](key4hep.md) for CLD and CLIC. CMS validation requires t
 
 ## 4. Deployment behavior
 
-Exporting to ONNX changes the execution implementation. Compare outputs numerically on real, variable-size events before measuring speed. Then record latency, throughput, peak memory, precision, event-size distribution, warm-up policy, and hardware. See [ONNX validation](onnx.md).
+Exporting to ONNX changes the execution implementation. Compare outputs numerically on real, variable-size events before measuring speed. Then record latency, throughput, peak memory, precision, event-size distribution, warm-up policy, and hardware. See [ONNX validation](onnx.md) for the export contract and [Export qualification](export-evidence.md) for runtime placement, precision, and measurement criteria.
 
 ## Local detector comparison
 
