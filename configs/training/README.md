@@ -1,5 +1,23 @@
 # Reusable training scenarios
 
+To repeat the single-device GH200 batch sweep on **LUMI MI250X or Flatiron H100**,
+follow the [cross-platform reproduction runbook](../../docs/training/hpc-batch-sweep.md).
+It includes branch checkout, data verification, site environment setup,
+single-device launchers, qualification and full-sweep commands.
+
+For the EmpireAI ARM64 GH200 test node and `ghtest` reservation, see the
+[setup and smoke-test instructions](../../scripts/empireai/README.md).
+`cld_gh200_backbone_benchmark` compares attention and HEPTv2 on the copied ttbar
+hits subset at batch 8 for 1,000 steps with matched decoder, features and seed.
+
+All native and Ray training workers collect portable benchmark evidence by default
+under each experiment's `benchmark/` directory. Use `python -m mlpf.benchmark_report
+experiments/<scenario>` to export per-worker metrics and allocation work totals to
+JSON/CSV. Configuration lives under `benchmark` (`enabled`, `sample_interval_seconds`,
+`warmup_steps`, `gpu_timing_interval`); the scenario runner accepts these through
+`--set`, and platform profiles can set them as runtime overrides. See the
+[artifact and metric definitions](../../scripts/empireai/README.md#utilization-evidence-for-an-allocation-request).
+
 The recommended CLD hit-model default is `pyg-cld-hits-heptv2-set-v1` in
 `particleflow_spec.yaml`. Use `cld_pf_heptv2_default_50k` for its training recipe:
 

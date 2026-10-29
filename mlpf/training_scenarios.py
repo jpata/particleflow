@@ -17,8 +17,11 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
 from mlpf.conf import MLPFConfig
 
-
 PLATFORM_OVERRIDE_KEYS = {
+    "benchmark.enabled",
+    "benchmark.sample_interval_seconds",
+    "benchmark.warmup_steps",
+    "benchmark.gpu_timing_interval",
     "compile",
     "dtype",
     "max_open_readers",
@@ -100,6 +103,8 @@ class SlurmProfile(BaseModel):
     partition: str = "gpu"
     constraint: str | None = None
     account: str | None = None
+    qos: str | None = None
+    reservation: str | None = None
     time: str = "12:00:00"
     nodes: int = Field(default=1, gt=0)
     tasks_per_node: int = Field(default=1, gt=0)

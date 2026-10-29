@@ -101,6 +101,11 @@ from mlpf.utils import create_comet_experiment
 from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
 from mlpf.jet_utils import get_jet_config
 
+from mlpf.model.benchmarking import active_benchmark, benchmark_phase, record_benchmark, record_phase
+
+# Instrument actual checkpoint writes, including Ray checkpoints.
+save_checkpoint = record_phase("checkpoint_save", artifact=True)(save_checkpoint)
+
 UNIT_REGRESSION_WEIGHTS = {feature: 1.0 for feature in REGRESSION_FEATURES}
 UNWEIGHTED_TOTAL = "Total_unweighted"
 JET_VALIDATION_METRICS = (
@@ -596,7 +601,7 @@ def optimizer_step(model, loss_opt, optimizer, lr_schedule, scaler):
 
 
 def train_step(
-    rank: Union[int, str],
+    rank: int | str,
     world_size: int,
     model: MLPF,
     optimizer,
@@ -845,10 +850,11 @@ def compute_particle_quality_metrics(batch, ypred_particles, ytarget):
 
 
 def print_event_table(batch, ytarget, ypred_particles, config):
+    import numpy as np
     import pandas as pd
     from tabulate import tabulate
+
     from mlpf.conf import CLASS_LABELS
-    import numpy as np
 
     # We only print the first event in the batch (index 0)
     mask = batch.mask[0].bool().cpu()
@@ -931,8 +937,9 @@ def print_event_table(batch, ytarget, ypred_particles, config):
     print("==============================================\n")
 
 
+@record_phase("validation")
 def evaluate(
-    rank: Union[int, str],
+    rank: int | str,
     world_size: int,
     model: MLPF,
     valid_loader,
@@ -1195,7 +1202,7 @@ def _log_and_checkpoint_step(
             }
 
             checkpoint_path = (Path(checkpoint_dir) / f"checkpoint-{step:02d}.pth").resolve()
-            _logger.info("saving checkpoint {}".format(checkpoint_path))
+            _logger.info(f"saving checkpoint {checkpoint_path}")
             save_checkpoint(checkpoint_path, model, optimizer, extra_state)
             if log_this_step:
                 tensorboard_writer_train.add_scalar(
@@ -1206,7 +1213,7 @@ def _log_and_checkpoint_step(
             cleanup_start = time.perf_counter()
             checkpoints = sorted(Path(checkpoint_dir).glob("checkpoint-*.pth"), key=os.path.getmtime)
             for i in range(len(checkpoints) - num_patience):
-                _logger.info("removing old checkpoint {}".format(checkpoints[i]))
+                _logger.info(f"removing old checkpoint {checkpoints[i]}")
                 os.remove(checkpoints[i])
             if log_this_step:
                 tensorboard_writer_train.add_scalar(
@@ -1217,6 +1224,7 @@ def _log_and_checkpoint_step(
         tensorboard_writer_train.flush()
 
 
+@record_phase("validation_cycle")
 def _run_validation_cycle(
     rank,
     world_size,
@@ -1246,10 +1254,12 @@ def _run_validation_cycle(
 ):
     """Run the validation, testing, and plotting cycle. losses_train_group goes to the step history."""
 
+    cycle_start = time.perf_counter()
     _logger.info(f"Running validation on rank{rank}")
     valid_loader.reset()
 
     # Run validation
+    validation_start = time.perf_counter()
     log_memory("evaluate_start", rank, tensorboard_writer_valid, step)
     losses_valid = evaluate(
         rank=rank,
@@ -1266,7 +1276,7 @@ def _run_validation_cycle(
     )
     log_memory("evaluate_end", rank, tensorboard_writer_valid, step)
     losses_valid_combined, losses_valid_group = _split_group_losses(losses_valid)
-    valid_time = time.time() - train_time - t0_initial
+    valid_time = time.perf_counter() - validation_start
     total_time = time.time() - t0_initial
 
     # Update learning rate scheduler that depends on validation loss
@@ -1302,6 +1312,7 @@ def _run_validation_cycle(
             "step_train_time": train_time,
             "step_valid_time": valid_time,
             "step_total_time": total_time,
+            "elapsed_training_loop_seconds": total_time,
         }
         with open(f"{history_path}/step_{step}.json", "w") as f:
             json.dump(stats, f)
@@ -1330,16 +1341,20 @@ def _run_validation_cycle(
 
     # Run inference and plotting on test datasets for this step
     testdir_name = f"_step_{step}"
+    testing_start = time.perf_counter()
     log_memory("run_test_start", rank, tensorboard_writer_valid, step)
     for sample in config.enabled_test_datasets:
         run_test(rank, world_size, config, outdir, model, sample, testdir_name, dtype)
     log_memory("run_test_end", rank, tensorboard_writer_valid, step)
+    testing_time = time.perf_counter() - testing_start
 
     plot_metrics_sample = {}
+    plotting_start = time.perf_counter()
     if (rank == 0) or (rank == "cpu"):
         log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
         for sample in config.enabled_test_datasets:
-            plot_metrics = make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
+            with benchmark_phase("plotting", sample=sample):
+                plot_metrics = make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
             plot_metrics_sample[sample] = plot_metrics
             # Log key jet metrics to TensorBoard and CometML
             for k in JET_VALIDATION_METRICS:
@@ -1356,6 +1371,7 @@ def _run_validation_cycle(
                     json.dump(data, f)
                     f.truncate()
         log_memory("make_plots_end", rank, tensorboard_writer_valid, step)
+    plotting_time = time.perf_counter() - plotting_start
 
     # Ray-specific reporting and checkpointing
     if use_ray:
@@ -1378,7 +1394,7 @@ def _run_validation_cycle(
                     "train_loader_state_dict": train_loader.state_dict(),
                     "valid_loader_state_dict": valid_loader.state_dict(),
                 }
-                for sample in plot_metrics_sample.keys():
+                for sample in plot_metrics_sample:
                     for metric in JET_VALIDATION_METRICS:
                         metric_name = f"step/{sample}/jet_ratio/jet_ratio_target_to_pred_pt/{metric}"
                         metrics[metric_name] = plot_metrics_sample[sample]["jet_ratio"]["jet_ratio_target_to_pred_pt"][metric]
@@ -1403,9 +1419,19 @@ def _run_validation_cycle(
     if device_type == "cuda":
         torch.cuda.empty_cache()
 
+    if (rank == 0) or (rank == "cpu"):
+        with open(f"{history_path}/step_{step}.json", "r+") as handle:
+            history = json.load(handle)
+            history.update(step_test_time=testing_time, step_plot_time=plotting_time,
+                           step_validation_cycle_time=time.perf_counter() - cycle_start)
+            handle.seek(0)
+            json.dump(history, handle)
+            handle.truncate()
+
     return best_val_loss, stale_steps
 
 
+@record_benchmark("training_loop")
 def train_all_steps(
     rank,
     world_size,
@@ -1479,6 +1505,8 @@ def train_all_steps(
         _logger.debug(f"Getting batch for step {step}")
         batch = next(train_iterator)
         data_load_time = time.time() - step_start_time
+        benchmark = active_benchmark()
+        benchmark_step = benchmark.begin_step(step, batch) if benchmark is not None else None
         _logger.debug(f"Got batch for step {step} rank={rank} batch={batch.X.shape}")
 
         # Run a single training step
@@ -1546,11 +1574,15 @@ def train_all_steps(
             )
 
             # check smi status
-            log_smi(rank)
+            if active_benchmark() is None:
+                log_smi(rank)
 
         # Synchronize all processes at the end of the step
         if world_size > 1:
             dist.barrier()
+
+        if benchmark is not None:
+            benchmark.end_step(benchmark_step, data_load_time, step_diagnostics, losses_train)
 
         # Log training info and save periodic checkpoint immediately after training
         _log_and_checkpoint_step(
@@ -1620,12 +1652,13 @@ def train_all_steps(
         tensorboard_writer_valid.close()
 
 
+@record_phase("testing")
 def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdir_name, dtype):
     batch_size = config.test_dataset[sample].batch_size * config.gpu_batch_multiplier
     version = config.test_dataset[sample].version
 
     split_configs = config.test_dataset[sample].splits
-    _logger.info("split_configs={}".format(split_configs))
+    _logger.info(f"split_configs={split_configs}")
 
     dataset = []
 
@@ -1734,7 +1767,7 @@ def restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config: MLPFCo
             missing_keys.append(k)
             continue
         if shp0 != shp1:
-            raise Exception("shape mismatch in {}, {}!={}".format(k, shp0, shp1))
+            raise Exception(f"shape mismatch in {k}, {shp0}!={shp1}")
 
     unexpected_keys = [key for key in checkpoint_state_dict if key not in model_state_dict]
     obsolete_task_weight_keys = [key for key in unexpected_keys if key.startswith("task_loss_weighter.")]
@@ -1780,7 +1813,8 @@ def restore_loader_states(loaders, checkpoint, config: MLPFConfig):
             loaders[split].load_state_dict(checkpoint["extra_state"][f"{split}_loader_state_dict"])
 
 
-def run(  # noqa: C901
+@record_benchmark("worker")
+def run(
     rank: int | str,
     world_size: int,
     config: MLPFConfig,
@@ -1800,7 +1834,7 @@ def run(  # noqa: C901
     _logger.info(f"Initializing model with seed={config.seed}; process seed={config.seed + rank_index}")
 
     dtype = getattr(torch, config.dtype)
-    _logger.info("configured dtype={} for autocast".format(dtype))
+    _logger.info(f"configured dtype={dtype} for autocast")
 
     if world_size > 1:
         os.environ["MASTER_ADDR"] = "localhost"
@@ -1830,18 +1864,19 @@ def run(  # noqa: C901
     model.task_loss_weighter = make_task_loss_weighter(config.task_loss_weights.model_dump())
     _logger.info("Instantiated model")
 
-    _logger.info("Moving model to device rank={}".format(rank))
+    _logger.info(f"Moving model to device rank={rank}")
     model = model.to(torch.device(rank))
-    _logger.info("Moved model to device rank={}".format(rank))
+    _logger.info(f"Moved model to device rank={rank}")
 
     configure_model_trainable(model, config.model.trainable, True)
     optimizer = get_optimizer(model, config)
     lr_schedule = get_lr_schedule(config, optimizer, config.num_steps)
 
     if config.load:
-        checkpoint = torch.load(config.load, map_location=torch.device(rank))
-        start_step = restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config, weights_only=config.load_weights_only)
-        _logger.info("Loaded model weights from {}".format(config.load), color="bold")
+        with benchmark_phase("checkpoint_load", path=str(config.load), bytes=Path(config.load).stat().st_size):
+            checkpoint = torch.load(config.load, map_location=torch.device(rank))
+            start_step = restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config, weights_only=config.load_weights_only)
+        _logger.info(f"Loaded model weights from {config.load}", color="bold")
 
     if config.compile:
         _logger.info("Compiling model")
@@ -1849,9 +1884,9 @@ def run(  # noqa: C901
 
     if world_size > 1:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        _logger.info("Configured model for SyncBatchNorm rank={}".format(rank))
+        _logger.info(f"Configured model for SyncBatchNorm rank={rank}")
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
-        _logger.info("Configured model for DistributedDataParallel rank={}".format(rank))
+        _logger.info(f"Configured model for DistributedDataParallel rank={rank}")
 
     seed_everything(config.seed + rank_index)
 
@@ -1866,7 +1901,7 @@ def run(  # noqa: C901
     if config.train:
         if (rank == 0) or (rank == "cpu"):
             save_HPs(config, model, outdir)  # save config and hyperparameters
-            _logger.info("Creating experiment dir {}".format(outdir))
+            _logger.info(f"Creating experiment dir {outdir}")
             _logger.info(f"Model directory {outdir}", color="bold")
 
         if config.comet:
@@ -1907,10 +1942,12 @@ def run(  # noqa: C901
             restore_loader_states(loaders, checkpoint, config)
 
         for split in loaders.keys():
-            _logger.info("loader split={} rank={} len={}".format(split, rank, len(loaders[split])))
+            _logger.info(f"loader split={split} rank={rank} len={len(loaders[split])}")
 
     if config.train and config.lr_find:
-        from mlpf.model.lr_finder import lr_range_test  # local import: lr_finder imports this module
+        from mlpf.model.lr_finder import (
+            lr_range_test,  # local import: lr_finder imports this module
+        )
 
         lr_range_test(rank, world_size, model, optimizer, loaders["train"], config, outdir, dtype=dtype, comet_experiment=comet_experiment)
     elif config.train:

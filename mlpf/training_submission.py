@@ -55,6 +55,7 @@ def _worker_for_site(repo_root, site):
         "flatiron": "scripts/flatiron/run_uv_scenario.sh",
         "tallinn": "scripts/tallinn/run_scenario.sh",
         "lumi": "scripts/lumi/run_scenario.sh",
+        "empireai": "scripts/empireai/run_scenario.sh",
     }
     try:
         return repo_root / relative_paths[site]
@@ -144,6 +145,10 @@ def build_slurm_submissions(
             command.extend(["--constraint", slurm.constraint])
         if slurm.account:
             command.extend(["--account", slurm.account])
+        if slurm.qos:
+            command.extend(["--qos", slurm.qos])
+        if slurm.reservation:
+            command.extend(["--reservation", slurm.reservation])
         if slurm.memory:
             command.extend(["--mem", slurm.memory])
         if slurm.memory_per_gpu:

@@ -24,6 +24,8 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`mlpf/pipeline.py`**: The main CLI for training, testing, LR range tests (`lr-find`), and hyperparameter optimization. Supports standard and Ray-based execution.
 - **`scripts/training/run_scenario.py`**: Resolves a generic scientific training scenario against a hardware profile, validates comparison invariants and global batch size (one value, or one per train group), and launches reproducible seeded jobs.
 - **`scripts/training/compare_scenario.py`**: Tabulates and plots the (per-group) validation losses of the runs of one scenario.
+- **`scripts/empireai/` / `envs/empireai-gh200/`**: Isolated ARM64 GH200 environment, reserved Slurm launcher and CLD smoke-test workflow; see [`scripts/empireai/README.md`](../scripts/empireai/README.md).
+- **Cross-platform batch sweeps**: [`training/hpc-batch-sweep.md`](training/hpc-batch-sweep.md) documents cloning the benchmark branch and repeating the exact CLD subset study on single-device LUMI MI250X and Flatiron H100 profiles, with dataset checks and the versioned GH200 reference.
 
 ## 3. Data Production & Preprocessing
 - **`mlpf/data/`**: Simulator-specific code for generating and preprocessing data. ColliderML: `colliderml/clustering.py` (`cluster_event` dispatcher + the properties every clusterer enforces; algorithms in `colliderml/radius_graph.py` (radius-graph bfs/union_find) and `colliderml/clue.py` (CLUE), shared helpers in `colliderml/cluster_common.py`), `colliderml/cluster_eval.py` (decodes/caches ColliderML events and their per-hit truth, scores clustering settings and the v20 Pandora clusters with `cluster_metrics.py`). Shared across detectors: `cluster_metrics.py` (truth-based clustering metrics, detector- and clusterer-agnostic).
@@ -72,6 +74,7 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`scripts/export-checkpoint-onnx.py`, `qualify-heptv2-onnx.py`, `benchmark-model-export.py`**: Trained CMS and seeded-model reference bundles, runtime qualification, and full-model measurements; see [Export qualification](validation/export-evidence.md).
 - **`scripts/plot-onnx-summary.py`**: Generates summary plots for ONNX validation results.
 - **`mlpf/model/monitoring.py`**: System resource monitoring and logging.
+- **`mlpf/model/benchmarking.py` / `mlpf/benchmark_report.py`**: Portable per-worker benchmark recording and JSON/CSV reports: actual work, latency, phase/checkpoint timing, NVIDIA/ROCm telemetry, host resources, energy coverage, provenance and rank-aware totals. Configuration is `MLPFConfig.benchmark`; artifact definitions are in the [HPC runbook](../scripts/empireai/README.md#utilization-evidence-for-an-allocation-request).
 
 ## 6. Utilities & Miscellaneous
 - **`mlpf/utils.py` / `mlpf/logger.py`**: Common utilities and centralized logging.

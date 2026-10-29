@@ -36,6 +36,7 @@ models
 logs
 
 env
+/particleflow-laif-env/
 
 *.done
 
@@ -45,6 +46,7 @@ env
 
 pixi.lock
 uv.lock
+!envs/empireai-gh200/uv.lock
 
 baselines
 
@@ -67,6 +69,7 @@ logs_slurm/
 .chart-data-*/
 data/tfds_validation_cld_hits/
 local_test_data/
+data/empireai-smoke/
 tmp/
 experiments.tar
 experiments.tgz

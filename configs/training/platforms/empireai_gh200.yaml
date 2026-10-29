@@ -1,0 +1,24 @@
+name: empireai_gh200
+gpus: 1
+# The worker puts the ARM virtual environment first on PATH.
+python_command: [python3]
+data_dir:
+  cld: ${MLPF_CLD_DATA_DIR}
+experiments_dir: /mnt/home/${USER}/particleflow/experiments
+runtime_overrides:
+  dtype: bfloat16
+  num_workers: 4
+  prefetch_factor: 2
+  model.attention.use_flash_attn_varlen: false
+slurm:
+  partition: grace
+  constraint: gracehopper
+  account: cuny
+  qos: burst
+  reservation: ghtest
+  time: "04:00:00"
+  nodes: 1
+  tasks_per_node: 1
+  cpus_per_task: 8
+  gpu_request: gres
+  memory: 128G
