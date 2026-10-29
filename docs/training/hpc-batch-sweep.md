@@ -30,6 +30,8 @@ the existing eight-device `lumi_mi250x` or `flatiron_h100` profiles.
 
 ## Clone the branch
 
+If the branch is published on GitHub:
+
 ```bash
 git clone --single-branch --branch jp_20261029_gracehopper \
   https://github.com/jpata/particleflow.git
@@ -42,6 +44,36 @@ For an existing checkout, switch to the same branch and update it before running
 Code and the small reference manifests are versioned; datasets, environments,
 checkpoints and raw experiment results are not included in the clone. The ARM64
 virtual environment from EmpireAI must not be copied to x86 LUMI/Flatiron.
+
+### Git bundle when the source cluster cannot push to GitHub
+
+An incremental Git bundle carries this branch's commits without credentials.
+Create it in the source checkout (a prepared bundle may also be supplied):
+
+```bash
+git bundle create /tmp/particleflow-jp_20261029_gracehopper.bundle \
+  d2d991cea54ab47382e9de63bc900d2850e75eb4..jp_20261029_gracehopper
+```
+
+Transfer the bundle to LUMI/Flatiron using `scp` or your normal file-transfer tool.
+On the target, clone the public repository, then fetch the branch from the bundle:
+
+```bash
+git clone https://github.com/jpata/particleflow.git
+cd particleflow
+git bundle verify /path/to/particleflow-jp_20261029_gracehopper.bundle
+git fetch /path/to/particleflow-jp_20261029_gracehopper.bundle \
+  jp_20261029_gracehopper:jp_20261029_gracehopper
+git switch jp_20261029_gracehopper
+git rev-parse HEAD
+mkdir -p logs_slurm
+```
+
+The bundle requires base commit `d2d991ce`, supplied by the public clone. Fetch
+that commit explicitly if using a shallow checkout that lacks it. This produces
+the same branch files as cloning the published branch. You can later push it
+from a checkout with GitHub write credentials using
+`git push -u origin jp_20261029_gracehopper`.
 
 ## Use the exact data subset
 
