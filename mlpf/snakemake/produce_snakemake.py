@@ -103,12 +103,14 @@ def main():  # noqa: C901
     prod_type = prod_config.get("type", "cms")
     if prod_config.get("generation_only", False):
         req_steps = ["gen"]
+    elif prod_config.get("dataset_only", False):
+        req_steps = ["post", "tfds", "tfds_hit"]
 
     # Determine models to train
     models_to_train = []
     # Resolve production type to match with model datasets
     # e.g. "cms_run3" -> "cms", "cld" -> "cld", "clic" -> "clic"
-    prod_key = args.production.split("_")[0] if "cms" in args.production else args.production
+    prod_key = args.production.split("_")[0]
     for mname, mspec in spec.get("models", {}).items():
         if mname == "defaults":
             continue
@@ -573,8 +575,8 @@ rule val_data_task:
 
             cmd = f"""
 config_id=$1
-tfds_id={sample_key}_{step_name}_$config_id
-job_scratch_dir={scratch_root}/tfds_tmp/$tfds_id
+tfds_id={args.production}_{sample_key}_{step_name}_$config_id
+job_scratch_dir={scratch_root}/tfds_tmp/${{tfds_id}}_${{SLURM_JOB_ID:-manual-$$}}
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export KERAS_BACKEND=torch

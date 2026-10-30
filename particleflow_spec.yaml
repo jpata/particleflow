@@ -279,7 +279,7 @@ productions:
   cld_ecal_pitch_5p1: &cld_ecal_pitch_scan
     type: "key4hep"
     model: "pyg-cld-v1"
-    generation_only: true
+    dataset_only: true
     comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 5.1 mm"
     workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_5p1mm"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
@@ -289,6 +289,8 @@ productions:
     pythia_card: "${project.paths.project_root}/scripts/cld_ecal_readout/cards/p8_ee_Z_tautau_ecm91_scan.cmd"
     memory:
       gen: 8000
+      post: 8000
+      tfds: 8000
     slurm_partition: "main"
     slurm_runtime: "48h"
     samples:
@@ -297,6 +299,19 @@ productions:
         gen_script: "scripts/cld_photon_readout/run_sim.sh"
         seed_range: [700000, 700100]
         events_per_job: 100
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
+      args: {}
+    tfds_mapping:
+      z_tautau:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/z_tautau"
+        version: "3.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    tfds_hit_mapping:
+      z_tautau:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/z_tautau"
+        version: "3.2.2"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   cld_ecal_pitch_4:
     <<: *cld_ecal_pitch_scan
@@ -331,7 +346,7 @@ productions:
   cld_hcal_pitch_30: &cld_hcal_pitch_scan
     type: "key4hep"
     model: "pyg-cld-v1"
-    generation_only: true
+    dataset_only: true
     comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 30 mm"
     workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_30mm"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
@@ -340,6 +355,8 @@ productions:
     cms_energy: 365
     memory:
       gen: 12000
+      post: 16000
+      tfds: 16000
     slurm_partition: "main"
     slurm_runtime: "48h"
     samples:
@@ -348,6 +365,19 @@ productions:
         gen_script: "scripts/cld_photon_readout/run_sim.sh"
         seed_range: [300000, 300100]
         events_per_job: 100
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
+      args: {}
+    tfds_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
+        version: "3.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    tfds_hit_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ttbar"
+        version: "3.2.2"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   cld_hcal_pitch_25:
     <<: *cld_hcal_pitch_scan
