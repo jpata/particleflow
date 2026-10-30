@@ -25,7 +25,8 @@ def test_cross_platform_profiles_resolve_single_device_cases(profile_name, monke
         jobs = resolve_scenario_jobs(case_scenario(scenario, batch, 120, 20), profile, spec_file=ROOT / scenario.spec_file)
         assert len(jobs) == 2
         assert all(job.resolved_config.gpus == 1 and job.per_gpu_batch_size == batch for job in jobs)
-        assert all(job.resolved_config.dtype == "bfloat16" and job.resolved_config.num_workers == 4 for job in jobs)
+        workers = 2 if profile_name == "lumi_mi250x_single" else 4
+        assert all(job.resolved_config.dtype == "bfloat16" and job.resolved_config.num_workers == workers for job in jobs)
         assert jobs[0].resolved_config.model.set_decoder == jobs[1].resolved_config.model.set_decoder
         assert profile.python_command == ["python3"]
 

@@ -185,6 +185,10 @@ sbatch --time=00:20:00 scripts/lumi/run_batch_sweep.sh \
 Confirm **both cases** have status `completed` in `sweep-state.json`, not merely a
 successful overall Slurm exit (the sweep intentionally tolerates OOM cases).
 Check that telemetry has a nonzero sample count and inspect any telemetry errors.
+The single-GCD profile uses two DataLoader workers per loader and
+`MLPF_SHARING_STRATEGY=file_descriptor`. Other profiles retain their existing
+sharing strategy. The worker records `/dev/shm` capacity and cgroup memory
+usage, limits and OOM counters every five seconds in `memory-diagnostics.jsonl`.
 The worker preserves Slurm's `ROCR_VISIBLE_DEVICES`; it does not apply the existing
 full-node eight-device visibility workaround.
 

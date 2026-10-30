@@ -17,7 +17,8 @@ OUTPUT=${MLPF_BATCH_SWEEP_OUTPUT:-${LUMI_PROJECT_ROOT:-/scratch/project_46500129
 echo "Batch sweep output: $OUTPUT"
 # srun establishes the one-device visibility mask before entering the container.
 exec srun --ntasks=1 --gpus-per-task=1 --cpu-bind=cores \
-  bash scripts/lumi/batch_python.sh scripts/training/batch_sweep.py \
+  bash scripts/lumi/batch_python.sh scripts/training/monitor_batch_memory.py \
+  --diagnostics "$OUTPUT/memory-diagnostics.jsonl" -- scripts/training/batch_sweep.py \
   --scenario configs/training/scenarios/cld_gh200_backbone_benchmark.yaml \
   --platform configs/training/platforms/lumi_mi250x_single.yaml \
   --output "$OUTPUT" "$@"
