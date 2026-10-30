@@ -1,5 +1,10 @@
 # Repeating the CLD hit-model batch sweep on HPC systems
 
+For new runs and new platforms, use the [profile-driven portable workflow](benchmark-portability.md).
+It centralizes Slurm resources, protocol defaults, data/code preflight and evidence
+export. The site setup and historical reproduction instructions below remain useful.
+
+
 The same study runs on EmpireAI GH200, Flatiron H100 and LUMI MI250X. The shared
 driver is [`scripts/training/batch_sweep.py`](../../scripts/training/batch_sweep.py).
 Its scenario retains the historical name `cld_gh200_backbone_benchmark`, but the

@@ -361,3 +361,12 @@ checkpoint intervals of 1,000. See [implementation and comparison details](../..
 ```bash
 scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_readout_50k mi250x --dry-run
 ```
+
+## Portable benchmark sweeps
+
+Use `scenarios/cld_backbone_benchmark.yaml` for new GPU comparisons and
+`python -m scripts.training.submit_batch_sweep --platform <profile.yaml> --dry-run`
+to preview allocation resources from a profile. Add `--python-wrapper` for a site
+environment adapter. The historical GH200 and H100-3.2.1 scenarios retain their
+original definitions. See [benchmark portability](../../docs/training/benchmark-portability.md)
+for qualification, data provenance and the compact evidence release workflow.

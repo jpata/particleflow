@@ -5,6 +5,7 @@ capacity limit; other failures make the overall command fail after saving result
 """
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -16,6 +17,8 @@ from pathlib import Path
 import yaml
 
 from mlpf.benchmark_report import main as report_main
+from scripts.training.check_batch_data import check_data
+from scripts.training.monitor_batch_memory import monitor_memory
 from mlpf.training_scenarios import (
     load_platform_profile,
     load_training_scenario,
@@ -38,6 +41,7 @@ def case_scenario(base, batch_size, steps, warmup):
             "tensorboard_step_freq": 20,
             "task_loss_weights.calibration_steps": max(1, warmup),
             "benchmark.enabled": True,
+            "benchmark.sample_interval_seconds": 1.0,
             "benchmark.warmup_steps": warmup,
             "benchmark.gpu_timing_interval": 10,
         }
@@ -86,11 +90,76 @@ def save_state(output, state):
     temporary.replace(output / "sweep-state.json")
 
 
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_SCENARIO = ROOT / "configs/training/scenarios/cld_backbone_benchmark.yaml"
+
+
+def validate_protocol_overrides(case, platform):
+    """A platform may choose implementation details, but cannot silently change timing/precision."""
+    protected = {key: value for key, value in case.training.parameters.items() if key.startswith("benchmark.") or key in {"dtype", "compile"}}
+    for source, overrides in [
+        (platform.name, platform.runtime_overrides),
+        *((name, variant.overrides) for name, variant in case.variants.items()),
+        ("common_overrides", case.common_overrides),
+    ]:
+        for key in protected.keys() & overrides.keys():
+            if overrides[key] != protected[key]:
+                raise ValueError(f"{source} overrides shared benchmark setting {key}; change the scientific recipe explicitly")
+
+
+def git_state(root=ROOT):
+    """Record provenance even for development runs; strict comparisons can reject dirt."""
+    try:
+
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.DEVNULL)
+
+        return {
+            "revision": git("rev-parse", "HEAD").decode().strip(),
+            "dirty": bool(git("status", "--porcelain")),
+            "tracked_diff_sha256": hashlib.sha256(git("diff", "HEAD")).hexdigest(),
+        }
+    except (OSError, subprocess.SubprocessError):
+        return {"unavailable": True}
+
+
+def verify_data(cases, manifest_path):
+    if manifest_path is None:
+        return {"status": "not_checked", "scope": "No data manifest supplied"}
+    manifest = json.loads(manifest_path.read_text())
+    roots = set()
+    for _, job in cases:
+        config = job.resolved_config.model_dump(mode="json")
+        selected = {
+            f"{name}/{split}/{sample['version']}"
+            for groups in config["train_dataset"].values()
+            for group in groups.values()
+            for name, sample in group["samples"].items()
+            for split in sample["splits"]
+        }
+        if selected != {manifest["relative_directory"]}:
+            raise ValueError("Data manifest must match every selected training dataset/config/version")
+        roots.add(job.data_dir)
+    for root in roots:
+        errors = check_data(root, manifest)
+        if errors:
+            raise ValueError("Dataset preflight failed: " + "; ".join(errors[:10]))
+    return {
+        "status": "verified",
+        "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        "dataset": manifest["relative_directory"],
+        "scope": "Filenames, sizes and metadata hashes only; shard payload checksums not checked",
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--scenario", type=Path, required=True)
+    parser.add_argument("--scenario", type=Path, default=os.environ.get("MLPF_BATCH_SWEEP_SCENARIO", DEFAULT_SCENARIO))
     parser.add_argument("--platform", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path, default=os.environ.get("MLPF_BATCH_SWEEP_OUTPUT"))
+    parser.add_argument("--data-dir", help="Override the profile TFDS root for every variant")
+    parser.add_argument("--data-manifest", type=Path, help="Require matching dataset inventory before any training")
+    parser.add_argument("--require-clean-git", action="store_true", help="Reject missing or dirty source provenance")
     parser.add_argument("--batch-sizes", nargs="+", type=int, default=[8, 16, 32, 64, 128])
     parser.add_argument("--steps", type=int, default=120)
     parser.add_argument("--warmup", type=int, default=20)
@@ -103,24 +172,51 @@ def main(argv=None):
         parser.error("Batch sizes must be unique")
     base = load_training_scenario(args.scenario)
     platform = load_platform_profile(args.platform)
+    if args.data_dir:
+        platform.data_dir = args.data_dir
+    if platform.gpus != 1:
+        parser.error("Batch sweeps require a single-device platform profile")
+    spec_file = Path(base.spec_file)
+    if not spec_file.is_absolute():
+        spec_file = ROOT / spec_file
+    base.spec_file = str(spec_file.resolve())
     cases = []
     for batch in args.batch_sizes:
         case = case_scenario(base, batch, args.steps, args.warmup)
+        validate_protocol_overrides(case, platform)
         jobs = resolve_scenario_jobs(case, platform, spec_file=case.spec_file)
         for job in jobs:
+            if job.resolved_config.gpus != 1:
+                parser.error("Every batch-sweep variant must use one visible device")
             cases.append((case, job))
     print(f"Resolved {len(cases)} cases: batches={args.batch_sizes}, steps={args.steps}, warmup={args.warmup}", flush=True)
     if args.dry_run:
         for case, job in cases:
             print(case.name, job.variant_name, job.seed, "per-GPU batch", job.per_gpu_batch_size)
         return
-    output = args.output.resolve()
+    source = git_state()
+    if args.require_clean_git and (source.get("unavailable") or source.get("dirty")):
+        parser.error("A clean Git checkout is required for this sweep")
+    verification = verify_data(cases, args.data_manifest)
+    default_name = f"{platform.name}_batch_sweep_{os.environ.get('SLURM_JOB_ID', time.strftime('%Y%m%d_%H%M%S'))}"
+    output = (args.output or Path(platform.experiments_dir) / default_name).resolve()
     if (output / "sweep-state.json").exists():
         parser.error("Output already contains a sweep; use a new output directory")
     (output / "cases").mkdir(parents=True, exist_ok=True)
     (output / "logs").mkdir(exist_ok=True)
+    # A frozen spec prevents later source edits from changing later cases in this sweep.
+    spec_bytes = spec_file.read_bytes()
+    (output / "particleflow_spec.yaml").write_bytes(spec_bytes)
+    for case, _ in cases:
+        case.spec_file = str(output / "particleflow_spec.yaml")
+    if args.data_manifest:
+        (output / "data-manifest.json").write_bytes(args.data_manifest.read_bytes())
     state = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "git": source,
+        "data_verification": verification,
+        "scenario_sha256": hashlib.sha256(args.scenario.read_bytes()).hexdigest(),
+        "spec_sha256": hashlib.sha256(spec_bytes).hexdigest(),
         "scenario": str(args.scenario.resolve()),
         "platform": str(args.platform.resolve()),
         "steps_per_case": args.steps,
@@ -128,7 +224,13 @@ def main(argv=None):
         "purpose": "throughput/memory sweep; event exposure differs across batch sizes",
         "cases": [],
     }
+    print(f"Batch sweep output: {output}", flush=True)
     save_state(output, state)
+    with monitor_memory(output / "memory-diagnostics.jsonl"):
+        run_cases(output, state, cases, platform, args.case_timeout)
+
+
+def run_cases(output, state, cases, platform, case_timeout):
     unexpected_failure = False
     for case, job in cases:
         case_path = output / "cases" / f"{case.name}.yaml"
@@ -140,7 +242,7 @@ def main(argv=None):
         log_path = output / "logs" / f"{case_id}.log"
         command = [
             sys.executable,
-            "scripts/training/run_scenario.py",
+            str(ROOT / "scripts/training/run_scenario.py"),
             "--scenario",
             str(case_path),
             "--platform",
@@ -165,7 +267,7 @@ def main(argv=None):
         state["cases"].append(record)
         save_state(output, state)
         print("Starting", case_id, flush=True)
-        returncode, timed_out = execute(command, log_path, args.case_timeout)
+        returncode, timed_out = execute(command, log_path, case_timeout)
         record.update(status=classify(returncode, log_path.read_text(errors="replace"), timed_out), returncode=returncode, finished_at=time.time())
         unexpected_failure |= record["status"] not in ("completed", "oom")
         save_state(output, state)

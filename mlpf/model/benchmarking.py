@@ -364,6 +364,7 @@ def provenance(config, rank, world_size, scope):
                 "ROCR_VISIBLE_DEVICES",
                 "HIP_VISIBLE_DEVICES",
                 "OMP_NUM_THREADS",
+                "MLPF_SHARING_STRATEGY",
                 "PF_SITE",
                 "IMG",
                 "LUMI_VENV",

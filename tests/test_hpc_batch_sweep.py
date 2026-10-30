@@ -46,7 +46,7 @@ def executable(path, body):
     path.chmod(0o755)
 
 
-@pytest.mark.parametrize("site,profile", [("lumi", "lumi_mi250x_single"), ("flatiron", "flatiron_h100_single")])
+@pytest.mark.parametrize("site,profile", [("lumi", "lumi_mi250x_single"), ("flatiron", "flatiron_h100_single"), ("empireai", "empireai_gh200")])
 def test_site_worker_binds_one_gpu_and_forwards_sweep_args(tmp_path, site, profile):
     stub, env = shell_environment(tmp_path)
     executable(stub / "srun", 'printf "%s\\n" "$@"')
@@ -56,11 +56,10 @@ def test_site_worker_binds_one_gpu_and_forwards_sweep_args(tmp_path, site, profi
     result = subprocess.run(
         ["bash", str(ROOT / f"scripts/{site}/run_batch_sweep.sh"), "--batch-sizes", "8", "16"], env=env, check=True, capture_output=True, text=True
     )
-    assert "--gpus-per-task=1" in result.stdout
+    assert "--ntasks=1" in result.stdout
     assert "--cpu-bind=cores" in result.stdout
     assert f"configs/training/platforms/{profile}.yaml" in result.stdout
-    if site == "flatiron":
-        assert "configs/training/scenarios/cld_h100_backbone_benchmark_321.yaml" in result.stdout
+    assert "scripts.training.batch_sweep" in result.stdout
     assert result.stdout.splitlines()[-3:] == ["--batch-sizes", "8", "16"]
 
 
@@ -110,3 +109,49 @@ def test_data_inventory_detects_missing_sizes_and_metadata_changes(tmp_path):
     assert any("checksum mismatch" in error for error in errors)
     (directory / "shard").unlink()
     assert any("missing" in error for error in check_data(tmp_path, manifest))
+
+
+@pytest.mark.parametrize("profile", ["empireai_gh200", "flatiron_h100_single", "lumi_mi250x_single"])
+def test_generic_submission_uses_profile_resources_and_preserves_arguments(profile):
+    from scripts.training.submit_batch_sweep import build_submission
+
+    path = ROOT / f"configs/training/platforms/{profile}.yaml"
+    command = build_submission(path, sweep_args=["--output", "/output with spaces", "--batch-sizes", "16"])
+    resolved = load_platform_profile(path)
+    assert command[command.index("--partition") + 1] == resolved.slurm.partition
+    assert command[command.index("--cpus-per-task") + 1] == str(resolved.slurm.cpus_per_task)
+    assert command[-4:] == ["--output", "/output with spaces", "--batch-sizes", "16"]
+    assert ("--no-requeue" in command) == resolved.slurm.no_requeue
+
+
+def test_new_platform_needs_no_site_dispatch(tmp_path):
+    import yaml
+    from scripts.training.submit_batch_sweep import build_submission
+
+    profile = tmp_path / "future.yaml"
+    profile.write_text(
+        yaml.safe_dump(
+            {
+                "name": "future_device",
+                "gpus": 1,
+                "data_dir": "/data",
+                "experiments_dir": "/runs",
+                "slurm": {"partition": "new_partition", "gpu_request": "gres", "gpu_type": "new_gpu", "cpus_per_task": 3},
+            }
+        )
+    )
+    command = build_submission(profile)
+    assert command[command.index("--gres") + 1] == "gpu:new_gpu:1"
+    assert command[command.index("--partition") + 1] == "new_partition"
+    assert command[-3:] == ["-", "--platform", str(profile)]
+
+
+def test_memory_monitor_stops_when_case_raises(tmp_path):
+    import threading
+    from scripts.training.monitor_batch_memory import monitor_memory
+
+    with pytest.raises(RuntimeError):
+        with monitor_memory(tmp_path / "memory.jsonl", interval=0.01):
+            raise RuntimeError("failed case")
+    assert not any(t.name == "mlpf-sweep-memory" for t in threading.enumerate())
+    assert len((tmp_path / "memory.jsonl").read_text().splitlines()) >= 2

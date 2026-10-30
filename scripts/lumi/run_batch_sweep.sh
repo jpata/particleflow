@@ -13,12 +13,7 @@
 set -euo pipefail
 REPO_ROOT=${MLPF_REPO_ROOT:-${SLURM_SUBMIT_DIR:-$PWD}}
 cd "$REPO_ROOT"
-OUTPUT=${MLPF_BATCH_SWEEP_OUTPUT:-${LUMI_PROJECT_ROOT:-/scratch/project_465001293}/${USER}/particleflow/experiments/lumi_batch_sweep_${SLURM_JOB_ID}}
-echo "Batch sweep output: $OUTPUT"
-# srun establishes the one-device visibility mask before entering the container.
-exec srun --ntasks=1 --gpus-per-task=1 --cpu-bind=cores \
-  bash scripts/lumi/batch_python.sh scripts/training/monitor_batch_memory.py \
-  --diagnostics "$OUTPUT/memory-diagnostics.jsonl" -- scripts/training/batch_sweep.py \
-  --scenario configs/training/scenarios/cld_gh200_backbone_benchmark.yaml \
-  --platform configs/training/platforms/lumi_mi250x_single.yaml \
-  --output "$OUTPUT" "$@"
+# Compatibility worker. Prefer submit_batch_sweep.py to read resources from the profile.
+exec srun --ntasks=1 --cpu-bind=cores \
+  bash scripts/lumi/batch_python.sh -m scripts.training.batch_sweep \
+  --platform configs/training/platforms/lumi_mi250x_single.yaml "$@"
