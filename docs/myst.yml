@@ -22,6 +22,7 @@ project:
     - title: Datasets
       children:
         - file: datasets/catalog.md
+        - file: datasets/event-displays.md
         - file: datasets/track-cluster.md
           children:
             - file: datasets/cms.md

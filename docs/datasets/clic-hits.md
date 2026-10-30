@@ -14,11 +14,16 @@ Recipes configure partitions 1--10. The [verified Hub selection](catalog.md#publ
 
 ## Event view
 
-Hits and target particles are shown for a representative `ttbar` event in the transverse plane. Tracker hits are red, ECAL hits blue, HCAL hits green, and muon-system hits orange.
+These views show the same simulated `ttbar` event (index 0) at 380 GeV in the transverse plane. The particle panel shows the Pandora reference reconstruction from the source event; the hit dataset stores its own training targets.
 
-| Raw hits | Target particles |
+| Raw detector hits | Pandora reconstructed particles |
 |:---:|:---:|
-| ![CLIC tracker, calorimeter, and muon-system hits.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/clic_event_5_hits_5x5cm.svg) | ![CLIC target particles.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/clic_event_5_targets_5x5cm.svg) |
+| ![CLIC: raw detector hits for event 0.](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/clic/event_0_hits.png) | ![CLIC: pandora reconstructed particles for the same event.](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/clic/event_0_particles.png) |
+
+[All-component overlay](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/clic/event_0_overlay.png),
+[vector input view](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/clic/event_0_hits.svg) and
+[vector particle view](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/clic/event_0_particles.svg) are available for reuse.
+See [event-view conventions](event-displays.md) for particle sources, sampling and scale.
 
 ## Production and related inputs
 

@@ -15,6 +15,9 @@ The catalog includes maintained recipes and explicitly identified partial workfl
 
 After selecting a sample, [download and verify](download.md) published data or follow [dataset generation](generate.md). The shared [Key4HEP production guide](key4hep.md) covers both CLD/CLIC representations.
 
+See [detector event views](event-displays.md) for reusable visualizations of the
+input representations and reference particles.
+
 ## Configuration partitions and event splits
 
 CMS, CLD, CLIC, MAIA, and ColliderML recipes use configuration partitions `1` through `10`; IDEA uses configuration `1`. A configuration partition contains its own `train` and `test` event splits: the number identifies the partition, while `train` or `test` identifies the event split. The standard ten-partition model recipes combine all ten partitions. Configuration `1` provides a one-partition subset for a small experiment; the configured training corpus spans all ten.
