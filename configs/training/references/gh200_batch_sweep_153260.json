@@ -1,0 +1,167 @@
+{
+  "job_id": "153260",
+  "platform": "empireai_gh200",
+  "steps": 120,
+  "warmup_steps": 20,
+  "seed": 12345,
+  "device": {
+    "name": "NVIDIA GH200 480GB",
+    "total_memory_bytes": 102005473280,
+    "compute_capability": [
+      9,
+      0
+    ],
+    "uuid": "d5312466-400d-fdd3-a3d2-736e98886836"
+  },
+  "architecture": "aarch64",
+  "torch": "2.11.0+cu128",
+  "cuda_runtime": "12.8",
+  "cases": [
+    {
+      "variant": "attention",
+      "global_batch_size": 8,
+      "status": "completed",
+      "events": 960,
+      "steady_events_per_training_second": 12.56589640592102,
+      "steady_hits_per_training_second": 122168.80203983614,
+      "steady_step_p50_seconds": 0.6320971548557281,
+      "steady_step_p99_seconds": 0.8602891777828339,
+      "training_gpu_busy_percent": 49.16816362698934,
+      "training_gpu_busy_covered_seconds": 76.973872278817,
+      "framework_process_peak_allocated_bytes": 6212977664
+    },
+    {
+      "variant": "heptv2",
+      "global_batch_size": 8,
+      "status": "completed",
+      "events": 960,
+      "steady_events_per_training_second": 11.59590143653919,
+      "steady_hits_per_training_second": 112738.26723626994,
+      "steady_step_p50_seconds": 0.6744112796150148,
+      "steady_step_p99_seconds": 0.939555611154065,
+      "training_gpu_busy_percent": 46.33128358634838,
+      "training_gpu_busy_covered_seconds": 88.05690310616046,
+      "framework_process_peak_allocated_bytes": 7242431488
+    },
+    {
+      "variant": "attention",
+      "global_batch_size": 16,
+      "status": "completed",
+      "events": 1920,
+      "steady_events_per_training_second": 14.16103246161317,
+      "steady_hits_per_training_second": 136614.56018174265,
+      "steady_step_p50_seconds": 1.1265132501721382,
+      "steady_step_p99_seconds": 1.3897758059576155,
+      "training_gpu_busy_percent": 53.73888343276557,
+      "training_gpu_busy_covered_seconds": 136.8359126187861,
+      "framework_process_peak_allocated_bytes": 11841815040
+    },
+    {
+      "variant": "heptv2",
+      "global_batch_size": 16,
+      "status": "completed",
+      "events": 1920,
+      "steady_events_per_training_second": 13.4722942636621,
+      "steady_hits_per_training_second": 129970.15298555062,
+      "steady_step_p50_seconds": 1.1703924494795501,
+      "steady_step_p99_seconds": 1.4493609412107618,
+      "training_gpu_busy_percent": 53.995112457524954,
+      "training_gpu_busy_covered_seconds": 149.54195080231875,
+      "framework_process_peak_allocated_bytes": 14239806464
+    },
+    {
+      "variant": "attention",
+      "global_batch_size": 32,
+      "status": "completed",
+      "events": 3840,
+      "steady_events_per_training_second": 14.547862661382029,
+      "steady_hits_per_training_second": 140599.04616683867,
+      "steady_step_p50_seconds": 2.1722677536308765,
+      "steady_step_p99_seconds": 2.530936222132296,
+      "training_gpu_busy_percent": null,
+      "training_gpu_busy_covered_seconds": null,
+      "framework_process_peak_allocated_bytes": 23358533632
+    },
+    {
+      "variant": "heptv2",
+      "global_batch_size": 32,
+      "status": "completed",
+      "events": 3840,
+      "steady_events_per_training_second": 13.830442036952725,
+      "steady_hits_per_training_second": 133665.4740096765,
+      "steady_step_p50_seconds": 2.285853264387697,
+      "steady_step_p99_seconds": 2.5668283491674813,
+      "training_gpu_busy_percent": 59.34518578774012,
+      "training_gpu_busy_covered_seconds": 285.5590875884518,
+      "framework_process_peak_allocated_bytes": 29242608128
+    },
+    {
+      "variant": "attention",
+      "global_batch_size": 64,
+      "status": "completed",
+      "events": 7680,
+      "steady_events_per_training_second": 13.837633818324782,
+      "steady_hits_per_training_second": 133021.27767780976,
+      "steady_step_p50_seconds": 4.618271645624191,
+      "steady_step_p99_seconds": 5.18914441172034,
+      "training_gpu_busy_percent": 62.999781332660305,
+      "training_gpu_busy_covered_seconds": 561.9764740495011,
+      "framework_process_peak_allocated_bytes": 46277582336
+    },
+    {
+      "variant": "heptv2",
+      "global_batch_size": 64,
+      "status": "completed",
+      "events": 7680,
+      "steady_events_per_training_second": 13.081137392713957,
+      "steady_hits_per_training_second": 125749.07186468971,
+      "steady_step_p50_seconds": 4.868631860706955,
+      "steady_step_p99_seconds": 5.330362756364049,
+      "training_gpu_busy_percent": 65.00384457665197,
+      "training_gpu_busy_covered_seconds": 598.8255046298727,
+      "framework_process_peak_allocated_bytes": 58237065216
+    },
+    {
+      "variant": "attention",
+      "global_batch_size": 128,
+      "status": "oom",
+      "events": 256,
+      "steady_events_per_training_second": null,
+      "steady_hits_per_training_second": null,
+      "steady_step_p50_seconds": null,
+      "steady_step_p99_seconds": null,
+      "training_gpu_busy_percent": 45.177014531458646,
+      "training_gpu_busy_covered_seconds": 38.41384841687977,
+      "framework_process_peak_allocated_bytes": 86645364224,
+      "recorder_status": "failed"
+    },
+    {
+      "variant": "heptv2",
+      "global_batch_size": 128,
+      "status": "oom",
+      "events": 0,
+      "steady_events_per_training_second": null,
+      "steady_hits_per_training_second": null,
+      "steady_step_p50_seconds": null,
+      "steady_step_p99_seconds": null,
+      "training_gpu_busy_percent": 20.719504509751665,
+      "training_gpu_busy_covered_seconds": 24.2693463973701,
+      "framework_process_peak_allocated_bytes": 93710633472,
+      "recorder_status": "failed"
+    }
+  ],
+  "notes": [
+    "Both batch-128 cases reached GPU out-of-memory; failed recorder status is an observed capacity limit.",
+    "Attention batch-32 telemetry had no phase-attributed samples; its utilization is unavailable.",
+    "Short throughput/capacity sweep; event exposure differs across batch sizes."
+  ],
+  "packages": {
+    "numpy": "2.4.6",
+    "tensorflow": "2.20.0",
+    "tensorflow-datasets": "4.9.10",
+    "array-record": "0.8.6",
+    "triton": "3.6.0",
+    "flash-attn": null,
+    "pydantic": "2.14.1"
+  }
+}

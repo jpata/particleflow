@@ -1,11 +1,15 @@
 import json
 import subprocess
-
-import pytest
 from pathlib import Path
 
+import pytest
 import yaml
 
+from mlpf.training_scenarios import (
+    load_platform_profile,
+    load_training_scenario,
+    resolve_scenario_jobs,
+)
 from mlpf.training_submission import (
     available_choices,
     build_slurm_submission,
@@ -14,14 +18,34 @@ from mlpf.training_submission import (
     resolve_platform_profile_path,
     resolve_scenario_path,
 )
-from mlpf.training_scenarios import (
-    load_platform_profile,
-    load_training_scenario,
-    resolve_scenario_jobs,
-)
-
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_empireai_submission_targets_reserved_gpu_and_smoke_data(monkeypatch):
+    monkeypatch.setenv("MLPF_CLD_DATA_DIR", "/home/test/tfds")
+    scenario = resolve_scenario_path("cld_gh200_smoke", ROOT)
+    profile = resolve_platform_profile_path("gh200", ROOT, "empireai")
+    worker = ROOT / "scripts/empireai/run_scenario.sh"
+    command, jobs = build_slurm_submission(scenario, profile, ROOT, worker=worker)
+    for flag, value in {
+        "--partition": "grace",
+        "--constraint": "gracehopper",
+        "--account": "cuny",
+        "--qos": "burst",
+        "--reservation": "ghtest",
+        "--gres": "gpu:1",
+    }.items():
+        assert command[command.index(flag) + 1] == value
+    assert str(worker) in command
+    config = jobs[0].resolved_config
+    assert config.data_dir == "/home/test/tfds"
+    assert jobs[0].per_gpu_batch_size == 2
+    for datasets in (config.train_dataset, config.valid_dataset):
+        samples = datasets["cld_hits"]["physical"].samples
+        assert list(samples) == ["cld_edm_ttbar_hits"]
+        assert samples["cld_edm_ttbar_hits"].splits == ["1"]
+    assert list(config.test_dataset) == ["cld_edm_ttbar_hits"]
 
 
 def test_picker_discovers_scenarios_and_accelerators():
@@ -32,6 +56,23 @@ def test_picker_discovers_scenarios_and_accelerators():
     assert "cld_pf_hits_comparison" in scenarios
     assert "clic_cld_pf_set_hits_comparison" in scenarios
     assert {"a100", "h100", "h200"}.issubset(accelerators)
+
+
+def test_gh200_benchmark_matches_decoder_features_and_event_exposure(monkeypatch):
+    monkeypatch.setenv("MLPF_CLD_DATA_DIR", "/home/test/tfds")
+    profile = load_platform_profile(resolve_platform_profile_path("gh200", ROOT, "empireai"))
+    scenario = load_training_scenario(resolve_scenario_path("cld_gh200_backbone_benchmark", ROOT))
+    jobs = resolve_scenario_jobs(scenario, profile, spec_file=ROOT / scenario.spec_file)
+    attention, heptv2 = [job.resolved_config for job in jobs]
+    assert [job.variant_name for job in jobs] == ["attention", "heptv2"]
+    assert all(job.global_batch_size == job.per_gpu_batch_size == 8 for job in jobs)
+    assert all(config.num_steps == 1000 and config.gpus == 1 for config in (attention, heptv2))
+    assert attention.model.set_decoder == heptv2.model.set_decoder
+    assert attention.model.hit_feature_engineering == heptv2.model.hit_feature_engineering
+    assert attention.train_dataset == heptv2.train_dataset
+    assert attention.model.attention.num_convs == heptv2.model.heptv2.num_convs == 6
+    assert attention.model.attention.num_heads * attention.model.attention.head_dim == heptv2.model.heptv2.embedding_dim == 256
+    assert list(attention.train_dataset["cld_hits"]["physical"].samples) == ["cld_edm_ttbar_hits"]
 
 
 def test_multi_production_scenario_submits_one_array_task_per_variant():
@@ -150,7 +191,7 @@ def test_picker_discovers_site_specific_accelerators():
     _, lumi_accelerators = available_choices(ROOT, "lumi")
 
     assert tallinn_accelerators == ["l40"]
-    assert lumi_accelerators == ["mi250x"]
+    assert lumi_accelerators == ["mi250x", "mi250x_single"]
 
 
 def _write_scenario_run(experiments_dir, scenario, profile, job, step):

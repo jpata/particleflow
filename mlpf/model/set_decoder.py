@@ -6,8 +6,17 @@ from typing import overload
 import torch
 from torch import nn
 from torch.nn import functional as F
+
 from mlpf.model.tracker_group_readout import SUMMARY_DIM, tracker_group_geometry
-from mlpf.model.tracker_momentum_readout import TrackerMomentumReadout, pool_hit_associations
+from mlpf.model.tracker_momentum_readout import (
+    TrackerMomentumReadout,
+    pool_hit_associations,
+)
+
+try:
+    from torch.nn.attention.varlen import varlen_attn as torch_varlen_attn
+except ImportError:
+    torch_varlen_attn = None
 
 try:
     from flash_attn import flash_attn_varlen_func
@@ -82,7 +91,9 @@ def _flash_attn_varlen_eager(*args, **kwargs):
 def _flash_multihead_attention(module, queries, memory, memory_mask=None):
     """Cross/self attention without a query-by-memory allocation.
 
-    GPU execution requires variable-length FlashAttention. The streaming fallback
+    GPU execution uses packed variable-length FlashAttention. PyTorch's native
+    kernel handles zero dropout on NVIDIA; the optional external library retains
+    dropout and ROCm support. The streaming fallback
     keeps CPU tests and inference bounded too; it is not the production kernel.
     """
     batch_size, num_queries, embedding_dim = queries.shape
@@ -100,8 +111,6 @@ def _flash_multihead_attention(module, queries, memory, memory_mask=None):
     empty_events = ~memory_mask.any(dim=1)
 
     if queries.is_cuda:
-        if flash_attn_varlen_func is None:
-            raise RuntimeError("Set decoder attention on GPU requires flash_attn_varlen_func")
         if q.dtype not in (torch.float16, torch.bfloat16):
             raise TypeError("Set decoder FlashAttention requires float16 or bfloat16; enable mixed precision")
         if memory.shape[1] == 0:
@@ -113,8 +122,7 @@ def _flash_multihead_attention(module, queries, memory, memory_mask=None):
             lengths = safe_mask.sum(dim=1, dtype=torch.int32)
             key_offsets = F.pad(lengths.cumsum(dim=0, dtype=torch.int32), (1, 0))
             query_offsets = torch.arange(batch_size + 1, dtype=torch.int32, device=queries.device) * num_queries
-            flash_attn_varlen = _flash_attn_varlen_eager if torch.version.hip is not None else flash_attn_varlen_func
-            attention_output = flash_attn_varlen(
+            packed_args = (
                 q.contiguous().reshape(-1, num_heads, head_dim),
                 k[safe_mask].contiguous(),
                 v[safe_mask].contiguous(),
@@ -122,9 +130,19 @@ def _flash_multihead_attention(module, queries, memory, memory_mask=None):
                 key_offsets,
                 num_queries,
                 int(lengths.max().item()),
-                dropout_p=module.dropout if module.training else 0.0,
-                causal=False,
-            ).reshape(batch_size, num_queries, num_heads, head_dim)
+            )
+            dropout_p = module.dropout if module.training else 0.0
+            if torch_varlen_attn is not None and torch.version.hip is None and dropout_p == 0.0:
+                attention_output = torch_varlen_attn(*packed_args)
+            else:
+                if flash_attn_varlen_func is None:
+                    raise RuntimeError(
+                        "Set decoder needs PyTorch native varlen attention on NVIDIA with zero dropout, "
+                        "or the optional flash-attn library for dropout/ROCm."
+                    )
+                flash_attn_varlen = _flash_attn_varlen_eager if torch.version.hip is not None else flash_attn_varlen_func
+                attention_output = flash_attn_varlen(*packed_args, dropout_p=dropout_p, causal=False)
+            attention_output = attention_output.reshape(batch_size, num_queries, num_heads, head_dim)
             attention_output = attention_output.masked_fill(empty_events[:, None, None, None], 0)
     else:
         attention_output = torch.stack(

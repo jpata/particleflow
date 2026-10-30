@@ -2,13 +2,11 @@ import pytest
 import torch
 
 from mlpf.conf import MLPFConfig
-from mlpf.model.PFDataset import PFBatch
 from mlpf.model.mlpf import MLPF
+from mlpf.model.PFDataset import PFBatch
 from mlpf.model.set_decoder import _flash_multihead_attention, _phi_sector
-from mlpf.model.set_losses import hungarian_match, set_event_loss
-from mlpf.model.set_losses import hit_grouping_loss
+from mlpf.model.set_losses import hit_grouping_loss, hungarian_match, set_event_loss
 from mlpf.model.utils import unpack_predictions, unpack_target
-
 
 REGRESSION_WEIGHTS = {feature: 1.0 for feature in ("pt", "eta", "sin_phi", "cos_phi", "energy")}
 
@@ -243,6 +241,48 @@ def test_global_set_attention_returns_zero_for_event_without_hits():
     output = _flash_multihead_attention(module, queries, memory, mask)
 
     torch.testing.assert_close(output, torch.zeros_like(output))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available() or torch.version.hip is not None, reason="requires NVIDIA CUDA")
+@pytest.mark.parametrize("dropout,training", [(0.0, True), (0.1, False)])
+def test_native_varlen_set_attention_matches_dense_outputs_and_gradients(monkeypatch, dropout, training):
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+
+    import mlpf.model.set_decoder as decoder
+
+    if decoder.torch_varlen_attn is None:
+        pytest.skip("requires PyTorch native varlen attention")
+    monkeypatch.setattr(decoder, "flash_attn_varlen_func", None)
+    torch.manual_seed(12345)
+    module = torch.nn.MultiheadAttention(64, 2, batch_first=True, dropout=dropout).cuda()
+    module.train(training)
+    queries = torch.randn(3, 5, 64, device="cuda", requires_grad=True)
+    memory = torch.randn(3, 9, 64, device="cuda", requires_grad=True)
+    mask = torch.tensor([[True] * 9, [True, False, True, False, True, True, False, True, False], [False] * 9], device="cuda")
+    with sdpa_kernel(SDPBackend.MATH):
+        expected = torch.stack(
+            [
+                (
+                    module(queries[i : i + 1], memory[i : i + 1, mask[i]], memory[i : i + 1, mask[i]], need_weights=False)[0][0]
+                    if mask[i].any()
+                    else queries[i] * 0
+                )
+                for i in range(3)
+            ]
+        )
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        actual = decoder._flash_multihead_attention(module, queries, memory, mask)
+    torch.testing.assert_close(actual.float(), expected, rtol=0.03, atol=0.003)
+    assert torch.count_nonzero(actual[2]) == 0
+    inputs = (queries, memory, *module.parameters())
+    actual_grads = torch.autograd.grad(actual.float().square().sum(), inputs)
+    expected_grads = torch.autograd.grad(expected.float().square().sum(), inputs)
+    for actual_grad, expected_grad in zip(actual_grads, expected_grads):
+        assert torch.isfinite(actual_grad).all()
+        # Compare to FP32 math attention using relative L2 error. BF16 rounding
+        # can dominate individual near-zero entries of accumulated weight grads.
+        relative_error = (actual_grad - expected_grad).norm() / expected_grad.norm().clamp_min(1e-6)
+        assert relative_error < 0.02
 
 
 def test_heptv2_sectorized_set_decoder_forward_backward():
