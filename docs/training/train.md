@@ -13,6 +13,8 @@ A **training step** updates the model once using one dataset-group batch. A **va
 
 The standard `pyg-cld-v1` recipe selects these three event types from configurations 1 through 10. `--data_config 1` restricts all three to the downloaded configuration.
 
+The [configuration reference](../reference/configuration.md) explains recipe selection, command-line overrides, and how to inspect the resolved settings before training.
+
 ## Step 1: run a CPU software check
 
 ```bash

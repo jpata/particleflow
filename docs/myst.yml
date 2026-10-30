@@ -60,6 +60,7 @@ project:
         - file: validation/export-evidence.md
     - title: Reference
       children:
+        - file: reference/configuration.md
         - file: reference/artifacts-and-directories.md
     - title: Capabilities and scientific evidence
       children:
