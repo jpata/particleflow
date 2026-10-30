@@ -63,10 +63,19 @@ def main():
     print("Training-step timings exclude validation/checkpoint work; first", args.warmup_steps, "steps excluded.")
     print("variant  step  events/s  step seconds  peak GPU MiB  unweighted validation loss")
     for run in runs:
-        print("  ".join(display(run[key]) for key in (
-            "variant", "last_logged_step", "training_events_per_second", "mean_training_step_seconds",
-            "peak_gpu_allocated_mib", "validation_loss_unweighted",
-        )))
+        print(
+            "  ".join(
+                display(run[key])
+                for key in (
+                    "variant",
+                    "last_logged_step",
+                    "training_events_per_second",
+                    "mean_training_step_seconds",
+                    "peak_gpu_allocated_mib",
+                    "validation_loss_unweighted",
+                )
+            )
+        )
     print("Wrote", output)
 
 

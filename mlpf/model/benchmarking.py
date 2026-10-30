@@ -648,9 +648,9 @@ class BenchmarkRecorder:
             power_coverage = self.gpu_integrals.get(f"{phase}/power_watts/covered_seconds", 0)
             device_phases[phase] = {
                 "sample_count": samples,
-                "time_weighted_gpu_busy_percent": self.gpu_integrals[f"{phase}/gpu_busy_percent/percent_seconds"] / busy_coverage
-                if busy_coverage
-                else None,
+                "time_weighted_gpu_busy_percent": (
+                    self.gpu_integrals[f"{phase}/gpu_busy_percent/percent_seconds"] / busy_coverage if busy_coverage else None
+                ),
                 "gpu_busy_covered_seconds": busy_coverage,
                 "estimated_energy_joules": self.gpu_integrals[f"{phase}/power_watts/joules"] if power_coverage else None,
                 "power_covered_seconds": power_coverage,

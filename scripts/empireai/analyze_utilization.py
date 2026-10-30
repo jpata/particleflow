@@ -59,7 +59,9 @@ def main():
             "sampled_data_load_seconds": describe(measured.get("step/time_data_load", [])),
             "sampled_hits_per_batch": describe(elems),
             "sampled_hits_per_second": statistics.mean(elems) / statistics.mean(step_times) if elems and step_times else None,
-            "phase_mean_seconds": {tag: statistics.mean(values) for tag, values in measured.items() if tag.startswith("diagnostic/train_step/time/") and values},
+            "phase_mean_seconds": {
+                tag: statistics.mean(values) for tag, values in measured.items() if tag.startswith("diagnostic/train_step/time/") and values
+            },
             "run_dir": str(manifest_path.parent),
         }
         summaries.append(summary)

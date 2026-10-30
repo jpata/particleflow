@@ -1422,8 +1422,7 @@ def _run_validation_cycle(
     if (rank == 0) or (rank == "cpu"):
         with open(f"{history_path}/step_{step}.json", "r+") as handle:
             history = json.load(handle)
-            history.update(step_test_time=testing_time, step_plot_time=plotting_time,
-                           step_validation_cycle_time=time.perf_counter() - cycle_start)
+            history.update(step_test_time=testing_time, step_plot_time=plotting_time, step_validation_cycle_time=time.perf_counter() - cycle_start)
             handle.seek(0)
             json.dump(history, handle)
             handle.truncate()

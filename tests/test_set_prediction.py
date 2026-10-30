@@ -262,8 +262,11 @@ def test_native_varlen_set_attention_matches_dense_outputs_and_gradients(monkeyp
     with sdpa_kernel(SDPBackend.MATH):
         expected = torch.stack(
             [
-                module(queries[i : i + 1], memory[i : i + 1, mask[i]], memory[i : i + 1, mask[i]], need_weights=False)[0][0]
-                if mask[i].any() else queries[i] * 0
+                (
+                    module(queries[i : i + 1], memory[i : i + 1, mask[i]], memory[i : i + 1, mask[i]], need_weights=False)[0][0]
+                    if mask[i].any()
+                    else queries[i] * 0
+                )
                 for i in range(3)
             ]
         )
