@@ -4,6 +4,8 @@ The papers below show how MLPF developed from a proof of concept into full detec
 
 Published numbers should be read together with the detector simulation, dataset, target definition, architecture, and code release used in that paper. Current `main` contains newer data schemas and model options and is not an exact reproduction of every historical setup.
 
+The [reproducibility guide](reproducibility.md) records verified code tags, dataset archives, result artifacts, and unresolved details for each study.
+
 ## 2021: first end-to-end MLPF study
 
 [MLPF: Efficient machine-learned particle-flow reconstruction using graph neural networks](https://doi.org/10.1140/epjc/s10052-021-09158-w) introduced full-event particle-flow reconstruction as a supervised, multi-task graph-learning problem. The study used simulated top-pair events with high pileup and reported improved physics response over its rule-based benchmark together with scalable computation.
@@ -17,6 +19,7 @@ Published numbers should be read together with the detector simulation, dataset,
 
 - [arXiv version](https://arxiv.org/abs/2203.00330)
 - [CMS public result from the initial study](https://cds.cern.ch/record/2792320)
+- [Archived code: v1.4, cited in the proceedings](https://zenodo.org/records/5520559)
 
 ## 2022: updated CMS performance
 
@@ -27,7 +30,8 @@ Published numbers should be read together with the detector simulation, dataset,
 [Improved particle-flow event reconstruction with scalable neural networks for current and future particle detectors](https://doi.org/10.1038/s42005-024-01599-5) studied electron-positron collisions with full CLICdet simulation. It compared a graph neural network with a kernel-based transformer and avoided model operations that scale quadratically with event size. The best graph model improved jet transverse-momentum resolution by up to 50% relative to the rule-based baseline in that study. The work also tested portability across Nvidia, AMD, and Habana hardware.
 
 - [arXiv version](https://arxiv.org/abs/2309.06782)
-- [Archived code](https://zenodo.org/records/10928968)
+- [Archived code cited in the paper: v1.6.2](https://zenodo.org/records/10893930) ([equivalent source archive](https://zenodo.org/records/10928968))
+- [Raw simulation](https://zenodo.org/records/8260741) and [processed datasets](https://zenodo.org/records/8409592)
 - [Results](https://doi.org/10.5281/zenodo.10567397)
 
 ## 2025: fine-tuning from CLIC to CLD
@@ -36,6 +40,7 @@ Published numbers should be read together with the detector simulation, dataset,
 
 - [arXiv version](https://arxiv.org/abs/2503.00131)
 - [Archived code](https://zenodo.org/records/14930299)
+- [CLIC training data](https://zenodo.org/records/15062717), [CLD simulation](https://zenodo.org/records/14930758), and [CLD training data](https://zenodo.org/records/14930610); see the [reproducibility guide](reproducibility.md) for coverage limits.
 
 ## 2026: full CMS Run-3 result
 
@@ -43,7 +48,8 @@ Published numbers should be read together with the detector simulation, dataset,
 
 - [arXiv version](https://arxiv.org/abs/2601.17554)
 - [CMS public result](https://cds.cern.ch/record/2937578)
-- [Archived code](https://zenodo.org/records/15573658)
+- [Archived code cited in the published paper: v2.5.0](https://zenodo.org/records/17519540)
+- [Earlier preapproval release: v2.4.0](https://zenodo.org/records/15573658)
 
 ## How to cite MLPF
 
