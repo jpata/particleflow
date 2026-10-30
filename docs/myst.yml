@@ -19,6 +19,9 @@ project:
     - title: Concepts
       children:
         - file: concepts/particle-flow-and-mlpf.md
+        - file: concepts/inputs-targets-and-outputs.md
+        - file: concepts/model-architectures.md
+        - file: concepts/end-to-end-workflow.md
     - title: Datasets
       children:
         - file: datasets/catalog.md
