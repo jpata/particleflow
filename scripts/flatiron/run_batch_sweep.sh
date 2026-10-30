@@ -13,9 +13,10 @@ set -euo pipefail
 REPO_ROOT=${MLPF_REPO_ROOT:-${SLURM_SUBMIT_DIR:-$PWD}}
 cd "$REPO_ROOT"
 OUTPUT=${MLPF_BATCH_SWEEP_OUTPUT:-$REPO_ROOT/experiments/h100_batch_sweep_${SLURM_JOB_ID}}
+SCENARIO=${MLPF_BATCH_SWEEP_SCENARIO:-configs/training/scenarios/cld_gh200_backbone_benchmark.yaml}
 echo "Batch sweep output: $OUTPUT"
 exec srun --ntasks=1 --gpus-per-task=1 --cpu-bind=cores \
   bash scripts/flatiron/batch_python.sh scripts/training/batch_sweep.py \
-  --scenario configs/training/scenarios/cld_gh200_backbone_benchmark.yaml \
+  --scenario "$SCENARIO" \
   --platform configs/training/platforms/flatiron_h100_single.yaml \
   --output "$OUTPUT" "$@"

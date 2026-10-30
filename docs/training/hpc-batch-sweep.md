@@ -214,9 +214,9 @@ export MLPF_CLD_DATA_DIR=/mnt/ceph/users/$USER/mlpf/cld/v1.2.5_key4hep_2025-05-2
 # Create/sync once; worker and per-case Python processes do not sync packages.
 module --force purge
 module load modules/2.4-20250724
-module load slurm gcc cmake cuda/12.8.0 cudnn/9.2.0.82-12 nccl openmpi apptainer
+module load slurm gcc cmake cuda/12.8.0 nccl openmpi apptainer
 uv sync
-bash scripts/flatiron/batch_python.sh -m pip freeze > logs_slurm/h100-pip-freeze.txt
+uv pip freeze --python .venv/bin/python3 > logs_slurm/h100-pip-freeze.txt
 
 bash scripts/flatiron/batch_python.sh -c 'import mlpf.pipeline; import torch; print(torch.__version__, torch.version.cuda)'
 bash scripts/flatiron/batch_python.sh scripts/training/check_batch_data.py "$MLPF_CLD_DATA_DIR"
@@ -238,7 +238,13 @@ The Flatiron helper uses `uv run --no-sync` and the frozen per-case profile uses
 `python3`, so subprocesses inherit that environment without repeatedly resolving
 dependencies. If your site requires an account, pass `sbatch --account=...` and
 update the profile's Slurm account for matching provenance. Check that the selected
-partition/constraint still identify H100 nodes before submission.
+partition/constraint still identify H100 nodes before submission. The helper leaves
+cuDNN to the PyTorch wheel; loading the site's `cudnn/9.2` module conflicts with
+the current wheel's bundled cuDNN. To use a different scientific scenario, set
+`MLPF_BATCH_SWEEP_SCENARIO` to its path before `sbatch`. Keep a separate output
+directory and label any result based on a different TFDS version as approximate.
+The `cld_h100_backbone_benchmark_321.yaml` scenario records the Flatiron run on
+the site's available TFDS `3.2.1` copy; the GH200 reference used `3.2.2`.
 
 ## Reports, monitoring and comparison
 

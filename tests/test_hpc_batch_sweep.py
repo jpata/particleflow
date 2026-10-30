@@ -50,12 +50,16 @@ def test_site_worker_binds_one_gpu_and_forwards_sweep_args(tmp_path, site, profi
     stub, env = shell_environment(tmp_path)
     executable(stub / "srun", 'printf "%s\\n" "$@"')
     env["MLPF_BATCH_SWEEP_OUTPUT"] = str(tmp_path / "output")
+    if site == "flatiron":
+        env["MLPF_BATCH_SWEEP_SCENARIO"] = "configs/training/scenarios/cld_h100_backbone_benchmark_321.yaml"
     result = subprocess.run(
         ["bash", str(ROOT / f"scripts/{site}/run_batch_sweep.sh"), "--batch-sizes", "8", "16"], env=env, check=True, capture_output=True, text=True
     )
     assert "--gpus-per-task=1" in result.stdout
     assert "--cpu-bind=cores" in result.stdout
     assert f"configs/training/platforms/{profile}.yaml" in result.stdout
+    if site == "flatiron":
+        assert "configs/training/scenarios/cld_h100_backbone_benchmark_321.yaml" in result.stdout
     assert result.stdout.splitlines()[-3:] == ["--batch-sizes", "8", "16"]
 
 
