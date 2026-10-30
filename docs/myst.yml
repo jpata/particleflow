@@ -65,6 +65,7 @@ project:
       children:
         - file: science/capabilities.md
         - file: science/publications.md
+        - file: science/reproducibility.md
         - file: cld_hit_results.md
         - file: science/roadmap.md
     - title: Development
