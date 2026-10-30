@@ -2,6 +2,12 @@
 
 These datasets use reconstructed tracks and calorimeter clusters as input elements. They contain fewer elements per event than [hit datasets](hit-based.md) and provide the default training path for CMS, CLD, and CLIC. ColliderML, MAIA, and IDEA have different reconstruction and validation boundaries, listed below.
 
+![Tracks and calorimeter clusters from CLD ttbar event 0.](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/cld/event_0_tracks_clusters.png)
+
+This example shows [CLD](cld.md) event 0 in the transverse plane.
+The detector pages use matching input and particle views; the
+[event gallery](event-displays.md) provides overlays and reusable assets.
+
 ## Choose a detector and physics sample
 
 | Detector or dataset family | Physics samples | Workflow |

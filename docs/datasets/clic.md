@@ -14,14 +14,16 @@ The recipes configure partitions 1--10; the [verified public selection](catalog.
 
 ## Event view
 
-Tracks and calorimeter clusters are shown beside the target particles for a
-representative `ttbar` event in the transverse plane.
+These views show the same simulated `ttbar` event (index 0) at 380 GeV in the transverse plane. The particle panel shows the Pandora reference reconstruction.
 
-| Tracks and clusters | Target particles |
+| Tracks and clusters | Pandora reconstructed particles |
 |:---:|:---:|
-| ![CLIC reconstructed tracks and calorimeter clusters.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/clic_event_5_pf_5x5cm.svg) | ![CLIC target particles.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/clic_event_5_targets_5x5cm.svg) |
+| ![CLIC: tracks and clusters for event 0.](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/clic/event_0_tracks_clusters.png) | ![CLIC: pandora reconstructed particles for the same event.](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/clic/event_0_particles.png) |
 
-Target labels use $e$, $\mu$, $\tau$, $\nu$, $\gamma$, $\pi$, and $K^0$.
+[All-component overlay](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/clic/event_0_overlay.png),
+[vector input view](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/clic/event_0_tracks_clusters.svg) and
+[vector particle view](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/clic/event_0_particles.svg) are available for reuse.
+See [event-view conventions](event-displays.md) for particle sources, sampling and scale.
 
 ## Production and related inputs
 

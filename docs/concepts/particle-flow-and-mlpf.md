@@ -12,6 +12,12 @@ Particle-flow reconstruction combines these signals into one list of reconstruct
 
 The difficult part is deciding which detector signals came from the same particle and which came from nearby particles. The number of signals and particles also changes from event to event. Good particle reconstruction matters because jets, missing transverse momentum, and many later analysis quantities are built from this particle list.
 
+![Reconstruction of one CLD event, showing track/cluster and raw-hit MLPF routes](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/pf_event.png)
+
+The figure uses one CLD event and reconstructed Pandora particles as the reference
+output. [Reusable event views](../datasets/event-displays.md) separate the hits,
+tracks, clusters and particles for five detector families.
+
 ## Where particle flow came from
 
 Particle flow did not begin as one standard algorithm with a single name. A widely cited early implementation was the “energy-flow” reconstruction used by ALEPH at the LEP electron-positron collider. It combined tracking and calorimeter measurements to build charged and neutral reconstructed objects. The approach and its detector performance are described in the [1995 ALEPH detector paper](https://doi.org/10.1016/0168-9002(95)00138-7).

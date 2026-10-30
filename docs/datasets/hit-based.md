@@ -2,6 +2,12 @@
 
 Hit datasets use tracker and calorimeter measurements as input elements and require dedicated model recipes. They are research workflows with substantially larger events than [tracks and clusters](track-cluster.md).
 
+![Raw detector hits from CLD ttbar event 0.](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/cld/event_0_hits.png)
+
+This example shows [CLD](cld-hits.md) event 0 in the transverse plane.
+The detector pages use matching input and particle views; the
+[event gallery](event-displays.md) provides overlays and reusable assets.
+
 ## Choose a detector and physics sample
 
 | Detector or dataset family | Physics samples | Details |
