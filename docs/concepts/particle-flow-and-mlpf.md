@@ -34,6 +34,8 @@ For each event, the model receives a variable-length set of detector elements. D
 
 Training is supervised: simulated particles provide targets for the detector signals. The loss combines several tasks, including deciding whether a particle is present, identifying its type, and estimating its kinematics. The exact target definition is detector-specific and is part of the data-processing pipeline.
 
+Continue with [inputs, targets, and outputs](inputs-targets-and-outputs.md) for the event representation, [model architectures](model-architectures.md) for elementwise and particle-set prediction, and [the end-to-end workflow](end-to-end-workflow.md) for the stages from simulation to validation.
+
 The original study used a graph neural network and showed that full-event reconstruction can be learned as one task. Later work explored scalable graph and transformer models with full detector simulation. See the [2021 method paper](https://doi.org/10.1140/epjc/s10052-021-09158-w) and the [2024 future-collider study](https://doi.org/10.1038/s42005-024-01599-5).
 
 ## Why use machine learning here?
