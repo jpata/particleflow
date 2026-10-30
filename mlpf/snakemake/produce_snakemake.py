@@ -103,12 +103,14 @@ def main():  # noqa: C901
     prod_type = prod_config.get("type", "cms")
     if prod_config.get("generation_only", False):
         req_steps = ["gen"]
+    elif prod_config.get("dataset_only", False):
+        req_steps = ["post", "tfds", "tfds_hit"]
 
     # Determine models to train
     models_to_train = []
     # Resolve production type to match with model datasets
     # e.g. "cms_run3" -> "cms", "cld" -> "cld", "clic" -> "clic"
-    prod_key = args.production.split("_")[0] if "cms" in args.production else args.production
+    prod_key = args.production.split("_")[0]
     for mname, mspec in spec.get("models", {}).items():
         if mname == "defaults":
             continue
@@ -247,6 +249,18 @@ def main():  # noqa: C901
             + f" && export NEV={events_per_job}"
             + (f" && export PROGRESS_INTERVAL={progress_interval}" if progress_interval is not None else "")
         )
+        if prod_type == "key4hep":
+            compact_file = prod_config.get("compact_file")
+            if compact_file:
+                exports += f' && export CLD_COMPACT_FILE="{resolve_path(compact_file, spec)}"'
+            cms_energy = prod_config.get("cms_energy")
+            if cms_energy is not None:
+                exports += f" && export CLD_CMS_ENERGY={int(cms_energy)}"
+            pythia_card = prod_config.get("pythia_card")
+            if pythia_card:
+                exports += f' && export CLD_PYTHIA_CARD="{resolve_path(pythia_card, spec)}"'
+            if prod_config.get("save_sim", False):
+                exports += " && export SAVE_SIM=1"
 
         gen_proto_content = f"""
 start_seed=$1
@@ -561,8 +575,8 @@ rule val_data_task:
 
             cmd = f"""
 config_id=$1
-tfds_id={sample_key}_{step_name}_$config_id
-job_scratch_dir={scratch_root}/tfds_tmp/$tfds_id
+tfds_id={args.production}_{sample_key}_{step_name}_$config_id
+job_scratch_dir={scratch_root}/tfds_tmp/${{tfds_id}}_${{SLURM_JOB_ID:-manual-$$}}
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export KERAS_BACKEND=torch

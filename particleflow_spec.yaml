@@ -223,6 +223,192 @@ productions:
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # CLD Production
+  # Paired single-photon ECAL readout pilot. These produce ROOT files only;
+  # neither view enters the CLD training mappings.
+  cld_photon_5p1: &cld_photon_pilot
+    type: "key4hep"
+    model: "pyg-cld-v1"
+    generation_only: true
+    comment: "CLD photon gun, baseline 5.1 mm ECAL readout"
+    workspace_dir: "${project.paths.storage_root}/cld/photon_ecal_5p1mm_key4hep_2025-05-29"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    save_sim: true
+    memory:
+      gen: 4000
+    slurm_partition: "main"
+    slurm_runtime: "48h"
+    samples:
+      gun_gamma_10gev:
+        process_name: "gun_gamma_10gev"
+        gen_script: "scripts/cld_photon_readout/run_sim.sh"
+        seed_range: [810000, 810010]
+        events_per_job: 100
+
+  cld_photon_2mm:
+    <<: *cld_photon_pilot
+    comment: "CLD photon gun, 2.0 mm ECAL readout"
+    workspace_dir: "${project.paths.storage_root}/cld/photon_ecal_2mm_key4hep_2025-05-29"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/CLD_o2_v07_ecal2mm/CLD_o2_v07.xml"
+
+  # Sample-neutral 2 mm ECAL validation production. The initial ttbar sample
+  # matches the first ten 100-event files of the existing 5.1 mm CLD run.
+  cld_ecal_2mm:
+    type: "key4hep"
+    model: "pyg-cld-v1"
+    generation_only: true
+    comment: "CLD 2.0 mm ECAL readout validation samples"
+    workspace_dir: "${project.paths.storage_root}/cld/ecal_2mm_key4hep_2025-05-29"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/CLD_o2_v07_ecal2mm/CLD_o2_v07.xml"
+    memory:
+      gen: 8000
+    slurm_partition: "main"
+    slurm_runtime: "48h"
+    samples:
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm365"
+        gen_script: "scripts/cld_photon_readout/run_sim.sh"
+        seed_range: [300000, 300010]
+        events_per_job: 100
+
+  # Independent, paired CLD granularity scans. Six complete 10k-event runs
+  # per detector subsystem; the opposite calorimeter retains its baseline pitch.
+  # All ECAL variants share an ECAL-only 1 mm Geant step cap, including 5.1 mm.
+  cld_ecal_pitch_5p1: &cld_ecal_pitch_scan
+    type: "key4hep"
+    model: "pyg-cld-v1"
+    dataset_only: true
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 5.1 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_5p1mm"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_5p1mm/CLD_o2_v07.xml"
+    cms_energy: 91
+    pythia_card: "${project.paths.project_root}/scripts/cld_ecal_readout/cards/p8_ee_Z_tautau_ecm91_scan.cmd"
+    memory:
+      gen: 8000
+      post: 8000
+      tfds: 8000
+    slurm_partition: "main"
+    slurm_runtime: "48h"
+    samples:
+      z_tautau:
+        process_name: "p8_ee_Z_tautau_ecm91"
+        gen_script: "scripts/cld_photon_readout/run_sim.sh"
+        seed_range: [700000, 700100]
+        events_per_job: 100
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
+      args: {}
+    tfds_mapping:
+      z_tautau:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/z_tautau"
+        version: "3.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    tfds_hit_mapping:
+      z_tautau:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/z_tautau"
+        version: "3.2.2"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+  cld_ecal_pitch_4:
+    <<: *cld_ecal_pitch_scan
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 4 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_4mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_4mm/CLD_o2_v07.xml"
+
+  cld_ecal_pitch_3:
+    <<: *cld_ecal_pitch_scan
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 3 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_3mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_3mm/CLD_o2_v07.xml"
+
+  cld_ecal_pitch_2p5:
+    <<: *cld_ecal_pitch_scan
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 2.5 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_2p5mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_2p5mm/CLD_o2_v07.xml"
+
+  cld_ecal_pitch_2:
+    <<: *cld_ecal_pitch_scan
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 2 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_2mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_2mm/CLD_o2_v07.xml"
+
+  cld_ecal_pitch_1p5:
+    <<: *cld_ecal_pitch_scan
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 1.5 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_1p5mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_1p5mm/CLD_o2_v07.xml"
+
+  cld_hcal_pitch_30: &cld_hcal_pitch_scan
+    type: "key4hep"
+    model: "pyg-cld-v1"
+    dataset_only: true
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 30 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_30mm"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_30mm/CLD_o2_v07.xml"
+    cms_energy: 365
+    memory:
+      gen: 12000
+      post: 16000
+      tfds: 16000
+    slurm_partition: "main"
+    slurm_runtime: "48h"
+    samples:
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm365"
+        gen_script: "scripts/cld_photon_readout/run_sim.sh"
+        seed_range: [300000, 300100]
+        events_per_job: 100
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
+      args: {}
+    tfds_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
+        version: "3.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    tfds_hit_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ttbar"
+        version: "3.2.2"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+  cld_hcal_pitch_25:
+    <<: *cld_hcal_pitch_scan
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 25 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_25mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_25mm/CLD_o2_v07.xml"
+
+  cld_hcal_pitch_20:
+    <<: *cld_hcal_pitch_scan
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 20 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_20mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_20mm/CLD_o2_v07.xml"
+
+  cld_hcal_pitch_15:
+    <<: *cld_hcal_pitch_scan
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 15 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_15mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_15mm/CLD_o2_v07.xml"
+
+  cld_hcal_pitch_12:
+    <<: *cld_hcal_pitch_scan
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 12 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_12mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_12mm/CLD_o2_v07.xml"
+
+  cld_hcal_pitch_10:
+    <<: *cld_hcal_pitch_scan
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 10 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_10mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_10mm/CLD_o2_v07.xml"
+
   cld:
     type: "key4hep"
     model: "pyg-cld-v1"

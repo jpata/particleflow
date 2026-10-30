@@ -471,6 +471,8 @@ def render_event(
     input_view: str = "combined",
     tree=None,
     dpi: int = 150,
+    center_on_cluster: bool = False,
+    center_xy: tuple[float, float] | None = None,
 ) -> str:
     """Render a ROOT event or an adapted ColliderML event in the transverse x-y plane."""
     if tree is None:
@@ -694,8 +696,18 @@ def render_event(
                         )
 
     ax.set_aspect("equal", adjustable="box")
-    ax.set_xlim(-display_limit, display_limit)
-    ax.set_ylim(-display_limit, display_limit)
+    center_x = center_y = 0.0
+    if center_xy is not None:
+        center_x, center_y = center_xy
+    elif center_on_cluster:
+        cluster = config.cluster_collection
+        energy = _event(tree, f"{cluster}/{cluster}.energy", event)
+        if len(energy):
+            leading = int(np.argmax(energy))
+            center_x = -float(_event(tree, f"{cluster}/{cluster}.position.x", event)[leading])
+            center_y = float(_event(tree, f"{cluster}/{cluster}.position.y", event)[leading])
+    ax.set_xlim(center_x - display_limit, center_x + display_limit)
+    ax.set_ylim(center_y - display_limit, center_y + display_limit)
     if not compact:
         seed = _production_suffix(root_file)
         seed_label = f" — seed {seed}" if seed is not None else ""
@@ -780,6 +792,7 @@ def main(default_detector="auto") -> None:
     parser.add_argument("--dpi", type=int, default=150, help="PNG output resolution (default: 150)")
     parser.add_argument("--detector", choices=("auto", "clic", "cld", "idea", "maia"), default=default_detector)
     parser.add_argument("--plot-limit", type=float, help="shared transverse half-width in mm")
+    parser.add_argument("--center-on-cluster", action="store_true", help="center the view on the leading calorimeter cluster")
     parser.add_argument(
         "--max-hits",
         type=int,
@@ -856,10 +869,11 @@ def main(default_detector="auto") -> None:
                         compact=True,
                         icon_size_cm=icon_size_cm,
                         input_view=args.input_view,
+                        center_on_cluster=args.center_on_cluster,
                     )
                     print(output)
             else:
-                suffix = "_targets" if args.target_only else ""
+                suffix = "_targets" if args.target_only else ("_cluster_zoom" if args.center_on_cluster else "")
                 extension = ".png"
                 output = args.output_dir / f"{config.key}_event_{event}{suffix}{extension}"
                 detector = render_event(
@@ -873,6 +887,7 @@ def main(default_detector="auto") -> None:
                     target_only=args.target_only,
                     input_view=args.input_view,
                     dpi=args.dpi,
+                    center_on_cluster=args.center_on_cluster,
                 )
                 event_images.append((output, detector))
                 print(output)

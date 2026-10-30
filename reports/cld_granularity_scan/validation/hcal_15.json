@@ -1,0 +1,90 @@
+{
+  "point": "hcal_15",
+  "files": 100,
+  "events": 10000,
+  "mean_file_MB": 308.20101349,
+  "counts": {
+    "sim_ecal": {
+      "n": 10000,
+      "mean": 10049.9286,
+      "sem": 23.64382023941468,
+      "median": 10161.0,
+      "p10": 6821.700000000001,
+      "p90": 13025.1,
+      "max": 15641
+    },
+    "reco_ecal": {
+      "n": 10000,
+      "mean": 7477.1207,
+      "sem": 17.3032825103133,
+      "median": 7578.5,
+      "p10": 5139.9,
+      "p90": 9644.0,
+      "max": 12101
+    },
+    "sim_hcal": {
+      "n": 10000,
+      "mean": 12334.9581,
+      "sem": 37.06840850246109,
+      "median": 12411.5,
+      "p10": 7292.8,
+      "p90": 17017.0,
+      "max": 23695
+    },
+    "reco_hcal": {
+      "n": 10000,
+      "mean": 1358.9184,
+      "sem": 4.283282132282028,
+      "median": 1365.0,
+      "p10": 789.0,
+      "p90": 1907.1000000000004,
+      "max": 2918
+    },
+    "tracks": {
+      "n": 10000,
+      "mean": 53.0143,
+      "sem": 0.16889216088143555,
+      "median": 53.0,
+      "p10": 31.0,
+      "p90": 75.0,
+      "max": 122
+    },
+    "clusters": {
+      "n": 10000,
+      "mean": 94.1595,
+      "sem": 0.2753595254604899,
+      "median": 94.0,
+      "p10": 57.0,
+      "p90": 130.0,
+      "max": 192
+    },
+    "pfos": {
+      "n": 10000,
+      "mean": 94.9456,
+      "sem": 0.2791128704725856,
+      "median": 95.0,
+      "p10": 57.0,
+      "p90": 131.0,
+      "max": 192
+    },
+    "photon_pfos": {
+      "n": 10000,
+      "mean": 44.934,
+      "sem": 0.14696994392201979,
+      "median": 45.0,
+      "p10": 26.0,
+      "p90": 64.0,
+      "max": 103
+    }
+  },
+  "definitions": {
+    "sim_ecal": "ECalBarrelCollection + ECalEndcapCollection SimCalorimeterHits",
+    "reco_ecal": "ECALBarrel + ECALEndcap reconstructed hits",
+    "sim_hcal": "HCalBarrelCollection + HCalEndcapCollection + HCalRingCollection SimCalorimeterHits",
+    "reco_hcal": "HCALBarrel + HCALEndcap + HCALOther reconstructed hits",
+    "tracks": "SiTracks_Refitted",
+    "clusters": "PandoraClusters",
+    "pfos": "PandoraPFOs",
+    "photon_pfos": "PandoraPFOs with PDG 22"
+  }
+}

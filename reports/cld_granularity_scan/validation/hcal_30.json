@@ -1,0 +1,90 @@
+{
+  "point": "hcal_30",
+  "files": 100,
+  "events": 10000,
+  "mean_file_MB": 301.88653530000005,
+  "counts": {
+    "sim_ecal": {
+      "n": 10000,
+      "mean": 10046.8497,
+      "sem": 23.750663515210103,
+      "median": 10172.0,
+      "p10": 6798.8,
+      "p90": 13023.1,
+      "max": 15874
+    },
+    "reco_ecal": {
+      "n": 10000,
+      "mean": 7477.0143,
+      "sem": 17.41088916844038,
+      "median": 7590.0,
+      "p10": 5107.0,
+      "p90": 9676.0,
+      "max": 12277
+    },
+    "sim_hcal": {
+      "n": 10000,
+      "mean": 10441.0076,
+      "sem": 30.84556136723451,
+      "median": 10498.0,
+      "p10": 6263.700000000001,
+      "p90": 14371.0,
+      "max": 19113
+    },
+    "reco_hcal": {
+      "n": 10000,
+      "mean": 1188.7043,
+      "sem": 3.6451078732037177,
+      "median": 1188.0,
+      "p10": 712.9000000000001,
+      "p90": 1666.0,
+      "max": 2354
+    },
+    "tracks": {
+      "n": 10000,
+      "mean": 53.1221,
+      "sem": 0.1691750016317946,
+      "median": 53.0,
+      "p10": 31.0,
+      "p90": 75.0,
+      "max": 125
+    },
+    "clusters": {
+      "n": 10000,
+      "mean": 94.6725,
+      "sem": 0.27732272745758946,
+      "median": 95.0,
+      "p10": 57.0,
+      "p90": 130.0,
+      "max": 206
+    },
+    "pfos": {
+      "n": 10000,
+      "mean": 95.4714,
+      "sem": 0.28131031220553454,
+      "median": 96.0,
+      "p10": 58.0,
+      "p90": 132.0,
+      "max": 206
+    },
+    "photon_pfos": {
+      "n": 10000,
+      "mean": 45.1082,
+      "sem": 0.14834867713936953,
+      "median": 45.0,
+      "p10": 26.0,
+      "p90": 64.0,
+      "max": 100
+    }
+  },
+  "definitions": {
+    "sim_ecal": "ECalBarrelCollection + ECalEndcapCollection SimCalorimeterHits",
+    "reco_ecal": "ECALBarrel + ECALEndcap reconstructed hits",
+    "sim_hcal": "HCalBarrelCollection + HCalEndcapCollection + HCalRingCollection SimCalorimeterHits",
+    "reco_hcal": "HCALBarrel + HCALEndcap + HCALOther reconstructed hits",
+    "tracks": "SiTracks_Refitted",
+    "clusters": "PandoraClusters",
+    "pfos": "PandoraPFOs",
+    "photon_pfos": "PandoraPFOs with PDG 22"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "point": "hcal_20",
+  "files": 100,
+  "events": 10000,
+  "truth_jets": 59339,
+  "matched_jets": 54555,
+  "jet_matching_efficiency": 0.9193784863243398,
+  "jet_pt_response": {
+    "n": 54555,
+    "mean": 0.961729424495615,
+    "median": 0.9696401036925589,
+    "p16": 0.8830407045596133,
+    "p84": 1.024121910558824,
+    "half_width_68": 0.07054060299960535,
+    "rms": 0.11140522792477339
+  },
+  "pfo_count_per_event": {
+    "n": 10000,
+    "mean": 95.2901,
+    "median": 95.0,
+    "p16": 67.0,
+    "p84": 124.0,
+    "half_width_68": 28.5,
+    "rms": 28.109644999359205
+  },
+  "definitions": {
+    "photon": "Previous ttbar photon study: status-1 propagated truth photon E>=1 GeV; Pandora PDG 22 E>=0.5 GeV; one-to-one \u0394R<0.03",
+    "pi0": "Direct pi0\u2192\u03b3\u03b3 daughters, both propagated in |cos\u03b8|<0.98 and E>=1 GeV; resolved when each has a distinct matched Pandora photon",
+    "jet": "Previous ttbar jet study: ee-genkt R=0.4 p=-1, pT>5 GeV; propagated visible truth vs Pandora PFO jets; one-to-one \u0394R<0.1; response=pT reco/truth",
+    "width": "(p84-p16)/2; no response cut; unchanged Pandora calibration"
+  }
+}
