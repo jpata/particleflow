@@ -93,23 +93,33 @@ def _lower_elu_for_cuda(graph):
             nodes.append(node)
             continue
         dtype = types.get(node.input[0])
-        if dtype not in (TensorProto.FLOAT, TensorProto.FLOAT16, TensorProto.DOUBLE):
+        if dtype not in (TensorProto.FLOAT, TensorProto.FLOAT16, TensorProto.BFLOAT16, TensorProto.DOUBLE):
             raise ValueError(f"Cannot lower Elu input {node.input[0]!r} with ONNX type {dtype}")
         alpha = next((attr.f for attr in node.attribute if attr.name == "alpha"), 1.0)
+        prefix = f"mlpf_elu_{index}"
+        value = node.input[0]
+        if dtype == TensorProto.BFLOAT16:
+            # CUDA EP has no BF16 comparison kernel; use FP32 opmath, as
+            # PyTorch's BF16 activation does, then round the result once.
+            value = prefix + "_fp32"
+            nodes.append(helper.make_node("Cast", [node.input[0]], [value], to=TensorProto.FLOAT))
+            dtype = TensorProto.FLOAT
         zero = constant(dtype, 0.0)
         one = constant(dtype, 1.0)
-        prefix = f"mlpf_elu_{index}"
         is_negative = f"{prefix}_negative"
         exponent = f"{prefix}_exp"
         negative_value = f"{prefix}_value"
-        nodes.append(helper.make_node("Less", [node.input[0], zero], [is_negative]))
-        nodes.append(helper.make_node("Exp", [node.input[0]], [exponent]))
+        nodes.append(helper.make_node("Less", [value, zero], [is_negative]))
+        nodes.append(helper.make_node("Exp", [value], [exponent]))
         nodes.append(helper.make_node("Sub", [exponent, one], [negative_value]))
         if alpha != 1.0:
             scaled = f"{prefix}_scaled"
             nodes.append(helper.make_node("Mul", [negative_value, constant(dtype, alpha)], [scaled]))
             negative_value = scaled
-        nodes.append(helper.make_node("Where", [is_negative, negative_value, node.input[0]], node.output, name=node.name))
+        result = [prefix + "_fp32_output"] if value != node.input[0] else node.output
+        nodes.append(helper.make_node("Where", [is_negative, negative_value, value], result, name=node.name))
+        if value != node.input[0]:
+            nodes.append(helper.make_node("Cast", result, node.output, to=TensorProto.BFLOAT16))
     del graph.graph.node[:]
     graph.graph.node.extend(nodes)
 
@@ -134,12 +144,15 @@ def _output_widths(model):
 @contextmanager
 def _export_settings(model, attention_format, attention_dtype):
     from mlpf.model.mlpf import SimpleMultiheadAttention
+    from mlpf.model.heptv2 import HEPTv2Attention
 
     settings = []
     for module in model.modules():
         values = {}
         if isinstance(module, SimpleMultiheadAttention):
             values.update(onnx_attention_format=attention_format, onnx_attention_dtype=attention_dtype, use_flash_attn_varlen=False)
+        if isinstance(module, HEPTv2Attention) and (attention_dtype is not None or attention_format == "attention24"):
+            values.update(onnx_attention_format=attention_format, onnx_attention_dtype=attention_dtype)
         if hasattr(module, "use_jagged_attention"):
             values["use_jagged_attention"] = False
         for name, value in values.items():
@@ -152,7 +165,31 @@ def _export_settings(model, attention_format, attention_dtype):
             setattr(module, name, value)
 
 
-def export_mlpf(model, features, mask, path, *, attention_format=None, attention_dtype=None):
+@contextmanager
+def fp32_layer_norms(model):
+    """Make the normalization precision policy explicit for AMP/export tests."""
+    hooks = [
+        module.register_forward_pre_hook(lambda module, args: (args[0].float(), *args[1:]))
+        for module in model.modules()
+        if isinstance(module, torch.nn.LayerNorm)
+    ]
+    try:
+        yield
+    finally:
+        for hook in hooks:
+            hook.remove()
+
+
+class _FloatOutputs(torch.nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, features, mask):
+        return tuple(value.float() for value in self.model(features, mask))
+
+
+def export_mlpf(model, features, mask, path, *, attention_format=None, attention_dtype=None, compute_dtype=None):
     """Export elementwise predictions with explicit attention and padding semantics.
 
     Callers must enforce validate_padding_mask for deployment inputs as well.
@@ -161,18 +198,22 @@ def export_mlpf(model, features, mask, path, *, attention_format=None, attention
     Export success establishes graph validity, not GPU fusion or equivalence.
     """
     from mlpf.model.mlpf import SimpleMultiheadAttention
+    from mlpf.model.heptv2 import HEPTv2Attention
+    from contextlib import nullcontext
     import io
 
     import onnx
 
     from mlpf.model.onnx_graph import finalize_export
 
-    modules = [m for m in model.modules() if isinstance(m, SimpleMultiheadAttention)]
-    attention_format = attention_format or ("attention24" if any(m.export_onnx_fused for m in modules) else "decomposed")
+    modules = [m for m in model.modules() if isinstance(m, (SimpleMultiheadAttention, HEPTv2Attention))]
+    attention_format = attention_format or ("attention24" if any(getattr(m, "export_onnx_fused", False) for m in modules) else "decomposed")
     if attention_format not in ("attention24", "decomposed"):
         raise ValueError(f"Unknown attention format: {attention_format}")
-    if attention_dtype not in (None, torch.float16, torch.float32):
-        raise ValueError("Attention export supports float16 or float32")
+    if attention_dtype not in (None, torch.float16, torch.bfloat16, torch.float32):
+        raise ValueError("Attention export supports float16, bfloat16 or float32")
+    if compute_dtype not in (None, torch.bfloat16):
+        raise ValueError("Full-model AMP export currently supports bfloat16")
     if model.training:
         raise ValueError("Export requires model.eval()")
     if getattr(getattr(model, "output_mode", None), "value", None) == "set":
@@ -180,10 +221,17 @@ def export_mlpf(model, features, mask, path, *, attention_format=None, attention
     validate_padding_mask(mask)
     if features.ndim != 3 or features.shape[:2] != mask.shape or not torch.isfinite(features).all():
         raise ValueError("Export requires finite features[B,L,F] matching mask[B,L]")
-    with _export_settings(model, attention_format, attention_dtype), _output_widths(model) as widths:
+    normalization = fp32_layer_norms(model) if compute_dtype is not None else nullcontext()
+    exported_model = _FloatOutputs(model).eval() if compute_dtype is not None else model
+    with (
+        _export_settings(model, attention_format, attention_dtype),
+        _output_widths(model) as widths,
+        normalization,
+        torch.autocast(features.device.type, dtype=compute_dtype, enabled=compute_dtype is not None, cache_enabled=False),
+    ):
         buffer = io.BytesIO()
         torch.onnx.export(
-            model,
+            exported_model,
             (features, mask),
             buffer,
             opset_version=20,
@@ -206,6 +254,8 @@ def export_mlpf(model, features, mask, path, *, attention_format=None, attention
             imports = [opset for opset in graph.opset_import if opset.domain != "mlpf"]
             del graph.opset_import[:]
             graph.opset_import.extend(imports)
+        elif compute_dtype is not None:
+            _lower_elu_for_cuda(graph)
         finalize_export(graph, attention_format, attention_dtype, output_widths=widths)
         onnx.checker.check_model(graph, full_check=True)
         onnx.save(graph, str(path))

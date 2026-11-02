@@ -44,6 +44,11 @@ try:
 except ImportError:
     flex_attention = None
 
+try:
+    from torch.nn.attention.flex_attention import AuxRequest as _FlexAuxRequest
+except ImportError:
+    _FlexAuxRequest = None
+
 
 def _env_bool(name, default=False):
     raw = os.environ.get(name)
@@ -308,7 +313,20 @@ def unsort_from_buckets(s_x, perm_inverse):
     return batched_index_select(b_x, perm_inverse)
 
 
-def qkv_res(s_query, s_key, s_value):
+def qkv_res(s_query, s_key, s_value, *, attention_format=None):
+    if torch.onnx.is_in_onnx_export() and attention_format is not None:
+        from mlpf.model.onnx_attention import export_attention
+
+        # FlexAttention returns FP32 log-sum-exp alongside its BF16 output.
+        # Standard ONNX Attention has no LSE output, so retain a separate
+        # FP32 reduction branch. Its cost is included in runtime comparisons.
+        with torch.autocast(s_query.device.type, enabled=False):
+            scores = torch.matmul(s_query.float(), s_key.float().transpose(-1, -2)) / math.sqrt(s_query.shape[-1])
+            lse = torch.logsumexp(scores, dim=-1, keepdim=True)
+        t_query, t_key, t_value = [rearrange(t, "c h n b d -> (c n) h b d") for t in (s_query, s_key, s_value)]
+        valid = torch.ones_like(t_key[:, 0, :, 0], dtype=torch.bool)
+        out = export_attention(t_query, t_key, t_value, valid, attention_format=attention_format, head_dim=s_query.shape[-1])
+        return lse, rearrange(out, "(c n) h b d -> c h n b d", c=s_query.shape[0])
     if s_query.is_cuda:
         if flex_attention is None:
             raise RuntimeError("HEPTv2 GPU attention requires compiled flex_attention; dense fallback is disabled")
@@ -320,7 +338,11 @@ def qkv_res(s_query, s_key, s_value):
         t_key = rearrange(s_key, "c h n b d -> (c n) h b d").contiguous()
         t_value = rearrange(s_value, "c h n b d -> (c n) h b d").contiguous()
         try:
-            out, lse = flex_attention(t_query, t_key, t_value, return_lse=True)
+            if _FlexAuxRequest is not None:
+                out, auxiliary = flex_attention(t_query, t_key, t_value, return_aux=_FlexAuxRequest(lse=True))
+                lse = auxiliary.lse
+            else:
+                out, lse = flex_attention(t_query, t_key, t_value, return_lse=True)
         except Exception as error:
             raise RuntimeError(
                 f"HEPTv2 fused bucket attention failed for shape={tuple(t_query.shape)}, "
@@ -378,6 +400,8 @@ class HEPTv2Attention(nn.Module):
         self.block_size = kwargs.get("block_size", 100)
         self.n_hashes = kwargs.get("n_hashes", 3)
         self.num_w_per_dist = kwargs.get("num_w_per_dist", 10)
+        self.onnx_attention_format = None
+        self.onnx_attention_dtype = None
         self.e2lsh = E2LSH(n_hashes=self.n_hashes, n_heads=self.num_heads, dim=hash_dim)
         self.e2lsh_new = E2LSH(n_hashes=self.n_hashes, n_heads=self.num_heads, dim=2)
 
@@ -489,7 +513,9 @@ class HEPTv2Attention(nn.Module):
         s_query, s_key, s_value = sort_qkv_to_buckets(q_hat, k_hat, value, positions, self.block_size)
         _debug_shape("HEPTv2Attention buckets s_query", s_query)
 
-        denom, so = qkv_res(s_query, s_key, s_value)
+        if torch.onnx.is_in_onnx_export() and self.onnx_attention_dtype is not None:
+            s_query, s_key, s_value = (t.to(self.onnx_attention_dtype) for t in (s_query, s_key, s_value))
+        denom, so = qkv_res(s_query, s_key, s_value, attention_format=self.onnx_attention_format)
         q_rev_positions = invert_permutation(positions)
 
         if _HEPTV2_COMBINED_UNSORT:

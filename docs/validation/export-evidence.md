@@ -312,3 +312,300 @@ well as inference, so dispatch counts are not inference operation counts.
 Per-case final programs establish the three attention operations and retained
 MLIR GEMMs. The `fusion-precision/report.html` appendix links the aggregate and
 per-case metrics, with independently checksummed outputs and execution evidence.
+
+## CMS v3.2.0 numerical and physics closure
+
+The 2026-10-30 rerun uses main revision
+`4e0da237661fcdea5f7dc3e18b45142486833a1c` and Hugging Face release revision
+`0acee6877912fd61fb7d6f03bf90348d33b441f4` of `jpata/particleflow`.
+Both v3.2.0 checkpoints are at step 100000. Verify their published SHA256
+values from the pinned `cms/v3.2.0/release.json`; these are different models
+from the 2026-10-20 qualification.
+
+Artifacts belong under `onnx_validation/cms-v3.2.0-qualification/2026-10-30/`.
+The input manifest selects 1024 unique test events with seed 20261030 from
+`/eos/user/j/jpata/mlpf/cms/2.8.0/cms_pf_ttbar/1/2.8.0`. All 64 test shards
+are represented; valid lengths span 2018–5516. Both serialized-record and
+event-content hashes are checked for duplicates. No repeated event contributes
+to the 1024-event requirement. The production `TFDSDataSource` applies the CMS
+HO correction, target remapping, feature-width handling and saved sorting
+settings. Four static length buckets (3000, 4000, 5000, 6000) pad without
+truncation. Every model/runtime consumes the same prepared inputs and masks.
+
+`scripts/qualify-cms-physics.py` provides `prepare`, `export`, `reference` and
+`run` commands. Each requires `--root PACKAGE_ROOT`; export/reference/run
+select `--model attention|heptv2`. Attention also supports
+`--profile decomposed-fp16|attention24-fp16`. Runtime selection is
+`--provider cpu|cuda|migraphx`, with `--fusion on|off` for the FP16 controls.
+CPU references use independent PyTorch FP32 MATH evaluation. Eager padded
+logits need not vanish; retain valid positions for comparison and enforce
+exact zero padding on ONNX outputs. Static runtime shapes execute in separate
+processes with full-GPU placement checks and retained graphs/profiles.
+
+`scripts/analyze-cms-physics-closure.py --root PACKAGE_ROOT --model MODEL
+--candidate RESULT_DIRECTORY --outdir REPORT_DIRECTORY` verifies input/output
+hashes and runtime placement before comparing numerical heads. It invokes
+the production `MLPF.predict_particles` decoding on retained heads, avoiding
+a separate implementation of particle-presence/PID selection or momentum
+rescaling. Particle and jet collections, per-event distributions and paired
+event-bootstrap intervals are retained. Physics is report-only by explicit
+user instruction; numerical acceptance remains `atol=1e-3, rtol=3e-3`.
+Reports below 1000 events require `--allow-small-sample` and are labeled as
+smoke tests. Never present a partially collected matrix as complete.
+
+Cluster every decoded collection using the current CMS anti-kT R=0.4 and
+pT>3 GeV selection, with the same FastJet implementation and FP64 four-vector
+construction. Include targets/candidates as context, and preserve gen jets and
+MET. Compare particle kinematics, species, multiplicities and PID migrations;
+jet kinematics, multiplicities, leading/subleading jets and one-to-one angular
+matches (dR<0.1); and event MET/summed pT. The PU-reduced collection uses the
+production `ispu<0.8` selection. Histogram differences use 400 paired
+event-bootstrap resamples; zero-reference bins are omitted from ratio plots
+and underflow/overflow counts remain in the numerical histogram artifacts.
+Distribution agreement does not override raw-head numerical failures.
+
+The 1024-event GPU rerun completed on NVIDIA L40S (CUDA ORT 1.29) and AMD
+W7900 (MIGraphX ORT 1.23.2 / MIGraphX 2.18). Attention FP32 passes on both:
+maximum absolute head errors are 0.0003681 and 0.0003772 respectively.
+HEPTv2 FP32 passes on NVIDIA (0.0002203), but AMD returns zero heads and
+fails (20.85485). The AMD failure reproduces with the documented compiler
+recipe configured before loading ORT and with a no-MLIR/rocBLAS control.
+A standalone ONNX/input/expected-output reproducer is retained; this model
+remains unqualified on this AMD runtime; the subsequent repair is documented below.
+
+Attention FP16 fails the unchanged numerical tolerance with fusion enabled
+and disabled on both GPUs. Maximum errors against FP32 are 0.11786/0.12123
+on NVIDIA and 0.11893/0.47344 on AMD (fused/unfused). Direct fused-versus-
+unfused errors are 0.08685 and 0.42663. Thus failure also occurs without
+fusion, but fusion contributes measurable differences and cannot be excluded.
+Per-shape programs and actual Nsight/rocprof traces establish the selected
+attention implementation; compilation/tuning dispatches are not counted as
+inference operation counts.
+
+Physics differences are reported without assigning acceptance. Across 1024
+events, FP32 Attention changes net particle counts by -1/-3 on NVIDIA/AMD
+and net jets above 30 GeV by +6/-4. NVIDIA HEPTv2 retains particle decisions
+but changes the net hard-jet count by +9. Jet matching tails and individual
+event outliers remain visible despite small average shifts. AMD HEPTv2
+reconstructs no particles or jets, versus 3,145,016 particles and 28,005 jets
+above 30 GeV in its reference. Consult the aggregate HTML and each model's
+plots, paired-event parquet, histogram arrays and confidence intervals.
+
+The standalone AMD reproducer was executed twice per session on MIGraphX
+and on the CPU backend: AMD returns zero bid/id/momentum on both calls,
+while CPU produces nonzero heads and passes the same FP32 tolerance. Logs
+record the actual loaded MIGraphX 2.18 libraries. An eight-event physics
+self-comparison smoke control gives zero shifts, unit matched-jet response
+and no unmatched jets; it does not contribute to the 1024-event requirement.
+
+Supplementary CPU-only ORT 1.29 controls complete all 1024 events. Attention
+passes with default graph optimization (max error 0.0004892). Default HEPTv2
+CPU execution and the eight-thread basic N=5000 run terminate with SIGBUS;
+retain these as failed controls. HEPTv2 passes with basic optimization and
+memory patterns disabled (max error 0.0005445), using eight threads for
+N=3000/4000 and one for N=5000/6000. This mixed configuration is a correctness
+control and supports no CPU performance comparison. The initial rerun collected
+12 complete analyses: six FP32 runtime controls, four FP16 profiles and two
+fused-versus-unfused comparisons. Its strict numerical gate fails, as expected.
+
+### AMD HEPTv2 zero-output repair
+
+The follow-up isolated `ReduceLogSumExp` in MIGraphX 2.18. Its ONNX parser
+uses `log(sum(exp(x)))`, without a maximum shift. A tiny operator reproducer
+returns +inf for `[100,101]` and -inf for `[-1000,-1001]` on AMD, while CPU
+and max-shifted arithmetic give the correct finite results. In the released
+checkpoint's second attention layer, all 192,000 CPU log-sum-exp values are
+finite (maximum 170.160736), while 41,668 AMD values are +inf. Extracting the
+binary head before cleanup gives 8,000/8,000 NaN AMD logits; the model's final
+`nan_to_num` turns these into zeros, hiding the internal nonfinite values.
+
+`mlpf/model/onnx_graph.py` now lowers log-sum-exp to explicit max-shifted
+primitives before export cleanup. A zero shift for infinite maxima preserves
+infinity semantics; axes, keepdims and empty-axis/noop behavior are retained.
+Eager evaluation, independent reference outputs and checkpoint weights do
+not change. Six new regression cases cover overflow, underflow, infinities,
+NaNs, opsets 17/20, keepdims and empty axes. All 26 targeted CPU tests and
+all six reduction cases directly on AMD (CPU fallback disabled) pass.
+
+A fresh export completes the same 1024-event sample on AMD with zero numerical
+violations and max absolute head error 0.00020980835. Particle multiplicities
+match in every event. Jet count differences are -9 above 3 GeV and -7 above
+30 GeV; mean MET shift is 6.46e-8 GeV, paired 95% CI [-6.64e-6, 6.83e-6].
+Physics acceptance remains unassigned. The aggregate report retains the old
+failure and adds a separately labeled repaired-export row (13 analyses).
+Debug evidence, operator/layer reproducers, executed source, fresh graphs,
+raw outputs and the physics report are under `heptv2-amd-debug/` and
+`analysis/heptv2-amd-stable-logsumexp/` in the qualification package.
+
+### CMS BF16 Flash baseline qualification
+
+The separate rerun is retained at
+`onnx_validation/cms-v3.2.0-bf16-flash/2026-10-30/`. It reuses the same pinned
+CMS v3.2.0 step-100000 checkpoints and 1024 unique CMS 2.8.0 ttbar events.
+The common numerical and physics reference is NVIDIA L40S PyTorch BF16:
+forced SDPA Flash with production jagged packing for Attention, and compiled
+FlexAttention with FP32 log-sum-exp for HEPTv2. Native AMD W7900 PyTorch BF16
+references are retained as separate platform controls and timing baselines.
+HEPTv2 is explicitly labeled FlexAttention, since its attention must return
+log-sum-exp for merging hash buckets.
+
+The policy is full-model GPU BF16 autocast, FP32 LayerNorm, original FP32
+geometry and exact int64 HEPT hashing, and FP32 external inputs/outputs.
+This differs from the earlier attention-only FP16 cast profiles. TF32 is off.
+The reference keeps its autocast weight cache across events. All timings are
+batch-one synchronous CPU inputs to CPU FP32 outputs, including transfers
+and output conversion, after six warmups per static bucket. File I/O,
+compilation, physics and profiling are excluded from measured inference.
+Cold session creation, first run, compilation warmup and per-bucket results
+are reported separately. GPU workloads run serially on each device.
+
+NVIDIA uses standard ONNX Attention-24 BF16 with explicit Flash/MATH dispatch.
+AMD uses decomposed BF16 attention with MIGraphX MLIR attention enabled or
+disabled, retaining MLIR for other operations. Fusion is checked separately
+from provider placement. HEPTv2's standard ONNX fused export retains a
+separate FP32 QK/log-sum-exp branch because Attention-24 has no LSE output;
+its measured runtime includes this extra work. It is a partial fusion of
+the native FlexAttention operation.
+
+Portability changes required by this rerun:
+
+- Explicit boolean mask casts avoid legacy export's invalid BF16 promotion
+  to ONNX COMPLEX128 while preserving eager arithmetic.
+- BF16 ELU uses FP32 opmath and one BF16 rounding. BF16 comparison operands
+  widen exactly to FP32 because CUDA ORT 1.29 lacks those predicate kernels.
+- BF16 literals use exact raw bytes: MIGraphX accepts BF16 raw tensors but
+  cannot parse BF16 literals serialized using `int32_data`.
+- HEPTv2 requests LSE through `AuxRequest` on newer PyTorch, avoiding a
+  deprecated `return_lse` warning that breaks full-graph compilation.
+  Older PyTorch retains the previous API. Dense GPU fallback stays disabled.
+
+These changes preserve checkpoints and keep the earlier stable log-sum-exp
+repair. The final targeted suite passes 49 tests, covering Attention-24,
+HEPTv2 sorting/geometry, stable reductions, BF16 graph structure, exact
+predicate widening, raw BF16 bit preservation and physics helpers. Both
+native GPU references also complete all 1024 events using their required
+fused kernels. Physics acceptance stays report-only, with no inferred limit;
+raw-head tolerance stays `atol=1e-3, rtol=3e-3`.
+
+The BF16 labels describe the exported graph and verified attention kernels,
+not guaranteed identical intermediate rounding across compilers. An audit
+of the classification heads checks that values lie on the BF16 lattice
+before the external FP32 cast. NVIDIA preserves this rounding; AMD emits
+off-lattice values in both models, including HEPTv2 with
+`eliminate_data_type` disabled. Final compiler programs show BF16 matrix
+outputs fused with FP32 bias/cleanup arithmetic. This backend discrepancy
+is retained and reported; the baseline and tolerance are not adjusted to
+hide it. `bf16-rounding-audit.json` and the operator probes retain the
+precision evidence separately from the attention-fusion evidence.
+
+All eight ONNX scenarios complete all 1024 events, with full GPU placement,
+finite heads and zero padded outputs. All 32 model/device/mode/shape fusion
+checks pass. All eight raw-head numerical gates fail. The separate report
+contains 14 complete physics analyses: eight ONNX-versus-reference cases,
+four same-device fused-versus-unfused comparisons, and two native AMD
+PyTorch-versus-NVIDIA controls.
+
+The table lists fused / unfused ONNX results. Count changes are totals over
+1024 events relative to the common NVIDIA PyTorch BF16 reference.
+
+| Model / GPU | Native PyTorch mean ms | ONNX mean ms F / U | Max abs error F / U | Δ particles F / U | Δ jets ≥30 GeV F / U |
+|---|---:|---:|---:|---:|---:|
+| Attention / L40S | 13.23 | 4.18 / 20.96 | 1.0625 / 1.2969 | -15 / -25 | -12 / +6 |
+| Attention / W7900 | 15.72 | 8.54 / 18.55 | 1.3497 / 4.3497 | +2770 / +1850 | +2 / +11 |
+| HEPTv2 / L40S | 17.13 | 25.72 / 27.09 | 1.9375 / 2.3125 | -105 / -70 | +3 / -52 |
+| HEPTv2 / W7900 | 20.84 | 29.36 / 30.41 | 2.1982 / 3.2720 | +4204 / +4511 | +5 / -35 |
+
+Attention ONNX fusion improves steady-state performance; native PyTorch
+remains faster for HEPTv2 on both devices. AMD HEPTv2 fused session creation
+costs 50.5–256.9 seconds per static shape, excluded from inference timings.
+The final source regenerates all four measured BF16 exports byte-for-byte.
+
+Small aggregate jet/MET differences do not exclude particle biases or rare
+event changes. Fused AMD Attention adds 2.705 particles/event (95% CI
+[2.538, 2.892]) and fused AMD HEPTv2 adds 4.105 ([3.948, 4.286]). Their mean
+scalar-sum-pT shifts are +2.254 and +2.651 GeV/event. Fused AMD HEPTv2 mean
+MET shifts +0.191 GeV, CI [0.0066, 0.3621]; the maximum event shift is 47.19
+GeV. These are measured differences, with no physics acceptance assigned.
+
+| Direct fused minus unfused BF16 | Max abs raw error | Δ particles | Δ jets ≥30 GeV | Max event abs(ΔMET), GeV |
+|---|---:|---:|---:|---:|
+| Attention / L40S | 0.96875 | +10 | -18 | 52.48 |
+| Attention / W7900 | 3.28125 | +920 | -9 | 35.58 |
+| HEPTv2 / L40S | 1.34375 | -35 | +55 | 64.94 |
+| HEPTv2 / W7900 | 2.71875 | -307 | +40 | 66.64 |
+
+The large tails include high-pT presence decisions: event_0520 gains a
+53.9 GeV electron in fused NVIDIA Attention, and event_0239 gains a
+77.2 GeV electron in fused NVIDIA HEPTv2 relative to their unfused outputs.
+Per-comparison `met-outliers.json` records the affected elements and decoded
+four-vectors. Both native AMD PyTorch controls also fail the strict raw-head
+gate against NVIDIA, so all export error cannot be attributed to attention
+fusion alone.
+
+The AMD operator reproducer confirms a separate rounding discrepancy without
+attention: BF16(1 + BF16(0.003)), widened to FP32, should return 1.0 but
+returns 1.0030059814453125, with or without `eliminate_data_type` disabled.
+The whole-sample audit finds off-BF16-lattice logits on AMD, while both
+native PyTorch baselines and NVIDIA ONNX preserve BF16 classification-head
+rounding. BF16 alone therefore does not establish backend compatibility.
+The exact compiler/runtime builds, raw arrays, kernel/compiler proofs,
+paired physics arrays, plots, failed attempts and source snapshots are
+retained in the BF16 package; the previous FP32/FP16 report is unchanged.
+
+
+## Expanded BF16 qualification: all ttbar test events (2026-11-02)
+
+The expanded package is retained at
+`onnx_validation/cms-v3.2.0-bf16-flash/2026-11-02-expanded/`
+(a workspace link to EOS). Open `report.html` and `relative-counts/report.html`.
+The requested 10,000 events were revised to all 5,000 available ttbar test
+events; the original 1,024 inputs are preserved exactly as a prefix. Checkpoints,
+graphs, precision and runtime profiles are unchanged. All eight ONNX scenarios,
+four native reference scenarios, 14 physics comparisons and 40 fusion checks
+complete on this expanded sample.
+
+Count shifts below are percentages of the common NVIDIA PyTorch BF16 reference
+count, using total counts across all 5,000 events. F / U means fused / unfused.
+
+| Model / GPU | Δ particles [%] F / U | Δ jets ≥30 GeV [%] F / U |
+|---|---:|---:|
+| Attention / L40S | -0.00027 / +0.00003 | -0.09388 / -0.17829 |
+| Attention / W7900 | +0.08735 / +0.05772 | -0.04891 / -0.12623 |
+| HEPTv2 / L40S | -0.00526 / -0.00424 | +0.05787 / -0.00519 |
+| HEPTv2 / W7900 | +0.13242 / +0.14489 | -0.09570 / -0.15951 |
+
+The AMD excess in particle counts persists with increased statistics and is
+present with fusion disabled. The full-sample BF16 lattice audit again finds
+off-lattice classification heads in AMD ONNX, while both native references and
+NVIDIA ONNX preserve BF16 rounding. Fusion still changes some predictions: the
+direct fused-minus-unfused AMD particle shifts are +0.02962% (Attention) and
+−0.01245% (HEPTv2), relative to the unfused outputs. These observations do not
+attribute every difference to rounding.
+
+All eight strict ONNX numerical gates still fail; direct fusion comparisons and
+native GPU controls also fail the unchanged raw-head tolerance. Physics remains
+report-only. The distribution pages retain event tails, gains/losses and matching
+results rather than interpreting small net count shifts as numerical equivalence.
+The NVIDIA SIGBUS attempt is retained alongside its successful complete-bucket
+retry. Full predictions and paired physics arrays are archived on EOS.
+
+The expanded report also embeds latency distributions and latency versus valid
+event size for all 12 runtime scenarios, using the original 60,000 timed records.
+`runtime-plots/` contains PNG/PDF figures, per-event CSV, source hashes and
+validation results. Static bucket boundaries and 250-element median/percentile
+summaries distinguish ONNX shape steps from the native size dependence.
+
+The current main report prioritizes particle-pT, jet-pT and event-sum-pT spectra
+with event-level reference sampling bands and paired bootstrap difference
+intervals. Raw numerical gates are retained under technical diagnostics. Among
+fused scenarios, populated jet-pT and sum-pT bins stay within the reference ±2σ
+sampling band; AMD HEPTv2 has four particle-pT bins outside it, all below 0.63 GeV
+(maximum 4.88σ at 0.15–0.18 GeV). This is a pointwise finite-sample comparison,
+not a global significance test or a physics equivalence margin. Latency plots
+and the runtime comparison remain in the main report.
+
+A standalone copy is available at
+`/eos/user/j/jpata/mlpf_studies/20261102_cms_onnx_physics_latency/`.
+Open `report.html`; `render.sh` regenerates the report and figures using only
+the copied histogram and timing inputs. All 472 local report links/images were
+verified after reproduction; the copy has no symlinks or source-directory dependency.

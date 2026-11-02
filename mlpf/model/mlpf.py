@@ -1198,7 +1198,7 @@ class RegressionOutput(nn.Module):
         elif self.mode == RegressionMode.DIRECT_ELEMTYPE:
             nn_out = self.nn(x)
             elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
-            nn_out = torch.sum(elemtype_mask * nn_out, axis=-1, keepdims=True)
+            nn_out = torch.sum(elemtype_mask.to(nn_out.dtype) * nn_out, axis=-1, keepdims=True)
             return nn_out
         elif self.mode == RegressionMode.DIRECT_ELEMTYPE_SPLIT:
             elem_outs = []
@@ -1206,7 +1206,7 @@ class RegressionOutput(nn.Module):
                 elem_outs.append(self.nn[elem](x))
             elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
             elem_outs = torch.cat(elem_outs, axis=-1)
-            return torch.sum(elem_outs * elemtype_mask, axis=-1, keepdims=True)
+            return torch.sum(elem_outs * elemtype_mask.to(elem_outs.dtype), axis=-1, keepdims=True)
         elif self.mode == RegressionMode.ADDITIVE:
             nn_out = self.nn(x)
             return orig_value + nn_out
@@ -1220,8 +1220,8 @@ class RegressionOutput(nn.Module):
             nn_out1 = self.nn1(x)
             nn_out2 = self.nn2(x)
             elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
-            a = torch.sum(elemtype_mask * nn_out1, axis=-1, keepdims=True)
-            b = torch.sum(elemtype_mask * nn_out2, axis=-1, keepdims=True)
+            a = torch.sum(elemtype_mask.to(nn_out1.dtype) * nn_out1, axis=-1, keepdims=True)
+            b = torch.sum(elemtype_mask.to(nn_out2.dtype) * nn_out2, axis=-1, keepdims=True)
             return orig_value * a + b
 
 
@@ -1717,7 +1717,7 @@ class MLPF(nn.Module):
             num_types = len(self.elemtypes_nonzero)
             all_embeddings = encoder(X_features).view(B, S, num_types, -1)
             elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
-            encoded = torch.sum(all_embeddings * elemtype_mask.unsqueeze(-1), axis=2)
+            encoded = torch.sum(all_embeddings * elemtype_mask.unsqueeze(-1).to(all_embeddings.dtype), axis=2)
         elif self.input_encoding not in [InputEncoding.JOINT, InputEncoding.SPLIT]:
             raise ValueError(f"Unsupported input encoding {self.input_encoding}")
         if mask is not None:
