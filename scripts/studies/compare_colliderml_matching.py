@@ -24,10 +24,16 @@ from scipy.sparse import coo_matrix
 from mlpf.data.colliderml.reader import iter_event_records
 from mlpf.data.colliderml.tracks import track_features_cml
 from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, compute_gen_tables
-from mlpf.data.target_building import EventData, assign_genparticles_to_obj_and_merge, match_particles_to_inputs, _segment_argmax_first
+from mlpf.data.target_building import (
+    EventData,
+    _segment_argmax_first,
+    assign_genparticles_to_obj_and_merge,
+    match_majority_tracks_then_energy,
+    match_particles_to_inputs,
+)
 from mlpf.jet_utils import _match_jets_event
 
-RULES = ("legacy", "majority_greedy", "ownership_greedy", "solver")
+RULES = ("legacy", "majority_greedy", "ownership_greedy", "solver", "majority_energy")
 
 
 def assign_tracks_by_hit_ownership(gp_to_track, track_hit_counts):
@@ -183,8 +189,10 @@ def process_event(task):
             assignment = greedy_assignment(track, cluster, particle_energy, counts, rule == "majority_greedy")
         elif rule == "ownership_greedy":
             assignment = ownership_greedy(track, cluster, xc[:, 5], gen["gp_to_cluster"])
-        else:
+        elif rule == "solver":
             assignment = match_particles_to_inputs(track, cluster, xc[:, 5], gen["gp_to_cluster"])
+        else:
+            assignment = match_majority_tracks_then_energy(track, cluster, particle_energy)
         match_seconds = time.perf_counter() - start
         assignments[rule] = assignment
         tr_rows, cl_rows = np.flatnonzero(assignment[:, 0] >= 0), np.flatnonzero(assignment[:, 1] >= 0)
@@ -250,6 +258,21 @@ def process_event(task):
             **merge_accounting(particle_energy, assignment, cleaned.gp_merges[1], target_energy),
         )
         assert metrics["dropped_particles"] == n - len(assigned) - len(cleaned.gp_merges[1])
+        merged = np.asarray(cleaned.gp_merges[1], dtype=int)
+        metrics.update(
+            merged_energy=float(particle_energy[merged].sum(dtype=np.float64)),
+            merged_hs_energy=float(particle_energy[merged][ispu[merged] == 0].sum(dtype=np.float64)),
+        )
+        # final cluster-target energy vs its cluster's energy (after merges): the regression target scale
+        log_ratio = np.abs(np.log(np.maximum(g_energy[cm], 1e-9) / np.maximum(xc[ci, 5], 1e-9)))
+        metrics.update(
+            cluster_energy_off3=int((log_ratio > np.log(3)).sum()),
+            cluster_energy_off10=int((log_ratio > np.log(10)).sum()),
+            cluster_energy_off3_energy=float(g_energy[cm][log_ratio > np.log(3)].sum(dtype=np.float64)),
+            cluster_target_energy=float(g_energy[cm].sum(dtype=np.float64)),
+        )
+        target_met = float(np.hypot(np.sum(g_pt * np.cos(g_phi)), np.sum(g_pt * np.sin(g_phi))))
+        metrics.update(target_met=target_met, genmet=float(cached["genmet"]), met_residual=target_met - float(cached["genmet"]))
         for kind, mask, ids, input_eta, input_phi, cut in [
             ("track", tm, ti, features["eta"][ti], array(t["phi"])[ti], 0.1),
             ("cluster", cm, ci, xc[ci, 2], np.arctan2(xc[ci, 3], xc[ci, 4]), 0.3),
@@ -269,6 +292,7 @@ def process_event(task):
         reference = reference[reference[:, 0] > 3]
         r, q = _match_jets_event(reference[:, 1], reference[:, 2], candidate_jets[:, 1], candidate_jets[:, 2], 0.1)
         ratio = candidate_jets[q, 0] / reference[r, 0]
+        objects.append(pd.DataFrame(dict(kind="jet", rule=rule, event_id=event_id, pt=reference[r, 0], response=ratio)))
         metrics.update(
             reference_jets=len(reference),
             target_jets=len(candidate_jets),
@@ -276,7 +300,8 @@ def process_event(task):
             response_qualified_jets=int((np.abs(ratio - 1) < 0.5).sum()),
         )
         rows.append(metrics)
-    assert rows[-1]["ownership_objective"] >= rows[-2]["ownership_objective"] - 1e-4
+    objective = {r["rule"]: r["ownership_objective"] for r in rows}
+    assert objective["solver"] >= objective["ownership_greedy"] - 1e-4
     out = Path(output) / sample / "events"
     out.mkdir(parents=True, exist_ok=True)
     pd.concat(objects, ignore_index=True).to_parquet(out / f"event_{event_id:06d}.parquet", index=False)
@@ -295,7 +320,7 @@ def tasks(args):
             ]
         batches = iter(
             pq.ParquetFile(processed).iter_batches(
-                batch_size=1, columns=["event_id", "X_cluster", "ytarget_track", "ytarget_cluster", "hit_to_cluster", "genjet"]
+                batch_size=1, columns=["event_id", "X_cluster", "ytarget_track", "ytarget_cluster", "hit_to_cluster", "genjet", "genmet"]
             )
         )
         for i, event in enumerate(iter_event_records(*paths, batch_size=1)):
@@ -310,8 +335,11 @@ def summarize(output):
         records.extend(json.loads(path.read_text()))
     frame = pd.DataFrame(records)
     frame.to_csv(output / "events.csv", index=False)
+    objects = pd.concat([pd.read_parquet(p).assign(sample=p.parent.parent.name) for p in sorted(output.glob("*/events/event_*.parquet"))])
+    jets = objects[(objects.kind == "jet") & (objects.pt > 20)]
     summaries = []
     for (sample, rule), z in frame.groupby(["sample", "rule"], sort=False):
+        j = jets[(jets["sample"] == sample) & (jets.rule == rule)].response
         sums = z.select_dtypes(include="number").sum()
         r = dict(
             sample=sample,
@@ -344,6 +372,16 @@ def summarize(output):
             median_post_assignment_seconds=float(z.post_assignment_seconds.median()),
             maximum_energy_balance_residual=float(z.energy_balance_residual.abs().max()),
             ownership_objective=float(sums.ownership_objective),
+            merged_energy=float(sums.merged_energy),
+            merged_hs_energy=float(sums.merged_hs_energy),
+            cluster_energy_off3_fraction=float(sums.cluster_energy_off3 / sums.cluster_targets),
+            cluster_energy_off3_energy_fraction=float(sums.cluster_energy_off3_energy / sums.cluster_target_energy),
+            cluster_energy_off10_fraction=float(sums.cluster_energy_off10 / sums.cluster_targets),
+            met_residual_mean=float(z.met_residual.mean()),
+            met_residual_rms=float(np.sqrt((z.met_residual**2).mean())),
+            jet20_matched=int(len(j)),
+            jet20_response_median=float(j.median()),
+            jet20_response_iqr=float(j.quantile(0.75) - j.quantile(0.25)),
         )
         summaries.append(r)
     pd.DataFrame(summaries).to_csv(output / "summary.csv", index=False)

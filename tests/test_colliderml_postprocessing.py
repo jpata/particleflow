@@ -145,9 +145,12 @@ def test_resume_reconverts_greedy_targets_with_same_event_count(tmp_path):
     ofn = tmp_path / "out" / "shard.parquet"
     process_one_file(*paths, ofn)
     table = pq.read_table(ofn)
-    assert table.schema.metadata[b"mlpf.target_assignment"] == b"bipartite-v1"
+    assert table.schema.metadata[b"mlpf.target_assignment"] == b"majority_energy-v1"
     pq.write_table(table.replace_schema_metadata(None), ofn)
     process_one_file(*paths, ofn)
+    assert pq.read_metadata(ofn).metadata[b"mlpf.target_assignment"] == b"majority_energy-v1"
+    # a complete output of another rule is reconverted, not skipped
+    process_one_file(*paths, ofn, assignment="bipartite")
     assert pq.read_metadata(ofn).metadata[b"mlpf.target_assignment"] == b"bipartite-v1"
 
 

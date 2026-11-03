@@ -16,6 +16,7 @@ LABELS = {
     "majority_greedy": "Majority tracks + greedy clusters",
     "ownership_greedy": "Greedy on ownership scores",
     "solver": "Joint solver",
+    "majority_energy": "Bipartite matching, energy score",
 }
 
 
@@ -34,7 +35,7 @@ def confidence_intervals(events, output):
         x = events[events["sample"] == sample]
         solver = x[x.rule == "solver"].sort_values("event_id")
         ix = rng.integers(0, len(solver), (5000, len(solver)))
-        for baseline in ["legacy", "ownership_greedy"]:
+        for baseline in ["legacy", "ownership_greedy", "majority_energy"]:
             other = x[x.rule == baseline].sort_values("event_id")
             assert np.array_equal(solver.event_id.values, other.event_id.values)
             for name, numerator, denominator in metrics:

@@ -50,6 +50,11 @@ from mlpf.data.target_building import (
 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 jet_ptcut = 3.0
 
+# Target assignment rules (target_building.assign_genparticles_to_obj_and_merge). The parquet
+# metadata records the rule, so resume never mixes outputs of different rules.
+ASSIGNMENTS = ("majority_energy", "bipartite", "greedy")
+DEFAULT_ASSIGNMENT = "majority_energy"
+
 particle_feature_order = [
     "PDG",
     "charge",
@@ -84,6 +89,7 @@ def _event_record_one(
     radii_mm: Dict[int, float] | None = None,
     clue_params: Dict[int, Dict[str, float]] | None = None,
     clue_options: Dict[str, Any] | None = None,
+    assignment: str = DEFAULT_ASSIGNMENT,
     event_index: int = -1,
     shard_label: str = "",
 ) -> Dict[str, Any]:
@@ -166,7 +172,7 @@ def _event_record_one(
         (np.array([]), np.array([])),
     )
     gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = (
-        assign_genparticles_to_obj_and_merge(gpdata, assignment="bipartite", cluster_energy=np.asarray(cl_feats).reshape(-1, 17)[:, 5])
+        assign_genparticles_to_obj_and_merge(gpdata, assignment=assignment, cluster_energy=np.asarray(cl_feats).reshape(-1, 17)[:, 5])
     )
     n_gp = len(gpdata_cleaned.gen_features["PDG"])
 
@@ -494,7 +500,12 @@ def _batch_arrow_arrays(events_batch: List[Dict[str, Any]]):
     return [(k, _from_events(k, [r[k] for r in events_batch])) for k in events_batch[0]]
 
 
-def _parquet_usable(ofn: Path, expected_rows: int | None = None) -> bool:
+def _assignment_tag(assignment: str) -> bytes:
+    """Parquet metadata value recording the target assignment rule that wrote a file."""
+    return f"{assignment}-v1".encode()
+
+
+def _parquet_usable(ofn: Path, expected_rows: int | None = None, assignment: str = DEFAULT_ASSIGNMENT) -> bool:
     """Check current target metadata, readability and the expected event count.
 
     Legacy greedy outputs, corrupted writes and partial --num-events outputs
@@ -506,7 +517,7 @@ def _parquet_usable(ofn: Path, expected_rows: int | None = None) -> bool:
         import pyarrow.parquet as pq
 
         metadata = pq.ParquetFile(ofn).metadata
-        if (metadata.metadata or {}).get(b"mlpf.target_assignment") != b"bipartite-v1":
+        if (metadata.metadata or {}).get(b"mlpf.target_assignment") != _assignment_tag(assignment):
             return False
         n_rows = metadata.num_rows
     except Exception:
@@ -514,10 +525,10 @@ def _parquet_usable(ofn: Path, expected_rows: int | None = None) -> bool:
     return expected_rows is None or n_rows == expected_rows
 
 
-def _shard_done(ofn: Path, source_fns: List[Path]) -> bool:
+def _shard_done(ofn: Path, source_fns: List[Path], assignment: str = DEFAULT_ASSIGNMENT) -> bool:
     """A full-shard output is done iff it is readable and holds every source event present in
     all four tables (the reader drops the rare event missing from one)."""
-    return _parquet_usable(ofn, expected_rows=n_shard_events(source_fns))
+    return _parquet_usable(ofn, expected_rows=n_shard_events(source_fns), assignment=assignment)
 
 
 def process_one_file(
@@ -534,9 +545,10 @@ def process_one_file(
     radii_mm: Dict[int, float] | None = None,
     clue_params: Dict[int, Dict[str, float]] | None = None,
     clue_options: Dict[str, Any] | None = None,
+    assignment: str = DEFAULT_ASSIGNMENT,
 ) -> None:
     source_fns = [particles_fn, tracks_fn, calo_fn, tracker_fn]
-    if num_events == -1 and _shard_done(ofn, source_fns):
+    if num_events == -1 and _shard_done(ofn, source_fns, assignment):
         print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} already exists, skipping")
         return
     if os.path.isfile(ofn) and num_events == -1:
@@ -575,7 +587,7 @@ def process_one_file(
 
             cols = _batch_arrow_arrays(out)
             table = pa.Table.from_arrays([c for _, c in cols], names=[k for k, _ in cols])
-            table = table.replace_schema_metadata({**(table.schema.metadata or {}), b"mlpf.target_assignment": b"bipartite-v1"})
+            table = table.replace_schema_metadata({**(table.schema.metadata or {}), b"mlpf.target_assignment": _assignment_tag(assignment)})
             if writer is None:
                 writer = pq.ParquetWriter(inflight, table.schema, compression="snappy")
             writer.write_table(table)
@@ -606,6 +618,7 @@ def process_one_file(
                 radii_mm=radii_mm,
                 clue_params=clue_params,
                 clue_options=clue_options,
+                assignment=assignment,
                 event_index=i,
                 shard_label=Path(ofn).name,
             )
@@ -701,6 +714,15 @@ def main():
         default=None,
         help="json overrides of clue.DEFAULT_CLUE_OPTIONS, e.g. '{\"drop_E\": 0.1}' (algorithm clue only)",
     )
+    parser.add_argument(
+        "--assignment",
+        type=str,
+        choices=ASSIGNMENTS,
+        default=DEFAULT_ASSIGNMENT,
+        help="target assignment (target_building.assign_genparticles_to_obj_and_merge): majority_energy = majority-owned "
+        "tracks, then a bipartite cluster matching with the energy score (particle energy + shared deposit); bipartite = "
+        "joint bipartite matching with the cluster overlap score; greedy = the former energy-ordered rule",
+    )
     parser.add_argument("--num-events", type=int, default=-1, help="cap number of events per shard (for tests)")
     args = parser.parse_args()
     from mlpf.data.colliderml.clue import resolve_clue_config
@@ -759,7 +781,7 @@ def main():
     for i, (p, t, c) in enumerate(zip(pa, tr, ch)):
         out_name = Path(args.outpath) / (p.stem + ".parquet")
         # --num-events is a debug cap: always (re)write, and never count a capped output as done
-        if args.num_events == -1 and _shard_done(out_name, [Path(p), Path(t), Path(c), Path(th[i])]):
+        if args.num_events == -1 and _shard_done(out_name, [Path(p), Path(t), Path(c), Path(th[i])], args.assignment):
             n_done += 1
             print(f"[shard {i + 1}/{n_files}] {out_name.name} already exists, skipping")
             continue
@@ -778,6 +800,7 @@ def main():
             radii_mm=radii_mm,
             clue_params=clue_params,
             clue_options=clue_options,
+            assignment=args.assignment,
         )
     print(f"all {n_files} shards accounted for ({n_done} already present, {n_files - n_done} newly converted)")
 

@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
 
-from mlpf.data.target_building import assign_genparticles_to_obj_and_merge
+from mlpf.data.target_building import assign_genparticles_to_obj_and_merge, match_majority_tracks_then_energy
 from scripts.studies.compare_colliderml_matching import assign_tracks_by_hit_ownership
 from tests.test_postprocessing_merge import make_eventdata
 
@@ -83,3 +83,37 @@ def test_particle_without_cluster_fallback_is_explicitly_dropped(capsys):
     assert objects.tolist() == [[0, -1]]
     assert float(ak.sum(cleaned.gen_features["energy"])) == 1.0
     assert "Dropped 1 unmatched genparticles" in capsys.readouterr().out
+
+
+def test_majority_energy_keeps_majority_tracks_and_reroutes_clusters():
+    # particle 0 owns 90% of track 0; particle 1 (20 GeV) deposits in clusters 0 and 1, particle 2
+    # (10 GeV) only in cluster 0: the matching moves particle 1 to cluster 1 so both are hosted.
+    tracks = csr_matrix([[0.9], [0.1], [0.0]])
+    clusters = csr_matrix([[1.0, 0.0], [15.0, 3.0], [8.0, 0.0]])
+    out = match_majority_tracks_then_energy(tracks, clusters, [5.0, 20.0, 10.0])
+    assert out.tolist() == [[0, -1], [-1, 1], [-1, 0]]
+
+
+def test_majority_energy_hosts_the_energetic_minor_contributor():
+    # cluster 0 (10 GeV): a 50 GeV particle deposits 2 GeV, a 5 GeV particle 8 GeV. The energy
+    # score hosts the 50 GeV particle (the overlap score would host the 5 GeV one).
+    out = match_majority_tracks_then_energy(csr_matrix((2, 0)), csr_matrix([[2.0], [8.0]]), [50.0, 5.0])
+    assert out.tolist() == [[-1, 0], [-1, -1]]
+
+
+def test_majority_energy_in_the_allocator_preserves_energy():
+    event = make_eventdata([1.0, 10.0, 2.0], [1.0, 2.0, 1.0])
+    event.gen_features = ak.with_field(event.gen_features, event.genparticle_to_hit[2], "gp_to_cluster")
+    event.track_features = ak.Array({"type": [1]})
+    event.genparticle_to_track = (np.array([0, 1]), np.array([0, 0]), np.array([0.875, 0.125]))
+    cleaned, objects, *_ = assign_genparticles_to_obj_and_merge(event, assignment="majority_energy")
+    # the 1 GeV majority owner keeps the track, the 10 GeV particle the cluster; the 2 GeV one merges into it
+    assert objects.tolist() == [[0, -1], [-1, 0]]
+    assert ak.to_list(cleaned.gen_features["energy"]) == [1.0, 12.0]
+
+
+def test_majority_energy_tracked_particles_do_not_compete_for_clusters():
+    # particle 0 (100 GeV) owns track 0 and also deposits in the only cluster; it must not take part
+    # in the cluster matching, so the trackless particle 1 keeps the cluster
+    out = match_majority_tracks_then_energy(csr_matrix([[1.0], [0.0]]), csr_matrix([[5.0], [1.0]]), [100.0, 1.0])
+    assert out.tolist() == [[0, -1], [-1, 0]]

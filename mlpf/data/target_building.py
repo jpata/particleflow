@@ -306,6 +306,57 @@ def match_particles_to_inputs(track_fractions, cluster_deposits, cluster_energy,
     return result
 
 
+def match_majority_tracks_then_energy(track_fractions, cluster_deposits, particle_energy, deposit_weight=1.0):
+    """Majority-owned tracks first, then a bipartite cluster matching with an energy score.
+
+    Tracks follow match_particles_to_inputs: a track is eligible only for its majority owner
+    (> 1/2 of all its hits), and a particle takes its purest eligible track. Particles without a
+    track then share the clusters through a maximum-weight bipartite matching with edge score
+    energy + deposit_weight * shared deposit, so energetic particles keep a cluster and a claim
+    can be rerouted when that lets another particle keep one too.
+    """
+    tracks = track_fractions.tocsc(copy=True)
+    tracks.sum_duplicates()
+    tracks.eliminate_zeros()
+    n_particle, n_track = tracks.shape
+    energy = np.asarray(particle_energy, dtype=float)
+    result = np.full((n_particle, 2), -1, dtype=np.int64)
+    if n_particle == 0:
+        return result
+    owners = np.full(n_track, -1, dtype=np.int64)
+    _segment_argmax_first(tracks.indptr, tracks.indices, tracks.data, n_particle, owners)
+    t = tracks.tocoo()
+    eligible = (t.data > 0.5) & (t.row == owners[t.col])
+    rows, cols, purity = t.row[eligible], t.col[eligible], t.data[eligible]
+    for i in np.lexsort((cols, -purity)):  # purest first, then lowest track index
+        if result[rows[i], 0] == -1:
+            result[rows[i], 0] = cols[i]
+
+    clusters = cluster_deposits.tocsr(copy=True)
+    clusters.sum_duplicates()
+    # only positive deposits of trackless particles compete; sparse multiply keeps explicit
+    # zeros, which would hand the tracked particles cluster edges worth their full energy
+    clusters = clusters.multiply(clusters > 0).multiply((result[:, 0] == -1).astype(float)[:, None]).tocsr()
+    clusters.eliminate_zeros()
+    clusters = clusters.tocoo()
+    n_cluster = clusters.shape[1]
+    if clusters.nnz == 0:
+        return result
+    score = energy[clusters.row] + deposit_weight * clusters.data
+    # private zero-score column per particle allows no match; +1 on every edge keeps them nonzero
+    graph = coo_matrix(
+        (
+            np.concatenate([1 + score, np.ones(n_particle)]),
+            (np.concatenate([clusters.row, np.arange(n_particle)]), np.concatenate([clusters.col, n_cluster + np.arange(n_particle)])),
+        ),
+        shape=(n_particle, n_cluster + n_particle),
+    ).tocsr()
+    r, c = min_weight_full_bipartite_matching(graph, maximize=True)
+    real = c < n_cluster
+    result[r[real], 1] = c[real]
+    return result
+
+
 def assign_genparticles_to_obj_and_merge(  # noqa: C901
     gpdata: EventData,
     *,
@@ -316,12 +367,14 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     """Assign targets, then merge particles without exclusive inputs.
 
     Other detectors retain the default energy-ordered greedy assignment.
-    ColliderML selects ``bipartite`` with calibrated cluster energies; track
-    links must be fractions of all hits and particle deposits must be in
-    ``gen_features["gp_to_cluster"]``. An explicit ``input_assignment`` is
+    ColliderML selects a bipartite matching: ``majority_energy``
+    (match_majority_tracks_then_energy, energy score) or ``bipartite``
+    (match_particles_to_inputs, overlap score; needs calibrated cluster
+    energies); track links must be fractions of all hits and particle
+    deposits must be in ``gen_features["gp_to_cluster"]``. An explicit ``input_assignment`` is
     available for comparisons using the same merge and energy accounting.
     """
-    if assignment not in ("greedy", "bipartite"):
+    if assignment not in ("greedy", "bipartite", "majority_energy"):
         raise ValueError(f"Unknown input assignment: {assignment}")
     if input_assignment is not None and assignment != "greedy":
         raise ValueError("Use either input_assignment or an assignment rule")
@@ -402,6 +455,8 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     if n_gp > 0 and n_hit > 0:
         hit_to_gp_inclusive = _col_argmax_and_mask(gp_to_hit)
 
+    if assignment == "majority_energy":
+        input_assignment = match_majority_tracks_then_energy(gp_to_track, gp_to_cluster, awkward.to_numpy(gpdata.gen_features["energy"]))
     if assignment == "bipartite":
         if cluster_energy is None:
             raise ValueError("Bipartite matching requires calibrated cluster energies")

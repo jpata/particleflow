@@ -34,15 +34,28 @@ The [detector-comparison runbook](../validation/detector-comparison.md) records 
 
 ## Target assignment
 
-ColliderML uses one sparse bipartite match for tracks and calorimeter clusters.
-Each particle gets at most one input; each input gets at most one particle.
-Track edges require more than half of **all** track hits, including hits without
-selected truth ownership in the denominator, and score `1 + hit_fraction`.
-Cluster edges score `2 * shared_deposit / (cluster_energy + particle_deposit)`
-using calibrated deposited energies. Each particle has a private unmatched
-choice with score zero. The solver maximizes the total score, with reliable
-tracks preferred over clusters. Equal-score duplicate tracks may be selected
-in a different order.
+ColliderML assigns tracks and calorimeter clusters to particles by bipartite
+matching: each particle gets at most one input, and each input at most one
+particle. The converter default is `majority_energy`, a bipartite matching with
+an energy score:
+
+1. Tracks: a track is eligible only for its majority owner, the particle holding
+   more than half of **all** its hits (hits without selected truth ownership count
+   in the denominator). A particle with several eligible tracks takes the purest.
+2. Clusters: the particles without a track share the clusters through one sparse
+   maximum-weight bipartite matching with edge score `particle_energy + shared_deposit`
+   (calibrated GeV). Each particle has a private unmatched choice with score zero.
+   The score keeps energetic particles hosted, and a claim can be rerouted to
+   another of the particle's clusters when that lets a second particle keep one.
+
+`--assignment bipartite` selects the joint bipartite matching with the overlap
+score instead. It uses the same track eligibility, scores track edges
+`1 + hit_fraction` and cluster edges
+`2 * shared_deposit / (cluster_energy + particle_deposit)`, and maximizes the
+total score in one joint matching, with reliable tracks preferred over clusters.
+Equal-score duplicate tracks may be selected in a different order. The overlap
+score favours pure hosts; the energy score hosts more energy and merges less (see
+the comparison below). `--assignment greedy` reproduces the former energy-ordered rule.
 
 After matching, hit assignment and merging use the shared allocator. An unmatched
 particle's full truth four-vector is added to the target of its largest-deposit
@@ -53,11 +66,12 @@ other clusters. This can still produce large cluster-to-target direction tails.
 
 CLD, CLIC, IDEA, MAIA, and CMS keep their existing greedy or native assignment.
 The shared allocator defaults to greedy; only the ColliderML converter selects
-bipartite matching. Alternative assignments in the study scripts are comparisons,
-not production settings.
+`majority_energy` or `bipartite`. The other assignments in the study scripts are
+comparisons, not production settings.
 
-New converted files carry `mlpf.target_assignment=bipartite-v1` in their Parquet
-metadata. Resume reconverts older files, including complete greedy outputs.
+New converted files carry `mlpf.target_assignment=<rule>-v1` (for example
+`majority_energy-v1`) in their Parquet metadata. Resume reconverts files written
+by another rule or without the tag, including complete greedy outputs.
 Rebuild ColliderML TFDS as clustered version **1.3.0** or hits version **1.1.0**;
 the old versions in the published catalog retain their original targets.
 The recipe and builder defaults select the new versions. They must be generated
@@ -65,7 +79,7 @@ before training; their availability is not implied by the published catalog.
 
 ## Greedy and joint matching on PU0 and PU200
 
-`scripts/studies/compare_colliderml_matching.py` compares four assignments on the same original events and published calorimeter clustering: the former energy-ordered greedy rule, majority tracks with energy-ordered greedy clusters, greedy matching on the joint ownership scores, and the exact joint solver. All four use the shared allocator for subsequent hit assignment, merging, and drop accounting. An explicit `input_assignment` lets the allocator accept the chosen matches without repeating its greedy assignment stage.
+`scripts/studies/compare_colliderml_matching.py` compares five assignments on the same original events and published calorimeter clustering: the former energy-ordered greedy rule, majority tracks with energy-ordered greedy clusters, greedy matching on the joint ownership scores, the exact joint solver, and `majority_energy`. All five use the shared allocator for subsequent hit assignment, merging, and drop accounting. An explicit `input_assignment` lets the allocator accept the chosen matches without repeating its greedy assignment stage.
 
 The comparison used the first 100 events of shard 00000 for each sample. The former greedy rule reproduced the published track and cluster targets on every event. Eight CPU workers ran outside the sandbox with one numerical thread per worker; the complete comparison took 147 seconds. Example command using the locally downloaded sources:
 
@@ -97,6 +111,33 @@ The following results compare the former greedy rule with the joint solver. Dire
 | Truth-jet recall | 95.72% | 96.75% | 26.52% | 29.97% |
 | Merged fraction of selected particles | 7.05% | 5.59% | 24.52% | 22.79% |
 | Dropped truth energy across the sample | 0 GeV | 0 GeV | 110.49 GeV | 91.30 GeV |
+
+### Overlap score (`bipartite`) and energy score (`majority_energy`)
+
+The same 100 events per sample, with the three production choices side by side. Merged energy sums the truth energy of particles merged into another target; jet response uses matched reference jets with pT > 20 GeV.
+
+| Metric | PU0 greedy | PU0 bipartite | PU0 majority_energy | PU200 greedy | PU200 bipartite | PU200 majority_energy |
+|---|---:|---:|---:|---:|---:|---:|
+| Track targets | 6,086 | 6,086 | 6,086 | 176.7k | 151.2k | 151.2k |
+| Track ΔR > 0.1 | 0.66% | **0.51%** | **0.51%** | 16.99% | **0.63%** | **0.63%** |
+| Hard-scatter track ΔR > 0.1 | 0.66% | **0.51%** | **0.51%** | 8.58% | **0.48%** | 0.50% |
+| Cluster targets | 15.85k | 16.20k | 16.38k | 928.2k | 979.1k | 1,036.5k |
+| Mean cluster purity | 75.3% | **77.6%** | 75.4% | 50.6% | **56.1%** | 50.9% |
+| High-pT cluster ΔR > 0.3 | **5.2%** | 6.1% | 6.5% | 60.4% | 40.7% | **16.0%** |
+| Merged fraction of selected particles | 7.05% | 5.59% | **4.82%** | 24.52% | 22.79% | **18.87%** |
+| Merged energy | 1.51 TeV | 1.79 TeV | **0.65 TeV** | 456 TeV | 1,026 TeV | **284 TeV** |
+| Merged hard-scatter energy | 1.51 TeV | 1.79 TeV | **0.65 TeV** | 4.3 TeV | 7.4 TeV | **2.2 TeV** |
+| Dropped energy | **0 GeV** | **0 GeV** | **0 GeV** | 110.5 GeV | **91.3 GeV** | **91.3 GeV** |
+| Truth-jet recall | 95.7% | 96.8% | **97.0%** | 26.5% | 30.0% | **32.5%** |
+| Truth-jet precision | 96.8% | 97.6% | **97.8%** | 31.7% | 34.8% | **37.2%** |
+| Matched jets, reference pT > 20 GeV | **671** | **671** | **671** | 3,635 | 3,820 | **4,081** |
+| Jet response median / IQR (pT > 20 GeV) | **1.000** / 0.002 | **1.000** / **0.000** | **1.000** / **0.000** | 0.936 / **0.110** | **0.944** / 0.111 | 0.943 / **0.110** |
+
+- **Rules:** greedy = former energy-ordered first-come rule; bipartite = joint bipartite matching, tracks require > 50% hit ownership, clusters scored by overlap 2·shared / (E_cluster + E_particle_deposit); majority_energy = the same majority-owned tracks, then a bipartite cluster matching scored E_particle + shared deposit.
+- **ΔR metrics** compare final targets (after merging) with their track or cluster; "high-pT" means target pT ≥ 5 GeV.
+- **Mean cluster purity** = mean over cluster targets of the host's shared deposit / cluster energy.
+- **Jets** are anti-kt R=0.4, pT > 3 GeV, built from the targets and matched one-to-one within ΔR < 0.1 to the published `genjet` (pileup included).
+- **Bold** marks the best value per pileup sample, with ties all bold; track and cluster target counts have no "better" direction and are not marked. For jet response, a median closer to 1 and a smaller IQR are better.
 
 The track improvement comes from majority eligibility. To isolate the solver, compare it with greedy matching on identical ownership edges and scores. On PU200, the solver increased the objective by 0.274% and truth-jet recall by 1.38 percentage points (95% paired event-bootstrap interval 0.67 to 2.06 points). On PU0, the corresponding recall difference was 0.21 points, with an interval of -0.21 to 0.69 points. Mean cluster purity is slightly lower for the solver than for same-score greedy matching because the objective sums overlap across all matches rather than maximizing average purity.
 
