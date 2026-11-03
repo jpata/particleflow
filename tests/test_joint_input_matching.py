@@ -12,9 +12,7 @@ from tests.test_postprocessing_merge import make_eventdata
 
 @pytest.mark.parametrize("n_particle,n_track,n_cluster", [(0, 0, 0), (0, 2, 3), (2, 0, 0), (3, 2, 4)])
 def test_empty_graphs(n_particle, n_track, n_cluster):
-    result = match_majority_tracks_then_energy(
-        csr_matrix((n_particle, n_track)), csr_matrix((n_particle, n_cluster)), np.zeros(n_particle)
-    )
+    result = match_majority_tracks_then_energy(csr_matrix((n_particle, n_track)), csr_matrix((n_particle, n_cluster)), np.zeros(n_particle))
     assert result.shape == (n_particle, 2)
     assert np.all(result == -1)
 
