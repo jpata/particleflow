@@ -20,9 +20,12 @@
 #   sbatch --ntasks=64 scripts/flatiron/colliderml_convert.sh 0 64  # single-node test
 #   sbatch scripts/flatiron/colliderml_convert.sh 0 64 pu0 /path/outdir  # custom output dir
 #
-# Third arg is the pileup label (default pu0); the sample is ttbar_${PU} and output goes to
-# mlpf_parquet/clue/ttbar_${PU}/ unless a 4th arg overrides it (the pre-CLUE bfs parquet stays
-# in mlpf_parquet/clustered/).
+#   sbatch scripts/flatiron/colliderml_convert.sh 0 1000 zee_pu200   # any Release-1 sample
+#
+# Third arg is the sample, <process>_<pileup> (a bare pu0/pu200 means ttbar_<pileup>; default
+# pu0); output goes to mlpf_parquet/clue/<sample>/ unless a 4th arg overrides it.
+# Shards are paired across the four tables by file name; a shard missing from any table is
+# skipped (dihiggs_pu200: only 295 tracker_hits shards upstream).
 # The per-rank shard arithmetic uses SLURM_NTASKS, so override --ntasks to taste.
 # pu200 events are memory-heavy (~10-20 GB/rank); if the node OOMs, give ranks a larger
 # memory slice, e.g. --ntasks=32 --cpus-per-task=2.
@@ -34,7 +37,12 @@ set -euo pipefail
 
 S0="${1:-0}"
 S1="${2:-1000}"
-PU="${3:-pu0}"
+SAMPLE="${3:-pu0}"
+# a bare pileup label is the ttbar sample (the original usage); otherwise <process>_<pileup>
+case "${SAMPLE}" in
+  pu0|pu200) SAMPLE="ttbar_${SAMPLE}" ;;
+esac
+PU="${SAMPLE##*_}"
 # Optional 4th positional arg: output dir override. Note the job runs with --export=NONE, so
 # COLLIDERML_OUT_DIR below never survives sbatch — it only helps direct/local runs.
 OUTDIR_ARG="${4:-}"
@@ -51,7 +59,7 @@ if [ "$PER_RANK" -eq 0 ]; then
   echo "shard range [${S0}, ${S1}) has ${RANGE} shards, fewer than n_tasks=${N}; lower --ntasks" >&2
   exit 2
 fi
-echo "host $(hostname) sample=ttbar_${PU} shards [${S0}, ${S1}); ranks=${N}; ${EXTRA} rank(s) get ${PER_RANK}+1 shards, the rest ${PER_RANK}"
+echo "host $(hostname) sample=${SAMPLE} shards [${S0}, ${S1}); ranks=${N}; ${EXTRA} rank(s) get ${PER_RANK}+1 shards, the rest ${PER_RANK}"
 
 # allocation summary, printed before srun so it lands in the job log
 for ((r=0; r<N; r++)); do
@@ -64,7 +72,6 @@ PYTHON=/mnt/home/ewulff/repositories/particleflow/.venv/bin/python
 export PYTHONPATH="/mnt/home/ewulff/repositories/particleflow"
 export KERAS_BACKEND=torch
 
-SAMPLE="ttbar_${PU}"
 SOURCE_DIR="/mnt/ceph/users/ewulff/data/colliderml/CERN__ColliderML-Release-1"
 # COLLIDERML_OUT_DIR overrides the output root (default: the production CLUE dir);
 # the optional 4th positional arg wins over it.
@@ -77,7 +84,7 @@ mkdir -p "$LOGDIR"
 # pu200 = the 2026-10-08 "middle setting"); see colliderml_convert_array.sh for the full comment.
 case "${PU}" in
   pu0|pu200) CLUE_PRESET="${PU}" ;;
-  *) echo "no CLUE preset for pileup label '${PU}' (known: pu0, pu200)" >&2; exit 2 ;;
+  *) echo "no CLUE preset for pileup label '${PU}' of sample ${SAMPLE} (known: pu0, pu200)" >&2; exit 2 ;;
 esac
 
 # rank r starts after r*PER_RANK shards plus the extra shards handed to ranks < r
