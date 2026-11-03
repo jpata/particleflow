@@ -139,6 +139,22 @@ def test_unsplit_pi0_target_is_a_photon():
     assert classes == [22.0, 22.0]
 
 
+def test_pileup_fraction_of_elements_and_hard_scatter_gen_reference():
+    # Photon B (pid 2) comes from a pileup collision and leaves one of the three track hits.
+    particles, tracks, calo, tracker = _shared_hits_event()
+    particles = _record({k: ([1, 2, 1] if k == "vertex_primary" else particles[k]) for k in particles.fields})
+    tracker = _record({k: ([3, 3, 2] if k == "particle_id" else tracker[k]) for k in tracker.fields})
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+
+    assert rec["pufrac_track"].tolist() == [np.float32(1 / 3)]
+    # one cluster per cell: its pileup fraction is B's share of the cell energy
+    pufrac_cell = np.array([0.1 / 3.1, 2.0 / 2.1, 0.05 / 1.05, 0.8 / 0.85])
+    assert np.allclose(rec["pufrac_cluster"][rec["hit_to_cluster"]], pufrac_cell, rtol=1e-5)
+    # the hard-scatter gen reference drops B (150 GeV along y): one jet less, smaller MET
+    assert len(rec["genjet"]) == len(rec["genjet_withpu"]) - 1
+    assert rec["genmet"] < rec["genmet_withpu"]
+
+
 def test_resume_reconverts_greedy_targets_with_same_event_count(tmp_path):
     make_fixture(tmp_path / "src", n_events=6)
     paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
@@ -161,3 +177,46 @@ def test_converter_track_target_uses_majority_hits_over_particle_energy():
     rec = _event_record_one(0, particles, tracks, calo, tracker)
     assert rec["ytarget_track"][0, PN] == 3
     assert rec["ytarget_track"][0, 0] == 211
+
+
+def test_resume_reconverts_outputs_without_pileup_truth(tmp_path):
+    make_fixture(tmp_path / "src", n_events=6)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    process_one_file(*paths, ofn)
+    table = pq.read_table(ofn)
+    metadata = dict(table.schema.metadata)
+    del metadata[b"mlpf.pileup_truth"]
+    old_fields = ["genmet_withpu", "genjet_withpu", "pufrac_track", "pufrac_cluster"]
+    pq.write_table(table.drop(old_fields).replace_schema_metadata(metadata), ofn)
+
+    process_one_file(*paths, ofn)
+
+    restored = pq.read_table(ofn)
+    assert restored.schema.metadata[b"mlpf.pileup_truth"] == b"energy-fraction-v1"
+    assert restored.schema.metadata[b"mlpf.target_assignment"] == b"majority_energy-v1"
+    assert set(old_fields).issubset(restored.column_names)
+
+
+def test_pileup_fields_roundtrip_to_tfds(tmp_path):
+    from mlpf.data.colliderml.postprocessing import _batch_arrow_arrays
+    from mlpf.heptfds.colliderml_utils.utils import generate_examples
+    import pyarrow as pa
+
+    particles, tracks, calo, tracker = _shared_hits_event()
+    particles = _record({k: ([1, 2, 1] if k == "vertex_primary" else particles[k]) for k in particles.fields})
+    tracker = _record({k: ([3, 3, 2] if k == "particle_id" else tracker[k]) for k in tracker.fields})
+    rec = _event_record_one(123, particles, tracks, calo, tracker)
+    cols = _batch_arrow_arrays([rec])
+    ofn = tmp_path / "events.parquet"
+    pq.write_table(pa.Table.from_arrays([a for _, a in cols], names=[k for k, _ in cols]), ofn)
+
+    ((_, example),) = generate_examples([ofn])
+
+    assert example["event_id"] == 123
+    assert example["pufrac"].shape == (len(example["X"]),)
+    np.testing.assert_array_equal(example["pufrac"], np.concatenate([rec["pufrac_track"], rec["pufrac_cluster"]]))
+    np.testing.assert_array_equal(example["genjets"], rec["genjet"])
+    np.testing.assert_array_equal(example["genjets_withpu"], rec["genjet_withpu"])
+    assert example["genmet"] == rec["genmet"]
+    assert example["genmet_withpu"] == rec["genmet_withpu"]

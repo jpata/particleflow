@@ -41,13 +41,16 @@ assert len(_X_FEATURES) == 17
 
 
 class CollidermlTtbarNopuPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.3.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.4.0"))
     RELEASE_NOTES = {
         "1.3.0": "Bipartite track/cluster assignment majority_energy: majority-owned tracks only, then a cluster matching with an energy score.",
         "1.0.0": "Initial release (bfs_merge clustering, merge-frac 0.25, radii ECAL 25 mm / HCAL 90 mm).",
         "1.1.0": "CLUE clustering (converter --algorithm clue --clue-preset pu0, i.e. the CLUE defaults).",
         "1.2.0": "Surrogate ancestors in the truth (key4hep parity): generator-decayed particles that "
         "interacted before decaying become targets, recovering their deposits. Clustering as in 1.1.0.",
+        "1.4.0": "Pileup truth: ispu is the pileup share of the target energy (fractional for targets merging "
+        "hard-scatter and pileup particles); genmet/genjets restricted to the hard scatter, the previous ones kept as "
+        "genmet_withpu/genjets_withpu; new features event_id and pufrac (pileup fraction of each element).",
     }
     DESCRIPTION = _DESCRIPTION
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
@@ -74,9 +77,16 @@ class CollidermlTtbarNopuPf(tfds.core.GeneratorBasedBuilder):
                     "X": tfds.features.Tensor(shape=(None, 17), dtype=np.float32),
                     "ytarget": tfds.features.Tensor(shape=(None, 14), dtype=np.float32),
                     "ycand": tfds.features.Tensor(shape=(None, 14), dtype=np.float32),
+                    # gen reference of the hard scatter (the *_withpu ones below include pileup)
                     "genmet": tfds.features.Scalar(dtype=np.float32),
                     "genjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
                     "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
+                    # pileup truth: release event_id, pileup fraction of each element of X,
+                    # gen reference including pileup
+                    "event_id": tfds.features.Scalar(dtype=np.int64),
+                    "pufrac": tfds.features.Tensor(shape=(None,), dtype=np.float32),
+                    "genmet_withpu": tfds.features.Scalar(dtype=np.float32),
+                    "genjets_withpu": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
                 }
             ),
             homepage="https://github.com/jpata/particleflow",

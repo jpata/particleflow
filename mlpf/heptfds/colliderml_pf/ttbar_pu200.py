@@ -22,4 +22,7 @@ class CollidermlTtbarPu200Pf(CollidermlTtbarNopuPf):
         "1.1.0": "CLUE clustering (converter --algorithm clue --clue-preset pu200).",
         "1.2.0": "Surrogate ancestors in the truth (key4hep parity): generator-decayed particles that "
         "interacted before decaying become targets, recovering their deposits. Clustering as in 1.1.0.",
+        "1.4.0": "Pileup truth: ispu is the pileup share of the target energy (fractional for targets merging "
+        "hard-scatter and pileup particles); genmet/genjets restricted to the hard scatter, the previous ones kept as "
+        "genmet_withpu/genjets_withpu; new features event_id and pufrac (pileup fraction of each element).",
     }

@@ -1,7 +1,7 @@
 # Shared ColliderML -> TFDS utilities. Mirrors mlpf/heptfds/edm4hep_utils/utils_pf.py but reads
 # the MLPF-format parquet produced by mlpf/data/colliderml/postprocessing.py (a dict-like record
 # of X_track / X_cluster / ytarget_track / ytarget_cluster / genmet / genjet / targetjet /
-# event_id).
+# event_id, plus the pileup fields genmet_withpu / genjet_withpu / pufrac_track / pufrac_cluster).
 from pathlib import Path
 from typing import List
 
@@ -87,6 +87,7 @@ def prepare_events(fn: Path):
     genmets = []
     genjets = []
     targetjets = []
+    pileup = []  # event_id, pufrac, genmet_withpu, genjets_withpu
     for iev in range(nev):
         X_track = ak.to_numpy(ret["X_track"][iev])
         X_cluster = ak.to_numpy(ret["X_cluster"][iev])
@@ -129,12 +130,23 @@ def prepare_events(fn: Path):
         genmets.append(genmet)
         genjets.append(genjet)
         targetjets.append(targetjet)
-    return Xs, ytargets, ycands, genmets, genjets, targetjets
+        genjet_withpu = ak.to_numpy(ret["genjet_withpu"][iev]).reshape(-1, 4)
+        pileup.append(
+            {
+                # the release event_id, unique over the whole release: the link back to the raw tables
+                "event_id": np.int64(np.asarray(ak.to_numpy(ret["event_id"][iev])).reshape(-1)[0]),
+                # truth pileup fraction of each element, in X order (tracks, then clusters)
+                "pufrac": np.concatenate([ak.to_numpy(ret["pufrac_track"][iev]), ak.to_numpy(ret["pufrac_cluster"][iev])]).astype(np.float32),
+                "genmet_withpu": float(np.asarray(ak.to_numpy(ret["genmet_withpu"][iev])).reshape(-1)[0]),
+                "genjets_withpu": genjet_withpu.astype(np.float32),
+            }
+        )
+    return Xs, ytargets, ycands, genmets, genjets, targetjets, pileup
 
 
 def generate_examples(files: List[Path]):
     for fi in files:
-        Xs, ytargets, ycands, genmets, genjets, targetjets = prepare_events(fi)
+        Xs, ytargets, ycands, genmets, genjets, targetjets, pileup = prepare_events(fi)
         for iev in range(len(Xs)):
             yield (
                 str(fi) + "_" + str(iev),
@@ -145,5 +157,6 @@ def generate_examples(files: List[Path]):
                     "genmet": genmets[iev],
                     "genjets": genjets[iev].astype(np.float32),
                     "targetjets": targetjets[iev].astype(np.float32),
+                    **pileup[iev],
                 },
             )

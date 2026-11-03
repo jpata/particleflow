@@ -233,9 +233,9 @@ def test_pileup_weighting_scenario_differs_only_in_step_weights():
     assert all(job.global_batch_size == {"pu0": 768, "pu200": 64} for job in jobs)
     assert all(job.per_gpu_batch_size == {"pu0": 96, "pu200": 8} for job in jobs)
     assert [_train_groups(job) for job in jobs] == [
-        {"pu0": (96, None, {"1.3.0"}), "pu200": (8, None, {"1.3.0"})},
-        {"pu0": (96, 1.0, {"1.3.0"}), "pu200": (8, 1.0, {"1.3.0"})},
-        {"pu0": (96, 1.0, {"1.3.0"}), "pu200": (8, 3.0, {"1.3.0"})},
+        {"pu0": (96, None, {"1.4.0"}), "pu200": (8, None, {"1.4.0"})},
+        {"pu0": (96, 1.0, {"1.4.0"}), "pu200": (8, 1.0, {"1.4.0"})},
+        {"pu0": (96, 1.0, {"1.4.0"}), "pu200": (8, 3.0, {"1.4.0"})},
     ]
     assert all(list(job.resolved_config.valid_dataset["colliderml"]) == ["pu0", "pu200"] for job in jobs)
 

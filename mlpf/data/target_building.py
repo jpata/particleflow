@@ -305,6 +305,13 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     tracks followed by cluster matching with an energy score. Track links must be fractions
     of all hits. An explicit ``input_assignment`` is available for comparisons using the same
     merge and energy accounting.
+
+    The pileup energy is merged along with the four-vectors, so a target's
+    ``ispu`` is the pileup share of its energy: sum(E_i * ispu_i) / sum(E_i)
+    over the particle that owns its track/cluster and the particles merged
+    into it. Targets with nothing merged in, or merged only with particles
+    of the same origin, keep exactly 0 or 1; samples without pileup
+    (ispu = 0 everywhere) are unaffected.
     """
     if assignment not in ("greedy", "majority_energy"):
         raise ValueError(f"Unknown input assignment: {assignment}")
@@ -452,8 +459,10 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     eta_arr = np.array(awkward.to_numpy(gpdata.gen_features["eta"]))
     phi_arr = np.array(awkward.to_numpy(gpdata.gen_features["phi"]))
     energy_arr = np.array(awkward.to_numpy(gpdata.gen_features["energy"]))
+    # pileup energy of each particle, accumulated like the energy on merging
+    pu_energy_arr = energy_arr.astype(np.float64) * np.asarray(awkward.to_numpy(gpdata.gen_features["ispu"]), dtype=np.float64)
 
-    # Merge full truth four-vectors; the host keeps its identity and labels.
+    # Merge full truth four-vectors and pileup energy; the host keeps its other labels.
     gp_merges_gp0 = []
     gp_merges_gp1 = []
     dropped_gps = []  # indices removed from the target because they have no track/cluster host
@@ -507,8 +516,12 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
         eta_arr[idx_gp_bestcluster] = vec.eta
         phi_arr[idx_gp_bestcluster] = vec.phi
         energy_arr[idx_gp_bestcluster] = vec.energy
+        pu_energy_arr[idx_gp_bestcluster] += pu_energy_arr[igp_unmatched]
 
     idx_all_masked = np.where(mask_gp_unmatched)[0]
+    energy_total = energy_arr.astype(np.float64)
+    ispu_new = np.clip(np.divide(pu_energy_arr, energy_total, out=np.zeros_like(energy_total), where=energy_total > 0), 0.0, 1.0)
+    ispu_new = ispu_new[mask_gp_unmatched].astype(np.float32)
     gen_features_new = {
         "PDG": np.abs(gpdata.gen_features["PDG"][mask_gp_unmatched]),
         "charge": gpdata.gen_features["charge"][mask_gp_unmatched],
@@ -517,7 +530,7 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
         "sin_phi": np.sin(phi_arr[mask_gp_unmatched]),
         "cos_phi": np.cos(phi_arr[mask_gp_unmatched]),
         "energy": energy_arr[mask_gp_unmatched],
-        "ispu": gpdata.gen_features["ispu"][mask_gp_unmatched],
+        "ispu": ispu_new,
         "generatorStatus": gpdata.gen_features["generatorStatus"][mask_gp_unmatched],
         "simulatorStatus": gpdata.gen_features["simulatorStatus"][mask_gp_unmatched],
         "gp_to_track": gpdata.gen_features["gp_to_track"][mask_gp_unmatched],

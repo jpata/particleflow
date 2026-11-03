@@ -1,6 +1,6 @@
 # ColliderML tracks and clusters
 
-ColliderML Release 1 supplies tracks and spatial calorimeter clusters for top-pair events. This is a research workflow with dataset version **1.3.0**; it has no PF baseline in the local detector comparison.
+ColliderML Release 1 supplies tracks and spatial calorimeter clusters for top-pair events. This is a research workflow with dataset version **1.4.0**; it has no PF baseline in the local detector comparison.
 
 ## Physics samples
 
@@ -53,7 +53,8 @@ an energy score:
 
 After matching, hit assignment and merging use the shared allocator. An unmatched
 particle's full truth four-vector is added to the target of its largest-deposit
-cluster. The host keeps its particle type, charge, and pileup label. If that
+cluster. The host keeps its particle type and charge; its `ispu` becomes the
+pileup share of the merged energy, `sum(E_i * ispu_i) / sum(E_i)`. If that
 cluster has no assigned target, the particle is dropped and its energy is
 reported in the accounting check. Merging does not use an angular cut or search
 other clusters. This can still produce large cluster-to-target direction tails.
@@ -66,10 +67,22 @@ comparisons, not production settings.
 New converted files carry `mlpf.target_assignment=<rule>-v1` (for example
 `majority_energy-v1`) in their Parquet metadata. Resume reconverts files written
 by another rule or without the tag, including complete greedy outputs.
-Rebuild ColliderML TFDS as clustered version **1.3.0** or hits version **1.1.0**;
+Files also carry `mlpf.pileup_truth=energy-fraction-v1`; resume reconverts older
+files lacking this tag so that pileup fields and target semantics stay consistent.
+Rebuild ColliderML TFDS as clustered version **1.4.0** or hits version **1.2.0**;
 the old versions in the published catalog retain their original targets.
 The recipe and builder defaults select the new versions. They must be generated
 before training; their availability is not implied by the published catalog.
+
+## Pileup truth
+
+Clustered TFDS version **1.4.0** adds the release `event_id`, `pufrac` in input
+order (tracks, then clusters), and `genmet_withpu` / `genjets_withpu`. Track
+pileup fractions count hits; cluster fractions weight calibrated deposited energy.
+These fractions describe the input even when it has no assigned target.
+`genmet` / `genjets` use only measurable hard-scatter truth; the `*_withpu`
+fields retain all collisions. Both clustered and hits targets carry fractional
+`ispu` after mixed-origin merges; training binarizes it at `>= 0.5`.
 
 ## Greedy and joint matching on PU0 and PU200
 
