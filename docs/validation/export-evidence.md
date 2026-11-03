@@ -609,3 +609,39 @@ A standalone copy is available at
 Open `report.html`; `render.sh` regenerates the report and figures using only
 the copied histogram and timing inputs. All 472 local report links/images were
 verified after reproduction; the copy has no symlinks or source-directory dependency.
+
+### CMS BF16 batch throughput
+
+The completed 2026-11-03 sweep is retained at
+`/eos/user/j/jpata/mlpf_studies/20261103_cms_batch_throughput/`.
+Open `report.html` for throughput and batch-latency plots and `throughput.csv`
+for all 80 points. It compares native PyTorch and fusion-enabled ONNX on both
+GPUs, for Attention and HEPTv2, batches 1/2/4/8/16 and static lengths 4000/5000.
+Each length uses the same 64 distinct real events across scenarios, repeated
+eight times after six warmups in a fresh process per shape. Timings include
+synchronous CPU FP32 inputs to CPU FP32 outputs and transfers; input preparation,
+compilation, warmup, profiling and output validation are excluded. Throughput is
+total events divided by summed inference time, excluding gaps between calls.
+
+At 4000 slots, L40S ONNX Attention peaks at batch 2 (281 events/s versus 257 at
+batch 1), while native Attention peaks at batch 8 (295 versus 82 events/s).
+L40S ONNX HEPTv2 also peaks at batch 2 (59 versus 53 events/s). Larger batches
+reduce L40S ONNX throughput at both lengths. W7900 ONNX generally benefits
+through batches 8–16; at 5000 slots, HEPTv2 improves from 16.2 to 45.7 events/s.
+These fixed-bucket results do not represent the full 5000-event size mixture.
+
+All 80 points completed with finite outputs and verified ONNX GPU placement.
+CUDA Flash dispatch was checked separately for all 20 exact timed ONNX graphs;
+AMD fusion was requested but not independently requalified for every batch shape.
+First-batch raw-head comparisons against retained batch-one predictions show
+differences, so this is not a batched physics-equivalence qualification.
+Removing the first timed round changes throughput by at most 0.635%.
+
+`scripts/benchmark-cms-throughput.py` runs isolated shape processes against the
+original evidence root (with inputs, checkpoints and prediction baselines).
+Use `--provider cuda` or `--provider migraphx`, `--root ROOT`, and `--outdir OUT`;
+`--engines onnx` and `--engines native` allow separate runtime environments.
+Use the qualified GPU environments described in `ngt/README.md`.
+`scripts/plot-cms-throughput.py --root STUDY` renders collected result directories
+without GPU access. The standalone study retains executed source archives,
+launch commands, logs, numerical diagnostics, raw timings and checksums.
