@@ -19,6 +19,7 @@ import numba
 import numpy as np
 import vector
 from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import min_weight_full_bipartite_matching
 
 
 @numba.njit
@@ -240,9 +241,90 @@ def compute_jets(particles_p4: Any, min_pt: float, jetdef: fastjet.JetDefinition
     return ret
 
 
+def match_particles_to_inputs(track_fractions, cluster_deposits, cluster_energy, particle_deposit):
+    """Match particles jointly to tracks and clusters using hit ownership.
+
+    Track edges require a majority and score 1 + hit purity. Cluster edges
+    score 2 * shared deposit / (cluster energy + particle deposit). Each
+    particle also has a private unmatched column with score zero.
+
+    The track bonus preserves the preference for a reliable track. Since a
+    majority-owned track has only one eligible particle, choosing it cannot
+    take a track away from another particle. Equal-score solutions may use
+    different duplicate tracks; the matching objective does not break ties.
+    """
+    tracks = track_fractions.tocsc(copy=True)
+    clusters = cluster_deposits.tocoo(copy=True)
+    tracks.sum_duplicates()
+    tracks.eliminate_zeros()
+    clusters.sum_duplicates()
+    clusters.eliminate_zeros()
+    n_particle, n_track = tracks.shape
+    if clusters.shape[0] != n_particle:
+        raise ValueError("Track and cluster matrices must have the same particle rows")
+    n_cluster = clusters.shape[1]
+    cluster_energy = np.asarray(cluster_energy, dtype=float)
+    particle_deposit = np.asarray(particle_deposit, dtype=float)
+    if cluster_energy.shape != (n_cluster,) or particle_deposit.shape != (n_particle,):
+        raise ValueError("Energy arrays must match the cluster and particle axes")
+    for values in [tracks.data, clusters.data, cluster_energy, particle_deposit]:
+        if np.any(~np.isfinite(values)) or np.any(values < 0):
+            raise ValueError("Hit fractions and deposited energies must be finite and nonnegative")
+    if np.any(np.asarray(tracks.sum(axis=0)) > 1 + 1e-6):
+        raise ValueError("Track fractions must use all hits in the denominator")
+    owners = np.full(n_track, -1, dtype=np.int64)
+    _segment_argmax_first(tracks.indptr, tracks.indices, tracks.data, n_particle, owners)
+    t = tracks.tocoo()
+    eligible = (t.data > 0.5) & (t.row == owners[t.col])
+    denominator = cluster_energy[clusters.col] + particle_deposit[clusters.row]
+    if np.any(denominator <= 0):
+        raise ValueError("Positive shared deposits require positive total energies")
+    overlap = 2 * clusters.data / denominator
+    if np.any(clusters.data > cluster_energy[clusters.col] * (1 + 1e-5)) or np.any(clusters.data > particle_deposit[clusters.row] * (1 + 1e-5)):
+        raise ValueError("Shared deposits cannot exceed the cluster or particle total")
+    overlap = np.minimum(overlap, 1.0)  # allow floating-point roundoff in the totals
+    result = np.full((n_particle, 2), -1, dtype=np.int64)
+    if n_particle == 0:
+        return result
+    # The sparse solver requires nonzero weights and a full row matching.
+    # Adding one to every real and dummy edge leaves the objective unchanged.
+    graph = coo_matrix(
+        (
+            np.concatenate([2 + t.data[eligible], 1 + overlap, np.ones(n_particle)]),
+            (
+                np.concatenate([t.row[eligible], clusters.row, np.arange(n_particle)]),
+                np.concatenate([t.col[eligible], n_track + clusters.col, n_track + n_cluster + np.arange(n_particle)]),
+            ),
+        ),
+        shape=(n_particle, n_track + n_cluster + n_particle),
+    ).tocsr()
+    rows, columns = min_weight_full_bipartite_matching(graph, maximize=True)
+    track_mask = columns < n_track
+    cluster_mask = (columns >= n_track) & (columns < n_track + n_cluster)
+    result[rows[track_mask], 0] = columns[track_mask]
+    result[rows[cluster_mask], 1] = columns[cluster_mask] - n_track
+    return result
+
+
 def assign_genparticles_to_obj_and_merge(  # noqa: C901
     gpdata: EventData,
+    *,
+    assignment: str = "greedy",
+    cluster_energy=None,
+    input_assignment=None,
 ) -> Tuple[EventData, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Assign targets, then merge particles without exclusive inputs.
+
+    Other detectors retain the default energy-ordered greedy assignment.
+    ColliderML selects ``bipartite`` with calibrated cluster energies; track
+    links must be fractions of all hits and particle deposits must be in
+    ``gen_features["gp_to_cluster"]``. An explicit ``input_assignment`` is
+    available for comparisons using the same merge and energy accounting.
+    """
+    if assignment not in ("greedy", "bipartite"):
+        raise ValueError(f"Unknown input assignment: {assignment}")
+    if input_assignment is not None and assignment != "greedy":
+        raise ValueError("Use either input_assignment or an assignment rule")
     n_gp = awkward.count(gpdata.gen_features["PDG"])
     n_track = awkward.count(gpdata.track_features["type"])
     n_hit = awkward.count(gpdata.hit_features["type"])
@@ -320,14 +402,34 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     if n_gp > 0 and n_hit > 0:
         hit_to_gp_inclusive = _col_argmax_and_mask(gp_to_hit)
 
+    if assignment == "bipartite":
+        if cluster_energy is None:
+            raise ValueError("Bipartite matching requires calibrated cluster energies")
+        input_assignment = match_particles_to_inputs(gp_to_track, gp_to_cluster, cluster_energy, gpdata.gen_features["gp_to_cluster"])
+
     # map each genparticle to a track or a cluster
     gp_to_obj = -1 * np.ones((n_gp, 2), dtype=np.int32)
+    if input_assignment is not None:
+        supplied = np.asarray(input_assignment)
+        if supplied.shape != (n_gp, 2) or not np.issubdtype(supplied.dtype, np.integer):
+            raise ValueError("input_assignment must be an integer (particles, 2) array")
+        if np.any(np.sum(supplied >= 0, axis=1) > 1):
+            raise ValueError("Each particle can have only one exclusive input")
+        for column, size, links in [(0, n_track, gp_to_track), (1, n_cluster, gp_to_cluster)]:
+            values = supplied[:, column]
+            if np.any(values < -1) or np.any(values >= size):
+                raise ValueError("Input assignment index out of range")
+            rows = np.flatnonzero(values >= 0)
+            if len(np.unique(values[rows])) != len(rows):
+                raise ValueError("An input cannot be assigned to multiple particles")
+            if len(rows) and np.any(np.asarray(links[rows, values[rows]]).ravel() <= 0):
+                raise ValueError("Assigned inputs must have positive hit ownership")
+        gp_to_obj[:] = supplied
     set_used_tracks = set([])
     set_used_clusters = set([])
     gps_sorted_energy = sorted(range(n_gp), key=lambda x: gpdata.gen_features["energy"][x], reverse=True)
 
-    for igp in gps_sorted_energy:
-
+    for igp in gps_sorted_energy if input_assignment is None else ():
         # first check if we can match the genparticle to a track
         trks, _ = _row_sorted_by_weight(gp_to_track, igp)
         for trk in trks:
@@ -359,7 +461,7 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
                 set_used_hits.add(ihit)
                 break
 
-    # the genparticles that could not be matched to a track or cluster are merged to the closest genparticle
+    # Unmatched particles merge into the target assigned to their largest-deposit cluster.
     unmatched = np.where((gp_to_obj[:, 0] == -1) & (gp_to_obj[:, 1] == -1))[0]
     mask_gp_unmatched = np.ones(n_gp, dtype=bool)
 
@@ -368,7 +470,7 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     phi_arr = np.array(awkward.to_numpy(gpdata.gen_features["phi"]))
     energy_arr = np.array(awkward.to_numpy(gpdata.gen_features["energy"]))
 
-    # now merge unmatched genparticles to their closest genparticle
+    # Merge full truth four-vectors; the host keeps its identity and labels.
     gp_merges_gp0 = []
     gp_merges_gp1 = []
     dropped_gps = []  # indices removed from the target because they have no track/cluster host
@@ -376,7 +478,7 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     for igp_unmatched in unmatched:
         mask_gp_unmatched[igp_unmatched] = False
 
-        # find closest cluster that this particle is matched to (positive weights only: the
+        # Find the cluster with the largest shared deposit (positive weights only: the
         # host is the dense row argmax, which requires some cluster weight > 0)
         s, e = gp_to_cluster.indptr[igp_unmatched], gp_to_cluster.indptr[igp_unmatched + 1]
         cl_idx, cl_w = gp_to_cluster.indices[s:e], gp_to_cluster.data[s:e]

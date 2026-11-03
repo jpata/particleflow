@@ -99,7 +99,7 @@ uv run python tests/validate_parquet.py \
   --plots-dir validation_plots/cld
 ```
 
-Strict mode is the default and exits nonzero on a failed gate. It writes `validation_report.json` plus diagnostic plots. Use the matching `clic` detector and process path for CLIC. CMS postprocessing emits compressed pickle and uses the [CMS-specific checks](cms.md).
+The validator runs every check, writes `validation_report.json` and plots, and exits nonzero if a check fails. Use the matching `clic` detector and process path for CLIC. CMS postprocessing emits compressed pickle and uses the [CMS-specific checks](cms.md).
 
 ## Build and verify TFDS
 

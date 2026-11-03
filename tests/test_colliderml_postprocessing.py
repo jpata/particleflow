@@ -137,3 +137,24 @@ def test_unsplit_pi0_target_is_a_photon():
     y = rec["ytarget_cluster"]
     classes = sorted(y[y[:, 0] != 0, 0].tolist())
     assert classes == [22.0, 22.0]
+
+
+def test_resume_reconverts_greedy_targets_with_same_event_count(tmp_path):
+    make_fixture(tmp_path / "src", n_events=6)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    process_one_file(*paths, ofn)
+    table = pq.read_table(ofn)
+    assert table.schema.metadata[b"mlpf.target_assignment"] == b"bipartite-v1"
+    pq.write_table(table.replace_schema_metadata(None), ofn)
+    process_one_file(*paths, ofn)
+    assert pq.read_metadata(ofn).metadata[b"mlpf.target_assignment"] == b"bipartite-v1"
+
+
+def test_converter_track_target_uses_majority_hits_over_particle_energy():
+    particles, tracks, calo, tracker = _shared_hits_event()
+    # The high-energy photon contributes only one of the three track hits.
+    tracker = _record({k: ([3, 3, 1] if k == "particle_id" else tracker[k]) for k in tracker.fields})
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+    assert rec["ytarget_track"][0, PN] == 3
+    assert rec["ytarget_track"][0, 0] == 211

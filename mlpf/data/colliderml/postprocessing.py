@@ -166,7 +166,7 @@ def _event_record_one(
         (np.array([]), np.array([])),
     )
     gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = (
-        assign_genparticles_to_obj_and_merge(gpdata)
+        assign_genparticles_to_obj_and_merge(gpdata, assignment="bipartite", cluster_energy=np.asarray(cl_feats).reshape(-1, 17)[:, 5])
     )
     n_gp = len(gpdata_cleaned.gen_features["PDG"])
 
@@ -495,16 +495,20 @@ def _batch_arrow_arrays(events_batch: List[Dict[str, Any]]):
 
 
 def _parquet_usable(ofn: Path, expected_rows: int | None = None) -> bool:
-    """True iff the named parquet file exists, pyarrow can open it and (if given) it holds
-    expected_rows events. A truncated write crashes pyarrow on the footer, so corrupted outputs
-    from a killed mid-shard job are reconvertible instead of being mistaken for done by the
-    resume logic; the row count does the same for a --num-events partial output."""
+    """Check current target metadata, readability and the expected event count.
+
+    Legacy greedy outputs, corrupted writes and partial --num-events outputs
+    must be reconverted rather than skipped by resume.
+    """
     if not os.path.isfile(ofn):
         return False
     try:
         import pyarrow.parquet as pq
 
-        n_rows = pq.ParquetFile(ofn).metadata.num_rows
+        metadata = pq.ParquetFile(ofn).metadata
+        if (metadata.metadata or {}).get(b"mlpf.target_assignment") != b"bipartite-v1":
+            return False
+        n_rows = metadata.num_rows
     except Exception:
         return False
     return expected_rows is None or n_rows == expected_rows
@@ -538,7 +542,9 @@ def process_one_file(
     if os.path.isfile(ofn) and num_events == -1:
         # a corrupted leftover (e.g. from an OOM-killed job) or a partial --num-events output
         # just falls through to the convert + rename path below, which overwrites it atomically
-        print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} exists but is corrupted or incomplete; reconverting")
+        print(
+            f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} exists but has outdated targets, is corrupted or incomplete; reconverting"
+        )
 
     # events per shard from the parquet metadata (1000 for pu0, 100 for pu200); tqdm uses it
     # for the ETA. num_events (debug cap) overrides.
@@ -569,6 +575,7 @@ def process_one_file(
 
             cols = _batch_arrow_arrays(out)
             table = pa.Table.from_arrays([c for _, c in cols], names=[k for k, _ in cols])
+            table = table.replace_schema_metadata({**(table.schema.metadata or {}), b"mlpf.target_assignment": b"bipartite-v1"})
             if writer is None:
                 writer = pq.ParquetWriter(inflight, table.schema, compression="snappy")
             writer.write_table(table)

@@ -1,6 +1,6 @@
 # ColliderML hits
 
-ColliderML Release 1 hit datasets use raw tracker and calorimeter hits with one target row per input hit. Both builders use schema version **1.0.0**. Pileup membership is carried in the target particle's `ispu` feature.
+ColliderML Release 1 hit datasets use raw tracker and calorimeter hits with one target row per input hit. Both builders use dataset version **1.1.0**, with targets from the [bipartite track/cluster assignment](colliderml.md#target-assignment). Rebuild the converted Parquet and TFDS datasets to replace the former greedy targets. Pileup membership is carried in the target particle's `ispu` feature.
 
 ## Physics samples
 
