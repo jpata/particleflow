@@ -26,15 +26,26 @@ variants:
 seeds: [12345]
 
 training:
-  # The runner derives the per-GPU batch from the platform GPU count.
-  global_batch_size: 64
+  # Match v2.6.0pre1: 8 GPUs x multiplier 12 x dataset batches 1/8.
+  # The runner derives the multiplier for each platform. With batches proportional
+  # to event counts, the default mix gives PU ~44% of updates (v3.2.0: ~9%).
+  global_batch_size:
+    physical_pu: 96
+    physical_nopu: 768
   parameters:
+    # Retain the v3.2.0 LR and calibrated objective while correcting exposure;
+    # the historical LR 0.002 needs a separate lr-find on these larger models.
     lr: 0.0004
-    num_steps: 100000
+    lr_schedule: cosinedecay
+    # Historical TensorBoard reaches step 316400 (~10 passes); v3.2.0's
+    # 100k steps at uniform batch 64 only covered ~0.43 passes per group.
+    num_steps: 320000
     val_freq: 10000
     checkpoint_freq: 10000
-    tensorboard_step_freq: 1000
-    nvalid: 512
+    tensorboard_step_freq: 100
+    # Per sample, across its ten shards. Keep test inputs fixed for comparison
+    # with the uploaded v3.2.0 paired reference evaluation.
+    nvalid: 5000
     ntest: 512
     sampler_mode: interleaved-shards
     validation_diagnostics_batches: 4
@@ -47,10 +58,12 @@ common_overrides:
   model.backbone.mode: shared
   model.backbone.num_convs: 3
 
-  # Uniform dataset batches are required for global-batch resolution. Retain
-  # both PU and no-PU samples, rather than inheriting the no-PU batch of 16.
-  train_dataset.cms.physical_nopu.batch_size: 1
-  valid_dataset.cms.physical_nopu.batch_size: 1
+  # Preserve the historical 1:8 PU/no-PU event-batch ratio. Leave train-group
+  # weights unset: batches-per-epoch mixing gives each group equal data passes.
+  train_dataset.cms.physical_pu.batch_size: 1
+  train_dataset.cms.physical_nopu.batch_size: 8
+  valid_dataset.cms.physical_pu.batch_size: 1
+  valid_dataset.cms.physical_nopu.batch_size: 8
 
   # Pin every sample explicitly: pyg-cms-v1 otherwise selects version 3.2.0.
   train_dataset.cms.physical_pu.samples.cms_pf_ttbar.version: "2.8.0"

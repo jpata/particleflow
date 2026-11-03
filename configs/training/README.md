@@ -107,9 +107,39 @@ but does not verify data availability or GPU memory usage.
 `--variant attention` or `--variant heptv2`. It retains the PU/no-PU ttbar, QCD
 and Z→ττ training/validation samples and the PU test samples. Both variants use
 three backbone layers, embedding width 512, 16 heads, zero dropout, the same seed
-and a global batch of 64;
-HEPTv2 uses deterministic hashing and block size 100. The schedule is 100,000
-steps at learning rate 0.0004. Dataset versions are pinned in the scenario.
+and global event batches of **96 (PU) / 768 (no-PU)**.
+HEPTv2 uses deterministic hashing and block size 100. The schedule is **320,000
+steps** at learning rate 0.0004 with cosine decay to 0.00004. Dataset versions are
+pinned in the scenario. Validation uses 5,000 events per sample (30,000 total);
+the PU test subsets stay at 512 per process for comparison with the published runs.
+
+This corrects the training exposure of the published
+[v3.2.0 runs](https://huggingface.co/jpata/particleflow/tree/main/cms/v3.2.0):
+uniform batches of 64 and 100k updates gave only 0.43 passes over each group,
+with 9.1% of updates on PU. The
+[v2.6.0pre1 reference](https://huggingface.co/jpata/particleflow/tree/main/cms/v2.6.0pre1/pyg-cms_20250722_101813_274478)
+used global batches 96/768 and reached TensorBoard step 316,400 over ten epochs.
+Restoring those batches and using 320k updates gives approximately ten passes
+and 44% PU updates with the recorded dataset counts. Keep group weights unset
+so sampling remains proportional to each group's batches per epoch.
+
+Both v3.2.0 models improved validation loss through 100k updates. Its published
+[paired PU comparison](https://huggingface.co/jpata/particleflow/blob/main/cms/v3.2.0/comparison_metrics/comparison.json)
+shows better PID accuracy and narrower jet-response IQR, but worse particle F1
+and MET error than the reference. More training is a supported next experiment,
+not evidence that the reference has already been exceeded. Retain v3.2.0's
+shared width-512 backbones and calibrated task weights for this experiment;
+the old width-256 dual backbone and objective differ, so historical aggregate
+losses are not directly comparable. Keep LR 0.0004 initially; test the historical
+0.002 with `lr-find` before adopting it for these larger models.
+
+Start fresh runs: resuming a 100k checkpoint restores the old cosine scheduler
+and calibrated weights, and is not equivalent to training with this schedule.
+Use the same held-out inputs and precision for final reference comparisons,
+including particle F1/purity, momentum errors, MET, jet response and angular
+recall; narrower response alone can hide a loss of matched jets. The larger
+batches require GPU memory and throughput checks for both backbones. Checkpoints
+remain every 10k updates; use `--continue` across allocation boundaries.
 
 The default CMS attention model also uses width 512 (16 heads × 32 channels).
 The comparison disables task queries for both backbones and pins TFDS 2.8.0;
