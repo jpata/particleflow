@@ -1113,10 +1113,7 @@ class ParquetValidator:
                 dphi = _deltaphi(phi, np.arctan2(y[:, SIN_PHI], y[:, COS_PHI]))
                 dr = np.hypot(deta, dphi)
                 valid = (
-                    np.isfinite(dr)
-                    & input_valid
-                    & np.isfinite(y[:, ETA : COS_PHI + 1]).all(axis=1)
-                    & (np.hypot(y[:, SIN_PHI], y[:, COS_PHI]) > 0)
+                    np.isfinite(dr) & input_valid & np.isfinite(y[:, ETA : COS_PHI + 1]).all(axis=1) & (np.hypot(y[:, SIN_PHI], y[:, COS_PHI]) > 0)
                 )
                 rows.append(np.column_stack((dr, valid, y[:, PT], y[:, ISPU])))
             a = np.concatenate(rows) if rows else np.empty((0, 4))
