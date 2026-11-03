@@ -261,6 +261,48 @@ def test_global_batch_size_cli_takes_one_value_or_one_per_group():
     assert {job.gpu_batch_multiplier for job in jobs} == {16}
 
 
+@pytest.mark.parametrize("platform_name", ["local", "lumi_mi250x"])
+def test_cms_backbone_scenario_pins_all_datasets_and_resolves_global_batch(platform_name):
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cms_backbone_comparison.yaml")
+    platform = load_platform_profile(PLATFORMS / f"{platform_name}.yaml")
+    platform.data_dir = "/tmp/cms-tfds"
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+
+    assert [job.resolved_config.model.type.value for job in jobs] == ["attention", "heptv2"]
+    for job in jobs:
+        config = job.resolved_config
+        assert config.dataset.value == "cms"
+        assert config.model.output_mode.value == "elementwise"
+        assert config.model.backbone.num_convs == 3
+        assert config.pad_to_multiple_elements == 100
+        assert config.seed == 12345
+        assert job.global_batch_size == {"physical_pu": 96, "physical_nopu": 768}
+        assert {name: batch * platform.gpus for name, batch in job.per_gpu_batch_size.items()} == job.global_batch_size
+        assert config.num_steps == 320000
+        assert config.lr == 0.0004 and config.lr_schedule.value == "cosinedecay"
+        assert config.nvalid == 5000 and config.ntest == 512
+        for datasets in (config.train_dataset["cms"], config.valid_dataset["cms"]):
+            assert {name: dataset.batch_size for name, dataset in datasets.items()} == {"physical_pu": 1, "physical_nopu": 8}
+            assert all(dataset.weight is None for dataset in datasets.values())
+            assert sum(len(dataset.samples) for dataset in datasets.values()) == 6
+            assert {sample.version for dataset in datasets.values() for sample in dataset.samples.values()} == {"2.8.0"}
+            assert all(sample.splits == [str(i) for i in range(1, 11)] for dataset in datasets.values() for sample in dataset.samples.values())
+        assert len(config.test_dataset) == 3
+        assert {sample.version for sample in config.test_dataset.values()} == {"2.8.0"}
+    from mlpf.conf import MLPFConfig
+
+    default = MLPFConfig.from_spec(str(ROOT / "particleflow_spec.yaml"), "pyg-cms-v1", "cms_run3")
+    attention = jobs[0].resolved_config.model.attention
+    heptv2 = jobs[1].resolved_config.model.heptv2
+    assert default.model.attention.num_heads == attention.num_heads == heptv2.num_heads == 16
+    assert default.model.attention.head_dim == attention.head_dim == 32
+    assert attention.num_heads * attention.head_dim == heptv2.embedding_dim == heptv2.width == 512
+    assert attention.num_convs == heptv2.num_convs == 3
+    assert attention.dropout_ff == attention.dropout_conv_id_ff == attention.dropout_conv_id_mha == heptv2.dropout_ff == 0.0
+    assert jobs[1].resolved_config.model.heptv2.block_size == 100
+    assert jobs[1].resolved_config.model.heptv2.deterministic_hashing
+
+
 def test_platform_data_dir_mapping_requires_the_variant_production():
     scenario = load_training_scenario(CLIC_CLD_SCENARIO)
     platform = load_platform_profile(PLATFORMS / "local.yaml")
