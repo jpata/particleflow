@@ -55,7 +55,7 @@ Check names appear in the JSON report, terminal output, and plot filenames. For 
 | `baseline_particle_counts`, `baseline_particle_labels`, `baseline_particle_energy` | Baseline reconstruction versus targets |
 | `truth_missing_momentum`, `truth_jet_counts`, `target_truth_energy`, `particle_types` | Truth quantities and target particle types |
 
-Direction checks use the assigned input/target row, without searching for another nearby particle. Tracks require at least 95% of assigned particles within delta-R < 0.1; clusters require at least 80% within delta-R < 0.3. Invalid directions count as failures. The JSON also contains results for hard-scatter particles, pileup particles, and target pT >= 1 and >= 5 GeV. These quality thresholds can flag physically difficult assignments; a failure alone does not establish an indexing error.
+Direction checks use the assigned input/target row, without searching for another nearby particle. Tracks use their stored momentum direction and require at least 95% of assigned particles within delta-R < 0.1. Clusters use the direction from the origin to their stored position, with phi = atan2(y, x) and eta = asinh(z / hypot(x, y)), and require at least 80% within delta-R < 0.3. Stored cluster angle features are not used by this check. Nonfinite positions and positions with zero transverse radius count as invalid directions. Invalid directions count against the passing fraction. The JSON records the direction source. The JSON also contains results for hard-scatter particles, pileup particles, and target pT >= 1 and >= 5 GeV. These quality thresholds can flag physically difficult assignments; a failure alone does not establish an indexing error.
 
 The checks cover these relationships:
 
@@ -120,7 +120,7 @@ Keep the machine-readable report with the production campaign. Record the reposi
 
 ## Production assignment validation, 2026-11-03
 
-Checked on 2026-11-03 with unchanged validator thresholds. CLD, CLIC, IDEA and ColliderML use 20 ttbar events; MAIA uses its available 10 events. CMS uses all 50 events in the native pickle sample.
+Historical results checked on 2026-11-03 with unchanged validator thresholds, before the cluster-direction check switched from stored angles to the direction from the origin to the cluster position. CLD, CLIC, IDEA and ColliderML use 20 ttbar events; MAIA uses its available 10 events. CMS uses all 50 events in the native pickle sample.
 
 ColliderML samples were freshly converted with bipartite matching and the existing CLUE pu0/pu200 presets. Other datasets use their native processed samples.
 
@@ -135,4 +135,4 @@ ColliderML samples were freshly converted with bipartite matching and the existi
 
 Track and cluster direction checks require 95% and 80%, respectively.
 
-CLD and CLIC fail only the stored cluster-direction check; the centroid comparison above explains the distinction. IDEA passes. MAIA fails track and cluster direction, tracker momentum, calorimeter energy, and baseline particle energy checks. Both ColliderML samples fail tracker-hit momentum, calorimeter-hit energy, hit-to-cluster positions, and cluster-to-target direction checks. PU0 also fails target-to-truth total energy. Full observations are recorded under `experiments/matching_cleanup_validation/`, alongside plots, commands and source paths. The CMS native-format validator reports five inconsistent particle-label groups across 50 events; its pickle schema is not supported by `validate_parquet.py`.
+In this historical run, CLD and CLIC fail only the stored cluster-direction check; the centroid comparison above explains the distinction. IDEA passes. MAIA fails track and cluster direction, tracker momentum, calorimeter energy, and baseline particle energy checks. Both ColliderML samples fail tracker-hit momentum, calorimeter-hit energy, hit-to-cluster positions, and cluster-to-target direction checks. PU0 also fails target-to-truth total energy. Full observations are recorded under `experiments/matching_cleanup_validation/`, alongside plots, commands and source paths. The CMS native-format validator reports five inconsistent particle-label groups across 50 events; its pickle schema is not supported by `validate_parquet.py`.

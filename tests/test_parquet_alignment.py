@@ -23,6 +23,8 @@ def make_validator(tmp_path, kind="track", angles=(0.0, 1.0), target_angles=None
     x[:, 0] = 1 if kind == "track" else 2
     x[:, 1] = 2
     x[:, 3:5] = np.array([np.sin(angles), np.cos(angles)]).T
+    if kind == "cluster":
+        x[:, 6:8] = 1000 * np.array([np.cos(angles), np.sin(angles)]).T
     target_angles = angles if target_angles is None else target_angles
     y[:, 0] = 211 if kind == "track" else 22
     y[:, 2] = 2
@@ -43,11 +45,47 @@ def test_native_alignment_detects_permutation(tmp_path, kind, permuted):
     assert v.alignment_metrics[kind]["all"]["fraction_aligned"] == (0 if permuted else 1)
 
 
-def test_phi_wraparound(tmp_path):
-    v = make_validator(tmp_path, angles=(np.pi - 0.01,), target_angles=(-np.pi + 0.01,))
+@pytest.mark.parametrize("kind", ["track", "cluster"])
+def test_phi_wraparound(tmp_path, kind):
+    v = make_validator(tmp_path, kind, angles=(np.pi - 0.01,), target_angles=(-np.pi + 0.01,))
     v.gate_element_target_alignment()
-    assert v.gates[0].status == "PASS"
-    assert v.alignment_metrics["track"]["all"]["median_delta_r"] == pytest.approx(0.02)
+    assert next(g for g in v.gates if g.gate_id == f"{kind}_target_direction").status == "PASS"
+    assert v.alignment_metrics[kind]["all"]["median_delta_r"] == pytest.approx(0.02)
+
+
+def test_cluster_alignment_uses_position_instead_of_stored_angles(tmp_path):
+    v = make_validator(tmp_path, "cluster")
+    data = ak.to_list(v.data)
+    for x, y in zip(data[0]["X_cluster"], data[0]["ytarget_cluster"]):
+        x[2:5] = [4.0, 1.0, 0.0]  # stored direction disagrees with position
+        x[8] = 1000 * np.sinh(1.2)
+        y[3] = 1.2
+    v.data = ak.Array(data)
+    v.gate_element_target_alignment()
+    assert v.gates[1].status == "PASS"
+    assert v.alignment_metrics["cluster"]["direction_source"] == "cluster_position"
+    assert v.alignment_metrics["cluster"]["all"]["median_delta_r"] == pytest.approx(0.0, abs=1e-12)
+
+
+@pytest.mark.parametrize("position", [[0, 0, 0], [0, 0, 1000], [float("nan"), 0, 0], [1000, 0, float("inf")]])
+def test_invalid_cluster_position_fails(tmp_path, position):
+    v = make_validator(tmp_path, "cluster", angles=(0.0,))
+    data = ak.to_list(v.data)
+    data[0]["X_cluster"][0][6:9] = position
+    v.data = ak.Array(data)
+    v.gate_element_target_alignment()
+    assert v.gates[1].status == "FAIL"
+    assert v.alignment_metrics["cluster"]["all"]["invalid"] == 1
+
+
+def test_missing_cluster_position_columns_fail(tmp_path):
+    v = make_validator(tmp_path, "cluster")
+    data = ak.to_list(v.data)
+    data[0]["X_cluster"] = [x[:5] for x in data[0]["X_cluster"]]
+    v.data = ak.Array(data)
+    v.gate_element_target_alignment()
+    assert v.gates[1].status == "FAIL"
+    assert v.alignment_metrics["cluster"]["malformed_events"] == 1
 
 
 @pytest.mark.parametrize("kind", ["track", "cluster"])

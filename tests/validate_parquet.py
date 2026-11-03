@@ -51,6 +51,7 @@ from mlpf.data.target_building import visible_energy_deposit, visible_energy_fra
 # X feature indices
 X_TRACK_PT = 1
 X_CLUSTER_ENERGY = 5
+X_CLUSTER_POSITION = slice(6, 9)
 X_CLUSTER_ENERGY_CHERENKOV = 10  # IDEA: common energy_ecal slot
 X_CLUSTER_ENERGY_SCINTILLATION = 11  # IDEA: common energy_hcal slot
 X_CLUSTER_ENERGY_OTHER = 12
@@ -1071,12 +1072,14 @@ class ParquetValidator:
             ("cluster_target_direction", "cluster", "t6_alignment"),
         ]:
             xf, yf = f"X_{kind}", f"ytarget_{kind}"
+            direction_source = "cluster_position" if kind == "cluster" else "track_momentum"
+            direction_label = "Cluster position" if kind == "cluster" else "Track momentum"
             cut, required = THRESHOLDS[threshold]
             if xf not in self.data.fields or yf not in self.data.fields:
                 gate = self.add_gate(
                     gate_id,
                     "alignment",
-                    f"{kind.capitalize()} and target particle directions",
+                    f"{direction_label} and target particle directions",
                     "Compare each input with its assigned target.",
                     "fields absent",
                     "SKIP",
@@ -1086,26 +1089,38 @@ class ParquetValidator:
             rows, malformed = [], 0
             for iev in range(self.nev_used):
                 x, y = self.ev(xf, iev), self.ev(yf, iev)
-                if len(x) != len(y) or (len(x) and (x.shape[1] < 5 or y.shape[1] < 14)):
+                if len(x) != len(y) or (len(x) and (x.shape[1] < (9 if kind == "cluster" else 5) or y.shape[1] < 14)):
                     malformed += 1
                     continue
                 if not len(x):
                     continue
                 mask = (x[:, X_ELEMTYPE] != 0) & (y[:, PID] > 0)
                 x, y = x[mask], y[mask]
-                deta = x[:, 2] - y[:, ETA]
-                dphi = _deltaphi(np.arctan2(x[:, 3], x[:, 4]), np.arctan2(y[:, SIN_PHI], y[:, COS_PHI]))
+                if kind == "cluster":
+                    # Pandora's stored angles differ from the direction from
+                    # the origin to the cluster; use its position for ownership.
+                    position = x[:, X_CLUSTER_POSITION]
+                    radius = np.hypot(position[:, 0], position[:, 1])
+                    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+                        eta = np.arcsinh(position[:, 2] / radius)
+                    phi = np.arctan2(position[:, 1], position[:, 0])
+                    input_valid = np.isfinite(position).all(axis=1) & (radius > 0)
+                else:
+                    eta = x[:, 2]
+                    phi = np.arctan2(x[:, 3], x[:, 4])
+                    input_valid = np.isfinite(x[:, 2:5]).all(axis=1) & (np.hypot(x[:, 3], x[:, 4]) > 0)
+                deta = eta - y[:, ETA]
+                dphi = _deltaphi(phi, np.arctan2(y[:, SIN_PHI], y[:, COS_PHI]))
                 dr = np.hypot(deta, dphi)
                 valid = (
                     np.isfinite(dr)
-                    & np.isfinite(x[:, 2:5]).all(axis=1)
+                    & input_valid
                     & np.isfinite(y[:, ETA : COS_PHI + 1]).all(axis=1)
-                    & (np.hypot(x[:, 3], x[:, 4]) > 0)
                     & (np.hypot(y[:, SIN_PHI], y[:, COS_PHI]) > 0)
                 )
                 rows.append(np.column_stack((dr, valid, y[:, PT], y[:, ISPU])))
             a = np.concatenate(rows) if rows else np.empty((0, 4))
-            metrics = {"delta_r_cut": cut, "minimum_fraction": required, "malformed_events": malformed}
+            metrics = {"direction_source": direction_source, "delta_r_cut": cut, "minimum_fraction": required, "malformed_events": malformed}
             groups = {
                 "all": np.ones(len(a), dtype=bool),
                 "hard_scatter": a[:, 3] == 0,
@@ -1134,12 +1149,17 @@ class ParquetValidator:
             gate = self.add_gate(
                 gate_id,
                 "alignment",
-                f"{kind.capitalize()} and target particle directions",
+                f"{direction_label} and target particle directions",
                 f">={required:.0%} of inputs with assigned target particles must have delta-R < {cut}. Directions must be finite and defined.",
                 observed,
                 status,
             )
-            self.hist_plot(gate, a[a[:, 1].astype(bool), 0], "Delta-R between input and assigned target particle", vlines=((cut, "red"),))
+            self.hist_plot(
+                gate,
+                a[a[:, 1].astype(bool), 0],
+                f"Delta-R between {direction_label.lower()} direction and assigned target particle",
+                vlines=((cut, "red"),),
+            )
 
     def gate_targets(self):
         # target_momentum_agreement: target row kinematics consistent across categories
