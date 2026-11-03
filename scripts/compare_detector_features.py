@@ -267,8 +267,9 @@ def color(col):
     return COLORS[col % len(COLORS)]
 
 
-def layout_comparison_figure(fig, axes, title, columns, synthetic=False):
-    """Reserve a fixed-height header, including on short one-row sheets. columns: [(label, detector)]."""
+def layout_comparison_figure(fig, axes, title, synthetic=False, columns=None):
+    """Reserve a fixed-height header, including on short one-row sheets. columns: [(label, detector)], default DETECTORS."""
+    columns = columns if columns is not None else [(d, d) for d in DETECTORS]
     height = fig.get_figheight()
     fig.tight_layout(rect=(0, 0, 1, 1 - 0.85 / height))
     main_title = fig.suptitle(title, fontsize=12, y=1 - 0.12 / height, va="top")
@@ -336,7 +337,7 @@ def plot_group(datasets, keys, title, path, columns, synthetic):
         ymax = max(ax.get_ylim()[1] for ax in axes[row])
         for ax in axes[row]:
             ax.set_ylim(0, ymax)
-    layout_comparison_figure(fig, axes, title + " — shared bins/axes; union of per-column 0.5–99.5% ranges", columns, synthetic)
+    layout_comparison_figure(fig, axes, title + " — shared bins/axes; union of per-column 0.5–99.5% ranges", synthetic, columns)
     fig.savefig(path, dpi=130)
     plt.close(fig)
 
@@ -444,7 +445,9 @@ def plot_jet_matching(datasets, stage, path, match_dr, columns, process="ttbar")
                 ax.set_ylim(0, upper) if row == 0 else ax.set_ylim(min(0.9, lower), max(1.1, upper))
         for ax in axes[row]:
             ax.grid(alpha=0.2)
-    layout_comparison_figure(fig, axes, f"{process} • {stage} • genjet ↔ targetjet: one-to-one ΔR < {match_dr:g}; no pT response cut", columns)
+    layout_comparison_figure(
+        fig, axes, f"{process} • {stage} • genjet ↔ targetjet: one-to-one ΔR < {match_dr:g}; no pT response cut", columns=columns
+    )
     fig.savefig(path, dpi=130)
     plt.close(fig)
     return summaries
