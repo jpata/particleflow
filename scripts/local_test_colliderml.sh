@@ -20,11 +20,11 @@ uv run python3 -m mlpf.data.colliderml.postprocessing \
     --outpath "$SMOKE_DIR"/colliderml_mlpf_parquet \
     --shards 0:2
 
-# 3. Validate: unified key4hep-style validator (extended for colliderml)
+# 3. Validate the synthetic fixture. Physics failures do not stop this conversion/training smoke test.
 uv run python3 tests/validate_parquet.py \
     --input "$SMOKE_DIR"/colliderml_mlpf_parquet/train-00000-of-00002.parquet \
     --detector colliderml \
-    --max-events 20 --plots-dir plots --mode report
+    --max-events 20 --plots-dir plots || echo "Synthetic fixture failed validation; see plots/validation_report.json"
 
 # 4. TFDS build (config 10; with 2 files, split_list puts them in the last split)
 uv run tfds build mlpf/heptfds/colliderml_pf/ttbar --config 10 \

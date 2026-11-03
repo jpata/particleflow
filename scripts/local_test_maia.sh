@@ -41,9 +41,10 @@ if [ "$PARQUET_EVENTS" != "$NUM_EVENTS" ] || [ "${MAIA_RECONVERT:-0}" = 1 ]; the
         --detector maia --num-events "$NUM_EVENTS"
 fi
 
+# Report physics failures; this smoke test checks conversion and training.
 uv run python3 tests/validate_parquet.py \
     --input "$PARQUET_FILE" --detector maia --max-events "$NUM_EVENTS" \
-    --plots-dir "$SMOKE_DIR/validation_plots" --mode report
+    --plots-dir "$SMOKE_DIR/validation_plots" || echo "MAIA validation failed; see $SMOKE_DIR/validation_plots/validation_report.json"
 
 # One source file is split into two event-disjoint parquet shards before TFDS.
 uv run python3 scripts/build_colliderml_comparison_tfds.py \

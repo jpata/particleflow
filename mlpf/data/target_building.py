@@ -19,6 +19,7 @@ import numba
 import numpy as np
 import vector
 from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import min_weight_full_bipartite_matching
 
 
 @numba.njit
@@ -240,10 +241,70 @@ def compute_jets(particles_p4: Any, min_pt: float, jetdef: fastjet.JetDefinition
     return ret
 
 
+def match_majority_tracks_then_energy(track_fractions, cluster_deposits, particle_energy, deposit_weight=1.0):
+    """Majority-owned tracks first, then a bipartite cluster matching with an energy score.
+
+    A track is eligible only for its majority owner (> 1/2 of all its hits), and a particle
+    takes its purest eligible track. Particles without a
+    track then share the clusters through a maximum-weight bipartite matching with edge score
+    energy + deposit_weight * shared deposit, so energetic particles keep a cluster and a claim
+    can be rerouted when that lets another particle keep one too.
+    """
+    tracks = track_fractions.tocsc(copy=True)
+    tracks.sum_duplicates()
+    tracks.eliminate_zeros()
+    n_particle, n_track = tracks.shape
+    energy = np.asarray(particle_energy, dtype=float)
+    result = np.full((n_particle, 2), -1, dtype=np.int64)
+    if n_particle == 0:
+        return result
+    owners = np.full(n_track, -1, dtype=np.int64)
+    _segment_argmax_first(tracks.indptr, tracks.indices, tracks.data, n_particle, owners)
+    t = tracks.tocoo()
+    eligible = (t.data > 0.5) & (t.row == owners[t.col])
+    rows, cols, purity = t.row[eligible], t.col[eligible], t.data[eligible]
+    for i in np.lexsort((cols, -purity)):  # purest first, then lowest track index
+        if result[rows[i], 0] == -1:
+            result[rows[i], 0] = cols[i]
+
+    clusters = cluster_deposits.tocsr(copy=True)
+    clusters.sum_duplicates()
+    # only positive deposits of trackless particles compete; sparse multiply keeps explicit
+    # zeros, which would hand the tracked particles cluster edges worth their full energy
+    clusters = clusters.multiply(clusters > 0).multiply((result[:, 0] == -1).astype(float)[:, None]).tocsr()
+    clusters.eliminate_zeros()
+    clusters = clusters.tocoo()
+    n_cluster = clusters.shape[1]
+    if clusters.nnz == 0:
+        return result
+    score = energy[clusters.row] + deposit_weight * clusters.data
+    # private zero-score column per particle allows no match; +1 on every edge keeps them nonzero
+    graph = coo_matrix(
+        (
+            np.concatenate([1 + score, np.ones(n_particle)]),
+            (np.concatenate([clusters.row, np.arange(n_particle)]), np.concatenate([clusters.col, n_cluster + np.arange(n_particle)])),
+        ),
+        shape=(n_particle, n_cluster + n_particle),
+    ).tocsr()
+    r, c = min_weight_full_bipartite_matching(graph, maximize=True)
+    real = c < n_cluster
+    result[r[real], 1] = c[real]
+    return result
+
+
 def assign_genparticles_to_obj_and_merge(  # noqa: C901
     gpdata: EventData,
+    *,
+    assignment: str = "greedy",
+    input_assignment=None,
 ) -> Tuple[EventData, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Assign each particle to a track or cluster, then merge the particles left without one.
+    """Assign targets, then merge particles without exclusive inputs.
+
+    Other detectors retain the default energy-ordered greedy assignment.
+    ColliderML selects ``majority_energy`` (match_majority_tracks_then_energy): majority-owned
+    tracks followed by cluster matching with an energy score. Track links must be fractions
+    of all hits. An explicit ``input_assignment`` is available for comparisons using the same
+    merge and energy accounting.
 
     The pileup energy is merged along with the four-vectors, so a target's
     ``ispu`` is the pileup share of its energy: sum(E_i * ispu_i) / sum(E_i)
@@ -252,6 +313,10 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     of the same origin, keep exactly 0 or 1; samples without pileup
     (ispu = 0 everywhere) are unaffected.
     """
+    if assignment not in ("greedy", "majority_energy"):
+        raise ValueError(f"Unknown input assignment: {assignment}")
+    if input_assignment is not None and assignment != "greedy":
+        raise ValueError("Use either input_assignment or an assignment rule")
     n_gp = awkward.count(gpdata.gen_features["PDG"])
     n_track = awkward.count(gpdata.track_features["type"])
     n_hit = awkward.count(gpdata.hit_features["type"])
@@ -329,14 +394,32 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     if n_gp > 0 and n_hit > 0:
         hit_to_gp_inclusive = _col_argmax_and_mask(gp_to_hit)
 
+    if assignment == "majority_energy":
+        input_assignment = match_majority_tracks_then_energy(gp_to_track, gp_to_cluster, awkward.to_numpy(gpdata.gen_features["energy"]))
+
     # map each genparticle to a track or a cluster
     gp_to_obj = -1 * np.ones((n_gp, 2), dtype=np.int32)
+    if input_assignment is not None:
+        supplied = np.asarray(input_assignment)
+        if supplied.shape != (n_gp, 2) or not np.issubdtype(supplied.dtype, np.integer):
+            raise ValueError("input_assignment must be an integer (particles, 2) array")
+        if np.any(np.sum(supplied >= 0, axis=1) > 1):
+            raise ValueError("Each particle can have only one exclusive input")
+        for column, size, links in [(0, n_track, gp_to_track), (1, n_cluster, gp_to_cluster)]:
+            values = supplied[:, column]
+            if np.any(values < -1) or np.any(values >= size):
+                raise ValueError("Input assignment index out of range")
+            rows = np.flatnonzero(values >= 0)
+            if len(np.unique(values[rows])) != len(rows):
+                raise ValueError("An input cannot be assigned to multiple particles")
+            if len(rows) and np.any(np.asarray(links[rows, values[rows]]).ravel() <= 0):
+                raise ValueError("Assigned inputs must have positive hit ownership")
+        gp_to_obj[:] = supplied
     set_used_tracks = set([])
     set_used_clusters = set([])
     gps_sorted_energy = sorted(range(n_gp), key=lambda x: gpdata.gen_features["energy"][x], reverse=True)
 
-    for igp in gps_sorted_energy:
-
+    for igp in gps_sorted_energy if input_assignment is None else ():
         # first check if we can match the genparticle to a track
         trks, _ = _row_sorted_by_weight(gp_to_track, igp)
         for trk in trks:
@@ -368,7 +451,7 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
                 set_used_hits.add(ihit)
                 break
 
-    # the genparticles that could not be matched to a track or cluster are merged to the closest genparticle
+    # Unmatched particles merge into the target assigned to their largest-deposit cluster.
     unmatched = np.where((gp_to_obj[:, 0] == -1) & (gp_to_obj[:, 1] == -1))[0]
     mask_gp_unmatched = np.ones(n_gp, dtype=bool)
 
@@ -379,8 +462,7 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     # pileup energy of each particle, accumulated like the energy on merging
     pu_energy_arr = energy_arr.astype(np.float64) * np.asarray(awkward.to_numpy(gpdata.gen_features["ispu"]), dtype=np.float64)
 
-    # now merge unmatched genparticles to their closest genparticle (the target keeps the labels of
-    # its matched particle, except ispu, see the docstring)
+    # Merge full truth four-vectors and pileup energy; the host keeps its other labels.
     gp_merges_gp0 = []
     gp_merges_gp1 = []
     dropped_gps = []  # indices removed from the target because they have no track/cluster host
@@ -388,7 +470,7 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     for igp_unmatched in unmatched:
         mask_gp_unmatched[igp_unmatched] = False
 
-        # find closest cluster that this particle is matched to (positive weights only: the
+        # Find the cluster with the largest shared deposit (positive weights only: the
         # host is the dense row argmax, which requires some cluster weight > 0)
         s, e = gp_to_cluster.indptr[igp_unmatched], gp_to_cluster.indptr[igp_unmatched + 1]
         cl_idx, cl_w = gp_to_cluster.indices[s:e], gp_to_cluster.data[s:e]
