@@ -64,3 +64,21 @@ def test_directory_uses_same_checks_for_each_file(tmp_path, monkeypatch, passed,
         main()
     assert exc.value.code == exit_code
     assert calls == [("one.parquet", output / "one"), ("two.parquet", output / "two")]
+
+
+@pytest.mark.parametrize(
+    "fields,expected",
+    [
+        (["genjet", "genmet"], ("genjet", "genmet")),
+        (["genjet", "genmet", "genjet_withpu", "genmet_withpu"], ("genjet_withpu", "genmet_withpu")),
+        (["genjet", "genmet", "genjet_withpu"], ("genjet", "genmet")),
+    ],
+)
+def test_target_comparisons_use_the_gen_reference_with_pileup_when_present(tmp_path, fields, expected):
+    # files with pileup truth store the hard-scatter reference in genjet/genmet; the targets
+    # include pileup, so closure and jet response compare with the *_withpu reference
+    from tests.validate_parquet import ParquetValidator
+
+    validator = ParquetValidator(tmp_path / "unused.parquet", "colliderml", None, tmp_path, save_plots=False)
+    validator.data = ak.Array({f: [[[1.0, 0.0, 0.0, 1.0]]] if "jet" in f else [1.0] for f in fields})
+    assert validator.gen_reference_fields() == expected
