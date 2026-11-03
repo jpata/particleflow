@@ -5,10 +5,11 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from mlpf.data.colliderml.make_test_fixture import make_fixture
-from mlpf.data.colliderml.postprocessing import _event_record_one, particle_feature_order, process_one_file
+from mlpf.data.colliderml.postprocessing import _event_record_one, particle_feature_order, pileup_sample, process_one_file
 from mlpf.data.colliderml.reader import shard_paths
 
 PN = particle_feature_order.index("particle_number")
+ISPU = particle_feature_order.index("ispu")
 
 
 def _record(fields):
@@ -68,6 +69,23 @@ def test_track_x_carries_perigee_track_state_parameters():
     assert np.isclose(x[0, 12], 30.0, atol=1e-6)
 
 
+def test_all_pileup_marks_every_target_ispu():
+    # vertex_primary is 1 everywhere, so the default rule gives ispu=0; all_pileup (set for
+    # pileup_only samples) overrides it on every target row of every view and on the element pufrac
+    assert pileup_sample("pileup_only_pu0") and not pileup_sample("ttbar_pu200")
+    particles, tracks, calo, tracker = _shared_hits_event()
+    for all_pileup, expected in ((False, 0.0), (True, 1.0)):
+        rec = _event_record_one(0, particles, tracks, calo, tracker, all_pileup=all_pileup)
+        for key in ("ytarget_track", "ytarget_cluster", "ytarget_hit_calo"):
+            y = rec[key]
+            targets = y[y[:, 0] != 0]
+            assert len(targets) and np.all(targets[:, ISPU] == expected), key
+        assert np.all(rec["pufrac_track"] == expected) and np.all(rec["pufrac_cluster"][rec["pufrac_cluster"] > 0] == 1.0)
+        assert len(rec["pufrac_track"]) and np.any(rec["pufrac_cluster"] == expected)
+        # the hard-scatter gen reference is empty for an all-pileup event; *_withpu keeps it all
+        assert (len(rec["genjet"]) == 0) == all_pileup and rec["genmet_withpu"] > 0
+
+
 def test_calo_hit_pn_is_largest_contributor():
     particles, tracks, calo, tracker = _shared_hits_event()
     rec = _event_record_one(0, particles, tracks, calo, tracker)
@@ -122,6 +140,34 @@ def test_event_missing_from_one_table_is_dropped(tmp_path):
     assert len(ids) == 3 and missing not in ids
     mtime = ofn.stat().st_mtime_ns
     process_one_file(*paths, ofn)  # the 3-event output counts as complete: skipped
+    assert ofn.stat().st_mtime_ns == mtime
+
+
+def test_events_with_corrupt_calo_hits_are_dropped(tmp_path):
+    # release-1 dihiggs/ggf/higgs_portal/hidden_valley_pu0 shards carry events with region code
+    # 255 hits, or hits whose contrib_particle_ids and contrib_energies lengths differ
+    make_fixture(tmp_path / "src", n_events=8)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    process_one_file(*paths, ofn)
+    ids_clean = pq.read_table(ofn)["event_id"].to_pylist()
+    assert len(ids_clean) >= 3
+    ofn.unlink()
+
+    calo = ak.from_parquet(paths[2])
+    rows = [list(calo["event_id"]).index(e) for e in ids_clean[:2]]
+    det = ak.to_list(calo["detector"])
+    det[rows[0]][0] = 255
+    energies = ak.to_list(calo["contrib_energies"])
+    energies[rows[1]][0] = []
+    calo = ak.with_field(calo, ak.values_astype(ak.Array(det), np.uint8), "detector")
+    calo = ak.with_field(calo, ak.values_astype(ak.Array(energies), np.float32), "contrib_energies")
+    pq.write_table(ak.to_arrow_table(calo, extensionarray=False), paths[2])
+
+    process_one_file(*paths, ofn)
+    assert pq.read_table(ofn)["event_id"].to_pylist() == ids_clean[2:]
+    mtime = ofn.stat().st_mtime_ns
+    process_one_file(*paths, ofn)  # the reduced output counts as complete: skipped
     assert ofn.stat().st_mtime_ns == mtime
 
 
