@@ -160,26 +160,24 @@ def test_unmatched_particle_with_only_negative_cluster_weight_is_dropped():
     assert np.asarray(ak.to_numpy(cleaned.gen_features["energy"])).tolist() == [100.0]
 
 
-def test_fractional_ispu_is_pileup_share_of_merged_energy():
-    # A hard-scatter host (100 GeV) absorbs a hard-scatter (10 GeV) and a pileup (30 GeV)
-    # particle. By default the host keeps its ispu = 0; with fractional_ispu the target's ispu
-    # is the pileup share of its energy, 30 / 140.
+def test_ispu_is_pileup_share_of_merged_energy():
+    # A hard-scatter particle (100 GeV) owns the cluster; a hard-scatter (10 GeV) and a pileup
+    # (30 GeV) particle are merged into it: the target's ispu is the pileup share of its energy,
+    # 30 / 140.
     gpdata = make_eventdata([100.0, 10.0, 30.0], cluster_weights=[10.0, 1.0, 1.0])
     gpdata = dataclasses.replace(gpdata, gen_features=ak.with_field(gpdata.gen_features, [0, 0, 1], "ispu"))
 
-    default, *_ = pp.assign_genparticles_to_obj_and_merge(gpdata)
-    fractional, *_ = pp.assign_genparticles_to_obj_and_merge(gpdata, fractional_ispu=True)
+    cleaned, *_ = pp.assign_genparticles_to_obj_and_merge(gpdata)
 
-    assert np.asarray(default.gen_features["ispu"]).tolist() == [0]
-    assert np.asarray(fractional.gen_features["energy"]).tolist() == [140.0]
-    assert np.asarray(fractional.gen_features["ispu"]) == pytest.approx([30.0 / 140.0])
+    assert np.asarray(cleaned.gen_features["energy"]).tolist() == [140.0]
+    assert np.asarray(cleaned.gen_features["ispu"]) == pytest.approx([30.0 / 140.0])
 
 
-def test_fractional_ispu_stays_binary_without_mixing():
-    # Merging only pileup into a pileup host keeps ispu exactly 1.
+def test_ispu_stays_binary_without_mixing():
+    # Merging only pileup particles into a pileup target keeps ispu exactly 1.
     gpdata = make_eventdata([100.0, 10.0, 30.0], cluster_weights=[10.0, 1.0, 1.0])
     gpdata = dataclasses.replace(gpdata, gen_features=ak.with_field(gpdata.gen_features, [1, 1, 1], "ispu"))
 
-    cleaned, *_ = pp.assign_genparticles_to_obj_and_merge(gpdata, fractional_ispu=True)
+    cleaned, *_ = pp.assign_genparticles_to_obj_and_merge(gpdata)
 
     assert np.asarray(cleaned.gen_features["ispu"]).tolist() == [1.0]

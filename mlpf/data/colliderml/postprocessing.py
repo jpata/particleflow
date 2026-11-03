@@ -111,8 +111,8 @@ def _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_o
       cluster: pileup fraction of the cluster's calibrated energy (calo_hits.contrib_particle_ids
                and contrib_energies of its hits, with the calibration of the cluster energy)
 
-    Unlike ytarget's ispu, which describes the target particle an element hosts, this describes
-    the element itself, and is defined also for the elements that host no target. Hits left
+    Unlike ytarget's ispu, which describes the target particle assigned to an element, this
+    describes the element itself, and is defined also for the elements without a target. Hits left
     unclustered (cluster_of == -1) count for no cluster, as for the cluster energy.
     Returns (pufrac_track, pufrac_cluster), float32 arrays in X_track / X_cluster order.
     """
@@ -230,7 +230,7 @@ def _event_record_one(
         (np.array([]), np.array([])),
     )
     gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = (
-        assign_genparticles_to_obj_and_merge(gpdata, fractional_ispu=True)
+        assign_genparticles_to_obj_and_merge(gpdata)
     )
     n_gp = len(gpdata_cleaned.gen_features["PDG"])
 

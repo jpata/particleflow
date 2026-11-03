@@ -242,17 +242,15 @@ def compute_jets(particles_p4: Any, min_pt: float, jetdef: fastjet.JetDefinition
 
 def assign_genparticles_to_obj_and_merge(  # noqa: C901
     gpdata: EventData,
-    *,
-    fractional_ispu: bool = False,
 ) -> Tuple[EventData, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Assign each particle to a track or cluster, then merge the particles left without one.
 
-    By default a merged target keeps the ``ispu`` of its host particle. With
-    ``fractional_ispu=True`` (ColliderML) the pileup energy is merged along
-    with the four-vectors, and ``ispu`` becomes the pileup share of the
-    target energy: sum(E_i * ispu_i) / sum(E_i) over the host and the
-    particles merged into it. Targets with nothing merged in, or merged only
-    with particles of the same origin, keep exactly 0 or 1.
+    The pileup energy is merged along with the four-vectors, so a target's
+    ``ispu`` is the pileup share of its energy: sum(E_i * ispu_i) / sum(E_i)
+    over the particle that owns its track/cluster and the particles merged
+    into it. Targets with nothing merged in, or merged only with particles
+    of the same origin, keep exactly 0 or 1; samples without pileup
+    (ispu = 0 everywhere) are unaffected.
     """
     n_gp = awkward.count(gpdata.gen_features["PDG"])
     n_track = awkward.count(gpdata.track_features["type"])
@@ -378,11 +376,11 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     eta_arr = np.array(awkward.to_numpy(gpdata.gen_features["eta"]))
     phi_arr = np.array(awkward.to_numpy(gpdata.gen_features["phi"]))
     energy_arr = np.array(awkward.to_numpy(gpdata.gen_features["energy"]))
-    # pileup energy of each particle, accumulated on the host like the energy (fractional_ispu)
+    # pileup energy of each particle, accumulated like the energy on merging
     pu_energy_arr = energy_arr.astype(np.float64) * np.asarray(awkward.to_numpy(gpdata.gen_features["ispu"]), dtype=np.float64)
 
-    # now merge unmatched genparticles to their closest genparticle (the host keeps its labels,
-    # except ispu with fractional_ispu, see the docstring)
+    # now merge unmatched genparticles to their closest genparticle (the target keeps the labels of
+    # its matched particle, except ispu, see the docstring)
     gp_merges_gp0 = []
     gp_merges_gp1 = []
     dropped_gps = []  # indices removed from the target because they have no track/cluster host
@@ -439,12 +437,9 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
         pu_energy_arr[idx_gp_bestcluster] += pu_energy_arr[igp_unmatched]
 
     idx_all_masked = np.where(mask_gp_unmatched)[0]
-    if fractional_ispu:
-        energy_total = energy_arr.astype(np.float64)
-        ispu_new = np.clip(np.divide(pu_energy_arr, energy_total, out=np.zeros_like(energy_total), where=energy_total > 0), 0.0, 1.0)
-        ispu_new = ispu_new[mask_gp_unmatched].astype(np.float32)
-    else:
-        ispu_new = gpdata.gen_features["ispu"][mask_gp_unmatched]
+    energy_total = energy_arr.astype(np.float64)
+    ispu_new = np.clip(np.divide(pu_energy_arr, energy_total, out=np.zeros_like(energy_total), where=energy_total > 0), 0.0, 1.0)
+    ispu_new = ispu_new[mask_gp_unmatched].astype(np.float32)
     gen_features_new = {
         "PDG": np.abs(gpdata.gen_features["PDG"][mask_gp_unmatched]),
         "charge": gpdata.gen_features["charge"][mask_gp_unmatched],
