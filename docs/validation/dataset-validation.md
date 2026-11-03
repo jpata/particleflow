@@ -81,7 +81,7 @@ The [generation guide](../datasets/generate.md) shows where these gates enter th
 
 ## Assignment solver checks across detectors
 
-`scripts/studies/validate_detector_matching.py` compares the native assignment, greedy matching on ownership scores, and the joint solver. It preserves each detector's visibility, ancestry and post-assignment policy. Run one job per detector; these jobs can run in parallel on CPU:
+`scripts/studies/validate_detector_matching.py` compares the native assignment with `majority_energy`. The former overlap-score solver and its greedy baseline have been removed. It preserves each detector's visibility, ancestry and post-assignment policy. Run one job per detector; these jobs can run in parallel on CPU:
 
 ```bash
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 \
@@ -94,6 +94,8 @@ PYTHONPATH=. uv run python3 scripts/studies/validate_detector_matching.py \
 Use the matching `clic`, `idea`, or `cms` detector and ROOT path for the other jobs. CMS uses `pfntuple_100000.root` from `scripts/fetch_test_data_cms.sh`, the same input used by `scripts/local_test_cms.sh`. `scripts/studies/report_detector_matching.py --input experiments/cross_detector_matching` combines the four outputs and writes plots and paired event-bootstrap intervals.
 
 The validation used the first 50 ttbar events from the published CLD, CLIC and IDEA `300000` ROOT files and all 50 events in the CMS smoke-test file. The CLD/CLIC/IDEA SHA-256 hashes match the Hugging Face files. Native target momenta and target-bearing input rows match the saved native postprocessing output on every event for all four detectors. All energy-accounting checks pass.
+
+The following results and discussion are historical measurements of the removed overlap-score solver. They do not measure `majority_energy`; rerun the current scripts into a fresh output directory for that comparison.
 
 | Detector | Track delta-R > 0.1, native → solver | Target-to-truth jet recall, native → solver |
 |---|---:|---:|
@@ -122,7 +124,7 @@ Keep the machine-readable report with the production campaign. Record the reposi
 
 Historical results checked on 2026-11-03 with unchanged validator thresholds, before the cluster-direction check switched from stored angles to the direction from the origin to the cluster position. CLD, CLIC, IDEA and ColliderML use 20 ttbar events; MAIA uses its available 10 events. CMS uses all 50 events in the native pickle sample.
 
-ColliderML samples were freshly converted with bipartite matching and the existing CLUE pu0/pu200 presets. Other datasets use their native processed samples.
+ColliderML samples were freshly converted with the former overlap-score bipartite matching (before `majority_energy` became the default) and the existing CLUE pu0/pu200 presets. Other datasets use their native processed samples.
 
 | Dataset | Events | Track ΔR < 0.1 | Cluster ΔR < 0.3 | Failed checks |
 |---|---:|---:|---:|---:|

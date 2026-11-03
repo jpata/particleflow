@@ -1,7 +1,7 @@
-"""Validate joint ownership matching against native CLD, CLIC, IDEA or CMS processing.
+"""Validate majority-energy matching against native CLD, CLIC, IDEA or CMS processing.
 
 Detector-specific visibility, truth ancestry and fallback rules stay native.
-Overcommitted track columns are excluded from solver eligibility and counted.
+Overcommitted track columns are excluded from majority-track eligibility and counted.
 """
 
 import argparse
@@ -23,11 +23,11 @@ import uproot
 import vector
 
 from mlpf.conf import EDM4HEP
-from mlpf.data.target_building import assign_genparticles_to_obj_and_merge, match_particles_to_inputs
+from mlpf.data.target_building import assign_genparticles_to_obj_and_merge, match_majority_tracks_then_energy
 from mlpf.jet_utils import _match_jets_event
-from scripts.studies.compare_colliderml_matching import ownership_greedy, greedy_assignment, delta_r, merge_accounting
+from scripts.studies.compare_colliderml_matching import greedy_assignment, delta_r, merge_accounting
 
-RULES = ("native", "ownership_greedy", "solver")
+RULES = ("native", "majority_energy")
 
 
 def arr(a):
@@ -62,20 +62,18 @@ def clean_scores(bundle):
     valid = (cluster.data >= 0) & (cluster.data <= bundle["signal"][cluster.col] * (1 + 1e-5))
     rejected = int((~valid).sum())
     cluster = coo_matrix((cluster.data[valid], (cluster.row[valid], cluster.col[valid])), shape=cluster.shape).tocsr()
-    deposit = np.asarray(cluster.sum(axis=1)).ravel()
-    # Tiny calibration roundoff is handled by the joint matcher, not renormalized.
     bundle["invalid_track_columns"] = int(invalid.sum())
     bundle["invalid_cluster_edges"] = rejected
-    return track.tocsr(), cluster, deposit
+    return track.tocsr(), cluster
 
 
 def choose(bundle, rule):
     if rule == "native":
         return bundle["native"].copy()
-    track, cluster, deposit = clean_scores(bundle)
-    if rule == "solver":
-        return match_particles_to_inputs(track, cluster, bundle["signal"], deposit)
-    return ownership_greedy(track, cluster, bundle["signal"], deposit)
+    if rule != "majority_energy":
+        raise ValueError(f"Unknown assignment rule: {rule}")
+    track, cluster = clean_scores(bundle)
+    return match_majority_tracks_then_energy(track, cluster, bundle["gen"]["energy"])
 
 
 def post_shared(bundle, assignment):

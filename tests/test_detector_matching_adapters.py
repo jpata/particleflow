@@ -10,7 +10,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from mlpf.data.cms import postprocessing2 as cms
-from mlpf.data.target_building import match_particles_to_inputs
+from mlpf.data.target_building import match_majority_tracks_then_energy
 from scripts.studies.validate_detector_matching import clean_scores, shared_bundle
 from tests.test_postprocessing_merge import make_eventdata
 
@@ -66,7 +66,7 @@ def test_cms_gsf_restriction_precedes_assignment():
 
 def test_overcommitted_tracks_are_excluded_not_renormalized():
     bundle = {"track": csr_matrix([[1.0], [1.0]]), "cluster": csr_matrix((2, 0)), "signal": np.empty(0)}
-    track, _, _ = clean_scores(bundle)
+    track, _ = clean_scores(bundle)
     assert track.nnz == 0
     assert bundle["invalid_track_columns"] == 1
     np.testing.assert_array_equal(bundle["track"].toarray(), [[1.0], [1.0]])
@@ -79,5 +79,5 @@ def test_key4hep_ownership_uses_hit_energy_instead_of_corrected_cluster_energy()
     gd.cluster_features = ak.Record({"type": [0], "energy": [1.0], "eta": [0.0], "phi": [0.0]})
     bundle = shared_bundle(gd, "cld", 0, np.empty((0, 4)))
     np.testing.assert_allclose(bundle["signal"], [1.5])
-    result = match_particles_to_inputs(bundle["track"], bundle["cluster"], bundle["signal"], np.array([1.2]))
+    result = match_majority_tracks_then_energy(bundle["track"], bundle["cluster"], [2.0])
     assert result.tolist() == [[-1, 0]]

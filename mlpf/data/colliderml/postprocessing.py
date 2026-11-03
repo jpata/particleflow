@@ -52,7 +52,7 @@ jet_ptcut = 3.0
 
 # Target assignment rules (target_building.assign_genparticles_to_obj_and_merge). The parquet
 # metadata records the rule, so resume never mixes outputs of different rules.
-ASSIGNMENTS = ("majority_energy", "bipartite", "greedy")
+ASSIGNMENTS = ("majority_energy", "greedy")
 DEFAULT_ASSIGNMENT = "majority_energy"
 
 particle_feature_order = [
@@ -172,7 +172,7 @@ def _event_record_one(
         (np.array([]), np.array([])),
     )
     gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = (
-        assign_genparticles_to_obj_and_merge(gpdata, assignment=assignment, cluster_energy=np.asarray(cl_feats).reshape(-1, 17)[:, 5])
+        assign_genparticles_to_obj_and_merge(gpdata, assignment=assignment)
     )
     n_gp = len(gpdata_cleaned.gen_features["PDG"])
 
@@ -720,8 +720,8 @@ def main():
         choices=ASSIGNMENTS,
         default=DEFAULT_ASSIGNMENT,
         help="target assignment (target_building.assign_genparticles_to_obj_and_merge): majority_energy = majority-owned "
-        "tracks, then a bipartite cluster matching with the energy score (particle energy + shared deposit); bipartite = "
-        "joint bipartite matching with the cluster overlap score; greedy = the former energy-ordered rule",
+        "tracks, then a bipartite cluster matching with the energy score (particle energy + shared deposit); "
+        "greedy = the former energy-ordered rule",
     )
     parser.add_argument("--num-events", type=int, default=-1, help="cap number of events per shard (for tests)")
     args = parser.parse_args()

@@ -16,7 +16,7 @@ import pandas as pd
 from scripts.studies.validate_detector_matching import summarize
 
 DETECTORS = ["cld", "clic", "idea", "cms"]
-LABELS = {"native": "Native assignment", "ownership_greedy": "Greedy on ownership scores", "solver": "Joint solver"}
+LABELS = {"native": "Native assignment", "majority_energy": "Majority tracks + energy matching"}
 
 
 def report(output):
@@ -58,18 +58,18 @@ def report(output):
     rng = np.random.default_rng(12345)
     intervals = []
     for d in DETECTORS:
-        solver = e[(e.detector == d) & (e.rule == "solver")].sort_values("event_id")
-        idx = rng.integers(0, len(solver), (5000, len(solver)))
-        for baseline in ["native", "ownership_greedy"]:
+        candidate = e[(e.detector == d) & (e.rule == "majority_energy")].sort_values("event_id")
+        idx = rng.integers(0, len(candidate), (5000, len(candidate)))
+        for baseline in ["native"]:
             native = e[(e.detector == d) & (e.rule == baseline)].sort_values("event_id")
-            assert np.array_equal(solver.event_id, native.event_id)
+            assert np.array_equal(candidate.event_id, native.event_id)
             for name, num, den in [
                 ("jet_recall_delta_pp", "matched_jets", "reference_jets"),
                 ("jet_response_recall_delta_pp", "response_jets", "reference_jets"),
                 ("track_failure_delta_pp", "track_bad", "track_targets"),
                 ("cluster_failure_delta_pp", "cluster_bad", "cluster_targets"),
             ]:
-                sn, sd = solver[num].values, solver[den].values
+                sn, sd = candidate[num].values, candidate[den].values
                 bn, bd = native[num].values, native[den].values
                 boot = 100 * (sn[idx].sum(axis=1) / sd[idx].sum(axis=1) - bn[idx].sum(axis=1) / bd[idx].sum(axis=1))
                 lo, hi = np.quantile(boot, [0.025, 0.975])

@@ -51,7 +51,7 @@ def test_rejected_track_link_falls_back_to_cluster_and_preserves_energy():
     event.track_features = ak.Array({"type": [1]})
     event.genparticle_to_track = (np.array([0, 1]), np.array([0, 0]), np.array([0.875, 0.125]))
     old, old_objects, *_ = assign_genparticles_to_obj_and_merge(event)
-    new, new_objects, *_ = assign_genparticles_to_obj_and_merge(event, assignment="bipartite", cluster_energy=[4.0])
+    new, new_objects, *_ = assign_genparticles_to_obj_and_merge(event, assignment="majority_energy")
     # The 1 GeV majority particle gets the track; the 10 GeV minority contributor
     # gets the cluster and absorbs the remaining 2 GeV particle.
     assert ak.to_list(old.gen_features["energy"])[old_objects[:, 0].tolist().index(0)] == 10.0
@@ -79,7 +79,7 @@ def test_particle_without_cluster_fallback_is_explicitly_dropped(capsys):
     event.gen_features = ak.with_field(event.gen_features, event.genparticle_to_hit[2], "gp_to_cluster")
     event.track_features = ak.Array({"type": [1]})
     event.genparticle_to_track = (np.array([0, 1]), np.array([0, 0]), np.array([0.6, 0.4]))
-    cleaned, objects, *_ = assign_genparticles_to_obj_and_merge(event, assignment="bipartite", cluster_energy=[1.0])
+    cleaned, objects, *_ = assign_genparticles_to_obj_and_merge(event, assignment="majority_energy")
     assert objects.tolist() == [[0, -1]]
     assert float(ak.sum(cleaned.gen_features["energy"])) == 1.0
     assert "Dropped 1 unmatched genparticles" in capsys.readouterr().out
@@ -99,17 +99,6 @@ def test_majority_energy_hosts_the_energetic_minor_contributor():
     # score hosts the 50 GeV particle (the overlap score would host the 5 GeV one).
     out = match_majority_tracks_then_energy(csr_matrix((2, 0)), csr_matrix([[2.0], [8.0]]), [50.0, 5.0])
     assert out.tolist() == [[-1, 0], [-1, -1]]
-
-
-def test_majority_energy_in_the_allocator_preserves_energy():
-    event = make_eventdata([1.0, 10.0, 2.0], [1.0, 2.0, 1.0])
-    event.gen_features = ak.with_field(event.gen_features, event.genparticle_to_hit[2], "gp_to_cluster")
-    event.track_features = ak.Array({"type": [1]})
-    event.genparticle_to_track = (np.array([0, 1]), np.array([0, 0]), np.array([0.875, 0.125]))
-    cleaned, objects, *_ = assign_genparticles_to_obj_and_merge(event, assignment="majority_energy")
-    # the 1 GeV majority owner keeps the track, the 10 GeV particle the cluster; the 2 GeV one merges into it
-    assert objects.tolist() == [[0, -1], [-1, 0]]
-    assert ak.to_list(cleaned.gen_features["energy"]) == [1.0, 12.0]
 
 
 def test_majority_energy_tracked_particles_do_not_compete_for_clusters():

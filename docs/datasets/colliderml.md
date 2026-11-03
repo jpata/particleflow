@@ -48,14 +48,8 @@ an energy score:
    The score keeps energetic particles hosted, and a claim can be rerouted to
    another of the particle's clusters when that lets a second particle keep one.
 
-`--assignment bipartite` selects the joint bipartite matching with the overlap
-score instead. It uses the same track eligibility, scores track edges
-`1 + hit_fraction` and cluster edges
-`2 * shared_deposit / (cluster_energy + particle_deposit)`, and maximizes the
-total score in one joint matching, with reliable tracks preferred over clusters.
-Equal-score duplicate tracks may be selected in a different order. The overlap
-score favours pure hosts; the energy score hosts more energy and merges less (see
-the comparison below). `--assignment greedy` reproduces the former energy-ordered rule.
+`--assignment greedy` reproduces the former energy-ordered rule. The former
+`bipartite` overlap-score option has been removed in favor of `majority_energy`.
 
 After matching, hit assignment and merging use the shared allocator. An unmatched
 particle's full truth four-vector is added to the target of its largest-deposit
@@ -66,7 +60,7 @@ other clusters. This can still produce large cluster-to-target direction tails.
 
 CLD, CLIC, IDEA, MAIA, and CMS keep their existing greedy or native assignment.
 The shared allocator defaults to greedy; only the ColliderML converter selects
-`majority_energy` or `bipartite`. The other assignments in the study scripts are
+`majority_energy`. The other assignments in the study scripts are
 comparisons, not production settings.
 
 New converted files carry `mlpf.target_assignment=<rule>-v1` (for example
@@ -79,7 +73,9 @@ before training; their availability is not implied by the published catalog.
 
 ## Greedy and joint matching on PU0 and PU200
 
-`scripts/studies/compare_colliderml_matching.py` compares five assignments on the same original events and published calorimeter clustering: the former energy-ordered greedy rule, majority tracks with energy-ordered greedy clusters, greedy matching on the joint ownership scores, the exact joint solver, and `majority_energy`. All five use the shared allocator for subsequent hit assignment, merging, and drop accounting. An explicit `input_assignment` lets the allocator accept the chosen matches without repeating its greedy assignment stage.
+`scripts/studies/compare_colliderml_matching.py` compares three assignments on the same original events and published calorimeter clustering: the former energy-ordered greedy rule, majority tracks with energy-ordered greedy clusters, and `majority_energy`. All three use the shared allocator for subsequent hit assignment, merging, and drop accounting. An explicit `input_assignment` lets the allocator accept the chosen matches without repeating its greedy assignment stage.
+
+The results below are historical measurements, including the removed overlap-score matcher (`bipartite`, also called the joint solver). The current study and plotting scripts compare `majority_energy` against the two greedy baselines; rerunning them does not reproduce the removed matcher columns or the historical overlap-score bootstrap intervals.
 
 The comparison used the first 100 events of shard 00000 for each sample. The former greedy rule reproduced the published track and cluster targets on every event. Eight CPU workers ran outside the sandbox with one numerical thread per worker; the complete comparison took 147 seconds. Example command using the locally downloaded sources:
 
@@ -93,7 +89,7 @@ PYTHONPATH=. uv run python3 scripts/studies/compare_colliderml_matching.py \
   --output experiments/colliderml_matching_comparison --events 100 --workers 8
 ```
 
-Each worker writes per-event metrics and final target directions. `summary.csv` aggregates counts and ownership measurements, and `source_manifest.json` records the sources and execution settings. Generate the plots and paired event-bootstrap intervals with:
+Each worker writes per-event metrics and final target directions. `summary.csv` aggregates counts and ownership measurements, and `inputs.json` records the input paths and execution settings. Generate the plots and paired event-bootstrap intervals with:
 
 ```bash
 uv run python3 scripts/studies/plot_colliderml_matching.py \
@@ -114,7 +110,7 @@ The following results compare the former greedy rule with the joint solver. Dire
 
 ### Overlap score (`bipartite`) and energy score (`majority_energy`)
 
-The same 100 events per sample, with the three production choices side by side. Merged energy sums the truth energy of particles merged into another target; jet response uses matched reference jets with pT > 20 GeV.
+The same 100 events per sample, with the former greedy rule, removed overlap-score matcher, and current default side by side. Merged energy sums the truth energy of particles merged into another target; jet response uses matched reference jets with pT > 20 GeV.
 
 | Metric | PU0 greedy | PU0 bipartite | PU0 majority_energy | PU200 greedy | PU200 bipartite | PU200 majority_energy |
 |---|---:|---:|---:|---:|---:|---:|

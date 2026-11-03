@@ -150,8 +150,8 @@ def test_resume_reconverts_greedy_targets_with_same_event_count(tmp_path):
     process_one_file(*paths, ofn)
     assert pq.read_metadata(ofn).metadata[b"mlpf.target_assignment"] == b"majority_energy-v1"
     # a complete output of another rule is reconverted, not skipped
-    process_one_file(*paths, ofn, assignment="bipartite")
-    assert pq.read_metadata(ofn).metadata[b"mlpf.target_assignment"] == b"bipartite-v1"
+    process_one_file(*paths, ofn, assignment="greedy")
+    assert pq.read_metadata(ofn).metadata[b"mlpf.target_assignment"] == b"greedy-v1"
 
 
 def test_converter_track_target_uses_majority_hits_over_particle_energy():

@@ -1,4 +1,4 @@
-"""Compare greedy and joint ownership matching on fixed ColliderML clusters.
+"""Compare greedy and majority-energy matching on fixed ColliderML clusters.
 
 Use --workers for bounded CPU parallelism. Each worker runs all rules on one
 original event, including the same merge and energy-accounting implementation.
@@ -29,11 +29,10 @@ from mlpf.data.target_building import (
     _segment_argmax_first,
     assign_genparticles_to_obj_and_merge,
     match_majority_tracks_then_energy,
-    match_particles_to_inputs,
 )
 from mlpf.jet_utils import _match_jets_event
 
-RULES = ("legacy", "majority_greedy", "ownership_greedy", "solver", "majority_energy")
+RULES = ("legacy", "majority_greedy", "majority_energy")
 
 
 def assign_tracks_by_hit_ownership(gp_to_track, track_hit_counts):
@@ -102,27 +101,6 @@ def greedy_assignment(track, cluster, energy, counts, majority=False):
     return result
 
 
-def ownership_greedy(track, cluster, cluster_energy, particle_deposit):
-    t, c = track.tocoo(), cluster.tocoo()
-    keep = t.data > 0.5
-    row = np.r_[t.row[keep], c.row]
-    col = np.r_[t.col[keep], track.shape[1] + c.col]
-    score = np.r_[1 + t.data[keep], np.minimum(2 * c.data / (cluster_energy[c.col] + particle_deposit[c.row]), 1)]
-    order = np.lexsort((row, col, -score))
-    result = np.full((track.shape[0], 2), -1, dtype=np.int64)
-    used = np.zeros(track.shape[1] + cluster.shape[1], dtype=bool)
-    for i in order:
-        p, o = row[i], col[i]
-        if np.any(result[p] >= 0) or used[o]:
-            continue
-        used[o] = True
-        if o < track.shape[1]:
-            result[p, 0] = o
-        else:
-            result[p, 1] = o - track.shape[1]
-    return result
-
-
 def extract_pairs(matrix, rows, columns):
     return np.asarray(matrix[rows, columns]).ravel() if len(rows) else np.empty(0)
 
@@ -187,10 +165,6 @@ def process_event(task):
         start = time.perf_counter()
         if rule in ("legacy", "majority_greedy"):
             assignment = greedy_assignment(track, cluster, particle_energy, counts, rule == "majority_greedy")
-        elif rule == "ownership_greedy":
-            assignment = ownership_greedy(track, cluster, xc[:, 5], gen["gp_to_cluster"])
-        elif rule == "solver":
-            assignment = match_particles_to_inputs(track, cluster, xc[:, 5], gen["gp_to_cluster"])
         else:
             assignment = match_majority_tracks_then_energy(track, cluster, particle_energy)
         match_seconds = time.perf_counter() - start
@@ -234,7 +208,7 @@ def process_event(task):
             cluster_overlap_sum=float(overlap.sum()),
             ownership_objective=float((1 + fractions[eligible]).sum() + np.minimum(overlap, 1).sum()),
         )
-        # Both rules use identical hit assignment, cluster merging and drop accounting.
+        # All rules use identical hit assignment, cluster merging and drop accounting.
         start = time.perf_counter()
         with contextlib.redirect_stdout(io.StringIO()):
             cleaned, assigned, *_ = assign_genparticles_to_obj_and_merge(gd, input_assignment=assignment)
@@ -300,8 +274,6 @@ def process_event(task):
             response_qualified_jets=int((np.abs(ratio - 1) < 0.5).sum()),
         )
         rows.append(metrics)
-    objective = {r["rule"]: r["ownership_objective"] for r in rows}
-    assert objective["solver"] >= objective["ownership_greedy"] - 1e-4
     out = Path(output) / sample / "events"
     out.mkdir(parents=True, exist_ok=True)
     pd.concat(objects, ignore_index=True).to_parquet(out / f"event_{event_id:06d}.parquet", index=False)

@@ -14,8 +14,6 @@ import pandas as pd
 LABELS = {
     "legacy": "Current greedy",
     "majority_greedy": "Majority tracks + greedy clusters",
-    "ownership_greedy": "Greedy on ownership scores",
-    "solver": "Joint solver",
     "majority_energy": "Bipartite matching, energy score",
 }
 
@@ -33,31 +31,18 @@ def confidence_intervals(events, output):
     ]
     for sample in ["pu0", "pu200"]:
         x = events[events["sample"] == sample]
-        solver = x[x.rule == "solver"].sort_values("event_id")
-        ix = rng.integers(0, len(solver), (5000, len(solver)))
-        for baseline in ["legacy", "ownership_greedy", "majority_energy"]:
+        candidate = x[x.rule == "majority_energy"].sort_values("event_id")
+        ix = rng.integers(0, len(candidate), (5000, len(candidate)))
+        for baseline in ["legacy", "majority_greedy"]:
             other = x[x.rule == baseline].sort_values("event_id")
-            assert np.array_equal(solver.event_id.values, other.event_id.values)
+            assert np.array_equal(candidate.event_id.values, other.event_id.values)
             for name, numerator, denominator in metrics:
-                sn, sd = solver[numerator].values, solver[denominator].values
+                sn, sd = candidate[numerator].values, candidate[denominator].values
                 gn, gd = other[numerator].values, other[denominator].values
                 values = 100 * (sn[ix].sum(axis=1) / sd[ix].sum(axis=1) - gn[ix].sum(axis=1) / gd[ix].sum(axis=1))
                 point = 100 * (sn.sum() / sd.sum() - gn.sum() / gd.sum())
                 lo, hi = np.quantile(values, [0.025, 0.975])
                 result.append(dict(sample=sample, baseline=baseline, metric=name, estimate=point, low95=lo, high95=hi))
-            s, g = solver.ownership_objective.values, other.ownership_objective.values
-            gain = 100 * (s[ix].sum(axis=1) / g[ix].sum(axis=1) - 1)
-            lo, hi = np.quantile(gain, [0.025, 0.975])
-            result.append(
-                dict(
-                    sample=sample,
-                    baseline=baseline,
-                    metric="ownership_objective_gain_percent",
-                    estimate=100 * (s.sum() / g.sum() - 1),
-                    low95=lo,
-                    high95=hi,
-                )
-            )
     frame = pd.DataFrame(result)
     frame.to_csv(output / "paired_bootstrap.csv", index=False)
     (output / "paired_bootstrap.json").write_text(json.dumps(result, indent=2))

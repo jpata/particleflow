@@ -241,76 +241,11 @@ def compute_jets(particles_p4: Any, min_pt: float, jetdef: fastjet.JetDefinition
     return ret
 
 
-def match_particles_to_inputs(track_fractions, cluster_deposits, cluster_energy, particle_deposit):
-    """Match particles jointly to tracks and clusters using hit ownership.
-
-    Track edges require a majority and score 1 + hit purity. Cluster edges
-    score 2 * shared deposit / (cluster energy + particle deposit). Each
-    particle also has a private unmatched column with score zero.
-
-    The track bonus preserves the preference for a reliable track. Since a
-    majority-owned track has only one eligible particle, choosing it cannot
-    take a track away from another particle. Equal-score solutions may use
-    different duplicate tracks; the matching objective does not break ties.
-    """
-    tracks = track_fractions.tocsc(copy=True)
-    clusters = cluster_deposits.tocoo(copy=True)
-    tracks.sum_duplicates()
-    tracks.eliminate_zeros()
-    clusters.sum_duplicates()
-    clusters.eliminate_zeros()
-    n_particle, n_track = tracks.shape
-    if clusters.shape[0] != n_particle:
-        raise ValueError("Track and cluster matrices must have the same particle rows")
-    n_cluster = clusters.shape[1]
-    cluster_energy = np.asarray(cluster_energy, dtype=float)
-    particle_deposit = np.asarray(particle_deposit, dtype=float)
-    if cluster_energy.shape != (n_cluster,) or particle_deposit.shape != (n_particle,):
-        raise ValueError("Energy arrays must match the cluster and particle axes")
-    for values in [tracks.data, clusters.data, cluster_energy, particle_deposit]:
-        if np.any(~np.isfinite(values)) or np.any(values < 0):
-            raise ValueError("Hit fractions and deposited energies must be finite and nonnegative")
-    if np.any(np.asarray(tracks.sum(axis=0)) > 1 + 1e-6):
-        raise ValueError("Track fractions must use all hits in the denominator")
-    owners = np.full(n_track, -1, dtype=np.int64)
-    _segment_argmax_first(tracks.indptr, tracks.indices, tracks.data, n_particle, owners)
-    t = tracks.tocoo()
-    eligible = (t.data > 0.5) & (t.row == owners[t.col])
-    denominator = cluster_energy[clusters.col] + particle_deposit[clusters.row]
-    if np.any(denominator <= 0):
-        raise ValueError("Positive shared deposits require positive total energies")
-    overlap = 2 * clusters.data / denominator
-    if np.any(clusters.data > cluster_energy[clusters.col] * (1 + 1e-5)) or np.any(clusters.data > particle_deposit[clusters.row] * (1 + 1e-5)):
-        raise ValueError("Shared deposits cannot exceed the cluster or particle total")
-    overlap = np.minimum(overlap, 1.0)  # allow floating-point roundoff in the totals
-    result = np.full((n_particle, 2), -1, dtype=np.int64)
-    if n_particle == 0:
-        return result
-    # The sparse solver requires nonzero weights and a full row matching.
-    # Adding one to every real and dummy edge leaves the objective unchanged.
-    graph = coo_matrix(
-        (
-            np.concatenate([2 + t.data[eligible], 1 + overlap, np.ones(n_particle)]),
-            (
-                np.concatenate([t.row[eligible], clusters.row, np.arange(n_particle)]),
-                np.concatenate([t.col[eligible], n_track + clusters.col, n_track + n_cluster + np.arange(n_particle)]),
-            ),
-        ),
-        shape=(n_particle, n_track + n_cluster + n_particle),
-    ).tocsr()
-    rows, columns = min_weight_full_bipartite_matching(graph, maximize=True)
-    track_mask = columns < n_track
-    cluster_mask = (columns >= n_track) & (columns < n_track + n_cluster)
-    result[rows[track_mask], 0] = columns[track_mask]
-    result[rows[cluster_mask], 1] = columns[cluster_mask] - n_track
-    return result
-
-
 def match_majority_tracks_then_energy(track_fractions, cluster_deposits, particle_energy, deposit_weight=1.0):
     """Majority-owned tracks first, then a bipartite cluster matching with an energy score.
 
-    Tracks follow match_particles_to_inputs: a track is eligible only for its majority owner
-    (> 1/2 of all its hits), and a particle takes its purest eligible track. Particles without a
+    A track is eligible only for its majority owner (> 1/2 of all its hits), and a particle
+    takes its purest eligible track. Particles without a
     track then share the clusters through a maximum-weight bipartite matching with edge score
     energy + deposit_weight * shared deposit, so energetic particles keep a cluster and a claim
     can be rerouted when that lets another particle keep one too.
@@ -361,20 +296,17 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
     gpdata: EventData,
     *,
     assignment: str = "greedy",
-    cluster_energy=None,
     input_assignment=None,
 ) -> Tuple[EventData, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Assign targets, then merge particles without exclusive inputs.
 
     Other detectors retain the default energy-ordered greedy assignment.
-    ColliderML selects a bipartite matching: ``majority_energy``
-    (match_majority_tracks_then_energy, energy score) or ``bipartite``
-    (match_particles_to_inputs, overlap score; needs calibrated cluster
-    energies); track links must be fractions of all hits and particle
-    deposits must be in ``gen_features["gp_to_cluster"]``. An explicit ``input_assignment`` is
-    available for comparisons using the same merge and energy accounting.
+    ColliderML selects ``majority_energy`` (match_majority_tracks_then_energy): majority-owned
+    tracks followed by cluster matching with an energy score. Track links must be fractions
+    of all hits. An explicit ``input_assignment`` is available for comparisons using the same
+    merge and energy accounting.
     """
-    if assignment not in ("greedy", "bipartite", "majority_energy"):
+    if assignment not in ("greedy", "majority_energy"):
         raise ValueError(f"Unknown input assignment: {assignment}")
     if input_assignment is not None and assignment != "greedy":
         raise ValueError("Use either input_assignment or an assignment rule")
@@ -457,10 +389,6 @@ def assign_genparticles_to_obj_and_merge(  # noqa: C901
 
     if assignment == "majority_energy":
         input_assignment = match_majority_tracks_then_energy(gp_to_track, gp_to_cluster, awkward.to_numpy(gpdata.gen_features["energy"]))
-    if assignment == "bipartite":
-        if cluster_energy is None:
-            raise ValueError("Bipartite matching requires calibrated cluster energies")
-        input_assignment = match_particles_to_inputs(gp_to_track, gp_to_cluster, cluster_energy, gpdata.gen_features["gp_to_cluster"])
 
     # map each genparticle to a track or a cluster
     gp_to_obj = -1 * np.ones((n_gp, 2), dtype=np.int32)
