@@ -41,8 +41,9 @@ assert len(_X_FEATURES) == 17
 
 
 class CollidermlTtbarNopuPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.2.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.3.0"))
     RELEASE_NOTES = {
+        "1.3.0": "Bipartite track/cluster assignment majority_energy: majority-owned tracks only, then a cluster matching with an energy score.",
         "1.0.0": "Initial release (bfs_merge clustering, merge-frac 0.25, radii ECAL 25 mm / HCAL 90 mm).",
         "1.1.0": "CLUE clustering (converter --algorithm clue --clue-preset pu0, i.e. the CLUE defaults).",
         "1.2.0": "Surrogate ancestors in the truth (key4hep parity): generator-decayed particles that "

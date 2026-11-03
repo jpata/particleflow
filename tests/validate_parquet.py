@@ -1,26 +1,14 @@
 #!/usr/bin/env python3
-"""
-Unified validation entry point for EDM4HEP post-processing parquet files.
+"""Validate postprocessed detector Parquet files.
 
-Validates a parquet file produced by mlpf/data/key4hep/postprocessing.py for
-CLIC, CLD or any other key4hep scenario. The validation chain (in order of
-trust) is:
-
-    truth (genmet + genjet, from status-1 pythia particles)
-        -> target (ytarget_*)
-        -> baseline PF (ycand_*)
-
-Every gate produces one plot in --plots-dir. Each plot contains:
-  * what to expect,
-  * the observed metric,
-  * PASS / FAIL / WARN / SKIP status.
-
-Exit code: 0 if no gate FAILs, 1 otherwise (in --mode strict).
+Run every check, write validation_report.json and plots, and exit 1 if a check fails.
+Checks without the required detector data are marked SKIP.
 """
 
 import argparse
 import json
 import sys
+import textwrap
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -63,6 +51,7 @@ from mlpf.data.target_building import visible_energy_deposit, visible_energy_fra
 # X feature indices
 X_TRACK_PT = 1
 X_CLUSTER_ENERGY = 5
+X_CLUSTER_POSITION = slice(6, 9)
 X_CLUSTER_ENERGY_CHERENKOV = 10  # IDEA: common energy_ecal slot
 X_CLUSTER_ENERGY_SCINTILLATION = 11  # IDEA: common energy_hcal slot
 X_CLUSTER_ENERGY_OTHER = 12
@@ -105,6 +94,12 @@ THRESHOLDS = {
     "g3_p90": 0.30,
     "t4_median": (0.5, 2.0),
     "t4_frac": 0.80,
+    # Direction diagnostics on native element/target rows, without rematching.
+    # Clusters need a wider cone because showers, bending and merged targets
+    # can legitimately move their direction. These are quality gates, not
+    # assertions that every reconstructed element matches truth exactly.
+    "t5_alignment": (0.1, 0.95),  # track delta-R cut, minimum passing fraction
+    "t6_alignment": (0.3, 0.80),  # cluster delta-R cut, minimum passing fraction
     "min_fits": 100,
     "v2_calo_median": 100.0,  # |mean(calo hits) - cluster|, mm
     "v2_calo_frac": (0.0, 500.0, 0.90),
@@ -142,6 +137,14 @@ def _deltaphi(phi1: float, phi2: float) -> float:
     """Signed difference of two azimuthal angles in [-pi, pi]."""
     d = phi1 - phi2
     return np.arctan2(np.sin(d), np.cos(d))
+
+
+def _has_pid_conflict(pn, pid):
+    """Detect multiple positive PIDs per positive PN without rescanning all hits per PN."""
+    mask = (pn > 0) & (pid > 0)
+    pairs = np.unique(np.column_stack((pn[mask], pid[mask])), axis=0)
+    _, counts = np.unique(pairs[:, 0], return_counts=True)
+    return bool(np.any(counts > 1))
 
 
 def fit_circle(x, y, max_iters=50, threshold=10.0):
@@ -208,7 +211,7 @@ class ParquetValidator:
     def __init__(self, input_path, detector, max_events, plots_dir, save_plots=True, show_plots=False):
         self.input_path = Path(input_path)
         self.detector = detector
-        # The B-field is used only by gate H3 (tracker-hit circle fits, pT = 0.0003*B*r).
+        # The B-field is used only by gate tracker_hit_momentum (tracker-hit circle fits, pT = 0.0003*B*r).
         self.bfield = EDM4HEP.DETECTORS[detector].b_field
         self.has_configured_hits = bool(EDM4HEP.DETECTORS[detector].hit_collections)
         self.vis_range = VIS_RANGE_COLLIDERML if detector.startswith("colliderml") else VIS_RANGE
@@ -220,6 +223,7 @@ class ParquetValidator:
         self.nev = 0
         self.nev_used = 0
         self.gates = []
+        self.alignment_metrics = {}
 
     # ------------------------------------------------------------- utilities
     def add_gate(self, gate_id, category, title, expectation, observed, status):
@@ -234,8 +238,12 @@ class ParquetValidator:
             "WARN": "#fff3cd",
             "SKIP": "#e2e3e5",
         }
-        fig.tight_layout(rect=[0, 0.14, 1, 1])
-        text = f"Gate {gate.gate_id} - {gate.title}\n" f"What to expect: {gate.expectation}\n" f"Observed: {gate.observed}\n" f"Status: {gate.status}"
+        lines = [gate.title, f"Expected: {gate.expectation}", f"Observed: {gate.observed}", f"Status: {gate.status}"]
+        text = "\n".join(textwrap.fill(line, width=110) for line in lines)
+        footer_height = 0.18 * len(text.splitlines()) + 0.3
+        width, height = fig.get_size_inches()
+        fig.set_size_inches(width, height + footer_height)
+        fig.tight_layout(rect=[0, footer_height / (height + footer_height), 1, 1])
         fig.text(
             0.01,
             0.01,
@@ -249,7 +257,7 @@ class ParquetValidator:
                 alpha=0.85,
             ),
         )
-        fname = f"gate_{gate.gate_id}.png"
+        fname = f"{gate.gate_id}.png"
         if self.save_plots:
             fig.savefig(self.plots_dir / fname, dpi=120, bbox_inches="tight")
             gate.plot = fname
@@ -278,7 +286,7 @@ class ParquetValidator:
         arr = np.asarray(data, dtype=float)
         # Degenerate inputs directly produce collapsed or missing auto ranges: an array where
         # every value is identical (e.g. jet-response arrays that are exactly 1.0 on
-        # colliderml's synthetic test data), or an empty one (colliderml's H3 circle-fit gate,
+        # colliderml's synthetic test data), or an empty one (colliderml's tracker_hit_momentum circle-fit gate,
         # which has no tracker-hit targets to fit). Give such data an explicit bin range so the
         # gate still gets a readable plot.
         if arr.size == 0:
@@ -300,7 +308,7 @@ class ParquetValidator:
         fully-empty event; scalar arrays (e.g. genmet with one scalar per event) come back as
         1-D and callers pick the scalar directly. NOTE: per-event getitem on option-typed
         columns is slow (~0.3 s per event slice) — gates that need all events should slice the
-        column once instead of calling this per event (see gate S3's ak.num vectorization)."""
+        column once instead of calling this per event (see gate input_target_counts's ak.num vectorization)."""
         a = np.asarray(ak.to_numpy(self.data[field][iev]))
         if a.ndim == 1 and a.size == 0:
             # zero-length 1-D fields (e.g. X_hit_tracker on an event with no tracker hits) come
@@ -312,11 +320,11 @@ class ParquetValidator:
     def load(self):
         try:
             self.data = ak.from_parquet(self.input_path)
-        except Exception as exc:  # noqa: BLE001 - report any load failure as gate S1
+        except Exception as exc:  # noqa: BLE001 - report any load failure as gate file_contents
             gate = self.add_gate(
-                "S1",
+                "file_contents",
                 "schema",
-                "Parquet loads with at least one event",
+                "File contains events",
                 "The file parses and contains at least one event.",
                 f"load failed: {exc}",
                 "FAIL",
@@ -349,11 +357,11 @@ class ParquetValidator:
     def gate_schema(self):
         ok = self.nev > 0
         gate = self.add_gate(
-            "S1",
+            "file_contents",
             "schema",
-            "Parquet loads with at least one event",
+            "File contains events",
             "The file parses and contains at least one event.",
-            f"{self.nev} event(s)",
+            f"{self.nev} events",
             "PASS" if ok else "FAIL",
         )
         fig, ax = plt.subplots(figsize=(8, 4))
@@ -365,7 +373,7 @@ class ParquetValidator:
         if not ok:
             return
 
-        # S2: required fields
+        # required_fields: required fields
         required = list(REQUIRED_FIELDS)
         pf_present = any(f in self.data.fields for f in PF_FIELDS)
         ycand_present = any(f in self.data.fields for f in YCAND_FIELDS)
@@ -375,7 +383,7 @@ class ParquetValidator:
             required += YCAND_FIELDS
         missing = [f for f in required if f not in self.data.fields]
         gate = self.add_gate(
-            "S2",
+            "required_fields",
             "schema",
             "Required fields are present",
             "Hit-level fields (and genmet/genjet/targetjet) are always required; "
@@ -391,18 +399,20 @@ class ParquetValidator:
             "present",
             colors=["#2ca02c" if f in self.data.fields else "#d62728" for f in required],
         )
+        if missing:
+            return
 
-        # S3: shape consistency X vs ytarget
+        # input_target_counts: shape consistency X vs ytarget
         mismatches = {}
         for xf, yf in X_Y_PAIRS:
             mismatches[(xf, yf)] = int(np.count_nonzero(ak.to_numpy(ak.num(self.data[xf], axis=1)) != ak.to_numpy(ak.num(self.data[yf], axis=1))))
         total_mismatch = sum(mismatches.values())
         gate = self.add_gate(
-            "S3",
+            "input_target_counts",
             "schema",
-            "Per-event X/ytarget length consistency",
+            "Input and target row counts",
             "Each event must have the same number of elements in X and ytarget " "for every (hit, track, cluster) pair.",
-            f"{total_mismatch} event(s) with mismatches",
+            f"{total_mismatch} events with mismatches",
             "PASS" if total_mismatch == 0 else "FAIL",
         )
         self.bar_plot(
@@ -413,7 +423,7 @@ class ParquetValidator:
             colors=["#d62728" if v else "#2ca02c" for v in mismatches.values()],
         )
 
-        # S4: finiteness
+        # finite_values: finiteness
         nonfinite = {}
         for f in ALL_FIELDS:
             if f in self.data.fields:
@@ -421,11 +431,11 @@ class ParquetValidator:
                 nonfinite[f] = int(np.sum(~np.isfinite(flat)))
         total_nonfinite = sum(nonfinite.values())
         gate = self.add_gate(
-            "S4",
+            "finite_values",
             "schema",
-            "No NaN/Inf in the data",
-            "All stored features and targets must be finite (post-processing " "sanitizes them).",
-            f"{total_nonfinite} non-finite value(s)",
+            "Finite feature values",
+            "All stored features and targets must be finite.",
+            f"{total_nonfinite} non-finite values",
             "PASS" if total_nonfinite == 0 else "FAIL",
         )
         self.bar_plot(
@@ -437,7 +447,7 @@ class ParquetValidator:
         )
 
     def gate_hits(self):
-        # H1: target consistency across all categories (noise, reps, PID)
+        # particle_labels: target consistency across all categories (noise, reps, PID)
         noise_bad = rep_missing = pid_conflict = 0
         for i in range(self.nev_used):
             # reshape(-1, 14) normalizes fully empty events (e.g. no tracker
@@ -452,24 +462,21 @@ class ParquetValidator:
             reps = set(np.unique(pn[pid > 0]))
             if not all(p in reps for p in unique_pn):
                 rep_missing += 1
-            for p in unique_pn:
-                if len(np.unique(pid[(pn == p) & (pid > 0)])) > 1:
-                    pid_conflict += 1
-                    break
+            pid_conflict += int(_has_pid_conflict(pn, pid))
         bad = noise_bad + rep_missing + pid_conflict
         gate = self.add_gate(
-            "H1",
+            "particle_labels",
             "hits",
-            "Target consistency (noise / representatives / PID)",
+            "Particle labels on inputs and targets",
             "Elements with particle_number=0 must have PID=0 and E=0; every "
-            "particle_number>0 must have at least one representative (PID>0); "
-            "all representatives of a particle must share the same PID.",
-            f"noise={noise_bad}, unrepped={rep_missing}, pid_conflicts={pid_conflict} " f"bad event(s) of {self.nev_used}",
+            "particle_number>0 must have at least one target row (PID>0); "
+            "all target rows of a particle must share the same PID.",
+            f"noise={noise_bad}, particles without targets={rep_missing}, pid_conflicts={pid_conflict} " f"bad events of {self.nev_used}",
             "PASS" if bad == 0 else "FAIL",
         )
         self.bar_plot(
             gate,
-            ["noise", "missing reps", "PID conflicts"],
+            ["noise", "particles without targets", "PID conflicts"],
             [noise_bad, rep_missing, pid_conflict],
             "events with violations",
             colors=["#d62728" if v else "#2ca02c" for v in (noise_bad, rep_missing, pid_conflict)],
@@ -478,18 +485,18 @@ class ParquetValidator:
         if not self.has_configured_hits:
             for gate_id, title, detail in [
                 (
-                    "H2",
-                    "Hit multiplicity",
+                    "hit_counts",
+                    "Tracker and calorimeter hit counts",
                     "This detector scenario intentionally stores track/cluster inputs without detector hits.",
                 ),
                 (
-                    "H3",
-                    "Tracker-hit pT closure",
+                    "tracker_hit_momentum",
+                    "Momentum from tracker hits",
                     "Tracker hits are not part of this dataset contract.",
                 ),
                 (
-                    "H4",
-                    "Calo-hit energy closure",
+                    "calorimeter_hit_energy",
+                    "Energy from calorimeter hits",
                     "Calorimeter hits are not part of this dataset contract.",
                 ),
             ]:
@@ -504,7 +511,7 @@ class ParquetValidator:
                 self.text_plot(gate, [detail])
             return
 
-        # H2: hit multiplicity (informational)
+        # hit_counts: hit multiplicity (informational)
         # reshape also handles intentionally empty hit collections, whose
         # inner dimension is not retained by Awkward/Parquet.
         n_hit_features = len(EDM4HEP.HitFeatures.get_names())
@@ -518,9 +525,9 @@ class ParquetValidator:
         n_calo_hits = np.array([int(np.sum(_norm_empty(self.ev("X_hit_calo", i))[:, X_ELEMTYPE] != 0)) for i in range(self.nev_used)])
         ok = (n_trk_hits > 0).all() and (n_calo_hits > 0).all()
         gate = self.add_gate(
-            "H2",
+            "hit_counts",
             "hits",
-            "Hit multiplicity",
+            "Tracker and calorimeter hit counts",
             "Every event should contain tracker and calorimeter hits; "
             "typical medians are >100 tracker and >1000 calo hits per event "
             "(detector-dependent).",
@@ -539,7 +546,7 @@ class ParquetValidator:
         ax2.legend(fontsize=8)
         self.finish_plot(fig, gate)
 
-        # H3/H4: hit-level closure metrics from tracker circle fits and calo
+        # tracker_hit_momentum/calorimeter_hit_energy: hit-level closure metrics from tracker circle fits and calo
         # energy sums. The shared implementation also writes the 4-panel
         # diagnostic plot into the plots directory.
         ratios_pt = np.array([])
@@ -557,9 +564,9 @@ class ParquetValidator:
             inclusive_note = f" (inclusive validation error: {exc})"
 
         gate = self._closure_gate(
-            "H3",
+            "tracker_hit_momentum",
             "hits",
-            "Tracker-hit pT closure",
+            "Momentum from tracker hits",
             "Circle fits through tracker hits of a particle should recover its "
             "gen pT: median pT_fit/pT_truth in 0.8-1.2 and >=85% of fits within "
             "[0.5, 2].",
@@ -578,9 +585,9 @@ class ParquetValidator:
         )
 
         gate = self._closure_gate(
-            "H4",
+            "calorimeter_hit_energy",
             "hits",
-            "Calo-hit energy closure",
+            "Energy from calorimeter hits",
             "The sum of calo hit energies of a particle should match its gen "
             "energy: median E_sum/E_truth in 0.7-1.3 and >=85% of sums within "
             "[0.5, 2].",
@@ -599,7 +606,7 @@ class ParquetValidator:
         )
 
     def gate_visualization(self):
-        """V1: sanity of the data behind the 3D PN visualization."""
+        """detector_positions: sanity of the data behind the 3D PN visualization."""
         n_finite = 0
         n_assigned = 0
         in_range_frac = []
@@ -628,9 +635,9 @@ class ParquetValidator:
             f"assigned fraction median={np.median(assigned_frac):.3f}"
         )
         gate = self.add_gate(
-            "V1",
+            "detector_positions",
             "visualization",
-            "PN visualization data sanity",
+            "Positions and particle numbers",
             "Finite element positions, at least one particle assignment (PN>0) per "
             f"event, and most elements inside the plotted volume (+/-{self.vis_range:.0f} mm) and "
             "assigned to a particle.",
@@ -750,7 +757,7 @@ class ParquetValidator:
         ax1.set_xlabel("X [mm]")
         ax1.set_ylabel("Y [mm]")
         ax1.set_zlabel("Z [mm]")
-        ax1.set_title(f"Hits Colored by PN (Event {iev})")
+        ax1.set_title(f"Hits by particle number (Event {iev})")
         ax1.view_init(elev=20, azim=45)
 
         ax2 = fig.add_subplot(122, projection="3d")
@@ -809,7 +816,7 @@ class ParquetValidator:
         ax2.set_xlabel("X [mm]")
         ax2.set_ylabel("Y [mm]")
         ax2.set_zlabel("Z [mm]")
-        ax2.set_title(f"Tracks & Clusters Colored by PN (Event {iev})")
+        ax2.set_title(f"Tracks and clusters by particle number (Event {iev})")
         ax2.view_init(elev=20, azim=45)
 
         for ax in [ax1, ax2]:
@@ -820,13 +827,13 @@ class ParquetValidator:
         self.finish_plot(fig, gate)
 
     def gate_hit_rep_consistency(self):
-        """V2: mean calo-hit position of a particle matches its cluster position."""
+        """hit_cluster_positions: mean calo-hit position of a particle matches its cluster position."""
         if not self.has_configured_hits:
             detail = "This detector scenario intentionally stores track/cluster inputs without calorimeter hits."
             gate = self.add_gate(
-                "V2",
+                "hit_cluster_positions",
                 "visualization",
-                "Calo-hit-to-cluster spatial consistency",
+                "Calorimeter hit and cluster positions",
                 "Applicable only to datasets containing calorimeter hits.",
                 detail,
                 "SKIP",
@@ -865,9 +872,9 @@ class ParquetValidator:
 
         observed = f"calo: n={len(d_clu)} median={np.median(d_clu):.1f} mm, " f"frac<{c_hi:.0f} mm={np.mean(d_clu < c_hi):.3f}"
         gate = self.add_gate(
-            "V2",
+            "hit_cluster_positions",
             "visualization",
-            "Calo-hit-to-cluster spatial consistency",
+            "Calorimeter hit and cluster positions",
             "The mean position of a particle's calorimeter hits should match "
             f"its cluster centroid: median < {c_med:.0f} mm with >={c_frac:.2f} "
             f"of particles within {c_hi:.0f} mm.",
@@ -884,7 +891,7 @@ class ParquetValidator:
         self.finish_plot(fig, gate)
 
     def _cluster_rep_positions(self, iev):
-        """Map particle_number -> cluster position for cluster representatives."""
+        """Map particle_number -> cluster position for cluster target rows."""
         cluster_pos = {}
         x = self.ev("X_cluster", iev)
         y = self.ev("ytarget_cluster", iev)
@@ -902,7 +909,7 @@ class ParquetValidator:
     def gate_tracks_clusters(self):
         if not all(f in self.data.fields for f in PF_FIELDS):
             gate = self.add_gate(
-                "T1",
+                "track_cluster_counts",
                 "tracks/clusters",
                 "Tracks and clusters present",
                 "PF-level files should contain tracks and clusters.",
@@ -913,7 +920,7 @@ class ParquetValidator:
                 gate,
                 [
                     "Track/cluster fields not present in this file.",
-                    "Gates T1-T4 skipped.",
+                    "Track and cluster checks were skipped.",
                 ],
             )
             return
@@ -923,11 +930,11 @@ class ParquetValidator:
         no_trk = int(np.sum(n_trk == 0))
         no_cl = int(np.sum(n_cl == 0))
         gate = self.add_gate(
-            "T1",
+            "track_cluster_counts",
             "tracks/clusters",
             "Tracks and clusters present",
             "Every event should contain at least one track and one cluster.",
-            f"{no_trk} event(s) without tracks, {no_cl} without clusters",
+            f"{no_trk} events without tracks, {no_cl} without clusters",
             "PASS" if no_trk + no_cl == 0 else "WARN",
         )
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
@@ -939,7 +946,7 @@ class ParquetValidator:
         ax2.axvline(1, color="orange", ls="--", lw=1.2)
         self.finish_plot(fig, gate)
 
-        # T2: every PN represented by a track/cluster with positive kinematics
+        # particle_targets: every PN represented by a track/cluster with positive kinematics
         unrepped_events = nonpositive_events = 0
         for i in range(self.nev_used):
             pn_all, pid_all, pt_all, e_all = [], [], [], []
@@ -963,23 +970,23 @@ class ParquetValidator:
                 nonpositive_events += 1
         bad = unrepped_events + nonpositive_events
         gate = self.add_gate(
-            "T2",
+            "particle_targets",
             "tracks/clusters",
-            "Targets represented by tracks/clusters",
+            "Particles with track or cluster targets",
             "Every truth particle (particle_number>0) must be represented by a "
-            "track or cluster, and representatives must have positive pt and energy.",
-            f"unrepped={unrepped_events}, non-positive kinematics={nonpositive_events} " f"bad event(s) of {self.nev_used}",
+            "track or cluster, and target rows must have positive pt and energy.",
+            f"particles without targets={unrepped_events}, non-positive momentum or energy={nonpositive_events} " f"bad events of {self.nev_used}",
             "PASS" if bad == 0 else "FAIL",
         )
         self.bar_plot(
             gate,
-            ["missing reps", "non-positive kin."],
+            ["particles without targets", "non-positive momentum or energy"],
             [unrepped_events, nonpositive_events],
             "events with violations",
             colors=["#d62728" if v else "#2ca02c" for v in (unrepped_events, nonpositive_events)],
         )
 
-        # T3: charge sanity rules.
+        # target_charge: charge sanity rules.
         # Note: neutral particles reconstructed as tracks keep gen charge 0 but
         # get a forced charged PID (postprocessing), so track PID/charge need
         # not agree; only check |charge| <= 1 for track reps.
@@ -997,10 +1004,10 @@ class ParquetValidator:
                 if np.any(rep & (np.abs(charge) > 1)):
                     track_charge_bad += 1
         gate = self.add_gate(
-            "T3",
+            "target_charge",
             "tracks/clusters",
-            "Charge rules for representatives",
-            "Cluster representatives must be neutral (charge=0); track " "representatives must have |charge| <= 1.",
+            "Track and cluster target charges",
+            "Cluster target rows must be neutral (charge=0); track " "target rows must have |charge| <= 1.",
             f"cluster charge violations={cluster_charge_bad}, track |q|>1 events={track_charge_bad}",
             "FAIL" if cluster_charge_bad else ("WARN" if track_charge_bad else "PASS"),
         )
@@ -1012,7 +1019,7 @@ class ParquetValidator:
             colors=["#d62728" if v else "#2ca02c" for v in (cluster_charge_bad, track_charge_bad)],
         )
 
-        # T4: kinematic consistency of reps vs reconstructed elements
+        # element_target_momentum: kinematic consistency of reps vs reconstructed elements
         r_pt = []
         r_e = []
         for i in range(self.nev_used):
@@ -1039,9 +1046,9 @@ class ParquetValidator:
             and np.mean((r_e >= 0.5) & (r_e <= 2.0)) >= frac_ok
         )
         gate = self.add_gate(
-            "T4",
+            "element_target_momentum",
             "tracks/clusters",
-            "Reconstruction-truth kinematic consistency",
+            "Track momentum and cluster energy",
             "Reconstructed track pt (cluster energy) should be close to the "
             "assigned truth: median ratio within 0.5-2 and >=80% of elements "
             "within [0.5, 2].",
@@ -1052,14 +1059,107 @@ class ParquetValidator:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
         ax1.axvspan(0.5, 2.0, color="green", alpha=0.12)
         ax1.hist(r_pt, bins=50, color="#4c72b0")
-        ax1.set_xlabel("ytarget_pt / X_pt (tracks)")
+        ax1.set_xlabel("Target pT / track pT")
         ax2.axvspan(0.5, 2.0, color="green", alpha=0.12)
         ax2.hist(r_e, bins=50, color="#4c72b0")
-        ax2.set_xlabel("ytarget_E / X_E (clusters)")
+        ax2.set_xlabel("Target energy / cluster energy")
         self.finish_plot(fig, gate)
 
+    def gate_element_target_alignment(self):
+        """Check native assigned rows, excluding PID=0 (including PN-only marks)."""
+        for gate_id, kind, threshold in [
+            ("track_target_direction", "track", "t5_alignment"),
+            ("cluster_target_direction", "cluster", "t6_alignment"),
+        ]:
+            xf, yf = f"X_{kind}", f"ytarget_{kind}"
+            direction_source = "cluster_position" if kind == "cluster" else "track_momentum"
+            direction_label = "Cluster position" if kind == "cluster" else "Track momentum"
+            cut, required = THRESHOLDS[threshold]
+            if xf not in self.data.fields or yf not in self.data.fields:
+                gate = self.add_gate(
+                    gate_id,
+                    "alignment",
+                    f"{direction_label} and target particle directions",
+                    "Compare each input with its assigned target.",
+                    "fields absent",
+                    "SKIP",
+                )
+                self.text_plot(gate, [gate.observed])
+                continue
+            rows, malformed = [], 0
+            for iev in range(self.nev_used):
+                x, y = self.ev(xf, iev), self.ev(yf, iev)
+                if len(x) != len(y) or (len(x) and (x.shape[1] < (9 if kind == "cluster" else 5) or y.shape[1] < 14)):
+                    malformed += 1
+                    continue
+                if not len(x):
+                    continue
+                mask = (x[:, X_ELEMTYPE] != 0) & (y[:, PID] > 0)
+                x, y = x[mask], y[mask]
+                if kind == "cluster":
+                    # Pandora's stored angles differ from the direction from
+                    # the origin to the cluster; use its position for ownership.
+                    position = x[:, X_CLUSTER_POSITION]
+                    radius = np.hypot(position[:, 0], position[:, 1])
+                    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+                        eta = np.arcsinh(position[:, 2] / radius)
+                    phi = np.arctan2(position[:, 1], position[:, 0])
+                    input_valid = np.isfinite(position).all(axis=1) & (radius > 0)
+                else:
+                    eta = x[:, 2]
+                    phi = np.arctan2(x[:, 3], x[:, 4])
+                    input_valid = np.isfinite(x[:, 2:5]).all(axis=1) & (np.hypot(x[:, 3], x[:, 4]) > 0)
+                deta = eta - y[:, ETA]
+                dphi = _deltaphi(phi, np.arctan2(y[:, SIN_PHI], y[:, COS_PHI]))
+                dr = np.hypot(deta, dphi)
+                valid = (
+                    np.isfinite(dr) & input_valid & np.isfinite(y[:, ETA : COS_PHI + 1]).all(axis=1) & (np.hypot(y[:, SIN_PHI], y[:, COS_PHI]) > 0)
+                )
+                rows.append(np.column_stack((dr, valid, y[:, PT], y[:, ISPU])))
+            a = np.concatenate(rows) if rows else np.empty((0, 4))
+            metrics = {"direction_source": direction_source, "delta_r_cut": cut, "minimum_fraction": required, "malformed_events": malformed}
+            groups = {
+                "all": np.ones(len(a), dtype=bool),
+                "hard_scatter": a[:, 3] == 0,
+                "pileup": a[:, 3] == 1,
+                "pt_ge_1": a[:, 2] >= 1,
+                "pt_ge_5": a[:, 2] >= 5,
+            }
+            for name, mask in groups.items():
+                dr, valid = a[mask, 0], a[mask, 1].astype(bool)
+                finite = dr[valid]
+                metrics[name] = {
+                    "count": len(dr),
+                    "invalid": int(np.sum(~valid)),
+                    "fraction_aligned": float(np.mean(valid & (dr < cut))) if len(dr) else None,
+                    "median_delta_r": float(np.median(finite)) if len(finite) else None,
+                    "p90_delta_r": float(np.quantile(finite, 0.9)) if len(finite) else None,
+                }
+            self.alignment_metrics[kind] = metrics
+            total = metrics["all"]
+            status = "FAIL" if malformed or (len(a) and total["fraction_aligned"] < required) else ("PASS" if len(a) else "SKIP")
+            observed = f"n={len(a)}, malformed events={malformed}, invalid={total['invalid']}"
+            if len(a):
+                median = total["median_delta_r"] if total["median_delta_r"] is not None else float("nan")
+                p90 = total["p90_delta_r"] if total["p90_delta_r"] is not None else float("nan")
+                observed += f"; within cut={total['fraction_aligned']:.2%}, median delta-R={median:.4g}, p90={p90:.4g}"
+            gate = self.add_gate(
+                gate_id,
+                "alignment",
+                f"{direction_label} and target particle directions",
+                f">={required:.0%} of inputs with assigned target particles must have delta-R < {cut}. Directions must be finite and defined.",
+                observed,
+                status,
+            )
+            self.hist_plot(
+                gate,
+                a[a[:, 1].astype(bool), 0],
+                f"Delta-R between {direction_label.lower()} direction and assigned target particle",
+                vlines=((cut, "red"),),
+            )
+
     def gate_targets(self):
-        # Y1: representative kinematics consistent across categories
+        # target_momentum_agreement: target row kinematics consistent across categories
         inconsistent = 0
         reps_per_pn = []
         for i in range(self.nev_used):
@@ -1082,18 +1182,18 @@ class ParquetValidator:
                     if not (np.allclose(pt[m], pt[m][0]) and np.allclose(e[m], e[m][0])):
                         inconsistent += 1
         gate = self.add_gate(
-            "Y1",
+            "target_momentum_agreement",
             "targets",
-            "Representative consistency across categories",
+            "Particle momentum in each target array",
             "A particle may appear at several levels (track/cluster and hit), "
-            "but all its representatives must carry identical kinematics "
+            "but all its target rows must carry identical kinematics "
             "(pt/energy).",
-            f"{inconsistent} particle(s) with inconsistent representatives",
+            f"{inconsistent} particles with inconsistent target rows",
             "PASS" if inconsistent == 0 else "WARN",
         )
-        self.hist_plot(gate, np.array(reps_per_pn), "representatives per particle", bins=20)
+        self.hist_plot(gate, np.array(reps_per_pn), "target rows per particle", bins=20)
 
-        # Y2: jet_idx validity
+        # target_jet_indices: jet_idx validity
         bad_events = 0
         for i in range(self.nev_used):
             n_jets = len(self.data["targetjet"][i])
@@ -1106,11 +1206,11 @@ class ParquetValidator:
                     bad_events += 1
                     break
         gate = self.add_gate(
-            "Y2",
+            "target_jet_indices",
             "targets",
-            "jet_idx within range",
+            "Target jet indices",
             "Representative jet_idx must be -1 (not in a jet) or within " "[0, n_targetjets).",
-            f"{bad_events} event(s) with out-of-range jet_idx of {self.nev_used}",
+            f"{bad_events} events with out-of-range jet_idx of {self.nev_used}",
             "PASS" if bad_events == 0 else "WARN",
         )
         self.bar_plot(
@@ -1122,30 +1222,30 @@ class ParquetValidator:
         )
 
     def gate_target_definition(self):
-        """R1/R2/M1/E1/W1: target-definition invariants raised in PR #490.
+        """target_jet_response/deposited_energy/muon_energy_deposits/simulation_flags/neutral_energy_deposits: target-definition invariants raised in PR #490.
 
-        R1 - the target jet response must be a smear around 1.0, not a hard
+        target_jet_response - the target jet response must be a smear around 1.0, not a hard
              ceiling: a downward-only response was the symptom of the
              merge-overwrite energy loss, which also affects CLIC/CLD in
              principle even though it only fired on MAIA in practice.
-        R2 - gp_to_cluster (the visibility-mask input) must be a calibrated
+        deposited_energy - gp_to_cluster (the visibility-mask input) must be a calibrated
              energy in GeV, so deposit/energy is a true energy fraction.
-        M1 - the absolute MIP-deposit term must actually retain muons: on
+        muon_energy_deposits - the absolute MIP-deposit term must actually retain muons: on
              ttbar-like samples a healthy fraction of target muons are
              MIP-like (deposited fraction below visible_energy_fraction).
-        E1 - every depositing target representative must carry simulator
+        simulation_flags - every depositing target target row must carry simulator
              endpoint bits (EDM4hep bits 24-27); missing flags indicate
              unsimulated particles (e.g. the MAIA 0x80000000 sample issue).
-        W1 - particles admitted only by the absolute term should not be
+        neutral_energy_deposits - particles admitted only by the absolute term should not be
              dominated by neutrals, whose energy nothing measured
              (informational; mirrors the open question in PR #490).
         """
         if not all(f in self.data.fields for f in PF_FIELDS):
             gate = self.add_gate(
-                "R1",
+                "target_jet_response",
                 "targets",
-                "Target-definition gates present",
-                "PF-level target fields are required for the target-definition gates.",
+                "Track and cluster target arrays",
+                "These checks require track and cluster target arrays.",
                 "track/cluster fields absent",
                 "SKIP",
             )
@@ -1153,12 +1253,12 @@ class ParquetValidator:
                 gate,
                 [
                     "Track/cluster fields not present in this file.",
-                    "Gates R1/R2/M1/E1/W1 skipped.",
+                    "Jet response, energy deposit and simulation flag checks were skipped.",
                 ],
             )
             return
 
-        # R1: jet response, target jet matched to the nearest gen jet
+        # target_jet_response: jet response, target jet matched to the nearest gen jet
         responses = []
         for i in range(self.nev_used):
             gj = self.ev("genjet", i)
@@ -1188,16 +1288,14 @@ class ParquetValidator:
             f"frac>1.0={float(np.mean(responses > 1.0)) if len(responses) else float('nan'):.3f}"
         )
         gate = self.add_gate(
-            "R1",
+            "target_jet_response",
             "targets",
-            "Jet response has no hard ceiling",
-            "The target jet pT should be a smear of the truth jet pT, not a "
-            f"strict subset: median target/gen response in [{r1_lo}, {r1_hi}] "
-            f"and >={r1_min_above:.0%} of matched jets above 1.0.",
+            "Target jet momentum relative to truth",
+            f"Median target/truth jet pT in [{r1_lo}, {r1_hi}]; " f">={r1_min_above:.0%} of matched target jets have more pT than the truth jet.",
             observed,
             status,
         )
-        self.hist_plot(gate, responses, "target jet pT / gen jet pT", vlines=((1.0, "red"),))
+        self.hist_plot(gate, responses, "Target jet pT / truth jet pT", vlines=((1.0, "red"),))
 
         if self.detector == "idea":
             # IDEA's two readout signals measure the same physical shower, so
@@ -1226,9 +1324,9 @@ class ParquetValidator:
                 ok = False
                 observed = "no IDEA clusters"
             gate = self.add_gate(
-                "R2",
+                "deposited_energy",
                 "targets",
-                "IDEA dual-readout cluster energies close",
+                "IDEA cluster energy components",
                 "For IDEA, energy_ecal is Cherenkov energy and energy_hcal is scintillation energy. "
                 "Both must be nonnegative, energy_other must be zero, and cluster energy must equal their sum.",
                 observed,
@@ -1242,7 +1340,7 @@ class ParquetValidator:
                 vlines=((0.0, "red"),),
             )
         else:
-            # R2: deposited-energy fraction of target representatives
+            # deposited_energy: deposited-energy fraction of target target rows
             fracs = []
             r2_fields = ["ytarget_track", "ytarget_cluster"]
             fracs = []
@@ -1275,9 +1373,9 @@ class ParquetValidator:
                 f"p99={float(np.percentile(fracs, 99)) if n_frac else float('nan'):.2f}"
             )
             gate = self.add_gate(
-                "R2",
+                "deposited_energy",
                 "targets",
-                "Deposited-energy fraction is a calibrated energy",
+                "Calorimeter deposit relative to particle energy",
                 "gp_to_cluster (the visibility-mask input) must be an energy in "
                 f"GeV: median deposit/energy in [{r2_lo}, {r2_hi}], >={fmin:.0%} "
                 f"within [{flo}, {fhi}], and p99 < {p99_lim}.",
@@ -1287,13 +1385,13 @@ class ParquetValidator:
             self.hist_plot(
                 gate,
                 fracs,
-                "gp_to_cluster / E_gen (target reps)",
+                "Calorimeter deposit / truth particle energy",
                 bins=80,
                 shade=(flo, fhi),
                 vlines=((1.0, "red"),),
             )
 
-        # M1: MIP muons retained by the absolute deposit term
+        # muon_energy_deposits: Muon energy deposits
         frac_lim = THRESHOLDS["m1_visible_energy_fraction"]
         dep_lim = THRESHOLDS["m1_visible_energy_deposit"]
         min_muons = THRESHOLDS["m1_min_muons"]
@@ -1319,13 +1417,11 @@ class ParquetValidator:
         else:
             status = "FAIL"
         gate = self.add_gate(
-            "M1",
+            "muon_energy_deposits",
             "targets",
-            "MIP muons retained by the absolute deposit term",
-            "On ttbar-like samples a meaningful fraction of target muons must "
-            f"be MIP-like (deposited fraction < {frac_lim:.0%}); those are "
-            f"kept by the absolute term (deposit > {dep_lim:.1f} GeV), and "
-            "removing it drops them from the target.",
+            "Muon energy deposits",
+            f"In ttbar samples, at least {min_lowfrac_frac:.0%} of target muons should have "
+            f"deposit/energy < {frac_lim:.0%}. Some should also have deposit > {dep_lim:.1f} GeV.",
             f"muons={n_mu}, frac<{frac_lim:.0%}={n_lowfrac} " f"({100 * n_lowfrac / max(n_mu, 1):.0f}%), " f"with deposit>{dep_lim:.1f} GeV={n_abs}",
             status,
         )
@@ -1337,7 +1433,7 @@ class ParquetValidator:
             colors=["#4c72b0", "#2ca02c", "#ff7f0e"],
         )
 
-        # E1: simulator endpoint bits on all target representatives
+        # simulation_flags: simulator endpoint bits on all target target rows
         endpoint_mask = THRESHOLDS["e1_endpoint_mask"]
         n_reps = 0
         n_endpoint_viol = 0
@@ -1353,19 +1449,19 @@ class ParquetValidator:
                     n_endpoint_viol += int(np.sum((sim & endpoint_mask) == 0))
         status = "WARN" if n_reps == 0 else ("PASS" if n_endpoint_viol == 0 else "FAIL")
         gate = self.add_gate(
-            "E1",
+            "simulation_flags",
             "targets",
-            "Target representatives carry simulator endpoint bits",
+            "Particle simulation flags",
             "Every particle that deposited energy must have at least one "
             f"EDM4hep simulator endpoint flag set (bits 24-27, mask "
             f"0x{endpoint_mask:08X}); missing flags indicate unsimulated "
-            "particles leaking into the target.",
-            f"representatives={n_reps}, without endpoint bits={n_endpoint_viol}",
+            "particles without detector interactions in the targets.",
+            f"target rows={n_reps}, without endpoint bits={n_endpoint_viol}",
             status,
         )
         self.bar_plot(
             gate,
-            ["representatives", "no endpoint bits"],
+            ["target rows", "no endpoint bits"],
             [n_reps, n_endpoint_viol],
             "count",
             colors=[
@@ -1374,7 +1470,7 @@ class ParquetValidator:
             ],
         )
 
-        # W1: neutrals among absolute-term-only admissions (informational)
+        # neutral_energy_deposits: neutrals among absolute-term-only admissions (informational)
         abs_pids = []
         for f in ["ytarget_track", "ytarget_cluster"]:
             for i in range(self.nev_used):
@@ -1398,20 +1494,17 @@ class ParquetValidator:
             neutral_frac = n_neutral / n_abs_total
             status = "WARN" if neutral_frac > warn_frac else "PASS"
         gate = self.add_gate(
-            "W1",
+            "neutral_energy_deposits",
             "targets",
-            "Absolute-term admissions are not neutral-dominated",
-            "Particles kept only by the absolute MIP term (deposited fraction "
-            f"below {frac_lim:.0%} but deposit above {dep_lim:.1f} GeV) should "
-            "mostly be charged (track-measured); a large neutral share means "
-            f"leaked energy with no measurement. WARN above {warn_frac:.0%} "
-            "neutrals.",
-            f"absolute-retained={n_abs_total}, neutrals={n_neutral} " f"({100 * n_neutral / max(n_abs_total, 1):.0f}%)",
+            "Neutral particles with small energy deposits",
+            f"Among particles with deposit/energy < {frac_lim:.0%} and deposit > {dep_lim:.1f} GeV, "
+            f"warn if more than {warn_frac:.0%} are neutral.",
+            f"particles below the fractional deposit cut={n_abs_total}, neutrals={n_neutral} " f"({100 * n_neutral / max(n_abs_total, 1):.0f}%)",
             status,
         )
         self.bar_plot(
             gate,
-            ["absolute-retained", "neutrals (22/130)"],
+            ["small fractional deposits", "neutral particles (22/130)"],
             [n_abs_total, n_neutral],
             "count",
             colors=["#4c72b0", "#ff7f0e" if n_neutral else "#2ca02c"],
@@ -1420,7 +1513,7 @@ class ParquetValidator:
     def gate_baseline_pf(self):
         if not all(f in self.data.fields for f in YCAND_FIELDS):
             gate = self.add_gate(
-                "P1",
+                "baseline_particle_counts",
                 "baseline PF",
                 "Baseline PF fields present",
                 "Files with a baseline PF (ycand_*) should contain both " "ycand_track and ycand_cluster.",
@@ -1431,12 +1524,12 @@ class ParquetValidator:
                 gate,
                 [
                     "Baseline PF (ycand) fields not present in this file.",
-                    "Gates P1-P3 skipped.",
+                    "Baseline particle checks were skipped.",
                 ],
             )
             return
 
-        # P1: counts
+        # baseline_particle_counts: counts
         mismatch = 0
         for i in range(self.nev_used):
             for xf, yf in [("X_track", "ycand_track"), ("X_cluster", "ycand_cluster")]:
@@ -1444,11 +1537,11 @@ class ParquetValidator:
                     mismatch += 1
                     break
         gate = self.add_gate(
-            "P1",
+            "baseline_particle_counts",
             "baseline PF",
             "Baseline PF element counts",
             "Each reconstructed element must have exactly one baseline PF entry " "(len(ycand) == len(X)).",
-            f"{mismatch} event(s) with count mismatches of {self.nev_used}",
+            f"{mismatch} events with count mismatches of {self.nev_used}",
             "PASS" if mismatch == 0 else "FAIL",
         )
         self.bar_plot(
@@ -1459,7 +1552,7 @@ class ParquetValidator:
             colors=["#d62728" if mismatch else "#2ca02c"],
         )
 
-        # P2: PID validity
+        # baseline_particle_labels: PID validity
         pids = []
         bad_pid = bad_energy = 0
         for i in range(self.nev_used):
@@ -1477,9 +1570,9 @@ class ParquetValidator:
                 if np.any((pid == 0) & (np.abs(e) > 1e-5)):
                     bad_energy += 1
         gate = self.add_gate(
-            "P2",
+            "baseline_particle_labels",
             "baseline PF",
-            "Baseline PF PID validity",
+            "Baseline particle types",
             "Baseline PIDs must belong to the candidate classes " f"{sorted(ALLOWED_PIDS)} and PID=0 elements must have zero energy.",
             f"bad PID events={bad_pid}, zero-PID non-zero-E events={bad_energy}",
             "FAIL" if (bad_pid or bad_energy) else "PASS",
@@ -1494,7 +1587,7 @@ class ParquetValidator:
             colors=["#d62728" if p not in ALLOWED_PIDS else "#4c72b0" for p in labels],
         )
 
-        # P3: baseline PF vs target closure
+        # baseline_particle_energy: baseline PF vs target closure
         rel = []
         for i in range(self.nev_used):
             e_target = float(ak.sum(self.data["ytarget_track"][i][:, ENERGY])) + float(ak.sum(self.data["ytarget_cluster"][i][:, ENERGY]))
@@ -1504,9 +1597,9 @@ class ParquetValidator:
         rel = np.array(rel)
         ok = len(rel) > 0 and np.median(rel) < THRESHOLDS["p3_median"] and np.percentile(rel, 90) < THRESHOLDS["p3_p90"]
         gate = self.add_gate(
-            "P3",
+            "baseline_particle_energy",
             "baseline PF",
-            "Baseline PF energy closure vs target",
+            "Baseline energy relative to target energy",
             "The baseline PF should reconstruct the target energy: per-event "
             f"|E(ycand)-E(ytarget)|/E(ytarget) median < {THRESHOLDS['p3_median']} "
             f"and 90th percentile < {THRESHOLDS['p3_p90']}.",
@@ -1527,9 +1620,9 @@ class ParquetValidator:
         gm = np.asarray(ak.to_numpy(self.data["genmet"]))
         finite_ok = bool(np.all(np.isfinite(gm)) and np.all(gm >= 0))
         gate = self.add_gate(
-            "G1",
+            "truth_missing_momentum",
             "ground truth",
-            "Truth MET is finite and non-negative",
+            "Truth missing transverse momentum",
             "genmet is derived from status-1 pythia particles and must be a " "finite, non-negative scalar.",
             f"min={gm.min():.2f} GeV, median={np.median(gm):.2f} GeV",
             "PASS" if finite_ok else "FAIL",
@@ -1539,9 +1632,9 @@ class ParquetValidator:
         n_jet = np.array([int(ak.sum(self.data["genjet"][i][:, 3] > 0)) for i in range(self.nev_used)])
         frac_with_jet = np.mean(n_jet > 0)
         gate = self.add_gate(
-            "G2",
+            "truth_jet_counts",
             "ground truth",
-            "Gen jets present",
+            "Truth jet counts",
             "Every event should contain at least one genjet (sample-dependent; " "expect >= 99% for ttbar-like samples).",
             f"{int(np.sum(n_jet > 0))}/{self.nev_used} events with genjets",
             "PASS" if frac_with_jet >= 0.99 else "WARN",
@@ -1554,7 +1647,7 @@ class ParquetValidator:
             colors=["#2ca02c", "#ff7f0e"],
         )
 
-        # G3: target vs truth closure (genjet energy + genmet)
+        # target_truth_energy: target vs truth closure (genjet energy + genmet)
         rel = []
         for i in range(self.nev_used):
             e_target = float(ak.sum(self.data["ytarget_track"][i][:, ENERGY])) + float(ak.sum(self.data["ytarget_cluster"][i][:, ENERGY]))
@@ -1578,9 +1671,9 @@ class ParquetValidator:
                 f"{THRESHOLDS['g3_median']} and 90th percentile < {THRESHOLDS['g3_p90']}."
             )
         gate = self.add_gate(
-            "G3",
+            "target_truth_energy",
             "ground truth",
-            "Target energy closure vs truth",
+            "Target energy relative to truth energy",
             expectation,
             f"median={np.median(rel):.4f}, p90={np.percentile(rel, 90):.4f}",
             status,
@@ -1595,7 +1688,7 @@ class ParquetValidator:
             ),
         )
 
-        # G4: expected PID classes present among representatives
+        # particle_types: expected PID classes present among target rows
         present = set()
         for i in range(self.nev_used):
             for f in TARGET_FIELDS:
@@ -1605,9 +1698,9 @@ class ParquetValidator:
                 present.update(y[y[:, PID] > 0, PID].astype(int).tolist())
         missing = sorted(EXPECTED_PIDS - present)
         gate = self.add_gate(
-            "G4",
+            "particle_types",
             "ground truth",
-            "Expected PID classes present",
+            "Particle types in the targets",
             "Representatives should cover the physics classes expected for the "
             f"sample: {sorted(EXPECTED_PIDS)} (e, mu, photon, K0L, charged hadron).",
             "missing: " + (", ".join(map(str, missing)) if missing else "none"),
@@ -1659,7 +1752,7 @@ class ParquetValidator:
         """Tracker-hit pT (circle fit) and calo-hit energy closure vs truth.
 
         Collects per-particle closure measurements and writes the 4-panel
-        diagnostic plot (gate_H3_H4.png) used by gates H3/H4.
+        diagnostic plot (hit_momentum_and_energy.png) used by gates tracker_hit_momentum/calorimeter_hit_energy.
         Returns {"track": ..., "calo": ...} with the raw truth/fitted arrays.
         """
         track_results = {"pT_truth": [], "pT_fit": []}
@@ -1697,7 +1790,10 @@ class ParquetValidator:
                                     if "bad_tracks" not in track_results:
                                         track_results["bad_tracks"] = []
                                     track_results["bad_tracks"].append(1)
-                                    print(f"Bad fit: event={iev} pn={pn} pT_truth={pn_to_truth[pn]['pt']:.3f} " f"pT_fit={pT_fit:.3f} R={r:.3f} mm")
+                                    print(
+                                        f"Track momentum differs from truth: event={iev} pn={pn} pT_truth={pn_to_truth[pn]['pt']:.3f} "
+                                        f"pT_fit={pT_fit:.3f} R={r:.3f} mm"
+                                    )
 
             # Calo hits: energy sum per particle
             x = self.ev("X_hit_calo", iev)
@@ -1726,9 +1822,9 @@ class ParquetValidator:
         ax1.scatter(track_results["pT_truth"], track_results["pT_fit"], alpha=0.3, s=10)
         max_pt = max(float(np.max(track_results["pT_truth"])) if has_track else 0.0, 100)
         ax1.plot([0, max_pt], [0, max_pt], color="red", linestyle="--")
-        ax1.set_xlabel("Gen Particle pT [GeV]")
+        ax1.set_xlabel("Truth particle pT [GeV]")
         ax1.set_ylabel("Fitted pT from Hits [GeV]")
-        ax1.set_title("Tracker Hits pT vs Gen pT")
+        ax1.set_title("Momentum from tracker hits versus truth")
         ax1.set_xlim(0, max_pt)
         ax1.set_ylim(0, max_pt)
 
@@ -1749,9 +1845,9 @@ class ParquetValidator:
         ax3.scatter(calo_results["E_truth"], calo_results["E_hit_sum"], alpha=0.3, s=10)
         max_e = max(float(np.max(calo_results["E_truth"])) if has_calo else 0.0, 100)
         ax3.plot([0, max_e], [0, max_e], color="red", linestyle="--")
-        ax3.set_xlabel("Gen Particle Energy [GeV]")
+        ax3.set_xlabel("Truth particle energy [GeV]")
         ax3.set_ylabel("Sum of Hit Energies [GeV]")
-        ax3.set_title("Calo Hits Energy vs Gen Energy")
+        ax3.set_title("Calorimeter hit energy versus truth")
         ax3.set_xlim(0, max_e)
         ax3.set_ylim(0, max_e)
 
@@ -1790,14 +1886,13 @@ class ParquetValidator:
         combined = "PASS" if (h3_status == h4_status == "PASS") else ("FAIL" if "FAIL" in (h3_status, h4_status) else "WARN")
         colors = {"PASS": "#d4edda", "FAIL": "#f8d7da", "WARN": "#fff3cd"}
         text = (
-            f"Gate H3/H4 - Inclusive hit closure (shared diagnostic)\n"
-            f"What to expect: tracker-hit pT fits and calo-hit energy sums "
-            f"recover the gen values (see gates H3/H4 for thresholds)\n"
-            f"Observed: pT median={mean_pt:.3f}, E median={mean_e:.3f}\n"
-            f"Status: H3 {h3_status}, H4 {h4_status}"
+            f"Particle momentum and energy from detector hits\n"
+            "Expected: momentum from tracker hits and calorimeter hit energy agree with truth.\n"
+            f"Observed: mean pT ratio={mean_pt:.3f}, mean energy ratio={mean_e:.3f}\n"
+            f"Tracker momentum: {h3_status}; calorimeter energy: {h4_status}"
         )
 
-        plt.suptitle(f"Inclusive hit closure validation\nFile: {self.input_path.name}")
+        plt.suptitle(f"Particle momentum and energy from detector hits\nFile: {self.input_path.name}")
         fig.tight_layout(rect=[0, 0.14, 1, 1])
         fig.text(
             0.01,
@@ -1810,7 +1905,7 @@ class ParquetValidator:
         )
 
         if self.save_plots:
-            out_file = str(self.plots_dir / "gate_H3_H4.png")
+            out_file = str(self.plots_dir / "hit_momentum_and_energy.png")
             fig.savefig(out_file, dpi=120, bbox_inches="tight")
             print(f"Saved gate plot to {out_file}")
         if self.show_plots:
@@ -1831,8 +1926,8 @@ class ParquetValidator:
     def write_report(self, json_path):
         overall, n_pass, n_fail, n_warn, n_skip = self.summary()
         plots = sorted(g.plot for g in self.gates if g.plot)
-        if (self.plots_dir / "gate_H3_H4.png").exists():
-            plots.append("gate_H3_H4.png")
+        if (self.plots_dir / "hit_momentum_and_energy.png").exists():
+            plots.append("hit_momentum_and_energy.png")
         report = {
             "file": str(self.input_path),
             "detector": self.detector,
@@ -1845,6 +1940,7 @@ class ParquetValidator:
             "n_skip": n_skip,
             "plots": plots,
             "gates": [asdict(g) for g in self.gates],
+            "alignment_metrics": self.alignment_metrics,
         }
         if json_path is not None:
             with open(json_path, "w") as f:
@@ -1852,10 +1948,10 @@ class ParquetValidator:
 
         print(f"\n=== Validation report: {self.input_path} ===")
         print(f"detector={self.detector} bfield={self.bfield} events_used={self.nev_used}")
-        print(f"{'gate':<4} {'category':<15} {'status':<6} observed")
+        print(f"{'check':<30} {'status':<6} result")
         print("-" * 90)
         for g in self.gates:
-            print(f"{g.gate_id:<4} {g.category:<15} {g.status:<6} {g.observed}")
+            print(f"{g.gate_id:<30} {g.status:<6} {g.observed}")
         print("-" * 90)
         print(f"PASS={n_pass} FAIL={n_fail} WARN={n_warn} SKIP={n_skip} overall={overall}")
         if self.save_plots:
@@ -1871,11 +1967,14 @@ class ParquetValidator:
         if not self.load():
             return self.write_report(report_path)
         self.gate_schema()
+        if any(g.status == "FAIL" for g in self.gates):
+            return self.write_report(report_path)
         if self.nev > 0:
             self.gate_hits()
             self.gate_visualization()
             self.gate_hit_rep_consistency()
             self.gate_tracks_clusters()
+            self.gate_element_target_alignment()
             self.gate_targets()
             self.gate_target_definition()
             self.gate_baseline_pf()
@@ -1900,16 +1999,12 @@ def main():
         "--max-events",
         type=int,
         default=None,
-        help="Cap the number of events used for validation",
+        help="Maximum events to check per file (default: all)",
     )
-    parser.add_argument("--plots-dir", default="validation_plots", help="Directory for per-gate plots")
-    parser.add_argument(
-        "--mode",
-        choices=["strict", "report"],
-        default="strict",
-        help="strict: exit 1 on any FAIL; report: always exit 0",
-    )
+    parser.add_argument("--plots-dir", default="validation_plots", help="Directory for plots and validation_report.json")
     args = parser.parse_args()
+    if args.max_events is not None and args.max_events < 1:
+        parser.error("--max-events must be positive")
 
     input_path = Path(args.input)
     if input_path.is_dir():
@@ -1928,7 +2023,7 @@ def main():
         ok = validator.run()
         all_ok &= ok
 
-    sys.exit(0 if (all_ok or args.mode == "report") else 1)
+    sys.exit(0 if all_ok else 1)
 
 
 if __name__ == "__main__":
