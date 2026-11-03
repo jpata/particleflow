@@ -6,8 +6,14 @@
 #   X_hit_tracker, ytarget_hit_tracker  (raw tracker hits; PN marks for target-owned hits),
 #   X_hit_calo,  ytarget_hit_calo       (raw calo hits; also hosts the exclusive target rows),
 #   genmet, genjet, targetjet, event_id
-# genmet/genjet are clustered from the *measurable truth* set (pre-visibility, pre-allocator,
-# see truth.py genref_features); targetjet from the ytarget representatives.
+#   genmet_withpu, genjet_withpu        (gen reference including pileup)
+#   pufrac_track, pufrac_cluster        (truth pileup fraction of every track / cluster)
+# genmet/genjet are clustered from the hard-scatter part of the *measurable truth* set
+# (pre-visibility, pre-allocator, see truth.py genref_features), genmet_withpu/genjet_withpu from
+# all of it; targetjet from the ytarget representatives.
+# Pileup: a target's ispu is the pileup share of its energy (0 or 1 unless the allocator merged
+# particles from the hard scatter and from pileup into it); see _element_pu_fraction for the
+# per-element fractions.
 # (ycand is zero-filled by the TFDS builder because ColliderML has no PF-candidate baseline.)
 #
 # The converter runs the shared allocator (mlpf.data.target_building) over one EventData built
@@ -73,6 +79,75 @@ cluster_feature_order = EDM4HEP.ClusterFeatures.get_names()  # 17 names
 _hit_feature_order = EDM4HEP.HitFeatures.get_names()  # 15 names
 
 
+def _met_and_jets(features: Dict[str, np.ndarray]):
+    """MET (GeV) and anti-kt jets (rows of pt, eta, phi, energy) of a set of truth particles."""
+    p4 = vector.awk(
+        ak.zip(
+            {
+                "px": features["pt"] * np.cos(features["phi"]),
+                "py": features["pt"] * np.sin(features["phi"]),
+                # pz from eta and pt
+                "pz": features["pt"] * np.sinh(features["eta"]),
+                "energy": features["energy"],
+            }
+        )
+    )
+    met = float(compute_met(ak.unflatten(p4, [len(p4)], axis=0))[0])
+    if len(p4):
+        jets = compute_jets(p4, min_pt=jet_ptcut, jetdef=jetdef)
+        jets = np.array([jets.pt, jets.eta, jets.phi, jets.energy]).T.astype(np.float32)
+    else:
+        jets = np.zeros((0, 4), dtype=np.float32)
+    return met, jets
+
+
+def _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_of: np.ndarray, n_cluster: int):
+    """Truth pileup fraction of every track and cluster, from the raw release tables only.
+
+    Every particle of the release, Geant4 secondaries included, carries the vertex_primary of
+    the collision it comes from (1 = hard scatter), so each hit can be labelled directly:
+      track:   fraction of the track's hits left by pileup particles
+               (tracks.hit_ids -> tracker_hits.particle_id -> particles.vertex_primary != 1)
+      cluster: pileup fraction of the cluster's calibrated energy (calo_hits.contrib_particle_ids
+               and contrib_energies of its hits, with the calibration of the cluster energy)
+
+    Unlike ytarget's ispu, which describes the target particle an element hosts, this describes
+    the element itself, and is defined also for the elements that host no target. Hits left
+    unclustered (cluster_of == -1) count for no cluster, as for the cluster energy.
+    Returns (pufrac_track, pufrac_cluster), float32 arrays in X_track / X_cluster order.
+    """
+    pid = ak.to_numpy(particles_ev["particle_id"]).astype(np.int64)
+    is_pu_particle = ak.to_numpy(particles_ev["vertex_primary"]) != 1
+    order = np.argsort(pid, kind="stable")
+
+    def is_pu(ids):
+        # particle_id -> vertex_primary; every id in the release resolves to a particle
+        pos = np.clip(np.searchsorted(pid[order], ids), 0, len(pid) - 1)
+        return is_pu_particle[order[pos]]
+
+    # tracks: share of hits from pileup
+    n_hits = ak.to_numpy(ak.num(tracks_ev["hit_ids"])).astype(np.int64)
+    hit_ids = ak.to_numpy(ak.flatten(tracks_ev["hit_ids"])).astype(np.int64)
+    hit_pid = ak.to_numpy(tracker_ev["particle_id"]).astype(np.int64)
+    pu_hits = np.zeros(len(n_hits))
+    np.add.at(pu_hits, np.repeat(np.arange(len(n_hits)), n_hits), is_pu(hit_pid[hit_ids]).astype(np.float64))
+    pufrac_track = pu_hits / np.maximum(n_hits, 1)
+
+    # clusters: share of calibrated deposited energy from pileup
+    n_contrib = ak.to_numpy(ak.num(calo_ev["contrib_particle_ids"], axis=-1)).astype(np.int64)
+    contrib_pid = ak.to_numpy(ak.flatten(calo_ev["contrib_particle_ids"], axis=None)).astype(np.int64)
+    contrib_e = ak.to_numpy(ak.flatten(calo_ev["contrib_energies"], axis=None)).astype(np.float64)
+    hit = np.repeat(np.arange(len(n_contrib)), n_contrib)
+    e = contrib_e * calibration_factors(ak.to_numpy(calo_ev["detector"]).astype(np.int64), DEFAULT_CALIBRATION)[hit]
+    cl = np.asarray(cluster_of, dtype=np.int64)[hit]
+    clustered = cl >= 0
+    e_cluster, e_cluster_pu = np.zeros(n_cluster), np.zeros(n_cluster)
+    np.add.at(e_cluster, cl[clustered], e[clustered])
+    np.add.at(e_cluster_pu, cl[clustered], np.where(is_pu(contrib_pid), e, 0.0)[clustered])
+    pufrac_cluster = np.divide(e_cluster_pu, e_cluster, out=np.zeros(n_cluster), where=e_cluster > 0)
+    return pufrac_track.astype(np.float32), pufrac_cluster.astype(np.float32)
+
+
 def _event_record_one(
     event_id: int,
     particles_ev: ak.Record,
@@ -107,29 +182,17 @@ def _event_record_one(
         particles_ev, calo_ev, tracks_ev, DEFAULT_CALIBRATION, tracker_ev=tracker_ev
     )
 
-    # -- gen reference (measurable truth): genmet / genjet ---------------------
+    # -- gen reference (measurable truth): genmet / genjet, with and without pileup --
     # Built from genref_features — the pre-visibility, pre-allocator measurable set (any
     # attributed calibrated deposit or track hit share, minus neutrinos; the key4hep
     # status-1-and-propagated analogue, see truth.py). Deliberately independent of the
     # allocator so the gen jets/MET stay a truth-level reference instead of restating the
     # target.
-    genref_p4 = vector.awk(
-        ak.zip(
-            {
-                "px": genref_features["pt"] * np.cos(genref_features["phi"]),
-                "py": genref_features["pt"] * np.sin(genref_features["phi"]),
-                # pz from eta and pt
-                "pz": genref_features["pt"] * np.sinh(genref_features["eta"]),
-                "energy": genref_features["energy"],
-            }
-        )
-    )
-    genmet = float(compute_met(ak.unflatten(genref_p4, [len(genref_p4)], axis=0))[0])
-    if len(genref_p4):
-        genjet_np = compute_jets(genref_p4, min_pt=jet_ptcut, jetdef=jetdef)
-        genjet_np = np.array([genjet_np.pt, genjet_np.eta, genjet_np.phi, genjet_np.energy]).T.astype(np.float32)
-    else:
-        genjet_np = np.zeros((0, 4), dtype=np.float32)
+    # genmet/genjet use the hard scatter only (ispu == 0, vertex_primary == 1): the truth that
+    # pileup mitigation is measured against. The *_withpu versions include all collisions.
+    hs = np.asarray(genref_features["ispu"]) == 0
+    genmet, genjet_np = _met_and_jets({k: np.asarray(v)[hs] for k, v in genref_features.items()})
+    genmet_withpu, genjet_withpu_np = _met_and_jets(genref_features)
 
     # -- tracks -> features ---------------------------------------------------
     tfeat = track_features_cml(tracks_ev, tracker_ev)
@@ -149,6 +212,7 @@ def _event_record_one(
         clue_options=clue_options,
     )
     n_cluster = len(cl_feats)
+    pufrac_track, pufrac_cluster = _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_of, n_cluster)
 
     # -- build EventData and run the shared allocator --------------------------
     # The allocator indexes hits in the extended calo-then-tracker space (truth.py appends
@@ -166,7 +230,7 @@ def _event_record_one(
         (np.array([]), np.array([])),
     )
     gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = (
-        assign_genparticles_to_obj_and_merge(gpdata)
+        assign_genparticles_to_obj_and_merge(gpdata, fractional_ispu=True)
     )
     n_gp = len(gpdata_cleaned.gen_features["PDG"])
 
@@ -450,12 +514,16 @@ def _event_record_one(
         "genmet": np.float32(genmet),
         "genjet": genjet_np,
         "targetjet": targetjet_np,
+        "genmet_withpu": np.float32(genmet_withpu),
+        "genjet_withpu": genjet_withpu_np,
+        "pufrac_track": pufrac_track,
+        "pufrac_cluster": pufrac_cluster,
     }
 
 
-# Explicit per-event scalar fields (the only two in the record dict). Routing is by name, not
+# Explicit per-event scalar fields of the record dict. Routing is by name, not
 # by shape: a 1-D field whose first event has length 1 must not be mistaken for a scalar.
-_SCALAR_FIELDS = {"event_id", "genmet"}
+_SCALAR_FIELDS = {"event_id", "genmet", "genmet_withpu"}
 
 
 def _from_events(key: str, vals):

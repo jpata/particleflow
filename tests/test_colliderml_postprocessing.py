@@ -137,3 +137,19 @@ def test_unsplit_pi0_target_is_a_photon():
     y = rec["ytarget_cluster"]
     classes = sorted(y[y[:, 0] != 0, 0].tolist())
     assert classes == [22.0, 22.0]
+
+
+def test_pileup_fraction_of_elements_and_hard_scatter_gen_reference():
+    # Photon B (pid 2) comes from a pileup collision and leaves one of the three track hits.
+    particles, tracks, calo, tracker = _shared_hits_event()
+    particles = _record({k: ([1, 2, 1] if k == "vertex_primary" else particles[k]) for k in particles.fields})
+    tracker = _record({k: ([3, 3, 2] if k == "particle_id" else tracker[k]) for k in tracker.fields})
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+
+    assert rec["pufrac_track"].tolist() == [np.float32(1 / 3)]
+    # one cluster per cell: its pileup fraction is B's share of the cell energy
+    pufrac_cell = np.array([0.1 / 3.1, 2.0 / 2.1, 0.05 / 1.05, 0.8 / 0.85])
+    assert np.allclose(rec["pufrac_cluster"][rec["hit_to_cluster"]], pufrac_cell, rtol=1e-5)
+    # the hard-scatter gen reference drops B (150 GeV along y): one jet less, smaller MET
+    assert len(rec["genjet"]) == len(rec["genjet_withpu"]) - 1
+    assert rec["genmet"] < rec["genmet_withpu"]
