@@ -36,7 +36,12 @@ def shell_environment(tmp_path):
     stub.mkdir()
     env = {key: value for key, value in os.environ.items() if not key.startswith("BASH_FUNC_")}
     env.update(
-        PATH=f"{stub}:/usr/bin:/bin", BASH_ENV="/dev/null", MLPF_REPO_ROOT=str(ROOT), SLURM_JOB_ID="123", MIOPEN_USER_DB_PATH=str(tmp_path / "miopen")
+        PATH=f"{stub}:/usr/bin:/bin",
+        BASH_ENV="/dev/null",
+        USER="testuser",
+        MLPF_REPO_ROOT=str(ROOT),
+        SLURM_JOB_ID="123",
+        MIOPEN_USER_DB_PATH=str(tmp_path / "miopen"),
     )
     return stub, env
 
