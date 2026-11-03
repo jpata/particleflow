@@ -64,6 +64,7 @@ build
 logs_slurm/
 
 # Local validation and analysis artifacts
+/reports/
 .chart-data-*/
 data/tfds_validation_cld_hits/
 local_test_data/
