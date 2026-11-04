@@ -53,7 +53,11 @@ def _isinf_nodes(node, types, producers, index):
     value = node.input[0]
     producer = producers.get(value)
     # Torch promotes to double solely for this test. Widening cannot create inf.
-    if producer is not None and producer.op_type == "Cast" and types.get(producer.input[0]) in (TensorProto.FLOAT, TensorProto.FLOAT16):
+    if (
+        producer is not None
+        and producer.op_type == "Cast"
+        and types.get(producer.input[0]) in (TensorProto.FLOAT, TensorProto.FLOAT16, TensorProto.BFLOAT16)
+    ):
         if types.get(value) == TensorProto.DOUBLE:
             value = producer.input[0]
     dtype = types[value]
@@ -79,6 +83,65 @@ def _isinf_nodes(node, types, producers, index):
     ]
 
 
+def _lower_logsumexp(graph):
+    """Keep exp inputs bounded when a provider lowers LogSumExp naively.
+
+    MIGraphX 2.18 parses ReduceLogSumExp as log(sum(exp(x))). HEPTv2's
+    trained attention scores can exceed the FP32 exponential range. Shift by
+    the maximum explicitly; retain +/-inf semantics by using a zero shift
+    for infinite maxima. This changes export only, not the eager reference.
+    """
+    if not any(n.domain == "" and n.op_type == "ReduceLogSumExp" for n in graph.graph.node):
+        return
+    inferred = onnx.shape_inference.infer_shapes(graph)
+    types = {v.name: v.type.tensor_type.elem_type for v in (*inferred.graph.input, *inferred.graph.value_info, *inferred.graph.output)}
+    version = next(v.version for v in graph.opset_import if v.domain == "")
+    nodes = []
+    for index, node in enumerate(graph.graph.node):
+        if node.domain != "" or node.op_type != "ReduceLogSumExp":
+            nodes.append(node)
+            continue
+        prefix = f"mlpf_export_lse_{index}"
+        attrs = {a.name: helper.get_attribute_value(a) for a in node.attribute}
+        keepdims = attrs.get("keepdims", 1)
+        reduction_attrs = {"keepdims": 1}
+        if "noop_with_empty_axes" in attrs:
+            reduction_attrs["noop_with_empty_axes"] = attrs["noop_with_empty_axes"]
+        axes = list(node.input[1:])
+        if "axes" in attrs:
+            axes = [prefix + "_axes"]
+            nodes.append(_constant(axes[0], TensorProto.INT64, attrs["axes"], [len(attrs["axes"])]))
+        maximum_inputs = [node.input[0], *axes]
+        if version < 18:
+            maximum_inputs = [node.input[0]]
+            if "axes" in attrs:
+                reduction_attrs["axes"] = attrs["axes"]
+        dtype = types[node.input[0]]
+        nodes += [
+            helper.make_node("ReduceMax", maximum_inputs, [prefix + "_max"], **reduction_attrs),
+            _constant(prefix + "_inf", dtype, [float("inf")]),
+            _constant(prefix + "_zero", dtype, [0]),
+            helper.make_node("Abs", [prefix + "_max"], [prefix + "_abs"]),
+            helper.make_node("Equal", [prefix + "_abs", prefix + "_inf"], [prefix + "_infinite"]),
+            helper.make_node("Where", [prefix + "_infinite", prefix + "_zero", prefix + "_max"], [prefix + "_shift"]),
+            helper.make_node("Sub", [node.input[0], prefix + "_shift"], [prefix + "_centered"]),
+            helper.make_node("Exp", [prefix + "_centered"], [prefix + "_exp"]),
+            helper.make_node(
+                "ReduceSum",
+                [prefix + "_exp", *axes],
+                [prefix + "_sum"],
+                keepdims=keepdims,
+                **({"noop_with_empty_axes": attrs["noop_with_empty_axes"]} if "noop_with_empty_axes" in attrs else {}),
+            ),
+            helper.make_node("Log", [prefix + "_sum"], [prefix + "_log"]),
+            helper.make_node("Shape", [prefix + "_sum"], [prefix + "_shape"]),
+            helper.make_node("Reshape", [prefix + "_shift", prefix + "_shape"], [prefix + "_offset"]),
+            helper.make_node("Add", [prefix + "_offset", prefix + "_log"], list(node.output)),
+        ]
+    del graph.graph.node[:]
+    graph.graph.node.extend(nodes)
+
+
 def _lower_nonfinite(graph):
     inferred = onnx.shape_inference.infer_shapes(graph)
     types = {value.name: value.type.tensor_type.elem_type for value in (*inferred.graph.input, *inferred.graph.value_info, *inferred.graph.output)}
@@ -96,6 +159,29 @@ def _lower_nonfinite(graph):
     graph.graph.node.extend(nodes)
 
 
+def _widen_bf16_comparisons(graph):
+    """BF16-to-FP32 widening is exact, including nonfinite classification.
+
+    ORT CUDA 1.29 does not register BF16 comparison kernels. Keep arithmetic
+    BF16 where requested while computing these predicates in FP32.
+    """
+    inferred = onnx.shape_inference.infer_shapes(graph)
+    types = {v.name: v.type.tensor_type.elem_type for v in (*inferred.graph.input, *inferred.graph.value_info, *inferred.graph.output)}
+    types.update({v.name: v.data_type for v in inferred.graph.initializer})
+    nodes, widened = [], {}
+    for index, node in enumerate(graph.graph.node):
+        if node.domain == "" and node.op_type in {"Equal", "Greater", "Less", "GreaterOrEqual", "LessOrEqual"}:
+            for i, name in enumerate(node.input):
+                if types.get(name) == TensorProto.BFLOAT16:
+                    if name not in widened:
+                        widened[name] = f"mlpf_bf16_predicate_{index}_{i}"
+                        nodes.append(helper.make_node("Cast", [name], [widened[name]], to=TensorProto.FLOAT))
+                    node.input[i] = widened[name]
+        nodes.append(node)
+    del graph.graph.node[:]
+    graph.graph.node.extend(nodes)
+
+
 def _node_inputs(node):
     used = set(node.input)
     for attribute in node.attribute:
@@ -104,6 +190,30 @@ def _node_inputs(node):
             local = {v.name for v in (*subgraph.input, *subgraph.initializer)} | {v for n in subgraph.node for v in n.output}
             used.update(set().union(*(_node_inputs(n) for n in subgraph.node)) - local)
     return used
+
+
+def _raw_bf16_literals(graph):
+    """Use exact raw BF16 bits; MIGraphX cannot parse BF16 int32_data literals."""
+    from onnx import numpy_helper
+
+    def tensor(value):
+        if value.data_type == TensorProto.BFLOAT16 and not value.raw_data:
+            value.CopyFrom(numpy_helper.from_array(numpy_helper.to_array(value), name=value.name))
+
+    def visit(body):
+        for value in body.initializer:
+            tensor(value)
+        for node in body.node:
+            for attr in node.attribute:
+                if attr.type == onnx.AttributeProto.TENSOR:
+                    tensor(attr.t)
+                elif attr.type == onnx.AttributeProto.GRAPH:
+                    visit(attr.g)
+                elif attr.type == onnx.AttributeProto.GRAPHS:
+                    for child in attr.graphs:
+                        visit(child)
+
+    visit(graph.graph)
 
 
 def _remove_dead_nodes(graph):
@@ -127,8 +237,11 @@ def finalize_export(graph, attention_format, attention_dtype, *, output_widths):
     nodes = prefix + list(graph.graph.node) + suffix
     del graph.graph.node[:]
     graph.graph.node.extend(nodes)
+    _lower_logsumexp(graph)
     _lower_nonfinite(graph)
+    _widen_bf16_comparisons(graph)
     _remove_dead_nodes(graph)
+    _raw_bf16_literals(graph)
     metadata = {prop.key: prop.value for prop in graph.metadata_props}
     metadata.update(
         attention_format=attention_format,
