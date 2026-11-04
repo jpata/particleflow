@@ -46,7 +46,7 @@
 #   interactions) can deposit in the endcap. It is replaced as a target candidate by its
 #   direct Geant4 children, repeated while a child is itself beyond the cut (a child pi0 with
 #   recorded children is split into them). Its own contributions are not attributed, and it
-#   is never a surrogate ancestor.
+#   is never a surrogate ancestor; a surrogate ancestor beyond the cut is replaced the same way.
 #
 # MERGES
 #   Handled by the shared allocator (target_building.assign_genparticles_to_obj_and_merge);
@@ -306,7 +306,8 @@ def build_leaf_maps(particles_ev: Dict[str, Any], calo_ev: Dict[str, Any], track
     pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles_ev)
     replaced = np.zeros(len(pid), dtype=bool)
     if replace_out_of_acceptance:
-        replaced = replace_out_of_acceptance_particles(is_leaf, pid, pdg, parent, out_of_acceptance(particles_ev))
+        out = out_of_acceptance(particles_ev)
+        replaced = replace_out_of_acceptance_particles(is_leaf, pid, pdg, parent, out)
     surrogate = np.zeros(len(pid), dtype=bool)
     if use_surrogate_ancestors:
         cid = _redirect_ids(np.asarray(ak.to_numpy(ak.flatten(calo_ev["contrib_particle_ids"], axis=None))).ravel(), redirect)
@@ -319,6 +320,13 @@ def build_leaf_maps(particles_ev: Dict[str, Any], calo_ev: Dict[str, Any], track
         hit_pids = hit_pids[~np.isin(hit_pids, pid[replaced].astype(np.int64))]
         rows, _, _ = find_surrogate_ancestors(hit_pids, pid, parent, primary, is_leaf)
         surrogate[rows] = True
+        if replace_out_of_acceptance and (surrogate & out).any():
+            # a surrogate beyond the cut is replaced the same way (its generator daughters are silent, so its
+            # interacting Geant4 secondaries take over)
+            candidate = is_leaf | surrogate
+            replace_out_of_acceptance_particles(candidate, pid, pdg, parent, out)
+            surrogate &= candidate
+            is_leaf = candidate & ~surrogate
     return pid, pdg, parent, is_leaf | surrogate, redirect, surrogate
 
 

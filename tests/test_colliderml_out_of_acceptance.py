@@ -113,3 +113,17 @@ def test_replaced_particle_is_not_a_surrogate(monkeypatch):
     particles, calo = _particles(rows), _calo([[(1, 0.05)]])
     assert _targets(particles, calo, False, monkeypatch)[0] == [1]
     assert _targets(particles, calo, True, monkeypatch)[0] == []
+
+
+def test_forward_surrogate_is_replaced(monkeypatch):
+    # a generator-decayed K0S (10) at eta 4.5 interacts in the beam pipe: its generator daughters (11, 12) are
+    # silent and its Geant4 secondary (20) deposits, so without the replacement the K0S is a surrogate target
+    rows = [
+        _p(10, 310, 0.0, 0.5, 4.5, True, -1, mass=0.498),
+        _p(11, 211, 1.0, 0.3, 4.5, True, 10),
+        _p(12, -211, -1.0, 0.2, 4.5, True, 10),
+        _p(20, 2112, 0.0, 1.0, 3.0, False, 10, BEAM_PIPE, mass=0.94),
+    ]
+    particles, calo = _particles(rows), _calo([[(20, 0.1)]])
+    assert _targets(particles, calo, False, monkeypatch)[0] == [10]
+    assert _targets(particles, calo, True, monkeypatch)[0] == [20]
