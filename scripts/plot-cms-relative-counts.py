@@ -7,6 +7,8 @@ import html
 import json
 from pathlib import Path
 
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -42,7 +44,7 @@ def main():
     p.add_argument("--outdir", type=Path, required=True)
     a = p.parse_args()
     a.outdir.mkdir(parents=True, exist_ok=True)
-    manifest = json.loads((a.root / "input-manifest.json").read_text())["cases"]
+    manifest = json.loads(input_manifest_path(a.root).read_text())["cases"]
     event_count = len(manifest)
     diagnostic_path = a.root / "particle-count-debug/summary.json"
     diagnostic = json.loads(diagnostic_path.read_text())["rows"] if diagnostic_path.exists() else {}

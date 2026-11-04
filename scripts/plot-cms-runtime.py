@@ -6,6 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -29,7 +31,7 @@ def main(root, outdir):
         provenance[str(path.relative_to(root))] = hashlib.sha256(path.read_bytes()).hexdigest()
         return json.loads(path.read_text())
 
-    cases = read(root / "input-manifest.json")["cases"]
+    cases = read(input_manifest_path(root))["cases"]
     names = [c["file"] for c in cases]
     assert len(set(names)) == len(names)
     sizes = np.array([c["length"] for c in cases])

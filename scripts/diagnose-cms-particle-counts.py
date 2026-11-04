@@ -8,6 +8,8 @@ import argparse
 import io
 import json
 from pathlib import Path
+
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
 import tarfile
 
 import numpy as np
@@ -111,7 +113,7 @@ def main():
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--outdir", type=Path, required=True)
     args = p.parse_args()
-    cases = json.loads((args.root / "input-manifest.json").read_text())["cases"]
+    cases = json.loads(input_manifest_path(args.root).read_text())["cases"]
     records = {}
     # Read the archived outputs directly; no extraction or GPU rerun is needed.
     for device in ["amd", "nvidia"]:

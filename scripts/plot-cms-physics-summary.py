@@ -5,6 +5,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -38,7 +40,7 @@ def spectra(hist, key, min_events=20):
 
 def main(root, outdir):
     outdir.mkdir(parents=True, exist_ok=True)
-    count = len(json.loads((root / "input-manifest.json").read_text())["cases"])
+    count = len(json.loads(input_manifest_path(root).read_text())["cases"])
     rows, data, provenance = [], {}, {}
     for model in ["attention", "heptv2"]:
         for scenario in ["cuda-on", "amd-on", "cuda-off", "amd-off", "amd-pytorch-vs-nvidia"]:

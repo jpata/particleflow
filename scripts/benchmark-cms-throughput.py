@@ -11,6 +11,8 @@ import sys
 import time
 from pathlib import Path
 
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
+
 import numpy as np
 
 
@@ -26,7 +28,7 @@ def worker(args):
     profile = "attention24-bf16" if args.provider == "cuda" else "decomposed-bf16"
     if args.provider == "migraphx" and args.engine == "onnx":
         os.environ.update(q.migraphx_environment(args.model, profile, "on"))
-    manifest = json.loads((args.root / "input-manifest.json").read_text())
+    manifest = json.loads(input_manifest_path(args.root).read_text())
     cases = [c for c in manifest["cases"] if c["slots"] == args.slots][:64]
     if len(cases) < 64:
         raise ValueError("Need 64 distinct events in the selected bucket")

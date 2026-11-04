@@ -3,12 +3,14 @@
 import argparse
 import json
 from pathlib import Path
+
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
 import numpy as np
 import ml_dtypes
 
 
 def audit(root, device="all"):
-    cases = json.loads((root / "input-manifest.json").read_text())["cases"]
+    cases = json.loads(input_manifest_path(root).read_text())["cases"]
     rows = []
     for model in ["attention", "heptv2"]:
         paths = [("pytorch-cuda", root / "reference" / model), ("pytorch-amd", root / "reference-amd" / model)]
