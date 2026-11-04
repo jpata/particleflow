@@ -10,8 +10,9 @@ For the EmpireAI ARM64 GH200 test node and `ghtest` reservation, see the
 `cld_gh200_backbone_benchmark` compares attention and HEPTv2 on the copied ttbar
 hits subset at batch 8 for 1,000 steps with matched decoder, features and seed.
 
-All native and Ray training workers collect portable benchmark evidence by default
-under each experiment's `benchmark/` directory. Use `python -m mlpf.benchmark_report
+Native and Ray training workers collect portable benchmark evidence when enabled
+with `--set benchmark.enabled=true`, under each experiment's `benchmark/` directory.
+Recording is disabled by default; batch sweeps enable it explicitly. Use `python -m mlpf.benchmark_report
 experiments/<scenario>` to export per-worker metrics and allocation work totals to
 JSON/CSV. Configuration lives under `benchmark` (`enabled`, `sample_interval_seconds`,
 `warmup_steps`, `gpu_timing_interval`); the scenario runner accepts these through

@@ -213,7 +213,7 @@ def test_thread_shutdown_and_failure_summary(tmp_path, monkeypatch):
         raise ValueError("training failed")
 
     with pytest.raises(ValueError, match="training failed"):
-        fail("cpu", 1, SimpleNamespace(benchmark=BenchmarkConfig(sample_interval_seconds=0.1)), tmp_path)
+        fail("cpu", 1, SimpleNamespace(benchmark=BenchmarkConfig(enabled=True, sample_interval_seconds=0.1)), tmp_path)
     assert bm.active_benchmark() is None
     summary = json.loads(next(tmp_path.glob("benchmark/*/summary.json")).read_text())
     assert summary["status"] == "failed"
@@ -222,12 +222,17 @@ def test_thread_shutdown_and_failure_summary(tmp_path, monkeypatch):
     assert not any(thread.name == "mlpf-benchmark" and thread.is_alive() for thread in threading.enumerate())
 
 
-def test_disabled_recorder_creates_no_files(tmp_path):
+@pytest.mark.parametrize("settings", [{}, {"enabled": False}])
+def test_disabled_recorder_creates_no_files(tmp_path, monkeypatch, settings):
     @bm.record_benchmark("worker")
     def run(rank, world_size, config, outdir):
         return 42
 
-    assert run("cpu", 1, SimpleNamespace(benchmark=BenchmarkConfig(enabled=False)), tmp_path) == 42
+    def unexpected_recorder(*args, **kwargs):
+        pytest.fail("Disabled recording must not start telemetry or collect provenance")
+
+    monkeypatch.setattr(bm, "BenchmarkRecorder", unexpected_recorder)
+    assert run("cpu", 1, SimpleNamespace(benchmark=BenchmarkConfig(**settings)), tmp_path) == 42
     assert not (tmp_path / "benchmark").exists()
 
 
