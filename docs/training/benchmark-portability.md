@@ -1,4 +1,4 @@
-# Portable benchmark workflow and v3.2.0 evidence
+# Portable CLD training benchmarks
 
 The benchmark separates the scientific recipe, the measurement protocol, and the
 site runtime. A new accelerator should need a platform YAML and, if necessary,
@@ -54,7 +54,7 @@ python -m scripts.training.submit_batch_sweep \
   --require-clean-git
 ```
 
-Remove `--dry-run` to submit. The generic worker starts one `srun` task; the
+Remove `--dry-run` to submit the full sweep after qualification. The generic worker starts one `srun` task; the
 platform YAML supplies the allocation resources. Replace the profile and adapter
 for another site. `--batch-sizes`, `--steps`, `--warmup`, `--output`, `--data-dir`,
 `--scenario` and `--case-timeout` pass through to the shared driver. To preview
@@ -89,6 +89,65 @@ dataset, and equivalent recipe settings. Repeat timed cases in varied order and
 record complete environment locks/container identities. A new hardware name or
 successful import alone does not qualify a platform. Begin with both models at
 batch 8, inspect completion and telemetry coverage, then run the full grid.
+
+## Qualification
+
+After the [site environment setup](hpc-batch-sweep.md), qualify both backbones at
+batch 8 before using the full grid. Run the submitter in the prepared environment;
+for GH200 that requires an ARM allocation. Select the profile and adapter together:
+
+```bash
+python -m scripts.training.submit_batch_sweep \
+  --platform configs/training/platforms/flatiron_h100_single.yaml \
+  --python-wrapper scripts/flatiron/batch_python.sh \
+  --data-manifest configs/training/data/cld_ttbar_hits_config1_3.2.2.json \
+  --require-clean-git --batch-sizes 8 --steps 20 --warmup 2
+```
+
+Inspect `sweep-state.json`: both cases must be `completed`. An overall successful
+sweep may contain OOM cases, which are recorded capacity limits. Other errors and
+timeouts make the command fail after the remaining cases finish. Inspect validation,
+checkpoint writes, nonzero telemetry coverage and telemetry errors. Then omit the
+short-case overrides to run the default grid. Use a fresh output directory for each
+sweep. Retain Slurm accounting separately for allocation walltime and billed cost.
+
+## Recorder artifacts and metric scope
+
+Recording is controlled by `benchmark.enabled`; the sweep enables it explicitly.
+For a scenario run, pass `--set benchmark.enabled=true`. Each worker/session writes
+a unique `benchmark/<worker-session>/` directory, including resumed and Ray workers.
+
+| Artifact | Contents |
+| --- | --- |
+| `metadata.json` | Resolved configuration, package/runtime versions, device/rank identity, source and scheduler provenance |
+| `steps.jsonl` | Actual events/hits/sequence lengths, padded work, host step time, loss and sampled CUDA stream timing |
+| `telemetry.jsonl` | Device/process-tree measurements, phase/step, collection time and errors |
+| `phases.jsonl` | Worker, training, validation, testing, plotting and checkpoint boundaries and checkpoint sizes |
+| `summary.json` | Work totals, warmup-excluded throughput, latency quantiles, phase times, memory peaks and covered busy/power intervals |
+
+The recorder defaults to one-second sampling, 100 warmup steps per session and
+CUDA timing every 10 steps; sweeps select 20 warmup steps. Zero
+`benchmark.gpu_timing_interval` disables CUDA events. Stream elapsed time includes
+host submission gaps and is not the sum of kernel times. Host samples cover the
+process tree, including loader workers; missing counters remain unavailable.
+
+Regenerate `benchmark-report.json` and `.csv` from a run or scenario with
+`python -m mlpf.benchmark_report RUNS_DIRECTORY`. The sweep updates reports in
+`runs/` after each case. Actual work sums across ranks; elapsed time uses the
+observed worker span. Retries include reprocessed events. Nested phase durations
+overlap, so inclusive durations must not be summed. Framework memory peaks can
+include validation and differ from sampled device-wide memory.
+
+Energy uses trapezoidal integration between valid, same-phase samples, with
+coverage reported explicitly. Device/package power is not process attribution;
+check physical boundaries before comparing GPUs. Missing samples are not zero
+utilization. GPU busy percentage does not establish SM/Tensor Core activity,
+achieved FLOPs, bandwidth or coherent-memory/interconnect performance.
+
+`step_valid_time` now measures the current validation call, while
+`step_test_time`, `step_plot_time` and `step_validation_cycle_time` cover the other
+phases. Older GH200 histories used an incorrect cumulative `step_valid_time`;
+do not use that field from the historical runs to estimate validation overhead.
 
 ## Export results without a training environment
 
@@ -140,10 +199,9 @@ recovery; do not blindly overwrite the release or repoint an existing tag.
 ## Historical evidence and remaining limitations
 
 The [v3.2.0 evidence package](https://huggingface.co/jpata/particleflow/tree/5a1fbd8f7cf71c7446a5202f4223009902e2d048/benchmarks/v3.2.0/cld_gpu_batch_sweep)
-covers the 29–30 October 2026 runs. The files are published on `main` at Hugging Face commit
-`5a1fbd8f7cf71c7446a5202f4223009902e2d048` and contains 23 files (4.7 MB), including
-seven reproducible figures and the 19-slide presentation. The `v3.2.0` Git tag is
-not currently present; tagging is reserved for a later manual release. The folder
+covers the 29–30 October 2026 runs at an immutable Hugging Face commit. It contains
+23 files (4.7 MB), including seven reproducible figures and a 19-slide presentation.
+Use the pinned commit link rather than assuming a Git tag exists. The folder
 version labels benchmark evidence, not the TFDS dataset version.
 H100 used TFDS 3.2.1, GH200/LUMI 3.2.2. The runs used different dirty Git bases,
 NVIDIA native versus ROCm external attention, and four versus two loader workers.
@@ -156,7 +214,3 @@ not claim convergence, confidence intervals, portable full-system energy scope,
 or scheduler-billed cost. LUMI power is unavailable; GH200 Attention batch 32 has
 no usable phase-attributed busy/power interval. Missing cgroup readings likewise
 must not be interpreted as zero memory use or an absence of OOM events.
-
-PR scope is the shared workflow, evidence schema/export and release links. Large
-results remain on Hugging Face, not in Git. Existing study inputs and the slides
-remain historical, immutable evidence of the actual recorded configurations.
