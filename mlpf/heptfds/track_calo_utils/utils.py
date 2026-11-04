@@ -130,7 +130,7 @@ def generate_examples(files, detector):
     for filename in files:
         missing = required - set(ak.metadata_from_parquet(filename)["form"].fields)
         if missing:
-            raise ValueError(f"{filename}: missing {sorted(missing)}; regenerate Parquet with --track-calo-targets")
+            raise ValueError(f"{filename}: missing {sorted(missing)}; regenerate Parquet with the current postprocessor")
         # Avoid loading legacy targets, clusters and raw tracker hits.
         data = ak.from_parquet(filename, columns=sorted(required))
         n_events = len(data["X_track"])

@@ -38,6 +38,7 @@ from mlpf.data.colliderml.clustering import cluster_event
 from mlpf.data.colliderml.reader import iter_event_records, n_shard_events, shard_paths
 from mlpf.data.colliderml.tracks import track_features_cml
 from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, calibration_factors, compute_gen_tables
+from mlpf.data.track_calo_targets import build_track_calo_targets
 from mlpf.data.target_building import (
     EventData,
     assign_genparticles_to_obj_and_merge,
@@ -167,7 +168,6 @@ def _event_record_one(
     assignment: str = DEFAULT_ASSIGNMENT,
     event_index: int = -1,
     shard_label: str = "",
-    track_calo_targets: bool = False,
 ) -> Dict[str, Any]:
     """Convert one ColliderML event into the MLPF record fields.
 
@@ -236,17 +236,13 @@ def _event_record_one(
         hit_to_cluster,
         (np.array([]), np.array([])),
     )
-    hybrid_targets = {}
-    if track_calo_targets:
-        from mlpf.data.track_calo_targets import build_track_calo_targets
-
-        hybrid_targets = build_track_calo_targets(
-            gpdata,
-            np.arange(n_hit + n_tracker) < n_hit,
-            jetdef=jetdef,
-            jet_ptcut=jet_ptcut,
-            pi0_as_photon=True,
-        )
+    hybrid_targets = build_track_calo_targets(
+        gpdata,
+        np.arange(n_hit + n_tracker) < n_hit,
+        jetdef=jetdef,
+        jet_ptcut=jet_ptcut,
+        pi0_as_photon=True,
+    )
     gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = (
         assign_genparticles_to_obj_and_merge(gpdata, assignment=assignment)
     )
@@ -604,12 +600,24 @@ def _parquet_usable(ofn: Path, expected_rows: int | None = None, assignment: str
     try:
         import pyarrow.parquet as pq
 
-        metadata = pq.ParquetFile(ofn).metadata
+        parquet = pq.ParquetFile(ofn)
+        metadata = parquet.metadata
         if (metadata.metadata or {}).get(b"mlpf.target_assignment") != _assignment_tag(assignment):
             return False
         if (metadata.metadata or {}).get(b"mlpf.pileup_truth") != b"energy-fraction-v1":
             return False
         if (metadata.metadata or {}).get(b"mlpf.forward_truth") != _forward_truth_tag():
+            return False
+        target_fields = {
+            "track_calo_target_particles",
+            "track_calo_original_to_target",
+            "track_calo_energy_accounting",
+            "ytarget_track_calo_track",
+            "ytarget_track_calo_hit",
+            "targetjet_track_calo",
+        }
+        present = target_fields.intersection(parquet.schema_arrow.names)
+        if present != target_fields:
             return False
         n_rows = metadata.num_rows
     except Exception:
@@ -638,10 +646,9 @@ def process_one_file(
     clue_params: Dict[int, Dict[str, float]] | None = None,
     clue_options: Dict[str, Any] | None = None,
     assignment: str = DEFAULT_ASSIGNMENT,
-    track_calo_targets: bool = False,
 ) -> None:
     source_fns = [particles_fn, tracks_fn, calo_fn, tracker_fn]
-    if num_events == -1 and not track_calo_targets and _shard_done(ofn, source_fns, assignment):
+    if num_events == -1 and _shard_done(ofn, source_fns, assignment):
         print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} already exists, skipping")
         return
     if os.path.isfile(ofn) and num_events == -1:
@@ -721,7 +728,6 @@ def process_one_file(
                 assignment=assignment,
                 event_index=i,
                 shard_label=Path(ofn).name,
-                track_calo_targets=track_calo_targets,
             )
             out.append(event)
             del event
@@ -825,9 +831,6 @@ def main():
         "greedy = the former energy-ordered rule",
     )
     parser.add_argument("--num-events", type=int, default=-1, help="cap number of events per shard (for tests)")
-    parser.add_argument(
-        "--track-calo-targets", action="store_true", help="Export independent tracks + calorimeter-hit targets alongside legacy targets"
-    )
     args = parser.parse_args()
     from mlpf.data.colliderml.clue import resolve_clue_config
 
@@ -885,7 +888,7 @@ def main():
     for i, (p, t, c) in enumerate(zip(pa, tr, ch)):
         out_name = Path(args.outpath) / (p.stem + ".parquet")
         # --num-events is a debug cap: always (re)write, and never count a capped output as done
-        if args.num_events == -1 and not args.track_calo_targets and _shard_done(out_name, [Path(p), Path(t), Path(c), Path(th[i])], args.assignment):
+        if args.num_events == -1 and _shard_done(out_name, [Path(p), Path(t), Path(c), Path(th[i])], args.assignment):
             n_done += 1
             print(f"[shard {i + 1}/{n_files}] {out_name.name} already exists, skipping")
             continue
@@ -905,7 +908,6 @@ def main():
             clue_params=clue_params,
             clue_options=clue_options,
             assignment=args.assignment,
-            track_calo_targets=args.track_calo_targets,
         )
     print(f"all {n_files} shards accounted for ({n_done} already present, {n_files - n_done} newly converted)")
 

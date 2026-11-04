@@ -103,6 +103,7 @@ def test_resume_reconverts_partial_output_and_skips_complete_one(tmp_path):
     assert rows() == 2
     process_one_file(*paths, ofn)  # a full run must not take the capped file for done
     assert rows() == 3
+    assert "track_calo_target_particles" in pq.read_schema(ofn).names
     mtime = ofn.stat().st_mtime_ns
     process_one_file(*paths, ofn)  # complete: skipped
     assert ofn.stat().st_mtime_ns == mtime
@@ -238,26 +239,24 @@ def test_pileup_fields_roundtrip_to_tfds(tmp_path):
     assert example["genmet_withpu"] == rec["genmet_withpu"]
 
 
-def test_track_calo_view_preserves_legacy_fields():
+def test_track_calo_view_labels_tracks_and_hits():
     particles, tracks, calo, tracker = _shared_hits_event()
-    legacy = _event_record_one(0, particles, tracks, calo, tracker)
-    hybrid = _event_record_one(0, particles, tracks, calo, tracker, track_calo_targets=True)
-    for name, value in legacy.items():
-        np.testing.assert_array_equal(hybrid[name], value, err_msg=name)
-    targets = hybrid["track_calo_target_particles"]
-    rows = np.concatenate((hybrid["ytarget_track_calo_track"], hybrid["ytarget_track_calo_hit"]))
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+    targets = rec["track_calo_target_particles"]
+    rows = np.concatenate((rec["ytarget_track_calo_track"], rec["ytarget_track_calo_hit"]))
     assert len(targets) == 3
     assert sorted(rows[rows[:, 0] != 0, PN]) == [1, 2, 3]
-    assert hybrid["ytarget_track_calo_track"][0, 0] == 211
+    assert rec["ytarget_track_calo_track"][0, 0] == 211
 
 
 def test_track_calo_parquet_roundtrip(tmp_path):
     make_fixture(tmp_path / "src", n_events=6)
     paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
     ofn = tmp_path / "out" / "shard.parquet"
-    # Enabling the new view must regenerate even an existing complete legacy file.
     process_one_file(*paths, ofn)
-    process_one_file(*paths, ofn, track_calo_targets=True)
+    mtime = ofn.stat().st_mtime_ns
+    process_one_file(*paths, ofn)
+    assert ofn.stat().st_mtime_ns == mtime
     result = ak.from_parquet(ofn)
     assert "track_calo_target_particles" in result.fields
     for event in result:

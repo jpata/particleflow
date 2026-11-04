@@ -86,7 +86,7 @@ def test_features_and_targets(tmp_path, detector):
 @pytest.mark.parametrize(
     "problem,match",
     [
-        ("missing", "--track-calo-targets"),
+        ("missing", "regenerate Parquet"),
         ("representatives", "representative"),
         ("alignment", "not aligned"),
         ("width", "expected"),

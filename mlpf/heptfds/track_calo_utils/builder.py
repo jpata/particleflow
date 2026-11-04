@@ -10,7 +10,7 @@ class TrackCaloBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     VERSION = tfds.core.Version("1.0.0")
     RELEASE_NOTES = {"1.0.0": "Independent reconstructed-track/calorimeter-hit targets; common 25-column input schema."}
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    Convert source data using --track-calo-targets. Place event-disjoint Parquet
+    Convert source data with the current postprocessor. Place event-disjoint Parquet
     directly in manual_dir (sorted file split 90/10), or in train/ and test/.
     Use config 10 for small samples. Do not split alternate views of an event
     across training and test. Legacy-only Parquet is rejected.

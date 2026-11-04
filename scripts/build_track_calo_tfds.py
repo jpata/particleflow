@@ -24,7 +24,7 @@ def build(input_path, detector, output_dir):
     table = ak.from_parquet(input_path)
     missing = required - set(table.fields)
     if missing:
-        raise ValueError(f"Missing {sorted(missing)}; regenerate input with --track-calo-targets")
+        raise ValueError(f"Missing {sorted(missing)}; regenerate input with the current postprocessor")
     # Write only the new view, preserving event boundaries and original source index ranges.
     table = ak.Array({name: table[name] for name in sorted(required)})
     if len(table) < 2:

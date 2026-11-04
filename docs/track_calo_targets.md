@@ -1,7 +1,7 @@
 # Reconstructed tracks plus calorimeter-hit targets
 
-The opt-in `--track-calo-targets` flag on the Key4hep and ColliderML postprocessors
-exports an additional target view. CLD, CLIC, MAIA and IDEA use Key4hep adapters;
+The Key4hep and ColliderML postprocessors export the track/calo target view.
+CLD, CLIC, MAIA and IDEA use Key4hep adapters;
 ColliderML uses its native release tables. Existing track/cluster and all-hit
 outputs keep their existing definitions. The new view is built before the legacy
 cluster allocator changes the particle population.
@@ -66,9 +66,9 @@ layout below; existing datasets keep their original layouts.
 
 ## Run and validate
 
-Add `--track-calo-targets` to either converter command. Use a distinct output
-directory for comparison. When requested, the flag forces regeneration rather
-than accepting an existing legacy-only output as complete.
+Both converters produce the target view. Use a distinct output directory for
+comparison. Existing files lacking target fields are regenerated; complete
+outputs are reused.
 
 The local smoke script uses the CLD/CLIC CI ROOT samples, the MAIA sample used by
 `scripts/local_test_maia.sh`, the local IDEA ttbar ROOT sample, and the locally downloaded real ColliderML tables:
@@ -201,8 +201,7 @@ rows simply because their `elemtype` is also 1.
 
 ## IDEA extension
 
-IDEA postprocessing now accepts `--track-calo-targets`, and its production spec
-turns the option on by default. Existing track/cluster outputs remain unchanged,
+IDEA postprocessing produces track/calo targets. Existing track/cluster outputs remain unchanged,
 and legacy raw-hit targets remain empty. `X_hit_calo[N,15]` holds positive-energy
 digitized signals from
 `DRcaloSiPMreadoutDigiHit` (Cherenkov) and

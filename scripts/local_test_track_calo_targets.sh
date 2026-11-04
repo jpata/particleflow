@@ -25,11 +25,11 @@ for detector in cld clic maia idea; do
     # Explicit local reader avoids the FSSpecSource PODIO metadata stall.
     "$TRACK_CALO_PYTHON" -u -c 'import functools, runpy, uproot; original_open = uproot.open; uproot.open = lambda *a, **kw: original_open(*a, **{"handler": uproot.source.file.MultithreadedFileSource, **kw}); runpy.run_module("mlpf.data.key4hep.postprocessing", run_name="__main__")' \
         --input "$source_file" --detector "$detector" --num-events "$NUM_EVENTS" \
-        --outpath "$TRACK_CALO_OUTPUT/$detector" --track-calo-targets > "$TRACK_CALO_OUTPUT/$detector.log" 2>&1
+        --outpath "$TRACK_CALO_OUTPUT/$detector" > "$TRACK_CALO_OUTPUT/$detector.log" 2>&1
 done
 echo "Converting ColliderML ($NUM_EVENTS events)"
 "$TRACK_CALO_PYTHON" -m mlpf.data.colliderml.postprocessing --input "$COLLIDERML_SOURCE" \
     --sample ttbar_pu0 --outpath "$TRACK_CALO_OUTPUT/colliderml" --shards 0:1 \
-    --num-events "$NUM_EVENTS" --track-calo-targets > "$TRACK_CALO_OUTPUT/colliderml.log" 2>&1
+    --num-events "$NUM_EVENTS" > "$TRACK_CALO_OUTPUT/colliderml.log" 2>&1
 "$TRACK_CALO_PYTHON" scripts/studies/validate_track_calo_targets.py \
     "$TRACK_CALO_OUTPUT"/{cld,clic,maia,idea,colliderml}/*.parquet --output "$TRACK_CALO_OUTPUT/validation.json"

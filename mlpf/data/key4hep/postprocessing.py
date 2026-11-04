@@ -1386,8 +1386,10 @@ def _idea_relation(prop_data: Any, name: str, iev: int) -> SparseMatrixCOO:
     return gp.astype(np.int32), obj.astype(np.int32), weight.astype(np.float32)
 
 
-def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: int = -1, track_calo_targets: bool = False) -> None:
-    """IDEA track/cluster output, optionally adding independent track/calo targets."""
+def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: int = -1) -> None:
+    """Convert IDEA events to track/cluster and track/calo target views."""
+    from mlpf.data.key4hep.idea_track_calo import build_idea_track_calo, required_branches
+
     started = time.monotonic()
     print(f"idea_postprocessing: opening input={fn}", flush=True)
     # The default multithreaded local-file source can spend minutes waiting in
@@ -1436,10 +1438,7 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         "_ClusterMCParticleLinks_from/_ClusterMCParticleLinks_from.index",
         "_ClusterMCParticleLinks_to/_ClusterMCParticleLinks_to.index",
     ]
-    if track_calo_targets:
-        from mlpf.data.key4hep.idea_track_calo import required_branches
-
-        branches.extend(required_branches())
+    branches.extend(required_branches())
     load_started = time.monotonic()
     print(f"idea_postprocessing: loading {len(branches)} ROOT branch groups", flush=True)
     # Apply the event selection while uproot reads the ROOT file. Previously
@@ -1489,11 +1488,7 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         tracks = idea_track_to_features(prop_data, local_iev, b_field)
         clusters = idea_cluster_to_features(prop_data, local_iev, cell_collection_id)
         gp_to_track = _idea_relation(prop_data, "TracksFromGenParticlesAssociation", local_iev)
-        hybrid_targets = {}
-        if track_calo_targets:
-            from mlpf.data.key4hep.idea_track_calo import build_idea_track_calo
-
-            hybrid_targets = build_idea_track_calo(prop_data, local_iev, collection_ids, gen, tracks, gp_to_track, jetdef, jet_ptcut)
+        hybrid_targets = build_idea_track_calo(prop_data, local_iev, collection_ids, gen, tracks, gp_to_track, jetdef, jet_ptcut)
         gp_to_cluster = _idea_relation(prop_data, "ClusterMCParticleLinks", local_iev)
         # Propagate reconstructed-object links from generator descendants to
         # their status-1 ancestor, matching the existing target convention.
@@ -1633,7 +1628,6 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
                 "X_track": xtrack,
                 "X_cluster": xcluster,
                 "X_hit_tracker": empty_x_hit,
-                "X_hit_calo": hybrid_targets.get("X_hit_calo", empty_x_hit),
                 "ytarget_track": ytrack,
                 "ytarget_cluster": ycluster,
                 "ytarget_hit_tracker": empty_y_hit,
@@ -1662,15 +1656,28 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         )
 
 
-def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1, track_calo_targets: bool = False) -> None:
+def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
 
-    # output exists, do not recreate
-    if os.path.isfile(ofn) and num_events == -1 and first_event == 0 and not track_calo_targets:
-        print("{} exists".format(ofn))
-        return
+    # A complete output with the requested target view can be reused.
+    if os.path.isfile(ofn) and num_events == -1 and first_event == 0:
+        try:
+            fields = set(awkward.metadata_from_parquet(ofn)["form"].fields)
+            target_fields = {
+                "track_calo_target_particles",
+                "track_calo_original_to_target",
+                "track_calo_energy_accounting",
+                "ytarget_track_calo_track",
+                "ytarget_track_calo_hit",
+                "targetjet_track_calo",
+            }
+            if target_fields.issubset(fields):
+                print("{} exists".format(ofn))
+                return
+        except Exception:
+            pass
 
     if detector == "idea":
-        process_one_file_idea(fn, ofn, first_event, num_events, track_calo_targets)
+        process_one_file_idea(fn, ofn, first_event, num_events)
         return
 
     print("loading {}".format(fn))
@@ -1894,15 +1901,11 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             print(f"Skipping event {iev} because it has no visible particles: {e}")
             continue
 
-        hybrid_targets = (
-            build_track_calo_targets(
-                gpdata,
-                np.asarray(gpdata.hit_features["subdetector"]) != 3,
-                jetdef=jetdef,
-                jet_ptcut=jet_ptcut,
-            )
-            if track_calo_targets
-            else {}
+        hybrid_targets = build_track_calo_targets(
+            gpdata,
+            np.asarray(gpdata.hit_features["subdetector"]) != 3,
+            jetdef=jetdef,
+            jet_ptcut=jet_ptcut,
         )
 
         # find the reconstructable genparticles and associate them to the best track/cluster
@@ -2145,9 +2148,6 @@ def parse_args() -> Any:
     parser.add_argument("--first-event", type=int, default=0, help="first event to process")
     parser.add_argument("--num-events", type=int, default=-1, help="number of events to process")
 
-    parser.add_argument(
-        "--track-calo-targets", action="store_true", help="Export independent tracks + calorimeter-hit targets alongside legacy targets"
-    )
     args = parser.parse_args()
     return args
 
@@ -2161,11 +2161,11 @@ def process(args: Any) -> None:
         flist = glob.glob(args.input + "/*.root")
         for infile in flist:
             outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-            process_one_file(infile, outfile, args.detector, args.first_event, args.num_events, getattr(args, "track_calo_targets", False))
+            process_one_file(infile, outfile, args.detector, args.first_event, args.num_events)
     else:
         infile = args.input
         outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-        process_one_file(infile, outfile, args.detector, args.first_event, args.num_events, getattr(args, "track_calo_targets", False))
+        process_one_file(infile, outfile, args.detector, args.first_event, args.num_events)
 
 
 if __name__ == "__main__":

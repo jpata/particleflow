@@ -1,4 +1,4 @@
-"""Validate the opt-in tracks + calorimeter-hit Parquet target contract."""
+"""Validate the tracks + calorimeter-hit Parquet target contract."""
 
 import argparse
 import json
