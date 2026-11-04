@@ -1656,25 +1656,26 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         )
 
 
-def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
+def _has_track_calo_targets(ofn: str) -> bool:
+    try:
+        fields = set(awkward.metadata_from_parquet(ofn)["form"].fields)
+    except Exception:
+        return False
+    return {
+        "track_calo_target_particles",
+        "track_calo_original_to_target",
+        "track_calo_energy_accounting",
+        "ytarget_track_calo_track",
+        "ytarget_track_calo_hit",
+        "targetjet_track_calo",
+    }.issubset(fields)
 
+
+def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
     # A complete output with the requested target view can be reused.
-    if os.path.isfile(ofn) and num_events == -1 and first_event == 0:
-        try:
-            fields = set(awkward.metadata_from_parquet(ofn)["form"].fields)
-            target_fields = {
-                "track_calo_target_particles",
-                "track_calo_original_to_target",
-                "track_calo_energy_accounting",
-                "ytarget_track_calo_track",
-                "ytarget_track_calo_hit",
-                "targetjet_track_calo",
-            }
-            if target_fields.issubset(fields):
-                print("{} exists".format(ofn))
-                return
-        except Exception:
-            pass
+    if os.path.isfile(ofn) and num_events == -1 and first_event == 0 and _has_track_calo_targets(ofn):
+        print("{} exists".format(ofn))
+        return
 
     if detector == "idea":
         process_one_file_idea(fn, ofn, first_event, num_events)
