@@ -628,21 +628,21 @@ productions:
     tfds_mapping:
       ttbar_pu0:
         builder_path: "mlpf/heptfds/colliderml_pf/ttbar"
-        version: "1.4.0"
+        version: "1.5.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ttbar_pu200:
         builder_path: "mlpf/heptfds/colliderml_pf/ttbar_pu200"
-        version: "1.4.0"
+        version: "1.5.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     tfds_hit_mapping:
       ttbar_pu0:
         builder_path: "mlpf/heptfds/colliderml_hits/ttbar"
-        version: "1.2.0"
+        version: "1.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ttbar_pu200:
         builder_path: "mlpf/heptfds/colliderml_hits/ttbar_pu200"
-        version: "1.2.0"
+        version: "1.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # IDEA full simulation and the reconstruction currently provided by FCC-config.
@@ -1342,7 +1342,7 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_nopu_pf"
-            version: "1.4.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1350,12 +1350,12 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_nopu_pf"
-            version: "1.4.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "colliderml_ttbar_nopu_pf"
-        version: "1.4.0"
+        version: "1.5.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # Same recipe as pyg-colliderml-v1 but on the ~200-pileup dataset (ispu flag carried per
@@ -1384,7 +1384,7 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_pu200_pf"
-            version: "1.4.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1392,12 +1392,12 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_pu200_pf"
-            version: "1.4.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "colliderml_ttbar_pu200_pf"
-        version: "1.4.0"
+        version: "1.5.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-colliderml-pu0pu200-groups-v1:
@@ -1410,13 +1410,13 @@ models:
         batch_size: 12
         samples:
           - name: "colliderml_ttbar_nopu_pf"
-            version: "1.4.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       pu200:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_pu200_pf"
-            version: "1.4.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1424,21 +1424,21 @@ models:
         batch_size: 12
         samples:
           - name: "colliderml_ttbar_nopu_pf"
-            version: "1.4.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       pu200:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_pu200_pf"
-            version: "1.4.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "colliderml_ttbar_nopu_pf"
-        version: "1.4.0"
+        version: "1.5.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "colliderml_ttbar_pu200_pf"
-        version: "1.4.0"
+        version: "1.5.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # Hits view: TFDS builder mlpf/heptfds/colliderml_hits/ttbar.py -> colliderml_ttbar_hits
@@ -1467,7 +1467,7 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_hits"
-            version: "1.2.0"
+            version: "1.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1475,12 +1475,12 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_hits"
-            version: "1.2.0"
+            version: "1.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "colliderml_ttbar_hits"
-        version: "1.2.0"
+        version: "1.3.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # Set-prediction variant of the hits model (cf. pyg-cld-hits-set-v1). Regresses absolute
