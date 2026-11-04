@@ -1,6 +1,6 @@
 """Build reproducible CLD ECAL/HCAL pitch variants from pinned k4geo XML.
 
-The committed HCAL 30 mm reference supplies the pinned 2025-05-29 source.
+The dedicated shared geometry directory supplies the pinned 2025-05-29 source.
 ``--source`` may select an identical copy elsewhere. Existing variants are
 verified and never silently overwritten.
 """
@@ -14,6 +14,7 @@ from pathlib import Path
 ECAL_MM = (5.1, 4.0, 3.0, 2.5, 2.0, 1.5)
 HCAL_MM = (30.0, 25.0, 20.0, 15.0, 12.0, 10.0)
 ROOT = Path(__file__).resolve().parents[2] / "mlpf/data/key4hep/geometry/granularity_scan"
+SOURCE = ROOT.parent / "shared/CLD_o2_v07"
 SOURCE_SHA256 = "4ce7894a992a9aa708642453471a8bf30ccf567da6419fed2fc18c4fb67bbf0e"
 
 
@@ -61,7 +62,7 @@ def variants(source, mode, pitch):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, default=ROOT / "hcal_30mm")
+    parser.add_argument("--source", type=Path, default=SOURCE)
     parser.add_argument("--output-root", type=Path, default=ROOT)
     args = parser.parse_args(argv)
     source = args.source.resolve()

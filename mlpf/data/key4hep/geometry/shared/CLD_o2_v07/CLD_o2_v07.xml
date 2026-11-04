@@ -1,0 +1,458 @@
+<lccdd xmlns:compact="http://www.lcsim.org/schemas/compact/1.0"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xs:noNamespaceSchemaLocation="http://www.lcsim.org/schemas/compact/1.0/compact.xsd">
+
+    <info name="CLD_o2_v07"
+        title="FCCee detector model option 2 version 07 (updated TrackerBarrel)"
+        author="Andre Sailer, Leonhard Reichenbach"
+        url="http://ilcsoft.desy.de"
+        status="development"
+        version="7">
+        <comment>The compact format for the FCCee Detector design</comment>
+    </info>
+
+    <includes>
+        <gdmlFile  ref="elements.xml"/>
+        <gdmlFile  ref="materials.xml"/>
+    </includes>
+
+    <define>
+        <constant name="world_side" value="6100*mm"/>
+        <constant name="world_x" value="world_side"/>
+        <constant name="world_y" value="world_side"/>
+        <constant name="world_z" value="world_side"/>
+
+        <constant name="CrossingAngle" value="0.030*rad"/>
+
+        <constant name="SolenoidField" value="2*tesla"/>
+
+        <constant name="DetID_NOTUSED"          value=" 0"/>
+
+        <constant name="DetID_VXD_Barrel"       value=" 1"/>
+        <constant name="DetID_VXD_Endcap"       value=" 2"/>
+
+        <constant name="DetID_IT_Barrel"        value=" 3"/>
+        <constant name="DetID_IT_Endcap"        value=" 4"/>
+
+        <constant name="DetID_OT_Barrel"        value=" 5"/>
+        <constant name="DetID_OT_Endcap"        value=" 6"/>
+
+        <constant name="DetID_ECal_Barrel"      value=" 20"/>
+        <constant name="DetID_ECal_Endcap"      value=" 29"/>
+        <constant name="DetID_ECal_Plug"        value=" 21"/>
+
+        <constant name="DetID_HCAL_Barrel"      value=" 10"/>
+        <constant name="DetID_HCAL_Endcap"      value=" 11"/>
+        <constant name="DetID_HCAL_Ring"        value=" 12"/>
+
+        <constant name="DetID_Yoke_Barrel"      value=" 13"/>
+        <constant name="DetID_Yoke_Endcap"      value=" 14"/>
+
+        <constant name="DetID_LumiCal"          value=" 15"/>
+        <constant name="DetID_LumiCalInstrumentation"          value=" 16"/>
+        <constant name="DetID_LumiCalBackShield"          value=" 18"/>
+        <constant name="DetID_LumiCalCooling"          value=" 17"/>
+        <constant name="DetID_LumiCalNoseShield"          value=" 22"/>
+
+        <constant name="DetID_HOMAbsorber"          value=" 19"/>
+
+        <!-- BPW: Beam Pipe Width -->
+        <constant name="BPWWall"       value="0.35*mm" />
+        <constant name="BPWCool"       value="1.0*mm" />
+        <constant name="BeamPipeWidth" value="2.0*BPWWall + BPWCool"/>
+
+	<constant name="BeamPipeWidthFirstCone" value="2.0*mm" />
+        <!-- this is the inner length of the longer elipse axis -->
+	<constant name="ConeBeamPipe_Rmax" value="28.9*mm" />
+        <constant name="CentralBeamPipe_zmax" value="90*mm"/>
+	<constant name="SeparatedBeamPipe_z" value="1190.0*mm"/>
+        <constant name="CentralBeamPipe_rmax" value="10.0*mm"/>
+	<constant name="BeamPipeGoldWidth" value="0.005*mm" />
+	<constant name="BeamPipeGoldTolerance" value="0.001*mm" />  <!-- dummy tolerance, some small non zero value -->
+	<constant name="BeamPipeConeHalfAngle" value="(ConeBeamPipe_Rmax + BeamPipeWidthFirstCone - CentralBeamPipe_rmax ) / (SeparatedBeamPipe_z - CentralBeamPipe_zmax)" />
+
+        <constant name="InnerTracker_half_length" value="2300*mm" />
+
+        <!-- used in the tracker detector -->
+        <constant name="ConeBeamPipe_zmax" value="InnerTracker_half_length" />
+        <constant name="ConeBeamPipe_rmax_1"  value="InnerTracker_half_length * 0.1 + 1*mm" />
+
+        <constant name="SeparatedBeamPipe_rmax"  value="15*mm"/>
+        <constant name="BeamPipeTantalShieldWidth"  value="15*mm"/>
+        <constant name="SideFillerShieldWidth"  value="7*mm"/>
+        <constant name="TopFillerShieldWidth"  value="8*mm"/>
+        <constant name="BeamPipe_end" value="12500*mm"/>
+
+        <!-- Mike Sullivan's Synch Rad mask -->
+        <constant name="MiddleOfSRMask_z" value="2.1*m" />
+        <constant name="SynchRadMaskSize" value="5*mm" /> <!-- mask tip is at 10 mm from the beamline -->
+        <constant name="mask_epsilon" value="0.001*mm" />
+
+
+        <constant name="size_x" value="60*mm"/>
+        <constant name="size_y" value="12*mm"/>
+        <constant name="size_z" value="50*mm"/>
+
+        <!-- ################### ENVELOPE PARAMETERS ######################################################## -->
+
+        <comment> suggested naming convention:
+
+            main parameters:
+
+            DET_inner_radius    : inner radius of tube like envelope  ( inscribed cylinder )
+            DET_outer_radius    : outer radius of tube like envelope  ( circumscribed cylinder )
+            DET_half_length     : half length along z axis
+            DET_min_z           : smallest absolute value on z-axis
+            DET_max_z           : largest  absolute value on z-axis
+            DET_inner_symmetry  : number of sides on the inside  ( 0 for tube )
+            DET_outer_symmetry  : number of sides on the inside  ( 0 for tube )
+            DET_inner_phi0      : optional rotation of the inner polygon ( in r-phi plane )
+            DET_outer_phi0      : optional rotation of the outer polygon ( in r-phi plane )
+
+            additional parameters for cutting away volumes/shapes use one of the above with a number
+            appended and/or an extra specifiaction such as cone ( for a cut away cone )
+
+            DET_inner_radius_1
+            DET_outer_radius_2
+            DET_cone_min_z
+            DET_cone_max_z
+
+        </comment>
+
+        <constant name="env_safety" value="0.1*mm"/>
+
+
+
+        <constant name="Vertex_inner_radius" value="12.5*mm"/>
+        <constant name="Vertex_outer_radius" value="111*mm"/>
+        <constant name="Vertex_half_length" value="302*mm"/>
+        <!-- cone to describe the upper acceptance of the LumiCal -->
+        <constant name="Vertex_LumiCal_Clearence" value="110*mrad"/>
+
+        <constant name="InnerTracker_inner_radius" value="61*mm"/>
+        <constant name="InnerTracker_outer_radius" value="696*mm"/>
+
+        <constant name="OuterTracker_inner_radius" value="696*mm"/>
+        <constant name="OuterTracker_outer_radius" value="2145*mm"/>  <!-- to avoid overlap with CaloFace, but it has to be large enough to accommodate OT-->
+        <constant name="OuterTracker_half_length" value="2300*mm"/>
+
+        <constant name="ECalBarrel_inner_radius" value="2150*mm"/>
+        <constant name="ECalBarrel_outer_radius" value="2352*mm"/>
+        <constant name="ECalBarrel_half_length" value="2210*mm"/>
+        <constant name="ECalBarrel_symmetry" value="12"/>
+
+        <constant name="ECalEndcap_inner_radius" value="340*mm"/>
+        <constant name="ECalEndcap_outer_radius" value="2455*mm"/>
+        <constant name="ECalEndcap_min_z" value="2307*mm"/>
+        <constant name="ECalEndcap_max_z" value="2509*mm"/>
+        <constant name="ECalEndcap_outer_symmetry" value="12"/>
+        <constant name="ECalEndcap_inner_symmetry" value="12"/>
+
+        <!-- ECal plug not used -->
+        <constant name="ECalPlug_inner_radius" value="260*mm"/>
+        <constant name="ECalPlug_outer_radius" value="380*mm"/>
+        <constant name="ECalPlug_min_z" value="2307*mm"/>
+        <constant name="ECalPlug_max_z" value="2509*mm"/>
+        <constant name="ECalPlug_outer_symmetry" value="12"/>
+        <constant name="ECalPlug_inner_symmetry" value="12"/>
+
+        <constant name="HCalBarrel_inner_radius" value="2400*mm"/>
+        <constant name="HCalBarrel_outer_radius" value="3566*mm"/>
+        <constant name="HCalBarrel_half_length" value="2210*mm"/>
+        <constant name="HCalBarrel_symmetry" value="12"/>
+
+        <constant name="HCalEndcap_inner_radius" value="340*mm"/>
+        <constant name="HCalEndcap_outer_radius" value="3566*mm"/>
+        <constant name="HCalEndcap_min_z" value="2539*mm"/>
+        <constant name="HCalEndcap_max_z" value="3705*mm"/>
+        <constant name="HCalEndcap_symmetry" value="12"/>
+        <constant name="HCalEndcap_zcutout" value="200*mm"/>
+        <constant name="HCalEndcap_rcutout" value="0*mm"/>
+
+        <constant name="HCalRing_inner_radius" value="2475*mm"/>
+        <constant name="HCalRing_outer_radius" value="HCalEndcap_outer_radius"/>
+        <constant name="HCalRing_min_z" value="2353.5*mm"/>
+        <constant name="HCalRing_max_z" value="HCalEndcap_min_z"/>
+        <constant name="HCalRing_symmetry" value="12"/>
+
+        <constant name="Solenoid_inner_radius" value="3719*mm"/>
+        <constant name="Solenoid_outer_radius" value="4272*mm"/>
+        <constant name="Solenoid_half_length" value="3705*mm"/>
+        <constant name="Solenoid_Coil_half_length" value="3476*mm"/>
+        <constant name="Solenoid_Coil_radius" value="3930*mm"/>
+
+        <constant name="YokeBarrel_inner_radius" value="4479*mm"/>
+        <constant name="YokeBarrel_outer_radius" value="6000*mm"/>
+        <constant name="YokeBarrel_half_length" value="3755*mm"/>
+        <constant name="YokeBarrel_symmetry" value="12"/>
+
+        <constant name="YokeEndcap_inner_radius" value="400*mm"/>
+        <constant name="YokeEndcap_outer_radius" value="6000*mm"/>
+        <constant name="YokeEndcap_min_z" value="3755*mm"/>
+        <constant name="YokeEndcap_max_z" value="5300*mm"/>
+        <constant name="YokeEndcap_outer_symmetry" value="12"/>
+        <constant name="YokeEndcap_inner_symmetry" value="0"/>
+
+        <constant name="CompSol_min_z" value="1230*mm"/>
+
+        <!-- _prime marks the coordinate system along the beamline instead of the detector coordinate frame -->
+        <constant name="LumiCal_min_z_prime" value="1074*mm"/>
+        <constant name="LumiCal_dz_prime" value="0.5 * 25 * 4.5 * mm"/> <!-- Must be consistent with layers defined in the lumiCal xml, half-length-->
+        <constant name="LumiCal_max_z_prime" value="LumiCal_min_z_prime + LumiCal_dz_prime * 2" />
+
+        <!-- calculate the Z position in the detector reference frame for consistency with existing drivers -->
+        <constant name="LumiCal_min_z" value="LumiCal_min_z_prime*cos(0.5*CrossingAngle)"/>
+        <constant name="LumiCal_max_z" value="LumiCal_max_z_prime*cos(0.5*CrossingAngle)" />
+
+        <!-- This has nothing to do with the actual length of the LumiCal, the value is only used for the positioning -->
+        <constant name="LumiCal_dz" value="LumiCal_dz_prime * cos(0.5 * CrossingAngle)"/>
+
+        <constant name="LumiCal_inner_radius" value="55.0*mm"/>
+        <constant name="LumiCal_outer_radius" value="115.0*mm- env_safety"/>
+
+	<constant name="LumiCal_Instr_thickness" value="20*mm"/>
+	<constant name="LumiCal_Instr_inner_radius" value="LumiCal_outer_radius"/>
+	<constant name="LumiCal_Instr_outer_radius" value="LumiCal_outer_radius+LumiCal_Instr_thickness - env_safety"/>
+
+	<constant name="LumiCal_Cool_thickness" value="9.75*mm"/>
+	<constant name="LumiCal_Cool_inner_radius" value="LumiCal_Instr_outer_radius"/>
+	<constant name="LumiCal_Cool_outer_radius" value="LumiCal_Instr_outer_radius+LumiCal_Cool_thickness"/>
+
+        <constant name="Lcal_services_rmax" value="LumiCal_outer_radius+30*mm"/>
+        <constant name="Lcal_offset_phi" value=" 0."/>
+        <!--preliminary LumiCal shielding-->
+        <!--back shielding-->
+        <constant name="LumiCal_Shield_inner_radius" value="LumiCal_inner_radius"/>
+        <constant name="LumiCal_Shield_outer_radius" value="LumiCal_outer_radius+LumiCal_Instr_thickness+LumiCal_Cool_thickness"/>
+        <!-- For convenience, z here refers to dimensions *along the beam pipe*, which is tilted by CrossingAngle/2 w.r.t the global z axis -->
+        <constant name="LumiCal_shield_dz_prime" value="3.5/2.0*mm"/> <!-- Must be consistent with layers defined in the lumiCal xml (1*3.5 mm)-->
+        <constant name="LumiCal_shield_dz" value="LumiCal_shield_dz_prime  * cos(0.5 * CrossingAngle)"/>
+
+        <constant name="BeamCal_inner_radius" value="32*mm"/>
+        <constant name="BeamCal_outer_radius" value="150*mm"/>
+        <constant name="BeamCal_min_z" value="3181*mm"/>
+        <constant name="BeamCal_max_z" value="3441*mm"/>
+        <constant name="BeamCal_dz" value="(BeamCal_max_z-BeamCal_min_z)/2.0"/>
+
+        <constant name="Kicker_inner_radius" value="4*mm"/>
+        <constant name="Kicker_outer_radius" value="25*mm"/>
+        <constant name="Kicker_min_z" value="3480*mm"/>
+        <constant name="Kicker_max_z" value="3780*mm"/>
+
+        <constant name="BPM_inner_radius" value="36*mm"/>
+        <constant name="BPM_outer_radius" value="55*mm"/>
+        <constant name="BPM_min_z" value="3790*mm"/>
+        <constant name="BPM_max_z" value="3880*mm"/>
+
+        <constant name="QD0_min_z" value="2000*mm"/>
+        <constant name="QD0_max_z" value="5400*mm"/>
+	<constant name="QD0Coil_outer_radius" value="30*mm"/>
+        <constant name="CollimatorInFrontOfQD0_dz" value="20*cm"/>
+        <constant name="CollimatorInFrontOfQD0_radius" value="10*mm"/>
+        <constant name="CollimatorInFrontOfQD0_dr" value="16*mm"/>
+
+        <constant name="tracker_region_zmax" value="OuterTracker_half_length"/>
+        <constant name="tracker_region_rmax" value="OuterTracker_outer_radius"/>
+
+        <constant name="GlobalTrackerReadoutID" type="string" value="system:5,side:-2,layer:6,module:11,sensor:8"/>
+    </define>
+
+        <!--
+       If the volume should be connected to the world:   connected="true"
+       else if the volume is part of the parallelworld:  connected="false"
+       The volume is always connected to the top level!
+    -->
+    <parallelworld_volume name="tracking_volume" anchor="/world" material="Air" connected="false"
+        vis="VisibleBlue">
+        <shape type="Polycone" material="Air">
+            <!-- small-angle approximation for tan(theta) -->
+            <zplane z="-OuterTracker_half_length"   rmin="149*mrad * ConeBeamPipe_zmax" rmax="OuterTracker_outer_radius" />
+            <zplane z="-CentralBeamPipe_zmax"       rmin="0"                            rmax="OuterTracker_outer_radius" />
+            <zplane z="+CentralBeamPipe_zmax"       rmin="0"                            rmax="OuterTracker_outer_radius" />
+            <zplane z="+OuterTracker_half_length"   rmin="149*mrad * ConeBeamPipe_zmax" rmax="OuterTracker_outer_radius" />
+        </shape>
+    </parallelworld_volume>
+
+    <limits>
+        <limitset name="cal_limits">
+            <limit name="step_length_max" particles="*" value="5.0" unit="mm" />
+        </limitset>
+    </limits>
+    <regions>
+        <region name="BeampipeRegion"            />
+        <region name="VertexBarrelRegion"        />
+        <region name="VertexEndcapRegion"        />
+        <region name="InnerTrackerBarrelRegion"  />
+        <region name="OuterTrackerBarrelRegion"  />
+        <region name="InnerTrackerEndcapRegion"  />
+        <region name="OuterTrackerEndcapRegion"  />
+    </regions>
+
+
+    <display>
+      <vis name="VXDVis"        alpha="0.1" r="0.1" 	g=".5"      b=".5"    showDaughters="true"  visible="false"/>
+      <vis name="ITVis"       	alpha="1.0" r="0.54"  	g="0.43"    b="0.04"  showDaughters="true"  visible="true"/>
+      <vis name="OTVis"       	alpha="1.0" r="0.8"   	g="0.8"     b="0.4"   showDaughters="true"  visible="false"/>
+      <vis name="ECALVis"     	alpha="1.0" r="0.0"   	g="0.48"    b="0.0"   showDaughters="true"  visible="true"/>
+      <vis name="HCALVis"     	alpha="1.0" r="0.74" 	g="0.81"    b="0.55"  showDaughters="true"  visible="true"/>
+      <vis name="SOLVis"      	alpha="1.0" r="0.4"   	g="0.4"     b="0.4"   showDaughters="true"  visible="true"/>
+      <vis name="YOKEVis"     	alpha="1.0" r="0.0"   	g="0.56"    b="0.28"  showDaughters="true"  visible="true"/>
+      <vis name="LCALInstrVis"  alpha="1.0" r="0.35"  	g="0.0"     b="0.47"  showDaughters="true"  visible="true"/>
+      <vis name="LCALVis"    	alpha="1.0" r="0.25"  	g="0.88"    b="0.81"  showDaughters="true"  visible="true"/>
+      <vis name="LCALCoolVis"   alpha="1.0" r="0.2"   	g="0.6"     b="0"     showDaughters="true"  visible="true"/>
+      <vis name="CompSolVis"    alpha="1.0" r="0.5"   	g="0.5"     b="0.0"   showDaughters="true"  visible="true"/>
+      <vis name="ScreenSolVis"  alpha="1.0" r="1"   	g="1"       b="0"     showDaughters="true"  visible="true"/>
+      <vis name="TantalumVis"   alpha="1.0" r="1"   	g="0.5"     b="0.5"   showDaughters="true"  visible="true"/>
+      <vis name="SupportVis"  	alpha="1"   r="0.2"   	g="0.2"     b="0.2"   showDaughters="true" visible="true"/>
+    </display>
+
+    <include ref="${DD4hepINSTALL}/DDDetectors/compact/detector_types.xml"/>
+
+    <include ref="Beampipe_o4_v05.xml"/>
+
+    <include ref="BeamInstrumentation_o3_v02_fitShield.xml"/>
+
+    <include ref="LumiCal_o3_v02_05.xml"/>
+
+    <include ref="Vertex_o4_v07_smallBP.xml"/>
+
+    <include ref="InnerTracker_o2_v08.xml"/>
+    <include ref="OuterTracker_o2_v08.xml"/>
+
+    <include ref="ECalBarrel_o2_v01_03.xml"/>
+    <include ref="ECalEndcap_o2_v01_03.xml"/>
+
+    <include ref="HCalBarrel_o1_v01_01.xml"/>
+    <include ref="HCalEndcap_o1_v01_01.xml"/>
+
+    <include ref="Solenoid_o1_v01_02.xml"/>
+
+    <include ref="YokeBarrel_o1_v01_02.xml"/>
+    <include ref="YokeEndcap_o1_v01_02.xml"/>
+
+    <plugins>
+      <plugin name="DD4hepVolumeManager"/>
+      <plugin name="InstallSurfaceManager"/>
+
+      <plugin name="lcgeo_LinearSortingPolicy">
+
+        <argument value="/InnerTrackerEndcapSupport_layer8" />
+        <argument value="InnerTracker_Barrel_half_length_0" />
+        <argument value="InnerTracker_Barrel_radius_0+0.5*mm" />
+        <argument value="0" />
+
+        <argument value="/InnerTrackerEndcapSupport_layer9" />
+        <argument value="InnerTracker_Barrel_half_length_0" />
+        <argument value="InnerTracker_Barrel_radius_1+0.5*mm" />
+        <argument value="0" />
+
+        <argument value="/InnerTrackerEndcapSupport" />
+        <argument value="InnerTracker_Barrel_half_length_0" />
+        <argument value="InnerTracker_Barrel_radius_1+0.5*mm" />
+        <argument value="(InnerTracker_outer_radius-InnerTracker_Barrel_radius_1)/(InnerTracker_half_length-InnerTracker_Barrel_half_length_0)" />
+
+        <argument value="/InnerTrackerEndcap/" />
+        <argument value="InnerTracker_Barrel_half_length_0" />
+        <argument value="InnerTracker_Barrel_radius_1" />
+        <argument value="(InnerTracker_outer_radius-InnerTracker_Barrel_radius_1)/(InnerTracker_half_length-InnerTracker_Barrel_half_length_0)" />
+
+        <argument value="/OuterTrackerEndcap/" />
+        <argument value="OuterTracker_Barrel_half_length" />
+        <argument value="OuterTracker_Barrel_radius_1" />
+        <argument value="(OuterTracker_Endcap_radius_2-OuterTracker_Barrel_radius_1)/(OuterTracker_half_length-OuterTracker_Barrel_half_length)" />
+
+        <argument value="/OuterTrackerEndcapSupport_layer4" />
+        <argument value="OuterTracker_Barrel_half_length" />
+        <argument value="OuterTracker_Barrel_radius_0+0.5*cm" />
+        <argument value="0.0" />
+
+        <argument value="/OuterTrackerEndcapSupport_layer5" />
+        <argument value="OuterTracker_Barrel_half_length" />
+        <argument value="OuterTracker_Barrel_radius_1+0.5*cm" />
+        <argument value="0.0" />
+
+        <argument value="/OuterTrackerEndcapSupport" />
+        <argument value="OuterTracker_Barrel_half_length" />
+        <argument value="OuterTracker_Barrel_radius_1+3*cm" />
+        <argument value="(OuterTracker_Endcap_radius_2-OuterTracker_Barrel_radius_1)/(OuterTracker_half_length-OuterTracker_Barrel_half_length)" />
+
+        <argument value="/VertexEndcap/" />
+        <argument value="VertexEndcap_z1" />
+        <argument value="VertexBarrel_r3+1*cm" />
+        <argument value="(VertexEndcap_rmax-VertexBarrel_r3+1*cm)/(VertexEndcap_z3-VertexEndcap_z1)" />
+
+        <argument value="/VertexVerticalCable" />
+        <argument value="0" />
+        <argument value="VertexBarrel_r3+0.5*cm" />
+        <argument value="0" />
+      </plugin>
+
+    </plugins>
+
+    <fields>
+
+      <field name="GlobalSolenoid" type="solenoid"
+             inner_field="SolenoidField"
+             outer_field="-1.0*tesla"
+             zmax="Solenoid_Coil_half_length"
+             outer_radius="Solenoid_Coil_radius">
+      </field>
+
+      <field name="CompensatingSolenoidZplus" type="solenoid"
+             inner_field="-SolenoidField -SolenoidField * QD0_min_z / ( QD0_min_z - CompSol_min_z)"
+             outer_field="0*tesla"
+             zmax="QD0_min_z"
+	     zmin="CompSol_min_z"
+             outer_radius="20*cm">
+      </field>
+
+      <field name="CompensatingSolenoidZminus" type="solenoid"
+             inner_field="-SolenoidField -SolenoidField * QD0_min_z / ( QD0_min_z - CompSol_min_z)"
+             outer_field="0*tesla"
+             zmin="-QD0_min_z"
+             zmax="-CompSol_min_z"
+             outer_radius="20*cm">
+      </field>
+
+<!-- Detailed field map -->
+<!--field name="TestField" type="FieldXYZ"
+             filename    = "fieldMapXYZ_120218.root"
+             treeName    = "ntuple"
+             xVarName    = "X"
+             yVarName    = "Y"
+             zVarName    = "Z"
+             BxVarName   = "Bx"
+             ByVarName   = "By"
+             BzVarName   = "Bz"
+             xScale      = "1.0"
+             yScale      = "1.0"
+             zScale      = "1.0"
+             bScale      = "1.0"
+             inner_radius="0*mm"
+             outer_radius="500*mm"
+             zmax="3000*mm"
+             coorUnits   = "mm"
+             BfieldUnits = "tesla">
+      </field-->
+
+<!-- to check with the visualisation that this works... :
+      <field name="GlobalSolenoid" type="solenoid"
+             inner_field="SolenoidField"
+             outer_field="-1.5*tesla"
+             zmax="1*m"
+             outer_radius="Solenoid_Coil_radius">
+      </field>
+      <field name="CompensatingSolenoid" type="solenoid"
+             inner_field="-SolenoidField"
+             outer_field="0*tesla"
+             zmax="3*m"
+             zmin="1*m"
+             outer_radius="Solenoid_Coil_radius">
+      </field>
+-->
+
+
+    </fields>
+
+
+</lccdd>
