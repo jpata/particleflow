@@ -1,0 +1,155 @@
+# Approximate Flatiron sweep: local TFDS version 3.2.1; GH200 reference used 3.2.2.
+# Initial single-GH200 comparison on copied ttbar hits config 1.
+# Derived from clic_cld_backbone_benchmark; 1,000 steps measure early learning,
+# not convergence. Both backbones use the same decoder and input features.
+name: cld_h100_backbone_benchmark_321
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  attention:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      model.set_decoder.num_slots: 256
+      model.set_decoder.num_layers: 4
+      model.set_decoder.num_heads: 8
+      model.set_decoder.attention_mode: global-flash
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.proposal_mode: grid-diverse
+      model.set_decoder.proposal_grid_size: 0.1
+      model.set_decoder.use_aggregate_anchors: true
+      model.set_decoder.aggregate_grid_size: 0.1
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+      model.set_decoder.hit_grouping: true
+      model.set_decoder.hit_grouping_dim: 32
+      model.set_decoder.hit_grouping_chunk_size: 1024
+      model.set_decoder.hit_grouping_loss_weight: 0.1
+      model.set_decoder.hit_grouping_background_weight: 0.1
+      model.set_decoder.hit_grouping_detector_balanced: false
+      model.set_decoder.hit_grouping_sparse: false
+      model.set_decoder.hit_grouping_tracker_particle_balanced: false
+      model.set_decoder.tracker_momentum_readout: true
+      model.set_decoder.tracker_group_readout: false
+      model.set_decoder.tracker_fit_correction: false
+      model.set_decoder.tracker_overlap_loss_weight: 0.0
+      model.set_decoder.tracker_geometry_loss_weight: 0.0
+      model.set_decoder.tracker_curvature_loss_weight: 0.0
+      model.set_decoder.event_consistency_loss_weight: 0.0
+      model.hit_feature_engineering.enabled: true
+      model.hit_feature_engineering.geometry: true
+      model.hit_feature_engineering.calorimeter_neighborhood: true
+      model.hit_feature_engineering.tracker_neighborhood: true
+      model.hit_feature_engineering.tracker_momentum: false
+      model.hit_feature_engineering.tracker_doublets: false
+  heptv2:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      model.type: heptv2
+      model.attention: null
+      model.heptv2.embedding_dim: 256
+      model.heptv2.width: 256
+      model.heptv2.num_convs: 6
+      model.heptv2.num_heads: 16
+      model.heptv2.dropout_ff: 0.0
+      model.heptv2.block_size: 128
+      model.heptv2.deterministic_hashing: true
+      model.heptv2.activation_checkpointing: true
+      model.set_decoder.num_slots: 256
+      model.set_decoder.num_layers: 4
+      model.set_decoder.num_heads: 8
+      model.set_decoder.attention_mode: global-flash
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.proposal_mode: grid-diverse
+      model.set_decoder.proposal_grid_size: 0.1
+      model.set_decoder.use_aggregate_anchors: true
+      model.set_decoder.aggregate_grid_size: 0.1
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+      model.set_decoder.hit_grouping: true
+      model.set_decoder.hit_grouping_dim: 32
+      model.set_decoder.hit_grouping_chunk_size: 1024
+      model.set_decoder.hit_grouping_loss_weight: 0.1
+      model.set_decoder.hit_grouping_background_weight: 0.1
+      model.set_decoder.hit_grouping_detector_balanced: false
+      model.set_decoder.hit_grouping_sparse: false
+      model.set_decoder.hit_grouping_tracker_particle_balanced: false
+      model.set_decoder.tracker_momentum_readout: true
+      model.set_decoder.tracker_group_readout: false
+      model.set_decoder.tracker_fit_correction: false
+      model.set_decoder.tracker_overlap_loss_weight: 0.0
+      model.set_decoder.tracker_geometry_loss_weight: 0.0
+      model.set_decoder.tracker_curvature_loss_weight: 0.0
+      model.set_decoder.event_consistency_loss_weight: 0.0
+      model.hit_feature_engineering.enabled: true
+      model.hit_feature_engineering.geometry: true
+      model.hit_feature_engineering.calorimeter_neighborhood: true
+      model.hit_feature_engineering.tracker_neighborhood: true
+      model.hit_feature_engineering.tracker_momentum: false
+      model.hit_feature_engineering.tracker_doublets: false
+seeds:
+- 12345
+training:
+  global_batch_size: 8
+  parameters:
+    optimizer: lamb
+    lr: 0.001
+    lr_schedule: cosinedecay
+    num_steps: 1000
+    patience: 1000
+    val_freq: 250
+    checkpoint_freq: 250
+    nvalid: 128
+    ntest: 32
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 0
+    validation_linear_probe: false
+    validation_linear_probe_max_events: 16
+    pad_to_multiple_elements: 128
+    make_plots: false
+    load: null
+    tensorboard_step_freq: 10
+common_overrides:
+  model.trainable: all
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.attention.num_convs: 6
+  model.attention.num_heads: 16
+  model.attention.head_dim: 16
+  model.attention.use_jagged_attention: true
+  train_dataset.cld_hits.physical.samples: &id001
+    cld_edm_ttbar_hits:
+      version: 3.2.1
+      splits:
+      - '1'
+  valid_dataset.cld_hits.physical.samples: *id001
+  test_dataset: *id001
+allowed_variant_differences:
+- conv_type
+- model.type
+- model.attention
+- model.heptv2

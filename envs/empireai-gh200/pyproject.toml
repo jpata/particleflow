@@ -1,0 +1,57 @@
+[project]
+name = "particleflow-empireai-gh200"
+version = "3.1.0"
+requires-python = "==3.11.*"
+# Training-only environment. The repository is imported via PYTHONPATH, avoiding
+# its x86-only dependency sources. LitePT, Ray HPO and data production are excluded.
+dependencies = [
+    "array-record~=0.8.3",
+    "awkward",
+    "boost-histogram",
+    "comet-ml",
+    "einops",
+    "fastjet",
+    "fsspec",
+    "importlib-resources",
+    "matplotlib",
+    "mlcroissant",
+    "mplhep",
+    "numba",
+    "numpy",
+    "onnx",
+    "onnxscript",
+    "packaging",
+    "pandas",
+    "protobuf~=5.28.3",
+    "psutil",
+    "pyarrow~=18.1.0",
+    "pydantic>=2,<3",
+    "pyyaml",
+    "scikit-learn",
+    "scipy",
+    "seaborn",
+    "tensorboard",
+    "tensorflow~=2.20.0",
+    "tensorflow-datasets~=4.9.9",
+    "tensorflow-metadata~=1.17.3",
+    "torch==2.11.0",
+    "torch-runstats",
+    "tqdm",
+    "uproot",
+    "vector",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'linux' and platform_machine == 'aarch64'"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

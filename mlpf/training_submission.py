@@ -55,6 +55,7 @@ def _worker_for_site(repo_root, site):
         "flatiron": "scripts/flatiron/run_uv_scenario.sh",
         "tallinn": "scripts/tallinn/run_scenario.sh",
         "lumi": "scripts/lumi/run_scenario.sh",
+        "empireai": "scripts/empireai/run_scenario.sh",
     }
     try:
         return repo_root / relative_paths[site]
@@ -71,6 +72,36 @@ def _gpu_request_args(slurm, gpus):
     if slurm.gpu_type:
         resource = f"gpu:{slurm.gpu_type}:{gpus}"
     return ["--gres", resource]
+
+
+def slurm_resource_args(slurm, gpus):
+    """One resource mapping for training arrays and serial benchmark sweeps."""
+    args = [
+        "--time",
+        slurm.time,
+        "--nodes",
+        str(slurm.nodes),
+        "--ntasks-per-node",
+        str(slurm.tasks_per_node),
+        "--partition",
+        slurm.partition,
+        *_gpu_request_args(slurm, gpus),
+        "--cpus-per-task",
+        str(slurm.cpus_per_task),
+    ]
+    for flag, value in (
+        ("--constraint", slurm.constraint),
+        ("--account", slurm.account),
+        ("--qos", slurm.qos),
+        ("--reservation", slurm.reservation),
+        ("--mem", slurm.memory),
+        ("--mem-per-gpu", slurm.memory_per_gpu),
+    ):
+        if value:
+            args.extend([flag, value])
+    if slurm.no_requeue:
+        args.append("--no-requeue")
+    return args
 
 
 def build_slurm_submissions(
@@ -126,30 +157,7 @@ def build_slurm_submissions(
         slurm = profile.slurm
         logs_dir = repo_root / "logs_slurm"
         worker = Path(worker) if worker is not None else _worker_for_site(repo_root, "flatiron")
-        command = [
-            "sbatch",
-            "--time",
-            slurm.time,
-            "--nodes",
-            str(slurm.nodes),
-            "--ntasks-per-node",
-            str(slurm.tasks_per_node),
-            "--partition",
-            slurm.partition,
-            *_gpu_request_args(slurm, gpus),
-            "--cpus-per-task",
-            str(slurm.cpus_per_task),
-        ]
-        if slurm.constraint:
-            command.extend(["--constraint", slurm.constraint])
-        if slurm.account:
-            command.extend(["--account", slurm.account])
-        if slurm.memory:
-            command.extend(["--mem", slurm.memory])
-        if slurm.memory_per_gpu:
-            command.extend(["--mem-per-gpu", slurm.memory_per_gpu])
-        if slurm.no_requeue:
-            command.append("--no-requeue")
+        command = ["sbatch", *slurm_resource_args(slurm, gpus)]
         command.extend(
             [
                 "--array",

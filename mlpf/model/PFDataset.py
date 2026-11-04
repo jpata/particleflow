@@ -1,4 +1,5 @@
 import sys
+import os
 import random
 import resource
 import math
@@ -15,7 +16,9 @@ from mlpf.conf import DatasetSamplerMode, MLPFConfig, OutputMode, Y_FEATURES, da
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
 # file_system strategy can be better when hitting file descriptor limits
-SHARING_STRATEGY = "file_system"
+SHARING_STRATEGY = os.environ.get("MLPF_SHARING_STRATEGY", "file_system")
+if SHARING_STRATEGY not in torch.multiprocessing.get_all_sharing_strategies():
+    raise ValueError(f"Unsupported MLPF_SHARING_STRATEGY: {SHARING_STRATEGY}")
 
 try:
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)

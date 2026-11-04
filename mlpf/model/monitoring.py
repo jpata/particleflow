@@ -1,11 +1,10 @@
-import psutil
 import resource
-import subprocess
-import shutil
-import threading
-import time
 from collections import defaultdict
+
+import psutil
+
 from mlpf.logger import _logger
+from mlpf.model.benchmarking import active_benchmark
 
 try:
     import torch
@@ -13,77 +12,16 @@ except ImportError:
     torch = None
 
 
-class GPUMonitor:
-    def __init__(self, interval=0.5):
-        self.interval = interval
-        self.max_utilization = 0.0
-        self.sum_utilization = 0.0
-        self.count_utilization = 0
-        self.stop_event = threading.Event()
-        self.smi_command = shutil.which("nvidia-smi") or shutil.which("rocm-smi")
-        self.thread = threading.Thread(target=self._monitor, daemon=True)
-        if self.smi_command:
-            self.thread.start()
-
-    def _monitor(self):
-        while not self.stop_event.is_set():
-            try:
-                current_util = None
-                if "nvidia-smi" in self.smi_command:
-                    res = subprocess.run(
-                        [self.smi_command, "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                    )
-                    utils = [float(x) for x in res.stdout.strip().split("\n") if x.strip()]
-                    if utils:
-                        current_util = max(utils)
-                elif "rocm-smi" in self.smi_command:
-                    res = subprocess.run(
-                        [self.smi_command, "--showuse"],
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                    )
-                    for line in res.stdout.split("\n"):
-                        if "GPU use (%)" in line:
-                            val = line.split(":")[-1].strip()
-                            current_util = float(val)
-                            break
-
-                if current_util is not None:
-                    self.max_utilization = max(self.max_utilization, current_util)
-                    self.sum_utilization += current_util
-                    self.count_utilization += 1
-            except Exception:
-                pass
-            time.sleep(self.interval)
-
-    def get_metrics_and_reset(self):
-        max_val = self.max_utilization
-        avg_val = self.sum_utilization / self.count_utilization if self.count_utilization > 0 else 0.0
-
-        self.max_utilization = 0.0
-        self.sum_utilization = 0.0
-        self.count_utilization = 0
-
-        return max_val, avg_val
-
-
-# Initialize a global monitor
-_gpu_monitor = None
-
-
 def log_gpu_utilization_to_tensorboard(tensorboard_writer, step):
-    global _gpu_monitor
-    if _gpu_monitor is None:
-        _gpu_monitor = GPUMonitor()
-
-    max_util, avg_util = _gpu_monitor.get_metrics_and_reset()
-    if tensorboard_writer:
-        tensorboard_writer.add_scalar("system/gpu_utilization_max", max_util, step)
-        tensorboard_writer.add_scalar("system/gpu_utilization_avg", avg_util, step)
+    recorder = active_benchmark()
+    if recorder is None or tensorboard_writer is None:
+        return
+    metrics = recorder.gpu_window()
+    tensorboard_writer.add_scalar("system/gpu_utilization_sample_count", metrics["sample_count"], step)
+    tensorboard_writer.add_scalar("system/gpu_utilization_sum_percent", metrics["sum_percent"], step)
+    if metrics["sample_count"]:
+        tensorboard_writer.add_scalar("system/gpu_utilization_max", metrics["max_percent"], step)
+        tensorboard_writer.add_scalar("system/gpu_utilization_avg", metrics["mean_percent"], step)
 
 
 def monitor_open_files():
@@ -241,6 +179,14 @@ def collect_cuda_memory_metrics(device=None):
         if source_key.endswith("_bytes.all.current"):
             value /= 1024**2
         metrics[target_key] = value
+    host_stats = getattr(torch.cuda.memory, "host_memory_stats", None)
+    if host_stats is not None:
+        try:
+            for key, value in host_stats().items():
+                if key in ("allocated_bytes.current", "allocated_bytes.peak", "active_bytes.current"):
+                    metrics[f"pinned_host_{key.replace('.', '_')}_MB"] = value / 1024**2
+        except RuntimeError:
+            pass
     return metrics
 
 

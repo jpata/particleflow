@@ -1,0 +1,22 @@
+name: flatiron_h100_single
+gpus: 1
+# The site helper runs under uv; child processes inherit its virtual environment.
+python_command: [python3]
+data_dir:
+  cld: ${MLPF_CLD_DATA_DIR}
+experiments_dir: /mnt/home/${USER}/particleflow/experiments
+runtime_overrides:
+  compile: false
+  dtype: bfloat16
+  num_workers: 4
+  prefetch_factor: 2
+  model.attention.use_flash_attn_varlen: false
+slurm:
+  partition: gpu
+  constraint: h100
+  time: "04:00:00"
+  nodes: 1
+  tasks_per_node: 1
+  cpus_per_task: 8
+  gpu_request: gpus-per-task
+  memory: 128G

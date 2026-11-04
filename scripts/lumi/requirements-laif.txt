@@ -3,8 +3,21 @@ awkward
 colorhash
 # Overlay for CLD/CLIC training; keep PyTorch, ROCm and Flash Attention from LAIF.
 comet-ml
+einops
 fastjet
+matplotlib
 mplhep
+numba
+packaging
+pandas
+psutil
+pydantic>=2,<3
+PyYAML
+scikit-learn
+scipy
+seaborn
 tabulate
+tensorboard
 tensorflow-datasets~=4.9.9
+tqdm
 vector
