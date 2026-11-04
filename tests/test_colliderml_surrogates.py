@@ -185,6 +185,8 @@ def test_native_equals_study_simulation_on_real_events(monkeypatch):
     fix (its candidate rows forced into the leaf set with the native rule switched off)."""
     from mlpf.data.colliderml import reader
 
+    # the study simulates the surrogate rule on the leaf set without the out-of-acceptance replacement
+    monkeypatch.setattr(truth, "replace_out_of_acceptance", False)
     study = _study()
     paths = [reader.shard_paths(RELEASE1, "ttbar_pu0", obj)[0] for obj in ["particles", "tracks", "calo_hits", "tracker_hits"]]
     n_surrogates = 0
