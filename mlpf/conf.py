@@ -1231,7 +1231,7 @@ class BenchmarkConfig(BaseModel):
     """Low-overhead per-rank benchmark evidence, independent of TensorBoard."""
 
     model_config = ConfigDict(extra="forbid")
-    enabled: bool = True
+    enabled: bool = False
     sample_interval_seconds: float = Field(default=1.0, ge=0.1, allow_inf_nan=False)
     warmup_steps: int = Field(default=100, ge=0)
     gpu_timing_interval: int = Field(default=10, ge=0)
