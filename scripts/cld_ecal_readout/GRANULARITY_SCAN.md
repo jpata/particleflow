@@ -20,7 +20,7 @@ replaced by older 5.1 mm output. The HCAL 30 mm geometry is an exact copy of
 the pinned baseline.
 
 The ECAL generator card is a copy of the existing Z→ττ card with the 91 GeV
-beam spot values used by CLD reconstruction. The runner passes `--cms 91` to
+beam spot values used by CLD reconstruction. The scan runner `run_sim.sh` passes `--cms 91` to
 reconstruction for ECAL points and `--cms 365` for HCAL points. Generation
 uses identical cards and seed ranges across points; compare generator records
 before treating corresponding files as exact pairs.
@@ -37,8 +37,8 @@ step limit), `ECalBarrel_o2_v01_03.xml` (the pitch and sensitive-layer limit), a
 `ECalEndcap_o2_v01_03.xml` (the sensitive-layer limit; segmentation uses the
 barrel-defined `ECal_cell_size`). HCAL points below 30 mm keep their changed
 barrel/endcap XML locally. Every scenario's top-level compact remains a regular
-file so its includes select that scenario's calorimeter XML. The photon/ttbar
-2 mm pilot likewise keeps its changed XML locally. Production paths are unchanged.
+file so its includes select that scenario's calorimeter XML. Production paths
+are unchanged.
 
 Run `uv run python3 scripts/cld_ecal_readout/prepare_granularity_scan.py` to verify
 all 12 variants without CVMFS. `--source` accepts a relocated copy with the same

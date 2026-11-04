@@ -109,3 +109,35 @@ def test_production_compacts_select_scan_pitch_and_step_limits(mode):
             assert sensitive.get("limits") == ("ecal_limits" if mode == "ecal" else "cal_limits")
         step = tree.find(f".//limitset[@name='{'ecal_limits' if mode == 'ecal' else 'cal_limits'}']/limit")
         assert step.get("value") == ("1.0" if mode == "ecal" else "5.0")
+
+
+@pytest.mark.parametrize("production", ["cld_ecal_pitch_2", "cld_hcal_pitch_10"])
+def test_scan_workflow_selects_runner_and_geometry(tmp_path, monkeypatch, production):
+    import subprocess
+    import sys
+    import yaml
+    from mlpf.snakemake import produce_snakemake as workflow
+
+    repository = Path(__file__).resolve().parents[1]
+    spec = yaml.safe_load((repository / "particleflow_spec.yaml").read_text())
+    spec["project"]["paths"].update(
+        project_root=str(repository), storage_root=str(tmp_path / "storage"), scratch_root=str(tmp_path / "scratch"), tmpdir=str(tmp_path / "tmp")
+    )
+    monkeypatch.setattr(workflow, "load_spec", lambda _: spec)
+    monkeypatch.setattr(workflow, "LOCAL_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setattr(sys, "argv", ["produce_snakemake.py", "--production", production])
+    workflow.main()
+    config = spec["productions"][production]
+    sample_name, sample = next(iter(config["samples"].items()))
+    runner = repository / sample["gen_script"]
+    assert runner.is_file()
+    directory = tmp_path / "jobs" / production
+    generated = directory / "gen" / f"gen_{sample_name}.sh"
+    script = generated.read_text()
+    compact = config["compact_file"].replace("${project.paths.project_root}", str(repository))
+    assert f'export CLD_COMPACT_FILE="{compact}"' in script
+    assert f"export CLD_CMS_ENERGY={config['cms_energy']}" in script
+    assert f"bash {sample['gen_script']} {sample['process_name']}" in script
+    for path in (runner, generated):
+        subprocess.run(["bash", "-n", str(path)], check=True)
+    assert {p.name for p in directory.glob("Snakefile_*")} == {"Snakefile_post", "Snakefile_tfds", "Snakefile_tfds_hit"}

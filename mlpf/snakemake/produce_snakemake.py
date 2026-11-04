@@ -259,8 +259,6 @@ def main():  # noqa: C901
             pythia_card = prod_config.get("pythia_card")
             if pythia_card:
                 exports += f' && export CLD_PYTHIA_CARD="{resolve_path(pythia_card, spec)}"'
-            if prod_config.get("save_sim", False):
-                exports += " && export SAVE_SIM=1"
 
         gen_proto_content = f"""
 start_seed=$1
