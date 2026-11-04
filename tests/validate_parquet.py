@@ -226,6 +226,17 @@ class ParquetValidator:
         self.alignment_metrics = {}
 
     # ------------------------------------------------------------- utilities
+    def gen_reference_fields(self):
+        """(jet field, MET field) of the gen reference to compare all targets with.
+
+        Files with pileup truth store the hard-scatter reference in genjet/genmet and the one
+        over all collisions in genjet_withpu/genmet_withpu. The targets include pileup
+        particles, so closure and jet response must use the latter when it is present.
+        """
+        if "genjet_withpu" in self.data.fields and "genmet_withpu" in self.data.fields:
+            return "genjet_withpu", "genmet_withpu"
+        return "genjet", "genmet"
+
     def add_gate(self, gate_id, category, title, expectation, observed, status):
         gate = GateResult(gate_id, category, title, expectation, observed, status)
         self.gates.append(gate)
@@ -1259,9 +1270,10 @@ class ParquetValidator:
             return
 
         # target_jet_response: jet response, target jet matched to the nearest gen jet
+        genjet_field, _ = self.gen_reference_fields()
         responses = []
         for i in range(self.nev_used):
-            gj = self.ev("genjet", i)
+            gj = self.ev(genjet_field, i)
             tj = self.ev("targetjet", i)
             if len(gj) == 0 or len(tj) == 0:
                 continue
@@ -1283,7 +1295,7 @@ class ParquetValidator:
             ok = (r1_lo <= np.median(responses) <= r1_hi) and (frac_above >= r1_min_above)
             status = "PASS" if ok else "FAIL"
         observed = (
-            f"matched jets={len(responses)}, "
+            f"reference={genjet_field}, matched jets={len(responses)}, "
             f"median={np.median(responses) if len(responses) else float('nan'):.3f}, "
             f"frac>1.0={float(np.mean(responses > 1.0)) if len(responses) else float('nan'):.3f}"
         )
@@ -1647,11 +1659,13 @@ class ParquetValidator:
             colors=["#2ca02c", "#ff7f0e"],
         )
 
-        # target_truth_energy: target vs truth closure (genjet energy + genmet)
+        # target_truth_energy: target vs truth closure (genjet energy + genmet), with the gen
+        # reference over all collisions when the file has one (the targets include pileup)
+        genjet_field, genmet_field = self.gen_reference_fields()
         rel = []
         for i in range(self.nev_used):
             e_target = float(ak.sum(self.data["ytarget_track"][i][:, ENERGY])) + float(ak.sum(self.data["ytarget_cluster"][i][:, ENERGY]))
-            e_truth = float(ak.sum(self.data["genjet"][i][:, 3])) + float(self.data["genmet"][i])
+            e_truth = float(ak.sum(self.data[genjet_field][i][:, 3])) + float(self.data[genmet_field][i])
             if e_truth > 0:
                 rel.append(abs(e_target - e_truth) / e_truth)
         rel = np.array(rel)
@@ -1667,7 +1681,7 @@ class ParquetValidator:
             status = "PASS" if ok else "FAIL"
             expectation = (
                 "The target should reproduce the pythia truth: per-event "
-                f"|E(ytarget)-(E(genjet)+genmet)|/(E(genjet)+genmet) median < "
+                f"|E(ytarget)-(E({genjet_field})+{genmet_field})|/(E({genjet_field})+{genmet_field}) median < "
                 f"{THRESHOLDS['g3_median']} and 90th percentile < {THRESHOLDS['g3_p90']}."
             )
         gate = self.add_gate(
@@ -1675,13 +1689,13 @@ class ParquetValidator:
             "ground truth",
             "Target energy relative to truth energy",
             expectation,
-            f"median={np.median(rel):.4f}, p90={np.percentile(rel, 90):.4f}",
+            f"reference={genjet_field}+{genmet_field}, median={np.median(rel):.4f}, p90={np.percentile(rel, 90):.4f}",
             status,
         )
         self.hist_plot(
             gate,
             rel,
-            "|E(ytarget) - (E(genjet)+genmet)| / (E(genjet)+genmet)",
+            f"|E(ytarget) - (E({genjet_field})+{genmet_field})| / (E({genjet_field})+{genmet_field})",
             vlines=(
                 (THRESHOLDS["g3_median"], "red"),
                 (THRESHOLDS["g3_p90"], "darkred"),
