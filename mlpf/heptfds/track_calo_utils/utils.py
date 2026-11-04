@@ -33,8 +33,8 @@ REQUIRED = {
 
 
 def required_fields(detector):
-    # IDEA's legacy hit columns remain empty for backward compatibility.
-    return (REQUIRED - {"X_hit_calo"}) | {"X_track_calo_hit"} if detector == "idea" else REQUIRED
+    track_mapping(detector)
+    return REQUIRED
 
 
 def track_mapping(detector):
@@ -76,8 +76,7 @@ def matrix(value, width, name):
 def input_features(event, detector):
     mapping = track_mapping(detector)
     track = matrix(event["X_track"], 17 if detector == "colliderml" else 16, "X_track")
-    calo_name = "X_track_calo_hit" if detector == "idea" else "X_hit_calo"
-    calo = matrix(event[calo_name], 15, calo_name)
+    calo = matrix(event["X_hit_calo"], 15, "X_hit_calo")
     if np.any(track[:, 0] != 1) or np.any(calo[:, 0] != 2):
         raise ValueError("Expected elemtype=1 for reconstructed tracks and elemtype=2 for calorimeter hits")
     xtrack = np.zeros((len(track), len(X_FEATURES)), dtype=np.float32)

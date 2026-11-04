@@ -208,4 +208,4 @@ def test_idea_descendant_tracks_are_members_not_representatives():
     assert track[0, 13] == 1  # It may still support the ancestor's PF membership.
     assert result["track_calo_target_particles"][0, 0] == 130
     assert result["track_calo_target_particles"][0, 1] == 0
-    assert len(result["X_track_calo_hit"]) == 5
+    assert len(result["X_hit_calo"]) == 5

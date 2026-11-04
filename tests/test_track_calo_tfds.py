@@ -45,8 +45,6 @@ def example(detector):
         genjet=np.zeros((0, 4)),
     )
 
-    if detector == "idea":
-        result["X_track_calo_hit"] = result.pop("X_hit_calo")
     return result
 
 
@@ -65,7 +63,7 @@ def test_features_and_targets(tmp_path, detector):
     assert key == "events.parquet:0"
     x = event["X"]
     assert x.shape == (2, 25)
-    np.testing.assert_array_equal(x[1, :15], raw["X_track_calo_hit" if detector == "idea" else "X_hit_calo"][0])
+    np.testing.assert_array_equal(x[1, :15], raw["X_hit_calo"][0])
     assert not x[0, 6:9].any()  # helix parameters must not become xyz
     assert not x[0, 10:15].any()  # no tracker-hit geometry on a fitted track
     if detector == "colliderml":

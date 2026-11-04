@@ -107,5 +107,4 @@ def build_idea_track_calo(prop_data, iev, collection_ids, gen, tracks, direct_tr
     targets = build_track_calo_targets(
         data, np.ones(len(x), dtype=bool), jetdef=jetdef, jet_ptcut=jet_ptcut, representative_track_edges=representatives
     )
-    # Use a view-specific input column: legacy IDEA raw-hit columns stay empty.
-    return {"X_track_calo_hit": x, **targets}
+    return {"X_hit_calo": x, **targets}

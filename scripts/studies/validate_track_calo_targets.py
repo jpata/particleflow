@@ -31,7 +31,7 @@ def validate(path):
         track = np.asarray(ak.to_numpy(event.ytarget_track_calo_track)).reshape(-1, len(fields))
         calo = np.asarray(ak.to_numpy(event.ytarget_track_calo_hit)).reshape(-1, len(fields))
         assert len(track) == len(event.X_track)
-        input_calo = event.X_track_calo_hit if "X_track_calo_hit" in event.fields else event.X_hit_calo
+        input_calo = event.X_hit_calo
         assert len(calo) == len(input_calo)
         rows = np.concatenate((track, calo))
         representatives = rows[rows[:, 0] != 0]

@@ -39,14 +39,14 @@ cluster allocator changes the particle population.
 
 Unmatched and duplicate reconstructed tracks remain inputs. An unclaimed track
 can have a membership label without becoming another particle target. The helper
-neither changes the input `EventData` nor modifies legacy outputs.
+neither changes the input `EventData` nor modifies existing target arrays.
 
 ## Additional Parquet fields
 
 | Field | Shape | Meaning |
 |---|---|---|
 | `ytarget_track_calo_track` | `[T,14]` | Targets aligned with `X_track` |
-| `ytarget_track_calo_hit` | `[Hcalo,14]` | Targets aligned with `X_hit_calo` (IDEA: `X_track_calo_hit`) |
+| `ytarget_track_calo_hit` | `[Hcalo,14]` | Targets aligned with `X_hit_calo` |
 | `track_calo_target_particles` | `[P,14]` | Unique final particle table, standard `ParticleFeatures` order |
 | `track_calo_original_to_target` | `[Pinput]` | Zero-based final row index or -1; input index refers to the reader's filtered PF truth table, **not** a raw MCParticle ID |
 | `track_calo_energy_accounting` | `[4]` | Input, newly invisible, dropped, final target energy in GeV |
@@ -59,8 +59,7 @@ source reader's ancestry/visibility selection, not from all simulated particles.
 Auxiliary source diagnostics such as `gp_to_cluster` retain the source values;
 they do not control the new assignment.
 
-Inputs are `X_track` and `X_hit_calo` (IDEA uses `X_track_calo_hit` to preserve its
-legacy empty raw-hit view). Key4hep tracks have the 16-column EDM4hep
+Inputs are `X_track` and `X_hit_calo`. Key4hep tracks have the 16-column EDM4hep
 layout; ColliderML tracks retain their existing 17-column union layout. Do not
 assume they are identical schemas. The new TFDS builders map both into the common
 layout below; existing datasets keep their original layouts.
@@ -203,9 +202,9 @@ rows simply because their `elemtype` is also 1.
 ## IDEA extension
 
 IDEA postprocessing now accepts `--track-calo-targets`, and its production spec
-turns the option on by default. Existing track/cluster outputs and the empty
-legacy raw-hit columns remain unchanged. A separate `X_track_calo_hit[N,15]`
-column holds positive-energy digitized signals from
+turns the option on by default. Existing track/cluster outputs remain unchanged,
+and legacy raw-hit targets remain empty. `X_hit_calo[N,15]` holds positive-energy
+digitized signals from
 `DRcaloSiPMreadoutDigiHit` (Cherenkov) and
 `DRcaloSiPMreadoutDigiHit_scint` (scintillation). The IDEA TFDS builder explicitly
 requires that column. Zero-signal cells are omitted without using truth; positive

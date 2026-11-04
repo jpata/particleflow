@@ -1633,7 +1633,7 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
                 "X_track": xtrack,
                 "X_cluster": xcluster,
                 "X_hit_tracker": empty_x_hit,
-                "X_hit_calo": empty_x_hit,
+                "X_hit_calo": hybrid_targets.get("X_hit_calo", empty_x_hit),
                 "ytarget_track": ytrack,
                 "ytarget_cluster": ycluster,
                 "ytarget_hit_tracker": empty_y_hit,
