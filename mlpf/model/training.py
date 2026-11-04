@@ -43,7 +43,6 @@ import tqdm
 import yaml
 import json
 import numpy as np
-from typing import Union
 import sys
 from packaging.version import Version
 
