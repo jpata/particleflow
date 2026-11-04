@@ -3,6 +3,8 @@
 import argparse
 import json
 from pathlib import Path
+
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
 import numpy as np
 import awkward as ak
 
@@ -14,7 +16,7 @@ def met(particles):
 
 
 def inspect(root, analysis):
-    manifest = json.loads((root / "input-manifest.json").read_text())["cases"]
+    manifest = json.loads(input_manifest_path(root).read_text())["cases"]
     events = ak.from_parquet(analysis / "paired-events.parquet")
     assert len(events) == len(manifest)
     rows = []

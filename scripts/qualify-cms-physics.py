@@ -11,6 +11,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
 import platform
 import subprocess
 import sys
@@ -160,7 +162,7 @@ def feeds_for(root, case):
 
 
 def selected_cases(args):
-    cases = json.loads((args.root / "inputs/manifest.json").read_text())["cases"]
+    cases = json.loads(input_manifest_path(args.root).read_text())["cases"]
     if args.case:
         cases = [c for c in cases if c["file"] == args.case]
     if args.limit:

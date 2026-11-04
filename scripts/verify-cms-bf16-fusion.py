@@ -6,13 +6,15 @@ import hashlib
 import json
 from pathlib import Path
 
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
+
 
 def text(path):
     return path.read_text() if path.exists() else gzip.decompress(path.with_suffix(path.suffix + ".gz").read_bytes()).decode()
 
 
 def verify(root):
-    cases = json.loads((root / "input-manifest.json").read_text())["cases"]
+    cases = json.loads(input_manifest_path(root).read_text())["cases"]
     buckets = sorted({c["slots"] for c in cases})
     proofs = []
     for model in ["attention", "heptv2"]:

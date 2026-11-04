@@ -5,6 +5,8 @@ from collections import Counter
 import html
 import json
 from pathlib import Path
+
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
 import statistics
 
 
@@ -20,7 +22,7 @@ def timing(records):
 
 
 def performance(root, model, device, fusion):
-    cases = json.loads((root / "input-manifest.json").read_text())["cases"]
+    cases = json.loads(input_manifest_path(root).read_text())["cases"]
     buckets = sorted({case["slots"] for case in cases})
     if fusion == "pytorch":
         path = root / ("reference" if device == "cuda" else "reference-amd") / model
@@ -105,11 +107,12 @@ def physics_report(root, result, physics):
         for name in ["latency-distributions", "latency-vs-event-size"]:
             body += f'<img src="runtime-plots/{name}.png" alt="{name}">'
     body += '<details><summary>Technical diagnostics and reproducibility</summary><p><a href="qualification-summary.json">Full numerical diagnostics and timings</a> · <a href="fusion-verification.json">Fusion and GPU-placement checks</a> · <a href="bf16-rounding-audit.json">BF16 rounding audit</a> · <a href="release.json">Checkpoints</a> · <a href="input-manifest.json">Events</a> · <a href="README.txt">Archive layout</a> · <a href="SHA256SUMS">Checksums</a>.</p></details></html>'
+    body = body.replace('href="input-manifest.json"', f'href="{input_manifest_path(root).relative_to(root).as_posix()}"')
     (root / "report.html").write_text(body)
 
 
 def main(root):
-    cases = json.loads((root / "input-manifest.json").read_text())["cases"]
+    cases = json.loads(input_manifest_path(root).read_text())["cases"]
     event_count = len(cases)
     bucket_counts = Counter(case["slots"] for case in cases)
     expected_shapes = 8 * len(bucket_counts)
@@ -208,7 +211,7 @@ def main(root):
             f"{row['mean_ms']:.3f}",
             f"{row['p50_ms']:.3f}",
             f"{row['p95_ms']:.3f}",
-            f"{row.get('speedup_vs_native_pytorch',1):.2f}×",
+            f"{row.get('speedup_vs_native_pytorch', 1):.2f}×",
         ]
         body += "<tr>" + "".join("<td>" + html.escape(str(v)) + "</td>" for v in vals) + "</tr>"
     body += "</table>"
@@ -272,6 +275,7 @@ def main(root):
         "FUSION_SHAPES": expected_shapes,
     }.items():
         body = body.replace(key, html.escape(str(value)))
+    body = body.replace('href="input-manifest.json"', f'href="{input_manifest_path(root).relative_to(root).as_posix()}"')
     (root / "report.html").write_text(body)
     print(json.dumps(dict(complete=True, analyses=len(rows), fusion_verified_shapes=expected_shapes)))
 

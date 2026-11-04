@@ -6,6 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -14,7 +16,7 @@ def main():
     args = parser.parse_args()
     import onnx
 
-    cases = json.loads((args.root / "inputs/manifest.json").read_text())["cases"]
+    cases = json.loads(input_manifest_path(args.root).read_text())["cases"]
     proofs, missing = [], []
     for provider, profile in [("cuda", "attention24-fp16"), ("migraphx", "decomposed-fp16")]:
         graph = onnx.load(args.root / "models/attention" / profile / "model.onnx")

@@ -10,6 +10,8 @@ import hashlib
 import html
 import json
 from pathlib import Path
+
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
 from types import SimpleNamespace
 
 import numpy as np
@@ -199,7 +201,7 @@ def main():
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    cases = json.loads((args.root / "inputs/manifest.json").read_text())["cases"]
+    cases = json.loads(input_manifest_path(args.root).read_text())["cases"]
     if args.limit:
         cases = cases[: args.limit]
     if len(cases) < 1000 and not args.allow_small_sample:

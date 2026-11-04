@@ -5,6 +5,8 @@ import html
 import json
 from pathlib import Path
 
+from mlpf.standalone_eval.cms_evidence import input_manifest_path
+
 PROFILES = [
     ("attention-cuda-fp32", "Attention", "NVIDIA", "FP32"),
     ("heptv2-cuda-fp32", "HEPTv2", "NVIDIA", "FP32"),
@@ -27,9 +29,7 @@ def main():
     p.add_argument("--root", type=Path, required=True)
     p.add_argument("--require-complete", action="store_true", help="Exit nonzero for missing analyses or numerical failures")
     args = p.parse_args()
-    source = args.root / "inputs/manifest.json"
-    if not source.exists():
-        source = args.root / "input-manifest.json"
+    source = input_manifest_path(args.root)
     manifest = json.loads(source.read_text())
     cases = manifest["cases"]
     assert len(cases) >= 1000
@@ -119,6 +119,7 @@ def main():
     body += "<table><thead><tr>" + "".join("<th>" + h + "</th>" for h in headers) + "</tr></thead><tbody>" + table + "</tbody></table>"
     body += """<p>The CPU-only ORT 1.29 wheel is recorded separately from the CUDA 12 ORT 1.29 wheel. Default CPU execution produced SIGBUS during extended tests; HEPTv2's basic-optimization/no-memory-pattern configuration is separately labeled and uses eight threads for lengths 3000/4000 and one thread for lengths 5000/6000. This mixed configuration is a correctness control; no CPU performance comparison is claimed. AMD HEPTv2's original zero-output failure is retained. The separate stable log-sum-exp export row tests the repair: MIGraphX 2.18's naive exp/sum/log reduction overflows in the second attention layer. Max-shifted lowering prevents this overflow without changing checkpoint weights or the eager reference. <a href="heptv2-amd-debug/README.txt">Debug evidence</a> includes an operator reproducer and intermediate layer comparisons. Earlier attempts are under revisions/.</p>
 <p><a href="qualification-summary.json">Aggregate JSON</a> · <a href="release.json">Release/checkpoint hashes</a> · <a href="release-revision.json">Pinned Hugging Face revision</a> · <a href="input-manifest.json">Unique test sample</a> · <a href="fusion-verification.json">Fusion evidence</a>. Source snapshots, runtime/library hashes, static graphs, raw heads, placement traces, compiler programs, kernel traces, failed attempts and checksums are retained in this package.</p></html>"""
+    body = body.replace('href="input-manifest.json"', f'href="{input_manifest_path(args.root).relative_to(args.root).as_posix()}"')
     (args.root / "report.html").write_text(body)
     print(json.dumps({"complete": complete, "numerical_passed": passed, "completed_analyses": len(rows), "missing": missing}), flush=True)
     if args.require_complete and not passed:

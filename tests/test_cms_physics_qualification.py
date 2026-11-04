@@ -102,3 +102,81 @@ def test_heptv2_runtime_retains_qualified_integer_and_compiler_settings():
     assert settings["MIGRAPHX_MLIR_USE_SPECIFIC_OPS"] == "!attention"
     assert module.migraphx_environment("attention", "decomposed-fp16", "on")["MIGRAPHX_MLIR_USE_SPECIFIC_OPS"] == "attention"
     assert module.migraphx_environment("attention", "decomposed-fp16", "off")["MIGRAPHX_MLIR_USE_SPECIFIC_OPS"] == "!attention"
+
+
+@pytest.mark.parametrize("layout", ["inputs/manifest.json", "input-manifest.json"])
+def test_prepared_inputs_feed_reference_selection_and_bf16_audit(tmp_path, monkeypatch, layout):
+    """Preparation output is consumed directly, including by the BF16 reports."""
+    import json
+    import sys
+    from types import SimpleNamespace
+    from mlpf.model import PFDataset
+
+    qualification = load_script("qualify-cms-physics")
+    directory = tmp_path / "data/cms_pf_ttbar/1/2.8.0"
+    directory.mkdir(parents=True)
+    (directory / "dataset_info.json").write_text("{}")
+    raw = SimpleNamespace(data_source=SimpleNamespace(__getitems__=lambda indices: [bytes(indices)]))
+
+    class Raw:
+        data_source = raw.data_source
+
+        def __len__(self):
+            return 2
+
+    builder = SimpleNamespace(as_data_source=lambda **kwargs: Raw())
+    monkeypatch.setitem(sys.modules, "tensorflow_datasets", SimpleNamespace(builder_from_directory=lambda path: builder))
+    monkeypatch.setattr(qualification, "config_for", lambda *args: SimpleNamespace(input_dim=55, sort_data=False))
+
+    events = []
+    for index in range(2):
+        x = np.zeros((2, 55), np.float32)
+        x[0, :2] = [1, index + 1]
+        events.append(
+            dict(
+                X=x,
+                ytarget=np.zeros((2, 14), np.float32),
+                ycand=np.zeros((2, 14), np.float32),
+                genjets=np.zeros((0, 4), np.float32),
+                genmet=np.float32(0),
+                ytarget_pt_orig=np.array([2, 0], np.float32),
+                ytarget_e_orig=np.array([3, 0], np.float32),
+            )
+        )
+    monkeypatch.setattr(PFDataset, "TFDSDataSource", lambda *args, **kwargs: events)
+    args = SimpleNamespace(root=tmp_path, data_dir=tmp_path / "data", seed=1, events=2, bucket_width=100, case=None, limit=0, bucket=None)
+    qualification.prepare(args)
+    prepared = tmp_path / "inputs/manifest.json"
+    if layout != "inputs/manifest.json":
+        prepared.rename(tmp_path / layout)
+    cases = qualification.selected_cases(args)
+    assert len(cases) == 2
+    # The throughput consumer reaches its sample-size guard without a GPU.
+    with pytest.raises(ValueError, match="Need 64 distinct events"):
+        load_script("benchmark-cms-throughput").worker(SimpleNamespace(root=tmp_path, provider="cuda", engine="native", slots=100))
+    for case in cases:
+        feeds = qualification.feeds_for(tmp_path, case)
+        assert feeds["mask"].sum() == 1
+        with np.load(tmp_path / "inputs" / case["file"]) as event:
+            assert event["target"][0, 2] == 2 and event["target"][0, 6] == 3
+        for model in ["attention", "heptv2"]:
+            for relative in [f"reference/{model}", f"results/{model}/cuda/attention24-bf16/on", f"results/{model}/cuda/attention24-bf16/off"]:
+                folder = tmp_path / relative
+                folder.mkdir(parents=True, exist_ok=True)
+                np.savez(folder / case["file"], bid=np.array([[0, 1]], np.float32), id=np.array([[1, 0]], np.float32))
+    load_script("audit-cms-bf16-rounding").audit(tmp_path, "cuda")
+    audit = json.loads((tmp_path / "bf16-rounding-audit-cuda.json").read_text())
+    assert len(audit["rows"]) == 6
+    assert all(row["events"] == 2 and row["heads"]["id"]["non_bf16_values"] == 0 for row in audit["rows"])
+
+
+def test_input_manifest_prefers_prepared_data_without_hiding_corruption(tmp_path):
+    import json
+    from mlpf.standalone_eval.cms_evidence import input_manifest_path
+
+    (tmp_path / "inputs").mkdir()
+    canonical = tmp_path / "inputs/manifest.json"
+    canonical.write_text("invalid JSON")
+    (tmp_path / "input-manifest.json").write_text('{"cases": []}')
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(input_manifest_path(tmp_path).read_text())
