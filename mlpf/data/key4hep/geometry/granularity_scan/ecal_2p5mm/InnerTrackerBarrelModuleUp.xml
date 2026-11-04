@@ -1,0 +1,25 @@
+<lccdd>
+    <!-- Build slices top-down from innermost slice (closest to IP) to outer-most (away from IP)-->
+    <module_component thickness="0.020*mm"  material="CarbonFiber_25D"  info="Cold Plate: Carbon fleece"    sensitive="false"/>
+    <module_component thickness="0.030*mm"  material="CarbonFiber"      info="Cold Plate: Graphite foil"    sensitive="false"/>
+    <module_component thickness="0.068*mm"  material="Kapton"           info="Cold Plate: Cooling pipe"     sensitive="false"/>
+    <module_component thickness="0.235*mm"  material="Water"            info="Cold Plate: Cooling fluid"    sensitive="false"/>
+    <module_component thickness="0.120*mm"  material="CarbonFiber"      info="Cold Plate: Carbon plate"     sensitive="false"/>
+    <module_component thickness="0.020*mm"  material="CarbonFiber_25D"  info="Cold Plate: Carbon fleece"    sensitive="false"/>
+
+    <module_component thickness="0.100*mm"  material="Epoxy"            info="Glue: Eccobond"               sensitive="false"/>
+
+    <module_component thickness="0.120*mm"  material="CarbonFiber"      info="Module: Plate"                sensitive="false"/>
+    <module_component thickness="0.100*mm"  material="Epoxy"            info="Module: Glue"                 sensitive="false"/>
+    <module_component thickness="0.100*mm"  material="Silicon"          info="Module: Sensor"               sensitive="true" />
+    <module_component thickness="0.100*mm"  material="Silicon"          info="Module: r/o ASIC"             sensitive="false"/>
+    <module_component thickness="0.050*mm"  material="Kapton"           info="Module: FPC insulating layer" sensitive="false"/>
+    <module_component thickness="0.050*mm"  material="Aluminium"        info="Module: FPC metal layer"      sensitive="false"/>
+    <module_component thickness="0.050*mm"  material="Kapton"           info="Module: FPC insulating layer" sensitive="false"/>
+
+    <module_component thickness="0.100*mm"  material="Epoxy"            info="Glue: Eccobond"               sensitive="false"/>
+
+    <module_component thickness="0.100*mm"  material="Kapton"           info="Power bus: Insulating layer"  sensitive="false"/>
+    <module_component thickness="0.200*mm"  material="Aluminium"        info="Power bus: Conductor"         sensitive="false"/>
+    <module_component thickness="0.100*mm"  material="Kapton"           info="Power bus: Insulating layer"  sensitive="false"/>
+</lccdd>

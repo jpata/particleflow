@@ -1,0 +1,67 @@
+<lccdd>
+
+    <!--  Definition of the readout segmentation/definition  -->
+    <readouts>
+        <readout name="YokeEndcapCollection">
+            <segmentation type="CartesianGridXY" grid_size_x="Yoke_cell_size" grid_size_y="Yoke_cell_size" />
+            <id>system:5,side:2,module:8,stave:4,layer:9,submodule:4,x:32:-16,y:-16</id>
+        </readout>
+    </readouts>
+
+        <!--  Definition of the used visualization attributes    -->
+    <display>
+        <vis name="YokeEndcapVis"          alpha="1" r="1"    g="0.4"  b="0.62" showDaughters="true" visible="true"/>
+    </display>
+
+    <!--  Includes for sensitives and support                -->
+    <detectors>
+
+        <detector name="YokeEndcap" type="GenericCalEndcap_o1_v01" id="DetID_Yoke_Endcap" readout="YokeEndcapCollection" vis="YOKEVis" >
+
+            <comment>Encap Yoke</comment>
+
+            <type_flags type=" DetType_CALORIMETER + DetType_MUON + DetType_ENDCAP"/>
+
+            <envelope vis="YOKEVis">
+                <shape type="BooleanShape" operation="Subtraction" material="Air">
+                    <shape type="BooleanShape" operation="Subtraction">
+                        <shape type="PolyhedraRegular"  numsides="YokeEndcap_outer_symmetry" rmin="0" rmax="YokeEndcap_outer_radius+ 10.0*env_safety" dz="2.0*YokeEndcap_max_z+2*env_safety"/>
+                        <shape type="PolyhedraRegular"  numsides="YokeEndcap_outer_symmetry" rmin="0" rmax="YokeEndcap_outer_radius+ 100.0*env_safety" dz="2.0*YokeEndcap_min_z"/>
+                    </shape>
+                    <shape type="Tube"  rmin="0" rmax="YokeEndcap_inner_radius-env_safety" dz="2.0*YokeEndcap_max_z+4*env_safety"/>
+                </shape>
+                <rotation x="0*deg" y="0*deg" z="90*deg-180*deg/YokeEndcap_outer_symmetry"/>
+            </envelope>
+
+            <dimensions nsides_inner="YokeEndcap_outer_symmetry" nsides_outer="YokeEndcap_outer_symmetry" zmin="YokeEndcap_min_z" rmin="YokeEndcap_inner_radius" rmax="YokeEndcap_outer_radius"/>
+            <layer repeat="6" vis="YokeEndcapLayerVis">
+                <slice material="Iron" thickness="21*cm"  vis="YokeAbsorberVis" radiator="yes"/>
+                <slice material="Aluminium" thickness="0.1*cm" />
+                <slice material="Air" thickness="0.35*cm" />
+                <slice material="PyrexGlass" thickness="0.2*cm" />
+                <slice material="RPCGasDefault" thickness="0.2*cm" sensitive="yes" vis="YokeSensorVis"/>
+                <slice material="PyrexGlass" thickness="0.2*cm" />
+                <slice material="Air" thickness="0.35*cm" />
+                <slice material="Aluminium" thickness="0.1*cm" />
+                <slice material="Aluminium" thickness="0.1*cm" />
+                <slice material="Air" thickness="0.35*cm" />
+                <slice material="PyrexGlass" thickness="0.2*cm" />
+                <slice material="RPCGasDefault" thickness="0.2*cm" vis="YokeSensorVis"/>
+                <slice material="PyrexGlass" thickness="0.2*cm" />
+                <slice material="Air" thickness="0.35*cm" />
+                <slice material="Aluminium" thickness="0.1*cm" />
+            </layer>
+            <layer repeat="1" vis="YokeEndcapLayerVis">
+                <slice material="Iron" thickness="10.5*cm"  vis="YokeAbsorberVis" radiator="yes"/>
+            </layer>
+        </detector>
+
+    </detectors>
+
+
+
+
+
+
+
+</lccdd>

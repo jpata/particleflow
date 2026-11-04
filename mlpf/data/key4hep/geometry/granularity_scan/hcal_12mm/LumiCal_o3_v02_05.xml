@@ -1,0 +1,170 @@
+<lccdd>
+
+    <define>
+            <constant name="LumiCal_cell_size" value="1.81*mm"/>
+    </define>
+
+    <readouts>
+        <readout name="LumiCalCollection">
+	    <segmentation type="PolarGridRPhi"
+			  grid_size_r="(LumiCal_outer_radius-LumiCal_inner_radius)/32"
+			  grid_size_phi="360/32*degree"
+			  offset_r="LumiCal_inner_radius + (LumiCal_outer_radius-LumiCal_inner_radius)/64"
+			  />
+	    <id>system:8,barrel:3,layer:8,slice:8,r:32:-16,phi:-16</id>
+        </readout>
+    </readouts>
+
+<!--offset_r="LumiCal_inner_radius+0.5*((LumiCal_outer_radius-LumiCal_inner_radius)/32)"-->
+
+    <detectors>
+        <detector name="LumiCal" type="LumiCal_o1_v01" vis="SeeThrough" id="DetID_LumiCal" readout="LumiCalCollection" insideTrackingVolume="false" >
+
+            <envelope vis="LCALVis">
+                <shape type="Assembly" >
+                    <shape type="Tube"  rmin="LumiCal_inner_radius" rmax="LumiCal_outer_radius" dz="LumiCal_dz_prime" >
+                        <!-- Center the tube on the outgoing beampipe and rotate it so that it is aligned -->
+                        <position x="tan(0.5*abs(CrossingAngle))*(LumiCal_min_z+LumiCal_dz)" y="0" z="LumiCal_min_z+LumiCal_dz"/>
+                        <rotation x="0" y="0.5*abs(CrossingAngle)" z="0"/>
+                    </shape>
+                    <shape type="Tube"  rmin="LumiCal_inner_radius" rmax="LumiCal_outer_radius" dz="LumiCal_dz_prime" >
+                        <!-- Center the tube on the outgoing beampipe and rotate it so that it is aligned -->
+                        <position x="tan(0.5*abs(CrossingAngle))*(LumiCal_min_z+LumiCal_dz)" y="0" z="-(LumiCal_min_z+LumiCal_dz)"/>
+                        <rotation x="0" y="-0.5*abs(CrossingAngle)" z="0"/>
+                    </shape>
+                </shape>
+            </envelope>
+
+            <parameter crossingangle="CrossingAngle" />
+
+            <dimensions inner_r = "LumiCal_inner_radius"
+            inner_z = "LumiCal_min_z - LumiCal_dz_prime + LumiCal_dz "
+            outer_r = "LumiCal_outer_radius"
+            modules = "8"
+            phi_sectors = "4"
+            r_sectors = "32"
+            phi_gap = "2*mm"
+            r_gap = "2*mm" />
+
+
+            <layer repeat="25" vis="SeeThrough">
+                <slice material = "TungstenDens24" thickness = "3.5*mm" 		   vis="BCLayerVis1" />
+                <slice material = "Kapton"     thickness = "0.28*mm" />
+                <slice material = "Silicon" thickness = "0.32*mm" 	sensitive = "yes"  vis="BCLayerVis2"/>
+                <slice material = "Copper"  thickness = "0.4*mm"                    vis="BCLayerVis3"/>
+            </layer>
+
+
+        </detector>
+
+        <detector name="LumiCalInstrumentation" type="LumiCal_o1_v01" vis="SeeThrough" id="DetID_LumiCalInstrumentation" readout="LumiCalCollection" insideTrackingVolume="false" >
+
+            <envelope vis="LCALInstrVis">
+                <shape type="Assembly">
+                    <shape type="Tube"  rmin="LumiCal_Instr_inner_radius" rmax="LumiCal_Instr_outer_radius" dz="LumiCal_dz_prime">
+                        <!-- Center the tube on the outgoing beampipe and rotate it so that it is aligned -->
+                        <position x="tan(0.5*abs(CrossingAngle))*(LumiCal_min_z+LumiCal_dz)" y="0" z="LumiCal_min_z+LumiCal_dz"/>
+                        <rotation x="0" y="0.5*abs(CrossingAngle)" z="0"/>
+                    </shape>
+                    <shape type="Tube"  rmin="LumiCal_Instr_inner_radius" rmax="LumiCal_Instr_outer_radius" dz="LumiCal_dz_prime">
+                        <!-- Center the tube on the outgoing beampipe and rotate it so that it is aligned -->
+                        <position x="tan(0.5*abs(CrossingAngle))*(LumiCal_min_z+LumiCal_dz)" y="0" z="-(LumiCal_min_z+LumiCal_dz)"/>
+                        <rotation x="0" y="-0.5*abs(CrossingAngle)" z="0"/>
+                    </shape>
+                </shape>
+            </envelope>
+
+            <parameter crossingangle="CrossingAngle" />
+
+            <dimensions inner_r = "LumiCal_Instr_inner_radius"
+            inner_z = "LumiCal_min_z - LumiCal_dz_prime + LumiCal_dz"
+            outer_r = "LumiCal_Instr_outer_radius"
+            modules = "8"
+            phi_sectors = "4"
+            r_sectors = "32"
+            phi_gap = "2*mm"
+            r_gap = "2*mm" />
+
+
+            <layer repeat="25" vis="SeeThrough">
+                <slice material = "Aluminum" thickness = "2.0*mm" 	sensitive = "no"  vis="SupportVis"/>
+		<slice material = "Air" thickness = "2.5*mm" 	sensitive = "no"  vis="SupportVis"/>
+            </layer>
+
+
+        </detector>
+
+
+        <detector name="LumiCalCooling" type="LumiCal_o1_v01" vis="SeeThrough" id="DetID_LumiCalCooling" readout="LumiCalCollection" insideTrackingVolume="false" >
+
+            <envelope vis="LCALCoolVis">
+                <shape type="Assembly">
+                    <shape type="Tube"  rmin="LumiCal_Cool_inner_radius" rmax="LumiCal_Cool_outer_radius" dz="LumiCal_dz_prime">
+                        <!-- Center the tube on the outgoing beampipe and rotate it so that it is aligned -->
+                        <position x="tan(0.5*abs(CrossingAngle))*(LumiCal_min_z+LumiCal_dz)" y="0" z="LumiCal_min_z+LumiCal_dz"/>
+                        <rotation x="0" y="0.5*abs(CrossingAngle)" z="0"/>
+                    </shape>
+                    <shape type="Tube"  rmin="LumiCal_Cool_inner_radius" rmax="LumiCal_Cool_outer_radius" dz="LumiCal_dz_prime">
+                        <!-- Center the tube on the outgoing beampipe and rotate it so that it is aligned -->
+                        <position x="tan(0.5*abs(CrossingAngle))*(LumiCal_min_z+LumiCal_dz)" y="0" z="-(LumiCal_min_z+LumiCal_dz)"/>
+                        <rotation x="0" y="-0.5*abs(CrossingAngle)" z="0"/>
+                    </shape>
+                </shape>
+            </envelope>
+
+            <parameter crossingangle="CrossingAngle" />
+
+            <dimensions inner_r = "LumiCal_Cool_inner_radius"
+            inner_z = "LumiCal_min_z - LumiCal_dz_prime + LumiCal_dz"
+            outer_r = "LumiCal_Cool_outer_radius"
+            modules = "8"
+            phi_sectors = "4"
+            r_sectors = "32"
+            phi_gap = "2*mm"
+            r_gap = "2*mm" />
+
+
+            <layer repeat="25" vis="SeeThrough">
+		<slice material = "Air" thickness = "4.5*mm" 	sensitive = "no"  vis="SupportVis"/>
+            </layer>
+
+
+        </detector>
+
+   <detector name="LumiCalBackShield" type="LumiCal_o1_v01" vis="SeeThrough" id="DetID_LumiCalBackShield"  readout="LumiCalCollection" insideTrackingVolume="false" >
+
+     <envelope vis="LCALShieldVis">
+       <shape type="Assembly">
+           <shape type="Tube"  rmin="LumiCal_Shield_inner_radius" rmax="LumiCal_Shield_outer_radius" dz="LumiCal_shield_dz_prime">
+               <!-- Center the tube on the outgoing beampipe and rotate it so that it is aligned -->
+               <position x="tan(0.5*abs(CrossingAngle))*(LumiCal_max_z+LumiCal_shield_dz)" y="0" z="LumiCal_max_z+LumiCal_shield_dz"/>
+               <rotation x="0" y="0.5*abs(CrossingAngle)" z="0"/>
+         </shape>
+         <shape type="Tube"  rmin="LumiCal_Shield_inner_radius" rmax="LumiCal_Shield_outer_radius" dz="LumiCal_shield_dz_prime">
+               <!-- Center the tube on the outgoing beampipe and rotate it so that it is aligned -->
+               <position x="tan(0.5*abs(CrossingAngle))*(LumiCal_max_z+LumiCal_shield_dz)" y="0" z="-(LumiCal_max_z+LumiCal_shield_dz)"/>
+               <rotation x="0" y="-0.5*abs(CrossingAngle)" z="0"/>
+         </shape>
+
+       </shape>
+     </envelope>
+
+     <parameter crossingangle="CrossingAngle" />
+
+
+
+     <dimensions inner_r = "LumiCal_Shield_inner_radius"
+		 outer_r = "LumiCal_Shield_outer_radius"
+	         inner_z = "LumiCal_max_z - LumiCal_shield_dz_prime + LumiCal_shield_dz"/>
+
+
+            <layer repeat="1" vis="SeeThrough">
+                <slice material = "TungstenDens24" thickness = "3.5*mm" 	sensitive = "no"  vis="SupportVis"/>
+            </layer>
+
+
+        </detector>
+
+    </detectors>
+
+</lccdd>

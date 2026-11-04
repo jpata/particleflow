@@ -1,0 +1,66 @@
+<lccdd>
+
+    <!--  Definition of the readout segmentation  -->
+    <define>
+        <constant name="ECal_cell_size" value="5.1*mm"/>
+    </define>
+
+    <readouts>
+        <readout name="ECalBarrelCollection">
+            <segmentation type="CartesianGridXY" grid_size_x="ECal_cell_size" grid_size_y="ECal_cell_size" />
+            <id>system:5,side:2,module:8,stave:4,layer:9,submodule:4,x:32:-16,y:-16</id>
+        </readout>
+    </readouts>
+
+    <!--  Definitions of visualization attributes  -->
+    <display>
+        <vis name="ECalStaveVis"      alpha="1.0" r="0.0"  g="0.8"  b="1.0"  showDaughters="true"  visible="true"/>
+        <vis name="ECalLayerVis"      alpha="1.0" r="0.8"  g="0.8"  b="0.0"  showDaughters="true"  visible="true"/>
+        <vis name="ECalSensitiveVis"  alpha="1.0" r="0.7"  g="0.3"  b="0.0"  showDaughters="false" visible="true"/>
+        <vis name="ECalAbsorberVis"   alpha="1.0" r="0.4"  g="0.4"  b="0.0"  showDaughters="false" visible="true"/>
+        <vis name="ECalEndcapVis"     alpha="1.0" r="0.77" g="0.74" b="0.86" showDaughters="true"  visible="true"/>
+	<vis name="HiddenEnvelope"    alpha="0.0" r="1.0"  g="1.0"  b="1.0"  showDaughters="true"  visible="false"/>
+	<vis name="CompositeVis"      alpha="1.0" r="1.0"  g="0.0"  b="0.0"  showDaughters="true"  visible="true"/>
+    </display>
+
+    <detectors>
+        <detector name="ECalBarrel" type="GenericCalBarrel_o1_v01" id="DetID_ECal_Barrel" readout="ECalBarrelCollection" vis="ECALVis" gap="0.*cm">
+
+            <comment>EM Calorimeter Barrel</comment>
+
+            <type_flags type=" DetType_CALORIMETER + DetType_ELECTROMAGNETIC + DetType_BARREL"/>
+
+            <envelope vis="ECALVis">
+                <shape type="PolyhedraRegular" numsides="ECalBarrel_symmetry"  rmin="ECalBarrel_inner_radius" rmax="ECalBarrel_outer_radius" dz="2.*ECalBarrel_half_length"  material="Air"/>
+		<!-- Radii definitions as in http://cern.ch/go/r9mZ -->
+                <rotation x="0*deg" y="0*deg" z="90*deg-180*deg/ECalBarrel_symmetry"/>
+            </envelope>
+
+            <dimensions numsides="ECalBarrel_symmetry" rmin="ECalBarrel_inner_radius" z="ECalBarrel_half_length*2" />
+            <staves vis="ECalStaveVis" />
+            <layer repeat="40" vis="ECalLayerVis">
+                <slice material = "TungstenDens24" thickness = "1.90*mm" vis="ECalAbsorberVis" radiator="yes"/>
+                <slice material = "G10"            thickness = "0.15*mm" vis="InvisibleNoDaughters"/>
+                <slice material = "GroundOrHVMix"  thickness = "0.10*mm" vis="ECalAbsorberVis"/>
+                <slice material = "Silicon"        thickness = "0.50*mm" sensitive="yes" limits="cal_limits" vis="ECalSensitiveVis"/>
+                <slice material = "Air"            thickness = "0.10*mm" vis="InvisibleNoDaughters"/>
+                <slice material = "siPCBMix"       thickness = "1.30*mm" vis="ECalAbsorberVis"/>
+                <slice material = "Air"            thickness = "0.25*mm" vis="InvisibleNoDaughters"/>
+                <slice material = "G10"            thickness = "0.75*mm" vis="InvisibleNoDaughters"/>
+            </layer>
+        </detector>
+    </detectors>
+
+    <plugins>
+        <plugin name="DD4hep_CaloFaceBarrelSurfacePlugin">
+            <argument value="ECalBarrel"/>
+            <argument value="length=2.*ECalBarrel_half_length"    />
+            <argument value="radius=ECalBarrel_inner_radius"  />
+            <argument value="phi0=0"    />
+            <argument value="symmetry=ECalBarrel_symmetry"/>
+            <argument value="systemID=DetID_ECal_Barrel"/>
+        </plugin>
+    </plugins>
+
+
+</lccdd>

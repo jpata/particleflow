@@ -1110,11 +1110,10 @@ def get_genparticles_and_adjacencies(
             print("st1 particles", gen_features["PDG"][idx], gen_features["pt"][idx])
         raise ValueError(f"Event {iev} does not have even one 'visible' particle.")
 
-    if len(np.array(mask_visible)) == 1:
-        # event has only one particle (then index will be empty because no daughters)
-        gen_features_record = {feat: (gen_features[feat][mask_visible] if feat != "index" else None) for feat in gen_features.keys()}  # type: ignore
-    else:
-        gen_features_record = {feat: gen_features[feat][mask_visible] for feat in gen_features.keys()}  # type: ignore
+    # The daughter index is a flattened relation table, not a per-particle feature.
+    # Its length can differ from the number of MC particles, so it cannot be sliced
+    # with the visibility mask. It is only needed above to traverse the decay tree.
+    gen_features_record = {feat: values[mask_visible] for feat, values in gen_features.items() if feat != "index"}  # type: ignore
 
     genparticle_to_hit = filter_adj(genparticle_to_hit, genpart_idx_all_to_filtered)
     genparticle_to_trk = filter_adj(genparticle_to_trk, genpart_idx_all_to_filtered)

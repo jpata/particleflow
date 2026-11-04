@@ -7,6 +7,8 @@ repos:
   rev: v5.0.0
   hooks:
   - id: trailing-whitespace
+    # Pinned k4geo copies must remain byte-for-byte identical to their source.
+    exclude: ^mlpf/data/key4hep/geometry/
   - id: check-added-large-files
     args: ["--maxkb=2000"]
   - id: check-ast
@@ -16,6 +18,7 @@ repos:
   - id: check-yaml
   - id: debug-statements
   - id: end-of-file-fixer
+    exclude: ^mlpf/data/key4hep/geometry/
   - id: requirements-txt-fixer
   - id: mixed-line-ending
     args: ['--fix=no']
