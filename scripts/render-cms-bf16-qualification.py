@@ -211,7 +211,7 @@ def main(root):
             f"{row['mean_ms']:.3f}",
             f"{row['p50_ms']:.3f}",
             f"{row['p95_ms']:.3f}",
-            f"{row.get('speedup_vs_native_pytorch',1):.2f}×",
+            f"{row.get('speedup_vs_native_pytorch', 1):.2f}×",
         ]
         body += "<tr>" + "".join("<td>" + html.escape(str(v)) + "</td>" for v in vals) + "</tr>"
     body += "</table>"
