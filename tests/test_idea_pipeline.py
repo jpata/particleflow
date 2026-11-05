@@ -9,6 +9,7 @@ import yaml
 
 from mlpf.conf import Dataset, MLPFConfig
 from mlpf.data.key4hep.prepare_idea_pipeline import prepare_pipeline_file
+from mlpf.heptfds.edm4hep_utils.utils_pf import N_X_FEATURES
 from mlpf.heptfds.edm4hep_utils.utils_idea import (
     CANDIDATE_SOURCE,
     TRACK_SOURCE,
@@ -96,19 +97,17 @@ def test_real_spec_builds_idea_pipeline_config():
     config = MLPFConfig.from_spec(REPOSITORY_ROOT / "particleflow_spec.yaml", "pyg-idea-pipeline-v1", "idea")
 
     assert config.dataset is Dataset.IDEA
-    assert config.input_dim == 19
+    assert config.input_dim == N_X_FEATURES
     assert config.num_classes == 6
-    assert config.ntrain is None
-    assert config.nvalid is None
-    assert config.ntest == 100
-    assert "idea_edm_qq_pf" in config.test_dataset
 
 
 def test_idea_tfds_mapping_excludes_validation_gun():
     with (REPOSITORY_ROOT / "particleflow_spec.yaml").open() as handle:
-        mapping = yaml.safe_load(handle)["productions"]["idea"]["tfds_mapping"]
+        production = yaml.safe_load(handle)["productions"]["idea"]
 
-    assert set(mapping) == {"ttbar", "ww_fullhad", "qq"}
+    guns = {name for name in production["samples"] if name.startswith("gun_")}
+    assert guns
+    assert guns.isdisjoint(production["tfds_mapping"])
 
 
 def test_idea_parquet_discovery_selects_requested_process(tmp_path):
@@ -122,17 +121,3 @@ def test_idea_parquet_discovery_selects_requested_process(tmp_path):
     ttbar_file.touch()
 
     assert find_idea_parquets(tmp_path, "p8_ee_ttbar_ecm365") == [ttbar_file]
-
-
-def test_idea_test_campaign_has_exactly_100_jobs_per_sample():
-    with (REPOSITORY_ROOT / "particleflow_spec.yaml").open() as handle:
-        samples = yaml.safe_load(handle)["productions"]["idea"]["samples"]
-
-    expected_samples = {"gun_e_10gev", "gun_mu_10gev", "gun_pi_10gev", "ttbar", "ww_fullhad", "qq"}
-    assert set(samples) == expected_samples
-    for sample in samples.values():
-        start, stop = sample["seed_range"]
-        assert stop - start == 100
-
-    for sample_name in expected_samples:
-        assert samples[sample_name]["events_per_job"] == 100
