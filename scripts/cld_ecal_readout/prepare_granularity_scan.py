@@ -1,8 +1,8 @@
 """Build reproducible CLD ECAL/HCAL pitch variants from pinned k4geo XML.
 
-Run with ``--source`` pointing to the 2025-05-29 k4geo
-FCCee/CLD/compact/CLD_o2_v07 directory. Existing variants are verified and
-never silently overwritten.
+The dedicated shared geometry directory supplies the pinned 2025-05-29 source.
+``--source`` may select an identical copy elsewhere. Existing variants are
+verified and never silently overwritten.
 """
 
 import argparse
@@ -14,6 +14,8 @@ from pathlib import Path
 ECAL_MM = (5.1, 4.0, 3.0, 2.5, 2.0, 1.5)
 HCAL_MM = (30.0, 25.0, 20.0, 15.0, 12.0, 10.0)
 ROOT = Path(__file__).resolve().parents[2] / "mlpf/data/key4hep/geometry/granularity_scan"
+SOURCE = ROOT.parent / "shared/CLD_o2_v07"
+SOURCE_SHA256 = "4ce7894a992a9aa708642453471a8bf30ccf567da6419fed2fc18c4fb67bbf0e"
 
 
 def label(value):
@@ -58,11 +60,11 @@ def variants(source, mode, pitch):
     return result
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--source", type=Path, default=SOURCE)
     parser.add_argument("--output-root", type=Path, default=ROOT)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     source = args.source.resolve()
     if not (source / "CLD_o2_v07.xml").is_file():
         raise FileNotFoundError(source / "CLD_o2_v07.xml")
@@ -70,6 +72,8 @@ def main():
     if len(source_files) != 22:
         raise ValueError(f"Expected 22 source XML files; found {len(source_files)}")
     source_digest = hashlib.sha256(b"".join(name.encode() + source_files[name] for name in sorted(source_files))).hexdigest()
+    if source_digest != SOURCE_SHA256:
+        raise ValueError(f"Source geometry does not match pinned k4geo SHA-256: {source_digest}")
     for mode, pitches in (("ecal", ECAL_MM), ("hcal", HCAL_MM)):
         for pitch in pitches:
             directory = args.output_root / f"{mode}_{label(pitch)}mm"
@@ -97,9 +101,14 @@ def main():
             }
             manifest_path = directory / "manifest.json"
             rendered = json.dumps(manifest, indent=2) + "\n"
-            if manifest_path.exists() and manifest_path.read_text() != rendered:
-                raise ValueError(f"Existing manifest differs: {manifest_path}")
-            manifest_path.write_text(rendered)
+            if manifest_path.exists():
+                recorded = json.loads(manifest_path.read_text())
+                # Location is provenance, not source identity. Keep the original
+                # manifest intact when verifying an identical relocated copy.
+                if {k: v for k, v in recorded.items() if k != "source"} != {k: v for k, v in manifest.items() if k != "source"}:
+                    raise ValueError(f"Existing manifest differs: {manifest_path}")
+            else:
+                manifest_path.write_text(rendered)
             print(f"{directory}: {', '.join(changed)}")
 
 

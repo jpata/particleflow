@@ -2,7 +2,7 @@
 
     <!--  Definition of the readout segmentation  -->
     <define>
-        <constant name="ECal_cell_size" value="2.0*mm"/>
+        <constant name="ECal_cell_size" value="5.1*mm"/>
     </define>
 
     <readouts>

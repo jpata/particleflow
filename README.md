@@ -22,27 +22,6 @@ uv run ./scripts/local_test_cld.sh
 uv run ./scripts/local_test_cms.sh
 ```
 
-Before opening a pull request, run the lightweight quality checks with
-`uvx --python 3.12 pre-commit run --all-files`. The cyclomatic-complexity check covers the
-first-party `mlpf/` package (not the vendored detector configuration under
-`mlpf/data/key4hep/gen/`) and rejects new functions above the transitional
-complexity ceiling. Prefer small, single-purpose helpers when generating or
-refactoring code; a local `# noqa: C901` should be a reviewed exception, not an
-automatic workaround.
-
-To run the same all-files check before every local commit, enable the repository
-hook with `git config core.hooksPath .githooks`. The hook uses the same pre-commit
-flags and Python version as GitHub Actions. It requires `uv`, which installs the
-lint tool and Python 3.12 if needed.
-
-Alternatively, you can use a prepared container:
-```
-apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cld.sh
-apptainer exec --nv https://jpata.web.cern.ch/jpata/pytorch-20260305-08d6950.sif ./scripts/local_test_cms.sh
-```
-
-
-
 ### **Datasets**
 
 See the user documentation to [choose a dataset](https://jpata.github.io/particleflow/datasets/catalog), [download and verify published TFDS data](https://jpata.github.io/particleflow/datasets/download), or [produce and publish a dataset](https://jpata.github.io/particleflow/datasets/generate).

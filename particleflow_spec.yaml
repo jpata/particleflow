@@ -223,56 +223,6 @@ productions:
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # CLD Production
-  # Paired single-photon ECAL readout pilot. These produce ROOT files only;
-  # neither view enters the CLD training mappings.
-  cld_photon_5p1: &cld_photon_pilot
-    type: "key4hep"
-    model: "pyg-cld-v1"
-    generation_only: true
-    comment: "CLD photon gun, baseline 5.1 mm ECAL readout"
-    workspace_dir: "${project.paths.storage_root}/cld/photon_ecal_5p1mm_key4hep_2025-05-29"
-    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
-    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
-    save_sim: true
-    memory:
-      gen: 4000
-    slurm_partition: "main"
-    slurm_runtime: "48h"
-    samples:
-      gun_gamma_10gev:
-        process_name: "gun_gamma_10gev"
-        gen_script: "scripts/cld_photon_readout/run_sim.sh"
-        seed_range: [810000, 810010]
-        events_per_job: 100
-
-  cld_photon_2mm:
-    <<: *cld_photon_pilot
-    comment: "CLD photon gun, 2.0 mm ECAL readout"
-    workspace_dir: "${project.paths.storage_root}/cld/photon_ecal_2mm_key4hep_2025-05-29"
-    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/CLD_o2_v07_ecal2mm/CLD_o2_v07.xml"
-
-  # Sample-neutral 2 mm ECAL validation production. The initial ttbar sample
-  # matches the first ten 100-event files of the existing 5.1 mm CLD run.
-  cld_ecal_2mm:
-    type: "key4hep"
-    model: "pyg-cld-v1"
-    generation_only: true
-    comment: "CLD 2.0 mm ECAL readout validation samples"
-    workspace_dir: "${project.paths.storage_root}/cld/ecal_2mm_key4hep_2025-05-29"
-    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
-    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
-    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/CLD_o2_v07_ecal2mm/CLD_o2_v07.xml"
-    memory:
-      gen: 8000
-    slurm_partition: "main"
-    slurm_runtime: "48h"
-    samples:
-      ttbar:
-        process_name: "p8_ee_ttbar_ecm365"
-        gen_script: "scripts/cld_photon_readout/run_sim.sh"
-        seed_range: [300000, 300010]
-        events_per_job: 100
-
   # Independent, paired CLD granularity scans. Six complete 10k-event runs
   # per detector subsystem; the opposite calorimeter retains its baseline pitch.
   # All ECAL variants share an ECAL-only 1 mm Geant step cap, including 5.1 mm.
@@ -296,7 +246,7 @@ productions:
     samples:
       z_tautau:
         process_name: "p8_ee_Z_tautau_ecm91"
-        gen_script: "scripts/cld_photon_readout/run_sim.sh"
+        gen_script: "scripts/cld_ecal_readout/run_sim.sh"
         seed_range: [700000, 700100]
         events_per_job: 100
     postprocessing:
@@ -362,7 +312,7 @@ productions:
     samples:
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
-        gen_script: "scripts/cld_photon_readout/run_sim.sh"
+        gen_script: "scripts/cld_ecal_readout/run_sim.sh"
         seed_range: [300000, 300100]
         events_per_job: 100
     postprocessing:

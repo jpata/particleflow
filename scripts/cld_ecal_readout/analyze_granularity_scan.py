@@ -1,8 +1,8 @@
 """Measure Pandora PF performance across the CLD granularity scan.
 
 Run one point at a time with --point, then make the scan plots with --plot.
-The photon and jet definitions follow compare_ttbar_pf_photons.py and
-compare_ttbar_pf_jets.py.  The ECAL sample additionally measures whether both
+Jets use the Key4hep ee-genkt definition (R=0.4, p=-1, pT>5 GeV).
+The ECAL sample additionally measures whether both
 direct daughters of a generator pi0 are reconstructed as separate photons.
 """
 
@@ -17,10 +17,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import uproot
+import vector
 
 from mlpf.jet_utils import _match_jets_event
-from compare_ttbar_pf_jets import jet_matrix, particles_and_jets, summarize
-from compare_ttbar_pf_photons import kinematics
+from mlpf.data.key4hep.postprocessing import compute_jets, find_surrogate_ancestors_from_record
 
 BASE = Path("/local/joosep/mlpf/cld/granularity_scan_2025-05-29")
 OUT = Path("reports/cld_granularity_scan/performance")
@@ -35,6 +35,80 @@ PHOTON_FIELDS = [
     "_MCParticles_daughters/_MCParticles_daughters.index",
     *(f"PandoraPFOs.{x}" for x in ("PDG", "energy", "momentum.x", "momentum.y", "momentum.z")),
 ]
+
+
+MC_FIELDS = ("PDG", "generatorStatus", "simulatorStatus", "momentum.x", "momentum.y", "momentum.z", "mass", "daughters_begin", "daughters_end")
+PFO_FIELDS = ("PDG", "mass", "momentum.x", "momentum.y", "momentum.z")
+JET_FIELDS = [
+    *(f"MCParticles.{f}" for f in MC_FIELDS),
+    "_MCParticles_daughters/_MCParticles_daughters.index",
+    *(f"PandoraPFOs.{f}" for f in PFO_FIELDS),
+]
+
+
+def particles_and_jets(path):
+    with uproot.open(path, handler=uproot.source.file.MemmapSource) as source:
+        tree = source["events"]
+        data = tree.arrays(JET_FIELDS, library="ak")
+    status = data["MCParticles.generatorStatus"]
+    pdg = data["MCParticles.PDG"]
+    status1 = status == 1
+    propagated = (data["MCParticles.simulatorStatus"] & 0x0F000000) != 0
+    mask = status1 & (abs(pdg) != 12) & (abs(pdg) != 14) & (abs(pdg) != 16) & propagated
+    mask = mask | find_surrogate_ancestors_from_record(data, "MCParticles")
+    truth = vector.awk(
+        ak.zip(
+            {
+                "px": data["MCParticles.momentum.x"][mask],
+                "py": data["MCParticles.momentum.y"][mask],
+                "pz": data["MCParticles.momentum.z"][mask],
+                "mass": data["MCParticles.mass"][mask],
+            }
+        )
+    )
+    pfo_mask = data["PandoraPFOs.PDG"] != 0
+    pf = vector.awk(
+        ak.zip(
+            {
+                "px": data["PandoraPFOs.momentum.x"][pfo_mask],
+                "py": data["PandoraPFOs.momentum.y"][pfo_mask],
+                "pz": data["PandoraPFOs.momentum.z"][pfo_mask],
+                "mass": data["PandoraPFOs.mass"][pfo_mask],
+            }
+        )
+    )
+    return compute_jets(truth), compute_jets(pf), ak.to_numpy(ak.num(pf))
+
+
+def jet_matrix(jets):
+    if len(jets["pt"]) == 0:
+        return np.empty((0, 4), dtype=float)
+    mat = np.column_stack([ak.to_numpy(jets[field]) for field in ("pt", "eta", "phi", "energy")])
+    return mat[np.isfinite(mat).all(axis=1) & (mat[:, 0] > 0)]
+
+
+def summarize(values):
+    values = np.asarray(values, dtype=float)
+    if len(values) == 0:
+        return {"n": 0}
+    p16, p50, p84 = np.percentile(values, [16, 50, 84])
+    return {
+        "n": int(len(values)),
+        "mean": float(values.mean()),
+        "median": float(p50),
+        "p16": float(p16),
+        "p84": float(p84),
+        "half_width_68": float((p84 - p16) / 2),
+        "rms": float(values.std()),
+    }
+
+
+def kinematics(px, py, pz):
+    pt = np.hypot(px, py)
+    p = np.hypot(pt, pz)
+    eta = np.arcsinh(np.divide(pz, pt, out=np.full_like(pt, np.nan), where=pt > 0))
+    phi = np.arctan2(py, px)
+    return p, eta, phi, np.divide(pz, p, out=np.full_like(p, np.nan), where=p > 0)
 
 
 def sample_files(point, max_seeds=None):
@@ -138,7 +212,7 @@ def analyze_hcal(point, paths):
     ntruth = events = 0
     for path in paths:
         print(f"{point}: {path.name}", flush=True)
-        _, _, truth_jets, reco_jets, counts = particles_and_jets(path)
+        truth_jets, reco_jets, counts = particles_and_jets(path)
         events += len(truth_jets)
         pfo_count.extend(ak.to_numpy(counts))
         for i in range(len(truth_jets)):
