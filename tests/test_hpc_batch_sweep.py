@@ -16,19 +16,24 @@ from scripts.training.check_batch_data import check_data
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize("profile_name", ["empireai_gh200", "lumi_mi250x_single", "flatiron_h100_single"])
-def test_cross_platform_profiles_resolve_single_device_cases(profile_name, monkeypatch):
-    monkeypatch.setenv("MLPF_CLD_DATA_DIR", "/test/tfds")
-    profile = load_platform_profile(ROOT / f"configs/training/platforms/{profile_name}.yaml")
-    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_gh200_backbone_benchmark.yaml")
-    for batch in (8, 16, 32, 64, 128):
-        jobs = resolve_scenario_jobs(case_scenario(scenario, batch, 120, 20), profile, spec_file=ROOT / scenario.spec_file)
-        assert len(jobs) == 2
-        assert all(job.resolved_config.gpus == 1 and job.per_gpu_batch_size == batch for job in jobs)
-        workers = 2 if profile_name == "lumi_mi250x_single" else 4
-        assert all(job.resolved_config.dtype == "bfloat16" and job.resolved_config.num_workers == workers for job in jobs)
-        assert jobs[0].resolved_config.model.set_decoder == jobs[1].resolved_config.model.set_decoder
-        assert profile.python_command == ["python3"]
+@pytest.mark.parametrize("workers,python_command", [(0, ["python3"]), (3, ["uv", "run", "python3"])])
+def test_batch_cases_use_platform_runtime_settings(training_files, workers, python_command):
+    from mlpf.training_scenarios import _pipeline_command
+
+    scenario_path, profile_path = training_files
+    scenario = load_training_scenario(scenario_path)
+    profile = load_platform_profile(profile_path)
+    profile.runtime_overrides["num_workers"] = workers
+    profile.python_command = python_command
+    case = case_scenario(scenario, 32, 11, 2)
+    jobs = resolve_scenario_jobs(case, profile, spec_file=case.spec_file)
+    for job in jobs:
+        assert job.resolved_config.gpus == profile.gpus
+        assert job.per_gpu_batch_size * profile.gpus == 32
+        assert job.resolved_config.num_workers == workers
+        assert job.resolved_config.dtype == scenario.training.parameters["dtype"]
+        command = _pipeline_command(job, case, profile, Path(case.spec_file), Path("experiment"))
+        assert command[: len(python_command) + 1] == [*python_command, "-u"]
 
 
 def shell_environment(tmp_path):
@@ -51,19 +56,19 @@ def executable(path, body):
     path.chmod(0o755)
 
 
-@pytest.mark.parametrize("site,profile", [("lumi", "lumi_mi250x_single"), ("flatiron", "flatiron_h100_single"), ("empireai", "empireai_gh200")])
-def test_site_worker_binds_one_gpu_and_forwards_sweep_args(tmp_path, site, profile):
+@pytest.mark.parametrize("site", ["lumi", "flatiron", "empireai"])
+def test_site_worker_binds_one_gpu_and_forwards_sweep_args(tmp_path, site):
     stub, env = shell_environment(tmp_path)
     executable(stub / "srun", 'printf "%s\\n" "$@"')
     env["MLPF_BATCH_SWEEP_OUTPUT"] = str(tmp_path / "output")
-    if site == "flatiron":
-        env["MLPF_BATCH_SWEEP_SCENARIO"] = "configs/training/scenarios/cld_h100_backbone_benchmark_321.yaml"
     result = subprocess.run(
         ["bash", str(ROOT / f"scripts/{site}/run_batch_sweep.sh"), "--batch-sizes", "8", "16"], env=env, check=True, capture_output=True, text=True
     )
     assert "--ntasks=1" in result.stdout
     assert "--cpu-bind=cores" in result.stdout
-    assert f"configs/training/platforms/{profile}.yaml" in result.stdout
+    args = result.stdout.splitlines()
+    profile_path = ROOT / args[args.index("--platform") + 1]
+    assert load_platform_profile(profile_path).gpus == 1
     assert "scripts.training.batch_sweep" in result.stdout
     assert result.stdout.splitlines()[-3:] == ["--batch-sizes", "8", "16"]
 
@@ -116,11 +121,10 @@ def test_data_inventory_detects_missing_sizes_and_metadata_changes(tmp_path):
     assert any("missing" in error for error in check_data(tmp_path, manifest))
 
 
-@pytest.mark.parametrize("profile", ["empireai_gh200", "flatiron_h100_single", "lumi_mi250x_single"])
-def test_generic_submission_uses_profile_resources_and_preserves_arguments(profile):
+def test_generic_submission_uses_profile_resources_and_preserves_arguments(training_files):
     from scripts.training.submit_batch_sweep import build_submission
 
-    path = ROOT / f"configs/training/platforms/{profile}.yaml"
+    _, path = training_files
     command = build_submission(path, sweep_args=["--output", "/output with spaces", "--batch-sizes", "16"])
     resolved = load_platform_profile(path)
     assert command[command.index("--partition") + 1] == resolved.slurm.partition
