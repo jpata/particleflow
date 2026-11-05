@@ -598,6 +598,11 @@ productions:
   # IDEA full simulation and the reconstruction currently provided by FCC-config.
   # This initial ML path deliberately uses truth-seeded proxy tracks and an
   # oracle ycand reference to validate the software pipeline, not physics.
+  cms_phase2:
+    type: "cms_phase2"
+    comment: "CMS Phase-2 HGCAL/TICL ttbar 200PU (tracks + CLUE3D tracksters). Training reuses the prebuilt tfds via --data-dir; no postprocessing/tfds build is configured here."
+    workspace_dir: "${project.paths.storage_root}/cms_phase2"
+
   idea:
     type: "key4hep"
     model: "pyg-idea-pipeline-v1"
@@ -1371,6 +1376,54 @@ models:
         num_convs: 3
         head_dim: 16
         num_heads: 16
+
+  # CMS Phase-2 HGCAL/TICL ttbar 200PU with the per-element pileup head (T0): same use_pu_head +
+  # pu_loss_pt_balance recipe as pyg-colliderml-pu200-puhead-v1, on the heptv2 (sub-quadratic LSH
+  # attention) backbone needed for the ~5000-element 200PU events. Reuses the prebuilt tfds.
+  pyg-cms-phase2-pu200-puhead:
+    <<: *defaults
+    dataset: cms_phase2
+    gpu_batch_multiplier: 1
+    pad_to_multiple_elements: 256
+    num_steps: 50000
+    val_freq: 2500
+    checkpoint_freq: 2500
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0004
+    architecture:
+      type: "heptv2"
+      input_encoding: "split"
+      use_pu_head: true
+      pu_loss_pt_balance: true
+      heptv2:
+        embedding_dim: 256
+        width: 1024
+        num_convs: 6
+        num_heads: 16
+        block_size: 256
+        n_hashes: 3
+        num_regions: 140
+        num_w_per_dist: 10
+        mlp_ratio: 4.0
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "cms_pf_phase2_ttbar200pu"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "cms_pf_phase2_ttbar200pu"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+    test_datasets:
+      - name: "cms_pf_phase2_ttbar200pu"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-colliderml-pu0pu200-groups-v1:
     <<: *pyg_colliderml_v1

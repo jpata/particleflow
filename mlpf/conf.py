@@ -16,6 +16,7 @@ from mlpf.utils import (
 
 class Dataset(Enum):
     CMS = "cms"
+    CMS_PHASE2 = "cms_phase2"
     CLIC = "clic"
     CLD = "cld"
     IDEA = "idea"
@@ -360,6 +361,7 @@ class ParticleFeatures:
 # 0 is placeholder for padded entries (generally only when batching events together)
 ELEM_TYPES = {
     Dataset.CMS.value: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    Dataset.CMS_PHASE2.value: [0, 1, 2],  # 1 - track, 2 - CLUE3D trackster
     Dataset.CLIC.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.CLD.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.IDEA.value: [0, 1, 2],  # 1 - truth-seeded proxy track, 2 - cluster
@@ -373,6 +375,7 @@ ELEM_TYPES = {
 # Some element types are defined, but do not exist in the dataset at all or should be excluded for physics reasons
 ELEM_TYPES_NONZERO = {
     Dataset.CMS.value: [1, 4, 5, 6, 8, 9, 10, 11],
+    Dataset.CMS_PHASE2.value: [1, 2],
     Dataset.CLIC.value: [1, 2],
     Dataset.CLD.value: [1, 2],
     Dataset.IDEA.value: [1, 2],
@@ -395,6 +398,7 @@ CLASS_LABELS = {
         13,
         15,
     ],  # we never actually predict 15/taus (not there in targets)
+    Dataset.CMS_PHASE2.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLIC.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLD.value: [0, 211, 130, 22, 11, 13],
     Dataset.IDEA.value: [0, 211, 130, 22, 11, 13],
@@ -406,6 +410,7 @@ CLASS_LABELS = {
 }
 
 CLASS_NAMES_LATEX = {
+    Dataset.CMS_PHASE2.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
     Dataset.CMS.value: [
         "none",
         "Charged Hadron",
@@ -462,6 +467,7 @@ CLASS_NAMES_LATEX = {
     Dataset.COLLIDERML_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
 }
 CLASS_NAMES = {
+    Dataset.CMS_PHASE2.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CMS.value: [
         "none",
         "chhad",
@@ -483,6 +489,7 @@ CLASS_NAMES = {
     Dataset.COLLIDERML_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
 }
 CLASS_NAMES_CAPITALIZED = {
+    Dataset.CMS_PHASE2.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
     Dataset.CMS.value: [
         "none",
         "Charged hadron",
@@ -540,6 +547,19 @@ CLASS_NAMES_CAPITALIZED = {
 }
 
 X_FEATURES = {
+    Dataset.CMS_PHASE2.value: [
+        "typ_idx", "pt", "eta", "sin_phi", "cos_phi", "e", "charge",
+        "px", "py", "pz", "em_energy", "nhits",
+        # trackster shape/timing (zero on track elements)
+        "bary_z", "time", "timeerror", "ev1", "ev2", "ev3",
+        # track quality / muon-ID / vertex (zero on trackster elements)
+        "muon_type", "muon_dt_hits", "muon_csc_hits", "gsf_type",
+        "pterror", "etaerror", "phierror", "lambdaerror", "qoverperror",
+        "vx", "vy", "vz",
+        # track-density around the trackster (zero on track elements)
+        "min_dR_track", "near_track_pt", "sum_pt_dR10",
+        "n_trk_dR01", "n_trk_dR02", "n_trk_dR03", "n_trk_dR04", "n_trk_dR05",
+    ],
     Dataset.CMS.value: [
         "typ_idx",
         "pt",
@@ -645,6 +665,13 @@ JET_CONFIG = {
         p=-1.0,
         pt_cut=5.0,
         match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
+    Dataset.CMS_PHASE2.value: JetConfig(
+        algorithm="antikt_algorithm",
+        radius=0.4,
+        pt_cut=3.0,
+        match_dr=0.2,
         match_rel_pt=0.5,
     ),
     Dataset.CMS.value: JetConfig(
