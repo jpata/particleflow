@@ -4,6 +4,8 @@ import pytest
 
 from mlpf.conf import EDM4HEP
 from mlpf.data.key4hep.postprocessing import (
+    CALOHIT_LINK_FIELDS,
+    append_relation_truth_links,
     cluster_to_features,
     decode_cellid_field,
     get_hit_matrix_and_genadj,
@@ -196,6 +198,88 @@ def test_registered_muon_collections_are_read():
         assert set(detector.muon_collections).issubset(detector.hit_collections), name
     for name in ("clic", "cld", "maia"):
         assert EDM4HEP.DETECTORS[name].muon_collections == ("MUON",)
+
+
+class FakeTree:
+    """The one uproot TTree method append_relation_truth_links uses."""
+
+    def __init__(self, branches):
+        self.branches = branches
+
+    def arrays(self, keys):
+        return ak.Array({k: self.branches[k] for k in keys})
+
+
+# A MAIA-like file: CalohitMCTruthLink covers ECAL only; MUON reaches truth through RelationMuonHit ->
+# Yoke sim hits -> CaloHitContributions -> MCParticle. Two events, the second empty.
+MAIA_LIKE_IDS = {
+    "ECALBarrel": 11,
+    "MUON": 13,
+    "YokeBarrelCollection": 21,
+    "YokeEndcapCollection": 22,
+    "AllCaloHitContributionsCombined": 30,
+    "MCParticle": 40,
+    "OtherParticles": 41,
+}
+MAIA_LIKE_TREE = FakeTree(
+    {
+        "_RelationMuonHit_from/_RelationMuonHit_from.collectionID": [[13, 13, 13], []],
+        "_RelationMuonHit_from/_RelationMuonHit_from.index": [[0, 1, 2], []],
+        "_RelationMuonHit_to/_RelationMuonHit_to.collectionID": [[21, 22, 21], []],
+        "_RelationMuonHit_to/_RelationMuonHit_to.index": [[0, 0, 1], []],
+        "YokeBarrelCollection.contributions_begin": [[0, 2], []],
+        "YokeBarrelCollection.contributions_end": [[2, 3], []],
+        "_YokeBarrelCollection_contributions/_YokeBarrelCollection_contributions.collectionID": [[30, 30, 30], []],
+        "_YokeBarrelCollection_contributions/_YokeBarrelCollection_contributions.index": [[0, 1, 2], []],
+        "YokeEndcapCollection.contributions_begin": [[0], []],
+        "YokeEndcapCollection.contributions_end": [[1], []],
+        "_YokeEndcapCollection_contributions/_YokeEndcapCollection_contributions.collectionID": [[30], []],
+        "_YokeEndcapCollection_contributions/_YokeEndcapCollection_contributions.index": [[3], []],
+        "AllCaloHitContributionsCombined.energy": [[2e-4, 1e-4, 5e-4, 4e-4], []],
+        # the third contribution belongs to another particle collection and must be skipped
+        "_AllCaloHitContributionsCombined_particle/_AllCaloHitContributionsCombined_particle.collectionID": [[40, 40, 41, 40], []],
+        "_AllCaloHitContributionsCombined_particle/_AllCaloHitContributionsCombined_particle.index": [[5, 7, 9, 5], []],
+    }
+)
+
+
+def make_calohit_links(links):
+    """links: one list of (weight, particle collection, particle index, hit collection, hit index) per event"""
+    return ak.Array({k: [[link[i] for link in event] for event in links] for i, k in enumerate(CALOHIT_LINK_FIELDS)})
+
+
+def test_relation_truth_links_give_muon_hits_their_contributing_particles():
+    ecal_only = make_calohit_links([[(5.0, 40, 0, 11, 0)], []])
+
+    links = append_relation_truth_links(ecal_only, MAIA_LIKE_TREE, "RelationMuonHit", MAIA_LIKE_IDS, MAIA_LIKE_IDS["MCParticle"])
+
+    assert links.fields == list(CALOHIT_LINK_FIELDS)
+    rows = list(zip(*(links[k][0].to_list() for k in CALOHIT_LINK_FIELDS)))
+    assert rows == [(5.0, 40, 0, 11, 0), (2e-4, 40, 5, 13, 0), (1e-4, 40, 7, 13, 0), (4e-4, 40, 5, 13, 1)]
+    assert all(len(links[k][1]) == 0 for k in CALOHIT_LINK_FIELDS)
+
+    # the hit -> particle matrix splits each muon hit's energy by the contributed-energy shares
+    hit_data = {"ECALBarrel": make_calo_hits("ECALBarrel", [1.0]), "MUON": make_calo_hits("MUON", [3e-4, 2e-4, 1e-4])}
+    _, (gen_idx, hit_idx, weight), _ = get_hit_matrix_and_genadj(hit_data, links, None, 0, MAIA_LIKE_IDS, MAIA_LIKE_IDS["MCParticle"])
+    got = {(int(g), int(h)): float(w) for g, h, w in zip(gen_idx, hit_idx, weight)}
+    # global hit order: ECALBarrel 0, then MUON 0, 1, 2; MUON 2 has no MCParticle contribution
+    assert got.keys() == {(0, 0), (5, 1), (7, 1), (5, 2)}
+    np.testing.assert_allclose([got[(5, 1)], got[(7, 1)], got[(5, 2)], got[(0, 0)]], [2e-4, 1e-4, 2e-4, 1.0], rtol=1e-5)
+
+
+def test_relation_truth_links_refuse_hits_that_calohit_links_already_cover():
+    # mixing the two weight conventions on one hit would skew its shares
+    muon_already_linked = make_calohit_links([[(5.0, 40, 0, 13, 0)], []])
+
+    with pytest.raises(ValueError, match="already links"):
+        append_relation_truth_links(muon_already_linked, MAIA_LIKE_TREE, "RelationMuonHit", MAIA_LIKE_IDS, MAIA_LIKE_IDS["MCParticle"])
+
+
+def test_only_maia_follows_the_muon_hit_relation():
+    # CLIC and CLD already link MUON in CalohitMCTruthLink
+    assert EDM4HEP.DETECTORS["maia"].hit_truth_relations == ("RelationMuonHit",)
+    for name in ("clic", "cld"):
+        assert EDM4HEP.DETECTORS[name].hit_truth_relations == ()
 
 
 def test_tfds_hit_schema_retains_detector_surface_fields():
