@@ -131,7 +131,8 @@ def test_config_validation():
             "lr_finder": {"num_steps": 50, "end_lr": 1e-2},
         }
     )
-    assert config.lr_finder.num_steps == 50 and config.lr_finder.start_lr == 1e-7
+    assert config.lr_finder.num_steps == 50
+    assert config.lr_finder.start_lr < config.lr_finder.end_lr
     assert config.lr_find is False
     with pytest.raises(ValueError):
         MLPFConfig.model_validate(

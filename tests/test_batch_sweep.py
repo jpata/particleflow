@@ -1,4 +1,6 @@
 import sys
+
+import pytest
 from pathlib import Path
 
 from mlpf.training_scenarios import (
@@ -8,25 +10,25 @@ from mlpf.training_scenarios import (
 )
 from scripts.training.batch_sweep import case_scenario, classify, execute, main
 
-ROOT = Path(__file__).resolve().parents[1]
 
-
-def test_batch_case_preserves_matched_models_and_resolves_measurement_settings(monkeypatch):
-    monkeypatch.setenv("MLPF_CLD_DATA_DIR", "/test/tfds")
-    base = load_training_scenario(ROOT / "configs/training/scenarios/cld_gh200_backbone_benchmark.yaml")
-    profile = load_platform_profile(ROOT / "configs/training/platforms/empireai_gh200.yaml")
-    case = case_scenario(base, 32, 120, 20)
-    jobs = resolve_scenario_jobs(case, profile, spec_file=ROOT / case.spec_file)
-    assert len(jobs) == 2
-    assert base.training.global_batch_size == 8
-    assert base.training.parameters["num_steps"] == 1000
-    assert all(job.global_batch_size == job.per_gpu_batch_size == 32 for job in jobs)
-    assert jobs[0].resolved_config.model.set_decoder == jobs[1].resolved_config.model.set_decoder
+@pytest.mark.parametrize("batch,steps,warmup", [(16, 11, 0), (32, 23, 3)])
+def test_batch_case_preserves_recipe_and_resolves_measurement_settings(training_files, batch, steps, warmup):
+    scenario_path, profile_path = training_files
+    base = load_training_scenario(scenario_path)
+    original = base.model_dump()
+    case = case_scenario(base, batch, steps, warmup)
+    assert base.model_dump() == original
+    assert case.variants == base.variants
+    assert case.common_overrides == base.common_overrides
+    assert case.seeds == base.seeds
+    jobs = resolve_scenario_jobs(case, load_platform_profile(profile_path), spec_file=case.spec_file)
+    assert [job.variant_name for job in jobs] == list(base.variants)
     for job in jobs:
         config = job.resolved_config
-        assert config.num_steps == config.checkpoint_freq == config.val_freq == 120
-        assert config.benchmark.enabled and config.benchmark.warmup_steps == 20
-        assert config.task_loss_weights.calibration_steps == 20
+        assert job.global_batch_size == job.per_gpu_batch_size == batch
+        assert config.num_steps == config.checkpoint_freq == config.val_freq == steps
+        assert config.benchmark.enabled and config.benchmark.warmup_steps == warmup
+        assert config.task_loss_weights.calibration_steps == max(1, warmup)
 
 
 def test_failure_classification():
@@ -41,16 +43,15 @@ def test_case_timeout_terminates_isolated_process(tmp_path):
     assert timed_out and code != 0
 
 
-def test_dry_run_resolves_all_cases_without_creating_output(tmp_path, monkeypatch):
-    monkeypatch.setenv("MLPF_CLD_DATA_DIR", "/test/tfds")
-    monkeypatch.chdir(ROOT)
+def test_dry_run_resolves_all_cases_without_creating_output(tmp_path, training_files, capsys):
+    scenario_path, profile_path = training_files
     output = tmp_path / "sweep"
     main(
         [
             "--scenario",
-            "configs/training/scenarios/cld_gh200_backbone_benchmark.yaml",
+            str(scenario_path),
             "--platform",
-            "configs/training/platforms/empireai_gh200.yaml",
+            str(profile_path),
             "--output",
             str(output),
             "--batch-sizes",
@@ -60,16 +61,18 @@ def test_dry_run_resolves_all_cases_without_creating_output(tmp_path, monkeypatc
         ]
     )
     assert not output.exists()
+    assert "Resolved 4 cases" in capsys.readouterr().out
 
 
-def test_shared_defaults_and_frozen_spec(tmp_path, monkeypatch):
+def test_environment_overrides_and_frozen_spec(tmp_path, monkeypatch, training_files):
+    scenario_path, profile_path = training_files
+    base = load_training_scenario(scenario_path)
     import json
     import yaml
     from scripts.training import batch_sweep as sweep
 
-    monkeypatch.setenv("MLPF_CLD_DATA_DIR", "/test/tfds")
     monkeypatch.setenv("MLPF_BATCH_SWEEP_OUTPUT", str(tmp_path / "sweep"))
-    monkeypatch.setenv("MLPF_BATCH_SWEEP_SCENARIO", str(ROOT / "configs/training/scenarios/cld_backbone_benchmark.yaml"))
+    monkeypatch.setenv("MLPF_BATCH_SWEEP_SCENARIO", str(scenario_path))
     monkeypatch.setattr(sweep, "git_state", lambda: {"revision": "abc", "dirty": False})
     invoked = []
 
@@ -79,15 +82,15 @@ def test_shared_defaults_and_frozen_spec(tmp_path, monkeypatch):
         return (1 if len(invoked) == 1 else 0), False
 
     monkeypatch.setattr(sweep, "execute", execute_stub)
-    sweep.main(["--platform", str(ROOT / "configs/training/platforms/empireai_gh200.yaml"), "--batch-sizes", "8", "--require-clean-git"])
+    sweep.main(["--platform", str(profile_path), "--batch-sizes", "8", "--require-clean-git"])
     output = tmp_path / "sweep"
     state = json.loads((output / "sweep-state.json").read_text())
     assert state["status"] == "completed"
     assert [case["status"] for case in state["cases"]] == ["oom", "completed"]
     assert state["data_verification"]["status"] == "not_checked"
     assert state["git"]["revision"] == "abc"
-    assert (output / "particleflow_spec.yaml").read_bytes() == (ROOT / "particleflow_spec.yaml").read_bytes()
-    frozen = yaml.safe_load(next((output / "cases").glob("cld*.yaml")).read_text())
+    assert (output / "particleflow_spec.yaml").read_bytes() == Path(base.spec_file).read_bytes()
+    frozen = yaml.safe_load(next((output / "cases").glob(f"{base.name}_batch*.yaml")).read_text())
     assert frozen["spec_file"] == str(output / "particleflow_spec.yaml")
     assert len((output / "memory-diagnostics.jsonl").read_text().splitlines()) >= 2
     assert len(invoked) == 2
@@ -114,17 +117,18 @@ def test_data_preflight_matches_config_and_fails_before_training(tmp_path):
     assert verify_data([(None, job)], manifest)["status"] == "verified"
 
 
-def test_strict_source_check_rejects_dirty_tree_before_creating_output(tmp_path, monkeypatch):
+def test_strict_source_check_rejects_dirty_tree_before_creating_output(tmp_path, monkeypatch, training_files):
+    scenario_path, profile_path = training_files
+    monkeypatch.setenv("MLPF_BATCH_SWEEP_SCENARIO", str(scenario_path))
     import pytest
     from scripts.training import batch_sweep as sweep
 
-    monkeypatch.setenv("MLPF_CLD_DATA_DIR", "/test/tfds")
     monkeypatch.setattr(sweep, "git_state", lambda: {"dirty": True})
     with pytest.raises(SystemExit):
         sweep.main(
             [
                 "--platform",
-                str(ROOT / "configs/training/platforms/empireai_gh200.yaml"),
+                str(profile_path),
                 "--output",
                 str(tmp_path / "sweep"),
                 "--batch-sizes",
@@ -135,16 +139,16 @@ def test_strict_source_check_rejects_dirty_tree_before_creating_output(tmp_path,
     assert not (tmp_path / "sweep").exists()
 
 
-def test_platform_cannot_silently_change_shared_precision_or_warmup(monkeypatch):
+def test_platform_cannot_silently_change_shared_precision_or_warmup(training_files):
+    scenario_path, profile_path = training_files
     import pytest
     from scripts.training.batch_sweep import validate_protocol_overrides
 
-    monkeypatch.setenv("MLPF_CLD_DATA_DIR", "/test/tfds")
-    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_backbone_benchmark.yaml")
+    scenario = load_training_scenario(scenario_path)
     case = case_scenario(scenario, 16, 120, 20)
-    profile = load_platform_profile(ROOT / "configs/training/platforms/empireai_gh200.yaml")
+    profile = load_platform_profile(profile_path)
     validate_protocol_overrides(case, profile)
-    for key, value in [("dtype", "float32"), ("benchmark.warmup_steps", 2), ("benchmark.enabled", False)]:
+    for key, value in [("dtype", "bfloat16"), ("benchmark.warmup_steps", 2), ("benchmark.enabled", False)]:
         changed = profile.model_copy(deep=True)
         changed.runtime_overrides[key] = value
         with pytest.raises(ValueError, match="shared benchmark setting"):
