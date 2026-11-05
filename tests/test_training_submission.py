@@ -5,241 +5,164 @@ from pathlib import Path
 import pytest
 import yaml
 
-from mlpf.training_scenarios import (
-    load_platform_profile,
-    load_training_scenario,
-    resolve_scenario_jobs,
-)
+from mlpf.training_scenarios import SlurmProfile, load_platform_profile, load_training_scenario, resolve_scenario_jobs
 from mlpf.training_submission import (
     available_choices,
     build_slurm_submission,
     build_slurm_submissions,
-    resolve_flatiron_profile_path,
     resolve_platform_profile_path,
     resolve_scenario_path,
+    slurm_resource_args,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_empireai_submission_targets_reserved_gpu_and_smoke_data(monkeypatch):
-    monkeypatch.setenv("MLPF_CLD_DATA_DIR", "/home/test/tfds")
-    scenario = resolve_scenario_path("cld_gh200_smoke", ROOT)
-    profile = resolve_platform_profile_path("gh200", ROOT, "empireai")
-    worker = ROOT / "scripts/empireai/run_scenario.sh"
-    command, jobs = build_slurm_submission(scenario, profile, ROOT, worker=worker)
-    for flag, value in {
-        "--partition": "grace",
-        "--constraint": "gracehopper",
-        "--account": "cuny",
-        "--qos": "burst",
-        "--reservation": "ghtest",
-        "--gres": "gpu:1",
-    }.items():
-        assert command[command.index(flag) + 1] == value
-    assert str(worker) in command
-    config = jobs[0].resolved_config
-    assert config.data_dir == "/home/test/tfds"
-    assert jobs[0].per_gpu_batch_size == 2
-    for datasets in (config.train_dataset, config.valid_dataset):
-        samples = datasets["cld_hits"]["physical"].samples
-        assert list(samples) == ["cld_edm_ttbar_hits"]
-        assert samples["cld_edm_ttbar_hits"].splits == ["1"]
-    assert list(config.test_dataset) == ["cld_edm_ttbar_hits"]
-
-
-def test_picker_discovers_scenarios_and_accelerators():
-    scenarios, accelerators = available_choices(ROOT)
-
-    assert "cld_hits_output_comparison" in scenarios
-    assert "cld_hits_backbone_comparison" in scenarios
-    assert "cld_pf_hits_comparison" in scenarios
-    assert "clic_cld_pf_set_hits_comparison" in scenarios
-    assert {"a100", "h100", "h200"}.issubset(accelerators)
-
-
-def test_gh200_benchmark_matches_decoder_features_and_event_exposure(monkeypatch):
-    monkeypatch.setenv("MLPF_CLD_DATA_DIR", "/home/test/tfds")
-    profile = load_platform_profile(resolve_platform_profile_path("gh200", ROOT, "empireai"))
-    scenario = load_training_scenario(resolve_scenario_path("cld_gh200_backbone_benchmark", ROOT))
-    jobs = resolve_scenario_jobs(scenario, profile, spec_file=ROOT / scenario.spec_file)
-    attention, heptv2 = [job.resolved_config for job in jobs]
-    assert [job.variant_name for job in jobs] == ["attention", "heptv2"]
-    assert all(job.global_batch_size == job.per_gpu_batch_size == 8 for job in jobs)
-    assert all(config.num_steps == 1000 and config.gpus == 1 for config in (attention, heptv2))
-    assert attention.model.set_decoder == heptv2.model.set_decoder
-    assert attention.model.hit_feature_engineering == heptv2.model.hit_feature_engineering
-    assert attention.train_dataset == heptv2.train_dataset
-    assert attention.model.attention.num_convs == heptv2.model.heptv2.num_convs == 6
-    assert attention.model.attention.num_heads * attention.model.attention.head_dim == heptv2.model.heptv2.embedding_dim == 256
-    assert list(attention.train_dataset["cld_hits"]["physical"].samples) == ["cld_edm_ttbar_hits"]
-
-
-def test_multi_production_scenario_submits_one_array_task_per_variant():
-    scenario = resolve_scenario_path("clic_cld_pf_set_hits_comparison", ROOT)
-    profile = resolve_flatiron_profile_path("h100", ROOT)
-
-    command, jobs = build_slurm_submission(scenario, profile, ROOT)
-
-    assert [job.production_name for job in jobs] == ["cld", "cld", "clic", "clic"]
-    assert command[command.index("--array") + 1] == "0-3"
-
-
-def test_h100_submission_is_derived_from_scenario_and_profile():
-    scenario = resolve_scenario_path("cld_hits_output_comparison", ROOT)
-    profile = resolve_flatiron_profile_path("h100", ROOT)
-
-    command, jobs = build_slurm_submission(
-        scenario,
-        profile,
-        ROOT,
-        seed=2468,
+@pytest.fixture
+def submission_files(tmp_path):
+    """Controlled inputs exercise submission behavior independently of site and experiment recipes."""
+    scenario_path = tmp_path / "scenario.yaml"
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "submission-test",
+                "production_name": "cld",
+                "variants": {"first": {"model_name": "pyg-cld-v1", "gpus": 1}, "second": {"model_name": "pyg-cld-v1"}},
+                "seeds": [11, 29],
+                "training": {"global_batch_size": 96, "parameters": {"num_steps": 100}},
+            },
+            sort_keys=False,
+        )
     )
-
-    assert [job.variant_name for job in jobs] == ["elementwise", "set"]
-    assert {job.seed for job in jobs} == {2468}
-    assert command[command.index("--gpus-per-node") + 1] == "8"
-    assert command[command.index("--constraint") + 1] == "h100"
-    assert command[command.index("--array") + 1] == "0-1"
-    assert command[command.index("--repo-root") + 1] == str(ROOT)
-    assert command[-2:] == ["--seed", "2468"]
-
-
-def test_array_size_includes_all_scenario_seeds():
-    scenario = resolve_scenario_path("cld_hits_output_comparison", ROOT)
-    profile = resolve_flatiron_profile_path("a100", ROOT)
-
-    command, jobs = build_slurm_submission(scenario, profile, ROOT)
-
-    assert len(jobs) == 2
-    assert command[command.index("--array") + 1] == "0-1"
-    assert command[command.index("--gpus-per-node") + 1] == "4"
-
-
-def test_tallinn_submission_uses_typed_gres_and_site_worker():
-    scenario = resolve_scenario_path("cld_hits_output_comparison", ROOT)
-    profile = resolve_platform_profile_path("l40", ROOT, "tallinn")
-    worker = ROOT / "scripts/tallinn/run_scenario.sh"
-
-    command, jobs = build_slurm_submission(
-        scenario,
-        profile,
-        ROOT,
-        seed=2468,
-        worker=worker,
+    profile_path = tmp_path / "profile.yaml"
+    profile_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "test",
+                "gpus": 4,
+                "data_dir": str(tmp_path / "data"),
+                "experiments_dir": str(tmp_path / "experiments"),
+                "slurm": {"partition": "test", "gpu_request": "gpus-per-node"},
+            }
+        )
     )
-
-    assert len(jobs) == 2
-    assert command[command.index("--gres") + 1] == "gpu:l40:2"
-    assert command[command.index("--mem-per-gpu") + 1] == "80G"
-    assert str(worker) in command
-    assert "--constraint" not in command
+    return scenario_path, profile_path
 
 
-def test_lumi_submission_uses_task_gpus_account_and_container_worker():
-    scenario = resolve_scenario_path("cld_hits_output_comparison", ROOT)
-    profile = resolve_platform_profile_path("mi250x", ROOT, "lumi")
-    worker = ROOT / "scripts/lumi/run_scenario.sh"
-
-    command, jobs = build_slurm_submission(
-        scenario,
-        profile,
-        ROOT,
-        worker=worker,
-    )
-
-    assert len(jobs) == 2
-    assert command[command.index("--gpus-per-task") + 1] == "8"
-    assert command[command.index("--account") + 1] == "project_465001293"
-    assert command[command.index("--time") + 1] == "2-00:00:00"
-    assert command[command.index("--mem") + 1] == "480G"
-    assert "--no-requeue" in command
-    assert str(worker) in command
+@pytest.mark.parametrize(
+    "gpu_request,gpu_type,expected",
+    [
+        ("gpus-per-node", None, ["--gpus-per-node", "3"]),
+        ("gpus-per-task", None, ["--gpus-per-task", "3"]),
+        ("gres", None, ["--gres", "gpu:3"]),
+        ("gres", "testgpu", ["--gres", "gpu:testgpu:3"]),
+    ],
+)
+def test_slurm_gpu_request_format(gpu_request, gpu_type, expected):
+    args = slurm_resource_args(SlurmProfile(gpu_request=gpu_request, gpu_type=gpu_type), 3)
+    index = args.index(expected[0])
+    assert args[index : index + 2] == expected
+    assert sum(flag in args for flag in ("--gpus-per-node", "--gpus-per-task", "--gres")) == 1
 
 
-def test_set_query_matching_scenario_submits_four_lumi_nodes():
-    scenario = resolve_scenario_path("cld_set_hits_query_matching_comparison", ROOT)
-    profile_path = resolve_platform_profile_path("mi250x", ROOT, "lumi")
-    profile = load_platform_profile(profile_path)
-    worker = ROOT / "scripts/lumi/run_scenario.sh"
-
-    command, jobs = build_slurm_submission(
-        scenario,
-        profile_path,
-        ROOT,
-        worker=worker,
-    )
-
-    assert [job.variant_name for job in jobs] == [
-        "baseline_4layer_local",
-        "calo_balanced_queries",
-        "pid_free_match",
-        "calo_balanced_pid_free_match",
-    ]
-    assert command[command.index("--array") + 1] == "0-3"
-    assert command[command.index("--gpus-per-task") + 1] == "8"
-    assert {job.global_batch_size for job in jobs} == {512}
-    assert {job.per_gpu_batch_size for job in jobs} == {64}
-    assert {job.gpu_batch_multiplier for job in jobs} == {64}
-    assert {job.resolved_config.compile for job in jobs} == {False}
-    assert {job.resolved_config.model.attention.use_flash_attn_varlen for job in jobs} == {True}
-    assert profile.environment["OMP_NUM_THREADS"] == "4"
+@pytest.mark.parametrize("memory_field,memory_flag", [("memory", "--mem"), ("memory_per_gpu", "--mem-per-gpu")])
+def test_slurm_optional_resources_are_forwarded(memory_field, memory_flag):
+    options = {"constraint": "test-constraint", "account": "test-account", "qos": "test-qos", "reservation": "test-reservation"}
+    profile = SlurmProfile(**options, **{memory_field: "24G"}, no_requeue=True)
+    args = slurm_resource_args(profile, 2)
+    for name, value in options.items():
+        assert args[args.index("--" + name) + 1] == value
+    assert args[args.index(memory_flag) + 1] == "24G"
+    assert "--no-requeue" in args
 
 
-def test_picker_discovers_site_specific_accelerators():
-    _, tallinn_accelerators = available_choices(ROOT, "tallinn")
-    _, lumi_accelerators = available_choices(ROOT, "lumi")
-
-    assert tallinn_accelerators == ["l40"]
-    assert lumi_accelerators == ["mi250x", "mi250x_single"]
+def test_slurm_optional_resources_are_omitted_when_unset():
+    args = slurm_resource_args(SlurmProfile(), 2)
+    assert not set(args).intersection({"--constraint", "--account", "--qos", "--reservation", "--mem", "--mem-per-gpu", "--no-requeue"})
 
 
-def _write_scenario_run(experiments_dir, scenario, profile, job, step):
-    run_dir = experiments_dir / scenario.name / f"{job.variant_name}_seed{job.seed}_test"
-    checkpoint_dir = run_dir / "checkpoints"
-    checkpoint_dir.mkdir(parents=True)
-    manifest = {
-        "job": job.model_dump(mode="json", exclude={"resolved_config"}),
-        "resolved_config": job.resolved_config.model_dump(mode="json"),
-    }
-    (run_dir / "scenario-manifest.json").write_text(json.dumps(manifest))
-    (checkpoint_dir / f"checkpoint-{step}.pth").touch()
+def test_picker_discovers_files_for_selected_site(tmp_path):
+    scenarios = tmp_path / "configs/training/scenarios"
+    profiles = tmp_path / "configs/training/platforms"
+    scenarios.mkdir(parents=True)
+    profiles.mkdir(parents=True)
+    for name in ("second.yaml", "first.yaml", "ignore.txt"):
+        (scenarios / name).touch()
+    for name in ("test_fast.yaml", "test_small.yaml", "other_fast.yaml"):
+        (profiles / name).touch()
+    assert available_choices(tmp_path, "test") == (["first", "second"], ["fast", "small"])
+    assert resolve_scenario_path("first", tmp_path) == scenarios / "first.yaml"
+    assert resolve_platform_profile_path("fast", tmp_path, "test") == profiles / "test_fast.yaml"
 
 
-def test_continue_submission_selects_only_unfinished_original_array_indices(tmp_path):
-    scenario_path = resolve_scenario_path("clic_cld_pf_set_hits_comparison", ROOT)
-    original_profile_path = resolve_flatiron_profile_path("h100", ROOT)
-    profile_data = yaml.safe_load(original_profile_path.read_text())
-    profile_data["experiments_dir"] = str(tmp_path / "experiments")
-    profile_path = tmp_path / "flatiron_h100.yaml"
+@pytest.mark.parametrize("gpu_request", ["gpus-per-node", "gpus-per-task", "gres"])
+def test_submission_groups_tasks_by_gpu_count(submission_files, gpu_request):
+    from mlpf.training_scenarios import _pipeline_command
+
+    scenario_path, profile_path = submission_files
+    profile_data = yaml.safe_load(profile_path.read_text())
+    profile_data["slurm"]["gpu_request"] = gpu_request
+    if gpu_request == "gres":
+        profile_data["slurm"]["gpu_type"] = "testgpu"
     profile_path.write_text(yaml.safe_dump(profile_data))
+    worker = ROOT / "scripts/tallinn/run_scenario.sh"
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, worker=worker)
+    scenario = load_training_scenario(scenario_path)
+    profile = load_platform_profile(profile_path)
+    assert len(submissions) == 2
+    for (command, jobs), count, indices in zip(submissions, (1, 4), ("0,2", "1,3")):
+        request = f"gpu:testgpu:{count}" if gpu_request == "gres" else str(count)
+        assert command[command.index("--" + gpu_request) + 1] == request
+        assert command[command.index("--array") + 1] == indices
+        assert [job.seed for job in jobs] == [11, 29]
+        assert str(worker) in command
+        for job in jobs:
+            assert job.resolved_config.gpus == count
+            assert job.per_gpu_batch_size * count == 96
+            pipeline = _pipeline_command(job, scenario, profile, ROOT / scenario.spec_file, Path("experiment"))
+            assert pipeline[pipeline.index("--gpus") + 1] == str(count)
+    with pytest.raises(ValueError, match="multiple GPU resource groups"):
+        build_slurm_submission(scenario_path, profile_path, ROOT)
 
+
+def test_seed_override_replaces_all_scenario_seeds(submission_files):
+    scenario_path, profile_path = submission_files
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, seed=2468)
+    assert sum(len(jobs) for _, jobs in submissions) == 2
+    for command, jobs in submissions:
+        assert {job.seed for job in jobs} == {2468}
+        assert command[-2:] == ["--seed", "2468"]
+        assert command[command.index("--repo-root") + 1] == str(ROOT)
+
+
+def test_single_resource_array_includes_all_seeds(submission_files):
+    scenario_path, profile_path = submission_files
+    payload = yaml.safe_load(scenario_path.read_text())
+    del payload["variants"]["first"]["gpus"]
+    scenario_path.write_text(yaml.safe_dump(payload))
+    command, jobs = build_slurm_submission(scenario_path, profile_path, ROOT)
+    assert len(jobs) == 4
+    assert command[command.index("--array") + 1] == "0-3"
+
+
+def test_continue_preserves_original_indices_across_resource_groups(submission_files):
+    scenario_path, profile_path = submission_files
     scenario = load_training_scenario(scenario_path)
     profile = load_platform_profile(profile_path)
     jobs = resolve_scenario_jobs(scenario, profile, spec_file=ROOT / scenario.spec_file)
     for index, job in enumerate(jobs):
-        _write_scenario_run(
-            Path(profile.experiments_dir),
-            scenario,
-            profile,
-            job,
-            40000 if index in {1, 3} else 50000,
-        )
-
-    command, selected_jobs = build_slurm_submission(
-        scenario_path,
-        profile_path,
-        ROOT,
-        worker=ROOT / "scripts/flatiron/run_uv_scenario.sh",
-        continue_run=True,
-    )
-
-    assert [job.variant_name for job in selected_jobs] == [
-        "cld_set_hits",
-        "clic_set_hits",
-    ]
-    assert command[command.index("--array") + 1] == "1,3"
-    assert command[-1] == "--continue"
+        run_dir = Path(profile.experiments_dir) / scenario.name / f"{job.variant_name}_seed{job.seed}_test"
+        checkpoint_dir = run_dir / "checkpoints"
+        checkpoint_dir.mkdir(parents=True)
+        manifest = {"job": job.model_dump(mode="json", exclude={"resolved_config"}), "resolved_config": job.resolved_config.model_dump(mode="json")}
+        (run_dir / "scenario-manifest.json").write_text(json.dumps(manifest))
+        step = 40 if index in {1, 2} else 100
+        (checkpoint_dir / f"checkpoint-{step}.pth").touch()
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, continue_run=True)
+    assert [command[command.index("--array") + 1] for command, _ in submissions] == ["1", "2"]
+    assert [command[command.index("--gpus-per-node") + 1] for command, _ in submissions] == ["4", "1"]
+    assert all(command[-1] == "--continue" for command, _ in submissions)
+    assert [(job.variant_name, job.seed) for _, jobs in submissions for job in jobs] == [("second", 11), ("first", 29)]
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
@@ -271,51 +194,6 @@ def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, m
     else:
         result = subprocess.run(["bash", str(script_path)], check=True, capture_output=True, text=True)
         assert result.stdout == payload * num_groups
-
-
-@pytest.mark.parametrize(
-    "site,profile_name,gpu_flag",
-    [("flatiron", "h100", "--gpus-per-node"), ("lumi", "mi250x", "--gpus-per-task")],
-)
-def test_benchmark_submits_separate_resource_arrays(site, profile_name, gpu_flag):
-    from mlpf.training_scenarios import _pipeline_command
-
-    scenario_path = resolve_scenario_path("clic_cld_backbone_benchmark", ROOT)
-    profile_path = resolve_platform_profile_path(profile_name, ROOT, site)
-    scenario = load_training_scenario(scenario_path)
-    profile = load_platform_profile(profile_path)
-    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, seed=2468)
-    assert len(submissions) == 2
-    for (command, jobs), count, indices in zip(submissions, (1, 8), ("0,1,4,5", "2,3,6,7")):
-        assert command[command.index(gpu_flag) + 1] == str(count)
-        assert command[command.index("--array") + 1] == indices
-        assert len(jobs) == 4
-        representation = "pf" if count == 1 else "hits"
-        assert {job.variant_name for job in jobs} == {
-            f"{detector}_{representation}_{backbone}" for detector in ("cld", "clic") for backbone in ("attention", "heptv2")
-        }
-        for job in jobs:
-            assert job.seed == 2468
-            assert job.resolved_config.gpus == count
-            assert job.per_gpu_batch_size * count == job.global_batch_size == 128
-            pipeline = _pipeline_command(job, scenario, profile, ROOT / scenario.spec_file, Path("experiment"))
-            assert pipeline[pipeline.index("--gpus") + 1] == str(count)
-
-
-def test_benchmark_continue_preserves_indices_across_resource_groups(tmp_path):
-    scenario_path = resolve_scenario_path("clic_cld_backbone_benchmark", ROOT)
-    profile_data = yaml.safe_load(resolve_flatiron_profile_path("h100", ROOT).read_text())
-    profile_data["experiments_dir"] = str(tmp_path / "experiments")
-    profile_path = tmp_path / "profile.yaml"
-    profile_path.write_text(yaml.safe_dump(profile_data))
-    scenario = load_training_scenario(scenario_path)
-    profile = load_platform_profile(profile_path)
-    jobs = resolve_scenario_jobs(scenario, profile, spec_file=ROOT / scenario.spec_file)
-    for index, job in enumerate(jobs):
-        _write_scenario_run(Path(profile.experiments_dir), scenario, profile, job, 40000 if index in {1, 6} else 50000)
-    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, continue_run=True)
-    assert [command[command.index("--array") + 1] for command, _ in submissions] == ["1", "6"]
-    assert [command[command.index("--gpus-per-node") + 1] for command, _ in submissions] == ["1", "8"]
 
 
 @pytest.mark.parametrize("task_gpus,expected_visible", [("1", "3"), ("8", "unset")])
