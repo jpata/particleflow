@@ -198,6 +198,22 @@ def test_resume_reconverts_outputs_without_pileup_truth(tmp_path):
     assert set(old_fields).issubset(restored.column_names)
 
 
+def test_resume_reconverts_outputs_without_forward_truth(tmp_path):
+    make_fixture(tmp_path / "src", n_events=6)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    process_one_file(*paths, ofn)
+    table = pq.read_table(ofn)
+    assert table.schema.metadata[b"mlpf.forward_truth"] == b"drop-eta3.5-v1"
+    metadata = dict(table.schema.metadata)
+    del metadata[b"mlpf.forward_truth"]
+    pq.write_table(table.replace_schema_metadata(metadata), ofn)
+
+    process_one_file(*paths, ofn)
+
+    assert pq.read_metadata(ofn).metadata[b"mlpf.forward_truth"] == b"drop-eta3.5-v1"
+
+
 def test_pileup_fields_roundtrip_to_tfds(tmp_path):
     from mlpf.data.colliderml.postprocessing import _batch_arrow_arrays
     from mlpf.heptfds.colliderml_utils.utils import generate_examples

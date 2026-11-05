@@ -40,6 +40,14 @@
 #   slices of the same leaf table, so the surrogate enters both — key4hep explains why
 #   target-only would bias the response above 1.
 #
+# OUT-OF-ACCEPTANCE PARTICLES (drop_out_of_acceptance)
+#   A truth particle beyond |eta| > OUT_OF_ACCEPTANCE_ABS_ETA passes through the endcap bores
+#   and never enters a calorimeter, but its Geant4 secondaries, born outside the calorimeter,
+#   can deposit in the endcap. It is dropped as a target candidate, also when it
+#   would be a surrogate ancestor; the deposits of it and its descendants stay unattributed.
+#   (Replacing it by its secondaries instead adds displaced particles whose momentum direction
+#   does not point at their deposit, which degrades the target-vs-gen jet response.)
+#
 # MERGES
 #   Handled by the shared allocator (target_building.assign_genparticles_to_obj_and_merge);
 #   nothing is dropped silently: surviving + dropped reproduces the selected input energy
@@ -89,6 +97,13 @@ GENREF_TRACK_FRACTION_MIN = 0.0  # share of a track's hits
 # Promote surrogate ancestors to leaves (see SURROGATE ANCESTORS above; key4hep's switch of the
 # same name). Set False to recover the previous behaviour on both targets and gen reference.
 use_surrogate_ancestors = True
+
+# Drop out-of-acceptance particles (see OUT-OF-ACCEPTANCE PARTICLES above).
+# Set False to recover the previous behaviour on both targets and gen reference.
+drop_out_of_acceptance = True
+# |eta| beyond which a particle misses every calorimeter: the endcap bore edge asinh(5432 / 362) = 3.40,
+# plus a margin.
+OUT_OF_ACCEPTANCE_ABS_ETA = 3.5
 
 
 def _empty_coo() -> SparseMatrixCOO:
@@ -248,19 +263,55 @@ def find_surrogate_ancestors(
     return rest[~nested], int(partial.sum()), int(nested.sum())
 
 
+def out_of_acceptance(particles_ev: Dict[str, Any]) -> np.ndarray:
+    """Per particle: momentum heading beyond |eta| > OUT_OF_ACCEPTANCE_ABS_ETA."""
+    px, py, pz = (np.asarray(ak.to_numpy(particles_ev[k]), dtype=np.float64) for k in ("px", "py", "pz"))
+    return np.abs(np.arcsinh(pz / np.maximum(np.hypot(px, py), 1e-12))) > OUT_OF_ACCEPTANCE_ABS_ETA
+
+
+def descendants(rows: np.ndarray, pid: np.ndarray, parent: np.ndarray, max_depth: int = 256) -> np.ndarray:
+    """Mask of `rows` and all of their descendants in the particle table."""
+    mask = np.zeros(len(pid), dtype=bool)
+    if not len(pid):
+        return mask
+    order = np.argsort(pid)
+    pos = np.clip(np.searchsorted(pid[order], parent), 0, len(pid) - 1)
+    parent_row = np.where(pid[order[pos]] == parent, order[pos], -1)
+    frontier = np.asarray(rows)
+    for _ in range(max_depth):
+        mask[frontier] = True
+        frontier = np.flatnonzero(np.isin(parent_row, frontier) & ~mask)
+        if not len(frontier):
+            break
+    return mask
+
+
 def build_leaf_maps(particles_ev: Dict[str, Any], calo_ev: Dict[str, Any], tracker_ev: Dict[str, Any]):
-    """The leaf set compute_gen_tables attributes to: _build_parent_maps, plus (with
+    """The leaf set compute_gen_tables attributes to: _build_parent_maps, without (with
+    drop_out_of_acceptance) the out-of-acceptance particles, plus (with
     use_surrogate_ancestors) the surrogate ancestors found from the event's calo contributions
     and tracker hits. Returns pid, pdg, parent, is_leaf, redirect and the surrogate row mask.
     """
     pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles_ev)
+    dropped = np.zeros(len(pid), dtype=bool)
+    if drop_out_of_acceptance:
+        out = out_of_acceptance(particles_ev)
+        dropped = is_leaf & out
+        is_leaf &= ~dropped
     surrogate = np.zeros(len(pid), dtype=bool)
     if use_surrogate_ancestors:
         cid = _redirect_ids(np.asarray(ak.to_numpy(ak.flatten(calo_ev["contrib_particle_ids"], axis=None))).ravel(), redirect)
         th_pid = _redirect_ids(np.asarray(ak.to_numpy(tracker_ev["particle_id"])).astype(np.int64), redirect)
         primary = np.asarray(ak.to_numpy(particles_ev["primary"])).astype(bool)
-        rows, _, _ = find_surrogate_ancestors(np.concatenate([cid.astype(np.int64), th_pid]), pid, parent, primary, is_leaf)
+        hit_pids = np.concatenate([cid.astype(np.int64), th_pid])
+        if dropped.any():
+            # the chains of a dropped particle's tree reach no candidate; they must not bring it (or an
+            # ancestor) back as a surrogate
+            hit_pids = hit_pids[~np.isin(hit_pids, pid[descendants(np.flatnonzero(dropped), pid, parent)].astype(np.int64))]
+        rows, _, _ = find_surrogate_ancestors(hit_pids, pid, parent, primary, is_leaf)
         surrogate[rows] = True
+        if drop_out_of_acceptance:
+            surrogate &= ~out  # a surrogate beyond the cut is dropped the same way
     return pid, pdg, parent, is_leaf | surrogate, redirect, surrogate
 
 

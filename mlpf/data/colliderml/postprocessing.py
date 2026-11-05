@@ -573,11 +573,18 @@ def _assignment_tag(assignment: str) -> bytes:
     return f"{assignment}-v1".encode()
 
 
+def _forward_truth_tag() -> bytes:
+    """Parquet metadata value recording the out-of-acceptance truth handling (truth.drop_out_of_acceptance)."""
+    from mlpf.data.colliderml import truth
+
+    return f"drop-eta{truth.OUT_OF_ACCEPTANCE_ABS_ETA:g}-v1".encode() if truth.drop_out_of_acceptance else b"none-v1"
+
+
 def _parquet_usable(ofn: Path, expected_rows: int | None = None, assignment: str = DEFAULT_ASSIGNMENT) -> bool:
     """Check current target metadata, readability and the expected event count.
 
-    Outputs predating pileup truth, legacy greedy outputs, corrupted writes and partial --num-events outputs
-    must be reconverted rather than skipped by resume.
+    Outputs predating pileup truth or the out-of-acceptance truth handling, legacy greedy outputs, corrupted
+    writes and partial --num-events outputs must be reconverted rather than skipped by resume.
     """
     if not os.path.isfile(ofn):
         return False
@@ -588,6 +595,8 @@ def _parquet_usable(ofn: Path, expected_rows: int | None = None, assignment: str
         if (metadata.metadata or {}).get(b"mlpf.target_assignment") != _assignment_tag(assignment):
             return False
         if (metadata.metadata or {}).get(b"mlpf.pileup_truth") != b"energy-fraction-v1":
+            return False
+        if (metadata.metadata or {}).get(b"mlpf.forward_truth") != _forward_truth_tag():
             return False
         n_rows = metadata.num_rows
     except Exception:
@@ -662,6 +671,7 @@ def process_one_file(
                     **(table.schema.metadata or {}),
                     b"mlpf.target_assignment": _assignment_tag(assignment),
                     b"mlpf.pileup_truth": b"energy-fraction-v1",
+                    b"mlpf.forward_truth": _forward_truth_tag(),
                 }
             )
             if writer is None:
