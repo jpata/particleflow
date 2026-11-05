@@ -935,3 +935,57 @@ def test_particle_metrics_disabled_preserves_set_diagnostics(grouping, monkeypat
     assert not any(key.startswith("metrics/particle/") for key in metrics)
     assert any(key.startswith("metrics/set_slot/") for key in metrics)
     assert any(key.startswith("metrics/hit_grouping/") for key in metrics) == grouping
+
+
+def test_particle_metric_subset_preserves_full_validation_losses(monkeypatch):
+    import mlpf.model.training as training
+
+    config = make_config(num_slots=4)
+    config.make_plots = False
+    config.validation_diagnostics_batches = 1
+    model = MLPF(config)
+    batches = []
+    offset = 0
+    for size in (1, 3, 4, 2):
+        features = torch.ones(size, 5, config.input_dim)
+        targets = make_target_tensor().repeat(size, 1, 1)
+        targets[:, 0, 2] = torch.arange(offset + 1, offset + size + 1).float().log()
+        batches.append(PFBatch(X=features, ytarget_set=targets))
+        offset += size
+
+    selected = []
+    original = training.compute_validation_particle_metrics
+
+    def record(targets, *args, **kwargs):
+        selected.extend(targets["pt"][:, 0].round().long().tolist())
+        return original(targets, *args, **kwargs)
+
+    monkeypatch.setattr(training, "compute_validation_particle_metrics", record)
+    reduction_keys = []
+    original_finalize = training._finalize_diagnostics
+
+    def record_keys(accum, world_size):
+        reduction_keys.append(sorted(accum))
+        return original_finalize(accum, world_size)
+
+    monkeypatch.setattr(training, "_finalize_diagnostics", record_keys)
+    config.validation_particle_metrics_max_events = 0
+    full = training.evaluate("cpu", 1, model, batches, 1, config, device_type="cpu")
+    assert selected == list(range(1, 11))
+    assert full["metrics/particle/event_samples"] == 10
+
+    selected.clear()
+    config.validation_particle_metrics_max_events = 3
+    limited = training.evaluate("cpu", 1, model, batches, 2, config, device_type="cpu")
+    expected = training._particle_metric_event_indices(10, 3, config.seed)
+    assert selected == [index + 1 for index in sorted(expected)]
+    assert limited["metrics/particle/event_samples"] == 3
+    assert limited["metrics/particle/momentum/all/event/samples"] == 0
+    assert reduction_keys[0] == reduction_keys[1]
+    for name, value in full.items():
+        if not name.startswith("metrics/particle/"):
+            assert limited[name] == pytest.approx(value)
+
+    selected.clear()
+    training.evaluate("cpu", 1, model, batches, 99, config, device_type="cpu")
+    assert selected == [index + 1 for index in sorted(expected)]

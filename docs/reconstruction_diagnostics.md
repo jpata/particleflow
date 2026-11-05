@@ -5,9 +5,17 @@ parameters to enable these checks on the first N validation batches **per rank**
 Zero disables them. The 50k grouping and momentum scenarios already set 4.
 These diagnostics are observational: they do not change predictions, losses,
 matching, or gradients. They use the validation population, not the test dumps.
-When `validation_particle_metrics` is true, ordinary particle metrics cover
-the complete validation pass. Setting it false also disables the detailed
-particle-momentum metrics, but not the set-slot or hit-grouping diagnostics.
+When `validation_particle_metrics` is true, particle matching uses at most
+`validation_particle_metrics_max_events` events per rank (default: 128).
+One event is sampled from each equal-sized interval of the validation event
+stream using a local RNG seeded by `seed + rank`. The subset stays fixed across
+validation cycles with the same loader order and world size. Set the limit to
+`0` to match every validation event. Validation losses still use every batch.
+Detailed particle-momentum metrics use selected events within the first
+`validation_diagnostics_batches` batches; their support can be smaller or zero.
+`metrics/particle/event_samples` records the number of matched events summed
+across ranks. Setting `validation_particle_metrics` false also disables detailed
+particle-momentum metrics, but not set-slot or hit-grouping diagnostics.
 
 Metrics are stored in each `history/step_*.json` under `valid` and sent through
 the existing TensorBoard/Comet logging. TensorBoard strips the `metrics/` prefix

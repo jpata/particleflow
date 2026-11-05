@@ -95,7 +95,7 @@ from mlpf.model.losses import (
     particle_loss,
 )
 from mlpf.model.set_losses import SetMatcherWeights, hungarian_match, set_mlpf_loss
-from mlpf.model.reconstruction_diagnostics import compute_hit_grouping_metrics
+from mlpf.model.reconstruction_diagnostics import compute_hit_grouping_metrics, empty_momentum_metrics
 from mlpf.model.validation_metrics import compute_set_slot_metrics, compute_validation_particle_metrics, validation_particle_collections
 from mlpf.utils import create_comet_experiment
 from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
@@ -931,6 +931,28 @@ def print_event_table(batch, ytarget, ypred_particles, config):
     print("==============================================\n")
 
 
+def _validation_event_count(loader):
+    """Count events without reading the dataset, including a partial last batch."""
+    if hasattr(loader, "data_loaders"):
+        return sum(_validation_event_count(part) for part in loader.data_loaders)
+    if isinstance(loader, (list, tuple)):
+        return sum(batch.X.shape[0] for batch in loader)
+    if loader.drop_last:
+        return len(loader) * loader.batch_size
+    return len(loader.sampler)
+
+
+def _particle_metric_event_indices(num_events, max_events, seed):
+    """One fixed-seed event per stratum; avoids aliasing with interleaved sample order.
+
+    None means all events. Uses a local RNG so validation does not change training randomness.
+    """
+    if max_events == 0 or num_events <= max_events:
+        return None
+    rng = random.Random(seed)
+    return {rng.randrange(i * num_events // max_events, (i + 1) * num_events // max_events) for i in range(max_events)}
+
+
 def evaluate(
     rank: Union[int, str],
     world_size: int,
@@ -976,6 +998,21 @@ def evaluate(
 
         probe = ValidationCaloProbe(config.validation_linear_probe_max_events)
     group_losses = _GroupLossMeans(getattr(valid_loader, "names", []))
+    metric_event_indices = None
+    event_offset = 0
+    if config.validation_particle_metrics:
+        num_events = _validation_event_count(valid_loader)
+        metric_event_indices = _particle_metric_event_indices(
+            num_events, config.validation_particle_metrics_max_events, config.seed + (rank if isinstance(rank, int) else 0)
+        )
+        matched_events = num_events if metric_event_indices is None else len(metric_event_indices)
+        _logger.info(f"Particle metrics on rank{rank}: sampling {matched_events}/{num_events} validation events")
+        _add_accumulator(diagnostic_accum, "metrics/particle/event_samples", torch.tensor(0.0, device=rank))
+        # Some ranks may sample no events in the detailed-diagnostic batches.
+        # Keep reduction keys identical even when their detailed counts are zero.
+        if config.validation_diagnostics_batches > 0:
+            for name in empty_momentum_metrics(config.num_classes):
+                _add_accumulator(diagnostic_accum, f"metrics/particle/{name}", torch.tensor(0.0, device=rank), count=0)
 
     # Only show progress bar on rank 0
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
@@ -990,6 +1027,13 @@ def evaluate(
 
     for ival, batch in iterator:
         batch = batch.to(rank, non_blocking=True)
+        batch_size = batch.X.shape[0]
+        metric_events = (
+            list(range(batch_size))
+            if metric_event_indices is None
+            else [i for i in range(batch_size) if event_offset + i in metric_event_indices]
+        )
+        event_offset += batch_size
 
         with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
             with torch.no_grad():
@@ -1009,11 +1053,18 @@ def evaluate(
                     ypred_particles,
                     model_module.output_mode,
                 )
-                if config.validation_particle_metrics:
+                if config.validation_particle_metrics and metric_events:
+                    targets, target_mask, predictions, prediction_mask = metric_collections
                     particle_metrics = compute_validation_particle_metrics(
-                        *metric_collections,
+                        {name: value[metric_events] for name, value in targets.items()},
+                        target_mask[metric_events],
+                        {name: value[metric_events] for name, value in predictions.items()},
+                        prediction_mask[metric_events],
                         num_classes=config.num_classes,
                         detailed=ival < config.validation_diagnostics_batches,
+                    )
+                    _add_accumulator(
+                        diagnostic_accum, "metrics/particle/event_samples", torch.tensor(float(len(metric_events)), device=batch.X.device)
                     )
                     for metric_name, (metric_total, metric_count) in particle_metrics.items():
                         _add_accumulator(
