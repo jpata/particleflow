@@ -25,4 +25,5 @@ class CollidermlTtbarPu200Pf(CollidermlTtbarNopuPf):
         "1.4.0": "Pileup truth: ispu is the pileup share of the target energy (fractional for targets merging "
         "hard-scatter and pileup particles); genmet/genjets restricted to the hard scatter, the previous ones kept as "
         "genmet_withpu/genjets_withpu; new features event_id and pufrac (pileup fraction of each element).",
+        "1.5.0": "Out-of-acceptance truth: particles beyond |eta| > 3.5 are no longer targets.",
     }

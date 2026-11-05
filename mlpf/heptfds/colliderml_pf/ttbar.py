@@ -41,7 +41,7 @@ assert len(_X_FEATURES) == 17
 
 
 class CollidermlTtbarNopuPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.4.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.5.0"))
     RELEASE_NOTES = {
         "1.3.0": "Bipartite track/cluster assignment majority_energy: majority-owned tracks only, then a cluster matching with an energy score.",
         "1.0.0": "Initial release (bfs_merge clustering, merge-frac 0.25, radii ECAL 25 mm / HCAL 90 mm).",
@@ -51,6 +51,7 @@ class CollidermlTtbarNopuPf(tfds.core.GeneratorBasedBuilder):
         "1.4.0": "Pileup truth: ispu is the pileup share of the target energy (fractional for targets merging "
         "hard-scatter and pileup particles); genmet/genjets restricted to the hard scatter, the previous ones kept as "
         "genmet_withpu/genjets_withpu; new features event_id and pufrac (pileup fraction of each element).",
+        "1.5.0": "Out-of-acceptance truth: particles beyond |eta| > 3.5 are no longer targets.",
     }
     DESCRIPTION = _DESCRIPTION
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
