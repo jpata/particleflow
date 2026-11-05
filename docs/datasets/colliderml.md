@@ -68,7 +68,7 @@ New converted files carry `mlpf.target_assignment=<rule>-v1` (for example
 `majority_energy-v1`) in their Parquet metadata. Resume reconverts files written
 by another rule or without the tag, including complete greedy outputs.
 Files also carry `mlpf.pileup_truth=energy-fraction-v1` and
-`mlpf.forward_truth=replace-eta3.5-v1`; resume reconverts older files lacking these
+`mlpf.forward_truth=drop-eta3.5-v1`; resume reconverts older files lacking these
 tags so that pileup fields and target semantics stay consistent.
 Rebuild ColliderML TFDS as clustered version **1.5.0** or hits version **1.3.0**;
 the old versions in the published catalog retain their original targets.
@@ -78,13 +78,11 @@ before training; their availability is not implied by the published catalog.
 ## Out-of-acceptance particles
 
 A particle beyond |eta| ≈ 3.4 passes through the bore of the endcap
-calorimeters and never enters them, but its Geant4 secondaries (mostly from
-beam-pipe interactions) can still deposit in the endcap. Such a particle is
-replaced as a target by its direct Geant4 children, repeated while a child is
-itself beyond the cut, so the targets are the particles that entered the
-detector and the deposits stay attributed. The cut is
-`OUT_OF_ACCEPTANCE_ABS_ETA` in `mlpf/data/colliderml/truth.py`;
-`replace_out_of_acceptance` switches it off.
+calorimeters and never enters them, but its Geant4 secondaries, born outside the
+calorimeter, can still deposit in the endcap. Such a particle is not
+a target, and the deposits of it and its secondaries stay unattributed. The cut
+is `OUT_OF_ACCEPTANCE_ABS_ETA` in `mlpf/data/colliderml/truth.py`;
+`drop_out_of_acceptance` switches it off.
 
 ## Pileup truth
 

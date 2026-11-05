@@ -574,10 +574,10 @@ def _assignment_tag(assignment: str) -> bytes:
 
 
 def _forward_truth_tag() -> bytes:
-    """Parquet metadata value recording the out-of-acceptance truth handling (truth.replace_out_of_acceptance)."""
+    """Parquet metadata value recording the out-of-acceptance truth handling (truth.drop_out_of_acceptance)."""
     from mlpf.data.colliderml import truth
 
-    return f"replace-eta{truth.OUT_OF_ACCEPTANCE_ABS_ETA:g}-v1".encode() if truth.replace_out_of_acceptance else b"none-v1"
+    return f"drop-eta{truth.OUT_OF_ACCEPTANCE_ABS_ETA:g}-v1".encode() if truth.drop_out_of_acceptance else b"none-v1"
 
 
 def _parquet_usable(ofn: Path, expected_rows: int | None = None, assignment: str = DEFAULT_ASSIGNMENT) -> bool:

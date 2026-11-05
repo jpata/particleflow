@@ -40,13 +40,13 @@
 #   slices of the same leaf table, so the surrogate enters both — key4hep explains why
 #   target-only would bias the response above 1.
 #
-# OUT-OF-ACCEPTANCE PARTICLES (replace_out_of_acceptance)
+# OUT-OF-ACCEPTANCE PARTICLES (drop_out_of_acceptance)
 #   A truth particle beyond |eta| > OUT_OF_ACCEPTANCE_ABS_ETA passes through the endcap bores
-#   and never enters a calorimeter, but its Geant4 secondaries (mostly from beam-pipe
-#   interactions) can deposit in the endcap. It is replaced as a target candidate by its
-#   direct Geant4 children, repeated while a child is itself beyond the cut (a child pi0 with
-#   recorded children is split into them). Its own contributions are not attributed, and it
-#   is never a surrogate ancestor; a surrogate ancestor beyond the cut is replaced the same way.
+#   and never enters a calorimeter, but its Geant4 secondaries, born outside the calorimeter,
+#   can deposit in the endcap. It is dropped as a target candidate, also when it
+#   would be a surrogate ancestor; the deposits of it and its descendants stay unattributed.
+#   (Replacing it by its secondaries instead adds displaced particles whose momentum direction
+#   does not point at their deposit, which degrades the target-vs-gen jet response.)
 #
 # MERGES
 #   Handled by the shared allocator (target_building.assign_genparticles_to_obj_and_merge);
@@ -98,9 +98,9 @@ GENREF_TRACK_FRACTION_MIN = 0.0  # share of a track's hits
 # same name). Set False to recover the previous behaviour on both targets and gen reference.
 use_surrogate_ancestors = True
 
-# Replace out-of-acceptance particles by their Geant4 children (see OUT-OF-ACCEPTANCE PARTICLES above).
+# Drop out-of-acceptance particles (see OUT-OF-ACCEPTANCE PARTICLES above).
 # Set False to recover the previous behaviour on both targets and gen reference.
-replace_out_of_acceptance = True
+drop_out_of_acceptance = True
 # |eta| beyond which a particle misses every calorimeter: the endcap bore edge asinh(5432 / 362) = 3.40,
 # plus a margin.
 OUT_OF_ACCEPTANCE_ABS_ETA = 3.5
@@ -269,64 +269,49 @@ def out_of_acceptance(particles_ev: Dict[str, Any]) -> np.ndarray:
     return np.abs(np.arcsinh(pz / np.maximum(np.hypot(px, py), 1e-12))) > OUT_OF_ACCEPTANCE_ABS_ETA
 
 
-def replace_out_of_acceptance_particles(
-    candidate: np.ndarray, pid: np.ndarray, pdg: np.ndarray, parent: np.ndarray, out: np.ndarray, max_depth: int = 64
-) -> np.ndarray:
-    """Replace out-of-acceptance target candidates by their direct children, in place on `candidate`.
-
-    `candidate` marks the truth particles that deposits are attributed to (the is_leaf mask). Repeated
-    while a child is itself out of acceptance (`out`), or is a pi0 with recorded children (split into them,
-    as _split_leaf_pi0 does for generator pi0). Returns the mask of the replaced particles."""
-    replaced = np.zeros(len(pid), dtype=bool)
+def descendants(rows: np.ndarray, pid: np.ndarray, parent: np.ndarray, max_depth: int = 256) -> np.ndarray:
+    """Mask of `rows` and all of their descendants in the particle table."""
+    mask = np.zeros(len(pid), dtype=bool)
     if not len(pid):
-        return replaced
+        return mask
     order = np.argsort(pid)
     pos = np.clip(np.searchsorted(pid[order], parent), 0, len(pid) - 1)
     parent_row = np.where(pid[order[pos]] == parent, order[pos], -1)
-    has_children = np.zeros(len(pid), dtype=bool)
-    has_children[parent_row[parent_row >= 0]] = True
-    frontier = np.flatnonzero(candidate & out)
+    frontier = np.asarray(rows)
     for _ in range(max_depth):
+        mask[frontier] = True
+        frontier = np.flatnonzero(np.isin(parent_row, frontier) & ~mask)
         if not len(frontier):
             break
-        candidate[frontier] = False
-        replaced[frontier] = True
-        children = np.flatnonzero(np.isin(parent_row, frontier))
-        candidate[children] = True
-        frontier = children[out[children] | ((np.abs(pdg[children]) == 111) & has_children[children])]
-    return replaced
+    return mask
 
 
 def build_leaf_maps(particles_ev: Dict[str, Any], calo_ev: Dict[str, Any], tracker_ev: Dict[str, Any]):
-    """The leaf set compute_gen_tables attributes to: _build_parent_maps, with (with
-    replace_out_of_acceptance) out-of-acceptance particles replaced by their Geant4 children, plus (with
+    """The leaf set compute_gen_tables attributes to: _build_parent_maps, without (with
+    drop_out_of_acceptance) the out-of-acceptance particles, plus (with
     use_surrogate_ancestors) the surrogate ancestors found from the event's calo contributions
     and tracker hits. Returns pid, pdg, parent, is_leaf, redirect and the surrogate row mask.
     """
     pid, pdg, parent, is_leaf, redirect = _build_parent_maps(particles_ev)
-    replaced = np.zeros(len(pid), dtype=bool)
-    if replace_out_of_acceptance:
+    dropped = np.zeros(len(pid), dtype=bool)
+    if drop_out_of_acceptance:
         out = out_of_acceptance(particles_ev)
-        replaced = replace_out_of_acceptance_particles(is_leaf, pid, pdg, parent, out)
+        dropped = is_leaf & out
+        is_leaf &= ~dropped
     surrogate = np.zeros(len(pid), dtype=bool)
     if use_surrogate_ancestors:
         cid = _redirect_ids(np.asarray(ak.to_numpy(ak.flatten(calo_ev["contrib_particle_ids"], axis=None))).ravel(), redirect)
         th_pid = _redirect_ids(np.asarray(ak.to_numpy(tracker_ev["particle_id"])).astype(np.int64), redirect)
         primary = np.asarray(ak.to_numpy(particles_ev["primary"])).astype(bool)
         hit_pids = np.concatenate([cid.astype(np.int64), th_pid])
-        # a replaced particle never comes back as a surrogate through its own contributions (all of its
-        # descendants reach one of its children, now target candidates, so these are the only chains of its
-        # tree that reach none)
-        hit_pids = hit_pids[~np.isin(hit_pids, pid[replaced].astype(np.int64))]
+        if dropped.any():
+            # the chains of a dropped particle's tree reach no candidate; they must not bring it (or an
+            # ancestor) back as a surrogate
+            hit_pids = hit_pids[~np.isin(hit_pids, pid[descendants(np.flatnonzero(dropped), pid, parent)].astype(np.int64))]
         rows, _, _ = find_surrogate_ancestors(hit_pids, pid, parent, primary, is_leaf)
         surrogate[rows] = True
-        if replace_out_of_acceptance and (surrogate & out).any():
-            # a surrogate beyond the cut is replaced the same way (its generator daughters are silent, so its
-            # interacting Geant4 secondaries take over)
-            candidate = is_leaf | surrogate
-            replace_out_of_acceptance_particles(candidate, pid, pdg, parent, out)
-            surrogate &= candidate
-            is_leaf = candidate & ~surrogate
+        if drop_out_of_acceptance:
+            surrogate &= ~out  # a surrogate beyond the cut is dropped the same way
     return pid, pdg, parent, is_leaf | surrogate, redirect, surrogate
 
 

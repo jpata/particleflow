@@ -1,4 +1,4 @@
-# Unit tests for the ColliderML out-of-acceptance replacement (truth.replace_out_of_acceptance).
+# Unit tests for the ColliderML out-of-acceptance drop (truth.drop_out_of_acceptance).
 import awkward as ak
 import numpy as np
 
@@ -45,7 +45,7 @@ def _no_tracks():
 
 
 def _targets(particles, calo, enabled, monkeypatch):
-    monkeypatch.setattr(truth, "replace_out_of_acceptance", enabled)
+    monkeypatch.setattr(truth, "drop_out_of_acceptance", enabled)
     tracker = ak.Record({"particle_id": ak.Array(np.zeros(0, dtype=np.int64))})
     gen, gp_to_hit, _, _, rows = compute_gen_tables(particles, calo, _no_tracks(), DEFAULT_CALIBRATION, tracker_ev=tracker, return_rows=True)
     pid = np.asarray(ak.to_numpy(particles["particle_id"]))
@@ -69,14 +69,15 @@ def test_out_of_acceptance_mask():
     np.testing.assert_array_equal(out_of_acceptance(_particles(FORWARD_EVENT)), [True, False, False, False])
 
 
-def test_forward_particle_replaced_by_its_children(monkeypatch):
+def test_forward_particle_dropped(monkeypatch):
     particles, calo = _particles(FORWARD_EVENT), _calo(FORWARD_CALO)
     before, dep_before = _targets(particles, calo, False, monkeypatch)
     after, dep_after = _targets(particles, calo, True, monkeypatch)
     assert before == [1, 2]
-    assert after == [2, 20, 21]
-    # the deposits stay attributed to targets
-    np.testing.assert_allclose(dep_after, dep_before)
+    assert after == [2]
+    # only the central pi+'s own deposit (raw 0.1 in the ECAL endcap) stays attributed
+    np.testing.assert_allclose(dep_after, 0.1 * DEFAULT_CALIBRATION[11], rtol=1e-5)
+    assert dep_after < dep_before
 
 
 def test_central_particle_unchanged(monkeypatch):
@@ -85,39 +86,22 @@ def test_central_particle_unchanged(monkeypatch):
     assert _targets(particles, calo, True, monkeypatch)[0] == _targets(particles, calo, False, monkeypatch)[0] == [2]
 
 
-def test_replacement_repeats_for_forward_children(monkeypatch):
-    # the beam-pipe interaction of id 1 leaves a leading child (20) still at eta 6, which interacts again
+def test_dropped_particle_and_ancestor_are_not_surrogates(monkeypatch):
+    # a generator-decayed rho (5) at eta 6 with a pi+ daughter (1) that interacts in the beam pipe: neither the pi+
+    # (through its own or its secondary's deposits) nor the rho comes back as a surrogate ancestor
     rows = [
-        _p(1, 2212, 1.0, 1.0, 8.0, True, -1, mass=0.94),
-        _p(20, 2212, 1.0, 1.0, 6.0, False, 1, (3.0, 0.0, 1500.0), mass=0.94),
-        _p(30, 211, 1.0, 1.5, 3.0, False, 20, BEAM_PIPE),
+        _p(5, 113, 0.0, 1.2, 6.0, True, -1, mass=0.775),
+        _p(1, 211, 1.0, 1.0, 6.0, True, 5),
+        _p(20, 211, 1.0, 1.0, 3.0, False, 1, BEAM_PIPE),
     ]
-    particles, calo = _particles(rows), _calo([[(30, 0.05)]])
-    assert _targets(particles, calo, True, monkeypatch)[0] == [30]
-
-
-def test_child_pi0_is_split(monkeypatch):
-    rows = [
-        _p(1, 211, 1.0, 1.0, 6.0, True, -1),
-        _p(20, 111, 0.0, 2.0, 3.0, False, 1, BEAM_PIPE, mass=0.135),
-        _p(40, 22, 0.0, 1.0, 3.0, False, 20, BEAM_PIPE, mass=0.0),
-        _p(41, 22, 0.0, 1.0, 2.9, False, 20, BEAM_PIPE, mass=0.0),
-    ]
-    particles, calo = _particles(rows), _calo([[(40, 0.05)], [(41, 0.05)]])
-    assert _targets(particles, calo, True, monkeypatch)[0] == [40, 41]
-
-
-def test_replaced_particle_is_not_a_surrogate(monkeypatch):
-    # id 1 deposits only through its own contribution (before interacting); its children deposit nothing
-    rows = [_p(1, 211, 1.0, 1.0, 6.0, True, -1), _p(20, 211, 1.0, 1.0, 3.0, False, 1, BEAM_PIPE)]
-    particles, calo = _particles(rows), _calo([[(1, 0.05)]])
+    particles, calo = _particles(rows), _calo([[(1, 0.05)], [(20, 0.1)]])
     assert _targets(particles, calo, False, monkeypatch)[0] == [1]
     assert _targets(particles, calo, True, monkeypatch)[0] == []
 
 
-def test_forward_surrogate_is_replaced(monkeypatch):
+def test_forward_surrogate_is_dropped(monkeypatch):
     # a generator-decayed K0S (10) at eta 4.5 interacts in the beam pipe: its generator daughters (11, 12) are
-    # silent and its Geant4 secondary (20) deposits, so without the replacement the K0S is a surrogate target
+    # silent and its Geant4 secondary (20) deposits, so without the cut the K0S is a surrogate target
     rows = [
         _p(10, 310, 0.0, 0.5, 4.5, True, -1, mass=0.498),
         _p(11, 211, 1.0, 0.3, 4.5, True, 10),
@@ -126,4 +110,4 @@ def test_forward_surrogate_is_replaced(monkeypatch):
     ]
     particles, calo = _particles(rows), _calo([[(20, 0.1)]])
     assert _targets(particles, calo, False, monkeypatch)[0] == [10]
-    assert _targets(particles, calo, True, monkeypatch)[0] == [20]
+    assert _targets(particles, calo, True, monkeypatch)[0] == []

@@ -51,9 +51,7 @@ class CollidermlTtbarNopuPf(tfds.core.GeneratorBasedBuilder):
         "1.4.0": "Pileup truth: ispu is the pileup share of the target energy (fractional for targets merging "
         "hard-scatter and pileup particles); genmet/genjets restricted to the hard scatter, the previous ones kept as "
         "genmet_withpu/genjets_withpu; new features event_id and pufrac (pileup fraction of each element).",
-        "1.5.0": "Out-of-acceptance truth: a particle heading beyond |eta| > 3.5 never enters a calorimeter "
-        "(endcap bore edge |eta| 3.4) and is replaced as a target by its Geant4 children that deposit (beam-pipe "
-        "interactions), instead of carrying its full truth 4-vector onto a forward cluster.",
+        "1.5.0": "Out-of-acceptance truth: particles beyond |eta| > 3.5 are no longer targets.",
     }
     DESCRIPTION = _DESCRIPTION
     MANUAL_DOWNLOAD_INSTRUCTIONS = """

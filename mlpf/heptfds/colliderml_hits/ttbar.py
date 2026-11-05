@@ -22,7 +22,7 @@ DOI 10.57967/hf/7269. CC-BY-4.0.
 class CollidermlTtbarHits(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.3.0"))
     RELEASE_NOTES = {
-        "1.3.0": "Out-of-acceptance truth: particles beyond |eta| > 3.5 are replaced as targets by their Geant4 children that deposit.",
+        "1.3.0": "Out-of-acceptance truth: particles beyond |eta| > 3.5 are no longer targets.",
         "1.2.0": "Fractional target pileup energy share and hard-scatter genmet/genjets.",
         "1.1.0": "Hit targets from the majority_energy bipartite track/cluster assignment (majority-owned tracks).",
         "1.0.0": "Initial release.",
