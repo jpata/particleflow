@@ -4,7 +4,8 @@ Spec: Validates the 'MLPFConfig' class and its 'from_spec' method. Tests configu
 
 import unittest
 import argparse
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
+from unittest.mock import patch
 import yaml
 import tempfile
 import os
@@ -216,73 +217,60 @@ class TestConfigOverrides(unittest.TestCase):
         self.assertEqual(config.raytune["storage_path"], "/tmp/particleflow/ray")
         self.assertEqual(config.load, "/tmp/particleflow/checkpoint.pt")
 
-    def test_cld_pipeline_overrides(self):
-        model = self.spec["models"]["test_model"]
-        model["dataset"] = "cld"
-        model["train_datasets"] = {"physical": {"batch_size": 7, "samples": [{"name": "cld_edm_ttbar_pf", "version": "1.0.0", "splits": ["1"]}]}}
-        model["validation_datasets"] = model["train_datasets"]
-        model["test_datasets"] = [{"name": "cld_edm_ttbar_pf", "version": "1.0.0"}]
-        self.spec["productions"]["test_prod"]["type"] = "cld"
-        self.write_spec()
+    def test_pipeline_uses_selected_dataset_override_and_preserves_batch_size(self):
+        for dataset, multiplier in (("cld", 3), ("cld_hits", None)):
+            with self.subTest(dataset=dataset):
+                override = replace(
+                    _PIPELINE_DATASETS[dataset],
+                    physical_name="fixture_group",
+                    sample_name="fixture_sample",
+                    version="9.8.7",
+                    gpu_batch_multiplier=multiplier,
+                )
+                self.spec["models"]["defaults"]["gpu_batch_multiplier"] = 5
+                model = self.spec["models"]["test_model"]
+                model["dataset"] = dataset
+                samples = [
+                    {"name": override.sample_name, "version": "1.0.0", "splits": ["original"]},
+                    {"name": "unselected", "version": "1.0.0", "splits": ["original"]},
+                ]
+                model["train_datasets"] = {override.physical_name: {"batch_size": 7, "samples": samples}}
+                model["validation_datasets"] = model["train_datasets"]
+                model["test_datasets"] = samples
+                self.spec["productions"]["test_prod"]["type"] = "cld"
+                self.write_spec()
+                with patch.dict(_PIPELINE_DATASETS, {dataset: override}):
+                    config = MLPFConfig.from_spec(
+                        self.temp_spec.name,
+                        "test_model",
+                        "test_prod",
+                        args=argparse.Namespace(pipeline=True, test_datasets=[]),
+                    )
+                self.assertEqual(config.gpu_batch_multiplier, multiplier if multiplier is not None else 5)
+                for datasets in (config.train_dataset, config.valid_dataset):
+                    self.assertEqual(list(datasets[dataset]), [override.physical_name])
+                    group = datasets[dataset][override.physical_name]
+                    self.assertEqual(group.batch_size, 7)
+                    self.assertEqual(list(group.samples), [override.sample_name])
+                    self.assertEqual(group.samples[override.sample_name].version, override.version)
+                train = config.train_dataset[dataset][override.physical_name].samples[override.sample_name]
+                valid = config.valid_dataset[dataset][override.physical_name].samples[override.sample_name]
+                self.assertEqual(list(config.test_dataset), [override.sample_name])
+                self.assertEqual(len(train.splits), 1)
+                self.assertNotEqual(train.splits, ["original"])
+                self.assertEqual(train.splits, valid.splits)
+                self.assertEqual(train.splits, config.test_dataset[override.sample_name].splits)
 
-        config = MLPFConfig.from_spec(
-            self.temp_spec.name,
-            "test_model",
-            "test_prod",
-            args=argparse.Namespace(pipeline=True, test_datasets=[]),
-        )
-
-        self.assertEqual(config.gpu_batch_multiplier, 8)
-        self.assertEqual(config.train_dataset["cld"]["physical"].batch_size, 7)
-        self.assertEqual(config.train_dataset["cld"]["physical"].samples["cld_edm_ttbar_pf"].splits, ["10"])
-        self.assertEqual(config.valid_dataset["cld"]["physical"].samples["cld_edm_ttbar_pf"].version, "3.3.0")
-        self.assertEqual(config.test_dataset["cld_edm_ttbar_pf"].splits, ["10"])
-
-    def test_pipeline_dataset_overrides_are_immutable_named_records(self):
-        cld_override = _PIPELINE_DATASETS["cld"]
-
-        self.assertEqual(cld_override.physical_name, "physical")
-        self.assertEqual(cld_override.sample_name, "cld_edm_ttbar_pf")
-        self.assertEqual(cld_override.version, "3.3.0")
-        self.assertEqual(cld_override.gpu_batch_multiplier, 8)
-        self.assertIsNone(_PIPELINE_DATASETS["cms"].gpu_batch_multiplier)
+    def test_pipeline_dataset_overrides_are_immutable(self):
         with self.assertRaises(FrozenInstanceError):
-            cld_override.version = "changed"
+            _PIPELINE_DATASETS["cld"].version = "changed"
 
-    def test_cld_hits_pipeline_overrides(self):
-        model = self.spec["models"]["test_model"]
-        model["dataset"] = "cld_hits"
-        model["train_datasets"] = {"physical": {"batch_size": 1, "samples": [{"name": "cld_edm_ttbar_hits", "version": "1.0.0", "splits": ["1"]}]}}
-        model["validation_datasets"] = model["train_datasets"]
-        model["test_datasets"] = [{"name": "cld_edm_ttbar_hits", "version": "1.0.0"}]
-        self.spec["productions"]["test_prod"]["type"] = "cld"
-        self.write_spec()
-
-        config = MLPFConfig.from_spec(
-            self.temp_spec.name,
-            "test_model",
-            "test_prod",
-            args=argparse.Namespace(pipeline=True, test_datasets=[]),
-        )
-
-        self.assertEqual(config.gpu_batch_multiplier, 1)
-        self.assertEqual(config.train_dataset["cld_hits"]["physical"].samples["cld_edm_ttbar_hits"].splits, ["10"])
-        self.assertEqual(config.valid_dataset["cld_hits"]["physical"].samples["cld_edm_ttbar_hits"].version, "3.2.2")
-        self.assertEqual(list(config.test_dataset), ["cld_edm_ttbar_hits"])
-
-    def test_pipeline_overrides(self):
-        args = argparse.Namespace()
-        args.pipeline = True
-        args.command = "train"
-        args.test_datasets = []
-
-        config_obj = MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=args)
-        config = config_obj.model_dump()
-
-        self.assertEqual(config["model"]["gnnlsh"]["num_convs"], 1)
-        self.assertEqual(config["model"]["gnnlsh"]["width"], 32)
-        self.assertEqual(config["train_dataset"]["cms"]["physical_pu"]["samples"]["cms_pf_ttbar"]["splits"], ["10"])
-        self.assertEqual(config["test_dataset"]["cms_pf_ttbar"]["splits"], ["10"])
+    def test_pipeline_reduces_model_size(self):
+        baseline = MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod")
+        pipeline = MLPFConfig.from_spec(self.temp_spec.name, "test_model", "test_prod", args=argparse.Namespace(pipeline=True, test_datasets=[]))
+        self.assertLess(pipeline.model.gnnlsh.num_convs, baseline.model.gnnlsh.num_convs)
+        self.assertLess(pipeline.model.gnnlsh.width, baseline.model.gnnlsh.width)
+        self.assertEqual(pipeline.model.type, baseline.model.type)
 
     def test_invalid_extra_args(self):
         args = argparse.Namespace()

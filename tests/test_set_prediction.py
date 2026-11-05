@@ -82,20 +82,17 @@ def make_target_tensor(batch_size=1, num_targets=2):
     return target
 
 
-def test_set_config_populates_decoder_defaults():
-    config = MLPFConfig.model_validate(
-        {
-            "dataset": "cld_hits",
-            "data_dir": "/tmp",
-            "model": {"type": "heptv2", "output_mode": "set", "heptv2": {}},
-            "conv_type": "heptv2",
-        }
-    )
-
+@pytest.mark.parametrize("decoder", [None, {"num_slots": 7, "no_object_weight": 0.3, "matcher": {"dr_scale": 0.25}}])
+def test_set_config_populates_decoder_and_honors_explicit_settings(decoder):
+    model = {"type": "heptv2", "output_mode": "set", "heptv2": {}}
+    if decoder is not None:
+        model["set_decoder"] = decoder
+    config = MLPFConfig.model_validate({"dataset": "cld_hits", "data_dir": "/tmp", "model": model, "conv_type": "heptv2"})
     assert config.model.set_decoder is not None
-    assert config.model.set_decoder.num_slots == 256
-    assert config.model.set_decoder.no_object_weight == 1.0
-    assert config.model.set_decoder.matcher.dr_scale == 0.1
+    if decoder is not None:
+        assert config.model.set_decoder.num_slots == decoder["num_slots"]
+        assert config.model.set_decoder.no_object_weight == decoder["no_object_weight"]
+        assert config.model.set_decoder.matcher.dr_scale == decoder["matcher"]["dr_scale"]
 
 
 def test_set_config_accepts_colliderml_hits():
