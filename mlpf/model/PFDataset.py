@@ -33,7 +33,7 @@ except Exception as e:
 
 
 class TFDSDataSource:
-    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None, max_open_readers=None, build_target_set=False):
+    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None, max_open_readers=None, build_target_set=False, target_abs_eta_max=None):
         self.ds = ds
         tmp = self.ds.dataset_info
         self.ds.dataset_info = SimpleNamespace()
@@ -45,6 +45,7 @@ class TFDSDataSource:
         self.feature_dim = feature_dim
         self.max_open_readers = max_open_readers
         self.build_target_set = build_target_set
+        self.target_abs_eta_max = target_abs_eta_max
 
     def _close_extra_readers(self):
         # ArrayRecordDataSource caches one reader per shard file forever, so the
@@ -93,6 +94,11 @@ class TFDSDataSource:
                     mode="constant",
                     constant_values=0,
                 )
+
+        # remove the targets beyond the acceptance: their elements stay in the event, without a target
+        if self.target_abs_eta_max is not None:
+            outside = np.abs(ret["ytarget"][:, Y_FEATURES.index("eta")]) >= self.target_abs_eta_max
+            ret["ytarget"][outside] = 0
 
         # sort the elements in each event in pT descending order
         # the transformer is permutation-covariant, but this can be helpful for other types of models
@@ -215,6 +221,7 @@ class PFDataset:
         feature_dim=None,
         max_open_readers=None,
         build_target_set=False,
+        target_abs_eta_max=None,
     ):
         """
         Args
@@ -242,6 +249,7 @@ class PFDataset:
             feature_dim=feature_dim,
             max_open_readers=max_open_readers,
             build_target_set=build_target_set,
+            target_abs_eta_max=target_abs_eta_max,
         )
 
         if num_samples and num_samples < len(self.ds):
@@ -804,6 +812,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                         feature_dim=config.input_dim,
                         max_open_readers=config.max_open_readers,
                         build_target_set=config.model.output_mode == OutputMode.SET,
+                        target_abs_eta_max=config.target_abs_eta_max,
                     ).ds
 
                     if (rank == 0) or (rank == "cpu"):

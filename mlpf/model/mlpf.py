@@ -1528,6 +1528,7 @@ class MLPF(nn.Module):
         self.set_decoder = None
         self.nn_binary_particle = None
         self.nn_pid = None
+        self.nn_ispu = None
         self.nn_pt = None
         self.nn_eta = None
         self.nn_sin_phi = None
@@ -1538,6 +1539,9 @@ class MLPF(nn.Module):
         else:
             self.nn_binary_particle = ffn(decoding_dim, 2, width, self.act, head_dropout_ff)
             self.nn_pid = ffn(decoding_dim, self.num_classes, width, self.act, head_dropout_ff)
+            if self.config.use_pu_head:
+                # hard scatter / pileup logits of each element, from the classification embedding
+                self.nn_ispu = ffn(decoding_dim, 2, width, self.act, head_dropout_ff)
 
             self.nn_pt = RegressionOutput(pt_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
             self.nn_eta = RegressionOutput(eta_mode, decoding_dim, width, self.act, head_dropout_ff, regression_selector_values)
@@ -1918,7 +1922,8 @@ class MLPF(nn.Module):
 
         preds_binary_particle = self.nn_binary_particle(final_embedding_cls)
         preds_pid = self.nn_pid(final_embedding_cls)
-        preds_pu = torch.zeros_like(preds_binary_particle)
+        # without a pileup head, the uniform logits give ispu = 0.5 everywhere at inference
+        preds_pu = self.nn_ispu(final_embedding_cls) if self.nn_ispu is not None else torch.zeros_like(preds_binary_particle)
 
         # The PFElement feature order in X_features defined in fcc/postprocessing.py
         preds_pt = self.nn_pt(X_features, final_embedding_reg, X_features[..., 1:2])

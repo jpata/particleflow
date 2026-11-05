@@ -88,6 +88,7 @@ from mlpf.model.PFDataset import (
 )
 from mlpf.model.losses import (
     LOSS_TASKS,
+    PU_LOSS_TASK,
     REGRESSION_FEATURES,
     make_task_loss_weighter,
     mlpf_loss,
@@ -311,7 +312,7 @@ def _add_unweighted_total(losses):
     Unlike "Total", whose task weights are calibrated per run, this is a fixed scalarization
     comparable across runs.
     """
-    losses[UNWEIGHTED_TOTAL] = sum(losses[task] for task in LOSS_TASKS)
+    losses[UNWEIGHTED_TOTAL] = sum(losses[task] for task in LOSS_TASKS + (PU_LOSS_TASK,) if task in losses)
 
 
 class _GroupLossMeans:
@@ -373,6 +374,10 @@ def _validation_group_losses(group_losses, loss_names, rank, world_size):
 def _get_task_loss_weighter(model):
     model_module = model.module if hasattr(model, "module") else model
     return getattr(model_module, "task_loss_weighter", None)
+
+
+def _pu_loss_kwargs(model_module):
+    return {"pu_head": model_module.config.use_pu_head, "pu_pt_balance": model_module.config.pu_loss_pt_balance}
 
 
 def _set_loss_kwargs(model_module, raw_predictions):
@@ -579,6 +584,7 @@ def model_step(batch, model, loss_fn, regression_weights):
             regression_weights,
             _get_task_loss_weighter(model),
             binary_focal_gamma=model_module.config.binary_classification_focal_gamma,
+            **_pu_loss_kwargs(model_module),
         )
     return loss_opt, losses_detached, task_loss_diagnostics, ypred_raw, ypred, ytarget
 
@@ -701,6 +707,7 @@ def train_step(
                 regression_weights,
                 _get_task_loss_weighter(model),
                 binary_focal_gamma=model_module.config.binary_classification_focal_gamma,
+                **_pu_loss_kwargs(model_module),
             )
     phase_start = _record_phase_time_if_enabled(diagnostics.get("time", {}), "loss", phase_start, device_type, log_this_step)
     if log_this_step:
@@ -1677,6 +1684,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
             feature_dim=config.input_dim,
             max_open_readers=config.max_open_readers,
             build_target_set=config.model.output_mode == OutputMode.SET,
+            target_abs_eta_max=config.target_abs_eta_max,
         ).ds
         dataset.append(ds)
     ds = torch.utils.data.ConcatDataset(dataset)
@@ -1859,7 +1867,8 @@ def run(
     # load a pre-trained checkpoint (continue an aborted training or fine-tune)
     _logger.info("Instantiating model")
     model = MLPF(config)
-    model.task_loss_weighter = make_task_loss_weighter(config.task_loss_weights.model_dump())
+    loss_tasks = LOSS_TASKS + ((PU_LOSS_TASK,) if config.model.use_pu_head else ())
+    model.task_loss_weighter = make_task_loss_weighter(config.task_loss_weights.model_dump(), tasks=loss_tasks)
     _logger.info("Instantiated model")
 
     _logger.info(f"Moving model to device rank={rank}")
