@@ -974,6 +974,12 @@ class ModelArchitectureConfig(BaseModel):
     # None keeps the standard binary cross-entropy. A non-negative value uses
     # focal loss with this gamma for the elementwise particle-presence head.
     binary_classification_focal_gamma: Optional[float] = Field(default=None, ge=0.0)
+    # Per-element pileup classification head (2 logits: hard scatter, pileup), trained on the target
+    # ispu label; its loss, Classification_pu, is one more task of the calibrated task-loss weights.
+    use_pu_head: bool = False
+    # In the pileup loss, balance hard scatter and pileup within each of 10 log-spaced bins of the
+    # element pT, so that pT alone carries no information on the label.
+    pu_loss_pt_balance: bool = False
     backbone: Optional[BackboneConfig] = None
     hit_feature_engineering: HitFeatureEngineeringConfig = Field(default_factory=HitFeatureEngineeringConfig)
     set_decoder: Optional[SetDecoderConfig] = None
@@ -1293,6 +1299,10 @@ class MLPFConfig(BaseModel):
     compile: bool = False
     make_plots: bool = True
     sort_data: bool = False
+    # Targets at |eta| >= this value are removed (their elements are kept, without a target). For
+    # particles outside the detector acceptance that are only seen through secondaries scattered
+    # back into it, whose energy and direction cannot be reconstructed. None keeps all targets.
+    target_abs_eta_max: Optional[float] = Field(default=None, gt=0.0)
     sampler_mode: DatasetSamplerMode = DatasetSamplerMode.SHARD_CONSECUTIVE  # use interleaved-shards for groups of several samples
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
     relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
@@ -1346,6 +1356,10 @@ class MLPFConfig(BaseModel):
                 self.model.set_decoder = SetDecoderConfig()
             if self.model.backbone.mode != BackboneMode.SHARED:
                 raise ValueError("model.output_mode='set' currently requires model.backbone.mode='shared'")
+            if self.model.use_pu_head:
+                raise ValueError("model.use_pu_head is supported only with model.output_mode='elementwise'")
+        if self.model.pu_loss_pt_balance and not self.model.use_pu_head:
+            raise ValueError("model.pu_loss_pt_balance requires model.use_pu_head")
         return self
 
     @model_validator(mode="after")

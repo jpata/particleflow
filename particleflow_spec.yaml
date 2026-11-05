@@ -1310,7 +1310,7 @@ models:
 
   # Same recipe as pyg-colliderml-v1 but on the ~200-pileup dataset (ispu flag carried per
   # target/gen particle)
-  pyg-colliderml-pu200-v1:
+  pyg-colliderml-pu200-v1: &pyg_colliderml_pu200_v1
     <<: *defaults
     dataset: colliderml
     gpu_batch_multiplier: 8
@@ -1349,6 +1349,28 @@ models:
       - name: "colliderml_ttbar_pu200_pf"
         version: "1.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  # pyg-colliderml-pu200-v1 with targets only within |eta| < 3.5, the edge of the ODD acceptance
+  # (tracks up to |eta| ~ 3, calorimeters up to 3.4): beyond it, targets are forward particles seen
+  # only through secondaries scattered back into the detector
+  pyg-colliderml-pu200-eta3p5-v1: &pyg_colliderml_pu200_eta3p5_v1
+    <<: *pyg_colliderml_pu200_v1
+    target_abs_eta_max: 3.5
+
+  # pyg-colliderml-pu200-eta3p5-v1 with the per-element pileup head, hard scatter and pileup
+  # balanced in bins of element pT in its loss
+  pyg-colliderml-pu200-puhead-v1:
+    <<: *pyg_colliderml_pu200_eta3p5_v1
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      use_pu_head: true
+      pu_loss_pt_balance: true
+      attention:
+        attention_type: flash
+        num_convs: 3
+        head_dim: 16
+        num_heads: 16
 
   pyg-colliderml-pu0pu200-groups-v1:
     <<: *pyg_colliderml_v1
