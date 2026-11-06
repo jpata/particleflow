@@ -98,7 +98,12 @@ def main():
     args.local_root.mkdir(parents=True, exist_ok=True)
     print(f"Listing {args.remote_url} recursively...", flush=True)
     listing = subprocess.run(listing_command, capture_output=True, text=True, check=True)
-    expected = manifest(listing.stdout, args.remote_url)
+    try:
+        expected = manifest(listing.stdout, args.remote_url)
+    except ValueError as exc:
+        if "no files found" in str(exc) and listing.stderr.strip():
+            raise SystemExit(f"davix-ls found no files and reported: {listing.stderr.strip()}") from exc
+        raise
     total_bytes = sum(expected.values())
     print(f"Selected {len(expected):,} files, {total_bytes:,} bytes -> {args.local_root}", flush=True)
     label = "download-tree/" + url.netloc + url.path.rstrip("/")
