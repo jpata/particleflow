@@ -60,7 +60,27 @@ with the endpoint's `Want-Digest: md5` response and its reported file size.
 This verifies stored bytes without a full readback and requires host `curl`
 with TLS trust for the endpoint. The default `sha256-readback` mode remains
 available for smaller collections. Both modes verify final directory sizes.
-Use `--progress-every 1000` to keep large transfer logs compact.
+Use `--progress-every 1000` to keep large transfer logs compact. Interactive
+terminals show a progress bar with verified bytes, transfer rate, ETA, and error
+count. Every run also writes atomic JSON status to
+`~/.local/state/mlpf-tfds-webdav/` (or `$XDG_STATE_HOME/mlpf-tfds-webdav/`)
+and prints the exact path at startup. Use `--status-file /path/to/job.json` for
+a predictable path, especially in batch jobs. The JSON contains both verified
+and newly transferred file/byte counts, so an agent can distinguish a resumed
+job from new network traffic. It contains no proxy credentials.
+
+Read the latest job from another terminal or agent session:
+
+```bash
+python3 scripts/tfds_webdav_status.py
+python3 scripts/tfds_webdav_status.py --watch
+python3 scripts/tfds_webdav_status.py /path/to/job.json --json
+```
+
+The status phases are `preparing`, `transferring`, `verifying`, `complete`, and
+`failed`. Status remains available after the transfer process exits. A final
+`complete` phase means all selected files passed the copy command's final
+verification; `failed` means the job needs attention or a retry.
 
 For the Tallinn CLD track/cluster campaign:
 
@@ -115,8 +135,10 @@ python3 scripts/tfds_webdav.py download cld v1.2.5_key4hep_2025-05-29 \
   --image /path/to/davix.sif --dry-run
 ```
 
-Remove `--dry-run` to copy. This simpler download command uses eight Davix
-threads and refuses a nonempty destination. Validate the downloaded version with
+Remove `--dry-run` to copy. The download command uses eight Davix
+threads, refuses a nonempty destination, and shows progress based on received
+files and bytes. It checks all downloaded file sizes against the remote listing.
+Validate the downloaded version with
 the [TFDS metadata and one-event checks](download.md#verify-metadata-and-one-event).
 For a scan point, add `--variant ecal_1p5mm` and set `--local-root` to a
 point-specific destination such as `/path/to/tfds/cld/granularity_scan_2025-05-29/ecal_1p5mm`.

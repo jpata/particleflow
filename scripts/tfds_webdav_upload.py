@@ -2,6 +2,7 @@
 """Upload a TFDS campaign to Grid WebDAV with parallel copies and readback checks."""
 
 import argparse
+import atexit
 import base64
 import hashlib
 import os
@@ -11,6 +12,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import quote, urlsplit
+
+from tfds_webdav_status import TransferStatus, new_status_path
 
 DEFAULT_REMOTE = "davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tfds"
 
@@ -46,6 +49,7 @@ def main():
     parser.add_argument("--attempts", type=int, default=5)
     parser.add_argument("--verify-mode", choices=("sha256-readback", "md5-server"), default="sha256-readback")
     parser.add_argument("--progress-every", type=int, default=20)
+    parser.add_argument("--status-file", type=Path, help="write atomic JSON progress here; default: ~/.local/state/mlpf-tfds-webdav/")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     if args.jobs < 1 or args.attempts < 1 or args.progress_every < 1:
@@ -91,6 +95,19 @@ def main():
             print(f"{version_url}: {len(members)} files, {sum(p.stat().st_size for p in members):,} bytes")
         return
 
+    label = "/".join(filter(None, ("upload", args.detector, args.campaign, args.variant, args.version)))
+    reporter = TransferStatus(
+        args.status_file or new_status_path(label),
+        direction="upload",
+        label=label,
+        local=args.local_root,
+        remote=campaign_url,
+        total_files=len(files),
+        total_bytes=sum(p.stat().st_size for p, _ in files),
+        progress_every=args.progress_every,
+    )
+    atexit.register(lambda: reporter.update(force=True, phase="failed") if reporter.status["phase"] != "complete" else None)
+
     common = ["apptainer", "exec", "-B", f"{args.proxy}:/tmp/x509:ro", "-B", f"{args.local_root}:/tfds:ro", str(args.image)]
     auth = ["-P", "grid", "-E", "/tmp/x509", "--key", "/tmp/x509", "--capath", args.capath, "--retry", "5", "--retry-delay", "2"]
 
@@ -130,6 +147,7 @@ def main():
         return sizes
 
     remote_sizes = {url: listed_sizes(url) for url in versions}
+    reporter.update(force=True, phase="transferring")
 
     def remote_digest(address):
         process = subprocess.Popen([*common, "davix-get", *auth, address], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -229,19 +247,21 @@ def main():
             try:
                 path, state = future.result()
                 completed += 1
-                if completed % args.progress_every == 0 or completed == len(files):
-                    print(f"{completed}/{len(files)} files verified (latest: {path.name}, {state})", flush=True)
+                reporter.complete_file(path.stat().st_size, transferred=state != "verified")
             except Exception as exc:
                 errors.append(str(exc))
+                reporter.error()
                 print(f"ERROR: {exc}", file=sys.stderr, flush=True)
     if errors:
         raise SystemExit(f"{len(errors)} file(s) failed; rerun the same command to retry")
+    reporter.update(force=True, phase="verifying")
     for version_url, members in versions.items():
         sizes = listed_sizes(version_url)
         for path in members:
             if sizes.get(path.name) != path.stat().st_size:
                 raise SystemExit(f"final remote size mismatch: {version_url}/{path.name}")
     print(f"Verified all {len(files)} files by {args.verify_mode} and final directory listings.", flush=True)
+    reporter.update(force=True, phase="complete")
 
 
 if __name__ == "__main__":
