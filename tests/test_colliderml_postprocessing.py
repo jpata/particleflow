@@ -103,6 +103,7 @@ def test_resume_reconverts_partial_output_and_skips_complete_one(tmp_path):
     assert rows() == 2
     process_one_file(*paths, ofn)  # a full run must not take the capped file for done
     assert rows() == 3
+    assert "track_calo_target_particles" in pq.read_schema(ofn).names
     mtime = ofn.stat().st_mtime_ns
     process_one_file(*paths, ofn)  # complete: skipped
     assert ofn.stat().st_mtime_ns == mtime
@@ -236,3 +237,31 @@ def test_pileup_fields_roundtrip_to_tfds(tmp_path):
     np.testing.assert_array_equal(example["genjets_withpu"], rec["genjet_withpu"])
     assert example["genmet"] == rec["genmet"]
     assert example["genmet_withpu"] == rec["genmet_withpu"]
+
+
+def test_track_calo_view_labels_tracks_and_hits():
+    particles, tracks, calo, tracker = _shared_hits_event()
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+    targets = rec["track_calo_target_particles"]
+    rows = np.concatenate((rec["ytarget_track_calo_track"], rec["ytarget_track_calo_hit"]))
+    assert len(targets) == 3
+    assert sorted(rows[rows[:, 0] != 0, PN]) == [1, 2, 3]
+    assert rec["ytarget_track_calo_track"][0, 0] == 211
+
+
+def test_track_calo_parquet_roundtrip(tmp_path):
+    make_fixture(tmp_path / "src", n_events=6)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    process_one_file(*paths, ofn)
+    mtime = ofn.stat().st_mtime_ns
+    process_one_file(*paths, ofn)
+    assert ofn.stat().st_mtime_ns == mtime
+    result = ak.from_parquet(ofn)
+    assert "track_calo_target_particles" in result.fields
+    for event in result:
+        target = ak.to_numpy(event.track_calo_target_particles)
+        rows = np.concatenate((ak.to_numpy(event.ytarget_track_calo_track), ak.to_numpy(event.ytarget_track_calo_hit)))
+        assert sorted(rows[rows[:, 0] != 0, PN]) == list(range(1, len(target) + 1))
+        assert len(event.ytarget_track_calo_track) == len(event.X_track)
+        assert len(event.ytarget_track_calo_hit) == len(event.X_hit_calo)

@@ -79,6 +79,7 @@ INPUT_TYPE_IDS = {
     "unknown": 0,
     "hits": 1,
     "pf": 2,
+    "track_calo": 3,
 }
 INPUT_TYPE_LABELS = {input_type_id: input_type_name for input_type_name, input_type_id in INPUT_TYPE_IDS.items()}
 
@@ -91,6 +92,8 @@ def dataset_source_id(dataset_name: str) -> int:
 
 
 def dataset_input_type_id(dataset_name: str) -> int:
+    if "_track_calo_" in dataset_name:
+        return INPUT_TYPE_IDS["track_calo"]
     if "_hits" in dataset_name:
         return INPUT_TYPE_IDS["hits"]
     return INPUT_TYPE_IDS["pf"]

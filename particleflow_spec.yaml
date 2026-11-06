@@ -85,6 +85,8 @@ productions:
     comment: "Local MAIA ttbar EDM4hep validation sample"
     workspace_dir: "${project.paths.project_root}/local_test_data/maia_smoke"
     config_dir: "${project.paths.project_root}"
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
 
   # CMS Production Campaign
   cms_run3:
@@ -447,7 +449,6 @@ productions:
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
-      args: {}
 
     tfds_mapping:
       ttbar:
@@ -521,7 +522,6 @@ productions:
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
-      args: {}
 
     tfds_mapping:
       ttbar:
@@ -573,7 +573,6 @@ productions:
 
     postprocessing:
       script: "mlpf/data/colliderml/postprocessing.py"
-      args: {}
 
     tfds_mapping:
       ttbar_pu0:
@@ -654,7 +653,6 @@ productions:
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
-      args: {}
 
     tfds_mapping:
       ttbar:
