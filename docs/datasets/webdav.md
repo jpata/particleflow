@@ -55,6 +55,13 @@ same command verifies existing files and uploads only missing or different-size
 files. The readback adds one full download of the selected data, so allow for
 both upload and download traffic.
 
+For very large collections, `--verify-mode md5-server` compares the local MD5
+with the endpoint's `Want-Digest: md5` response and its reported file size.
+This verifies stored bytes without a full readback and requires host `curl`
+with TLS trust for the endpoint. The default `sha256-readback` mode remains
+available for smaller collections. Both modes verify final directory sizes.
+Use `--progress-every 1000` to keep large transfer logs compact.
+
 For the Tallinn CLD track/cluster campaign:
 
 ```bash
@@ -75,6 +82,12 @@ The IDEA production has three datasets at configuration `1` in both `0.2.0`
 and `0.2.1`. Use the uploader once per version, with `--detector idea`,
 `--campaign IDEA_o1_v03_fccconfig_a05a3a9`, and repeat `--dataset` for
 `idea_edm_ttbar_pf`, `idea_edm_ww_fullhad_pf`, and `idea_edm_qq_pf`.
+
+The main CLD and CLIC hit productions each have `ttbar`, `ww_fullhad`, and
+`qq` datasets at version `3.2.2`, configurations 1–10. Use the same
+campaign names as their track/cluster datasets and select all three hit
+dataset names for each detector. `cld_edm_zz_hits` is configured as an
+additional builder but is absent from this production workspace.
 
 For all 12 CLD granularity scan points, use the scan wrapper. It checks that
 each point has the expected PF and hits datasets and all ten configurations
