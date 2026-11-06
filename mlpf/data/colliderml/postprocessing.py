@@ -106,7 +106,7 @@ def _met_and_jets(features: Dict[str, np.ndarray]):
     return met, jets
 
 
-def _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_of: np.ndarray, n_cluster: int):
+def _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_of: np.ndarray, n_cluster: int, all_pileup: bool = False):
     """Truth pileup fraction of every track and cluster, from the raw release tables only.
 
     Every particle of the release, Geant4 secondaries included, carries the vertex_primary of
@@ -119,10 +119,13 @@ def _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_o
     Unlike ytarget's ispu, which describes the target particle assigned to an element, this
     describes the element itself, and is defined also for the elements without a target. Hits left
     unclustered (cluster_of == -1) count for no cluster, as for the cluster energy.
+    all_pileup=True counts every particle as pileup (see pileup_sample).
     Returns (pufrac_track, pufrac_cluster), float32 arrays in X_track / X_cluster order.
     """
     pid = ak.to_numpy(particles_ev["particle_id"]).astype(np.int64)
     is_pu_particle = ak.to_numpy(particles_ev["vertex_primary"]) != 1
+    if all_pileup:
+        is_pu_particle = np.ones_like(is_pu_particle)
     order = np.argsort(pid, kind="stable")
 
     def is_pu(ids):
@@ -153,6 +156,15 @@ def _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_o
     return pufrac_track.astype(np.float32), pufrac_cluster.astype(np.float32)
 
 
+def pileup_sample(sample: str) -> bool:
+    """Whether every event of the sample is pileup only (Release-1 `pileup_only_pu0`): its
+    particles carry vertex_primary 1 like a hard scatter's, so truth.py's vertex_primary != 1
+    rule would mark them as hard scatter; the converter counts all of them as pileup instead
+    (target ispu = 1, element pufrac = 1, empty hard-scatter genmet/genjets, everything in the
+    *_withpu gen reference)."""
+    return sample.startswith("pileup_only")
+
+
 def _event_record_one(
     event_id: int,
     particles_ev: ak.Record,
@@ -167,12 +179,14 @@ def _event_record_one(
     assignment: str = DEFAULT_ASSIGNMENT,
     event_index: int = -1,
     shard_label: str = "",
+    all_pileup: bool = False,
 ) -> Dict[str, Any]:
     """Convert one ColliderML event into the MLPF record fields.
 
     merge_frac=None and radii_mm=None take cluster_event's per-algorithm defaults
     (DEFAULT_MERGE_FRAC for bfs_merge; DEFAULT_REGION_RADII_MM), the same resolution as
-    the CLI.
+    the CLI. all_pileup=True counts every particle as pileup, for samples made only of pileup
+    interactions, whose vertex_primary is 1 like a hard scatter's (see pileup_sample).
     """
     # raw inputs
     hit_x = ak.to_numpy(calo_ev["x"]).astype(np.float32)
@@ -187,6 +201,9 @@ def _event_record_one(
     gen_features, gp_to_hit, gp_to_track, genref_features = compute_gen_tables(
         particles_ev, calo_ev, tracks_ev, DEFAULT_CALIBRATION, tracker_ev=tracker_ev
     )
+    if all_pileup:
+        gen_features["ispu"] = np.ones_like(gen_features["ispu"])
+        genref_features["ispu"] = np.ones_like(genref_features["ispu"])
 
     # -- gen reference (measurable truth): genmet / genjet, with and without pileup --
     # Built from genref_features — the pre-visibility, pre-allocator measurable set (any
@@ -218,7 +235,7 @@ def _event_record_one(
         clue_options=clue_options,
     )
     n_cluster = len(cl_feats)
-    pufrac_track, pufrac_cluster = _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_of, n_cluster)
+    pufrac_track, pufrac_cluster = _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_of, n_cluster, all_pileup=all_pileup)
 
     # -- build EventData and run the shared allocator --------------------------
     # The allocator indexes hits in the extended calo-then-tracker space (truth.py appends
@@ -625,6 +642,7 @@ def process_one_file(
     clue_params: Dict[int, Dict[str, float]] | None = None,
     clue_options: Dict[str, Any] | None = None,
     assignment: str = DEFAULT_ASSIGNMENT,
+    all_pileup: bool = False,
 ) -> None:
     source_fns = [particles_fn, tracks_fn, calo_fn, tracker_fn]
     if num_events == -1 and _shard_done(ofn, source_fns, assignment):
@@ -707,6 +725,7 @@ def process_one_file(
                 assignment=assignment,
                 event_index=i,
                 shard_label=Path(ofn).name,
+                all_pileup=all_pileup,
             )
             out.append(event)
             del event
@@ -835,17 +854,24 @@ def main():
 
     shard_ids = args.shards.split(":")
     a, b = int(shard_ids[0]), int(shard_ids[1])
-    pa = shard_paths(Path(args.input), args.sample, "particles")[a:b]
-    tr = shard_paths(Path(args.input), args.sample, "tracks")[a:b]
-    ch = shard_paths(Path(args.input), args.sample, "calo_hits")[a:b]
-    # tracker_hits is required input: its per-hit truth feeds the gp->track hit-fraction links
-    # (truth.py) and the X_hit_tracker geometry written for the validator.
-    th = shard_paths(Path(args.input), args.sample, "tracker_hits")[a:b]
-    if len(th) != len(pa):
-        raise RuntimeError(
-            f"tracker_hits shard count mismatch in the requested range: {len(th)} tracker_hits shards vs {len(pa)} particles shards "
-            f"(expected matching four-table layout under {Path(args.input) / f'{args.sample}_tracker_hits'})"
-        )
+    # Pair the four tables' shards by file name, not list position: an upstream config can lack
+    # shards (Release 1 dihiggs_pu200_tracker_hits has 295 of 1000), where a positional zip would
+    # pair different shards. --shards slices the particles table; a shard missing from any other
+    # table is skipped. tracker_hits is required input: its per-hit truth feeds the gp->track
+    # hit-fraction links (truth.py) and the X_hit_tracker geometry written for the validator.
+    objects = ("particles", "tracks", "calo_hits", "tracker_hits")
+    tables = {obj: {p.name: p for p in shard_paths(Path(args.input), args.sample, obj)} for obj in objects}
+    absent = [obj for obj in objects if not tables[obj]]
+    if absent:
+        raise RuntimeError(f"no {'/'.join(absent)} shards for {args.sample} under {args.input}")
+    requested = sorted(tables["particles"].values())[a:b]
+    shards = []
+    for p in requested:
+        missing = [obj for obj in objects[1:] if p.name not in tables[obj]]
+        if missing:
+            print(f"WARNING: skipping {p.name}: no {'/'.join(missing)} shard of that name under {args.input}", flush=True)
+            continue
+        shards.append(tuple(tables[obj][p.name] for obj in objects))
 
     from mlpf.data.colliderml.clustering import DEFAULT_MERGE_FRAC, DEFAULT_REGION_RADII_MM
 
@@ -858,20 +884,22 @@ def main():
         if args.radii_hcal is not None:
             radii_mm.update({12: args.radii_hcal, 13: args.radii_hcal, 14: args.radii_hcal})
 
-    n_files = len(pa)
+    n_files = len(shards)
+    n_skipped = len(requested) - n_files
+    all_pileup = pileup_sample(args.sample)
     print(
         f"planning {n_files} shards (range {args.shards}) -> {args.outpath} with algorithm={args.algorithm} merge_frac={merge_frac} radii_mm={radii_mm}"
         + (f" clue_params={clue_params} clue_options={clue_options}" if args.algorithm == "clue" else "")
+        + (" all_pileup=True (every particle counted as pileup)" if all_pileup else "")
     )
     n_done = 0
-    for i, (p, t, c) in enumerate(zip(pa, tr, ch)):
+    for i, (p, t, c, tracker_fn) in enumerate(shards):
         out_name = Path(args.outpath) / (p.stem + ".parquet")
         # --num-events is a debug cap: always (re)write, and never count a capped output as done
-        if args.num_events == -1 and _shard_done(out_name, [Path(p), Path(t), Path(c), Path(th[i])], args.assignment):
+        if args.num_events == -1 and _shard_done(out_name, [p, t, c, tracker_fn], args.assignment):
             n_done += 1
             print(f"[shard {i + 1}/{n_files}] {out_name.name} already exists, skipping")
             continue
-        tracker_fn = Path(th[i])
         process_one_file(
             Path(p),
             Path(t),
@@ -887,8 +915,12 @@ def main():
             clue_params=clue_params,
             clue_options=clue_options,
             assignment=args.assignment,
+            all_pileup=all_pileup,
         )
-    print(f"all {n_files} shards accounted for ({n_done} already present, {n_files - n_done} newly converted)")
+    print(
+        f"all {n_files} shards accounted for ({n_done} already present, {n_files - n_done} newly converted"
+        + (f"; {n_skipped} requested shards skipped for a missing table)" if n_skipped else ")")
+    )
 
 
 if __name__ == "__main__":

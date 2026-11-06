@@ -4,14 +4,20 @@
 # each row of a `train-XXXXX-of-01000.parquet` is one event. The join key is `event_id`; the
 # reader enforces that the four tables see the event ids in the same order (they do in the
 # release, because shards were written event-aligned) and drops the rare event missing from one
-# table.
+# table or carrying corrupt calo hits.
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterator, Sequence
 
 import awkward as ak
 import numpy as np
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
+
+# calo region codes the release uses (ODD ECAL barrel/endcaps 9-11, HCAL barrel/endcaps 12-14);
+# must match the keys of truth.DEFAULT_CALIBRATION
+CALO_REGIONS = (9, 10, 11, 12, 13, 14)
 
 
 def shard_paths(source_dir: Path, sample: str, object_type: str) -> list[Path]:
@@ -62,10 +68,59 @@ def common_event_ids(paths: Sequence[Path]) -> np.ndarray | None:
     return common
 
 
+def _corrupt_calo_event_ids(calo_path: Path) -> np.ndarray:
+    """Event ids whose calo hits cannot be attributed, in table order.
+
+    Some Release-1 shards (at the pinned revision; byte-identical to the Hub) carry blocks of
+    events with corrupt calo truth: hits whose region code is 255 instead of one of CALO_REGIONS
+    (dihiggs_pu0, ggf_pu0; positions are ordinary ECAL/HCAL ones, the label is lost), and hits
+    whose contrib_particle_ids and contrib_energies lists differ in length (whole shards of
+    dihiggs_pu0, ggf_pu0, higgs_portal_pu0, hidden_valley_pu0). Such events are dropped whole.
+    Cached (keyed on path, size and mtime) because the resume check, the tqdm total and the
+    reader all ask for the same shard.
+    """
+    st = Path(calo_path).stat()
+    return _corrupt_calo_event_ids_cached(str(calo_path), st.st_size, st.st_mtime_ns)
+
+
+@lru_cache(maxsize=8)
+def _corrupt_calo_event_ids_cached(calo_path: str, size: int, mtime_ns: int) -> np.ndarray:
+    pf = pq.ParquetFile(calo_path)
+    regions = pa.array(CALO_REGIONS, type=pa.uint8())
+    bad = []
+    for rb in pf.iter_batches(batch_size=10, columns=["event_id", "detector", "contrib_particle_ids", "contrib_energies"]):
+        ev = rb.column("event_id").to_numpy()
+        det = rb.column("detector")
+        bad_det = ~pc.is_in(pc.list_flatten(det), value_set=regions).to_numpy(zero_copy_only=False)
+        ids, en = rb.column("contrib_particle_ids"), rb.column("contrib_energies")
+        mismatch = pc.list_value_length(pc.list_flatten(ids)).to_numpy() != pc.list_value_length(pc.list_flatten(en)).to_numpy()
+        rows = np.union1d(
+            pc.list_parent_indices(det).to_numpy()[bad_det],
+            pc.list_parent_indices(ids).to_numpy()[mismatch],
+        )
+        bad.append(ev[rows.astype(np.int64)])
+    return np.concatenate(bad) if bad else np.zeros(0, dtype=np.uint32)
+
+
+def kept_event_ids(paths: Sequence[Path]) -> np.ndarray | None:
+    """Event ids iter_event_records yields for a full shard (table order), or None for all of them.
+
+    Drops events missing from any table (common_event_ids) and events with corrupt calo hits
+    (_corrupt_calo_event_ids); paths are (particles, tracks, calo_hits, tracker_hits).
+    """
+    keep = common_event_ids(paths)
+    corrupt = _corrupt_calo_event_ids(paths[2])
+    if len(corrupt) == 0:
+        return keep
+    if keep is None:
+        keep = _read_event_ids(paths[0])
+    return keep[~np.isin(keep, corrupt)]
+
+
 def n_shard_events(paths: Sequence[Path]) -> int:
     """Number of events iter_event_records yields for a full shard."""
-    common = common_event_ids(paths)
-    return pq.ParquetFile(paths[0]).metadata.num_rows if common is None else len(common)
+    keep = kept_event_ids(paths)
+    return pq.ParquetFile(paths[0]).metadata.num_rows if keep is None else len(keep)
 
 
 def _iter_table_rows(table_path: Path, batch_size: int, keep: np.ndarray | None) -> Iterator[tuple[int, ak.Record]]:
@@ -92,18 +147,26 @@ def iter_event_records(
 
     All four tables are required (tracker_hits feeds the gp->track hit-fraction links and
     X_hit_tracker) and row-aligned already; we walk them in lockstep batches of `batch_size`
-    events and check event-id alignment per event. Events missing from any table are dropped
-    (see common_event_ids).
+    events and check event-id alignment per event. Events missing from any table or with
+    corrupt calo hits are dropped (see kept_event_ids).
     """
     paths = [particles_path, tracks_path, calo_path, tracker_hits_path]
     names = ["particles", "tracks", "calo_hits", "tracker_hits"]
 
-    keep = common_event_ids(paths)
-    if keep is not None:
+    common = common_event_ids(paths)
+    if common is not None:
         ids = [_read_event_ids(p) for p in paths]
-        dropped = np.setdiff1d(np.concatenate(ids), keep)
+        dropped = np.setdiff1d(np.concatenate(ids), common)
         absent_from = [name for name, i in zip(names, ids) if not np.isin(dropped, i).all()]
         print(f"{Path(particles_path).name}: dropping event_ids {dropped.tolist()} (missing from {', '.join(absent_from)})", flush=True)
+    corrupt = _corrupt_calo_event_ids(calo_path)
+    if len(corrupt):
+        print(
+            f"WARNING: {Path(calo_path).name}: dropping {len(corrupt)} event(s) with corrupt calo hits "
+            f"(unknown region code or contrib id/energy length mismatch), event_ids {corrupt.min()}..{corrupt.max()}",
+            flush=True,
+        )
+    keep = kept_event_ids(paths)
 
     for rows in zip(*[_iter_table_rows(p, batch_size, keep) for p in paths]):
         ids = [eid for eid, _ in rows]

@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Compare ttbar parquet and ArrayRecord TFDS features with explicit column semantics."""
+"""Compare parquet and ArrayRecord TFDS features across samples with explicit column semantics.
+
+One figure column per sample, given as --parquet/--tfds LABEL[:DETECTOR]=PATH in plotting order;
+DETECTOR (default LABEL) selects the feature layout. Columns can be detectors (ttbar on ColliderML,
+CLIC, CLD, IDEA, MAIA; see scripts/run_detector_feature_comparison.sh) or samples of one detector,
+e.g. --tfds ttbar_pu0:colliderml=... --tfds zprime_pu0:colliderml=...
+"""
 import argparse
 from collections import defaultdict
 from collections import Counter
@@ -20,7 +26,7 @@ from mlpf.jet_utils import _match_jets_event  # noqa: E402
 
 
 DETECTORS = ["colliderml", "clic", "cld", "idea", "maia"]
-COLORS = ["#a23b72", "#0072b2", "#d55e00", "#009e73", "#9467bd"]
+COLORS = ["#a23b72", "#0072b2", "#d55e00", "#009e73", "#9467bd", "#e69f00", "#56b4e9", "#8c564b", "#cc79a7", "#7f7f7f", "#bcbd22", "#17becf"]
 LABELS = np.array([0, 211, 130, 22, 11, 13])
 CML_TRACK = [
     "elemtype",
@@ -247,28 +253,44 @@ def verify_persisted_colliderml(parquet_path, tfds_path, detector="colliderml"):
     }
 
 
-def layout_comparison_figure(fig, axes, title, synthetic=False):
-    """Reserve a fixed-height header, including on short one-row sheets."""
+def parse_column(spec):
+    """'LABEL[:DETECTOR]=PATH' -> (label, detector, path); the detector defaults to the label."""
+    name, path = spec.split("=", 1)
+    label, _, detector = name.partition(":")
+    detector = detector or label
+    if detector not in DETECTORS:
+        raise ValueError(f"unknown detector {detector!r} in {spec!r} (known: {DETECTORS})")
+    return label, detector, path
+
+
+def color(col):
+    return COLORS[col % len(COLORS)]
+
+
+def layout_comparison_figure(fig, axes, title, synthetic=False, columns=None):
+    """Reserve a fixed-height header, including on short one-row sheets. columns: [(label, detector)], default DETECTORS."""
+    columns = columns if columns is not None else [(d, d) for d in DETECTORS]
     height = fig.get_figheight()
     fig.tight_layout(rect=(0, 0, 1, 1 - 0.85 / height))
     main_title = fig.suptitle(title, fontsize=12, y=1 - 0.12 / height, va="top")
     column_titles = []
-    for detector, ax in zip(DETECTORS, axes[0]):
-        label = detector.upper() + (" (SYNTHETIC)" if detector == "colliderml" and synthetic else "")
+    for (name, detector), ax in zip(columns, axes[0]):
+        label = name.upper() + (" (SYNTHETIC)" if detector == "colliderml" and synthetic else "")
         position = ax.get_position()
         column_titles.append(fig.text((position.x0 + position.x1) / 2, 1 - 0.48 / height, label, ha="center", va="top", fontweight="bold"))
     return main_title, column_titles
 
 
-def plot_group(datasets, keys, title, path, synthetic):
-    fig, axes = plt.subplots(len(keys), len(DETECTORS), figsize=(4 * len(DETECTORS), max(3.6, 2.35 * len(keys))), squeeze=False)
+def plot_group(datasets, keys, title, path, columns, synthetic):
+    labels = [label for label, _ in columns]
+    fig, axes = plt.subplots(len(keys), len(labels), figsize=(4 * len(labels), max(3.6, 2.35 * len(keys))), squeeze=False)
     for row, key in enumerate(keys):
-        arrays = [datasets.get(d, {}).get(key, np.array([])) for d in DETECTORS]
+        arrays = [datasets.get(d, {}).get(key, np.array([])) for d in labels]
         finite = [a[np.isfinite(a)] for a in arrays]
         pooled = np.concatenate(finite)
         if not len(pooled):
             continue
-        # Give every detector equal influence on the visible range even when
+        # Give every sample equal influence on the visible range even when
         # their object multiplicities differ by orders of magnitude.
         lo = min(np.quantile(arr, 0.005) for arr in finite if len(arr))
         hi = max(np.quantile(arr, 0.995) for arr in finite if len(arr))
@@ -284,11 +306,11 @@ def plot_group(datasets, keys, title, path, synthetic):
         edges = np.arange(-0.5, 6.5) if categorical else np.linspace(lo, hi, 51)
         if log_x:
             edges = scale * np.expm1(np.linspace(np.log1p(lo / scale), np.log1p(hi / scale), 51))
-        for col, (detector, arr, ax) in enumerate(zip(DETECTORS, finite, axes[row])):
+        for col, (arr, ax) in enumerate(zip(finite, axes[row])):
             if len(arr):
                 counts, _ = np.histogram(arr, edges)
                 fractions = counts / len(arr)
-                ax.stairs(fractions, edges, color=COLORS[col], linewidth=1.4)
+                ax.stairs(fractions, edges, color=color(col), linewidth=1.4)
                 outside = np.mean((arr < lo) | (arr > hi))
                 annotation = f"n={len(arr):,}" if categorical else f"n={len(arr):,}\nmedian={np.median(arr):.3g}\noutside={outside:.1%}"
                 ax.text(
@@ -315,7 +337,7 @@ def plot_group(datasets, keys, title, path, synthetic):
         ymax = max(ax.get_ylim()[1] for ax in axes[row])
         for ax in axes[row]:
             ax.set_ylim(0, ymax)
-    layout_comparison_figure(fig, axes, title + " — shared bins/axes; union of detector 0.5–99.5% ranges", synthetic)
+    layout_comparison_figure(fig, axes, title + " — shared bins/axes; union of per-column 0.5–99.5% ranges", synthetic, columns)
     fig.savefig(path, dpi=130)
     plt.close(fig)
 
@@ -337,8 +359,9 @@ def binned_fraction(values, matched, edges):
     return fraction, center - half, center + half, passed, total
 
 
-def plot_jet_matching(datasets, stage, path, match_dr):
-    fig, axes = plt.subplots(5, len(DETECTORS), figsize=(4 * len(DETECTORS), 13), squeeze=False)
+def plot_jet_matching(datasets, stage, path, match_dr, columns, process="ttbar"):
+    labels = [label for label, _ in columns]
+    fig, axes = plt.subplots(5, len(labels), figsize=(4 * len(labels), 13), squeeze=False)
     all_pt = np.concatenate([v["jetmatch/gen_pt"] for v in datasets.values()])
     all_eta = np.concatenate([v["jetmatch/gen_eta"] for v in datasets.values()])
     all_target_pt = np.concatenate([v["jetmatch/target_pt"] for v in datasets.values()])
@@ -350,7 +373,7 @@ def plot_jet_matching(datasets, stage, path, match_dr):
     eta_edges = np.linspace(-eta_max, eta_max, 13)
     response_edges = np.linspace(0.5, 1.5, 81)
     summaries = {}
-    for col, detector in enumerate(DETECTORS):
+    for col, detector in enumerate(labels):
         if detector not in datasets:
             for ax in axes[:, col]:
                 ax.text(0.5, 0.5, "Unavailable", transform=ax.transAxes, ha="center")
@@ -358,7 +381,7 @@ def plot_jet_matching(datasets, stage, path, match_dr):
         data = datasets[detector]
         ratio = data["jetmatch/pt_ratio"]
         counts = np.histogram(ratio, response_edges)[0]
-        axes[0, col].stairs(counts / max(len(ratio), 1), response_edges, color=COLORS[col])
+        axes[0, col].stairs(counts / max(len(ratio), 1), response_edges, color=color(col))
         axes[0, col].axvline(1, color="black", linestyle=":", linewidth=1)
         axes[0, col].set_xlim(0.5, 1.5)
         axes[0, col].set_xlabel(r"Matched $p_T^{target}/p_T^{gen}$")
@@ -392,8 +415,8 @@ def plot_jet_matching(datasets, stage, path, match_dr):
                 if len(selected):
                     quantiles[index] = np.quantile(selected, [0.16, 0.5, 0.84])
             ax = axes[response_row, col]
-            ax.plot(centers, quantiles[:, 1], "o-", color=COLORS[col], markersize=3)
-            ax.fill_between(centers, quantiles[:, 0], quantiles[:, 2], color=COLORS[col], alpha=0.2)
+            ax.plot(centers, quantiles[:, 1], "o-", color=color(col), markersize=3)
+            ax.fill_between(centers, quantiles[:, 0], quantiles[:, 2], color=color(col), alpha=0.2)
             ax.axhline(1, color="black", linestyle=":", linewidth=1)
             ax.set_xlabel(r"Genjet $p_T$ [GeV]" if dim == "pt" else r"Genjet $\eta$")
             for collection, style, label in (("gen", "-", "Genjet efficiency"), ("target", "--", "Targetjet purity")):
@@ -401,8 +424,8 @@ def plot_jet_matching(datasets, stage, path, match_dr):
                     data[f"jetmatch/{collection}_{dim}"], data[f"jetmatch/{collection}_matched"], edges
                 )
                 ax = axes[fraction_row, col]
-                ax.plot(centers, fraction, style, color=COLORS[col], label=label, marker="o", markersize=3)
-                ax.fill_between(centers, lower, upper, color=COLORS[col], alpha=0.12)
+                ax.plot(centers, fraction, style, color=color(col), label=label, marker="o", markersize=3)
+                ax.fill_between(centers, lower, upper, color=color(col), alpha=0.12)
                 summaries[detector]["bins"][f"{collection}_{dim}"] = {"edges": edges.tolist(), "matched": passed.tolist(), "total": total.tolist()}
             axes[fraction_row, col].set_ylim(0, 1.05)
             axes[fraction_row, col].set_xlabel(r"Jet $p_T$ [GeV] (each collection)" if dim == "pt" else r"Jet $\eta$ (each collection)")
@@ -422,7 +445,9 @@ def plot_jet_matching(datasets, stage, path, match_dr):
                 ax.set_ylim(0, upper) if row == 0 else ax.set_ylim(min(0.9, lower), max(1.1, upper))
         for ax in axes[row]:
             ax.grid(alpha=0.2)
-    layout_comparison_figure(fig, axes, f"ttbar • {stage} • genjet ↔ targetjet: one-to-one ΔR < {match_dr:g}; no pT response cut")
+    layout_comparison_figure(
+        fig, axes, f"{process} • {stage} • genjet ↔ targetjet: one-to-one ΔR < {match_dr:g}; no pT response cut", columns=columns
+    )
     fig.savefig(path, dpi=130)
     plt.close(fig)
     return summaries
@@ -430,8 +455,11 @@ def plot_jet_matching(datasets, stage, path, match_dr):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--parquet", action="append", default=[], help="detector=directory")
-    parser.add_argument("--tfds", action="append", default=[], help="detector=version-directory")
+    parser.add_argument("--parquet", action="append", default=[], help="label[:detector]=directory (one figure column each, in order)")
+    parser.add_argument("--tfds", action="append", default=[], help="label[:detector]=version-directory (one figure column each, in order)")
+    parser.add_argument("--process", default="ttbar", help="process name in the sheet titles")
+    parser.add_argument("--title", default="ttbar detector feature comparison", help="report page title")
+    parser.add_argument("--note", help="report intro paragraph (default: the ttbar detector comparison note)")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--num-events", type=int, default=100)
     parser.add_argument("--split", default="test")
@@ -457,8 +485,9 @@ def main():
         "cluster": EDM4HEP.ClusterFeatures.get_names(),
         "target": ParticleFeatures.get_names(),
     }
-    tfds_paths = dict(spec.split("=", 1) for spec in args.tfds)
-    parquet_paths = dict(spec.split("=", 1) for spec in args.parquet)
+    tfds_paths = {label: path for label, _, path in map(parse_column, args.tfds)}
+    parquet_paths = {label: path for label, _, path in map(parse_column, args.parquet)}
+    detector_comparison = any(detector != "colliderml" for _, detector, _ in map(parse_column, args.parquet + args.tfds))
     if args.verify_colliderml_roundtrip:
         report["colliderml_persisted_roundtrip"] = verify_persisted_colliderml(parquet_paths["colliderml"], tfds_paths["colliderml"])
         print("Persisted ColliderML roundtrip:", report["colliderml_persisted_roundtrip"], flush=True)
@@ -468,10 +497,9 @@ def main():
     images = []
     for stage, specs in (("parquet", args.parquet), ("tfds", args.tfds)):
         datasets = {}
+        columns = []
         for spec in specs:
-            detector, path = spec.split("=", 1)
-            if detector not in DETECTORS:
-                raise ValueError(detector)
+            label, detector, path = parse_column(spec)
             paths = sorted(Path(path).glob("*.parquet")) if stage == "parquet" else [Path(path)]
             if not paths:
                 raise FileNotFoundError(path)
@@ -480,19 +508,22 @@ def main():
                 if stage == "parquet"
                 else tfds_events(path, args.num_events, args.split, args.seed)
             )
-            features = tfds.builder_from_directory(tfds_paths[detector]).info.features if stage == "parquet" and detector in tfds_paths else None
+            features = tfds.builder_from_directory(tfds_paths[label]).info.features if stage == "parquet" and label in tfds_paths else None
             values, checks = collect(events, detector, features, args.jet_match_dr)
-            datasets[detector] = values
-            report["samples"][f"{stage}/{detector}"] = {
+            datasets[label] = values
+            columns.append((label, detector))
+            report["samples"][f"{stage}/{label}"] = {
                 "paths": [str(p) for p in paths],
                 "checks": checks,
                 "features": {k: stats(v) for k, v in values.items()},
             }
-            print(stage, detector, checks, flush=True)
+            print(stage, label, checks, flush=True)
         if not datasets:
             continue
         filename = f"{stage}_jet_matching.png"
-        report.setdefault("jet_matching", {})[stage] = plot_jet_matching(datasets, stage, args.output_dir / filename, args.jet_match_dr)
+        report.setdefault("jet_matching", {})[stage] = plot_jet_matching(
+            datasets, stage, args.output_dir / filename, args.jet_match_dr, columns, args.process
+        )
         images.append(filename)
         allkeys = sorted(set().union(*(v.keys() for v in datasets.values())))
         for group in ("event", "track", "cluster", "target", "genjets", "targetjets", "diagnostic"):
@@ -507,17 +538,27 @@ def main():
             keys = first + [key for key in keys if key not in first]
             for start in range(0, len(keys), 6):
                 filename = f"{stage}_{group}_{start // 6 + 1}.png"
-                plot_group(datasets, keys[start : start + 6], f"ttbar • {stage} • {group}", args.output_dir / filename, args.colliderml_synthetic)
+                plot_group(
+                    datasets,
+                    keys[start : start + 6],
+                    f"{args.process} • {stage} • {group}",
+                    args.output_dir / filename,
+                    columns,
+                    args.colliderml_synthetic,
+                )
                 images.append(filename)
     (args.output_dir / "summary.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
-    note = (
+    note = args.note or (
         "ColliderML is SYNTHETIC: this validates schema and plumbing only."
         if args.colliderml_synthetic
         else "ColliderML: pp ttbar; CLIC/CLD/IDEA: ee ttbar at 380/365/365 GeV; MAIA: muon-collider ttbar. Shape agreement is not expected."
     )
-    html = "<!doctype html><meta charset='utf-8'><title>ttbar detector comparison</title><style>body{font:16px sans-serif;max-width:1600px;margin:30px auto}img{width:100%}</style>"
-    html += f"<h1>ttbar detector feature comparison</h1><p>{note}</p><p>CLIC uses ee ttbar at 380 GeV; CLD and IDEA use ee ttbar at 365 GeV. IDEA tracks are truth-seeded and candidates are target oracles. ColliderML has no PF baseline. For CLIC/CLD/IDEA, stored TFDS and newly converted ROOT samples are independent; distributions are not an event-matched serialization test. ColliderML and MAIA TFDS are built from the plotted parquet samples. The serialization checks separately verify each parquet event against the TFDS feature encoder/decoder. Targets exclude PDG=0 padding/unassigned rows. Non-finite values are counted in summary.json and excluded from histograms. Tail fractions are shown per panel. Input paths, sample counts, full ranges, quantiles, zero fractions and validation results are in <a href='summary.json'>summary.json</a>.</p>"
-    if (args.output_dir.parent / "event_displays" / "index.html").exists():
+    html = f"<!doctype html><meta charset='utf-8'><title>{args.title}</title><style>body{{font:16px sans-serif;max-width:1600px;margin:30px auto}}img{{width:100%}}</style>"
+    html += f"<h1>{args.title}</h1><p>{note}</p>"
+    if detector_comparison:
+        html += "<p>CLIC uses ee ttbar at 380 GeV; CLD and IDEA use ee ttbar at 365 GeV. IDEA tracks are truth-seeded and candidates are target oracles. ColliderML has no PF baseline. For CLIC/CLD/IDEA, stored TFDS and newly converted ROOT samples are independent; distributions are not an event-matched serialization test. ColliderML and MAIA TFDS are built from the plotted parquet samples. The serialization checks separately verify each parquet event against the TFDS feature encoder/decoder.</p>"
+    html += "<p>Targets exclude PDG=0 padding/unassigned rows. Non-finite values are counted in summary.json and excluded from histograms. Tail fractions are shown per panel. Input paths, sample counts, full ranges, quantiles, zero fractions and validation results are in <a href='summary.json'>summary.json</a>.</p>"
+    if detector_comparison and (args.output_dir.parent / "event_displays" / "index.html").exists():
         html += "<p><a href='../event_displays/index.html'>Five-detector event-display gallery</a>: tracks, clusters, hits and truth guides on a common transverse scale.</p>"
     if "maia" in parquet_paths:
         maia_count = report["samples"]["parquet/maia"]["checks"]["events"]
@@ -527,10 +568,13 @@ def main():
         failures = [gate for gate in validation["gates"] if gate["status"] == "FAIL"]
         html += f"<h2>MAIA physics validation: {validation['overall']}</h2><p>{validation['n_pass']} pass, {validation['n_fail']} fail, {validation['n_warn']} warn. The smoke script runs validation in report mode, so successful pipeline execution does not imply all physics gates passed.</p>"
         html += "<ul>" + "".join(f"<li>{gate['gate_id']} — {gate['title']}: {gate['observed']}</li>" for gate in failures) + "</ul>"
-    html += "<p>Features are matched by meaning, not raw column number. After the first six track columns, ColliderML stores ACTS perigee parameters while the other detectors store EDM4hep track features. GeV is used for momenta and energies; phi is in radians; eta is dimensionless. Positive features spanning several orders of magnitude use a shared symlog x-axis. Every row uses shared bins and y limits, with equal event limits per detector; object histograms count objects, not events.</p>"
+    if detector_comparison:
+        html += "<p>Features are matched by meaning, not raw column number. After the first six track columns, ColliderML stores ACTS perigee parameters while the other detectors store EDM4hep track features.</p>"
+    html += "<p>GeV is used for momenta and energies; phi is in radians; eta is dimensionless. Positive features spanning several orders of magnitude use a shared symlog x-axis. Every row uses shared bins and y limits, with equal event limits per column; object histograms count objects, not events.</p>"
     html += f"<p>Jet matching uses a maximum-cardinality, minimum-ΔR one-to-one assignment within ΔR &lt; {args.jet_match_dr:g}, with wrapped phi and no response cut. Response is targetjet pT / genjet pT; profiles show the median and 16–84% spread for matched pairs versus genjet coordinates. Solid matching-fraction curves use all genjets as denominator (efficiency); dashed curves use all targetjets (purity), each binned in its own coordinates. Shading shows 68% Wilson intervals; empty bins are omitted. Jets retain their original detector-specific clustering and pT cuts. Binned numerator and denominator counts are saved in summary.json.</p>"
-    html += "<p><strong>ColliderML track update:</strong> tanLambda is now derived as sinh(eta), omega uses the nominal 3 T field with the Key4hep 3e-4 conversion factor, and radiusOfInnermostHit is the minimum transverse radius of associated tracker hits. These occupy track columns 10/11/12; the equivalent EDM4hep columns are 11/13/10. The diagnostic compares tanLambda with sinh(eta) for every detector. ColliderML's minimum hit radius and EDM4hep's AtFirstHit reference-point radius are related but not identical definitions.</p>"
-    html += "<p><strong>Existing TFDS edge case:</strong> One sampled CLIC cluster and one sampled CLD cluster have iTheta approximately pi, nonzero energy, and ET=eta=0. They fail the ET=E/cosh(eta) relation after the polar-boundary eta fallback. This was observed in stored 3.2.1 datasets; the newly converted ROOT samples have no such rows.</p>"
+    if detector_comparison:
+        html += "<p><strong>ColliderML track update:</strong> tanLambda is now derived as sinh(eta), omega uses the nominal 3 T field with the Key4hep 3e-4 conversion factor, and radiusOfInnermostHit is the minimum transverse radius of associated tracker hits. These occupy track columns 10/11/12; the equivalent EDM4hep columns are 11/13/10. The diagnostic compares tanLambda with sinh(eta) for every detector. ColliderML's minimum hit radius and EDM4hep's AtFirstHit reference-point radius are related but not identical definitions.</p>"
+        html += "<p><strong>Existing TFDS edge case:</strong> One sampled CLIC cluster and one sampled CLD cluster have iTheta approximately pi, nonzero energy, and ET=eta=0. They fail the ET=E/cosh(eta) relation after the polar-boundary eta fallback. This was observed in stored 3.2.1 datasets; the newly converted ROOT samples have no such rows.</p>"
     html += "<h2>Validation checks</h2><table border='1' cellpadding='6'><tr><th>Sample</th><th>Events</th><th>Non-finite</th><th>Alignment</th><th>Phi normalization</th><th>Jet indices</th><th>p / pt / eta</th><th>ET / E / eta</th><th>Target E &lt; p</th><th>Encoding mismatches</th></tr>"
     for sample, entry in report["samples"].items():
         check = entry["checks"]
