@@ -92,7 +92,8 @@ class TransferStatus:
             return
         elapsed = max(now - self.started, 0.001)
         self.status["elapsed_seconds"] = round(elapsed, 1)
-        self.status["rate_bytes_per_second"] = round(self.status["completed_bytes"] / elapsed)
+        rate_bytes = self.status["transferred_bytes"] if self.status["direction"] == "download" else self.status["completed_bytes"]
+        self.status["rate_bytes_per_second"] = round(rate_bytes / elapsed)
         rate = self.status["rate_bytes_per_second"]
         self.status["eta_seconds"] = (
             round((self.status["total_bytes"] - self.status["completed_bytes"]) / rate) if rate and self.status["phase"] == "transferring" else None

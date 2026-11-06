@@ -152,8 +152,11 @@ Use `scripts/tfds_webdav_tree.py` for a WebDAV directory containing multiple
 datasets and configurations. It inventories the remote tree, runs one parallel
 recursive Davix download, and reports file/byte progress in the terminal and
 the same atomic JSON status format as the other transfer commands. The local
-destination must be empty. After Davix exits, it checks every downloaded file
-against the remote listing's size. This is a size check, not a checksum check.
+destination must be empty for the initial recursive download. If a large
+transfer is interrupted, rerun the same command with `--resume`: it checks
+existing file sizes and downloads only missing or wrong-size files in parallel.
+After Davix exits, it checks every downloaded file against the remote listing's
+size. This is a size check, not a checksum check.
 
 For the legacy CMS TFDS root on another site:
 
