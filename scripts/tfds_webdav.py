@@ -35,6 +35,7 @@ def command_argv(args, program, *operands):
 def command(args, program, *operands):
     base = command_argv(args, program, *operands)
     print(shlex.join(base), flush=True)
+    print(" ".join(shlex.quote(arg) for arg in base), flush=True)
     if not args.dry_run:
         subprocess.run(base, check=True)
 
