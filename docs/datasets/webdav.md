@@ -146,6 +146,28 @@ The upload command's SHA-256 readback verifies the bytes on the endpoint at
 publication time; receiving sites should perform their own integrity check if
 they need end-to-end confirmation.
 
+## Download a complete data root
+
+Use `scripts/tfds_webdav_tree.py` for a WebDAV directory containing multiple
+datasets and configurations. It inventories the remote tree, runs one parallel
+recursive Davix download, and reports file/byte progress in the terminal and
+the same atomic JSON status format as the other transfer commands. The local
+destination must be empty. After Davix exits, it checks every downloaded file
+against the remote listing's size. This is a size check, not a checksum check.
+
+For the legacy CMS TFDS root on another site:
+
+```bash
+python3 scripts/tfds_webdav_tree.py \
+  --remote-url davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tensorflow_datasets/2.8.0/ \
+  --local-root /path/to/tfds --image /path/to/davix.sif --jobs 16
+```
+
+The local root then contains `cms_pf_ttbar/1/2.8.0/` and the other CMS
+dataset directories. Set `$X509_USER_PROXY` or pass `--proxy` if the site's
+proxy is not at `~/x509-cms-2048`. The legacy tree has 78,148 files and includes
+six `.config/metadata.json` files; the tree downloader includes them.
+
 The upload and download scripts use `$X509_USER_PROXY`, falling back to `~/x509-cms-2048`, and
 mount it read-only at `/tmp/x509` in Apptainer. Supply `--proxy`, `--image`,
 `--capath`, or `--remote-root` for other sites. The Davix image is available at
