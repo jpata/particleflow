@@ -29,4 +29,12 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 
 The local builders default to **0.2.1**, which includes calorimeter-cell shower widths, while the model recipe selects **0.2.0**. Align the recipe with the actual rebuilt data before training. Do not relabel a dataset directory to bridge this difference.
 
+For the local `IDEA_o1_v03_fccconfig_a05a3a9/tfds` production, a full file
+comparison found that versions `0.2.0` and `0.2.1` have identical shards,
+`features.json`, and `metadata.json` for all three samples. Only
+`dataset_info.json` differs, recording its version. Treat those two local
+directories as the same event data; their distinct version labels do not by
+themselves demonstrate a changed shower-width calculation. The
+[WebDAV guide](webdav.md) records the transferred copies.
+
 For production, review `productions.idea` in `particleflow_spec.yaml` and the builders under `mlpf/heptfds/idea_pf_edm4hep/`, then follow [dataset generation](generate.md). The [detector-comparison runbook](../validation/detector-comparison.md) preserves the separate historical sample inventory and its limitations.

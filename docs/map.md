@@ -85,6 +85,8 @@ Complex data production and training pipelines are managed using Snakemake or si
 - **`mlpf/raytune/`**: Ray Tune integration for hyperparameter search (`search_space.py`, `utils.py`).
 - **`mlpf/jet_utils.py`**: Jet clustering and matching logic.
 - **`scripts/`**: Miscellaneous utility scripts.
+  - **`tfds_webdav.py` / `tfds_webdav_tree.py` / `tfds_webdav_upload.py` / `tfds_webdav_status.py`**: Download one TFDS version or a whole data root, upload a campaign with parallel transfers and digest checks, or monitor a transfer in the CLI or JSON; see [the transfer guide](datasets/webdav.md).
+  - **`upload_granularity_scan.py`**: Upload and verify all CLD granularity scan TFDS roots under point-specific WebDAV directories.
   - **`benchmark.py`**: Benchmarks the forward and backward pass timings and peak memory usage for various model architectures.
   - **`tallinn/`, `lxplus/`, `flatiron/`, `lumi/`, `local/`**: Site-specific and local orchestration scripts for training and evaluation.
   - **`legacy/`**: Older site-specific scripts retained for previous cluster workflows.

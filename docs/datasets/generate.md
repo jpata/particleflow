@@ -117,6 +117,9 @@ PROD=cld pixi run tfds_hit
 
 Adapt the metadata and single-event checks in [Download a dataset](download.md) to the workspace's `tfds/` directory and exact configured version. A successful read is the final dataset-production gate.
 
+To make a completed version available from the Tallinn Grid storage endpoint,
+follow the [WebDAV transfer guide](webdav.md).
+
 ## Publish selected outputs
 
 Publishing changes a shared external repository. Authenticate with a Hugging Face account that has write access, and always preview the exact selection:

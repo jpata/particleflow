@@ -13,7 +13,7 @@ Start with the input representation. Each detector page lists its physics sample
 
 The catalog includes maintained recipes and explicitly identified partial workflows. A builder's existence does not imply a trained model, physics validation, or public download. Detector pages identify those boundaries. Dataset schema, Python package, and model artifact versions are independent.
 
-After selecting a sample, [download and verify](download.md) published data or follow [dataset generation](generate.md). The shared [Key4HEP production guide](key4hep.md) covers both CLD/CLIC representations.
+After selecting a sample, [download and verify](download.md) published data or follow [dataset generation](generate.md). For data produced in Tallinn and copied between Grid sites, use the [WebDAV transfer guide](webdav.md). The shared [Key4HEP production guide](key4hep.md) covers both CLD/CLIC representations.
 
 See [detector event views](event-displays.md) for reusable visualizations of the
 input representations and reference particles.
