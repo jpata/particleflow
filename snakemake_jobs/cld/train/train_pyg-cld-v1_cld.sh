@@ -14,7 +14,7 @@ mkdir -p $TMPDIR
 cd /home/joosep/particleflow
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
-export TFDS_DATA_DIR=/local/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
+export TFDS_DATA_DIR=/local/joosep/mlpf/cld/v1.3.0_key4hep_2026-04-08/tfds
 export KERAS_BACKEND=torch
 export TORCH_COMPILE_DISABLE=1
 env
