@@ -107,10 +107,9 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         [awkvals["cand"], awkvals["target"], awkvals["pred"], awkvals["pred"]],
     ):
         msk = ydata["cls_id"] != 0
-        # placeholder cut on the PU frac prediction
-        if typ == "pred_nopu":
-            msk1 = ydata["ispu"] < 0.8
-            msk = msk & msk1
+        # pred_nopu: the particles the pileup head labels hard scatter (all of pred without a head)
+        if typ == "pred_nopu" and model_module.config.use_pu_head:
+            msk = msk & (ydata["ispu"] < 0.5)
 
         pt = ydata["pt"][msk]
         eta = ydata["eta"][msk]

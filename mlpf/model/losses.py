@@ -18,14 +18,16 @@ LOSS_TASKS = (
     "Regression_cos_phi",
     "Regression_energy",
 )
+# loss of the optional pileup classification head (model.use_pu_head)
+PU_LOSS_TASK = "Classification_pu"
 
 
 class CalibratedTaskLossWeights(nn.Module):
     """Calibrate task weights from early losses once, then keep them fixed."""
 
-    def __init__(self, calibration_steps=100, epsilon=1e-8, min_weight=1e-2, max_weight=1e3):
+    def __init__(self, tasks=LOSS_TASKS, calibration_steps=100, epsilon=1e-8, min_weight=1e-2, max_weight=1e3):
         super().__init__()
-        self.tasks = LOSS_TASKS
+        self.tasks = tuple(tasks)
         self.calibration_steps = calibration_steps
         self.epsilon = epsilon
         self.min_weight = min_weight
@@ -100,8 +102,8 @@ class CalibratedTaskLossWeights(nn.Module):
         return sum(weighted_losses), diagnostics
 
 
-def make_task_loss_weighter(task_loss_weights):
-    return CalibratedTaskLossWeights(**task_loss_weights)
+def make_task_loss_weighter(task_loss_weights, tasks=LOSS_TASKS):
+    return CalibratedTaskLossWeights(tasks=tasks, **task_loss_weights)
 
 
 def _mask_no_target_regression(y, ypred):
@@ -176,14 +178,54 @@ def regression_loss(y, ypred, input_pt, regression_weights):
     return losses
 
 
-def particle_loss(y, ypred, input_pt, regression_weights, *, binary_focal_gamma=None):
+def _pt_balance_weights(pt, target, mask, nbins=10):
+    """Per-element weights that balance the two classes of target (0/1) within each of nbins
+    log-spaced pt bins spanning the masked elements: in every bin both classes get the same total
+    weight, so pt alone carries no information on the label."""
+    w = torch.ones_like(pt)
+    if mask.sum() < 2:
+        return w
+    lp = torch.log(pt.clamp_min(1e-3))
+    lo, hi = float(lp[mask].min()), float(lp[mask].max())
+    edges = torch.linspace(lo, hi, nbins + 1, device=pt.device)
+    binidx = torch.bucketize(lp, edges)
+    for b in torch.unique(binidx[mask]):
+        inb = mask & (binidx == b)
+        ntot = inb.sum().float()
+        for c in (0, 1):
+            mc = inb & (target == c)
+            nc = mc.sum()
+            if nc > 0:
+                w[mc] = ntot / (2.0 * nc.float())
+    return w
+
+
+def pu_loss(y, ypred, input_pt, *, pt_balance=False):
+    """Pileup classification loss over the elements with a target particle.
+
+    Cross entropy of the hard scatter / pileup logits against the binarized target ispu (1 for
+    pileup, see unpack_target). With pt_balance, hard scatter and pileup are balanced within bins of
+    the element pT (see _pt_balance_weights): the rare low-pT hard-scatter particles are upweighted.
+    """
+    is_particle = y["cls_id"] != 0
+    target = y["ispu"].long()
+    per_element = F.cross_entropy(ypred["ispu"], target, reduction="none")
+    if pt_balance:
+        per_element = per_element * _pt_balance_weights(input_pt, target, is_particle)
+    per_element = torch.where(is_particle, per_element, torch.zeros_like(per_element))
+    return {PU_LOSS_TASK: per_element.sum() / is_particle.sum().clamp_min(1)}
+
+
+def particle_loss(y, ypred, input_pt, regression_weights, *, binary_focal_gamma=None, pu_head=False, pu_pt_balance=False):
     """Compute classification and regression losses over flattened particles."""
     losses = classification_loss(y, ypred, binary_focal_gamma=binary_focal_gamma)
     losses.update(regression_loss(y, ypred, input_pt, regression_weights))
+    if pu_head:
+        losses.update(pu_loss(y, ypred, input_pt, pt_balance=pu_pt_balance))
     return losses
 
 
-def event_loss(y, ypred, batch, regression_weights, *, binary_focal_gamma=None):
+def event_loss(y, ypred, batch, regression_weights, *, binary_focal_gamma=None, pu_head=False, pu_pt_balance=False):
     """Compute losses for complete padded event batches.
 
     The standard loss currently contains only independent particle terms.
@@ -201,6 +243,9 @@ def event_loss(y, ypred, batch, regression_weights, *, binary_focal_gamma=None):
         "cls_id_onehot": ypred["cls_id_onehot"][valid],
         **{feature: ypred[feature][valid] for feature in REGRESSION_FEATURES},
     }
+    if pu_head:
+        particle_targets["ispu"] = y["ispu"][valid]
+        particle_predictions["ispu"] = ypred["ispu"][valid]
     input_pt = batch.X[..., 1][valid]
 
     return particle_loss(
@@ -209,18 +254,21 @@ def event_loss(y, ypred, batch, regression_weights, *, binary_focal_gamma=None):
         input_pt,
         regression_weights,
         binary_focal_gamma=binary_focal_gamma,
+        pu_head=pu_head,
+        pu_pt_balance=pu_pt_balance,
     )
 
 
-def mlpf_loss(y, ypred, batch, regression_weights, task_loss_weighter=None, *, binary_focal_gamma=None):
+def mlpf_loss(y, ypred, batch, regression_weights, task_loss_weighter=None, *, binary_focal_gamma=None, pu_head=False, pu_pt_balance=False):
     """Compute the standard MLPF objective for a batch of events."""
+    pu_kwargs = dict(pu_head=pu_head, pu_pt_balance=pu_pt_balance)
     if task_loss_weighter is None:
-        loss = event_loss(y, ypred, batch, regression_weights, binary_focal_gamma=binary_focal_gamma)
+        loss = event_loss(y, ypred, batch, regression_weights, binary_focal_gamma=binary_focal_gamma, **pu_kwargs)
         loss_opt = sum(loss.values())
         task_loss_diagnostics = None
     else:
         unweighted_regression_weights = {feature: 1.0 for feature in REGRESSION_FEATURES}
-        loss = event_loss(y, ypred, batch, unweighted_regression_weights, binary_focal_gamma=binary_focal_gamma)
+        loss = event_loss(y, ypred, batch, unweighted_regression_weights, binary_focal_gamma=binary_focal_gamma, **pu_kwargs)
         loss_opt, task_loss_diagnostics = task_loss_weighter(loss)
 
     loss["Total"] = loss_opt
