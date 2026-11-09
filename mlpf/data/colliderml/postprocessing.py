@@ -38,6 +38,7 @@ from mlpf.data.colliderml.clustering import cluster_event
 from mlpf.data.colliderml.reader import iter_event_records, n_shard_events, shard_paths
 from mlpf.data.colliderml.tracks import track_features_cml
 from mlpf.data.colliderml.truth import DEFAULT_CALIBRATION, calibration_factors, compute_gen_tables
+from mlpf.data.track_calo_targets import build_track_calo_targets
 from mlpf.data.target_building import (
     EventData,
     assign_genparticles_to_obj_and_merge,
@@ -234,6 +235,13 @@ def _event_record_one(
         gp_to_track,
         hit_to_cluster,
         (np.array([]), np.array([])),
+    )
+    hybrid_targets = build_track_calo_targets(
+        gpdata,
+        np.arange(n_hit + n_tracker) < n_hit,
+        jetdef=jetdef,
+        jet_ptcut=jet_ptcut,
+        pi0_as_photon=True,
     )
     gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = (
         assign_genparticles_to_obj_and_merge(gpdata, assignment=assignment)
@@ -504,6 +512,7 @@ def _event_record_one(
     ytarget_cluster[:, particle_feature_order.index("jet_idx")] = ytarget_constituents[len(ytarget_track) :]
 
     return {
+        **hybrid_targets,
         "event_id": int(event_id),
         "X_track": X_track,
         "X_cluster": X_cluster,
@@ -591,12 +600,24 @@ def _parquet_usable(ofn: Path, expected_rows: int | None = None, assignment: str
     try:
         import pyarrow.parquet as pq
 
-        metadata = pq.ParquetFile(ofn).metadata
+        parquet = pq.ParquetFile(ofn)
+        metadata = parquet.metadata
         if (metadata.metadata or {}).get(b"mlpf.target_assignment") != _assignment_tag(assignment):
             return False
         if (metadata.metadata or {}).get(b"mlpf.pileup_truth") != b"energy-fraction-v1":
             return False
         if (metadata.metadata or {}).get(b"mlpf.forward_truth") != _forward_truth_tag():
+            return False
+        target_fields = {
+            "track_calo_target_particles",
+            "track_calo_original_to_target",
+            "track_calo_energy_accounting",
+            "ytarget_track_calo_track",
+            "ytarget_track_calo_hit",
+            "targetjet_track_calo",
+        }
+        present = target_fields.intersection(parquet.schema_arrow.names)
+        if present != target_fields:
             return False
         n_rows = metadata.num_rows
     except Exception:

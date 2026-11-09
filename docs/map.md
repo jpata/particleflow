@@ -18,7 +18,7 @@ The project uses a hierarchical configuration system.
 Complex data production and training pipelines are managed using Snakemake or site-specific shell scripts.
 
 - **`mlpf/snakemake/`**: Contains scripts to generate Snakemake workflows.
-  - **`produce_snakemake.py`**: Generates workflows for generation, postprocessing, TFDS creation, and training.
+  - **`produce_snakemake.py`**: Generates workflows for generation, postprocessing, TFDS creation (including the separate `tfds_track_calo` stage for mapped Key4hep samples), and training.
   - **`produce_cms_validation_snakemake.py`**: Orchestrates validation workflows specifically for CMS.
   - **`produce_validation_snakemake.py`**: Orchestrates validation workflows for Key4Hep detectors (CLD, CLIC).
 - **`mlpf/pipeline.py`**: The main CLI for training, testing, LR range tests (`lr-find`), and hyperparameter optimization. Supports standard and Ray-based execution.
@@ -33,6 +33,7 @@ Complex data production and training pipelines are managed using Snakemake or si
   - **`key4hep/`**: Scripts for Key4Hep-based generation (`gen/`) and postprocessing (`postprocessing.py`). CLD ECAL/HCAL scan definitions and conversion are in [the granularity runbook](../scripts/cld_ecal_readout/GRANULARITY_SCAN.md).
 - **`mlpf/heptfds/`**: TFDS (TensorFlow Datasets) builders for CMS, CLD, CLIC, IDEA, MAIA, and ColliderML datasets, including support for both cluster-based and raw hits-based data (`cld_pf_edm4hep_hits`, `clic_pf_edm4hep_hits`). Shared EDM4Hep utilities in `edm4hep_utils/`. ColliderML support: `colliderml_pf/ttbar.py` (clustered view), `colliderml_hits/{ttbar,ttbar_pu200}.py` (hits view)
   + shared conversion in `colliderml_utils/utils.py` reading the MLPF-format parquet written by `mlpf/data/colliderml/postprocessing.py`.
+  - **Track/calo target builders**: `*_track_calo/` modules share the `track_calo_utils/` 25-column schema; mapped CLD, CLIC, and IDEA samples use the `tfds_track_calo` production step, while ColliderML uses `scripts/flatiron/colliderml_tfds.sh` with its `track_calo` view.
 
 ## 4. Machine Learning Core (`mlpf/model/`)
 - **`mlpf.py`**: Implementation of the MLPF model, featuring multi-head attention and configurable sub-networks. Supports fused attention, simplified math attention for ONNX export, and HEPT/HEPTv2/LitePT layers that consume detector coordinates.

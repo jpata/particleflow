@@ -18,6 +18,7 @@ from mlpf.data.target_building import (  # noqa: F401  (re-exported for existing
     assign_genparticles_to_obj_and_merge,
     visibility_mask,
 )
+from mlpf.data.track_calo_targets import build_track_calo_targets
 
 # Set these before importing numerical libraries to avoid OpenBLAS thread-init failures.
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -1386,7 +1387,9 @@ def _idea_relation(prop_data: Any, name: str, iev: int) -> SparseMatrixCOO:
 
 
 def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: int = -1) -> None:
-    """Initial IDEA track/cluster post-processing without hits or PFOs."""
+    """Convert IDEA events to track/cluster and track/calo target views."""
+    from mlpf.data.key4hep.idea_track_calo import build_idea_track_calo, required_branches
+
     started = time.monotonic()
     print(f"idea_postprocessing: opening input={fn}", flush=True)
     # The default multithreaded local-file source can spend minutes waiting in
@@ -1399,7 +1402,8 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
     prefix = "events___CollectionTypeInfo/events___CollectionTypeInfo."
     names = metadata[prefix + "name"].array()[0]
     ids = metadata[prefix + "collectionID"].array()[0]
-    cell_collection_id = dict(zip(names, ids))["TopoClusterAllCells"]
+    collection_ids = dict(zip(names, ids))
+    cell_collection_id = collection_ids["TopoClusterAllCells"]
     stop = tree.num_entries if num_events == -1 else min(tree.num_entries, first_event + num_events)
     if first_event < 0 or first_event >= tree.num_entries or stop <= first_event:
         raise ValueError(f"Invalid IDEA event range [{first_event}, {stop}) for input with {tree.num_entries} events")
@@ -1434,6 +1438,7 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         "_ClusterMCParticleLinks_from/_ClusterMCParticleLinks_from.index",
         "_ClusterMCParticleLinks_to/_ClusterMCParticleLinks_to.index",
     ]
+    branches.extend(required_branches())
     load_started = time.monotonic()
     print(f"idea_postprocessing: loading {len(branches)} ROOT branch groups", flush=True)
     # Apply the event selection while uproot reads the ROOT file. Previously
@@ -1483,6 +1488,7 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         tracks = idea_track_to_features(prop_data, local_iev, b_field)
         clusters = idea_cluster_to_features(prop_data, local_iev, cell_collection_id)
         gp_to_track = _idea_relation(prop_data, "TracksFromGenParticlesAssociation", local_iev)
+        hybrid_targets = build_idea_track_calo(prop_data, local_iev, collection_ids, gen, tracks, gp_to_track, jetdef, jet_ptcut)
         gp_to_cluster = _idea_relation(prop_data, "ClusterMCParticleLinks", local_iev)
         # Propagate reconstructed-object links from generator descendants to
         # their status-1 ancestor, matching the existing target convention.
@@ -1618,10 +1624,10 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
             sanitize(arr)
         ret.append(
             {
+                **hybrid_targets,
                 "X_track": xtrack,
                 "X_cluster": xcluster,
                 "X_hit_tracker": empty_x_hit,
-                "X_hit_calo": empty_x_hit,
                 "ytarget_track": ytrack,
                 "ytarget_cluster": ycluster,
                 "ytarget_hit_tracker": empty_y_hit,
@@ -1650,10 +1656,24 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         )
 
 
-def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
+def _has_track_calo_targets(ofn: str) -> bool:
+    try:
+        fields = set(awkward.metadata_from_parquet(ofn)["form"].fields)
+    except Exception:
+        return False
+    return {
+        "track_calo_target_particles",
+        "track_calo_original_to_target",
+        "track_calo_energy_accounting",
+        "ytarget_track_calo_track",
+        "ytarget_track_calo_hit",
+        "targetjet_track_calo",
+    }.issubset(fields)
 
-    # output exists, do not recreate
-    if os.path.isfile(ofn) and num_events == -1 and first_event == 0:
+
+def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
+    # A complete output with the requested target view can be reused.
+    if os.path.isfile(ofn) and num_events == -1 and first_event == 0 and _has_track_calo_targets(ofn):
         print("{} exists".format(ofn))
         return
 
@@ -1680,7 +1700,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     collectionIDs_reverse = {v: k for (k, v) in collectionIDs.items()}
     cellid_encodings = get_cellid_encodings(fi)
     if detector == "maia" and not cellid_encodings:
-        print("MAIA has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero); use track/cluster inputs only.")
+        print("MAIA has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero).")
 
     prop_data = arrs.arrays(
         [
@@ -1881,6 +1901,13 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         except ValueError as e:
             print(f"Skipping event {iev} because it has no visible particles: {e}")
             continue
+
+        hybrid_targets = build_track_calo_targets(
+            gpdata,
+            np.asarray(gpdata.hit_features["subdetector"]) != 3,
+            jetdef=jetdef,
+            jet_ptcut=jet_ptcut,
+        )
 
         # find the reconstructable genparticles and associate them to the best track/cluster
         (
@@ -2096,6 +2123,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
             "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
         }
+        this_ev.update(hybrid_targets)
         ret.append(this_ev)
 
     if len(ret) == 0:
@@ -2126,6 +2154,7 @@ def parse_args() -> Any:
 
 
 def process(args: Any) -> None:
+    os.makedirs(args.outpath, exist_ok=True)
 
     if os.path.isdir(args.input) is True:
         print("Will process all files in " + args.input)

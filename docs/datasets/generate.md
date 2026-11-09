@@ -12,6 +12,7 @@ This guide covers the shared Pixi/Snakemake procedure. Read [CMS data production
 | Postprocessing | `pixi run post` | Generated ROOT/EDM files | CMS pickle or Key4HEP Parquet below `post/` | Files open; for CLD/CLIC, strict Parquet validation passes |
 | TFDS, track/cluster | `pixi run tfds` | Postprocessed files | Versioned TFDS directories below `tfds/` | Builder metadata and one event can be read |
 | TFDS, hits | `pixi run tfds_hit` | Key4HEP Parquet containing hit fields | Versioned hit TFDS below `tfds/` | Metadata/event read plus hit validation passes |
+| TFDS, tracks and calorimeter hits | `pixi run tfds_track_calo` | Postprocessed Parquet for one physics sample | Versioned track/calo TFDS below `tfds/` | Target alignment and source fields validate during the build |
 
 Dataset-integrity gates establish the quality of upstream events before a long training run. Training and physics validation then answer downstream model and performance questions.
 
@@ -114,6 +115,19 @@ For a CLD or CLIC hit study, the same validated Parquet files supply the hit rep
 ```bash
 PROD=cld pixi run tfds_hit
 ```
+
+For productions with `tfds_track_calo_mapping`, build the reconstructed-track and
+calorimeter-hit representation after postprocessing. The generated jobs read each
+sample's `post/<process_name>/` directory and split its Parquet files by source
+file, with separate train and test events:
+
+```bash
+PROD=cld pixi run tfds_track_calo
+```
+
+Run `PROD=<production> pixi run snakefile` after changing a production workspace
+or merging generator changes, then review the generated scripts before launch.
+The [track/calo dataset guide](../track_calo_targets.md) lists the mapped samples.
 
 Adapt the metadata and single-event checks in [Download a dataset](download.md) to the workspace's `tfds/` directory and exact configured version. A successful read is the final dataset-production gate.
 

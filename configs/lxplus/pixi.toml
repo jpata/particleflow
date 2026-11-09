@@ -30,6 +30,9 @@ jobs: 100
 max-jobs-per-second: 10
 max-status-checks-per-second: 10
 restart-times: 0
+use-conda: false' > .profiles/lxbatch/config.v8+.yaml
+""", description = "Create the LXPlus Snakemake profile" }
+
 snakefile = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/snakemake/produce_snakemake.py --production ${PROD:-cms_run3} \"$@\"' --", depends-on = ["setup"], description = "Generate the snakemake files" }
 
 all = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} all \"$@\"' --", depends-on = ["snakefile"], description = "Run the full production pipeline" }
@@ -41,6 +44,8 @@ post = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --sn
 tfds = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds \"$@\"' --", depends-on = ["snakefile"], description = "Create TFDS datasets" }
 
 tfds_hit = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds_hit --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds_hit \"$@\"' --", depends-on = ["snakefile"], description = "Create TFDS datasets with hits" }
+
+tfds_track_calo = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds_track_calo --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds_track_calo \"$@\"' --", depends-on = ["snakefile"], description = "Create track and calorimeter-hit TFDS datasets" }
 
 train = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_train --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} \"$@\"' --", depends-on = ["snakefile"], description = "Train the model" }
 

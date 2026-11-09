@@ -30,8 +30,13 @@ set -euo pipefail
 #   # vars don't propagate):
 #   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu0 /path/to/mlpf_parquet
 #
-# Safe to parallelize: split_sample() gives each config a disjoint slice of the manual_dir
-# parquet shards, and each config prepares into its own directory under --data_dir (TFDS
+#   # track/calo targets (third positional arg):
+#   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu0 /path/to/mlpf_parquet track_calo
+#   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu200 /path/to/mlpf_parquet track_calo
+#
+# Safe to parallelize: both the PF and track/calo builders give each config a
+# disjoint slice of the manual_dir parquet shards, and each config prepares
+# into its own directory under --data_dir (TFDS
 # preparation is atomic per config: tmp dir + rename; an already-prepared config is
 # skipped). Re-running after a converter change requires either deleting the prepared
 # <data_dir>/<dataset>/<config>/<version>/ tree first or bumping the builder VERSION.
@@ -39,12 +44,15 @@ set -euo pipefail
 PU="${1:-pu0}"
 SAMPLE="ttbar_${PU}"
 MANUAL_DIR="${2:-/mnt/ceph/users/ewulff/data/colliderml/mlpf_parquet/clue/${SAMPLE}}"
+VIEW="${3:-pf}"
 TFDS_DATA_DIR="/mnt/ceph/users/ewulff/tensorflow_datasets/colliderml"
 
-case "${PU}" in
-    pu0) BUILDER="mlpf/heptfds/colliderml_pf/ttbar" ;;
-    pu200) BUILDER="mlpf/heptfds/colliderml_pf/ttbar_pu200" ;;
-    *) echo "ERROR: no TFDS builder registered for pileup label '${PU}' (known: pu0, pu200)" >&2; exit 2 ;;
+case "${VIEW}:${PU}" in
+    pf:pu0) BUILDER="mlpf/heptfds/colliderml_pf/ttbar" ;;
+    pf:pu200) BUILDER="mlpf/heptfds/colliderml_pf/ttbar_pu200" ;;
+    track_calo:pu0) BUILDER="mlpf/heptfds/colliderml_track_calo/ttbar" ;;
+    track_calo:pu200) BUILDER="mlpf/heptfds/colliderml_track_calo/ttbar_pu200" ;;
+    *) echo "ERROR: no TFDS builder registered for view '${VIEW}' and pileup label '${PU}'" >&2; exit 2 ;;
 esac
 
 # array mode: one config per task; non-array: all configs sequentially in one job

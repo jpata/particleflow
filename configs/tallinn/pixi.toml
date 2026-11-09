@@ -88,6 +88,8 @@ tfds = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snake
 
 tfds_hit = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds_hit --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds_hit \"$@\"' --", depends-on = ["snakefile"], description = "Create TFDS datasets with hits" }
 
+tfds_track_calo = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_tfds_track_calo --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds_track_calo \"$@\"' --", depends-on = ["snakefile"], description = "Create track and calorimeter-hit TFDS datasets" }
+
 train = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_train --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} \"$@\"' --", depends-on = ["snakefile"], description = "Train the model" }
 
 validation_cms = { cmd = "bash -c 'PYTHONPATH=. python3 mlpf/snakemake/produce_cms_validation_snakemake.py --scenario ${PROD:-cms_run3} && snakemake --workflow-profile $PROFILE --snakefile $(cat .last_jobs_dir)/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores 1 \"$@\"' --", depends-on = ["setup"], description = "Run validation" }
