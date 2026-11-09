@@ -18,6 +18,7 @@ except ImportError:
 
 from mlpf.model.hept import HEPTLayer, trunc_normal_
 from mlpf.model.heptv2 import HEPTv2Layer
+from mlpf.model.input_normalization import InputNormalization
 from mlpf.model.tracker_features import TrackerDoubletFeatures
 from mlpf.model.set_decoder import ParticleSetDecoder
 
@@ -1249,6 +1250,7 @@ class MLPF(nn.Module):
             else nn.Identity()
         )
         self.input_dim = self.raw_input_dim + (self.feature_engineering.num_output_features if self.uses_hit_feature_engineering else 0)
+        self.input_normalization = InputNormalization(self.raw_input_dim, config.dataset_versions()) if config.model.input_normalization else None
         self.num_classes = config.num_classes
         self.elemtypes_nonzero = config.elemtypes_nonzero
 
@@ -1708,8 +1710,9 @@ class MLPF(nn.Module):
             )
         raise ValueError(f"Unsupported conv type {self.conv_type}")
 
-    def _encode_inputs(self, X_features, mask=None, encoder=None):
+    def _encode_inputs(self, X_features, mask=None, encoder=None, source_id=None):
         encoder = self.nn0 if encoder is None else encoder
+        X_features = X_features if self.input_normalization is None else self.input_normalization(X_features, source_id)
         if self.input_encoding == InputEncoding.JOINT:
             encoded = encoder(X_features)
         if self.input_encoding == InputEncoding.SPLIT:
@@ -1822,33 +1825,33 @@ class MLPF(nn.Module):
             representations.extend(jagged_to_dense(embedding, valid_mask) for embedding in common_embeddings)
         return representations
 
-    def encode_backbone(self, X_features, mask):
+    def encode_backbone(self, X_features, mask, source_id=None):
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_detector_backbone:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             embeddings = self._run_detector_backbone_layers(x, mask, X_features)
             return embeddings[-1]
         if self.use_split_backbone:
-            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
+            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id, source_id=source_id)
             x = self._prepare_backbone_input(x, mask)
             embeddings = self._run_backbone(x, mask, x, X_features, backbone=self._backbone_id)
         else:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             x = self._prepare_backbone_input(x, mask)
             embeddings = self._run_backbone(x, mask, x, X_features)
         return self._restore_backbone_output(self._collect_representation(embeddings), mask)
 
-    def encode_backbone_layers(self, X_features, mask):
+    def encode_backbone_layers(self, X_features, mask, source_id=None):
         """Return the input encoding and each successive backbone representation."""
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_detector_backbone:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             return [x, *self._run_detector_backbone_layers(x, mask, X_features)]
         if self.use_split_backbone:
-            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
+            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id, source_id=source_id)
             backbone = self._backbone_id
         else:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             backbone = self.backbone
         x = self._prepare_backbone_input(x, mask)
         representations = [x]
@@ -1881,14 +1884,14 @@ class MLPF(nn.Module):
         return self.regression_norm
 
     # @torch.compile
-    def forward(self, X_features, mask):
+    def forward(self, X_features, mask, source_id=None):
         if self.output_mode == OutputMode.SET:
-            return self.set_decoder(self.encode_backbone(X_features, mask), mask, X_features)
+            return self.set_decoder(self.encode_backbone(X_features, mask, source_id=source_id), mask, X_features)
 
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_split_backbone:
-            x_id = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
-            x_reg = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_reg)
+            x_id = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id, source_id=source_id)
+            x_reg = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_reg, source_id=source_id)
             x_id = self._prepare_backbone_input(x_id, mask)
             x_reg = self._prepare_backbone_input(x_reg, mask)
             embeddings_id = self._run_backbone(x_id, mask, x_id, X_features, backbone=self._backbone_id)
@@ -1896,7 +1899,7 @@ class MLPF(nn.Module):
             final_embedding_cls = self._restore_backbone_output(self._collect_representation(embeddings_id), mask)
             final_embedding_reg = self._restore_backbone_output(self._collect_representation(embeddings_reg), mask)
         else:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             if self.use_detector_backbone:
                 final_embedding = self._run_detector_backbone_layers(x, mask, X_features)[-1]
             else:
@@ -1942,10 +1945,10 @@ class MLPF(nn.Module):
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
 
-    def predict_particles(self, X_features, mask):
+    def predict_particles(self, X_features, mask, source_id=None):
         from mlpf.model.utils import unpack_predictions
 
-        ypred_raw = self.forward(X_features, mask)
+        ypred_raw = self.forward(X_features, mask, source_id=source_id)
         ypred_raw = [y.to(torch.float32) for y in ypred_raw]
 
         if self.output_mode == OutputMode.SET:

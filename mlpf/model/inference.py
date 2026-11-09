@@ -50,7 +50,7 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
     else:
         model_module = model
 
-    ypred = model_module.predict_particles(batch.X, batch.mask)
+    ypred = model_module.predict_particles(batch.X, batch.mask, source_id=batch.source_id)
 
     if model_module.output_mode == OutputMode.SET:
         ytarget = unpack_target(batch.ytarget_set.to(torch.float32), model_module)
