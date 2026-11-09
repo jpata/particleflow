@@ -486,6 +486,48 @@ productions:
         version: "3.2.2"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
+    tfds_track_calo_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/cld_track_calo/ttbar"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ww_fullhad:
+        builder_path: "mlpf/heptfds/cld_track_calo/ww_fullhad"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      zz:
+        builder_path: "mlpf/heptfds/cld_track_calo/zz"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      zz_tautau_365:
+        builder_path: "mlpf/heptfds/cld_track_calo/zz_tautau_365"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      zz_tautau_240:
+        builder_path: "mlpf/heptfds/cld_track_calo/zz_tautau_240"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      zh_tautau_365:
+        builder_path: "mlpf/heptfds/cld_track_calo/zh_tautau_365"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      zh_tautau_240:
+        builder_path: "mlpf/heptfds/cld_track_calo/zh_tautau_240"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qq:
+        builder_path: "mlpf/heptfds/cld_track_calo/qq"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      z_qq:
+        builder_path: "mlpf/heptfds/cld_track_calo/z_qq"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      z_tautau:
+        builder_path: "mlpf/heptfds/cld_track_calo/z_tautau"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
   # CLIC Production
   clic:
     type: "key4hep"
@@ -550,6 +592,20 @@ productions:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/qq"
         version: "3.2.2"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    tfds_track_calo_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/clic_track_calo/ttbar"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ww_fullhad:
+        builder_path: "mlpf/heptfds/clic_track_calo/ww_fullhad"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qq:
+        builder_path: "mlpf/heptfds/clic_track_calo/qq"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
   # ColliderML Release 1 (OpenDataDetector, pp @ 14 TeV)
   colliderml:
     type: "colliderml"
@@ -592,6 +648,16 @@ productions:
       ttbar_pu200:
         builder_path: "mlpf/heptfds/colliderml_hits/ttbar_pu200"
         version: "1.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    tfds_track_calo_mapping:
+      ttbar_pu0:
+        builder_path: "mlpf/heptfds/colliderml_track_calo/ttbar"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ttbar_pu200:
+        builder_path: "mlpf/heptfds/colliderml_track_calo/ttbar_pu200"
+        version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # IDEA full simulation and the reconstruction currently provided by FCC-config.
@@ -667,6 +733,20 @@ productions:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/qq"
         version: "0.2.1"
         config_ids: [1]
+
+    tfds_track_calo_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/idea_track_calo/ttbar"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      ww_fullhad:
+        builder_path: "mlpf/heptfds/idea_track_calo/ww_fullhad"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      qq:
+        builder_path: "mlpf/heptfds/idea_track_calo/qq"
+        version: "1.0.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 # -----------------------------------------------------------------------------
 # Model Configurations

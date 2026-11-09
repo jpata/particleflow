@@ -1,5 +1,7 @@
 """Common ArrayRecord builder for the track/calo view."""
 
+import os
+
 import numpy as np
 import tensorflow_datasets as tfds
 
@@ -7,7 +9,7 @@ from .utils import CLASS_LABELS, X_FEATURES, Y_FEATURES, feature_availability, g
 
 
 class TrackCaloBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
-    VERSION = tfds.core.Version("1.0.0")
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "1.0.0"))
     RELEASE_NOTES = {"1.0.0": "Independent reconstructed-track/calorimeter-hit targets; common 25-column input schema."}
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     Convert source data with the current postprocessor. Place event-disjoint Parquet
@@ -17,6 +19,7 @@ class TrackCaloBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     """
     BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(i)) for i in range(1, 11)]
     DETECTOR = None
+    PROCESS = None
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
@@ -40,6 +43,7 @@ class TrackCaloBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
             homepage="https://github.com/jpata/particleflow",
             metadata=tfds.core.MetadataDict(
                 detector=self.DETECTOR,
+                sample=self.PROCESS,
                 input_type="track_calo",
                 x_features=X_FEATURES,
                 y_features=Y_FEATURES,

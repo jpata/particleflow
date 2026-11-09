@@ -16,7 +16,8 @@ from scripts.studies.validate_track_calo_targets import validate
 
 COL = {name: i for i, name in enumerate(ParticleFeatures.get_names())}
 TRACK, CALO, LEGACY = "#2563a6", "#df8530", "#525866"
-DETECTORS = ("cld", "clic", "maia", "colliderml")
+DETECTORS = ("cld", "clic", "idea", "colliderml")
+SUPPORTED_DETECTORS = ("cld", "clic", "idea", "maia", "colliderml")
 
 
 def matrix(value, width=14):
@@ -57,13 +58,13 @@ def save(fig, output, name):
     plt.close(fig)
 
 
-def overview(samples, output):
+def overview(samples, output, detectors):
     fig, axes = plt.subplots(2, 2, figsize=(12, 8), layout="constrained")
-    labels = [f"{d.upper()}\n{len(samples[d])} events" for d in DETECTORS]
+    labels = [f"{d.upper()}\n{len(samples[d])} events" for d in detectors]
     x = np.arange(4)
-    legacy = np.array([sum(len(e["legacy"]) for e in samples[d]) for d in DETECTORS])
-    tracks = np.array([sum(e["tracked"].sum() for e in samples[d]) for d in DETECTORS])
-    calo = np.array([sum((~e["tracked"]).sum() for e in samples[d]) for d in DETECTORS])
+    legacy = np.array([sum(len(e["legacy"]) for e in samples[d]) for d in detectors])
+    tracks = np.array([sum(e["tracked"].sum() for e in samples[d]) for d in detectors])
+    calo = np.array([sum((~e["tracked"]).sum() for e in samples[d]) for d in detectors])
     ax = axes[0, 0]
     ax.bar(x - 0.2, legacy, 0.36, color=LEGACY, label="Legacy tracks + clusters")
     ax.bar(x + 0.2, tracks, 0.36, color=TRACK, label="New: track representative")
@@ -75,7 +76,7 @@ def overview(samples, output):
     ax.margins(y=0.2)
     ax.legend(fontsize=8, loc="upper left")
     ax = axes[0, 1]
-    for i, d in enumerate(DETECTORS):
+    for i, d in enumerate(detectors):
         old = [len(e["legacy"]) for e in samples[d]]
         new = [len(e["target"]) for e in samples[d]]
         ax.scatter(old, new, s=42, label=d.upper(), color=plt.get_cmap("tab10")(i))
@@ -84,7 +85,7 @@ def overview(samples, output):
     ax.set(xlabel="Legacy particles / event", ylabel="New particles / event", title="Paired events", xlim=(0, upper), ylim=(0, upper))
     ax.legend(fontsize=9)
     ax = axes[1, 0]
-    for i, d in enumerate(DETECTORS):
+    for i, d in enumerate(detectors):
         values = [
             100 * (e["target"][:, 6].astype(float).sum() - e["legacy"][:, 6].astype(float).sum()) / max(e["accounting"][0], 1e-12) for e in samples[d]
         ]
@@ -93,22 +94,23 @@ def overview(samples, output):
     ax.axhline(0, color="0.6", ls="--", lw=1)
     ax.set(xticks=x, xticklabels=labels, ylabel="(New − legacy) target energy / input [%]", title="Energy retained relative to legacy targets")
     ax = axes[1, 1]
-    for i, d in enumerate(DETECTORS):
-        values = [abs(e["accounting"][0] - e["accounting"][1:].sum()) / max(e["accounting"][0], 1e-12) for e in samples[d]]
-        ax.scatter(i + np.linspace(-0.13, 0.13, len(values)), values, s=38, color=plt.get_cmap("tab10")(i))
-    ax.set(xticks=x, xticklabels=labels, ylabel="Absolute fractional closure residual", title="Input = target + invisible + dropped")
-    ax.set_ylim(-5e-14, 1e-12)
+    for i, d in enumerate(detectors):
+        positions = i + np.linspace(-0.13, 0.13, len(samples[d]))
+        invisible = [100 * e["accounting"][1] / max(e["accounting"][0], 1e-12) for e in samples[d]]
+        dropped = [100 * e["accounting"][2] / max(e["accounting"][0], 1e-12) for e in samples[d]]
+        ax.scatter(positions, invisible, s=38, color=TRACK, label="Invisible" if i == 0 else None)
+        ax.scatter(positions, dropped, s=45, marker="x", color="black", label="Dropped" if i == 0 else None)
+    ax.set(xticks=x, xticklabels=labels, ylabel="Fraction of input particle energy [%]", title="Energy unavailable to targets")
+    ax.legend(fontsize=8, loc="upper left")
     residuals = [abs(e["accounting"][0] - e["accounting"][1:].sum()) / max(e["accounting"][0], 1e-12) for events in samples.values() for e in events]
-    ax.set_ylim(-5e-14, max(1e-12, max(residuals) * 1.3))
-    ax.text(0.5, 0.8, f"Maximum residual: {max(residuals):.2g} ({len(residuals)} events)", transform=ax.transAxes, ha="center", fontsize=9)
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.text(0.5, 0.8, f"Maximum closure residual: {max(residuals):.2g} ({len(residuals)} events)", transform=ax.transAxes, ha="center", fontsize=9)
     fig.suptitle("Track + calorimeter-hit target validation\nSmall input samples; truth-label checks, not reconstruction performance", fontsize=14)
     save(fig, output, "overview")
 
 
-def kinematics(samples, output):
+def kinematics(samples, output, detectors):
     fig, axes = plt.subplots(4, 2, figsize=(12, 13), layout="constrained")
-    for row, d in enumerate(DETECTORS):
+    for row, d in enumerate(detectors):
         target = np.concatenate([e["target"] for e in samples[d]])
         tracked = np.concatenate([e["tracked"] for e in samples[d]])
         legacy = np.concatenate([e["legacy"] for e in samples[d]])
@@ -138,9 +140,9 @@ def kinematics(samples, output):
     save(fig, output, "kinematics")
 
 
-def membership(samples, output):
+def membership(samples, output, detectors):
     fig, axes = plt.subplots(2, 2, figsize=(12, 8), layout="constrained")
-    for ax, d in zip(axes.flat, DETECTORS):
+    for ax, d in zip(axes.flat, detectors):
         counts = np.concatenate([e["membership"] for e in samples[d]])
         tracked = np.concatenate([e["tracked"] for e in samples[d]])
         bins = np.unique(np.concatenate(([-0.5, 0.5], np.geomspace(1.5, max(2, counts.max() + 1), 25))))
@@ -168,11 +170,11 @@ def membership(samples, output):
     save(fig, output, "membership")
 
 
-def event_display(samples, output):
+def event_display(samples, output, detectors):
     fig, axes = plt.subplots(2, 2, figsize=(13, 10), layout="constrained")
     colors = plt.get_cmap("tab10")
     rng = np.random.default_rng(42)
-    for ax, d in zip(axes.flat, DETECTORS):
+    for ax, d in zip(axes.flat, detectors):
         event = samples[d][0]
         raw, target = event["raw"], event["target"]
         hits = matrix(raw.X_hit_calo, 15)
@@ -230,17 +232,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-dir", type=Path, default=Path("local_test_data/track_calo_targets"))
     parser.add_argument("--output-dir", type=Path, default=Path("plots/track_calo_targets"))
+    parser.add_argument("--detectors", nargs=4, choices=SUPPORTED_DETECTORS, default=DETECTORS)
     args = parser.parse_args()
+    if len(set(args.detectors)) != 4:
+        parser.error("--detectors requires four distinct detector names")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.right": False})
     samples, reports = {}, {}
-    for d in DETECTORS:
+    for d in args.detectors:
         paths = sorted((args.input_dir / d).glob("*.parquet"))
         if not paths:
             raise FileNotFoundError(f"No converted {d} samples under {args.input_dir}")
         samples[d], reports[d] = read_sample(paths)
     for plot in (overview, kinematics, membership, event_display):
-        plot(samples, args.output_dir)
+        plot(samples, args.output_dir, args.detectors)
     (args.output_dir / "validation.json").write_text(json.dumps(reports, indent=2) + "\n")
     print(f"Wrote four figures (PNG + SVG) and validation.json to {args.output_dir}")
 
