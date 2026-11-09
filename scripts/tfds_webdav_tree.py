@@ -15,9 +15,10 @@ from urllib.parse import quote, unquote, urlsplit
 from tfds_webdav_status import TransferStatus, new_status_path
 
 
-def manifest(listing, remote):
-    """Convert a recursive davix-ls listing to relative file paths and sizes."""
+def manifest(listing, remote, datasets=()):
+    """Convert a recursive davix-ls listing to selected relative paths and sizes."""
     prefix = unquote(urlsplit(remote).path).lstrip("/").rstrip("/") + "/"
+    selected = set(datasets)
     files = {}
     for line in listing.splitlines():
         fields = line.split(maxsplit=5)
@@ -29,31 +30,30 @@ def manifest(listing, remote):
         relative = PurePosixPath(path.removeprefix(prefix))
         if not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
             raise ValueError(f"unsafe path in listing: {path}")
+        if selected and relative.parts[0] not in selected:
+            continue
         if relative in files:
             raise ValueError(f"duplicate file in listing: {path}")
         files[relative] = int(fields[2])
+    missing = selected - {path.parts[0] for path in files}
+    if missing:
+        raise ValueError(f"datasets not found below {remote}: {', '.join(sorted(missing))}")
     if not files:
         raise ValueError(f"no files found below {remote}")
     return files
 
 
 def local_progress(root, expected):
-    """Count received bytes without reading file contents or scanning absent paths."""
+    """Count received bytes for manifest paths without walking other datasets."""
     files = 0
     bytes_received = 0
-    for directory, _, names in os.walk(root):
-        relative_dir = Path(directory).relative_to(root)
-        for name in names:
-            relative = PurePosixPath(*(relative_dir.parts + (name,)))
-            size = expected.get(relative)
-            if size is None:
-                continue
-            try:
-                actual = (Path(directory) / name).stat().st_size
-            except FileNotFoundError:
-                continue
-            bytes_received += min(actual, size)
-            files += actual == size
+    for relative, size in expected.items():
+        try:
+            actual = root.joinpath(*relative.parts).stat().st_size
+        except FileNotFoundError:
+            continue
+        bytes_received += min(actual, size)
+        files += actual == size
     return files, bytes_received
 
 
@@ -61,6 +61,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--remote-url", required=True, help="WebDAV directory that is the TFDS data root")
     parser.add_argument("--local-root", type=Path, required=True, help="local TFDS data root; must be empty unless --resume is set")
+    parser.add_argument("--dataset", action="append", default=[], help="dataset directory to download; repeat to select multiple")
     parser.add_argument("--image", type=Path, default=Path("davix.sif"))
     parser.add_argument("--proxy", type=Path, default=Path(os.environ.get("X509_USER_PROXY", str(Path.home() / "x509-cms-2048"))))
     parser.add_argument("--capath", default="/etc/grid-security/certificates")
@@ -74,6 +75,8 @@ def main():
         parser.error("--remote-url must be a davs:// directory URL without query or fragment")
     if args.jobs < 1:
         parser.error("--jobs must be positive")
+    if any(name in {"", ".", ".."} or "/" in name or "\\" in name for name in args.dataset):
+        parser.error("--dataset must be one directory name")
     args.remote_url = args.remote_url.rstrip("/") + "/"
     args.local_root = args.local_root.expanduser().resolve()
     args.image = args.image.expanduser().resolve()
@@ -89,8 +92,10 @@ def main():
     download_command = [*common, "davix-get", *auth, "-r", str(args.jobs), "--retry", "5", args.remote_url, "/tfds"]
     if args.dry_run:
         print(shlex.join(listing_command))
-        if args.resume:
-            print("Resume mode: inventory the destination, then run parallel davix-get for missing or wrong-size files")
+        if args.dataset:
+            print(f"Selected datasets: {', '.join(dict.fromkeys(args.dataset))}")
+        if args.resume or args.dataset:
+            print("Inventory the selected files, then run parallel davix-get for missing or wrong-size files")
         else:
             print(shlex.join(download_command))
         return
@@ -99,7 +104,7 @@ def main():
     print(f"Listing {args.remote_url} recursively...", flush=True)
     listing = subprocess.run(listing_command, capture_output=True, text=True, check=True)
     try:
-        expected = manifest(listing.stdout, args.remote_url)
+        expected = manifest(listing.stdout, args.remote_url, args.dataset)
     except ValueError as exc:
         if "no files found" in str(exc) and listing.stderr.strip():
             raise SystemExit(f"davix-ls found no files and reported: {listing.stderr.strip()}") from exc
@@ -119,7 +124,7 @@ def main():
     )
     atexit.register(lambda: reporter.update(force=True, phase="failed") if reporter.status["phase"] != "complete" else None)
     reporter.update(force=True, phase="transferring")
-    if args.resume:
+    if args.resume or args.dataset:
         missing = []
         existing_files = 0
         existing_bytes = 0
@@ -131,7 +136,7 @@ def main():
             else:
                 missing.append((relative, size))
         reporter.update(force=True, completed_files=existing_files, completed_bytes=existing_bytes)
-        print(f"Resuming: {existing_files:,} size-matched files; {len(missing):,} to download.", flush=True)
+        print(f"Selected: {existing_files:,} size-matched files; {len(missing):,} to download.", flush=True)
 
         def download_one(item):
             relative, size = item
@@ -191,8 +196,8 @@ def main():
         phase="complete",
         completed_files=files,
         completed_bytes=bytes_received,
-        transferred_files=reporter.status["transferred_files"] if args.resume else files,
-        transferred_bytes=reporter.status["transferred_bytes"] if args.resume else bytes_received,
+        transferred_files=reporter.status["transferred_files"] if args.resume or args.dataset else files,
+        transferred_bytes=reporter.status["transferred_bytes"] if args.resume or args.dataset else bytes_received,
     )
     print(f"Verified sizes of all {files:,} downloaded files.", flush=True)
 

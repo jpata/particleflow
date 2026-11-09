@@ -149,14 +149,27 @@ they need end-to-end confirmation.
 ## Download a complete data root
 
 Use `scripts/tfds_webdav_tree.py` for a WebDAV directory containing multiple
-datasets and configurations. It inventories the remote tree, runs one parallel
-recursive Davix download, and reports file/byte progress in the terminal and
+datasets and configurations. It inventories the remote tree, downloads in
+parallel, and reports file/byte progress in the terminal and
 the same atomic JSON status format as the other transfer commands. The local
 destination must be empty for the initial recursive download. If a large
 transfer is interrupted, rerun the same command with `--resume`: it checks
 existing file sizes and downloads only missing or wrong-size files in parallel.
 After Davix exits, it checks every downloaded file against the remote listing's
 size. This is a size check, not a checksum check.
+
+To download selected datasets from a campaign root, repeat `--dataset`. The
+script lists the remote campaign once and copies only the selected dataset
+directories. Use `--resume` when the local TFDS root already contains data.
+For the three main CLD hit datasets:
+
+```bash
+python3 scripts/tfds_webdav_tree.py \
+  --remote-url davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tfds/cld/v1.2.5_key4hep_2025-05-29/ \
+  --local-root /mnt/ceph/users/jpata/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds \
+  --dataset cld_edm_ttbar_hits --dataset cld_edm_ww_fullhad_hits \
+  --dataset cld_edm_qq_hits --image ./davix.sif --jobs 8 --resume
+```
 
 For the legacy CMS TFDS root on another site:
 
