@@ -36,7 +36,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--local-root", type=Path, required=True, help="campaign TFDS directory containing dataset-name directories")
     parser.add_argument("--detector", type=component, required=True)
-    parser.add_argument("--campaign", type=component, required=True)
+    parser.add_argument("--campaign", type=component, help="optional directory below the detector")
     parser.add_argument("--variant", type=component, help="optional scan point within the campaign")
     parser.add_argument("--dataset", type=component, action="append", required=True, help="repeat for each dataset")
     parser.add_argument("--version", type=component, required=True)
@@ -66,7 +66,10 @@ def main():
         parser.error("Davix image and X.509 proxy must be readable")
 
     root = args.remote_root.rstrip("/")
-    campaign_url = "/".join((root, quote(args.detector, safe=""), quote(args.campaign, safe="")))
+    detector_url = root + "/" + quote(args.detector, safe="")
+    campaign_url = detector_url
+    if args.campaign:
+        campaign_url += "/" + quote(args.campaign, safe="")
     if args.variant:
         campaign_url += "/" + quote(args.variant, safe="")
     versions = {}
@@ -123,12 +126,10 @@ def main():
         print(f"Created {address}", flush=True)
 
     # The parent /store/user/jpata/mlpf exists. Create collections serially.
-    addresses = [
-        root,
-        root + "/" + quote(args.detector, safe=""),
-        root + "/" + quote(args.detector, safe="") + "/" + quote(args.campaign, safe=""),
-        campaign_url,
-    ]
+    addresses = [root, detector_url]
+    if args.campaign:
+        addresses.append(detector_url + "/" + quote(args.campaign, safe=""))
+    addresses.append(campaign_url)
     for version_url in versions:
         addresses.extend((version_url.rsplit("/", 2)[0], version_url.rsplit("/", 1)[0], version_url))
     for address in dict.fromkeys(addresses):

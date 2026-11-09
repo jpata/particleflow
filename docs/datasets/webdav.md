@@ -19,6 +19,10 @@ contains dataset-name directories and can be used as `--data-dir` after download
 Keep a campaign name stable across all its datasets and configurations. The legacy
 `mlpf/tensorflow_datasets/2.8.0/` tree is separate from this layout.
 
+`--campaign` is optional for uploads. Omit it to place datasets directly under
+`/store/user/jpata/mlpf/tfds/<detector>/<dataset>/<configuration>/<version>/`.
+Use the detector directory as the TFDS data root when downloading that layout.
+
 On 6 November 2026, the Tallinn CLD campaign
 `cld/v1.2.5_key4hep_2025-05-29` was uploaded at version `3.3.0` for
 `cld_edm_{ttbar,ww_fullhad,qq,zz}_pf`, configurations 1–10. All 930 files
