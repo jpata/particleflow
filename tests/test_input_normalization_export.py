@@ -2,6 +2,8 @@
 
 import json
 import math
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,6 +20,26 @@ from mlpf.model.onnx_attention import export_mlpf
 
 
 VERSIONS = {"cld": "3.3.0", "clic": "3.3.0", "colliderml": "1.5.0", "idea": "0.1.0"}
+
+
+def test_particle_decoding_does_not_require_pandas():
+    # A fresh interpreter prevents other tests' imports from hiding this dependency.
+    code = """
+import sys
+import torch
+from types import SimpleNamespace
+sys.modules['pandas'] = None
+from mlpf.conf import OutputMode
+from mlpf.model.mlpf import MLPF
+raw = (torch.tensor([[[0., 1.]]]), torch.tensor([[[0., 1., 0., 0., 0., 0.]]]),
+       torch.tensor([[[0., 0., 0., 1., 0.]]]), torch.zeros(1, 1, 2))
+proxy = SimpleNamespace(output_mode=OutputMode.ELEMENTWISE, forward=lambda *args, **kwargs: raw)
+features = torch.tensor([[[1., 3., 0., 0., 1., 4.]]])
+particles = MLPF.predict_particles(proxy, features, torch.ones(1, 1, dtype=torch.bool))
+assert particles['pt'].item() == 3.
+assert particles['energy'].item() == 4.
+"""
+    subprocess.run([sys.executable, "-c", code], cwd=Path(__file__).resolve().parents[1], check=True, capture_output=True, text=True)
 
 
 def make_model(backbone="shared"):
