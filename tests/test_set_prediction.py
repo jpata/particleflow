@@ -745,7 +745,7 @@ def test_set_presence_threshold_controls_inference_selection():
     pid[0, 1, 3] = 5.0
     momentum = torch.zeros(1, 2, 5)
     momentum[..., 3] = 1.0
-    model.forward = lambda _features, _mask: (presence, pid, momentum, torch.zeros_like(presence))
+    model.forward = lambda _features, _mask, source_id=None: (presence, pid, momentum, torch.zeros_like(presence))
 
     prediction = model.predict_particles(torch.ones(1, 3, 15), torch.ones(1, 3, dtype=torch.bool))
 

@@ -3,8 +3,11 @@
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional, Dict, Any, Tuple, Literal
 from dataclasses import dataclass, fields
+import math
 import os
 from enum import Enum
+from pathlib import Path
+import yaml
 from mlpf.utils import (
     resolve_path,
     load_spec,
@@ -713,6 +716,74 @@ JET_CONFIG = {
 
 Y_FEATURES = ParticleFeatures.get_names()
 
+# Input normalization statistics (mlpf/model/input_normalization.py). Positive quantities with
+# fat-tailed distributions spanning orders of magnitude, by their X_FEATURES names, are standardized
+# after log1p(x / scale): the log takes over above the scale. Energies and momenta (GeV) reach down
+# to 10 MeV in ColliderML and IDEA clusters; energy_other and energy_muon are mostly 0, else below 10 MeV.
+LOG1P_SCALES = {
+    "pt": 0.01,
+    "et": 0.01,
+    "p": 0.01,
+    "energy": 0.01,
+    "energy_ecal": 0.01,  # Also IDEA name for Cherenkov energy
+    "energy_hcal": 0.01,  # Also IDEA name for scintillation energy
+    "energy_other": 1e-4,
+    "energy_muon": 1e-4,
+    "chi2": 1.0,
+    "radiusOfInnermostHit": 1.0,
+    "num_hits": 1.0,
+    "num_muon_hits": 1.0,
+    "sigma_x": 1.0,
+    "sigma_y": 1.0,
+    "sigma_z": 1.0,
+}
+# Bounds of the raw values, applied before log1p: a few CLD/CLIC tracks have failed fits with
+# negative chi2 or tanLambda, omega, D0 and Z0 orders of magnitude beyond any physical track.
+CLIP_BOUNDS = {
+    "chi2": (0.0, math.inf),
+    "tanLambda": (-20.0, 20.0),
+    "omega": (-0.1, 0.1),
+    "D0": (-2000.0, 2000.0),
+    "Z0": (-2000.0, 2000.0),
+}
+ELEMENT_TYPES = {1: "track", 2: "cluster"}
+STATS_DIR = Path(__file__).parent / "model" / "input_normalization_stats"
+
+
+def column_names(dataset, elemtype):
+    """Name of each input column of one element type; X_FEATURES writes "<track> | <cluster>" where they differ."""
+    return [name.split(" | ")[elemtype - 1] if " | " in name else name for name in X_FEATURES[dataset]]
+
+
+def column_transform(name):
+    """Transform of an input column before standardization, as recorded in its statistics."""
+    return {"log1p_scale": LOG1P_SCALES.get(name), "clip": list(CLIP_BOUNDS[name]) if name in CLIP_BOUNDS else None}
+
+
+def stats_path(dataset, version):
+    return STATS_DIR / f"{dataset}_{version}.yaml"
+
+
+def load_stats(dataset, version):
+    """Statistics of a dataset version, checked against the current column names and transforms."""
+    path = stats_path(dataset, version)
+    if not path.exists():
+        raise ValueError(f"No input normalization statistics {path}: run scripts/compute_input_normalization_stats.py")
+    stats = yaml.safe_load(path.read_text())
+    for elemtype, name in ELEMENT_TYPES.items():
+        names = column_names(dataset, elemtype)
+        for column in stats[name]:
+            if not math.isfinite(column["mean"]) or not math.isfinite(column["std"]):
+                raise ValueError(f"{path} has a {name} column {column['column']} mean or std that is not finite: {column}")
+            recorded = {"name": column["name"], "log1p_scale": column.get("log1p_scale"), "clip": column.get("clip")}
+            expected = {"name": names[column["column"]], **column_transform(names[column["column"]])}
+            if recorded != expected:
+                raise ValueError(
+                    f"{path} has {name} column {column['column']} as {recorded}, not {expected}: "
+                    "recompute it with scripts/compute_input_normalization_stats.py"
+                )
+    return stats
+
 
 class GNNLSHConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -977,6 +1048,7 @@ class ModelArchitectureConfig(BaseModel):
     backbone: Optional[BackboneConfig] = None
     hit_feature_engineering: HitFeatureEngineeringConfig = Field(default_factory=HitFeatureEngineeringConfig)
     set_decoder: Optional[SetDecoderConfig] = None
+    input_normalization: bool = False
 
     # Nested configs
     gnnlsh: Optional[GNNLSHConfig] = None
@@ -1346,7 +1418,31 @@ class MLPFConfig(BaseModel):
                 self.model.set_decoder = SetDecoderConfig()
             if self.model.backbone.mode != BackboneMode.SHARED:
                 raise ValueError("model.output_mode='set' currently requires model.backbone.mode='shared'")
+        if self.model.input_normalization:
+            hits = sorted(name for name, _ in self._samples() if dataset_input_type_id(name) != INPUT_TYPE_IDS["pf"])
+            if hits:
+                raise ValueError(f"model.input_normalization supports track/cluster samples, not {hits}")
+            for dataset, version in self.dataset_versions().items():
+                load_stats(dataset, version)
         return self
+
+    def _samples(self):
+        """{(name, version)} of the train, validation and test samples."""
+        samples = {(name, entry.version) for name, entry in self.test_dataset.items()}
+        for groups in (self.train_dataset or {}, self.valid_dataset or {}):
+            for by_type in groups.values():
+                for physical in by_type.values():
+                    samples.update((name, sample.version) for name, sample in physical.samples.items())
+        return samples
+
+    def dataset_versions(self):
+        """{dataset: version} of the samples, e.g. {"cld": "3.2.1"}; the samples of a dataset share one version."""
+        versions = {}
+        for name, version in self._samples():
+            dataset = SOURCE_LABELS[dataset_source_id(name)]
+            if version is not None and versions.setdefault(dataset, version) != version:
+                raise ValueError(f"{dataset} samples have versions {versions[dataset]} and {version}")
+        return versions
 
     @model_validator(mode="after")
     def validate_dataset_weights(self) -> "MLPFConfig":

@@ -557,7 +557,7 @@ def _current_step_memory_summary(diagnostics):
 
 def model_step(batch, model, loss_fn, regression_weights):
     _logger.debug(f"model_step X={batch.X.shape}")
-    ypred_raw = model(batch.X, batch.mask)
+    ypred_raw = model(batch.X, batch.mask, source_id=batch.source_id)
     ypred = unpack_predictions(ypred_raw)
     model_module = model.module if hasattr(model, "module") else model
     if model_module.output_mode == OutputMode.SET:
@@ -673,7 +673,7 @@ def train_step(
     phase_start = time.perf_counter()
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
         _logger.debug(f"model_step X={batch.X.shape}")
-        ypred_raw = model(batch.X, batch.mask)
+        ypred_raw = model(batch.X, batch.mask, source_id=batch.source_id)
     phase_start = _record_phase_time_if_enabled(diagnostics.get("time", {}), "forward", phase_start, device_type, log_this_step)
     if log_this_step:
         _collect_step_memory(rank, "after_forward", diagnostics)
@@ -1009,7 +1009,7 @@ def evaluate(
                     )
 
                 model_module = model.module if hasattr(model, "module") else model
-                ypred_particles = model_module.predict_particles(batch.X, batch.mask)
+                ypred_particles = model_module.predict_particles(batch.X, batch.mask, source_id=batch.source_id)
                 metric_collections = validation_particle_collections(
                     batch,
                     ypred_particles,
@@ -1714,7 +1714,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
-        collate_fn=Collater(vals_for_test, ["genmet"]),
+        collate_fn=Collater(vals_for_test, ["genmet", "source_id"]),
         sampler=sampler,
         num_workers=config.num_workers,
         generator=test_loader_generator,

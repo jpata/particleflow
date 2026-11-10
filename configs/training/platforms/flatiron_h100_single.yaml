@@ -4,6 +4,7 @@ gpus: 1
 python_command: [python3]
 data_dir:
   cld: ${MLPF_CLD_DATA_DIR}
+  colliderml: ${MLPF_COLLIDERML_DATA_DIR}
 experiments_dir: /mnt/home/${USER}/particleflow/experiments
 runtime_overrides:
   compile: false
