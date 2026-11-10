@@ -112,6 +112,7 @@ def build_slurm_submissions(
     seed=None,
     worker=None,
     continue_run=False,
+    variants=None,
 ):
     scenario = load_training_scenario(scenario_path)
     if seed is not None:
@@ -130,9 +131,15 @@ def build_slurm_submissions(
         raise ValueError("Scenario did not resolve to any jobs")
 
     selected_indices = list(range(len(jobs)))
+    if variants:
+        unknown = sorted(set(variants) - {job.variant_name for job in jobs})
+        if unknown:
+            raise ValueError(f"Unknown variants {unknown}; scenario has {sorted({job.variant_name for job in jobs})}")
+        selected_indices = [index for index in selected_indices if jobs[index].variant_name in variants]
     if continue_run:
-        selected_indices = []
-        for index, job in enumerate(jobs):
+        candidates, selected_indices = selected_indices, []
+        for index in candidates:
+            job = jobs[index]
             continuation = find_scenario_continuation(job, profile)
             if continuation is None:
                 print(f"Skipping {job.variant_name} seed {job.seed}: no compatible prior run")
@@ -161,7 +168,7 @@ def build_slurm_submissions(
         command.extend(
             [
                 "--array",
-                ",".join(str(index) for index in indices) if continue_run or len(groups) > 1 else f"0-{len(jobs) - 1}",
+                ",".join(str(index) for index in indices) if len(indices) < len(jobs) else f"0-{len(jobs) - 1}",
                 "--job-name",
                 scenario.name,
                 "--output",
@@ -215,6 +222,13 @@ def main(argv=None, *, site="flatiron"):
         help="Resubmit only compatible jobs whose latest checkpoint is below num_steps",
     )
     parser.add_argument(
+        "--variant",
+        dest="variants",
+        action="append",
+        metavar="NAME",
+        help="Submit only this variant (repeatable); array task indices stay those of the full scenario",
+    )
+    parser.add_argument(
         "--submission-script",
         type=Path,
         help="Write the sbatch command to a shell script for submission outside the container",
@@ -239,6 +253,7 @@ def main(argv=None, *, site="flatiron"):
         seed=args.seed,
         worker=_worker_for_site(repo_root, site),
         continue_run=args.continue_run,
+        variants=args.variants,
     )
     for command, jobs in submissions:
         print(
