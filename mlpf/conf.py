@@ -895,6 +895,16 @@ class HEPTv2Config(BaseModel):
     deterministic_hashing: bool = True
     num_w_per_dist: int = 10
     mlp_ratio: float = 4.0
+    # Hash tracks at their calorimeter entry point instead of their vertex direction, where their
+    # clusters' positions are (mlpf/model/calo_entry.py). Helix-extrapolated for
+    # colliderml/clic/cld/idea/maia, read from eta_ecal/phi_ecal for cms. The radius/endcap |z|
+    # default to the detector's measured calorimeter entry (required for idea/maia).
+    track_hash_at_calo: bool = False
+    track_hash_calo_radius_mm: Optional[float] = Field(default=None, gt=0.0)
+    track_hash_calo_endcap_z_mm: Optional[float] = Field(default=None, gt=0.0)
+    # Hash clusters at the direction of their centroid position instead of their eta/phi features,
+    # which are Pandora's shower-axis direction on the key4hep PF datasets (clic/cld/idea/maia only).
+    cluster_hash_at_centroid: bool = False
 
 
 class BackboneConfig(BaseModel):
