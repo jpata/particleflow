@@ -116,6 +116,10 @@ labels = {
 }
 
 
+# legend label of each gen jet reference
+REFERENCE_LABELS = {"gen": "Truth", "gen_withpu": "Truth incl. PU"}
+
+
 def get_class_names(sample_name):
     if sample_name.startswith("clic_"):
         return CLASS_NAMES_CLIC
@@ -500,7 +504,7 @@ def load_eval_data(path, max_events=None):
             yvals[typ + "_py"] = yvals[typ + "_pt"] * yvals[typ + "_sin_phi"]
             yvals[typ + "_pz"] = yvals[typ + "_pt"] * np.sinh(yvals[typ + "_eta"])
 
-    for typ in ["gen", "cand", "pred", "target", "pred_nopu"]:
+    for typ in ["gen", "gen_withpu", "cand", "pred", "target", "pred_nopu"]:
         if typ in data["jets"].fields:
             # Get the jet vectors
             jetvec = vector.awk(data["jets"][typ])
@@ -514,6 +518,8 @@ def load_eval_data(path, max_events=None):
 
     yvals.update(compute_jet_ratio(data, yvals))
     yvals["gen_met"] = data["genmet"]
+    if "genmet_withpu" in data.fields:
+        yvals["gen_withpu_met"] = data["genmet_withpu"]
     return yvals, X, filenames
 
 
@@ -528,6 +534,9 @@ def compute_jet_ratio(data, yvals):
         ("target", "pred"),
         ("target", "cand"),
     ]
+    # gen reference including pileup, where the predictions have one (ColliderML TFDS >= 1.4.0)
+    if "gen_withpu_to_pred" in data["matched_jets"].fields:
+        matches += [("gen_withpu", "pred"), ("gen_withpu", "pred_nopu"), ("gen_withpu", "cand"), ("gen_withpu", "target")]
 
     for match1, match2 in matches:
         for val in ["pt", "eta"]:
@@ -625,7 +634,10 @@ def save_img(outfile, epoch=None, cp_dir=None, comet_experiment=None):
             comet_experiment.log_image(image_path, step=epoch - 1)
 
 
-def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None, dataset=None, baseline_yvals=None):
+def plot_jets(
+    yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None, dataset=None, baseline_yvals=None, reference="gen", file_modifier=""
+):
+    """Jet pt/eta distributions of target, PF, MLPF and the gen reference: "gen", or "gen_withpu" (including pileup)."""
 
     baseline_yvals = baseline_yvals if baseline_yvals is not None else yvals
 
@@ -658,13 +670,13 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         label="MLPF",
     )
 
-    pt = awkward.to_numpy(awkward.flatten(yvals["jets_gen_pt"]))
+    pt = awkward.to_numpy(awkward.flatten(yvals[f"jets_{reference}_pt"]))
     plt.hist(
         pt,
         bins=b,
         histtype="step",
         lw=2,
-        label="Truth",
+        label=REFERENCE_LABELS[reference],
     )
 
     plt.xscale("log")
@@ -680,7 +692,7 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
     EXPERIMENT_LABELS[dataset](ax)
     sample_label(ax, sample)
     save_img(
-        "jet_pt_log.png",
+        f"jet_pt_log{file_modifier}.png",
         epoch,
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
@@ -716,13 +728,13 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         label="MLPF",
     )
 
-    pt = awkward.to_numpy(awkward.flatten(yvals["jets_gen_pt"]))
+    pt = awkward.to_numpy(awkward.flatten(yvals[f"jets_{reference}_pt"]))
     plt.hist(
         pt,
         bins=b,
         histtype="step",
         lw=2,
-        label="Truth",
+        label=REFERENCE_LABELS[reference],
     )
 
     plt.xlabel("jet $p_T$")
@@ -736,7 +748,7 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
     EXPERIMENT_LABELS[dataset](ax)
     sample_label(ax, sample)
     save_img(
-        "jet_pt.png",
+        f"jet_pt{file_modifier}.png",
         epoch,
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
@@ -771,13 +783,13 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
         label="MLPF",
     )
 
-    eta = awkward.to_numpy(awkward.flatten(yvals["jets_gen_eta"]))
+    eta = awkward.to_numpy(awkward.flatten(yvals[f"jets_{reference}_eta"]))
     plt.hist(
         eta,
         bins=b,
         histtype="step",
         lw=2,
-        label="Truth",
+        label=REFERENCE_LABELS[reference],
     )
 
     plt.xlabel("jet $\eta$")
@@ -791,7 +803,7 @@ def plot_jets(yvals, epoch=None, cp_dir=None, comet_experiment=None, sample=None
     EXPERIMENT_LABELS[dataset](ax)
     sample_label(ax, sample)
     save_img(
-        "jet_eta.png",
+        f"jet_eta{file_modifier}.png",
         epoch,
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
@@ -811,7 +823,10 @@ def plot_jet_ratio(
     sample=None,
     baseline_yvals=None,
     response_rel_pt_cut=0.5,
+    reference="gen",
 ):
+    """Jet response of target, PF and MLPF vs the gen reference ("gen", or "gen_withpu" including pileup); with
+    reference="gen" also PF and MLPF vs the target jets, which do not depend on the gen reference."""
     baseline_yvals = baseline_yvals if baseline_yvals is not None else yvals
     plt.figure()
     ax = plt.axes()
@@ -820,40 +835,40 @@ def plot_jet_ratio(
         bins = np.linspace(0, 5, 500)
 
     ret_dict = {}
-    p = med_iqr(yvals["jet_ratio_gen_to_target_pt"])
-    ret_dict["jet_ratio_gen_to_target_pt"] = jet_response_metrics(yvals, "gen", "target", response_rel_pt_cut)
+    p = med_iqr(yvals[f"jet_ratio_{reference}_to_target_pt"])
+    ret_dict[f"jet_ratio_{reference}_to_target_pt"] = jet_response_metrics(yvals, reference, "target", response_rel_pt_cut)
     plt.hist(
-        yvals["jet_ratio_gen_to_target_pt"],
+        yvals[f"jet_ratio_{reference}_to_target_pt"],
         bins=bins,
         histtype="step",
         lw=2,
         label="target $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
-    p = med_iqr(baseline_yvals["jet_ratio_gen_to_cand_pt"])
-    ret_dict["jet_ratio_gen_to_cand_pt"] = jet_response_metrics(baseline_yvals, "gen", "cand", response_rel_pt_cut)
+    p = med_iqr(baseline_yvals[f"jet_ratio_{reference}_to_cand_pt"])
+    ret_dict[f"jet_ratio_{reference}_to_cand_pt"] = jet_response_metrics(baseline_yvals, reference, "cand", response_rel_pt_cut)
     plt.hist(
-        baseline_yvals["jet_ratio_gen_to_cand_pt"],
+        baseline_yvals[f"jet_ratio_{reference}_to_cand_pt"],
         bins=bins,
         histtype="step",
         lw=2,
         label="PF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
-    p = med_iqr(yvals["jet_ratio_gen_to_pred_pt"])
-    ret_dict["jet_ratio_gen_to_pred_pt"] = jet_response_metrics(yvals, "gen", "pred", response_rel_pt_cut)
+    p = med_iqr(yvals[f"jet_ratio_{reference}_to_pred_pt"])
+    ret_dict[f"jet_ratio_{reference}_to_pred_pt"] = jet_response_metrics(yvals, reference, "pred", response_rel_pt_cut)
     plt.hist(
-        yvals["jet_ratio_gen_to_pred_pt"],
+        yvals[f"jet_ratio_{reference}_to_pred_pt"],
         bins=bins,
         histtype="step",
         lw=2,
         label="MLPF $({:.2f}\pm{:.2f})$".format(p[0], p[1]),
     )
 
-    p = med_iqr(yvals["jet_ratio_gen_to_pred_nopu_pt"])
-    ret_dict["jet_ratio_gen_to_pred_nopu_pt"] = jet_response_metrics(yvals, "gen", "pred_nopu", response_rel_pt_cut)
+    p = med_iqr(yvals[f"jet_ratio_{reference}_to_pred_nopu_pt"])
+    ret_dict[f"jet_ratio_{reference}_to_pred_nopu_pt"] = jet_response_metrics(yvals, reference, "pred_nopu", response_rel_pt_cut)
     plt.hist(
-        yvals["jet_ratio_gen_to_pred_nopu_pt"],
+        yvals[f"jet_ratio_{reference}_to_pred_nopu_pt"],
         bins=bins,
         histtype="step",
         lw=2,
@@ -882,6 +897,8 @@ def plot_jet_ratio(
         cp_dir=cp_dir,
         comet_experiment=comet_experiment,
     )
+    if reference != "gen":
+        return ret_dict
 
     plt.figure()
     ax = plt.axes()

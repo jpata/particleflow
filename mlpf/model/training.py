@@ -1690,8 +1690,16 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         sampler = torch.utils.data.SequentialSampler(ds)
 
     vals_for_test = ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"]
+    per_event_vals_for_test = ["genmet", "source_id"]
     if config.model.output_mode == OutputMode.SET:
         vals_for_test.append("ytarget_set")
+
+    # gen reference including pileup, where the dataset has one (ColliderML TFDS >= 1.4.0)
+    # (with num_samples, PFDataset wraps its TFDSDataSource in a Subset)
+    sources = [d.dataset if isinstance(d, torch.utils.data.Subset) else d for d in dataset]
+    if all("genjets_withpu" in source.ds.dataset_info.features.keys() for source in sources):
+        vals_for_test.append("genjets_withpu")
+        per_event_vals_for_test.append("genmet_withpu")
 
     # pythia branch was introduced for cms in version 2.8.0
     if sample.startswith("cms_") and version and Version(version) >= Version("2.8.0"):
@@ -1714,7 +1722,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
-        collate_fn=Collater(vals_for_test, ["genmet", "source_id"]),
+        collate_fn=Collater(vals_for_test, per_event_vals_for_test),
         sampler=sampler,
         num_workers=config.num_workers,
         generator=test_loader_generator,
