@@ -125,6 +125,17 @@ def test_submission_groups_tasks_by_gpu_count(submission_files, gpu_request):
         build_slurm_submission(scenario_path, profile_path, ROOT)
 
 
+def test_variant_selection_keeps_original_array_indices(submission_files):
+    scenario_path, profile_path = submission_files
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, variants=["second"])
+    assert len(submissions) == 1
+    command, jobs = submissions[0]
+    assert [job.variant_name for job in jobs] == ["second", "second"]
+    assert command[command.index("--array") + 1] == "1,3"
+    with pytest.raises(ValueError, match="Unknown variants"):
+        build_slurm_submissions(scenario_path, profile_path, ROOT, variants=["no_such_variant"])
+
+
 def test_seed_override_replaces_all_scenario_seeds(submission_files):
     scenario_path, profile_path = submission_files
     submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, seed=2468)
