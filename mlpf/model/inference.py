@@ -35,6 +35,23 @@ from mlpf.model.utils import unpack_target
 from mlpf.conf import JET_CONFIG, OutputMode
 
 
+def gen_jet_vectors(genjets, jet_ptcut):
+    """Gen jets of a batch ([batch, jets, (pt, eta, phi, energy)], zero-padded) above jet_ptcut, as px/py/pz/E vectors."""
+    genjets_msk = genjets[:, :, 0].cpu() > jet_ptcut
+    genjets = awkward.unflatten(genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
+    genjets = vector.awk(
+        awkward.zip(
+            {
+                "pt": genjets[:, :, 0],
+                "eta": genjets[:, :, 1],
+                "phi": genjets[:, :, 2],
+                "e": genjets[:, :, 3],
+            }
+        )
+    )
+    return vector.awk(awkward.zip({"px": genjets.px, "py": genjets.py, "pz": genjets.pz, "E": genjets.E}))
+
+
 def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_match_dr, outpath, dir_name, sample):
 
     # skip prediction if output exists
@@ -64,22 +81,11 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         ytarget = unpack_target(batch.ytarget.to(torch.float32), model_module)
     ycand = unpack_target(batch.ycand.to(torch.float32), model_module)
 
-    genjets_msk = batch.genjets[:, :, 0].cpu() > jet_ptcut
-    genjets = awkward.unflatten(batch.genjets.cpu().to(torch.float64)[genjets_msk], torch.sum(genjets_msk, axis=1))
-    genjets = vector.awk(
-        awkward.zip(
-            {
-                "pt": genjets[:, :, 0],
-                "eta": genjets[:, :, 1],
-                "phi": genjets[:, :, 2],
-                "e": genjets[:, :, 3],
-            }
-        )
-    )
-    genjets = vector.awk(awkward.zip({"px": genjets.px, "py": genjets.py, "pz": genjets.pz, "E": genjets.E}))
-
     jets_coll = {}
-    jets_coll["gen"] = genjets
+    jets_coll["gen"] = gen_jet_vectors(batch.genjets, jet_ptcut)
+    # gen reference including pileup, where the dataset has one (ColliderML TFDS >= 1.4.0)
+    if batch.genjets_withpu is not None:
+        jets_coll["gen_withpu"] = gen_jet_vectors(batch.genjets_withpu, jet_ptcut)
 
     # Flatten each independently padded collection with its own mask.
     X = batch.X[batch.mask].cpu().float().contiguous().numpy()
@@ -130,24 +136,23 @@ def predict_one_batch(conv_type, model, i, batch, rank, jetdef, jet_ptcut, jet_m
         jets = cluster.inclusive_jets(min_pt=jet_ptcut)
         jets_coll[typ] = vector.awk(awkward.zip({"px": jets.px, "py": jets.py, "pz": jets.pz, "E": jets.E}))
 
-    matched_jets = awkward.Array(
-        {
-            "gen_to_pred_nopu": match_two_jet_collections(jets_coll, "gen", "pred_nopu", jet_match_dr),
-            "gen_to_pred": match_two_jet_collections(jets_coll, "gen", "pred", jet_match_dr),
-            "gen_to_cand": match_two_jet_collections(jets_coll, "gen", "cand", jet_match_dr),
-            "gen_to_target": match_two_jet_collections(jets_coll, "gen", "target", jet_match_dr),
-            "target_to_cand": match_two_jet_collections(jets_coll, "target", "cand", jet_match_dr),
-            "target_to_pred": match_two_jet_collections(jets_coll, "target", "pred", jet_match_dr),
-        }
-    )
+    matched_jets = {
+        "target_to_cand": match_two_jet_collections(jets_coll, "target", "cand", jet_match_dr),
+        "target_to_pred": match_two_jet_collections(jets_coll, "target", "pred", jet_match_dr),
+    }
+    for gen in [typ for typ in ("gen", "gen_withpu") if typ in jets_coll]:
+        for typ in ("pred_nopu", "pred", "cand", "target"):
+            matched_jets[f"{gen}_to_{typ}"] = match_two_jet_collections(jets_coll, gen, typ, jet_match_dr)
 
     outdict = {
         "inputs": Xs,
         "particles": awkvals,
         "jets": jets_coll,
-        "matched_jets": matched_jets,
+        "matched_jets": awkward.Array(matched_jets),
         "genmet": batch.genmet.cpu(),
     }
+    if batch.genmet_withpu is not None:
+        outdict["genmet_withpu"] = batch.genmet_withpu.cpu()
     if batch.pythia is not None:
         outdict["pythia"] = batch.pythia.cpu()
 
@@ -225,6 +230,31 @@ def make_plots(outpath, sample, dataset, dir_name="", num_test_events=None, base
         response_rel_pt_cut=JET_CONFIG[ds_name].match_rel_pt,
     )
     _logger.info("Plotted jet ratio")
+
+    # the same jet plots against the gen reference including pileup, where the dataset has one (ColliderML
+    # TFDS >= 1.4.0, whose genjets are the hard scatter only), as *_withpu.png
+    if "jets_gen_withpu_pt" in yvals:
+        plot_jets(
+            yvals,
+            cp_dir=plots_path,
+            sample=sample,
+            dataset=ds_name,
+            baseline_yvals=baseline_yvals,
+            reference="gen_withpu",
+            file_modifier="_withpu",
+        )
+        has_baseline_withpu = baseline_yvals is not None and "jet_ratio_gen_withpu_to_cand_pt" in baseline_yvals
+        ret_dict["jet_ratio_withpu"] = plot_jet_ratio(
+            yvals,
+            cp_dir=plots_path,
+            sample=sample,
+            dataset=ds_name,
+            baseline_yvals=baseline_yvals if has_baseline_withpu else None,
+            response_rel_pt_cut=JET_CONFIG[ds_name].match_rel_pt,
+            reference="gen_withpu",
+            file_modifier="_withpu",
+        )
+        _logger.info("Plotted jets and jet ratio against the gen reference including pileup")
 
     return ret_dict
 
