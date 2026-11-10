@@ -30,7 +30,11 @@ set -euo pipefail
 #
 # Release-1 samples at the pinned revision: ttbar_{pu0,pu200}, dihiggs_{pu0,pu200},
 # ggf_{pu0,pu200}, hidden_valley_pu0, higgs_portal_pu0, pileup_only_pu0, zprime_pu0,
-# zee_pu200, zmumu_pu200. All configs have 1000 shards except dihiggs_pu200_tracker_hits (295).
+# zee_pu200, zmumu_pu200, 1000 shards per config. The pin is the 2026-11-06 fix
+# (ColliderML-Production#53): 705 dihiggs_pu200_tracker_hits shards added (the previous pin,
+# 64c3d2f1, had 295) and 39 damaged pu0 calo_hits shards replaced. Moving an existing download to
+# a new pin fetches only new or changed files (unchanged files match by etag) and overwrites
+# changed ones in place.
 # scripts/flatiron/colliderml_process_samples.sh chains download -> convert -> TFDS for them.
 #
 # No --max-events: full config via snapshot_download, which is parallel and
@@ -74,7 +78,7 @@ else
   CONFIG="${CONFIGS[0]}"
 fi
 
-REVISION=64c3d2f112df3d5d20979d22da7cfdff13e10c4b
+REVISION=f8ae2aeaa09d947ad0955edc08aef4af38df0410
 
 # The colliderml CLI lives in this repo's uv environment.
 if [ ! -x .venv/bin/colliderml ]; then
@@ -116,7 +120,7 @@ export HF_XET_FIXED_DOWNLOAD_CONCURRENCY="${HF_XET_FIXED_DOWNLOAD_CONCURRENCY:-3
 SHARD_DIR="${COLLIDERML_DATA_DIR}/CERN__ColliderML-Release-1/${CONFIG}/data/${CONFIG}"
 
 # One download attempt plus the completeness check: the local shard count must equal the pinned
-# revision's (1000 for every Release-1 config except dihiggs_pu200_tracker_hits, 295). Called
+# revision's (1000 for every Release-1 config). Called
 # in an `until` condition, where set -e is off, hence the explicit `|| return 1`.
 download_complete() {
   colliderml download \
