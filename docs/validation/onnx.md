@@ -10,11 +10,37 @@ Use ONNX validation to check numerical agreement with PyTorch before measuring d
 |---|---|
 | `Xfeat_normed` | Finite features `[B,L,F]` matching the saved model's feature layout |
 | `mask` | Binary validity mask `[B,L]`, with at least one valid element per event and right padding |
+| `source_id` | Normalized models only: `int64[B]`, one dataset source ID per event |
 | `bid`, `id`, `momentum`, `pu` | Four separate prediction heads `[B,L,head_width]` |
 
 Batch size and sequence length are dynamic. Masks must contain a valid prefix followed by padding; holes, left padding, and empty events are invalid. Validation tools reject these inputs. Deployment callers must enforce the same contract because the exported graph cannot raise those errors.
 
 The exporter sanitizes padded features, excludes padded keys from attention, and materializes each output head with exactly zero values on padding. Consumers should still use the mask to select real predictions. Particle-set decoders have a different output contract and are explicitly rejected by this export helper.
+
+### Models with input normalization
+
+When `model.input_normalization` is enabled, supply a `source_id` tensor to export and inference. The source IDs select the statistics configured in the saved model; batches may mix those datasets. The exporter embeds the clipping, log transforms, and standardization tables into the ONNX graph. Runtime inference needs no statistics YAML files. Models without normalization retain the two-input contract.
+
+Despite the historical name `Xfeat_normed`, supply **raw features**. The encoder normalizes them inside the graph, while regression corrections and final physical decoding still use the raw features. ONNX `momentum[..., 0]` and `momentum[..., 4]` remain log ratios: multiply their exponentials by raw input columns 1 and 5 to recover physical pT and energy.
+
+```python
+import onnxruntime as ort
+import torch
+from mlpf.conf import SOURCE_IDS
+from mlpf.model.onnx_attention import export_mlpf
+
+source_id = torch.full((features.shape[0],), SOURCE_IDS["cld"], dtype=torch.int64)
+export_mlpf(model, features, mask, "normalized.onnx",
+            source_id=source_id, attention_format="decomposed")
+session = ort.InferenceSession("normalized.onnx", providers=["CPUExecutionProvider"])
+outputs = session.run(None, {
+    "Xfeat_normed": features.cpu().numpy(),
+    "mask": mask.cpu().numpy(),
+    "source_id": source_id.numpy(),
+})
+```
+
+The ONNX `input_normalization` metadata maps source IDs to dataset names and statistics versions. Deployment callers must provide exactly one supported ID per event. The graph cannot enforce that contract. `cms-validate-onnx.py` derives the source from `--dataset`, and `--save-inputs` includes it for replay with `validate-onnx-runtime.py`. `export-checkpoint-onnx.py` also supports normalized track/cluster checkpoints and includes source IDs in its reference bundles.
 
 ## Choose an attention representation
 

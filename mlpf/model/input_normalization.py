@@ -43,6 +43,7 @@ class InputNormalization(nn.Module):
 
     def __init__(self, input_dim, versions):
         super().__init__()
+        self.versions = dict(versions)
         for name, table in zip(("low", "high", "is_log1p", "scale", "mean", "inv_std"), build_normalization_tables(input_dim, versions)):
             self.register_buffer(name, table, persistent=False)
 
