@@ -13,9 +13,8 @@ class CollidermlDihiggsPu200Pf(CollidermlTtbarNopuPf):
     Only the dataset name (derived from the class name) and the description differ; the
     manual_dir content (converted parquet under clue/dihiggs_pu200/) drives the data.
 
-    Upstream ships only 295 of the 1000 tracker_hits shards at the pinned revision; the converter
-    skips shards missing a table, so this dataset has ~29.5k events (vs 100k for the other pu200
-    samples).
+    Release-1 revisions before f8ae2aea (2026-11-06) shipped only 295 of the 1000 tracker_hits
+    shards; the pinned revision has all 1000 (100k events, like the other pu200 samples).
     """
 
     DESCRIPTION = _DESCRIPTION

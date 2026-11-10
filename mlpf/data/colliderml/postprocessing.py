@@ -855,10 +855,11 @@ def main():
     shard_ids = args.shards.split(":")
     a, b = int(shard_ids[0]), int(shard_ids[1])
     # Pair the four tables' shards by file name, not list position: an upstream config can lack
-    # shards (Release 1 dihiggs_pu200_tracker_hits has 295 of 1000), where a positional zip would
-    # pair different shards. --shards slices the particles table; a shard missing from any other
-    # table is skipped. tracker_hits is required input: its per-hit truth feeds the gp->track
-    # hit-fraction links (truth.py) and the X_hit_tracker geometry written for the validator.
+    # shards (dihiggs_pu200_tracker_hits had 295 of 1000 before revision f8ae2aea), where a
+    # positional zip would pair different shards. --shards slices the particles table; a shard
+    # missing from any other table is skipped. tracker_hits is required input: its per-hit truth
+    # feeds the gp->track hit-fraction links (truth.py) and the X_hit_tracker geometry written
+    # for the validator.
     objects = ("particles", "tracks", "calo_hits", "tracker_hits")
     tables = {obj: {p.name: p for p in shard_paths(Path(args.input), args.sample, obj)} for obj in objects}
     absent = [obj for obj in objects if not tables[obj]]

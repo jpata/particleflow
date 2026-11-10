@@ -25,7 +25,7 @@
 # Third arg is the sample, <process>_<pileup> (a bare pu0/pu200 means ttbar_<pileup>; default
 # pu0); output goes to mlpf_parquet/clue/<sample>/ unless a 4th arg overrides it.
 # Shards are paired across the four tables by file name; a shard missing from any table is
-# skipped (dihiggs_pu200: only 295 tracker_hits shards upstream).
+# skipped (dihiggs_pu200 had only 295 tracker_hits shards before HF revision f8ae2aea).
 # The per-rank shard arithmetic uses SLURM_NTASKS, so override --ntasks to taste.
 # pu200 events are memory-heavy (~10-20 GB/rank); if the node OOMs, give ranks a larger
 # memory slice, e.g. --ntasks=32 --cpus-per-task=2.

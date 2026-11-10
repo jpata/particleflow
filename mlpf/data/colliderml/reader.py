@@ -71,11 +71,12 @@ def common_event_ids(paths: Sequence[Path]) -> np.ndarray | None:
 def _corrupt_calo_event_ids(calo_path: Path) -> np.ndarray:
     """Event ids whose calo hits cannot be attributed, in table order.
 
-    Some Release-1 shards (at the pinned revision; byte-identical to the Hub) carry blocks of
-    events with corrupt calo truth: hits whose region code is 255 instead of one of CALO_REGIONS
-    (dihiggs_pu0, ggf_pu0; positions are ordinary ECAL/HCAL ones, the label is lost), and hits
-    whose contrib_particle_ids and contrib_energies lists differ in length (whole shards of
-    dihiggs_pu0, ggf_pu0, higgs_portal_pu0, hidden_valley_pu0). Such events are dropped whole.
+    Release-1 revisions before f8ae2aea (2026-11-06) carried blocks of events with corrupt calo
+    truth in 39 calo_hits shards (replaced upstream since; the check stays as a guard): hits
+    whose region code is 255 instead of one of CALO_REGIONS (dihiggs_pu0, ggf_pu0; positions
+    are ordinary ECAL/HCAL ones, the label is lost), and hits whose contrib_particle_ids and
+    contrib_energies lists differ in length (whole shards of dihiggs_pu0, ggf_pu0,
+    higgs_portal_pu0, hidden_valley_pu0). Such events are dropped whole.
     Cached (keyed on path, size and mtime) because the resume check, the tqdm total and the
     reader all ask for the same shard.
     """
