@@ -160,7 +160,7 @@ def run_bundle(args):
         path = args.bundle / case["file"]
         assert digest(path) == case["sha256"]
         with np.load(path) as data:
-            feeds = {name: data[name] for name in ["Xfeat_normed", "mask"]}
+            feeds = {name: data[name] for name in ("Xfeat_normed", "mask", "source_id") if name in data}
             valid = feeds["mask"].astype(bool)
             if session is None:
                 model_path = args.bundle / "model.onnx"

@@ -30,7 +30,7 @@ def main():
         p.error("--num-events must be positive")
     import torch
     import tensorflow_datasets as tfds
-    from mlpf.conf import MLPFConfig, AttentionType
+    from mlpf.conf import MLPFConfig, AttentionType, dataset_source_id
     from mlpf.model.mlpf import MLPF
     from mlpf.model.onnx_attention import export_mlpf
 
@@ -41,8 +41,8 @@ def main():
         saved = pickle.load(f)
     config = MLPFConfig.model_validate(saved if isinstance(saved, dict) else saved.model_dump())
     training_config = config.model_dump(mode="json")
-    if config.dataset.value != "cms" or config.model.output_mode.value != "elementwise":
-        p.error("This qualification requires an elementwise CMS checkpoint")
+    if config.model.output_mode.value != "elementwise":
+        p.error("This qualification requires an elementwise checkpoint")
     model_type = config.model.type.value
     if model_type == "heptv2" and (a.attention_format != "decomposed" or a.attention_dtype != "float32"):
         p.error("HEPTv2 uses the portable FP32 profile")
@@ -129,6 +129,9 @@ def main():
         x = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True)
         x = torch.nn.functional.pad(x, (0, 0, 0, size - x.shape[1])).clamp(-60000, 60000).contiguous()
         mask = (torch.arange(size)[None, :] < torch.tensor(lengths)[:, None]).float()
+        source_kwargs = {}
+        if config.model.input_normalization:
+            source_kwargs["source_id"] = torch.tensor([dataset_source_id(source["dataset"].split("/")[0]) for source in sources], dtype=torch.int64)
         if index == 0:
             export_mlpf(
                 model,
@@ -137,15 +140,22 @@ def main():
                 a.bundle / "model.onnx",
                 attention_format=a.attention_format,
                 attention_dtype=torch.float16 if a.attention_dtype == "float16" else None,
+                **source_kwargs,
             )
             manifest["model_sha256"] = digest(a.bundle / "model.onnx")
         with torch.no_grad():
-            reference = model(x, mask)
+            reference = model(x, mask, **source_kwargs)
         for key, value in zip(outputs, reference, strict=True):
             if not torch.isfinite(value).all():
                 raise ValueError(f"Nonfinite PyTorch reference in {name}/{key}")
         path = a.bundle / (name + ".npz")
-        np.savez(path, Xfeat_normed=x.numpy(), mask=mask.numpy(), **{key: value.numpy() for key, value in zip(outputs, reference, strict=True)})
+        np.savez(
+            path,
+            Xfeat_normed=x.numpy(),
+            mask=mask.numpy(),
+            **{key: value.numpy() for key, value in source_kwargs.items()},
+            **{key: value.numpy() for key, value in zip(outputs, reference, strict=True)},
+        )
         manifest["cases"].append({"file": path.name, "sha256": digest(path), "shape": list(x.shape), "lengths": lengths, "sources": sources})
         print(name, list(x.shape), lengths, flush=True)
     (a.bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

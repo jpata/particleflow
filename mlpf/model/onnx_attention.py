@@ -185,17 +185,20 @@ class _FloatOutputs(torch.nn.Module):
         super().__init__()
         self.model = model
 
-    def forward(self, features, mask):
-        return tuple(value.float() for value in self.model(features, mask))
+    def forward(self, features, mask, source_id=None):
+        kwargs = {} if source_id is None else {"source_id": source_id}
+        return tuple(value.float() for value in self.model(features, mask, **kwargs))
 
 
-def export_mlpf(model, features, mask, path, *, attention_format=None, attention_dtype=None, compute_dtype=None):
+def export_mlpf(model, features, mask, path, *, source_id=None, attention_format=None, attention_dtype=None, compute_dtype=None):
     """Export elementwise predictions with explicit attention and padding semantics.
 
     Callers must enforce validate_padding_mask for deployment inputs as well.
     The graph itself cannot raise for malformed masks or empty events. If format
     is omitted, preserve the old export_onnx_fused choice (otherwise decompose).
     Export success establishes graph validity, not GPU fusion or equivalence.
+    Normalized models require source_id: int64[B], exported as a dynamic input.
+    Features remain raw; normalization tables are embedded in the graph.
     """
     from mlpf.model.mlpf import SimpleMultiheadAttention
     from mlpf.model.heptv2 import HEPTv2Attention
@@ -221,6 +224,25 @@ def export_mlpf(model, features, mask, path, *, attention_format=None, attention
     validate_padding_mask(mask)
     if features.ndim != 3 or features.shape[:2] != mask.shape or not torch.isfinite(features).all():
         raise ValueError("Export requires finite features[B,L,F] matching mask[B,L]")
+    uses_normalization = getattr(model, "input_normalization", None) is not None
+    inputs = (features, mask)
+    input_names = ["Xfeat_normed", "mask"]
+    dynamic_axes = {name: {0: "num_batch", 1: "num_elements"} for name in (*input_names, "bid", "id", "momentum", "pu")}
+    if uses_normalization:
+        from mlpf.conf import SOURCE_IDS
+
+        if source_id is None or source_id.dtype != torch.int64 or source_id.shape != features.shape[:1]:
+            raise ValueError("Normalized export requires source_id: int64[B], one dataset source per event")
+        versions = model.input_normalization.versions
+        allowed = source_id.new_tensor([SOURCE_IDS[name] for name in versions])
+        if not torch.isin(source_id, allowed).all():
+            raise ValueError("Export source_id must select a dataset with configured normalization statistics")
+        source_id = source_id.to(features.device)
+        inputs += (source_id,)
+        input_names.append("source_id")
+        dynamic_axes["source_id"] = {0: "num_batch"}
+    elif source_id is not None:
+        raise ValueError("source_id is only an ONNX input for models with input normalization")
     normalization = fp32_layer_norms(model) if compute_dtype is not None else nullcontext()
     exported_model = _FloatOutputs(model).eval() if compute_dtype is not None else model
     with (
@@ -232,13 +254,13 @@ def export_mlpf(model, features, mask, path, *, attention_format=None, attention
         buffer = io.BytesIO()
         torch.onnx.export(
             exported_model,
-            (features, mask),
+            inputs,
             buffer,
             opset_version=20,
             custom_opsets={"mlpf": 1} if modules and attention_format == "attention24" else {},
-            input_names=["Xfeat_normed", "mask"],
+            input_names=input_names,
             output_names=["bid", "id", "momentum", "pu"],
-            dynamic_axes={name: {0: "num_batch", 1: "num_elements"} for name in ("Xfeat_normed", "mask", "bid", "id", "momentum", "pu")},
+            dynamic_axes=dynamic_axes,
             dynamo=False,
         )
         graph = onnx.load_model_from_string(buffer.getvalue())
@@ -257,5 +279,16 @@ def export_mlpf(model, features, mask, path, *, attention_format=None, attention
         elif compute_dtype is not None:
             _lower_elu_for_cuda(graph)
         finalize_export(graph, attention_format, attention_dtype, output_widths=widths)
+        if uses_normalization:
+            import json
+
+            metadata = {prop.key: prop.value for prop in graph.metadata_props}
+            metadata.update(
+                input_normalization=json.dumps(
+                    {SOURCE_IDS[name]: {"dataset": name, "version": version} for name, version in versions.items()}, sort_keys=True
+                ),
+                source_id_contract="int64[B]; one source per event, from the input_normalization metadata; no external feature normalization",
+            )
+            onnx.helper.set_model_props(graph, metadata)
         onnx.checker.check_model(graph, full_check=True)
         onnx.save(graph, str(path))
