@@ -13,7 +13,7 @@ Start with the input representation. Each detector page lists its physics sample
 
 The catalog includes maintained recipes and explicitly identified partial workflows. A builder's existence does not imply a trained model, physics validation, or public download. Detector pages identify those boundaries. Dataset schema, Python package, and model artifact versions are independent.
 
-After selecting a sample, [download and verify](download.md) published data or follow [dataset generation](generate.md). The shared [Key4HEP production guide](key4hep.md) covers both CLD/CLIC representations.
+After selecting a sample, [download and verify](download.md) published data or follow [dataset generation](generate.md). For data produced in Tallinn and copied between Grid sites, use the [WebDAV transfer guide](webdav.md). The shared [Key4HEP production guide](key4hep.md) covers both CLD/CLIC representations.
 
 See [detector event views](event-displays.md) for reusable visualizations of the
 input representations and reference particles.
@@ -38,23 +38,17 @@ Pass the detector-level directory containing the dataset-name directories as `--
 
 ## Published availability
 
-As checked on **28 October 2026**, the [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/d03df152669939dae26336f68de7c0af575bb12d/tensorflow_datasets) includes metadata, feature definitions, and all declared split shards for these current-recipe selections:
+The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) includes metadata, feature definitions, and all declared split shards for these current-recipe selections:
 
 | Representation | Detector | Published datasets | Version | Configuration |
 |---|---|---|---|---|
 | Tracks and clusters | CLD | `cld_edm_{ttbar,ww_fullhad,qq,zz}_pf` | 3.3.0 | 1 |
 | Tracks and clusters | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_pf` | 3.3.0 | 1 |
 | Tracks and clusters | ColliderML | `colliderml_ttbar_nopu_pf`, `colliderml_ttbar_pu200_pf` | 1.2.0 | 1 |
-| Tracks and clusters | IDEA | `idea_edm_{ttbar,ww_fullhad,qq}_pf` | 0.2.0 | 1 |
+| Tracks and clusters | IDEA | `idea_edm_{ttbar,ww_fullhad,qq}_pf` | 0.2.1 | 1 |
 | Hits | CLD | `cld_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
 | Hits | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
 
-The [download guide](download.md) supplies the CLD 3.3.0 inputs required by
-[the training guide](../training/train.md). Only configuration `1` is published
-for the selections above; use `--data_config 1` rather than the standard
-ten-partition training selection. Produce additional partitions with
-[the generation workflow](generate.md).
-
-Treat the [live Hub tree](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) as the source of truth for publication availability. The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects. A usable dataset has a detector, name, configuration, and version that match in both contexts.
+Treat the [live Hub tree](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) as the source of truth for data availability. The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects.
 
 For scientific provenance and citations, use the [publication map](../science/publications.md) and the dataset record associated with the version you consume.
