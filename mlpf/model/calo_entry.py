@@ -47,6 +47,11 @@ ECAL_GEOMETRY_MM = {
 # (shower depth). The front face puts tracks further from their clusters: on CLIC ttbar 8% less cluster energy has a
 # track within dR < 0.05 (CLD 4%); mid-depth is within 1% of the best radius on all three detectors.
 CALO_ENTRY_GEOMETRY_MM = {dataset: (sum(radii) / 2, sum(z) / 2) for dataset, (radii, z) in ECAL_GEOMETRY_MM.items()}
+# IDEA (k4geo IDEA_o1_v03, DectDimensions_IDEA_o1_v03.xml) has no separate ECAL: its fibre dual-readout calorimeter
+# towers start at r = |z| = 2500 mm (FiberDRCalo_barrel_z_start, FiberDRCalo_endcap_z_start) and are 2 m deep without
+# depth segmentation. Its cluster centroids sit at that front face (ttbar median r 2501 mm, endcap |z| 2502 mm), so
+# tracks go to the front face.
+CALO_ENTRY_GEOMETRY_MM[Dataset.IDEA.value] = (2500.0, 2500.0)
 
 # PF datasets whose tracks carry the helix parameters, by name in X_FEATURES.
 HELIX_DATASETS = (Dataset.COLLIDERML.value, Dataset.CLIC.value, Dataset.CLD.value, Dataset.IDEA.value, Dataset.MAIA.value)

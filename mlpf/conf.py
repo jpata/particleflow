@@ -898,7 +898,7 @@ class HEPTv2Config(BaseModel):
     # Hash tracks at their calorimeter entry point instead of their vertex direction, where their
     # clusters' positions are (mlpf/model/calo_entry.py). Helix-extrapolated for
     # colliderml/clic/cld/idea/maia, read from eta_ecal/phi_ecal for cms. The radius/endcap |z|
-    # default to the middle of the detector's ECAL (calo_entry.py; required for idea/maia).
+    # default to the detector's calorimeter geometry (calo_entry.py; required for maia).
     track_hash_at_calo: bool = False
     track_hash_calo_radius_mm: Optional[float] = Field(default=None, gt=0.0)
     track_hash_calo_endcap_z_mm: Optional[float] = Field(default=None, gt=0.0)

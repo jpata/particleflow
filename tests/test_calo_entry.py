@@ -77,7 +77,7 @@ def _inputs(config):
     return X, torch.ones(2, 16, dtype=torch.bool)
 
 
-@pytest.mark.parametrize("dataset", ["colliderml", "clic", "cld", "cms"])
+@pytest.mark.parametrize("dataset", ["colliderml", "clic", "cld", "idea", "cms"])
 def test_track_hash_at_calo_only_moves_tracks_in_the_backbone(dataset):
     config_off, model_off = _heptv2(dataset)
     config_on, model_on = _heptv2(dataset, track_hash_at_calo=True)
@@ -117,9 +117,12 @@ def test_geometry_override_and_unsupported_datasets():
     _, model = _heptv2("clic", track_hash_at_calo=True, track_hash_calo_radius_mm=1000.0)
     assert (model.track_calo_entry.radius, model.track_calo_entry.endcap_z) == (1000.0, 2408.0)
 
+    _, model = _heptv2("idea", track_hash_at_calo=True)
+    assert (model.track_calo_entry.radius, model.track_calo_entry.endcap_z) == (2500.0, 2500.0)
+
     with pytest.raises(ValueError, match="no calorimeter geometry"):
-        _heptv2("idea", track_hash_at_calo=True)
-    _, model = _heptv2("idea", track_hash_at_calo=True, track_hash_calo_radius_mm=2100.0, track_hash_calo_endcap_z_mm=2500.0)
+        _heptv2("maia", track_hash_at_calo=True)
+    _, model = _heptv2("maia", track_hash_at_calo=True, track_hash_calo_radius_mm=2000.0, track_hash_calo_endcap_z_mm=2450.0)
     assert model.track_calo_entry.mode == "helix"
 
     with pytest.raises(ValueError, match="not supported"):
@@ -178,6 +181,7 @@ SPEC_FILE = Path(__file__).resolve().parents[1] / "particleflow_spec.yaml"
         ("pyg-cms-v1", "cms_run3", False),
         ("pyg-clic-v1", "clic", True),
         ("pyg-cld-v1", "cld", True),
+        ("pyg-idea-pipeline-v1", "idea", False),
         ("pyg-colliderml-v1", "colliderml", False),
         ("pyg-colliderml-pu200-v1", "colliderml", False),
         ("pyg-colliderml-pu0pu200-groups-v1", "colliderml", False),

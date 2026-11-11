@@ -750,6 +750,8 @@ models:
         num_heads: 16
         dropout_ff: 0.0
         block_size: 100
+        # hash tracks at their calorimeter entry (the dual-readout calorimeter front face)
+        track_hash_at_calo: true
 
     train_datasets:
       physical:
