@@ -97,7 +97,7 @@ from mlpf.model.set_losses import SetMatcherWeights, hungarian_match, set_mlpf_l
 from mlpf.model.reconstruction_diagnostics import compute_hit_grouping_metrics
 from mlpf.model.validation_metrics import compute_set_slot_metrics, compute_validation_particle_metrics, validation_particle_collections
 from mlpf.utils import create_comet_experiment
-from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
+from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS, dataset_for_sample
 from mlpf.jet_utils import get_jet_config
 
 from mlpf.model.benchmarking import active_benchmark, benchmark_phase, record_benchmark, record_phase
@@ -1353,7 +1353,7 @@ def _run_validation_cycle(
         log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
         for sample in config.enabled_test_datasets:
             with benchmark_phase("plotting", sample=sample):
-                plot_metrics = make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
+                plot_metrics = make_plots(outdir, sample, dataset_for_sample(sample, config.dataset), testdir_name, config.ntest)
             plot_metrics_sample[sample] = plot_metrics
             # Log key jet metrics to TensorBoard and CometML
             for k in JET_VALIDATION_METRICS:
@@ -1736,7 +1736,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     _logger.info(f"Running predictions on {sample}")
     torch.cuda.empty_cache()
 
-    jetdef, jet_ptcut, jet_match_dr = get_jet_config(config.dataset)
+    jetdef, jet_ptcut, jet_match_dr = get_jet_config(dataset_for_sample(sample, config.dataset))
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
@@ -1989,7 +1989,7 @@ def run(
 
         if (rank == 0) or (rank == "cpu"):
             for sample in config.enabled_test_datasets:
-                make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
+                make_plots(outdir, sample, dataset_for_sample(sample, config.dataset), testdir_name, config.ntest)
 
     if world_size > 1:
         dist.barrier()

@@ -99,6 +99,19 @@ def dataset_input_type_id(dataset_name: str) -> int:
     return INPUT_TYPE_IDS["pf"]
 
 
+def dataset_for_sample(sample_name: str, default: "Dataset") -> "Dataset":
+    """Return the Dataset a TFDS sample belongs to, e.g. colliderml_ttbar_nopu_pf -> COLLIDERML."""
+    source = SOURCE_LABELS.get(dataset_source_id(sample_name), "unknown")
+    if source == "unknown":
+        return default
+    if dataset_input_type_id(sample_name) == INPUT_TYPE_IDS["hits"]:
+        source = f"{source}_hits"
+    try:
+        return Dataset(source)
+    except ValueError:
+        return default
+
+
 class RegressionMode(Enum):
     DIRECT = "direct"
     ADDITIVE = "additive"
@@ -630,6 +643,9 @@ X_FEATURES = {
     Dataset.COLLIDERML_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
+# Datasets whose elements are tracks (1) and clusters (2), the sources model.feature_bag supports.
+TRACK_CLUSTER_SOURCES = tuple(source for source in SOURCE_IDS if source in X_FEATURES and ELEM_TYPES_NONZERO.get(source) == [1, 2])
+
 
 @dataclass(frozen=True, slots=True)
 class JetConfig:
@@ -1049,6 +1065,7 @@ class ModelArchitectureConfig(BaseModel):
     hit_feature_engineering: HitFeatureEngineeringConfig = Field(default_factory=HitFeatureEngineeringConfig)
     set_decoder: Optional[SetDecoderConfig] = None
     input_normalization: bool = False
+    feature_bag: bool = False
 
     # Nested configs
     gnnlsh: Optional[GNNLSHConfig] = None
@@ -1418,6 +1435,18 @@ class MLPFConfig(BaseModel):
                 self.model.set_decoder = SetDecoderConfig()
             if self.model.backbone.mode != BackboneMode.SHARED:
                 raise ValueError("model.output_mode='set' currently requires model.backbone.mode='shared'")
+        if self.model.feature_bag:
+            if self.model.input_encoding != InputEncoding.SPLIT:
+                raise ValueError("model.feature_bag requires model.input_encoding='split': the element type is not a feature")
+            if not self.model.input_normalization:
+                raise ValueError("model.feature_bag requires model.input_normalization")
+            unsupported = sorted(
+                name
+                for name, _ in self._samples()
+                if dataset_input_type_id(name) != INPUT_TYPE_IDS["pf"] or SOURCE_LABELS.get(dataset_source_id(name)) not in TRACK_CLUSTER_SOURCES
+            )
+            if unsupported:
+                raise ValueError(f"model.feature_bag supports track/cluster samples of {list(TRACK_CLUSTER_SOURCES)}, not {unsupported}")
         if self.model.input_normalization:
             hits = sorted(name for name, _ in self._samples() if dataset_input_type_id(name) != INPUT_TYPE_IDS["pf"])
             if hits:

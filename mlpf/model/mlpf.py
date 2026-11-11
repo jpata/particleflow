@@ -19,6 +19,7 @@ except ImportError:
 from mlpf.model.hept import HEPTLayer, trunc_normal_
 from mlpf.model.heptv2 import HEPTv2Layer
 from mlpf.model.input_normalization import InputNormalization
+from mlpf.model.feature_bag import FeatureBag
 from mlpf.model.tracker_features import TrackerDoubletFeatures
 from mlpf.model.set_decoder import ParticleSetDecoder
 
@@ -1251,6 +1252,9 @@ class MLPF(nn.Module):
         )
         self.input_dim = self.raw_input_dim + (self.feature_engineering.num_output_features if self.uses_hit_feature_engineering else 0)
         self.input_normalization = InputNormalization(self.raw_input_dim, config.dataset_versions()) if config.model.input_normalization else None
+        self.feature_bag = FeatureBag(self.raw_input_dim) if config.model.feature_bag else None
+        if self.feature_bag is not None:
+            self.input_dim = self.feature_bag.num_features
         self.num_classes = config.num_classes
         self.elemtypes_nonzero = config.elemtypes_nonzero
 
@@ -1713,12 +1717,13 @@ class MLPF(nn.Module):
     def _encode_inputs(self, X_features, mask=None, encoder=None, source_id=None):
         encoder = self.nn0 if encoder is None else encoder
         X_features = X_features if self.input_normalization is None else self.input_normalization(X_features, source_id)
+        inputs = X_features if self.feature_bag is None else self.feature_bag(X_features, source_id)
         if self.input_encoding == InputEncoding.JOINT:
-            encoded = encoder(X_features)
+            encoded = encoder(inputs)
         if self.input_encoding == InputEncoding.SPLIT:
             B, S, _ = X_features.shape
             num_types = len(self.elemtypes_nonzero)
-            all_embeddings = encoder(X_features).view(B, S, num_types, -1)
+            all_embeddings = encoder(inputs).view(B, S, num_types, -1)
             elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
             encoded = torch.sum(all_embeddings * elemtype_mask.unsqueeze(-1).to(all_embeddings.dtype), axis=2)
         elif self.input_encoding not in [InputEncoding.JOINT, InputEncoding.SPLIT]:
