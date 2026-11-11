@@ -13,40 +13,39 @@ samples: [cms_pf_qcd/1/2.8.0, cms_pf_qcd/10/2.8.0, cms_pf_qcd/2/2.8.0, cms_pf_qc
   cms_pf_ztt/10/2.8.0, cms_pf_ztt/2/2.8.0, cms_pf_ztt/3/2.8.0, cms_pf_ztt/4/2.8.0, cms_pf_ztt/5/2.8.0, cms_pf_ztt/6/2.8.0, cms_pf_ztt/7/2.8.0, cms_pf_ztt/8/2.8.0,
   cms_pf_ztt/9/2.8.0, cms_pf_ztt_nopu/1/2.8.0, cms_pf_ztt_nopu/10/2.8.0, cms_pf_ztt_nopu/2/2.8.0, cms_pf_ztt_nopu/3/2.8.0, cms_pf_ztt_nopu/4/2.8.0, cms_pf_ztt_nopu/5/2.8.0,
   cms_pf_ztt_nopu/6/2.8.0, cms_pf_ztt_nopu/7/2.8.0, cms_pf_ztt_nopu/8/2.8.0, cms_pf_ztt_nopu/9/2.8.0]
-events: 9000
-sampling: {method: evenly_spaced_train_indices, max_events_per_build: 100, population_events: 28352350}
+events: 28352350
 track:
-- {column: 1, name: pt, log1p_scale: 0.01, clip: null, mean: 4.158333373251643, std: 0.7689730502736701, min: 0.012870272621512413, max: 2385.205810546875,
+- {column: 1, name: pt, log1p_scale: 0.01, clip: null, mean: 4.432721088682874, std: 1.0200010666839998, min: 0.0011921204859390855, max: 2377475.25, clipped: 0,
+  nonfinite: 0}
+- {column: 2, name: eta, log1p_scale: null, clip: null, mean: -0.0007870254334051119, std: 1.5481452865677607, min: -6.459126949310303, max: 5.911087512969971,
   clipped: 0, nonfinite: 0}
-- {column: 2, name: eta, log1p_scale: null, clip: null, mean: -0.0017082648343489477, std: 1.6095684746908097, min: -3.8749918937683105, max: 3.587411403656006,
-  clipped: 0, nonfinite: 0}
-- {column: 3, name: sin_phi, log1p_scale: null, clip: null, mean: 0.0004063210517855157, std: 0.7069180342134769, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
-- {column: 4, name: cos_phi, log1p_scale: null, clip: null, mean: -0.00514197159753803, std: 0.7072766697486019, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
-- {column: 5, name: e, log1p_scale: 0.01, clip: null, mean: 4.996957076500593, std: 0.9538233240799817, min: 0.05385437607765198, max: 11838.681640625,
-  clipped: 0, nonfinite: 0}
+- {column: 3, name: sin_phi, log1p_scale: null, clip: null, mean: 0.0006985162177897091, std: 0.7068671410272107, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 4, name: cos_phi, log1p_scale: null, clip: null, mean: -0.004455049652293658, std: 0.7073319653333376, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 5, name: e, log1p_scale: 0.01, clip: null, mean: 5.217970397797987, std: 1.115527207790126, min: 0.007769475691020489, max: 6810034.5, clipped: 0,
+  nonfinite: 0}
 - {column: 6, name: layer, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 7, name: depth, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
-- {column: 8, name: charge, log1p_scale: null, clip: null, mean: 0.02192437061588489, std: 0.9997596320981845, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 8, name: charge, log1p_scale: null, clip: null, mean: 0.020586276754194638, std: 0.9997880801496883, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
 - {column: 9, name: trajpoint, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
-- {column: 10, name: eta_ecal, log1p_scale: null, clip: null, mean: 0.0005585444059822032, std: 1.9552590484285175, min: -3.1987476348876953, max: 3.2060554027557373,
+- {column: 10, name: eta_ecal, log1p_scale: null, clip: null, mean: 0.0011566891870486947, std: 1.8571315123463166, min: -3.2129244804382324, max: 3.2134859561920166,
   clipped: 0, nonfinite: 0}
-- {column: 11, name: phi_ecal, log1p_scale: null, clip: null, mean: 0.0008684235326090285, std: 1.670794052525726, min: -3.141592025756836, max: 3.1415908336639404,
+- {column: 11, name: phi_ecal, log1p_scale: null, clip: null, mean: 0.0005029551261119806, std: 1.6940124227683546, min: -3.1415927410125732, max: 3.1415927410125732,
   clipped: 0, nonfinite: 0}
-- {column: 12, name: eta_hcal, log1p_scale: null, clip: null, mean: -0.00040936653934946714, std: 1.9489740256601398, min: -3.0003068447113037, max: 3.000307559967041,
+- {column: 12, name: eta_hcal, log1p_scale: null, clip: null, mean: 0.0008357821308347454, std: 1.863885539127796, min: -3.000307559967041, max: 3.000307559967041,
   clipped: 0, nonfinite: 0}
-- {column: 13, name: phi_hcal, log1p_scale: null, clip: null, mean: 0.000854146424724291, std: 1.5858912634710045, min: -3.1415913105010986, max: 3.141592502593994,
+- {column: 13, name: phi_hcal, log1p_scale: null, clip: null, mean: 0.000687664348783805, std: 1.623875445477623, min: -3.1415927410125732, max: 3.1415927410125732,
   clipped: 0, nonfinite: 0}
-- {column: 14, name: muon_dt_hits, log1p_scale: null, clip: null, mean: 0.005329008527152579, std: 0.39200004745362466, min: 0.0, max: 44.0, clipped: 0,
+- {column: 14, name: muon_dt_hits, log1p_scale: null, clip: null, mean: 0.015933139278078188, std: 0.6758035154043411, min: 0.0, max: 44.0, clipped: 0,
   nonfinite: 0}
-- {column: 15, name: muon_csc_hits, log1p_scale: null, clip: null, mean: 0.008407637827896509, std: 0.40570242082783325, min: 0.0, max: 46.0, clipped: 0,
+- {column: 15, name: muon_csc_hits, log1p_scale: null, clip: null, mean: 0.01305530536118053, std: 0.5118172938366403, min: 0.0, max: 54.0, clipped: 0,
   nonfinite: 0}
-- {column: 16, name: muon_type, log1p_scale: null, clip: null, mean: 0.19829938862743252, std: 4.845346778321449, min: 0.0, max: 206.0, clipped: 0, nonfinite: 0}
-- {column: 17, name: px, log1p_scale: null, clip: null, mean: -0.002873750371516486, std: 3.500323838642623, min: -2375.8818359375, max: 1350.7855224609375,
-  clipped: 0, nonfinite: 0}
-- {column: 18, name: py, log1p_scale: null, clip: null, mean: 0.00041706521059863406, std: 3.3182281550419273, min: -828.7862548828125, max: 1132.650390625,
-  clipped: 0, nonfinite: 0}
-- {column: 19, name: pz, log1p_scale: null, clip: null, mean: -0.012252049508871665, std: 9.096947530486819, min: -11595.912109375, max: 2286.75244140625,
-  clipped: 0, nonfinite: 0}
+- {column: 16, name: muon_type, log1p_scale: null, clip: null, mean: 0.26884691210594297, std: 5.40299853432289, min: 0.0, max: 206.0, clipped: 0, nonfinite: 0}
+- {column: 17, name: px, log1p_scale: null, clip: null, mean: -0.003380293669531429, std: 36.12867651416045, min: -1176575.625, max: 1339858.625, clipped: 0,
+  nonfinite: 0}
+- {column: 18, name: py, log1p_scale: null, clip: null, mean: 0.0006176709042544422, std: 43.92295938350471, min: -1963967.25, max: 1058648.125, clipped: 0,
+  nonfinite: 0}
+- {column: 19, name: pz, log1p_scale: null, clip: null, mean: -0.0014170493457317983, std: 168.51663450774222, min: -6657542.0, max: 6648976.5, clipped: 0,
+  nonfinite: 0}
 - {column: 20, name: deltap, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 21, name: sigmadeltap, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 22, name: gsf_electronseed_trkorecal, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
@@ -55,29 +54,29 @@ track:
 - {column: 25, name: gsf_electronseed_dnn3, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 26, name: gsf_electronseed_dnn4, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 27, name: gsf_electronseed_dnn5, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
-- {column: 28, name: num_hits, log1p_scale: 1.0, clip: null, mean: 2.488776373690595, std: 0.5252819766376874, min: 3.0, max: 37.0, clipped: 0, nonfinite: 0}
+- {column: 28, name: num_hits, log1p_scale: 1.0, clip: null, mean: 2.5319505098033397, std: 0.5169095428037881, min: 3.0, max: 45.0, clipped: 0, nonfinite: 0}
 - {column: 29, name: cluster_flags, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 30, name: corr_energy, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 31, name: corr_energy_err, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
-- {column: 32, name: vx, log1p_scale: null, clip: null, mean: 0.048055726377238386, std: 1.9481761876733905, min: -134.4904327392578, max: 120.84898376464844,
+- {column: 32, name: vx, log1p_scale: null, clip: null, mean: 0.04756398748677673, std: 1.9625658777210264, min: -183.57058715820312, max: 181.1521453857422,
   clipped: 0, nonfinite: 0}
-- {column: 33, name: vy, log1p_scale: null, clip: null, mean: -0.019129961639062866, std: 1.932238597349238, min: -170.17855834960938, max: 127.17507934570312,
+- {column: 33, name: vy, log1p_scale: null, clip: null, mean: -0.020257820882200753, std: 1.9681079348789596, min: -187.7812957763672, max: 185.2622833251953,
   clipped: 0, nonfinite: 0}
-- {column: 34, name: vz, log1p_scale: null, clip: null, mean: -0.08082024250144168, std: 9.28526364505819, min: -544.7620849609375, max: 614.3856201171875,
+- {column: 34, name: vz, log1p_scale: null, clip: null, mean: -0.019704472916906354, std: 12.629560675580644, min: -47763.5390625, max: 691023.0625, clipped: 0,
+  nonfinite: 0}
+- {column: 35, name: pterror, log1p_scale: 0.01, clip: null, mean: 1.0983093632611722, std: 0.8445620835831399, min: 5.5002969020279124e-05, max: 1072067390734336.0,
   clipped: 0, nonfinite: 0}
-- {column: 35, name: pterror, log1p_scale: 0.01, clip: null, mean: 0.9374224524088445, std: 0.6736482270328387, min: 0.0001707304472802207, max: 38533.67578125,
+- {column: 36, name: etaerror, log1p_scale: null, clip: null, mean: 0.0058999853330977325, std: 0.10245032357946424, min: 7.905035454314202e-05, max: 3879.81640625,
   clipped: 0, nonfinite: 0}
-- {column: 36, name: etaerror, log1p_scale: null, clip: null, mean: 0.006673019871596768, std: 0.015834535576278386, min: 9.813220094656572e-05, max: 12.37285327911377,
+- {column: 37, name: phierror, log1p_scale: null, clip: null, mean: 0.007433363453575547, std: 0.3147592622993123, min: 1.874302370197256e-06, max: 19939.45703125,
   clipped: 0, nonfinite: 0}
-- {column: 37, name: phierror, log1p_scale: null, clip: null, mean: 0.008391289673140546, std: 0.01223557857395412, min: 4.781676398124546e-05, max: 9.363638877868652,
+- {column: 38, name: lambd, log1p_scale: null, clip: null, mean: 0.0005379771789758295, std: 1.0192931282010045, min: -1.5676640272140503, max: 1.5653778314590454,
   clipped: 0, nonfinite: 0}
-- {column: 38, name: lambd, log1p_scale: null, clip: null, mean: 0.00011520083330057033, std: 1.0468120135943768, min: -1.5292932987213135, max: 1.5154707431793213,
+- {column: 39, name: lambdaerror, log1p_scale: null, clip: null, mean: 0.0024838758204724274, std: 0.08047417678587328, min: 1.2689071809290908e-05, max: 3692.3310546875,
   clipped: 0, nonfinite: 0}
-- {column: 39, name: lambdaerror, log1p_scale: null, clip: null, mean: 0.002698860305219718, std: 0.010341038110556268, min: 2.5844403353403322e-05, max: 12.056729316711426,
+- {column: 40, name: theta, log1p_scale: null, clip: null, mean: 1.5702583496155436, std: 1.0192931282009554, min: 0.005418464541435242, max: 3.138460397720337,
   clipped: 0, nonfinite: 0}
-- {column: 40, name: theta, log1p_scale: null, clip: null, mean: 1.5706811259471345, std: 1.046812013602396, min: 0.05532561242580414, max: 3.1000895500183105,
-  clipped: 0, nonfinite: 0}
-- {column: 41, name: thetaerror, log1p_scale: null, clip: null, mean: 0.002698860305219718, std: 0.010341038110556268, min: 2.5844403353403322e-05, max: 12.056729316711426,
+- {column: 41, name: thetaerror, log1p_scale: null, clip: null, mean: 0.0024838758204724274, std: 0.08047417678587328, min: 1.2689071809290908e-05, max: 3692.3310546875,
   clipped: 0, nonfinite: 0}
 - {column: 42, name: time, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 43, name: timeerror, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
@@ -93,95 +92,96 @@ track:
 - {column: 53, name: sigma_y, log1p_scale: 1.0, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 54, name: sigma_z, log1p_scale: 1.0, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 cluster:
-- {column: 1, name: pt, log1p_scale: 0.01, clip: null, mean: 4.135587454919467, std: 1.1424226588345663, min: 0.0, max: 22170.6171875, clipped: 0, nonfinite: 0}
-- {column: 2, name: eta, log1p_scale: null, clip: null, mean: 0.005560247225237146, std: 3.5279946173573538, min: -5.095886707305908, max: 5.096505641937256,
+- {column: 1, name: pt, log1p_scale: 0.01, clip: null, mean: 3.5807907010971083, std: 1.3557366312174237, min: 0.0, max: 339735200.0, clipped: 0, nonfinite: 0}
+- {column: 2, name: eta, log1p_scale: null, clip: null, mean: 0.011812519762759415, std: 3.489010462871571, min: -5.86990213394165, max: 6.455801486968994,
   clipped: 0, nonfinite: 0}
-- {column: 3, name: sin_phi, log1p_scale: null, clip: null, mean: -0.00031421367308377153, std: 0.7068460228718819, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
-- {column: 4, name: cos_phi, log1p_scale: null, clip: null, mean: -1.7693135069465674e-05, std: 0.7073673724132296, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
-- {column: 5, name: e, log1p_scale: 0.01, clip: null, mean: 6.737166740459258, std: 1.525869580137078, min: 0.08003935217857361, max: 203758.46875, clipped: 0,
+- {column: 3, name: sin_phi, log1p_scale: null, clip: null, mean: 0.001130971936058004, std: 0.706827143479047, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 4, name: cos_phi, log1p_scale: null, clip: null, mean: -0.0018971385705178216, std: 0.707382859550444, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 5, name: e, log1p_scale: 0.01, clip: null, mean: 6.130425396068823, std: 1.3887691784961134, min: 0.000566085334867239, max: 340780032.0, clipped: 0,
   nonfinite: 0}
-- {column: 6, name: layer, log1p_scale: null, clip: null, mean: 8.207657734388969, std: 5.085427558325383, min: -2.0, max: 12.0, clipped: 0, nonfinite: 0}
-- {column: 7, name: depth, log1p_scale: null, clip: null, mean: 1.4512624995171306, std: 0.600170909635254, min: 0.0, max: 7.0, clipped: 0, nonfinite: 0}
-- {column: 8, name: charge, log1p_scale: null, clip: null, mean: -7.763326205709364e-05, std: 0.06459476942072451, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 6, name: layer, log1p_scale: null, clip: null, mean: 7.630332993544173, std: 5.166929793811246, min: -2.0, max: 12.0, clipped: 0, nonfinite: 0}
+- {column: 7, name: depth, log1p_scale: null, clip: null, mean: 1.4227258654336867, std: 0.6786299668693551, min: 0.0, max: 7.0, clipped: 0, nonfinite: 0}
+- {column: 8, name: charge, log1p_scale: null, clip: null, mean: -6.245416848801386e-05, std: 0.08363657858349148, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
 - {column: 9, name: trajpoint, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
-- {column: 10, name: eta_ecal, log1p_scale: null, clip: null, mean: 1.426762598491641e-05, std: 0.08701691075772386, min: -3.510420083999634, max: 3.0748825073242188,
+- {column: 10, name: eta_ecal, log1p_scale: null, clip: null, mean: 3.691146289101553e-05, std: 0.11007565806266831, min: -8.49970817565918, max: 6.444981098175049,
   clipped: 0, nonfinite: 0}
-- {column: 11, name: phi_ecal, log1p_scale: null, clip: null, mean: -3.47855170161222e-05, std: 0.1163703689777568, min: -3.1415555477142334, max: 3.1415867805480957,
+- {column: 11, name: phi_ecal, log1p_scale: null, clip: null, mean: 1.1276659998402705e-06, std: 0.15136583044721552, min: -3.1415927410125732, max: 3.141592502593994,
   clipped: 0, nonfinite: 0}
-- {column: 12, name: eta_hcal, log1p_scale: null, clip: null, mean: 1.3085371333179513e-05, std: 0.08639369958597959, min: -3.328845500946045, max: 3.0743567943573,
+- {column: 12, name: eta_hcal, log1p_scale: null, clip: null, mean: 3.5465915566129815e-05, std: 0.10957736953553311, min: -7.758437633514404, max: 9.974920272827148,
   clipped: 0, nonfinite: 0}
-- {column: 13, name: phi_hcal, log1p_scale: null, clip: null, mean: -3.6972905187055185e-05, std: 0.11641081028343875, min: -3.1413609981536865, max: 3.141181468963623,
+- {column: 13, name: phi_hcal, log1p_scale: null, clip: null, mean: 7.2406631071303525e-06, std: 0.1514086607422264, min: -3.141592502593994, max: 3.1415927410125732,
   clipped: 0, nonfinite: 0}
 - {column: 14, name: muon_dt_hits, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 15, name: muon_csc_hits, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 16, name: muon_type, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
-- {column: 17, name: px, log1p_scale: null, clip: null, mean: 0.00588134092701343, std: 64.08056222162972, min: -17947.248046875, max: 20420.068359375,
-  clipped: 0, nonfinite: 0}
-- {column: 18, name: py, log1p_scale: null, clip: null, mean: -0.02633038750182144, std: 63.49478496435539, min: -8841.6748046875, max: 18664.84375, clipped: 0,
+- {column: 17, name: px, log1p_scale: null, clip: null, mean: -0.17903763833604316, std: 1522.637214586089, min: -22325154.0, max: 152110720.0, clipped: 0,
   nonfinite: 0}
-- {column: 19, name: pz, log1p_scale: null, clip: null, mean: 1.2368254088699218, std: 976.6146230924522, min: -202548.703125, max: 32398.349609375, clipped: 0,
+- {column: 18, name: py, log1p_scale: null, clip: null, mean: 0.03734018548877699, std: 2897.756816371527, min: -303780064.0, max: 12006207.0, clipped: 0,
+  nonfinite: 0}
+- {column: 19, name: pz, log1p_scale: null, clip: null, mean: 3.0264758730693506, std: 1738.900369046615, min: -80207624.0, max: 31599472.0, clipped: 0,
   nonfinite: 0}
 - {column: 20, name: deltap, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
 - {column: 21, name: sigmadeltap, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
-- {column: 22, name: gsf_electronseed_trkorecal, log1p_scale: null, clip: null, mean: 0.007638874928714943, std: 0.12047112454479866, min: 0.0, max: 2.0,
+- {column: 22, name: gsf_electronseed_trkorecal, log1p_scale: null, clip: null, mean: 0.01273719531773383, std: 0.1551102429025497, min: 0.0, max: 2.0,
   clipped: 0, nonfinite: 0}
-- {column: 23, name: gsf_electronseed_dnn1, log1p_scale: null, clip: null, mean: 8.890724663516347e-05, std: 0.007324715832343014, min: 0.0, max: 0.9991565942764282,
+- {column: 23, name: gsf_electronseed_dnn1, log1p_scale: null, clip: null, mean: 0.00013762401581667426, std: 0.009696105147432243, min: 0.0, max: 1.0,
   clipped: 0, nonfinite: 0}
-- {column: 24, name: gsf_electronseed_dnn2, log1p_scale: null, clip: null, mean: 0.0002741607538469425, std: 0.011434285019982738, min: 0.0, max: 0.9999996423721313,
-  clipped: 0, nonfinite: 0}
-- {column: 25, name: gsf_electronseed_dnn3, log1p_scale: null, clip: null, mean: 0.0005364892938779047, std: 0.018083876782804674, min: 0.0, max: 1.0, clipped: 0,
+- {column: 24, name: gsf_electronseed_dnn2, log1p_scale: null, clip: null, mean: 0.000533831926768898, std: 0.01628483258972384, min: 0.0, max: 1.0, clipped: 0,
   nonfinite: 0}
-- {column: 26, name: gsf_electronseed_dnn4, log1p_scale: null, clip: null, mean: 0.000227255701237742, std: 0.009696388324092682, min: 0.0, max: 1.0, clipped: 0,
+- {column: 25, name: gsf_electronseed_dnn3, log1p_scale: null, clip: null, mean: 0.0009970386821644022, std: 0.02502339490549788, min: 0.0, max: 1.0, clipped: 0,
   nonfinite: 0}
-- {column: 27, name: gsf_electronseed_dnn5, log1p_scale: null, clip: null, mean: 5.765633219619106e-05, std: 0.004387271737104698, min: 0.0, max: 0.9875525236129761,
+- {column: 26, name: gsf_electronseed_dnn4, log1p_scale: null, clip: null, mean: 0.0003624495654152206, std: 0.012242462873463254, min: 0.0, max: 1.0, clipped: 0,
+  nonfinite: 0}
+- {column: 27, name: gsf_electronseed_dnn5, log1p_scale: null, clip: null, mean: 8.301128571553989e-05, std: 0.0055433006211697295, min: 0.0, max: 1.0,
   clipped: 0, nonfinite: 0}
-- {column: 28, name: num_hits, log1p_scale: 1.0, clip: null, mean: 1.1321783421216054, std: 0.8961722977560688, min: 1.0, max: 765.0, clipped: 0, nonfinite: 0}
+- {column: 28, name: num_hits, log1p_scale: 1.0, clip: null, mean: 1.0448770642992964, std: 0.7324082731792488, min: 1.0, max: 819.0, clipped: 0, nonfinite: 0}
 - {column: 29, name: cluster_flags, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
-- {column: 30, name: corr_energy, log1p_scale: null, clip: null, mean: -0.2816192498905498, std: 10.375638562801772, min: -1.0, max: 2300.14794921875, clipped: 0,
+- {column: 30, name: corr_energy, log1p_scale: null, clip: null, mean: 0.2030348391818934, std: 16.68137826045996, min: -1.0, max: 5517.37939453125, clipped: 0,
   nonfinite: 0}
-- {column: 31, name: corr_energy_err, log1p_scale: null, clip: null, mean: -0.8529024259666994, std: 0.35420315886058695, min: -1.0, max: 0.0, clipped: 0,
+- {column: 31, name: corr_energy_err, log1p_scale: null, clip: null, mean: -0.8426261698090223, std: 0.36415286317973533, min: -1.0, max: 0.0, clipped: 0,
   nonfinite: 0}
-- {column: 32, name: vx, log1p_scale: null, clip: null, mean: 0.00019904535592699658, std: 0.02650692644811324, min: -13.204751968383789, max: 23.697017669677734,
+- {column: 32, name: vx, log1p_scale: null, clip: null, mean: 0.000319393320492779, std: 0.026415831094886703, min: -82.12665557861328, max: 110.67549896240234,
   clipped: 0, nonfinite: 0}
-- {column: 33, name: vy, log1p_scale: null, clip: null, mean: -8.044503282079742e-05, std: 0.022145736008870317, min: -12.705910682678223, max: 16.62061309814453,
+- {column: 33, name: vy, log1p_scale: null, clip: null, mean: -0.00011843381536213502, std: 0.025917964323488942, min: -69.75496673583984, max: 58.482261657714844,
   clipped: 0, nonfinite: 0}
-- {column: 34, name: vz, log1p_scale: null, clip: null, mean: -0.00035502580238948544, std: 0.3030254809104998, min: -129.2810516357422, max: 385.1998291015625,
+- {column: 34, name: vz, log1p_scale: null, clip: null, mean: -4.883907130235488e-05, std: 0.34407000929326004, min: -2796.9091796875, max: 11832.5771484375,
   clipped: 0, nonfinite: 0}
-- {column: 35, name: pterror, log1p_scale: 0.01, clip: null, mean: 2.0183863407771163, std: 2.886439001913371, min: 0.0, max: 99444384.0, clipped: 0, nonfinite: 0}
-- {column: 36, name: etaerror, log1p_scale: null, clip: null, mean: 0.08706552345391133, std: 0.16038614601049242, min: 0.0, max: 1.1587424278259277, clipped: 0,
+- {column: 35, name: pterror, log1p_scale: 0.01, clip: null, mean: 1.4982337461722055, std: 2.4104218811272404, min: 0.0, max: 2168665352962048.0, clipped: 0,
   nonfinite: 0}
-- {column: 37, name: phierror, log1p_scale: null, clip: null, mean: 0.15346793214894172, std: 0.330163470247787, min: 0.0, max: 3.0980618000030518, clipped: 0,
+- {column: 36, name: etaerror, log1p_scale: null, clip: null, mean: 0.04828378579144754, std: 0.35234374864698237, min: 0.0, max: 31062.775390625, clipped: 0,
   nonfinite: 0}
-- {column: 38, name: lambd, log1p_scale: null, clip: null, mean: 2.1401753504591435e-05, std: 0.06148839753989993, min: -1.5082522630691528, max: 1.4784727096557617,
-  clipped: 0, nonfinite: 0}
-- {column: 39, name: lambdaerror, log1p_scale: null, clip: null, mean: 1.9448227244601213e-06, std: 0.00010512579711185957, min: 0.0, max: 0.15114085376262665,
-  clipped: 0, nonfinite: 0}
-- {column: 40, name: theta, log1p_scale: null, clip: null, mean: 0.006532730625485529, std: 0.11817833300239679, min: 0.0, max: 3.0790486335754395, clipped: 0,
+- {column: 37, name: phierror, log1p_scale: null, clip: null, mean: 0.07768703260556342, std: 0.5226323392238286, min: 0.0, max: 46301.44921875, clipped: 0,
   nonfinite: 0}
-- {column: 41, name: thetaerror, log1p_scale: null, clip: null, mean: 1.9448227244601213e-06, std: 0.00010512579711185957, min: 0.0, max: 0.15114085376262665,
+- {column: 38, name: lambd, log1p_scale: null, clip: null, mean: 3.5556170313927833e-05, std: 0.07786088345589913, min: -1.5651500225067139, max: 1.5676535367965698,
   clipped: 0, nonfinite: 0}
-- {column: 42, name: time, log1p_scale: null, clip: null, mean: -141.35482474003103, std: 334.96027203816357, min: -999.0, max: 74.58402252197266, clipped: 0,
+- {column: 39, name: lambdaerror, log1p_scale: null, clip: null, mean: 6.879199116948337e-06, std: 0.31667327427451997, min: 0.0, max: 30872.27734375, clipped: 0,
+  nonfinite: 0}
+- {column: 40, name: theta, log1p_scale: null, clip: null, mean: 0.010952291649217297, std: 0.15195503853195552, min: 0.0, max: 3.135946273803711, clipped: 0,
+  nonfinite: 0}
+- {column: 41, name: thetaerror, log1p_scale: null, clip: null, mean: 6.879199116948337e-06, std: 0.31667327427451997, min: 0.0, max: 30872.27734375, clipped: 0,
+  nonfinite: 0}
+- {column: 42, name: time, log1p_scale: null, clip: null, mean: -203.32757115691695, std: 380.7030921818023, min: -999.0, max: 102.108642578125, clipped: 0,
   nonfinite: 0}
 - {column: 43, name: timeerror, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
-- {column: 44, name: etaerror1, log1p_scale: null, clip: null, mean: 0.06490775588042791, std: 0.14168555063788335, min: 0.0, max: 1.1587424278259277, clipped: 0,
+- {column: 44, name: etaerror1, log1p_scale: null, clip: null, mean: 0.034200353241208, std: 0.09593432927973979, min: 0.0, max: 1.158742904663086, clipped: 0,
   nonfinite: 0}
-- {column: 45, name: etaerror2, log1p_scale: null, clip: null, mean: 0.007260036984458367, std: 0.029202769864144457, min: 0.0, max: 0.4857823848724365,
+- {column: 45, name: etaerror2, log1p_scale: null, clip: null, mean: 0.005725017277457956, std: 0.025777350286767163, min: 0.0, max: 0.9144421219825745,
   clipped: 0, nonfinite: 0}
-- {column: 46, name: etaerror3, log1p_scale: null, clip: null, mean: 0.004128170121646808, std: 0.023331136084282424, min: 0.0, max: 0.6151829957962036,
+- {column: 46, name: etaerror3, log1p_scale: null, clip: null, mean: 0.0027956835346957865, std: 0.01879780712513072, min: 0.0, max: 0.9365636706352234,
   clipped: 0, nonfinite: 0}
-- {column: 47, name: etaerror4, log1p_scale: null, clip: null, mean: 0.002434140714849287, std: 0.017942856379265088, min: 0.0, max: 0.8147481679916382,
+- {column: 47, name: etaerror4, log1p_scale: null, clip: null, mean: 0.0018666740195657186, std: 0.015927656257760787, min: 0.0, max: 0.9842926263809204,
   clipped: 0, nonfinite: 0}
-- {column: 48, name: phierror1, log1p_scale: null, clip: null, mean: 0.09602079093005404, std: 0.23913693772777547, min: 0.0, max: 2.2214415073394775, clipped: 0,
+- {column: 48, name: phierror1, log1p_scale: null, clip: null, mean: 0.04894805360292268, std: 0.15743651695568836, min: 0.0, max: 2.2230074405670166, clipped: 0,
   nonfinite: 0}
-- {column: 49, name: phierror2, log1p_scale: null, clip: null, mean: 0.008279913925224865, std: 0.03342823510045363, min: 0.0, max: 0.6689149737358093,
+- {column: 49, name: phierror2, log1p_scale: null, clip: null, mean: 0.0065992279138156465, std: 0.0293285193830675, min: 0.0, max: 1.1184196472167969,
   clipped: 0, nonfinite: 0}
-- {column: 50, name: phierror3, log1p_scale: null, clip: null, mean: 0.004951712773991655, std: 0.028036031181982807, min: 0.0, max: 0.6745882034301758,
+- {column: 50, name: phierror3, log1p_scale: null, clip: null, mean: 0.003334050983999264, std: 0.022102414856681185, min: 0.0, max: 1.2341340780258179,
   clipped: 0, nonfinite: 0}
-- {column: 51, name: phierror4, log1p_scale: null, clip: null, mean: 0.0039353409623397685, std: 0.02720020082842054, min: 0.0, max: 0.8021872639656067,
+- {column: 51, name: phierror4, log1p_scale: null, clip: null, mean: 0.003205676483268132, std: 0.023093011479504287, min: 0.0, max: 1.2341341972351074,
   clipped: 0, nonfinite: 0}
-- {column: 52, name: sigma_x, log1p_scale: 1.0, clip: null, mean: 0.80106000372328, std: 1.1837162747327694, min: 0.0, max: 81.27806091308594, clipped: 0,
+- {column: 52, name: sigma_x, log1p_scale: 1.0, clip: null, mean: 0.5812358109508688, std: 1.0008835893664263, min: 0.0, max: 117.65513610839844, clipped: 0,
   nonfinite: 0}
-- {column: 53, name: sigma_y, log1p_scale: 1.0, clip: null, mean: 0.8005239908700762, std: 1.182954689841162, min: 0.0, max: 78.60485076904297, clipped: 0,
+- {column: 53, name: sigma_y, log1p_scale: 1.0, clip: null, mean: 0.5814006035553175, std: 1.001268292062415, min: 0.0, max: 121.8802261352539, clipped: 0,
   nonfinite: 0}
-- {column: 54, name: sigma_z, log1p_scale: 1.0, clip: null, mean: 0.3091234352514958, std: 0.9111187720274879, min: 0.0, max: 184.87037658691406, clipped: 0,
+- {column: 54, name: sigma_z, log1p_scale: 1.0, clip: null, mean: 0.35357375897751575, std: 0.9513985409978072, min: 0.0, max: 205.56036376953125, clipped: 0,
   nonfinite: 0}
