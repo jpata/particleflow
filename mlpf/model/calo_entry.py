@@ -7,7 +7,8 @@ in a 3 T field turns by ~0.6 rad in phi before r = 1.3 m), so it can be far from
 
 heptv2.track_hash_at_calo (TrackCaloEntry) moves each track to the (eta, phi) of its calorimeter
 entry point, seen from the origin: helix-extrapolated from the track parameters (z0, tanLambda,
-omega) on the key4hep-style datasets, read from the eta_ecal/phi_ecal features on CMS.
+omega) to the middle of the ECAL on the key4hep-style datasets, read from the eta_ecal/phi_ecal
+features on CMS.
 
 heptv2.cluster_hash_at_centroid (ClusterCentroid) moves each cluster to the (eta, phi) of its
 centroid position. On the key4hep PF datasets (CLIC, CLD, IDEA, MAIA) the cluster eta/phi features
@@ -34,13 +35,18 @@ from mlpf.conf import X_FEATURES, Dataset
 
 TRACK_ELEMTYPE = 1
 
-# (barrel radius, endcap |z|) [mm] of the calorimeter entry: the median transverse radius of barrel
-# cluster centroids and the median |z| of endcap cluster centroids on each detector's ttbar PF dataset.
-CALO_ENTRY_GEOMETRY_MM = {
-    Dataset.COLLIDERML.value: (1300.0, 3300.0),
-    Dataset.CLIC.value: (1580.0, 2370.0),
-    Dataset.CLD.value: (2250.0, 2370.0),
+# ECAL ((barrel inner, outer radius), (endcap min, max |z|)) [mm] from the detector compact files: ColliderML =
+# OpenDataDetector (xml/OpenDataDetectorEnvelopes.xml: ecal_b_rmin/rmax, ecal_e_min_z/max_z), CLIC = k4geo CLIC_o3_v14,
+# CLD = k4geo CLD_o2_v07 (ECalBarrel_inner/outer_radius, ECalEndcap_min/max_z).
+ECAL_GEOMETRY_MM = {
+    Dataset.COLLIDERML.value: ((1250.0, 1500.0), (3200.0, 3450.0)),
+    Dataset.CLIC.value: ((1500.0, 1702.0), (2307.0, 2509.0)),
+    Dataset.CLD.value: ((2150.0, 2352.0), (2307.0, 2509.0)),
 }
+# (barrel radius, endcap |z|) [mm] tracks are extrapolated to: the middle of the ECAL, where the cluster centroids sit
+# (shower depth). The front face puts tracks further from their clusters: on CLIC ttbar 8% less cluster energy has a
+# track within dR < 0.05 (CLD 4%); mid-depth is within 1% of the best radius on all three detectors.
+CALO_ENTRY_GEOMETRY_MM = {dataset: (sum(radii) / 2, sum(z) / 2) for dataset, (radii, z) in ECAL_GEOMETRY_MM.items()}
 
 # PF datasets whose tracks carry the helix parameters, by name in X_FEATURES.
 HELIX_DATASETS = (Dataset.COLLIDERML.value, Dataset.CLIC.value, Dataset.CLD.value, Dataset.IDEA.value, Dataset.MAIA.value)

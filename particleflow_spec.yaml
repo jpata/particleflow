@@ -867,6 +867,9 @@ models:
     # Architecture Definition
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -885,6 +888,10 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry and clusters at their centroid
+      heptv2:
+        track_hash_at_calo: true
+        cluster_hash_at_centroid: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -1112,6 +1119,10 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry and clusters at their centroid
+      heptv2:
+        track_hash_at_calo: true
+        cluster_hash_at_centroid: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -1279,6 +1290,9 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         attention_type: flash
@@ -1321,6 +1335,9 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         attention_type: flash

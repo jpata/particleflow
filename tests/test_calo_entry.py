@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 
 import pytest
 import torch
@@ -114,7 +115,7 @@ def test_cms_tracks_without_ecal_extrapolation_keep_their_direction():
 
 def test_geometry_override_and_unsupported_datasets():
     _, model = _heptv2("clic", track_hash_at_calo=True, track_hash_calo_radius_mm=1000.0)
-    assert (model.track_calo_entry.radius, model.track_calo_entry.endcap_z) == (1000.0, 2370.0)
+    assert (model.track_calo_entry.radius, model.track_calo_entry.endcap_z) == (1000.0, 2408.0)
 
     with pytest.raises(ValueError, match="no calorimeter geometry"):
         _heptv2("idea", track_hash_at_calo=True)
@@ -166,3 +167,29 @@ def test_cluster_hash_at_centroid_rejects_position_clusters():
         _heptv2("cms", cluster_hash_at_centroid=True)
     with pytest.raises(ValueError, match="not supported"):
         _heptv2("colliderml", cluster_hash_at_centroid=True)
+
+
+SPEC_FILE = Path(__file__).resolve().parents[1] / "particleflow_spec.yaml"
+
+
+@pytest.mark.parametrize(
+    "model_name, production, centroid",
+    [
+        ("pyg-cms-v1", "cms_run3", False),
+        ("pyg-clic-v1", "clic", True),
+        ("pyg-cld-v1", "cld", True),
+        ("pyg-colliderml-v1", "colliderml", False),
+        ("pyg-colliderml-pu200-v1", "colliderml", False),
+        ("pyg-colliderml-pu0pu200-groups-v1", "colliderml", False),
+    ],
+)
+def test_spec_pf_models_hash_at_calo_when_switched_to_heptv2(model_name, production, centroid):
+    heptv2 = MLPFConfig.from_spec(SPEC_FILE, model_name, production, extra_args=["--model.type", "heptv2"]).model.heptv2
+    assert heptv2.track_hash_at_calo
+    assert heptv2.cluster_hash_at_centroid == centroid
+
+
+def test_spec_hit_models_keep_vertex_hashing():
+    heptv2 = MLPFConfig.from_spec(SPEC_FILE, "pyg-cld-hits-heptv2-set-v1", "cld").model.heptv2
+    assert not heptv2.track_hash_at_calo
+    assert not heptv2.cluster_hash_at_centroid
