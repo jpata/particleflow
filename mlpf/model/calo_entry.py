@@ -66,17 +66,19 @@ CENTROID_COLUMNS = ("position.x", "position.y", "position.z")
 
 
 def calo_entry_eta_phi(phi0, z0, tan_lambda, omega, radius, endcap_z):
-    """(eta, phi) of the point where a track enters the calorimeter, seen from the origin.
+    """(eta, phi, reached) of the point where a track enters the calorimeter, seen from the origin.
 
     The track is a helix from (0, 0, z0) (d0 neglected) with initial azimuth phi0, signed
     transverse curvature omega [1/mm] and tan_lambda = pz / pt. It ends at the first of the
-    barrel cylinder r = radius [mm] and the endcap planes |z| = endcap_z [mm]; a track that curls
-    up inside the barrel radius can only reach an endcap, and one that reaches neither keeps its
-    vertex direction. After a transverse arc s the entry point lies at signed chord length
-    2 sin(omega * s / 2) / omega along azimuth phi0 - omega * s / 2. This is the sign of the
-    EDM4hep/LCIO omega convention (and of ColliderML's q/pT-based omega): it puts the most
-    cluster energy around the tracks on ColliderML, CLIC and CLD; the opposite sign puts less
-    there than the vertex direction does.
+    barrel cylinder r = radius [mm] and the endcap planes |z| = endcap_z [mm]. A track that curls
+    up inside the barrel radius can only reach an endcap plane (at any transverse radius: the
+    endcap's inner and outer radii are not checked). reached is False for a track that reaches
+    neither surface or starts at or beyond an endcap plane (|z0| >= endcap_z); its eta and phi are
+    then its vertex direction (asinh(tan_lambda), phi0). After a transverse arc s the entry point
+    lies at signed chord length 2 sin(omega * s / 2) / omega along azimuth phi0 - omega * s / 2.
+    This is the sign of the EDM4hep/LCIO omega convention (and of ColliderML's q/pT-based omega):
+    it puts the most cluster energy around the tracks on ColliderML, CLIC and CLD; the opposite
+    sign puts less there than the vertex direction does.
     """
     phi0, z0, tan_lambda, omega = (t.float() for t in (phi0, z0, tan_lambda, omega))
     curvature = omega.abs().clamp_min(1e-12)
@@ -91,17 +93,20 @@ def calo_entry_eta_phi(phi0, z0, tan_lambda, omega, radius, endcap_z):
     arc_endcap = torch.where(forward & (arc_endcap > 0), arc_endcap, no_hit)
 
     arc = torch.minimum(arc_barrel, arc_endcap)
-    arc = torch.where(torch.isfinite(arc), arc, torch.zeros_like(arc))
+    reached = torch.isfinite(arc) & (z0.abs() < endcap_z)
+    arc = torch.where(reached, arc, torch.zeros_like(arc))
 
     half_turn = omega * arc / 2
     safe_omega = torch.where(omega == 0, torch.ones_like(omega), omega)
     chord = torch.where(half_turn.abs() > 1e-6, 2 * torch.sin(half_turn) / safe_omega, arc)
-    # past half a turn the chord is negative: the entry point is on the opposite side
+    # past a full turn (|omega| * s > 2 pi, endcap entries only) the chord is negative: the entry point is on the opposite side
     direction = phi0 - half_turn + torch.where(chord < 0, torch.full_like(chord, torch.pi), torch.zeros_like(chord))
     phi = torch.atan2(torch.sin(direction), torch.cos(direction))
     z = z0 + arc * tan_lambda
     eta = torch.asinh(z / chord.abs().clamp_min(1.0))
-    return eta, phi
+    # arc = 0 already gives phi = phi0; the vertex eta needs tan_lambda
+    eta = torch.where(reached, eta, torch.asinh(tan_lambda))
+    return eta, phi, reached
 
 
 def _track_column_names(dataset):
@@ -111,6 +116,13 @@ def _track_column_names(dataset):
 
 def _cluster_column_names(dataset):
     return [name.split("|")[-1].strip().lower() for name in X_FEATURES[dataset]]
+
+
+def _column_indices(names, wanted, dataset, flag):
+    missing = [name for name in wanted if name not in names]
+    if missing:
+        raise ValueError(f"heptv2.{flag} needs the X_FEATURES columns {missing}, which dataset {dataset} does not have")
+    return [names.index(name) for name in wanted]
 
 
 def _replace_coordinates(X_features, replace, eta, phi):
@@ -132,10 +144,10 @@ class TrackCaloEntry:
         names = _track_column_names(dataset)
         if dataset in PRECOMPUTED_COLUMNS:
             self.mode = "precomputed"
-            self.columns = [names.index(name) for name in PRECOMPUTED_COLUMNS[dataset]]
+            self.columns = _column_indices(names, PRECOMPUTED_COLUMNS[dataset], dataset, "track_hash_at_calo")
         elif dataset in HELIX_DATASETS:
             self.mode = "helix"
-            self.columns = [names.index(name) for name in HELIX_COLUMNS]
+            self.columns = _column_indices(names, HELIX_COLUMNS, dataset, "track_hash_at_calo")
             default = CALO_ENTRY_GEOMETRY_MM.get(dataset, (None, None))
             self.radius = radius_mm if radius_mm is not None else default[0]
             self.endcap_z = endcap_z_mm if endcap_z_mm is not None else default[1]
@@ -158,11 +170,12 @@ class TrackCaloEntry:
         if self.mode == "helix":
             z0, tan_lambda, omega = (X_features[..., column] for column in self.columns)
             phi0 = torch.atan2(X_features[..., 3], X_features[..., 4]).float()
-            eta, phi = calo_entry_eta_phi(phi0, z0, tan_lambda, omega, self.radius, self.endcap_z)
-            return eta, phi, torch.ones_like(eta, dtype=torch.bool)
+            # tracks that reach no calorimeter surface keep their vertex direction
+            return calo_entry_eta_phi(phi0, z0, tan_lambda, omega, self.radius, self.endcap_z)
         eta, phi = (X_features[..., column].float() for column in self.columns)
-        # tracks without an ECAL extrapolation carry eta_ecal = phi_ecal = 0: they keep their vertex direction
-        return eta, phi, (eta != 0) | (phi != 0)
+        # tracks without an ECAL extrapolation carry eta_ecal = phi_ecal = 0: they keep their vertex direction (as would
+        # non-finite values)
+        return eta, phi, torch.isfinite(eta) & torch.isfinite(phi) & ((eta != 0) | (phi != 0))
 
     @torch.no_grad()
     def __call__(self, X_features):
@@ -181,7 +194,7 @@ class ClusterCentroid:
             raise ValueError(f"heptv2.cluster_hash_at_centroid is not supported for dataset {dataset} (supported: {sorted(CENTROID_DATASETS)})")
         self.dataset = dataset
         names = _cluster_column_names(dataset)
-        self.columns = [names.index(name) for name in CENTROID_COLUMNS]
+        self.columns = _column_indices(names, CENTROID_COLUMNS, dataset, "cluster_hash_at_centroid")
 
     def __repr__(self):
         return f"ClusterCentroid({self.dataset}, position columns {self.columns})"

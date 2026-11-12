@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from mlpf.conf import MLPFConfig
+from mlpf.conf import X_FEATURES, MLPFConfig
 from mlpf.model.calo_entry import TrackCaloEntry, calo_entry_eta_phi
 from mlpf.model.mlpf import MLPF
 
@@ -15,15 +15,16 @@ def _t(*values):
 
 def test_straight_track_keeps_its_direction():
     tan_lambda = _t(0.0, 0.5, -2.0)
-    eta, phi = calo_entry_eta_phi(_t(0.3, -1.0, 2.5), _t(0, 0, 0), tan_lambda, _t(0, 0, 0), radius=1500.0, endcap_z=2300.0)
+    eta, phi, reached = calo_entry_eta_phi(_t(0.3, -1.0, 2.5), _t(0, 0, 0), tan_lambda, _t(0, 0, 0), radius=1500.0, endcap_z=2300.0)
     torch.testing.assert_close(eta, torch.asinh(tan_lambda))
     torch.testing.assert_close(phi, _t(0.3, -1.0, 2.5))
+    assert reached.all()
 
 
 def test_barrel_entry_of_a_bending_track():
     # a central track enters the barrel at azimuth phi0 - asin(omega * R / 2)
     omega, radius = 1e-4, 1500.0
-    eta, phi = calo_entry_eta_phi(_t(0.2, 0.2), _t(0, 0), _t(0, 0), _t(omega, -omega), radius=radius, endcap_z=2300.0)
+    eta, phi, reached = calo_entry_eta_phi(_t(0.2, 0.2), _t(0, 0), _t(0, 0), _t(omega, -omega), radius=radius, endcap_z=2300.0)
     turn = math.asin(omega * radius / 2)
     torch.testing.assert_close(phi, _t(0.2 - turn, 0.2 + turn))
     torch.testing.assert_close(eta, _t(0, 0))
@@ -32,7 +33,7 @@ def test_barrel_entry_of_a_bending_track():
 def test_forward_track_enters_the_endcap():
     # tanLambda 5: reaches |z| = 2300 mm after an arc of 460 mm < 1500 mm, so at r = chord(460 mm)
     omega, tan_lambda, endcap_z = 1e-3, 5.0, 2300.0
-    eta, phi = calo_entry_eta_phi(_t(0.0), _t(0.0), _t(tan_lambda), _t(omega), radius=1500.0, endcap_z=endcap_z)
+    eta, phi, reached = calo_entry_eta_phi(_t(0.0), _t(0.0), _t(tan_lambda), _t(omega), radius=1500.0, endcap_z=endcap_z)
     arc = endcap_z / tan_lambda
     chord = 2 * math.sin(omega * arc / 2) / omega
     torch.testing.assert_close(eta, _t(math.asinh(endcap_z / chord)))
@@ -40,10 +41,48 @@ def test_forward_track_enters_the_endcap():
 
 
 def test_curling_track_reaches_no_barrel():
-    # 2 / omega < radius: never reaches the barrel; without pz it keeps its vertex direction
-    eta, phi = calo_entry_eta_phi(_t(1.0), _t(0.0), _t(0.0), _t(1e-2), radius=1500.0, endcap_z=2300.0)
-    torch.testing.assert_close(eta, _t(0.0))
-    torch.testing.assert_close(phi, _t(1.0))
+    # 2 / omega < radius: never reaches the barrel; without pz it reaches no surface and keeps its vertex direction
+    # (also away from z0 = 0, where the vertex eta is not asinh(z0 / chord))
+    eta, phi, reached = calo_entry_eta_phi(_t(1.0, 1.0), _t(0.0, 100.0), _t(0.0, 0.0), _t(1e-2, 1e-2), radius=1500.0, endcap_z=2300.0)
+    torch.testing.assert_close(eta, _t(0.0, 0.0))
+    torch.testing.assert_close(phi, _t(1.0, 1.0))
+    assert not reached.any()
+
+
+def test_curling_track_reaches_the_endcap_after_several_turns():
+    # 2 / omega < radius, tanLambda 0.2: reaches |z| = 2300 mm after an arc of 11500 mm, 1.83 turns at omega 1e-3
+    omega, tan_lambda, endcap_z = 1e-3, 0.2, 2300.0
+    eta, phi, reached = calo_entry_eta_phi(_t(0.0), _t(0.0), _t(tan_lambda), _t(omega), radius=2500.0, endcap_z=endcap_z)
+    arc = endcap_z / tan_lambda
+    # direct helix position: the center sits at distance 1 / omega from the origin, perpendicular to phi0
+    x, y = math.sin(omega * arc) / omega, (math.cos(omega * arc) - 1) / omega
+    assert reached.all()
+    torch.testing.assert_close(phi, _t(math.atan2(y, x)))
+    torch.testing.assert_close(eta, _t(math.asinh(endcap_z / math.hypot(x, y))))
+
+
+def test_track_starting_beyond_the_endcap_keeps_its_vertex_direction():
+    # |z0| >= endcap_z: the track starts outside the calorimeter's front, curling (reaches no surface) or not
+    tan_lambda = _t(0.5, -0.3, 0.5)
+    eta, phi, reached = calo_entry_eta_phi(
+        _t(0.3, -1.0, 2.0), _t(2600.0, -3000.0, 2300.0), tan_lambda, _t(1e-2, 1e-4, 1e-4), radius=1500.0, endcap_z=2300.0
+    )
+    torch.testing.assert_close(eta, torch.asinh(tan_lambda))
+    torch.testing.assert_close(phi, _t(0.3, -1.0, 2.0))
+    assert not reached.any()
+
+
+def test_tracks_that_reach_no_surface_keep_their_features():
+    entry = TrackCaloEntry("clic")
+    z0, tan_lambda, omega = entry.columns
+    X = torch.zeros(1, 2, len(X_FEATURES["clic"]))
+    X[..., 0] = 1
+    X[..., 2] = _t(0.7, 0.7)  # stored eta, deliberately not asinh(tan_lambda)
+    X[..., 3], X[..., 4] = math.sin(1.0), math.cos(1.0)
+    X[..., z0], X[..., tan_lambda], X[..., omega] = _t(0.0, 3000.0), _t(0.5, 0.5), _t(1e-4, 1e-2)
+    out = entry(X)
+    assert not torch.allclose(out[0, 0, 2:5], X[0, 0, 2:5])  # reaches the barrel: moved
+    torch.testing.assert_close(out[0, 1], X[0, 1])  # starts beyond the endcap plane: untouched
 
 
 def _heptv2(dataset, **heptv2):
@@ -111,6 +150,21 @@ def test_cms_tracks_without_ecal_extrapolation_keep_their_direction():
     out = entry(X)
     torch.testing.assert_close(out[0], X[0])
     torch.testing.assert_close(out[1, :, 2], X[1, :, entry.columns[0]])
+
+    # non-finite extrapolations also keep the vertex direction
+    X[1, :2, entry.columns[0]] = float("nan")
+    X[1, 2:4, entry.columns[1]] = float("inf")
+    out = entry(X)
+    torch.testing.assert_close(out[1, :4], X[1, :4], equal_nan=True)
+    assert torch.isfinite(out[..., 2:5]).all()
+
+
+def test_missing_columns_name_the_flag_and_dataset(monkeypatch):
+    import mlpf.model.calo_entry as calo_entry
+
+    monkeypatch.setattr(calo_entry, "HELIX_COLUMNS", ("z0", "tanlambda", "no_such_column"))
+    with pytest.raises(ValueError, match=r"track_hash_at_calo needs the X_FEATURES columns \['no_such_column'\].*clic"):
+        TrackCaloEntry("clic")
 
 
 def test_geometry_override_and_unsupported_datasets():
