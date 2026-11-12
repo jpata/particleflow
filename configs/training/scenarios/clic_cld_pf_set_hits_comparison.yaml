@@ -68,6 +68,8 @@ allowed_variant_differences:
   - train_dataset
   - valid_dataset
   - test_dataset
+  # The PF models' spec sections switch on calohash for HEPTv2 runs (unused here: all variants are attention).
+  - model.heptv2
   - hyperparameters.lr
   - model.binary_classification_focal_gamma
   - model.backbone.num_convs

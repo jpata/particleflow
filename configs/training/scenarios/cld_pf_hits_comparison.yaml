@@ -71,6 +71,8 @@ allowed_variant_differences:
   - train_dataset
   - valid_dataset
   - test_dataset
+  # The PF models' spec sections switch on calohash for HEPTv2 runs (unused here: all variants are attention).
+  - model.heptv2
   # This is the model-spec default; training.parameters.lr overrides it equally.
   - hyperparameters.lr
   # Hit elementwise training uses focal presence classification; PF keeps CE.
