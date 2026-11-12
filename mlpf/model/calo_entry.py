@@ -115,11 +115,18 @@ def calo_entry_eta_phi(phi0, z0, tan_lambda, omega, radius, endcap_z, d0=None):
     x = -d0 * torch.sin(phi0) + chord * torch.cos(phi0 - half_turn)
     y = d0 * torch.cos(phi0) + chord * torch.sin(phi0 - half_turn)
     z = z0 + arc * tan_lambda
-    eta = torch.asinh(z / torch.hypot(x, y).clamp_min(1.0))
+    eta = _asinh(z / torch.sqrt(x.square() + y.square()).clamp_min(1.0))
     phi = torch.atan2(y, x)
-    eta = torch.where(reached, eta, torch.asinh(tan_lambda))
+    eta = torch.where(reached, eta, _asinh(tan_lambda))
     phi = torch.where(reached, phi, torch.atan2(torch.sin(phi0), torch.cos(phi0)))
     return eta, phi, reached
+
+
+def _asinh(value):
+    """Numerically stable asinh using operators supported by the legacy ONNX exporter."""
+    magnitude = value.abs()
+    squared = magnitude.square()
+    return value.sign() * torch.log1p(magnitude + squared / (torch.sqrt(1 + squared) + 1))
 
 
 def _track_column_names(dataset):
@@ -234,6 +241,6 @@ class ClusterCentroid:
     @torch.no_grad()
     def __call__(self, X_features):
         x, y, z = (X_features[..., column].float() for column in self.columns)
-        eta = torch.asinh(z / torch.hypot(x, y).clamp_min(1.0))
+        eta = _asinh(z / torch.sqrt(x.square() + y.square()).clamp_min(1.0))
         phi = torch.atan2(y, x)
         return _replace_coordinates(X_features, X_features[..., 0] == CLUSTER_ELEMTYPE, eta, phi)

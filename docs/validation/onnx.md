@@ -40,7 +40,9 @@ outputs = session.run(None, {
 })
 ```
 
-The ONNX `input_normalization` metadata maps source IDs to dataset names and statistics versions. Deployment callers must provide exactly one supported ID per event. The graph cannot enforce that contract. `cms-validate-onnx.py` derives the source from `--dataset`, and `--save-inputs` includes it for replay with `validate-onnx-runtime.py`. `export-checkpoint-onnx.py` also supports normalized track/cluster checkpoints and includes source IDs in its reference bundles.
+The ONNX `input_normalization` metadata maps source IDs to dataset names and statistics versions. Deployment callers must provide exactly one supported ID per event. The graph cannot enforce that contract. `cms-validate-onnx.py` derives the source from `--dataset`, and `--save-inputs` includes it for replay with `validate-onnx-runtime.py`. `export-checkpoint-onnx.py` also supports normalized track/cluster checkpoints and includes source IDs in its reference bundles. For joint-detector checkpoints, pass the desired samples with `--datasets`; it reads each sample from the saved data-directory mapping by default, and `--data-dir cld=/path/to/cld clic=/path/to/clic` overrides those roots.
+
+Models with `model.feature_bag` use the same `source_id` input to select each event's feature-column mapping. The feature bag is embedded in the graph, so inference callers still supply raw features in the saved model's padded feature layout.
 
 ## Choose an attention representation
 
@@ -143,6 +145,8 @@ Dynamic graphs may require CPU shape operations. Static specialization is availa
 ## HEPTv2 and checkpoint compatibility
 
 HEPTv2 defaults to deterministic hashing (`model.heptv2.deterministic_hashing: true`). It quantizes eta/phi and projection coefficients, uses int64 arithmetic, and resolves equal sort keys by input order. Export uses exact integer inverse permutations and separate materialized output heads. Pad input lengths to a multiple of the model's block size.
+
+The optional `track_hash_at_calo` and `cluster_hash_at_centroid` coordinate transforms are also embedded in HEPTv2 exports. Their eta calculations use ONNX-compatible arithmetic; the raw input feature contract and regression baselines are unchanged. Validate a checkpoint with these options against its own PyTorch reference before deployment.
 
 Deterministic coordinates and bucket assignments can change predictions from checkpoints trained with floating-point hashing. Setting the option to `false` selects floating-point hashing but does not guarantee historical tie ordering or agreement across runtimes. Likewise, older attention checkpoints trained with unmasked padding require validation under the current masking semantics.
 
