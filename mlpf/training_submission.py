@@ -1,11 +1,18 @@
 """Build and submit site-specific Slurm jobs for reusable training scenarios."""
 
 import argparse
+import datetime
+import json
+import os
+import shutil
 import shlex
 import subprocess
 from pathlib import Path
 
 from mlpf.training_scenarios import (
+    _experiment_path,
+    _git_revision,
+    _pipeline_command,
     find_scenario_continuation,
     load_platform_profile,
     load_training_scenario,
@@ -185,6 +192,77 @@ def build_slurm_submission(*args, **kwargs):
     return submissions[0]
 
 
+def write_component_scripts(submissions, scenario_path, profile_path, repo_root, *, continue_run=False):
+    """Persist one independently resubmittable Slurm script per resolved job."""
+    scenario = load_training_scenario(scenario_path)
+    profile = load_platform_profile(profile_path)
+    directory = repo_root / "logs_slurm" / "submissions" / (
+        scenario.name + "_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    )
+    directory.mkdir(parents=True)
+    spec = Path(scenario.spec_file)
+    if not spec.is_absolute():
+        spec = repo_root / spec
+    saved_spec = directory / "particleflow_spec.yaml"
+    shutil.copyfile(spec, saved_spec)
+    result = []
+    for command, jobs in submissions:
+        worker_index = command.index(str(_worker_for_site(repo_root, "lumi")))
+        for job in jobs:
+            continuation = find_scenario_continuation(job, profile) if continue_run else None
+            if continue_run and continuation is None:
+                raise ValueError(f"No prior run for {job.variant_name} seed {job.seed}")
+            run = continuation.experiment_dir if continuation else _experiment_path(profile, job)
+            run = run.resolve()
+            manifest_path = run / "scenario-manifest.json"
+            if continuation is None:
+                run.mkdir(parents=True, exist_ok=False)
+                manifest = {
+                    "scenario": scenario.model_dump(mode="json"),
+                    "platform": profile.model_dump(mode="json"),
+                    "job": job.model_dump(mode="json", exclude={"resolved_config"}),
+                    "resolved_config": job.resolved_config.model_dump(mode="json"),
+                    "command": _pipeline_command(job, scenario, profile, saved_spec, run),
+                    "git_revision": _git_revision(),
+                }
+                manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+            options = command[1:worker_index]
+            array_index = options.index("--array")
+            del options[array_index:array_index + 2]
+            name = f"{job.variant_name}_seed{job.seed}"
+            options[options.index("--job-name") + 1] = f"{scenario.name}_{name}"
+            for flag, suffix in (("--output", "out"), ("--error", "err")):
+                options[options.index(flag) + 1] = str(repo_root / "logs_slurm" / f"log_%x_%j.{suffix}")
+            script = directory / f"{name}.sh"
+            lines = ["#!/bin/bash"]
+            i = 0
+            while i < len(options):
+                flag = options[i]
+                if flag == "--no-requeue":
+                    lines.append("#SBATCH " + flag)
+                    i += 1
+                else:
+                    lines.append("#SBATCH " + flag + "=" + shlex.quote(options[i + 1]))
+                    i += 2
+            lines.extend([
+                "# Resubmit this component: sbatch " + shlex.quote(str(script)),
+                "set -euo pipefail",
+                "cd " + shlex.quote(str(repo_root)),
+            ])
+            for variable in ("IMG", "LUMI_VENV"):
+                if variable in os.environ:
+                    lines.append("export " + variable + "=" + shlex.quote(os.environ[variable]))
+            lines.append("exec bash " + shlex.join([
+                str(_worker_for_site(repo_root, "lumi")), str(scenario_path), str(profile_path),
+                "--repo-root", str(repo_root), "--run-manifest", str(manifest_path),
+            ]))
+            script.write_text("\n".join(lines) + "\n")
+            script.chmod(0o755)
+            print(f"Component script: {script}", flush=True)
+            result.append((["sbatch", str(script)], [job]))
+    return result
+
+
 def main(argv=None, *, site="flatiron"):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scenario", nargs="?", help="Scenario name or YAML path")
@@ -211,6 +289,7 @@ def main(argv=None, *, site="flatiron"):
         type=Path,
         help="Write the sbatch command to a shell script for submission outside the container",
     )
+    parser.add_argument("--component-scripts", action="store_true", help="Persist a Slurm script per LUMI component; each submission resumes its saved run")
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -241,6 +320,12 @@ def main(argv=None, *, site="flatiron"):
         return
 
     (repo_root / "logs_slurm").mkdir(parents=True, exist_ok=True)
+    if args.component_scripts:
+        if site != "lumi":
+            parser.error("--component-scripts currently requires LUMI")
+        submissions = write_component_scripts(
+            submissions, scenario_path, profile_path, repo_root, continue_run=args.continue_run
+        )
     if args.submission_script is not None:
         args.submission_script.write_text("#!/bin/bash\nset -euo pipefail\n" + "\n".join(shlex.join(command) for command, _ in submissions) + "\n")
         return

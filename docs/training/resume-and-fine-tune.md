@@ -104,3 +104,43 @@ The log should state the loaded checkpoint and the restored starting step. Confi
 - the printed trainable and non-trainable parameter counts match the intended experiment;
 - new validation history and checkpoints appear in the selected experiment directory; and
 - validation loss is finite before interpreting longer-term trends.
+
+
+## Resubmitting a LUMI scenario component
+
+Submit a scenario as usual:
+
+```bash
+bash scripts/lumi/train_scenario.sh cms_backbone_comparison mi250x
+```
+
+The wrapper creates and submits a separate Slurm Bash script for every variant
+and seed. It prints their paths under
+`logs_slurm/submissions/<scenario>_<timestamp>/`, for example
+`attention_seed12345.sh` and `heptv2_seed12345.sh`. Each script contains its own
+resource requests and points to one fixed experiment directory. To restart only
+one failed component:
+
+```bash
+sbatch logs_slurm/submissions/<scenario>_<timestamp>/heptv2_seed12345.sh
+```
+
+On every launch, the component reads its saved `scenario-manifest.json`, selects
+the checkpoint with the highest numeric step, and resumes with the original
+training command. Without a checkpoint it starts from scratch in the same run
+directory. A component whose checkpoint has reached `num_steps` exits without
+training. An exclusive run lock prevents simultaneous training in that directory;
+a duplicate submission fails rather than writing competing checkpoints.
+
+The generated scripts preserve the resolved container and overlay paths from the
+submission environment, and new runs use a saved copy of the particleflow spec.
+Keep the submission directory and experiment directory for future restarts.
+Changes to scenario YAML do not affect resubmission of these scripts. The source
+code and overlay environment are still taken from the working checkout and saved
+overlay path; they are not copied or versioned by this workflow.
+
+`--continue` still selects compatible unfinished existing runs and generates
+component scripts for those runs. `--dry-run` and `--list` do not create scripts
+or submit jobs. The submission wrapper runs configuration resolution inside the
+LUMI container; the host only executes Bash and `sbatch` (system Python 3.6 is
+not used for configuration resolution).
