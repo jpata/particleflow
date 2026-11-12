@@ -8,6 +8,7 @@ shift 2
 TASK_INDEX=${SLURM_ARRAY_TASK_ID:-0}
 SEED_OVERRIDE=${SEED:-}
 CONTINUE_RUN=0
+RUN_MANIFEST=
 REPO_ROOT=${MLPF_REPO_ROOT:-${SLURM_SUBMIT_DIR:-$PWD}}
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -21,6 +22,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --repo-root)
       REPO_ROOT=${2:?--repo-root requires a value}
+      shift 2
+      ;;
+    --run-manifest)
+      RUN_MANIFEST=${2:?--run-manifest requires a path}
       shift 2
       ;;
     --continue)
@@ -95,6 +100,10 @@ if [[ -n "$SEED_OVERRIDE" ]]; then
 fi
 if [[ "$CONTINUE_RUN" == 1 ]]; then
   RUN_ARGS+=(--continue)
+fi
+
+if [[ -n "$RUN_MANIFEST" ]]; then
+  RUN_ARGS=("$REPO_ROOT/scripts/training/resume_manifest.py" "$RUN_MANIFEST")
 fi
 
 singularity run \
