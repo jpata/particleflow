@@ -381,6 +381,35 @@ checkpoint intervals of 1,000. See [implementation and comparison details](../..
 scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_readout_50k mi250x --dry-run
 ```
 
+## Track/cluster HEPTv2 experts
+
+`scenarios/pf_heptv2_experts.yaml` defines CLIC, CLD, IDEA and ColliderML PU0
+experts with the same 256-wide, six-layer HEPTv2 backbone, optimizer, learning
+rate, global batch of four events and fixed update budget. CLIC, CLD and IDEA use one
+GPU; ColliderML uses four. The scenario retains each detector's native input
+layout and train/validation samples. IDEA uses the locally available 0.2.1 data.
+
+All experts run 200,000 optimizer updates so their training exposure matches.
+Validation runs every 2,000 steps on up to 256 events per sample. Patience is
+set above the total number of validation cycles so the runs complete the fixed
+update budget. ReduceLROnPlateau halves the learning rate after three stale
+validation cycles, with a floor of 1e-5. Expert runs use validation loss for
+selection and skip the per-cycle test plots. Detector-specific physics
+evaluation should follow.
+
+Preview the commands without submitting Slurm jobs:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/pf_heptv2_experts.yaml \
+  --platform configs/training/platforms/flatiron_h100.yaml --dry-run
+```
+
+The full joint configuration is `scenarios/pf_heptv2_joint.yaml`. It uses the
+`pyg-cldcliccolliderml-v1` recipe from main, including its per-source TFDS roots,
+and enables `model.feature_bag` with input normalization. It runs 200,000 updates
+with four events per step on CLIC, CLD, and ColliderML PU0 samples.
+
 ## Portable benchmark sweeps
 
 Use `scenarios/cld_backbone_benchmark.yaml` for new GPU comparisons and
