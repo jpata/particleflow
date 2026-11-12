@@ -1,5 +1,5 @@
 # Matched track/cluster HEPTv2 experts. This defines runs; it submits none.
-# One GPU each for CLIC, CLD and IDEA. ColliderML uses four GPUs.
+# One GPU for each expert, including ColliderML.
 # Every expert presents 16 events per optimizer step and runs 100,000 updates.
 # Patience exceeds the 50 validation cycles, keeping update counts identical.
 name: pf_heptv2_experts
@@ -20,7 +20,7 @@ variants:
   colliderml:
     model_name: pyg-colliderml-v1
     production_name: colliderml
-    gpus: 4
+    gpus: 1
 seeds: [12345]
 training:
   global_batch_size: 16

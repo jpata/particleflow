@@ -385,9 +385,9 @@ scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_readout_50k mi250x --dry-ru
 
 `scenarios/pf_heptv2_experts.yaml` defines CLIC, CLD, IDEA and ColliderML PU0
 experts with the same 256-wide, six-layer HEPTv2 backbone, optimizer, learning
-rate, global batch of 16 events and fixed update budget. CLIC, CLD and IDEA use one
-GPU; ColliderML uses four. The scenario retains each detector's native input
-layout and train/validation samples. IDEA uses the locally available 0.2.1 data.
+rate, global batch of 16 events and fixed update budget. Each expert uses one
+GPU and retains its detector's native input layout and train/validation samples.
+IDEA uses the locally available 0.2.1 data.
 
 All experts run 100,000 optimizer updates so their training exposure matches.
 Validation runs every 2,000 steps on up to 256 events per sample. Detailed

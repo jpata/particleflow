@@ -39,6 +39,13 @@ def test_heptv2_expert_and_joint_campaigns_share_training_and_noninput_model_siz
         for job in resolve_scenario_jobs(load_training_scenario(ROOT / f"configs/training/scenarios/{name}.yaml"), platform)
     ]
     assert {job.variant_name for job in jobs} == {"cld", "clic", "idea", "colliderml", "joint"}
+    assert {job.variant_name: job.resolved_config.gpus for job in jobs} == {
+        "cld": 1,
+        "clic": 1,
+        "idea": 1,
+        "colliderml": 1,
+        "joint": 4,
+    }
 
     reference_model = None
     reference_shapes = None
