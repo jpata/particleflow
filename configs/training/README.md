@@ -388,6 +388,10 @@ experts with the same 256-wide, six-layer HEPTv2 backbone, optimizer, learning
 rate, global batch of 16 events and fixed update budget. Each expert uses one
 GPU and retains its detector's native input layout and train/validation samples.
 IDEA uses the locally available 0.2.1 data.
+Track positions are hashed at each detector's calorimeter entry point in the
+experts and joint run. The joint run selects the geometry and feature columns
+from each event's source ID. Cluster centroid hashing stays disabled in these
+campaigns because ColliderML cluster coordinates are already positions.
 
 All experts run 100,000 optimizer updates so their training exposure matches.
 Validation runs every 2,000 steps on up to 256 events per sample. Detailed

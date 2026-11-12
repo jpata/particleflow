@@ -31,7 +31,7 @@ original features.
 
 import torch
 
-from mlpf.conf import X_FEATURES, Dataset
+from mlpf.conf import X_FEATURES, Dataset, SOURCE_IDS
 
 TRACK_ELEMTYPE = 1
 
@@ -165,9 +165,31 @@ class TrackCaloEntry:
         return eta, phi, (eta != 0) | (phi != 0)
 
     @torch.no_grad()
-    def __call__(self, X_features):
+    def __call__(self, X_features, source_id=None):
         eta, phi, defined = self.eta_phi(X_features)
         return _replace_coordinates(X_features, (X_features[..., 0] == TRACK_ELEMTYPE) & defined, eta, phi)
+
+
+class MultiSourceTrackCaloEntry:
+    """Use each event's detector layout and calorimeter geometry for track coordinates."""
+
+    def __init__(self, sources, radius_mm=None, endcap_z_mm=None):
+        self.entries = {
+            SOURCE_IDS[source]: TrackCaloEntry(source, radius_mm=radius_mm, endcap_z_mm=endcap_z_mm)
+            for source in sources
+        }
+
+    @torch.no_grad()
+    def __call__(self, X_features, source_id):
+        if source_id is None:
+            raise ValueError("Multi-source calorimeter hashing needs each event's source_id")
+        if source_id.numel() != X_features.shape[0]:
+            raise ValueError("Calorimeter hashing needs one source_id per event")
+        source_id = source_id.to(device=X_features.device).view(-1, 1, 1)
+        out = X_features
+        for source, entry in self.entries.items():
+            out = torch.where(source_id == source, entry(X_features), out)
+        return out
 
 
 class ClusterCentroid:

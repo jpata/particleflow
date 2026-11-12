@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 import torch
 
-from mlpf.conf import MLPFConfig
-from mlpf.model.calo_entry import TrackCaloEntry, calo_entry_eta_phi
+from mlpf.conf import MLPFConfig, SOURCE_IDS
+from mlpf.model.calo_entry import MultiSourceTrackCaloEntry, TrackCaloEntry, calo_entry_eta_phi
 from mlpf.model.mlpf import MLPF
 
 
@@ -127,6 +127,50 @@ def test_geometry_override_and_unsupported_datasets():
 
     with pytest.raises(ValueError, match="not supported"):
         _heptv2("clic_hits", track_hash_at_calo=True)
+
+
+def test_joint_hashing_uses_each_events_source():
+    sources = ("cld", "clic", "colliderml")
+    config = MLPFConfig.model_validate(
+        {
+            "dataset": "cld",
+            "data_dir": "/tmp",
+            "input_dim": 19,
+            "model": {
+                "type": "heptv2",
+                "input_encoding": "split",
+                "input_normalization": True,
+                "feature_bag": True,
+                "heptv2": {"num_convs": 1, "num_heads": 2, "embedding_dim": 16, "width": 16, "block_size": 8, "track_hash_at_calo": True},
+            },
+            "conv_type": "heptv2",
+            "test_dataset": {
+                "cld_edm_ttbar_pf": {"version": "3.3.0", "splits": ["1"]},
+                "clic_edm_ttbar_pf": {"version": "3.3.0", "splits": ["1"]},
+                "colliderml_ttbar_nopu_pf": {"version": "1.5.0", "splits": ["1"]},
+            },
+        }
+    )
+    model = MLPF(config).eval()
+    assert isinstance(model.track_calo_entry, MultiSourceTrackCaloEntry)
+    X = torch.zeros(3, 8, 19)
+    X[..., 0] = 1
+    X[..., 4] = 1
+    X[:, 1, 0] = 2
+    for event, source in enumerate(sources):
+        z0, tan_lambda, omega = TrackCaloEntry(source).columns
+        X[event, :, z0] = 0
+        X[event, :, tan_lambda] = 0.2
+        X[event, :, omega] = 1e-4
+    source_id = torch.tensor([SOURCE_IDS[source] for source in sources])
+    expected = torch.cat([TrackCaloEntry(source)(X[event : event + 1]) for event, source in enumerate(sources)])
+    seen = []
+    model.backbone[0].register_forward_pre_hook(lambda module, args: seen.append(args[2].clone()))
+    model(X, torch.ones(3, 8, dtype=torch.bool), source_id=source_id)
+    torch.testing.assert_close(seen[0], expected)
+    assert not torch.allclose(expected[0, 0, 3:5], expected[1, 0, 3:5])
+    with pytest.raises(ValueError, match="source_id"):
+        model.track_calo_entry(X, None)
 
 
 @pytest.mark.parametrize("dataset", ["clic", "cld"])

@@ -55,7 +55,7 @@ common_overrides:
   model.heptv2.block_size: 128
   model.heptv2.deterministic_hashing: true
   model.heptv2.activation_checkpointing: true
-  model.heptv2.track_hash_at_calo: false
+  model.heptv2.track_hash_at_calo: true
   model.heptv2.cluster_hash_at_centroid: false
 allowed_variant_differences:
   - data_dir
