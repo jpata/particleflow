@@ -1669,7 +1669,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
 
     for split_config in split_configs_to_use:
         ds = PFDataset(
-            config.data_dir,
+            config.data_dir_for(sample),
             f"{sample}/{split_config}:{version}",
             "test",
             num_samples=ntest,

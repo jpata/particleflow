@@ -112,6 +112,21 @@ def dataset_for_sample(sample_name: str, default: "Dataset") -> "Dataset":
         return default
 
 
+def parse_data_dir(values):
+    """--data-dir values: one PATH, or one SOURCE=PATH per detector (cld=/a clic=/b)."""
+    if values is None or isinstance(values, (str, dict)):
+        return values
+    if len(values) == 1 and "=" not in values[0]:
+        return values[0]
+    data_dirs = {}
+    for value in values:
+        source, separator, path = value.partition("=")
+        if not separator or not source or not path:
+            raise ValueError(f"--data-dir takes one PATH or one SOURCE=PATH per detector, got {values}")
+        data_dirs[source] = path
+    return data_dirs
+
+
 class RegressionMode(Enum):
     DIRECT = "direct"
     ADDITIVE = "additive"
@@ -1156,6 +1171,10 @@ _PIPELINE_DATASETS = {
 }
 
 
+def _tfds_dir(spec, production_config):
+    return os.path.join(resolve_path(production_config["workspace_dir"], spec), "tfds")
+
+
 def _build_base_config(spec, model_config, production_config):
     config = {}
     for key, value in spec["models"].get("defaults", {}).items():
@@ -1168,7 +1187,12 @@ def _build_base_config(spec, model_config, production_config):
     config["model"] = model_config["architecture"]
     config["conv_type"] = config["model"]["type"]
     config["dataset"] = Dataset(model_config.get("dataset", production_config.get("type")))
-    config["data_dir"] = os.path.join(resolve_path(production_config["workspace_dir"], spec), "tfds")
+    # A production of several detectors reads each detector's samples from that detector's production.
+    source_productions = production_config.get("source_productions")
+    if source_productions:
+        config["data_dir"] = {source: _tfds_dir(spec, spec["productions"][name]) for source, name in source_productions.items()}
+    else:
+        config["data_dir"] = _tfds_dir(spec, production_config)
 
     dataset_name = config["dataset"].value
     config["input_dim"] = len(X_FEATURES[dataset_name])
@@ -1330,7 +1354,7 @@ class MLPFConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dataset: Dataset
-    data_dir: str
+    data_dir: str | Dict[str, str]  # One TFDS directory, or {source: directory} for trainings on several detectors (data_dir_for).
     model: ModelArchitectureConfig
     conv_type: ModelType
 
@@ -1453,7 +1477,17 @@ class MLPFConfig(BaseModel):
                 raise ValueError(f"model.input_normalization supports track/cluster samples, not {hits}")
             for dataset, version in self.dataset_versions().items():
                 load_stats(dataset, version)
+        if isinstance(self.data_dir, dict):
+            missing = sorted(name for name, _ in self._samples() if SOURCE_LABELS[dataset_source_id(name)] not in self.data_dir)
+            if missing:
+                raise ValueError(f"data_dir has directories for {sorted(self.data_dir)}, but not for the samples {missing}")
         return self
+
+    def data_dir_for(self, sample_name):
+        """TFDS directory of a sample: data_dir, or its detector's entry when data_dir is {source: directory}."""
+        if isinstance(self.data_dir, str):
+            return self.data_dir
+        return self.data_dir[SOURCE_LABELS[dataset_source_id(sample_name)]]
 
     def _samples(self):
         """{(name, version)} of the train, validation and test samples."""
@@ -1523,6 +1557,7 @@ class MLPFConfig(BaseModel):
         production_config = spec["productions"][production_name]
         config_dict, dataset_name = _build_base_config(spec, model_config, production_config)
         _apply_namespace_overrides(config_dict, args, MLPFConfig.model_fields)
+        config_dict["data_dir"] = parse_data_dir(config_dict["data_dir"])
         _apply_extra_arg_overrides(config_dict, extra_args)
         _normalize_data_config(config_dict)
         _build_dataset_configs(config_dict, model_config, dataset_name)

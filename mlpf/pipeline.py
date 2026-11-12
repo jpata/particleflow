@@ -118,7 +118,7 @@ def get_parser():
 
     parser.add_argument("--experiment-dir", type=str, help="The directory where to save the weights and configs. If None, create a new one.")
     parser.add_argument("--prefix", type=str, help="Prefix prepended to the experiment dir name")
-    parser.add_argument("--data-dir", type=str, help="Path to the `tensorflow_datasets/` directory")
+    parser.add_argument("--data-dir", action="append", help="Path to the `tensorflow_datasets/` directory, or SOURCE=PATH for each detector (repeat the option)")
     parser.add_argument("--experiments-dir", type=str, help="Base directory within which trainings are stored")
     parser.add_argument("--pipeline", action="store_true", help="Flag to indicate the script is running in a CI/CD pipeline")
     parser.add_argument("--loglevel", choices=["debug", "info", "warning"], default="info", help="Log level, also of the per-rank train.log files")
