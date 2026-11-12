@@ -757,19 +757,21 @@ models:
         num_heads: 16
         dropout_ff: 0.0
         block_size: 100
+        # hash tracks at their calorimeter entry (the dual-readout calorimeter front face)
+        track_hash_at_calo: true
 
     train_datasets:
       physical:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
 
     validation_datasets:
@@ -777,24 +779,24 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
 
     test_datasets:
       - name: "idea_edm_qq_pf"
-        version: "0.2.0"
+        version: "0.2.1"
         splits: ["1"]
       - name: "idea_edm_ttbar_pf"
-        version: "0.2.0"
+        version: "0.2.1"
         splits: ["1"]
       - name: "idea_edm_ww_fullhad_pf"
-        version: "0.2.0"
+        version: "0.2.1"
         splits: ["1"]
 
   pyg-cms-v1:
@@ -874,6 +876,9 @@ models:
     # Architecture Definition
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -892,6 +897,10 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry and clusters at their centroid
+      heptv2:
+        track_hash_at_calo: true
+        cluster_hash_at_centroid: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -1119,6 +1128,10 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry and clusters at their centroid
+      heptv2:
+        track_hash_at_calo: true
+        cluster_hash_at_centroid: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -1286,6 +1299,9 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         attention_type: flash
@@ -1437,6 +1453,9 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         attention_type: flash

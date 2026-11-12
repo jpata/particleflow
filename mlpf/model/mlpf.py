@@ -20,6 +20,7 @@ from mlpf.model.hept import HEPTLayer, trunc_normal_
 from mlpf.model.heptv2 import HEPTv2Layer
 from mlpf.model.input_normalization import InputNormalization
 from mlpf.model.feature_bag import FeatureBag
+from mlpf.model.calo_entry import ClusterCentroid, TrackCaloEntry
 from mlpf.model.tracker_features import TrackerDoubletFeatures
 from mlpf.model.set_decoder import ParticleSetDecoder
 
@@ -1381,6 +1382,20 @@ class MLPF(nn.Module):
             num_heads = sub_config.num_heads
             self.use_pre_layernorm = False
 
+        # heptv2.track_hash_at_calo: the backbone sees X_features with the tracks' (eta, sin_phi,
+        # cos_phi) moved to their calorimeter entry point; the encoder and heads keep the raw ones.
+        self.track_calo_entry = None
+        if self.conv_type == ModelType.HEPTV2 and sub_config.track_hash_at_calo:
+            self.track_calo_entry = TrackCaloEntry(
+                config.dataset.value,
+                radius_mm=sub_config.track_hash_calo_radius_mm,
+                endcap_z_mm=sub_config.track_hash_calo_endcap_z_mm,
+            )
+        # heptv2.cluster_hash_at_centroid: likewise for the clusters, moved to their centroid direction.
+        self.cluster_centroid = None
+        if self.conv_type == ModelType.HEPTV2 and sub_config.cluster_hash_at_centroid:
+            self.cluster_centroid = ClusterCentroid(config.dataset.value)
+
         if self.use_detector_backbone and self.conv_type != ModelType.ATTENTION:
             raise ValueError("Detector-specific tracker/calo/common layers are only supported by the attention model")
 
@@ -1701,7 +1716,19 @@ class MLPF(nn.Module):
         if self.conv_type == ModelType.HEPTV2:
             heptv2_conf = self.config.heptv2.model_dump()
             heptv2_conf.pop("activation_checkpointing")
-            for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff", "num_heads"]:
+            for key in [
+                "num_convs",
+                "conv_type",
+                "embedding_dim",
+                "width",
+                "activation",
+                "dropout_ff",
+                "num_heads",
+                "track_hash_at_calo",
+                "track_hash_calo_radius_mm",
+                "track_hash_calo_endcap_z_mm",
+                "cluster_hash_at_centroid",
+            ]:
                 if key in heptv2_conf:
                     heptv2_conf.pop(key)
             return HEPTv2Layer(
@@ -1757,6 +1784,10 @@ class MLPF(nn.Module):
         if len(backbone) == 0:
             embeddings.append(x)
             return embeddings
+        if self.track_calo_entry is not None:
+            X_features = self.track_calo_entry(X_features)
+        if self.cluster_centroid is not None:
+            X_features = self.cluster_centroid(X_features)
 
         for conv in backbone:
             if self.conv_type == ModelType.HEPTV2 and self.config.heptv2.activation_checkpointing and self.training and torch.is_grad_enabled():

@@ -7,7 +7,7 @@ Use [Current capabilities](capabilities.md) for implemented workflows. This page
 | Area | Current boundary | Follow-up work |
 |---|---|---|
 | Published data | Current CLD, CLIC, and ColliderML selections on the Hub provide configuration 1. | Publish and validate additional partitions for full-corpus training. |
-| IDEA | Truth-seeded proxy tracks and oracle candidates; published/model version 0.2.0 differs from builder default 0.2.1. | Align rebuilt data and recipes, then establish reconstruction-level validation. |
+| IDEA | Truth-seeded proxy tracks and oracle candidates; builders and recipes use 0.2.1. | Establish reconstruction-level validation. |
 | MAIA | Conversion and local training exist, with failed validation gates and incomplete detector metadata. | Resolve data-quality and metadata limitations before expanding support. |
 | ColliderML | Clustered and hit workflows exist; pileup-200 hits have no named training recipe. | Extend maintained recipes and detector-specific physics validation. |
 

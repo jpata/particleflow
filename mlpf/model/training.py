@@ -39,6 +39,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import gc
 from contextlib import nullcontext
+from datetime import timedelta
 import tqdm
 import yaml
 import json
@@ -1853,6 +1854,7 @@ def run(
             "nccl",
             rank=int(rank),
             world_size=world_size,
+            timeout=timedelta(minutes=30),
             device_id=torch.device(rank),  # (nccl should be faster than gloo)
         )
 

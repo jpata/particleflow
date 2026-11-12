@@ -753,6 +753,7 @@ Y_FEATURES = ParticleFeatures.get_names()
 # to 10 MeV in ColliderML and IDEA clusters; energy_other and energy_muon are mostly 0, else below 10 MeV.
 LOG1P_SCALES = {
     "pt": 0.01,
+    "e": 0.01,  # CMS energy
     "et": 0.01,
     "p": 0.01,
     "energy": 0.01,
@@ -763,6 +764,7 @@ LOG1P_SCALES = {
     "chi2": 1.0,
     "radiusOfInnermostHit": 1.0,
     "num_hits": 1.0,
+    "pterror": 0.01,  # CMS transverse momentum uncertainty
     "num_muon_hits": 1.0,
     "sigma_x": 1.0,
     "sigma_y": 1.0,
@@ -926,6 +928,16 @@ class HEPTv2Config(BaseModel):
     deterministic_hashing: bool = True
     num_w_per_dist: int = 10
     mlp_ratio: float = 4.0
+    # Hash tracks at their calorimeter entry point instead of their vertex direction, where their
+    # clusters' positions are (mlpf/model/calo_entry.py). Helix-extrapolated for
+    # colliderml/clic/cld/idea/maia, read from eta_ecal/phi_ecal for cms. The radius/endcap |z|
+    # default to the detector's calorimeter geometry (calo_entry.py; required for maia).
+    track_hash_at_calo: bool = False
+    track_hash_calo_radius_mm: Optional[float] = Field(default=None, gt=0.0)
+    track_hash_calo_endcap_z_mm: Optional[float] = Field(default=None, gt=0.0)
+    # Hash clusters at the direction of their centroid position instead of their eta/phi features,
+    # which are Pandora's shower-axis direction on the key4hep PF datasets (clic/cld/idea/maia only).
+    cluster_hash_at_centroid: bool = False
 
 
 class BackboneConfig(BaseModel):

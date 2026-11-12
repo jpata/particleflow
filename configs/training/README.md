@@ -149,6 +149,24 @@ uv run python3 scripts/training/run_scenario.py \
 Use `--variant heptv2` for HEPTv2; omit `--variant` to run both. Remove
 `--dry-run` to start training.
 
+## CMS input normalization
+
+`cms_input_normalization` compares `--variant norm` and `--variant no_norm`
+using the HEPTv2 recipe from `cms_backbone_comparison`, including the CMS 2.8.0
+sample pins, global batch of 64 and 100,000-step schedule. The variants differ
+only in `model.input_normalization`. The normalized run uses the committed
+full-training-split statistics in `mlpf/model/input_normalization_stats/cms_2.8.0.yaml`.
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/cms_input_normalization.yaml \
+  --platform configs/training/platforms/local.yaml \
+  --data-dir /path/to/cms/tfds \
+  --dry-run
+```
+
+Omit `--variant` to run both variants. Remove `--dry-run` to start training.
+
 ## HEPTv2 model-size scaling (50k)
 
 `scenarios/cld_pf_heptv2_model_scaling_50k.yaml` scales width and depth together
