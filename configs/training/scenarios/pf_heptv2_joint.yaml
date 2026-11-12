@@ -9,13 +9,14 @@ variants:
     gpus: 4
 seeds: [12345]
 training:
-  global_batch_size: 4
+  global_batch_size: 16
   parameters:
     optimizer: lamb
     lr: 0.0005
     lr_schedule: onecycle
     lr_schedule_config.onecycle.pct_start: 0.3
-    num_steps: 200000
+    num_steps: 100000
+    tensorboard_step_freq: 1000
     val_freq: 2000
     checkpoint_freq: 2000
     patience: 1000

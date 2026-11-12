@@ -49,8 +49,10 @@ def test_heptv2_expert_and_joint_campaigns_share_training_and_noninput_model_siz
         assert config.lr == 0.0005
         assert config.lr_schedule.value == "onecycle"
         assert config.lr_schedule_config == {"onecycle": {"pct_start": 0.3}}
-        assert config.num_steps == 200000
-        assert job.global_batch_size == 4
+        assert config.num_steps == 100000
+        assert config.tensorboard_step_freq == 1000
+        assert job.global_batch_size == 16
+        assert job.per_gpu_batch_size == (16 if job.resolved_config.gpus == 1 else 4)
 
         model = MLPF(config)
         assert type(get_lr_schedule(config, get_optimizer(model, config), config.num_steps)).__name__ == "OneCycleLR"

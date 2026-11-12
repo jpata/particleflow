@@ -1,7 +1,7 @@
 # Matched track/cluster HEPTv2 experts. This defines runs; it submits none.
 # One GPU each for CLIC, CLD and IDEA. ColliderML uses four GPUs.
-# Every expert presents four events per optimizer step and runs 200,000 updates.
-# Patience exceeds the 100 validation cycles, keeping update counts identical.
+# Every expert presents 16 events per optimizer step and runs 100,000 updates.
+# Patience exceeds the 50 validation cycles, keeping update counts identical.
 name: pf_heptv2_experts
 spec_file: particleflow_spec.yaml
 production_name: cld
@@ -23,13 +23,14 @@ variants:
     gpus: 4
 seeds: [12345]
 training:
-  global_batch_size: 4
+  global_batch_size: 16
   parameters:
     optimizer: lamb
     lr: 0.0005
     lr_schedule: onecycle
     lr_schedule_config.onecycle.pct_start: 0.3
-    num_steps: 200000
+    num_steps: 100000
+    tensorboard_step_freq: 1000
     val_freq: 2000
     checkpoint_freq: 2000
     patience: 1000
