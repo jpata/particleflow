@@ -595,6 +595,13 @@ productions:
         version: "1.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
+  # Training-only: each detector's samples are read from the tfds directory of its own production.
+  cld_clic_colliderml:
+    type: "key4hep"
+    model: "pyg-cldcliccolliderml-v1"
+    comment: "Joint CLD+CLIC+ColliderML pu0 tracks/clusters"
+    source_productions: {cld: cld, clic: clic, colliderml: colliderml}
+
   # IDEA full simulation and the reconstruction currently provided by FCC-config.
   # This initial ML path deliberately uses truth-seeded proxy tracks and an
   # oracle ycand reference to validate the software pipeline, not physics.
@@ -1304,6 +1311,115 @@ models:
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
+      - name: "colliderml_ttbar_nopu_pf"
+        version: "1.5.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  # Joint CLD+CLIC+ColliderML pu0 model: one group per detector, a third of the steps each.
+  # TODO: Test config, hyperparameters such as learning rate should be tuned
+  pyg-cldcliccolliderml-v1:
+    <<: *defaults
+    dataset: cld
+    gpu_batch_multiplier: 1024
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0005
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 3
+        head_dim: 16
+        num_heads: 16
+
+    train_datasets:
+      cld:
+        batch_size: 1
+        weight: 1.0
+        samples:
+          - name: "cld_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      clic:
+        batch_size: 1
+        weight: 1.0
+        samples:
+          - name: "clic_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      colliderml:
+        batch_size: 1
+        weight: 1.0
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.5.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      cld:
+        batch_size: 1
+        samples:
+          - name: "cld_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      clic:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      colliderml:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.5.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "cld_edm_ttbar_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_ww_fullhad_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_qq_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_ttbar_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_ww_fullhad_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_qq_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "colliderml_ttbar_nopu_pf"
         version: "1.5.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]

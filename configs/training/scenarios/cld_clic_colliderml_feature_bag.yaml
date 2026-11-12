@@ -1,0 +1,40 @@
+# Joint CLD+CLIC+ColliderML pu0 model, both runs input-normalized, with and without feature bag.
+name: cld_clic_colliderml_feature_bag
+spec_file: particleflow_spec.yaml
+production_name: cld_clic_colliderml
+
+# feature_bag first: array task 0, and the first variant run locally.
+variants:
+  feature_bag:
+    model_name: pyg-cldcliccolliderml-v1
+    overrides:
+      model.feature_bag: true
+  no_feature_bag:
+    model_name: pyg-cldcliccolliderml-v1
+
+seeds: [12345]
+
+training:
+  # Per step, summed over GPUs; each step's batch comes from one detector.
+  global_batch_size: 1024
+  parameters:
+    lr: 0.001
+    num_steps: 2000
+    val_freq: 1000
+    checkpoint_freq: 1000
+    nvalid: 2000
+    ntest: 2000
+    sampler_mode: interleaved-shards
+    pad_to_multiple_elements: 128
+    make_plots: true
+
+common_overrides:
+  model.input_normalization: true
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.attention.head_dim: 32
+  model.attention.use_jagged_attention: true
+
+allowed_variant_differences:
+  - model.feature_bag
