@@ -19,7 +19,7 @@ def main():
     p.add_argument("--experiment", type=Path, required=True)
     p.add_argument("--checkpoint", type=Path)
     p.add_argument("--bundle", type=Path, required=True)
-    p.add_argument("--data-dir", type=Path, required=True)
+    p.add_argument("--data-dir", nargs="+", help="One TFDS root, or SOURCE=ROOT for each detector; defaults to the saved configuration")
     p.add_argument("--datasets", nargs="+", default=["cms_pf_ttbar/1:3.0.0", "cms_pf_qcd/1:3.0.0", "cms_pf_ztt/1:3.0.0"])
     p.add_argument("--split", default="test")
     p.add_argument("--num-events", type=int, default=2, help="Actual events per dataset, without truncation or repetition")
@@ -30,7 +30,7 @@ def main():
         p.error("--num-events must be positive")
     import torch
     import tensorflow_datasets as tfds
-    from mlpf.conf import MLPFConfig, AttentionType, dataset_source_id
+    from mlpf.conf import MLPFConfig, AttentionType, SOURCE_LABELS, dataset_source_id, parse_data_dir
     from mlpf.model.mlpf import MLPF
     from mlpf.model.onnx_attention import export_mlpf
 
@@ -40,6 +40,7 @@ def main():
     with kwargs.open("rb") as f:
         saved = pickle.load(f)
     config = MLPFConfig.model_validate(saved if isinstance(saved, dict) else saved.model_dump())
+    data_dirs = parse_data_dir(a.data_dir) if a.data_dir else config.data_dir
     training_config = config.model_dump(mode="json")
     if config.model.output_mode.value != "elementwise":
         p.error("This qualification requires an elementwise checkpoint")
@@ -63,7 +64,11 @@ def main():
     for dataset in a.datasets:
         name_config, version = dataset.split(":")
         name, builder_config = name_config.split("/")
-        directory = a.data_dir / name / builder_config / version
+        source = SOURCE_LABELS[dataset_source_id(name)]
+        if isinstance(data_dirs, dict) and source not in data_dirs:
+            raise ValueError(f"--data-dir has no TFDS root for {source} ({dataset})")
+        root = data_dirs[source] if isinstance(data_dirs, dict) else data_dirs
+        directory = Path(root) / name / builder_config / version
         builder = tfds.builder_from_directory(str(directory))
         data = builder.as_data_source(split=a.split)
         if len(data) < a.num_events:

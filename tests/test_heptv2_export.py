@@ -79,6 +79,56 @@ def test_heptv2_dynamic_export(tmp_path):
             np.testing.assert_array_equal(first, value)
 
 
+def test_heptv2_calo_coordinates_export(tmp_path):
+    """Both coordinate transforms must remain live in the exported graph."""
+    from mlpf.model.calo_entry import TrackCaloEntry
+
+    torch.set_num_threads(1)
+    config = MLPFConfig.model_validate(
+        {
+            "dataset": "cld",
+            "data_dir": "/tmp",
+            "conv_type": "heptv2",
+            "model": {
+                "type": "heptv2",
+                "heptv2": {
+                    "num_convs": 1,
+                    "num_heads": 2,
+                    "embedding_dim": 16,
+                    "width": 16,
+                    "block_size": 8,
+                    "n_hashes": 2,
+                    "track_hash_at_calo": True,
+                    "cluster_hash_at_centroid": True,
+                },
+            },
+        }
+    )
+    torch.manual_seed(42)
+    model = MLPF(config).eval()
+
+    def inputs(lengths, size):
+        x, mask = batch(config, lengths, size)
+        x[..., 0] = torch.arange(size) % 2 + 1
+        x[..., TrackCaloEntry("cld").columns[2]] *= 1e-4
+        x[~mask.bool()] = 0
+        return x, mask
+
+    x, mask = inputs([13, 9], 16)
+    path = tmp_path / "calo_coordinates.onnx"
+    export_mlpf(model, x, mask, path, attention_format="decomposed")
+    onnx.checker.check_model(onnx.load(path), full_check=True)
+    session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    for lengths, size in [([13, 9], 16), ([19], 24)]:
+        x, mask = inputs(lengths, size)
+        actual = session.run(None, {"Xfeat_normed": x.numpy(), "mask": mask.numpy()})
+        with torch.no_grad():
+            expected = model(x, mask)
+        valid = mask.bool().numpy()
+        for value, reference in zip(actual, expected, strict=True):
+            np.testing.assert_allclose(value[valid], reference.numpy()[valid], atol=3e-4, rtol=3e-4)
+
+
 @pytest.mark.parametrize("batch_size,size", [(1, 24), (2, 16), (3, 32)])
 def test_quantile_partition_matches_table_gather(batch_size, size):
     from mlpf.model.heptv2 import quantile_partition
