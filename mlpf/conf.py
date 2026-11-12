@@ -722,6 +722,7 @@ Y_FEATURES = ParticleFeatures.get_names()
 # to 10 MeV in ColliderML and IDEA clusters; energy_other and energy_muon are mostly 0, else below 10 MeV.
 LOG1P_SCALES = {
     "pt": 0.01,
+    "e": 0.01,  # CMS energy
     "et": 0.01,
     "p": 0.01,
     "energy": 0.01,
@@ -732,6 +733,7 @@ LOG1P_SCALES = {
     "chi2": 1.0,
     "radiusOfInnermostHit": 1.0,
     "num_hits": 1.0,
+    "pterror": 0.01,  # CMS transverse momentum uncertainty
     "num_muon_hits": 1.0,
     "sigma_x": 1.0,
     "sigma_y": 1.0,

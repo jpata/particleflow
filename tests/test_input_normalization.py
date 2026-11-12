@@ -51,7 +51,7 @@ def synthetic_stats(tmp_path, monkeypatch):
 
 
 def test_log1p_scales_are_given_for_input_column_names():
-    assert set(LOG1P_SCALES) <= {name for dataset in VERSIONS for elemtype in ELEMENT_TYPES for name in column_names(dataset, elemtype)}
+    assert set(LOG1P_SCALES) <= {name for dataset in conf.X_FEATURES for elemtype in ELEMENT_TYPES for name in column_names(dataset, elemtype)}
 
 
 @pytest.mark.parametrize("path", sorted(conf.STATS_DIR.glob("*.yaml")), ids=lambda path: path.stem)
@@ -240,3 +240,32 @@ def test_statistics_script_reads_the_selected_samples(tmp_path, monkeypatch):
     assert len(stats_script.open_builds("colliderml", "1.5.0", tmp_path)) == 6
     with pytest.raises(SystemExit, match="No colliderml_ggf_nopu_pf samples of version 1.5.0"):
         stats_script.open_builds("colliderml", "1.5.0", tmp_path, ["ttbar_nopu", "ggf_nopu"])
+
+
+def test_statistics_script_discovers_cms_sample_configs(tmp_path, monkeypatch):
+    for sample in ("qcd", "qcd_nopu", "ttbar", "ttbar_nopu", "ztt", "ztt_nopu"):
+        (tmp_path / f"cms_pf_{sample}" / "1" / "2.8.0").mkdir(parents=True)
+    monkeypatch.setattr(stats_script.tfds, "builder", lambda name, data_dir: name)
+    builds = stats_script.open_builds("cms", "2.8.0", tmp_path)
+    assert builds == [f"cms_pf_{sample}/1:2.8.0" for sample in ("qcd", "qcd_nopu", "ttbar", "ttbar_nopu", "ztt", "ztt_nopu")]
+    assert stats_script.open_builds("cms", "2.8.0", tmp_path, ["ttbar_nopu"]) == ["cms_pf_ttbar_nopu/1:2.8.0"]
+
+
+def test_cms_statistics_combine_all_calo_element_types(tmp_path, monkeypatch):
+    monkeypatch.setattr(conf, "STATS_DIR", tmp_path)
+    track = np.zeros((1, len(conf.X_FEATURES["cms"])), dtype=np.float32)
+    ps1 = track.copy()
+    hfhad = track.copy()
+    track[0, :2] = [1, 1]
+    ps1[0, :2] = [2, 2]
+    hfhad[0, :2] = [9, 8]
+    builder = FakeBuilder("cms_pf_qcd/1/2.8.0", [np.concatenate([track, ps1]), hfhad])
+    builder.info.features["X"].shape = (None, len(conf.X_FEATURES["cms"]))
+    monkeypatch.setattr(stats_script, "open_builds", lambda *args: [builder])
+    args = SimpleNamespace(dataset="cms", version="2.8.0", data_dir=None, samples=None, work_dir=tmp_path / "work", shard=0, num_shards=1)
+    stats_script.map_shard(args)
+    stats_script.reduce_shards(args)
+    stats = load_stats("cms", "2.8.0")
+    pt = stats["cluster"][0]
+    values = np.log1p(np.array([2.0, 8.0]) / 0.01)
+    assert (pt["mean"], pt["std"]) == pytest.approx((values.mean(), values.std()))
