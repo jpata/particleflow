@@ -27,6 +27,48 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_heptv2_expert_and_joint_campaigns_share_training_and_noninput_model_size():
+    from mlpf.model.mlpf import MLPF
+    from mlpf.model.utils import get_lr_schedule
+    from mlpf.optimizers import get_optimizer
+
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    jobs = [
+        job
+        for name in ("pf_heptv2_experts", "pf_heptv2_joint")
+        for job in resolve_scenario_jobs(load_training_scenario(ROOT / f"configs/training/scenarios/{name}.yaml"), platform)
+    ]
+    assert {job.variant_name for job in jobs} == {"cld", "clic", "idea", "colliderml", "joint"}
+
+    reference_model = None
+    reference_shapes = None
+    for job in jobs:
+        config = job.resolved_config
+        assert config.optimizer.value == "lamb"
+        assert config.weight_decay == 0.01
+        assert config.lr == 0.0005
+        assert config.lr_schedule.value == "onecycle"
+        assert config.lr_schedule_config == {"onecycle": {"pct_start": 0.3}}
+        assert config.num_steps == 200000
+        assert job.global_batch_size == 4
+
+        model = MLPF(config)
+        assert type(get_lr_schedule(config, get_optimizer(model, config), config.num_steps)).__name__ == "OneCycleLR"
+        shapes = {name: tuple(parameter.shape) for name, parameter in model.named_parameters()}
+        input_shape = shapes.pop("nn0.0.weight")
+        assert input_shape[0] == 256
+        if reference_shapes is None:
+            reference_shapes = shapes
+            reference_model = config.model.model_dump(mode="json")
+        else:
+            assert shapes == reference_shapes
+            model_config = config.model.model_dump(mode="json")
+            assert {name for name in reference_model if reference_model[name] != model_config[name]} <= {
+                "feature_bag",
+                "input_normalization",
+            }
+
+
 def test_training_scenario_rejects_empty_variants():
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_default_50k.yaml")
     payload = scenario.model_dump()

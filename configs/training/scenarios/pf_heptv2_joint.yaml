@@ -13,13 +13,8 @@ training:
   parameters:
     optimizer: lamb
     lr: 0.0005
-    lr_schedule: reduce_lr_on_plateau
-    lr_schedule_config.reduce_lr_on_plateau.factor: 0.5
-    lr_schedule_config.reduce_lr_on_plateau.patience: 3
-    lr_schedule_config.reduce_lr_on_plateau.threshold: 0.002
-    lr_schedule_config.reduce_lr_on_plateau.threshold_mode: rel
-    lr_schedule_config.reduce_lr_on_plateau.cooldown: 1
-    lr_schedule_config.reduce_lr_on_plateau.min_lr: 0.00001
+    lr_schedule: onecycle
+    lr_schedule_config.onecycle.pct_start: 0.3
     num_steps: 200000
     val_freq: 2000
     checkpoint_freq: 2000
@@ -47,4 +42,5 @@ common_overrides:
   model.heptv2.block_size: 128
   model.heptv2.deterministic_hashing: true
   model.heptv2.activation_checkpointing: true
+  model.heptv2.track_hash_at_calo: false
   model.heptv2.cluster_hash_at_centroid: false

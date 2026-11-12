@@ -392,10 +392,10 @@ layout and train/validation samples. IDEA uses the locally available 0.2.1 data.
 All experts run 200,000 optimizer updates so their training exposure matches.
 Validation runs every 2,000 steps on up to 256 events per sample. Patience is
 set above the total number of validation cycles so the runs complete the fixed
-update budget. ReduceLROnPlateau halves the learning rate after three stale
-validation cycles, with a floor of 1e-5. Expert runs use validation loss for
-selection and skip the per-cycle test plots. Detector-specific physics
-evaluation should follow.
+update budget. All runs use LAMB with a 0.0005 peak learning rate and the same
+OneCycle schedule (30% warmup). Expert runs use validation loss for selection
+and skip the per-cycle test plots. Detector-specific physics evaluation should
+follow.
 
 Preview the commands without submitting Slurm jobs:
 
@@ -408,7 +408,10 @@ uv run python3 scripts/training/run_scenario.py \
 The full joint configuration is `scenarios/pf_heptv2_joint.yaml`. It uses the
 `pyg-cldcliccolliderml-v1` recipe from main, including its per-source TFDS roots,
 and enables `model.feature_bag` with input normalization. It runs 200,000 updates
-with four events per step on CLIC, CLD, and ColliderML PU0 samples.
+with four events per step on CLIC, CLD, and ColliderML PU0 samples. Its HEPTv2
+backbone, heads, optimizer, peak learning rate, and OneCycle schedule match the
+experts. Only the input layer size varies with detector feature width and the
+joint feature bag.
 
 ## Portable benchmark sweeps
 
