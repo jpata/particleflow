@@ -15,7 +15,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 
-from mlpf.conf import MLPFConfig
+from mlpf.conf import MLPFConfig, parse_data_dir
+from mlpf.utils import load_spec
 
 PLATFORM_OVERRIDE_KEYS = {
     "benchmark.enabled",
@@ -165,7 +166,7 @@ class ResolvedScenarioJob(BaseModel):
     variant_name: str
     model_name: str
     production_name: str
-    data_dir: str
+    data_dir: str | dict[str, str]
     seed: int
     # one value, or one per train group when the scenario gives global_batch_size per group
     global_batch_size: int | dict[str, int]
@@ -326,7 +327,7 @@ def resolve_scenario_job(
     settings["seed"] = seed
     selected_spec = str(spec_file or scenario.spec_file)
     production_name = scenario.variant_production(variant_name)
-    data_dir = platform.data_dir_for(production_name)
+    data_dir = _production_data_dir(platform, selected_spec, production_name)
 
     with _temporary_environment(platform.environment):
         config = MLPFConfig.from_spec(
@@ -426,6 +427,20 @@ def resolve_scenario_jobs(
     return jobs
 
 
+def _production_data_dir(platform, spec_file, production_name):
+    """The platform's data_dir for a production; {source: data_dir} for a production of several detectors."""
+    source_productions = load_spec(spec_file)["productions"].get(production_name, {}).get("source_productions")
+    if not source_productions or isinstance(platform.data_dir, str):
+        return platform.data_dir_for(production_name)
+    return {source: platform.data_dir_for(name) for source, name in source_productions.items()}
+
+
+def _data_dir_args(data_dir):
+    if isinstance(data_dir, str):
+        return ["--data-dir", data_dir]
+    return [arg for source in sorted(data_dir) for arg in ("--data-dir", f"{source}={data_dir[source]}")]
+
+
 def _pipeline_command(job, scenario, platform, spec_file, experiment_dir):
     settings = dict(job.settings)
     command = [
@@ -438,8 +453,7 @@ def _pipeline_command(job, scenario, platform, spec_file, experiment_dir):
         job.model_name,
         "--production-name",
         job.production_name,
-        "--data-dir",
-        job.data_dir,
+        *_data_dir_args(job.data_dir),
         "--experiment-dir",
         str(experiment_dir),
         "train",
@@ -611,7 +625,7 @@ def main(argv=None):
     selection.add_argument("--task-index", type=int)
     parser.add_argument("--seed", type=int)
     parser.add_argument("--global-batch-size", type=_global_batch_size_arg, metavar="N|GROUP=N,...")
-    parser.add_argument("--data-dir")
+    parser.add_argument("--data-dir", action="append", metavar="PATH|PRODUCTION=PATH")
     parser.add_argument("--experiments-dir")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--dry-run", action="store_true")
@@ -631,7 +645,7 @@ def main(argv=None):
         scenario.seeds = [args.seed]
     platform = load_platform_profile(args.platform)
     if args.data_dir:
-        platform.data_dir = args.data_dir
+        platform.data_dir = parse_data_dir(args.data_dir)
     if args.experiments_dir:
         platform.experiments_dir = args.experiments_dir
 

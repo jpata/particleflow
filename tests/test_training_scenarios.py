@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from mlpf.conf import parse_data_dir
 from mlpf.training_scenarios import (
     PlatformProfile,
     ScenarioVariant,
@@ -14,6 +15,7 @@ from mlpf.training_scenarios import (
     TrainingScenario,
     _experiment_path,
     _global_batch_size_arg,
+    _pipeline_command,
     find_scenario_continuation,
     load_platform_profile,
     load_training_scenario,
@@ -466,3 +468,96 @@ def test_worker_validates_selected_variant_gpu_allocation(monkeypatch):
     with pytest.raises(ValueError, match="Slurm allocated 1"):
         runner.main(args)
     assert len(executed) == 1
+
+
+@pytest.mark.parametrize(
+    ("sample", "expected"),
+    [
+        ("cld_edm_ttbar_pf", "cld"),
+        ("clic_edm_qq_pf", "clic"),
+        ("clic_edm_qq_hits", "clic_hits"),
+        ("colliderml_ttbar_nopu_pf", "colliderml"),
+        ("cms_pf_ttbar", "cms"),
+        ("unrecognized_sample", "cld"),
+    ],
+)
+def test_dataset_for_sample_follows_the_sample_detector(sample, expected):
+    from mlpf.conf import Dataset, dataset_for_sample
+
+    assert dataset_for_sample(sample, Dataset.CLD).value == expected
+
+
+def test_feature_bag_scenario_differs_only_in_the_feature_bag():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_clic_colliderml_feature_bag.yaml")
+    platform = load_platform_profile(PLATFORMS / "flatiron_h100.yaml")
+
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+
+    assert [job.variant_name for job in jobs] == ["feature_bag", "no_feature_bag"]
+    assert [job.resolved_config.model.feature_bag for job in jobs] == [True, False]
+    for job in jobs:
+        config = job.resolved_config
+        assert config.model.input_normalization
+        # Each detector's samples come from that detector's platform data_dir.
+        assert config.data_dir == {name: platform.data_dir[name] for name in ("cld", "clic", "colliderml")}
+        assert config.data_dir_for("colliderml_ttbar_nopu_pf") == platform.data_dir["colliderml"]
+        assert config.dataset_versions() == {"cld": "3.3.0", "clic": "3.3.0", "colliderml": "1.5.0"}
+        # Each detector gets the same share of the training steps.
+        assert {name: group.weight for name, group in config.train_dataset["cld"].items()} == {"cld": 1.0, "clic": 1.0, "colliderml": 1.0}
+    reference, candidate = (job.resolved_config.model_dump(mode="json") for job in jobs)
+    candidate["model"]["feature_bag"] = True
+    assert candidate == reference
+
+
+def test_joint_production_passes_one_data_dir_per_detector_to_the_pipeline(tmp_path):
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_clic_colliderml_feature_bag.yaml")
+    platform = PlatformProfile(
+        name="test", gpus=1, data_dir={"cld": "/d/cld", "clic": "/d/clic", "colliderml": "/d/cml"}, experiments_dir=str(tmp_path)
+    )
+    job = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")[0]
+
+    command = _pipeline_command(job, scenario, platform, ROOT / "particleflow_spec.yaml", tmp_path)
+    data_dir_args = [command[i + 1] for i, arg in enumerate(command) if arg == "--data-dir"]
+    assert data_dir_args == ["cld=/d/cld", "clic=/d/clic", "colliderml=/d/cml"]
+    # The pipeline reads them back into the same mapping.
+    assert parse_data_dir(data_dir_args) == job.resolved_config.data_dir == {"cld": "/d/cld", "clic": "/d/clic", "colliderml": "/d/cml"}
+
+
+def test_joint_production_needs_every_detector_on_the_platform(tmp_path):
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_clic_colliderml_feature_bag.yaml")
+    platform = PlatformProfile(name="test", gpus=1, data_dir={"cld": "/d/cld", "clic": "/d/clic"}, experiments_dir=str(tmp_path))
+    with pytest.raises(ValueError, match="no data_dir for production 'colliderml'"):
+        resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        (None, None),
+        (["/data/tfds"], "/data/tfds"),
+        (["cld=/a", "colliderml=/b"], {"cld": "/a", "colliderml": "/b"}),
+    ],
+)
+def test_parse_data_dir(values, expected):
+    assert parse_data_dir(values) == expected
+
+
+def test_parse_data_dir_rejects_a_path_mixed_with_per_detector_entries():
+    with pytest.raises(ValueError, match="SOURCE=PATH"):
+        parse_data_dir(["/data/tfds", "cld=/a"])
+
+
+def test_config_rejects_a_data_dir_map_without_a_sample_detector():
+    from mlpf.conf import MLPFConfig
+
+    config = {
+        "dataset": "cld",
+        "data_dir": {"cld": "/a"},
+        "model": {"type": "attention"},
+        "conv_type": "attention",
+        "test_dataset": {"cld_edm_ttbar_pf": {"version": "3.3.0"}, "colliderml_ttbar_nopu_pf": {"version": "1.5.0"}},
+    }
+    with pytest.raises(ValueError, match="not for the samples \\['colliderml_ttbar_nopu_pf'\\]"):
+        MLPFConfig.model_validate(config)
+    config["data_dir"]["colliderml"] = "/b"
+    assert MLPFConfig.model_validate(config).data_dir_for("colliderml_ttbar_nopu_pf") == "/b"

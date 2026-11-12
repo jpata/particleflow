@@ -798,7 +798,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
 
                 for split_config in split_configs_to_use:
                     ds = PFDataset(
-                        config.data_dir,
+                        config.data_dir_for(sample_name),
                         f"{sample_name}/{split_config}:{version}",
                         split,
                         num_samples=nevents,
