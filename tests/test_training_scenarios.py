@@ -84,6 +84,8 @@ def test_pf_fm_scan_location_comes_from_platform(tmp_path):
 
 @pytest.mark.parametrize("campaign", ["experts", "joint", "finetuning"])
 def test_attention_campaigns_validate_physics_every_10k_steps(campaign):
+    from mlpf.plotting.plot_utils import EVALUATION_DATASET_NAMES
+
     platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
     scenario = load_training_scenario(ROOT / f"configs/training/scenarios/pf_fm_{campaign}.yaml")
     assert scenario.name == f"pf_fm_{campaign}"
@@ -104,6 +106,7 @@ def test_attention_campaigns_validate_physics_every_10k_steps(campaign):
         assert config.make_plots is True
         assert config.ntest == 256
         assert config.enabled_test_datasets == list(config.test_dataset)
+        assert set(config.enabled_test_datasets) <= EVALUATION_DATASET_NAMES.keys()
         # Test inference must cover the same samples and versions as training,
         # including all three detectors in the joint recipe.
         samples = {name: entry for groups in config.train_dataset.values() for group in groups.values() for name, entry in group.samples.items()}
