@@ -33,7 +33,7 @@ except Exception as e:
 
 
 class TFDSDataSource:
-    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None, max_open_readers=None, build_target_set=False):
+    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None, max_open_readers=None, build_target_set=False, input_only=False):
         self.ds = ds
         tmp = self.ds.dataset_info
         self.ds.dataset_info = SimpleNamespace()
@@ -45,6 +45,13 @@ class TFDSDataSource:
         self.feature_dim = feature_dim
         self.max_open_readers = max_open_readers
         self.build_target_set = build_target_set
+        self.input_only = input_only
+        if input_only and build_target_set:
+            raise ValueError("input_only and build_target_set are mutually exclusive")
+        if input_only and isinstance(tmp.features, tfds.features.FeaturesDict):
+            # Parse only X rather than allocating targets, candidates, and jets
+            # and discarding them after decoding.
+            self.ds.dataset_info.features = tfds.features.FeaturesDict({"X": tmp.features["X"]})
 
     def _close_extra_readers(self):
         # ArrayRecordDataSource caches one reader per shard file forever, so the
@@ -69,19 +76,25 @@ class TFDSDataSource:
         if isinstance(item, int):
             item = [item]
         assert len(item) == 1
-        # getitems requires a list
-        records = self.ds.data_source.__getitems__(item)
-        self._close_extra_readers()
+        return self.__getitems__(item)[0]
 
-        ret = [self.ds.dataset_info.features.deserialize_example_np(record, decoders=self.ds.decoders) for record in records]
-        assert len(ret) == 1
-        ret = ret[0]
+    def __getitems__(self, items):
+        # ArrayRecord can group reads by shard and preserve duplicate requests.
+        records = self.ds.data_source.__getitems__(list(items))
+        self._close_extra_readers()
+        return [self._decode_record(record) for record in records]
+
+    def _decode_record(self, record):
+        decoders = self.ds.decoders
+        if self.input_only and isinstance(decoders, dict):
+            decoders = {key: value for key, value in decoders.items() if key == "X"}
+        ret = self.ds.dataset_info.features.deserialize_example_np(record, decoders=decoders)
         ds_name = self.ds.dataset_info.name
         ret["source_id"] = np.int64(dataset_source_id(ds_name))
         ret["input_type_id"] = np.int64(dataset_input_type_id(ds_name))
 
         Xshape = ret["X"].shape
-        _logger.debug(f"Getting item={item}, ds={ds_name}:{self.ds.dataset_info.config_name}, X={Xshape}")
+        _logger.debug(f"Getting ds={ds_name}:{self.ds.dataset_info.config_name}, X={Xshape}")
 
         if self.feature_dim is not None:
             if ret["X"].shape[1] > self.feature_dim:
@@ -93,6 +106,19 @@ class TFDSDataSource:
                     mode="constant",
                     constant_values=0,
                 )
+
+        if self.input_only:
+            # No target/candidate fields are required, transformed, or returned.
+            X = ret["X"]
+            if ds_name.startswith("cms_"):
+                X = X.copy()
+                ho = X[:, 0] == 10
+                X[ho, 1] = np.sqrt(np.maximum(0, X[ho, 5] ** 2 - (np.tanh(X[ho, 2]) * X[ho, 5]) ** 2))
+            if self.sort:
+                X = X[np.argsort(X[:, 1])[::-1]]
+            if self.pad_to_multiple:
+                X = np.pad(X, ((0, (-len(X)) % self.pad_to_multiple), (0, 0)))
+            return {"X": X, "source_id": ret["source_id"], "input_type_id": ret["input_type_id"]}
 
         # sort the elements in each event in pT descending order
         # the transformer is permutation-covariant, but this can be helpful for other types of models
@@ -215,6 +241,7 @@ class PFDataset:
         feature_dim=None,
         max_open_readers=None,
         build_target_set=False,
+        input_only=False,
     ):
         """
         Args
@@ -242,6 +269,7 @@ class PFDataset:
             feature_dim=feature_dim,
             max_open_readers=max_open_readers,
             build_target_set=build_target_set,
+            input_only=input_only,
         )
 
         if num_samples and num_samples < len(self.ds):

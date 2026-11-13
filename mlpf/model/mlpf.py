@@ -1922,7 +1922,7 @@ class MLPF(nn.Module):
     # @torch.compile
     def forward(self, X_features, mask, source_id=None):
         if self.output_mode == OutputMode.SET:
-            return self.set_decoder(self.encode_backbone(X_features, mask, source_id=source_id), mask, X_features)
+            return self.decode_backbone(self.encode_backbone(X_features, mask, source_id=source_id), X_features, mask)
 
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_split_backbone:
@@ -1943,12 +1943,24 @@ class MLPF(nn.Module):
                 backbone_embeddings = self._run_backbone(x, mask, x, X_features)
                 final_embedding = self._restore_backbone_output(self._collect_representation(backbone_embeddings), mask)
 
-            if self.task_queries:
-                final_embedding_cls = self.classification_readout(final_embedding, mask, self.classification_query)
-                final_embedding_reg = self.regression_readout(final_embedding, mask, self.regression_query)
-            else:
-                final_embedding_cls = final_embedding
-                final_embedding_reg = final_embedding
+            return self.decode_backbone(final_embedding, X_features, mask)
+
+        return self._decode_elementwise(final_embedding_cls, final_embedding_reg, X_features, mask)
+
+    def decode_backbone(self, embedding, X_features, mask):
+        """Apply existing PF readouts to shared, optionally cached embeddings."""
+        if self.use_split_backbone:
+            raise ValueError("decode_backbone requires a shared backbone")
+        if self.output_mode == OutputMode.SET:
+            return self.set_decoder(embedding, mask, X_features)
+        if self.task_queries:
+            cls = self.classification_readout(embedding, mask, self.classification_query)
+            reg = self.regression_readout(embedding, mask, self.regression_query)
+        else:
+            cls = reg = embedding
+        return self._decode_elementwise(cls, reg, X_features, mask)
+
+    def _decode_elementwise(self, final_embedding_cls, final_embedding_reg, X_features, mask):
 
         if self.classification_norm is not None:
             final_embedding_cls = self.classification_norm(final_embedding_cls)
