@@ -389,6 +389,9 @@ experts with the same 256-wide, six-layer HEPTv2 backbone, optimizer, learning
 rate, global batch of 16 events and fixed update budget. Each expert uses one
 GPU and retains its detector's native input layout and train/validation samples.
 IDEA uses the locally available 0.2.1 data.
+All four experts and the joint run enable input normalization using the
+statistics for their exact dataset versions. Historical expert checkpoints
+from before this setting was enabled used unnormalized inputs.
 Track positions are hashed at each detector's calorimeter entry point in the
 experts and joint run. The joint run selects the geometry and feature columns
 from each event's source ID. Cluster centroid hashing stays disabled in these
@@ -437,10 +440,11 @@ samples, shard 1, seed 12345, global batch 16 on one GPU, 100,000 **new** update
 LAMB and the same 0.0005 OneCycle schedule. Validation/checkpoint intervals,
 sample caps, padding, sampler mode and background benchmarking match the expert.
 All model parameters are trainable. The joint checkpoint's feature bag and input
-normalization remain enabled to keep learned tensor shapes compatible. These
-input settings differ from the original IDEA expert, so the comparison includes
-the input representation as well as pretraining. IDEA remains an engineering
-pipeline dataset with truth-seeded proxy tracks, as documented in its recipe.
+normalization remain enabled to keep learned tensor shapes compatible. The
+feature bag differs from the expert, so the comparison includes the input
+representation as well as pretraining. Input normalization is enabled in both
+current scenarios. IDEA remains an engineering pipeline dataset with
+truth-seeded proxy tracks, as documented in its recipe.
 
 `load_weights_only: true` starts a fresh optimizer, schedule, RNG stream, sampler
 and step counter. `reset_task_loss_weights: true` discards the joint task-loss
@@ -450,16 +454,17 @@ totals are not a common objective across the expert and fine-tuned models;
 compare raw components or evaluate with common weights and physics metrics.
 
 The default `load` pins the archived 100k checkpoint at
-`results/experiments/pf_heptv2_joint/joint_seed12345_20261112_151754_406805/checkpoints/checkpoint-100000.pth`.
+`experiments/pf_heptv2_joint/joint_seed12345_20261112_151754_406805/checkpoints/checkpoint-100000.pth`.
 Use `--set load=/path/to/checkpoint.pth` to select its location on the training
 host or another compatible joint checkpoint. The source checkpoint's GPU count
 does not constrain this one-GPU fine-tune.
 
-Before resolving or submitting this scenario, generate normalization statistics
-from **the IDEA 0.2.1 training split** on the host holding the dataset. This
-checkout contains IDEA 0.1.0 statistics, which cannot substitute for 0.2.1
-(cluster features changed). No synthetic or renamed statistics are provided.
-For the IDEA directory in the Flatiron profile:
+IDEA 0.2.1 normalization statistics are provided in
+`mlpf/model/input_normalization_stats/idea_0.2.1.yaml`, computed from all 24,000
+training events (8,000 each of qq, ttbar and fully hadronic WW). Test events
+are excluded. IDEA 0.1.0 statistics cannot substitute for 0.2.1 because cluster
+features changed. To regenerate the statistics on a host holding the dataset,
+for example using the IDEA directory in the Flatiron profile:
 
 ```bash
 export IDEA_TFDS_DIR=/mnt/ceph/users/jpata/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/tfds

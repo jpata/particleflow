@@ -50,6 +50,7 @@ common_overrides:
   model.type: heptv2
   model.attention: null
   model.input_encoding: split
+  model.input_normalization: true
   model.backbone.mode: shared
   model.backbone.num_convs: 6
   model.heptv2.num_convs: 6

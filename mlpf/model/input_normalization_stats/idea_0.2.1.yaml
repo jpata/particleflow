@@ -1,0 +1,100 @@
+# Written by scripts/compute_input_normalization_stats.py: mean and std of each column after its transform.
+samples: [idea_edm_qq_pf/1/0.2.1, idea_edm_ttbar_pf/1/0.2.1, idea_edm_ww_fullhad_pf/1/0.2.1]
+events: 24000
+track:
+- {column: 1, name: pt, log1p_scale: 0.01, clip: null, mean: 4.056584307742204, std: 1.6842982710233394, min: 0.0, max: 157.4097137451172, clipped: 0, nonfinite: 0}
+- {column: 2, name: eta, log1p_scale: null, clip: null, mean: 0.001228261215293196, std: 1.1041225400722172, min: -6.901617050170898, max: 7.957879543304443,
+  clipped: 0, nonfinite: 0}
+- {column: 3, name: sin_phi, log1p_scale: null, clip: null, mean: -0.00046117894903252354, std: 0.7065689356378927, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 4, name: cos_phi, log1p_scale: null, clip: null, mean: 0.014127857059679024, std: 0.7075030246016462, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 5, name: p, log1p_scale: 0.01, clip: null, mean: 4.461047833271738, std: 1.711155039911082, min: 0.0, max: 180.37789916992188, clipped: 0, nonfinite: 0}
+- column: 6
+  name: chi2
+  log1p_scale: 1.0
+  clip: [0.0, .inf]
+  mean: 0.0
+  std: 0.0
+  min: 0.0
+  max: 0.0
+  clipped: 0
+  nonfinite: 0
+- {column: 7, name: ndf, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 8, name: dEdx, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 9, name: dEdxError, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 10, name: radiusOfInnermostHit, log1p_scale: 1.0, clip: null, mean: 3.132744423897294, std: 2.9277608372203483, min: 0.002167888917028904, max: 3281.456787109375,
+  clipped: 0, nonfinite: 0}
+- column: 11
+  name: tanLambda
+  log1p_scale: null
+  clip: [-20.0, 20.0]
+  mean: 0.008153992003829769
+  std: 2.28795929715611
+  min: -496.9398193359375
+  max: 1429.002685546875
+  clipped: 3698
+  nonfinite: 0
+- column: 12
+  name: D0
+  log1p_scale: null
+  clip: [-2000.0, 2000.0]
+  mean: -26.56942565009262
+  std: 680.8260811906715
+  min: -2603.36572265625
+  max: 178573.109375
+  clipped: 36821
+  nonfinite: 0
+- column: 13
+  name: omega
+  log1p_scale: null
+  clip: [-0.1, 0.1]
+  mean: -0.0009428998417346917
+  std: 0.01641474328967547
+  min: -51.58915710449219
+  max: 70.68032836914062
+  clipped: 17562
+  nonfinite: 0
+- column: 14
+  name: Z0
+  log1p_scale: null
+  clip: [-2000.0, 2000.0]
+  mean: -5.6405290212092645
+  std: 346.35286696352165
+  min: -2003980.625
+  max: 463943.75
+  clipped: 11893
+  nonfinite: 0
+- {column: 15, name: time, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 16, name: 'Null', log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 17, name: 'Null', log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 18, name: 'Null', log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+cluster:
+- {column: 1, name: et, log1p_scale: 0.01, clip: null, mean: 0.8975494958862684, std: 0.8056543590164266, min: 0.0003926403005607426, max: 362.1206970214844,
+  clipped: 0, nonfinite: 0}
+- {column: 2, name: eta, log1p_scale: null, clip: null, mean: -0.0031179162438103123, std: 1.1756331115715812, min: -3.0645148754119873, max: 3.057889938354492,
+  clipped: 0, nonfinite: 0}
+- {column: 3, name: sin_phi, log1p_scale: null, clip: null, mean: -0.0015803832385118156, std: 0.7072774164230892, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 4, name: cos_phi, log1p_scale: null, clip: null, mean: 0.01916976062982258, std: 0.706674379449551, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 5, name: energy, log1p_scale: 0.01, clip: null, mean: 1.1426308122621627, std: 0.8655745524536841, min: 0.004000000189989805, max: 381.74041748046875,
+  clipped: 0, nonfinite: 0}
+- {column: 6, name: position.x, log1p_scale: null, clip: null, mean: 39.2636386794784, std: 1496.5736103715487, min: -4422.6806640625, max: 4422.6826171875,
+  clipped: 0, nonfinite: 0}
+- {column: 7, name: position.y, log1p_scale: null, clip: null, mean: -2.818578900481192, std: 1498.1873305812856, min: -4422.68115234375, max: 4422.67236328125,
+  clipped: 0, nonfinite: 0}
+- {column: 8, name: position.z, log1p_scale: null, clip: null, mean: -3.7549662075394217, std: 2030.9469571069199, min: -4351.29345703125, max: 4351.29345703125,
+  clipped: 0, nonfinite: 0}
+- {column: 9, name: iTheta, log1p_scale: null, clip: null, mean: 1.5727585638402846, std: 0.842459842728148, min: 0.09390439838171005, max: 3.048307418823242,
+  clipped: 0, nonfinite: 0}
+- {column: 10, name: energy_ecal, log1p_scale: 0.01, clip: null, mean: 0.42253361165576586, std: 0.8490671643733108, min: 0.0, max: 198.31210327148438,
+  clipped: 0, nonfinite: 0}
+- {column: 11, name: energy_hcal, log1p_scale: 0.01, clip: null, mean: 0.9054739104366034, std: 0.7748419270152394, min: 0.0, max: 202.23538208007812, clipped: 0,
+  nonfinite: 0}
+- {column: 12, name: energy_other, log1p_scale: 0.0001, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 13, name: num_hits, log1p_scale: 1.0, clip: null, mean: 1.7988308025706614, std: 0.798034624754782, min: 1.0, max: 18358.0, clipped: 0, nonfinite: 0}
+- {column: 14, name: sigma_x, log1p_scale: 1.0, clip: null, mean: 0.3968448785790339, std: 0.9522460597783502, min: 0.0, max: 932.3148803710938, clipped: 0,
+  nonfinite: 0}
+- {column: 15, name: sigma_y, log1p_scale: 1.0, clip: null, mean: 0.3969944806775636, std: 0.9523990472260024, min: 0.0, max: 950.13671875, clipped: 0,
+  nonfinite: 0}
+- {column: 16, name: sigma_z, log1p_scale: 1.0, clip: null, mean: 0.41543408831896356, std: 1.0862667916819486, min: 0.0, max: 921.67724609375, clipped: 0,
+  nonfinite: 0}
+- {column: 17, name: num_muon_hits, log1p_scale: 1.0, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 18, name: energy_muon, log1p_scale: 0.0001, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}

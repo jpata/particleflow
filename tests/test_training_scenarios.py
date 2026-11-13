@@ -27,30 +27,7 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.fixture
-def idea_normalization_for_shape_tests(monkeypatch):
-    """Identity tables for model-shape tests only; real 0.2.1 stats come from train data."""
-    import mlpf.conf as conf
-    import mlpf.model.input_normalization as normalization
-
-    original = conf.load_stats
-
-    def load_stats(dataset, version):
-        if dataset != "idea":
-            return original(dataset, version)
-        assert version == "0.2.1"
-        return {
-            name: [
-                {"column": column, "clip": None, "log1p_scale": None, "mean": 0.0, "std": 1.0} for column in range(1, len(conf.X_FEATURES["idea"]))
-            ]
-            for name in conf.ELEMENT_TYPES.values()
-        }
-
-    monkeypatch.setattr(conf, "load_stats", load_stats)
-    monkeypatch.setattr(normalization, "load_stats", load_stats)
-
-
-def test_idea_finetuning_matches_expert_exposure_and_loads_joint_model(idea_normalization_for_shape_tests):
+def test_idea_finetuning_matches_expert_exposure_and_loads_joint_model():
     import torch
 
     from mlpf.model.losses import make_task_loss_weighter
@@ -99,7 +76,7 @@ def test_idea_finetuning_matches_expert_exposure_and_loads_joint_model(idea_norm
         torch.testing.assert_close(parameter, dict(target.named_parameters())[name])
 
 
-def test_finetuning_continuation_resumes_its_own_state(tmp_path, capsys, idea_normalization_for_shape_tests):
+def test_finetuning_continuation_resumes_its_own_state(tmp_path, capsys):
     import mlpf.training_scenarios as runner
 
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_heptv2_finetuning.yaml")
@@ -164,6 +141,7 @@ def test_heptv2_expert_and_joint_campaigns_share_training_and_noninput_model_siz
     reference_shapes = None
     for job in jobs:
         config = job.resolved_config
+        assert config.model.input_normalization
         assert config.optimizer.value == "lamb"
         assert config.weight_decay == 0.01
         assert config.lr == 0.0005
@@ -175,6 +153,7 @@ def test_heptv2_expert_and_joint_campaigns_share_training_and_noninput_model_siz
         assert job.per_gpu_batch_size == (16 if job.resolved_config.gpus == 1 else 4)
 
         model = MLPF(config)
+        assert model.input_normalization is not None
         assert type(get_lr_schedule(config, get_optimizer(model, config), config.num_steps)).__name__ == "OneCycleLR"
         shapes = {name: tuple(parameter.shape) for name, parameter in model.named_parameters()}
         input_shape = shapes.pop("nn0.0.weight")
@@ -550,7 +529,7 @@ def test_slurm_allocation_validates_task_capacity(monkeypatch, environment, requ
 
 
 @pytest.mark.parametrize("scenario_path", sorted((ROOT / "configs/training/scenarios").glob("*.yaml")), ids=lambda path: path.stem)
-def test_shipped_scenarios_resolve(scenario_path, idea_normalization_for_shape_tests):
+def test_shipped_scenarios_resolve(scenario_path):
     """Recipes may change, but must still produce valid jobs and satisfy their declared invariants."""
     scenario = load_training_scenario(scenario_path)
     platform = PlatformProfile(name="test", gpus=1, data_dir="/tmp/data", experiments_dir="/tmp/experiments")

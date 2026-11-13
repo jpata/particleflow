@@ -1,7 +1,7 @@
 # Fine-tune the joint backbone on individual detector datasets. No jobs are submitted.
 # IDEA matches the expert update budget, sampler, batch and optimizer recipe.
 # Preserve the joint feature bag and normalization for strict checkpoint loading.
-# Generate IDEA 0.2.1 normalization statistics on the training host before resolving.
+# Uses the committed IDEA 0.2.1 normalization statistics.
 # Override load with --set load=/path/to/the/joint/checkpoint-100000.pth on other hosts.
 # Future CLD configuration variants belong alongside idea under variants.
 name: pf_heptv2_finetuning
