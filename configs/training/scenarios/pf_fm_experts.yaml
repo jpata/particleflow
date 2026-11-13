@@ -1,7 +1,7 @@
 # Matched track/cluster attention experts. This defines runs; it submits none.
 # One GPU for each expert, including ColliderML.
-# Every expert presents 16 events per optimizer step and runs 100,000 updates.
-# Patience exceeds the 10 validation cycles, keeping update counts identical.
+# Every expert presents 16 events per optimizer step, for up to 100,000 updates.
+# Stop after 3 consecutive validation cycles without a lower total loss.
 name: pf_fm_experts
 spec_file: particleflow_spec.yaml
 production_name: cld
@@ -165,7 +165,7 @@ training:
     benchmark.gpu_timing_interval: 0
     val_freq: 10000
     checkpoint_freq: 2000
-    patience: 1000
+    patience: 3
     nvalid: 256
     ntest: 256
     sampler_mode: interleaved-shards

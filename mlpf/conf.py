@@ -1389,7 +1389,7 @@ class MLPFConfig(BaseModel):
     # Training parameters
     seed: int = Field(default=12345, ge=0)
     num_steps: int = 100000
-    patience: int = 10000
+    patience: int = Field(default=10000, ge=0, description="Consecutive validation cycles without loss improvement before early stopping")
     checkpoint_freq: int = 10000
     val_freq: int = 10000
     num_workers: int = 8

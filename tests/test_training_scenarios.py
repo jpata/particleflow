@@ -57,6 +57,9 @@ def test_attention_campaigns_validate_physics_every_10k_steps(campaign):
         assert config.val_freq == 10000
         assert config.num_steps % config.val_freq == 0
         assert config.checkpoint_freq == 2000
+        if campaign in ("experts", "finetuning"):
+            assert config.patience == 3
+            assert config.patience < config.num_steps // config.val_freq
         assert config.make_plots is True
         assert config.ntest == 256
         assert config.enabled_test_datasets == list(config.test_dataset)
@@ -90,6 +93,7 @@ def test_idea_finetuning_matches_expert_exposure_and_loads_joint_model():
         "valid_dataset",
         "test_dataset",
         "num_steps",
+        "patience",
         "lr",
         "lr_schedule",
         "lr_schedule_config",

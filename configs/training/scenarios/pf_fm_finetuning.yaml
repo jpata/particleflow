@@ -1,5 +1,5 @@
 # Fine-tune the joint backbone on individual detector datasets. No jobs are submitted.
-# IDEA matches the expert update budget, sampler, batch and optimizer recipe.
+# IDEA matches the expert maximum update budget, patience, sampler, batch and optimizer recipe.
 # Preserve the joint feature bag and normalization for strict checkpoint loading.
 # Uses the committed IDEA 0.2.1 normalization statistics.
 # Override load with --set load=/path/to/the/joint/checkpoint-100000.pth on other hosts.
@@ -143,7 +143,8 @@ training:
     benchmark.gpu_timing_interval: 0
     val_freq: 10000
     checkpoint_freq: 2000
-    patience: 1000
+    # Stop after 3 consecutive validation cycles without a lower total loss.
+    patience: 3
     nvalid: 256
     ntest: 256
     sampler_mode: interleaved-shards

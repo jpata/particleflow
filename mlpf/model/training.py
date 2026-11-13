@@ -1288,14 +1288,30 @@ def _run_validation_cycle(
         metrics = {f"step_valid_loss_{name}": value for name, value in losses_valid_combined.items()}
         comet_experiment.log_metrics({**metrics, **_comet_group_metrics(losses_valid_group, "valid")}, step=step)
 
+    # evaluate() reduces losses across ranks, so every worker must update its
+    # stopping state to leave the training loop at the same validation cycle.
+    improved = losses_valid["Total"] < best_val_loss
+    if improved:
+        best_val_loss = losses_valid["Total"]
+        stale_steps = 0
+    else:
+        stale_steps += 1
+
     # All subsequent actions are only done on the main process
     if (rank == 0) or (rank == "cpu"):
-        # Save the best model checkpoint if validation loss improves
-        if losses_valid["Total"] < best_val_loss:
-            best_val_loss = losses_valid["Total"]
-            stale_steps = 0
-        else:
-            stale_steps += 1
+        if improved:
+            # Keep this outside checkpoint-*.pth periodic retention.
+            save_checkpoint(
+                Path(checkpoint_dir) / "best.pth",
+                model,
+                optimizer,
+                {
+                    "step": step,
+                    "lr_schedule_state_dict": lr_schedule.state_dict() if lr_schedule is not None else None,
+                    "train_loader_state_dict": train_loader.state_dict(),
+                    "valid_loader_state_dict": valid_loader.state_dict(),
+                },
+            )
 
         # Log validation losses to TensorBoard
         _log_validation_results_to_tensorboard(tensorboard_writer_valid, losses_valid_combined, step)
@@ -1637,10 +1653,10 @@ def train_all_steps(
                 losses_train_group=losses_train_group,
             )
 
-        # Check for early stopping
-        if stale_steps > patience:
-            _logger.info(f"Stopping early due to stale steps: {stale_steps} > {patience}")
-            break
+            # Patience counts consecutive validation cycles without improvement.
+            if stale_steps > 0 and stale_steps >= patience:
+                _logger.info(f"Stopping early after {stale_steps} validation cycles without loss improvement (patience={patience})")
+                break
 
     # End of training loop
     _logger.info(f"Training completed. Total time on device {rank}: {(time.time() - t0_initial)/60:.3f}min")

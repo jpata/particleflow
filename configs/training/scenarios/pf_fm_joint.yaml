@@ -1,4 +1,4 @@
-# Full joint campaign with the same number of optimizer updates as each expert.
+# Full joint campaign with the same maximum update budget as each expert.
 name: pf_fm_joint
 spec_file: particleflow_spec.yaml
 production_name: cld
