@@ -43,10 +43,17 @@ class ScenarioVariant(BaseModel):
     production_name: str | None = None
     # Omit to use the hardware profile's GPU count (e.g. for large hit models).
     gpus: int | None = Field(default=None, gt=0)
+    # Logical platform data root plus an optional dataset-variation subdirectory.
+    data_root: str | None = None
+    data_subdir: str | None = None
     overrides: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def reject_derived_overrides(self):
+        if self.data_subdir is not None and (
+            self.data_root is None or Path(self.data_subdir).is_absolute() or ".." in Path(self.data_subdir).parts
+        ):
+            raise ValueError("data_subdir requires data_root and must stay within that root")
         invalid = DERIVED_KEYS.intersection(self.overrides)
         if invalid:
             raise ValueError(f"Variant overrides must not set derived keys: {sorted(invalid)}")
@@ -110,6 +117,7 @@ class SlurmProfile(BaseModel):
     nodes: int = Field(default=1, gt=0)
     tasks_per_node: int = Field(default=1, gt=0)
     cpus_per_task: int = Field(default=64, gt=0)
+    cpus_per_gpu: PositiveInt | None = None  # when set, request cpus_per_gpu * effective GPU count per task
     gpu_request: Literal["gpus-per-node", "gpus-per-task", "gres"] = "gpus-per-node"
     gpu_type: str | None = None
     memory: str | None = None
@@ -225,6 +233,8 @@ def _serialize_cli_value(value):
         return "true" if value else "false"
     if isinstance(value, list):
         return ",".join(str(item) for item in value)
+    if isinstance(value, dict):
+        return json.dumps(value)
     return str(value)
 
 
@@ -327,7 +337,16 @@ def resolve_scenario_job(
     settings["seed"] = seed
     selected_spec = str(spec_file or scenario.spec_file)
     production_name = scenario.variant_production(variant_name)
-    data_dir = _production_data_dir(platform, selected_spec, production_name)
+    # A detector-configuration variant can replace the production's nominal
+    # TFDS root. Keep the resolved path in both the manifest and --data-dir.
+    if "data_dir" in settings:
+        data_dir = parse_data_dir(settings.pop("data_dir"))
+    elif variant.data_root is not None:
+        data_dir = platform.data_dir_for(variant.data_root)
+        if variant.data_subdir is not None:
+            data_dir = str(Path(data_dir) / variant.data_subdir)
+    else:
+        data_dir = _production_data_dir(platform, selected_spec, production_name)
 
     with _temporary_environment(platform.environment):
         config = MLPFConfig.from_spec(
@@ -544,6 +563,12 @@ def run_scenario_job(job, scenario, platform, spec_file, *, dry_run=False, conti
     )
     if continuation is not None and continuation.checkpoint is not None:
         job.settings["load"] = str(continuation.checkpoint)
+        # A fine-tuning scenario loads source weights only on its first launch.
+        # Continuing its own checkpoint must retain progress and calibration.
+        if job.settings.get("load_weights_only"):
+            job.settings["load_weights_only"] = False
+        if job.settings.get("reset_task_loss_weights"):
+            job.settings["reset_task_loss_weights"] = False
     command = _pipeline_command(job, scenario, platform, spec_file, experiment_dir)
     print(shlex.join(command), flush=True)
     if dry_run:

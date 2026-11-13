@@ -1389,7 +1389,7 @@ class MLPFConfig(BaseModel):
     # Training parameters
     seed: int = Field(default=12345, ge=0)
     num_steps: int = 100000
-    patience: int = 10000
+    patience: int = Field(default=10000, ge=0, description="Consecutive validation cycles without loss improvement before early stopping")
     checkpoint_freq: int = 10000
     val_freq: int = 10000
     num_workers: int = 8
@@ -1422,6 +1422,7 @@ class MLPFConfig(BaseModel):
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
     relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
     load_weights_only: bool = False  # load only the model weights from --load; optimizer, LR schedule, RNG, sampler and step start fresh
+    reset_task_loss_weights: bool = False  # with weights-only loading, recalibrate task weights on the fine-tuning data
     sampler_from_scratch: bool = False  # start the sampler from scratch (without resuming the sampler state)
 
     # Logging

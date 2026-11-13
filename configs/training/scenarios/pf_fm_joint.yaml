@@ -1,0 +1,46 @@
+# Full joint campaign with the same maximum update budget as each expert.
+name: pf_fm_joint
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  joint:
+    model_name: pyg-cldcliccolliderml-v1
+    production_name: cld_clic_colliderml
+seeds: [12345]
+training:
+  global_batch_size: 16
+  parameters:
+    optimizer: lamb
+    lr: 0.0005
+    lr_schedule: onecycle
+    lr_schedule_config.onecycle.pct_start: 0.3
+    num_steps: 100000
+    tensorboard_step_freq: 1000
+    # Sample telemetry in each worker's background thread, independent of logging.
+    benchmark.enabled: true
+    benchmark.sample_interval_seconds: 1.0
+    benchmark.warmup_steps: 100
+    benchmark.gpu_timing_interval: 0
+    val_freq: 10000
+    checkpoint_freq: 2000
+    patience: 1000
+    nvalid: 256
+    ntest: 256
+    sampler_mode: interleaved-shards
+    pad_to_multiple_elements: 128
+    validation_particle_metrics: true
+    make_plots: true
+common_overrides:
+  model.type: attention
+  model.heptv2: null
+  model.attention:
+    num_convs: 6
+    num_heads: 16
+    head_dim: 16
+    attention_type: flash
+    dropout_ff: 0.0
+  model.input_encoding: split
+  model.feature_bag: true
+  model.input_normalization: true
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6

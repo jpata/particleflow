@@ -71,8 +71,8 @@ The adapter preserves Slurm's GPU visibility. Change the account/profile and
 
 ## Flatiron: one H100 PCIe
 
-[`flatiron_h100_single.yaml`](../../configs/training/platforms/flatiron_h100_single.yaml)
-requests one H100, eight CPU cores and 128G host RAM. Prepare the CUDA environment
+[`flatiron_h100_benchmark.yaml`](../../configs/training/platforms/flatiron_h100_benchmark.yaml)
+requests one H100, 24 CPU cores and 128G host RAM. Prepare the CUDA environment
 once on the appropriate site host:
 
 ```bash
@@ -85,7 +85,7 @@ uv pip freeze --python .venv/bin/python3 > logs_slurm/h100-pip-freeze.txt
 bash scripts/flatiron/batch_python.sh -c 'import mlpf.pipeline; import torch; print(torch.__version__, torch.version.cuda)'
 bash scripts/flatiron/batch_python.sh scripts/training/check_batch_data.py "$MLPF_CLD_DATA_DIR"
 bash scripts/flatiron/batch_python.sh -m scripts.training.batch_sweep \
-  --platform configs/training/platforms/flatiron_h100_single.yaml --dry-run
+  --platform configs/training/platforms/flatiron_h100_benchmark.yaml --dry-run
 ```
 
 Use `scripts/flatiron/batch_python.sh` as the environment adapter. It uses

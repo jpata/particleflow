@@ -241,6 +241,7 @@ def test_validation_history_uses_cycle_duration_not_elapsed_training(tmp_path, m
 
     monkeypatch.setattr(training, "evaluate", lambda **kwargs: {"Total": 1.0, "Total_unweighted": 2.0})
     monkeypatch.setattr(training, "get_train_epoch", lambda loader: 0.5)
+    monkeypatch.setattr(training, "save_checkpoint", Mock())
     for name in ("log_memory", "_log_validation_results_to_tensorboard", "_log_group_losses_to_tensorboard", "_log_validation_probe_results"):
         monkeypatch.setattr(training, name, lambda *args, **kwargs: None)
     monkeypatch.setattr(training.time, "perf_counter", Mock(side_effect=[10, 11, 13, 14, 15, 16, 17, 18]))
@@ -267,7 +268,7 @@ def test_validation_history_uses_cycle_duration_not_elapsed_training(tmp_path, m
         train_time=0.5,
         t0_initial=100,
         use_ray=False,
-        train_loader=None,
+        train_loader=Mock(),
         valid_sampler=None,
         train_sampler=None,
         losses_train_group={},

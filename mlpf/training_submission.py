@@ -87,7 +87,7 @@ def slurm_resource_args(slurm, gpus):
         slurm.partition,
         *_gpu_request_args(slurm, gpus),
         "--cpus-per-task",
-        str(slurm.cpus_per_task),
+        str(slurm.cpus_per_gpu * gpus if slurm.cpus_per_gpu is not None else slurm.cpus_per_task),
     ]
     for flag, value in (
         ("--constraint", slurm.constraint),

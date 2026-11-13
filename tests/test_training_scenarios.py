@@ -25,6 +25,306 @@ from mlpf.training_scenarios import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+CLD_SCAN_VARIATIONS = (
+    "ecal_1p5mm",
+    "ecal_2mm",
+    "ecal_2p5mm",
+    "ecal_3mm",
+    "ecal_4mm",
+    "ecal_5p1mm",
+    "hcal_10mm",
+    "hcal_12mm",
+    "hcal_15mm",
+    "hcal_20mm",
+    "hcal_25mm",
+    "hcal_30mm",
+)
+
+
+@pytest.mark.parametrize("campaign", ["experts", "finetuning", "joint"])
+@pytest.mark.parametrize("gpus", [1, 4, 8])
+def test_pf_fm_profiles_control_resources_without_changing_recipe(campaign, gpus):
+    scenario = load_training_scenario(ROOT / f"configs/training/scenarios/pf_fm_{campaign}.yaml")
+    single = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    multi = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    assert single.runtime_overrides == multi.runtime_overrides
+    assert single.data_dir == multi.data_dir
+    assert all(variant.gpus is None for variant in scenario.variants.values())
+    baseline = resolve_scenario_jobs(scenario, single)
+    jobs = resolve_scenario_jobs(scenario, multi.model_copy(update={"gpus": gpus}))
+    for reference, job in zip(baseline, jobs):
+        assert job.resolved_config.gpus == gpus
+        assert job.global_batch_size == 16
+        assert job.per_gpu_batch_size * gpus == 16
+        expected = reference.resolved_config.model_dump()
+        actual = job.resolved_config.model_dump()
+        for key in ("gpus", "gpu_batch_multiplier"):
+            expected.pop(key)
+            actual.pop(key)
+        assert actual == expected
+
+
+@pytest.mark.parametrize("subdir", ["/absolute", "../escape", "valid/../../escape"])
+def test_variant_data_subdirectory_stays_within_platform_root(subdir):
+    with pytest.raises(ValueError, match="within that root"):
+        ScenarioVariant(model_name="pyg-cld-v1", data_root="cld_granularity", data_subdir=subdir)
+
+
+def test_pf_fm_scan_location_comes_from_platform(tmp_path):
+    from mlpf.training_scenarios import resolve_scenario_job
+
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_experts.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    platform.data_dir["cld_granularity"] = str(tmp_path)
+    job = resolve_scenario_job(scenario, platform, "cld_ecal_3mm", 12345)
+    assert job.data_dir == str(tmp_path / "ecal_3mm")
+    assert job.resolved_config.data_dir == job.data_dir
+    assert scenario.variants["cld_ecal_3mm"].data_root == "cld_granularity"
+
+
+@pytest.mark.parametrize("campaign", ["experts", "joint", "finetuning"])
+def test_attention_campaigns_validate_physics_every_10k_steps(campaign):
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    scenario = load_training_scenario(ROOT / f"configs/training/scenarios/pf_fm_{campaign}.yaml")
+    assert scenario.name == f"pf_fm_{campaign}"
+    for job in resolve_scenario_jobs(scenario, platform):
+        config = job.resolved_config
+        assert config.model.type.value == "attention"
+        assert config.model.heptv2 is None
+        assert config.model.backbone.num_convs == config.model.attention.num_convs == 6
+        assert config.model.attention.num_heads == config.model.attention.head_dim == 16
+        assert config.model.attention.attention_type.value == "flash"
+        assert config.validation_particle_metrics is True
+        assert config.val_freq == 10000
+        assert config.num_steps % config.val_freq == 0
+        assert config.checkpoint_freq == 2000
+        if campaign in ("experts", "finetuning"):
+            assert config.patience == 3
+            assert config.patience < config.num_steps // config.val_freq
+        assert config.make_plots is True
+        assert config.ntest == 256
+        assert config.enabled_test_datasets == list(config.test_dataset)
+        # Test inference must cover the same samples and versions as training,
+        # including all three detectors in the joint recipe.
+        samples = {name: entry for groups in config.train_dataset.values() for group in groups.values() for name, entry in group.samples.items()}
+        assert set(config.test_dataset) == set(samples)
+        for name, entry in config.test_dataset.items():
+            assert entry.version == samples[name].version
+            assert entry.splits == samples[name].splits
+
+
+def test_idea_finetuning_matches_expert_exposure_and_loads_joint_model():
+    import torch
+
+    from mlpf.model.losses import make_task_loss_weighter
+    from mlpf.model.mlpf import MLPF
+    from mlpf.model.training import restore_checkpoint
+
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_finetuning.yaml")
+    fine = resolve_scenario_jobs(scenario, platform)[0].resolved_config
+    expert = next(
+        job.resolved_config
+        for job in resolve_scenario_jobs(load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_experts.yaml"), platform)
+        if job.variant_name == "idea"
+    )
+    joint = resolve_scenario_jobs(load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_joint.yaml"), platform)[0].resolved_config
+    for field in (
+        "train_dataset",
+        "valid_dataset",
+        "test_dataset",
+        "num_steps",
+        "patience",
+        "lr",
+        "lr_schedule",
+        "lr_schedule_config",
+        "optimizer",
+        "weight_decay",
+        "gpus",
+        "gpu_batch_multiplier",
+        "seed",
+        "nvalid",
+        "sampler_mode",
+        "benchmark",
+    ):
+        assert getattr(fine, field) == getattr(expert, field), field
+    assert fine.dataset_versions() == {"idea": "0.2.1"}
+    assert fine.num_steps == 100000 and fine.gpus == 1 and fine.gpu_batch_multiplier == 16
+    assert fine.load and fine.load_weights_only and fine.reset_task_loss_weights
+    assert "pf_fm_joint/" in fine.load
+    assert not fine.relaxed_load
+    assert fine.model == joint.model
+    source, target = MLPF(joint), MLPF(fine)
+    for model in (source, target):
+        model.task_loss_weighter = make_task_loss_weighter(fine.task_loss_weights.model_dump())
+    source.task_loss_weighter.calibrated.fill_(True)
+    assert restore_checkpoint({"model_state_dict": source.state_dict()}, target, None, None, fine, weights_only=True) == 1
+    assert not target.task_loss_weighter.calibrated.item()
+    for name, parameter in source.named_parameters():
+        torch.testing.assert_close(parameter, dict(target.named_parameters())[name])
+
+
+def test_finetuning_continuation_resumes_its_own_state(tmp_path, capsys):
+    import mlpf.training_scenarios as runner
+
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_finetuning.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    platform.experiments_dir = str(tmp_path)
+    job = resolve_scenario_jobs(scenario, platform)[0]
+    experiment = tmp_path / scenario.name / "idea_seed12345_partial"
+    (experiment / "checkpoints").mkdir(parents=True)
+    checkpoint = experiment / "checkpoints/checkpoint-2000.pth"
+    checkpoint.touch()
+    (experiment / "scenario-manifest.json").write_text(
+        json.dumps(
+            {
+                "job": job.model_dump(mode="json", exclude={"resolved_config"}),
+                "resolved_config": job.resolved_config.model_dump(mode="json"),
+            }
+        )
+    )
+
+    runner.run_scenario_job(job, scenario, platform, ROOT / "particleflow_spec.yaml", dry_run=True, continue_run=True)
+
+    command = shlex.split(capsys.readouterr().out.strip())
+    assert command[command.index("--load") + 1] == str(checkpoint)
+    assert command[command.index("--load_weights_only") + 1] == "false"
+    assert command[command.index("--reset_task_loss_weights") + 1] == "false"
+
+
+def test_idea_finetuning_requires_statistics_for_its_actual_dataset(tmp_path, monkeypatch):
+    import mlpf.conf as conf
+
+    original = conf.stats_path
+    monkeypatch.setattr(
+        conf, "stats_path", lambda dataset, version: tmp_path / "idea_0.2.1.yaml" if dataset == "idea" else original(dataset, version)
+    )
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_finetuning.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    with pytest.raises(ValueError, match="No input normalization statistics.*idea_0.2.1.yaml"):
+        resolve_scenario_jobs(scenario, platform)
+
+
+def test_attention_expert_and_joint_campaigns_share_training_and_noninput_model_size():
+    from mlpf.model.mlpf import MLPF
+    from mlpf.model.utils import get_lr_schedule
+    from mlpf.optimizers import get_optimizer
+
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    jobs = [
+        job
+        for name in ("pf_fm_experts", "pf_fm_joint")
+        for job in resolve_scenario_jobs(load_training_scenario(ROOT / f"configs/training/scenarios/{name}.yaml"), platform)
+    ]
+    expected = {"cld", "clic", "idea", "colliderml", "joint"} | {f"cld_{name}" for name in CLD_SCAN_VARIATIONS}
+    assert {job.variant_name for job in jobs} == expected
+    assert {job.variant_name: job.resolved_config.gpus for job in jobs} == dict.fromkeys(expected, 1)
+
+    reference_model = None
+    reference_shapes = None
+    for job in jobs:
+        config = job.resolved_config
+        assert config.model.input_normalization
+        assert config.optimizer.value == "lamb"
+        assert config.weight_decay == 0.01
+        assert config.lr == 0.0005
+        assert config.lr_schedule.value == "onecycle"
+        assert config.lr_schedule_config == {"onecycle": {"pct_start": 0.3}}
+        assert config.num_steps == 100000
+        assert config.tensorboard_step_freq == 1000
+        assert job.global_batch_size == 16
+        assert job.per_gpu_batch_size == (16 if job.resolved_config.gpus == 1 else 4)
+
+        model = MLPF(config)
+        assert model.input_normalization is not None
+        assert type(get_lr_schedule(config, get_optimizer(model, config), config.num_steps)).__name__ == "OneCycleLR"
+        shapes = {name: tuple(parameter.shape) for name, parameter in model.named_parameters()}
+        input_shape = shapes.pop("nn0.0.weight")
+        assert input_shape[0] == 256
+        if reference_shapes is None:
+            reference_shapes = shapes
+            reference_model = config.model.model_dump(mode="json")
+        else:
+            assert shapes == reference_shapes
+            model_config = config.model.model_dump(mode="json")
+            assert {name for name in reference_model if reference_model[name] != model_config[name]} <= {
+                "feature_bag",
+                "input_normalization",
+            }
+
+
+def test_cld_granularity_experts_and_finetunes_are_matched_and_commands_keep_their_data():
+    from mlpf.conf import MLPFConfig
+    from mlpf.pipeline import get_parser
+
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    scenarios = {kind: load_training_scenario(ROOT / f"configs/training/scenarios/pf_fm_{kind}.yaml") for kind in ("experts", "finetuning")}
+    jobs = {kind: {j.variant_name: j for j in resolve_scenario_jobs(scenario, platform)} for kind, scenario in scenarios.items()}
+    scan_names = {f"cld_{name}" for name in CLD_SCAN_VARIATIONS}
+    assert {name for name in jobs["experts"] if name.startswith("cld_")} == scan_names
+    assert {name for name in jobs["finetuning"] if name.startswith("cld_")} == scan_names
+    assert len(jobs["experts"]) == 16 and len(jobs["finetuning"]) == 13
+    for variation in CLD_SCAN_VARIATIONS:
+        expert, fine = (jobs[kind][f"cld_{variation}"] for kind in ("experts", "finetuning"))
+        reference, candidate = (j.resolved_config.model_dump(mode="json") for j in (expert, fine))
+        for field in ("load", "load_weights_only", "reset_task_loss_weights"):
+            reference.pop(field)
+            candidate.pop(field)
+        assert candidate == reference, variation
+        assert not expert.resolved_config.load and not expert.resolved_config.load_weights_only
+        assert fine.resolved_config.load and fine.resolved_config.load_weights_only and fine.resolved_config.reset_task_loss_weights
+        for kind, job in (("experts", expert), ("finetuning", fine)):
+            config = job.resolved_config
+            expected_root = f"/mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/{variation}"
+            assert job.data_dir == config.data_dir == expected_root
+            assert config.model.feature_bag and config.model.input_normalization
+            assert config.dataset_versions() == {"cld": "3.3.0"}
+            assert config.gpus == 1 and job.global_batch_size == job.per_gpu_batch_size == 16
+            assert config.num_steps == 100000 and config.benchmark.enabled
+            sample = "cld_edm_z_tautau_pf" if variation.startswith("ecal_") else "cld_edm_ttbar_pf"
+            assert list(config.test_dataset) == [sample]
+            for dataset in (config.train_dataset, config.valid_dataset):
+                assert list(dataset) == ["cld"] and list(dataset["cld"]) == ["physical"]
+                assert list(dataset["cld"]["physical"].samples) == [sample]
+                entry = dataset["cld"]["physical"].samples[sample]
+                assert entry.version == "3.3.0" and entry.splits == [str(i) for i in range(1, 11)]
+            command = _pipeline_command(job, scenarios[kind], platform, ROOT / "particleflow_spec.yaml", Path("/tmp/scan-run"))
+            command = shlex.split(shlex.join(command))
+            assert command.count("--data-dir") == 1 and "--data_dir" not in command
+            assert command[command.index("--data-dir") + 1] == expected_root
+            assert json.loads(command[command.index("--train_dataset.cld.physical.samples") + 1]) == {
+                sample: {"version": "3.3.0", "splits": [str(i) for i in range(1, 11)]}
+            }
+            # Reparse the actual emitted dataset overrides, rather than only checking in-memory jobs.
+            parsed_args, extra_args = get_parser().parse_known_args(command[command.index("mlpf/pipeline.py") + 1 :])
+            parsed_args.train = True
+            parsed_args.test = True
+            reparsed = MLPFConfig.from_spec(
+                str(ROOT / "particleflow_spec.yaml"),
+                job.model_name,
+                job.production_name,
+                args=parsed_args,
+                extra_args=extra_args,
+            )
+            assert reparsed.train_dataset == config.train_dataset
+            assert reparsed.valid_dataset == config.valid_dataset
+            assert reparsed.test_dataset == config.test_dataset
+            assert reparsed.enabled_test_datasets == config.enabled_test_datasets
+            assert reparsed.make_plots and reparsed.ntest == config.ntest
+            assert reparsed.data_dir == config.data_dir
+
+
+def test_variant_data_root_can_be_relocated_without_changing_the_platform(tmp_path):
+    from mlpf.training_scenarios import resolve_scenario_job
+
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_experts.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    original = dict(platform.data_dir)
+    selected = str(tmp_path / "relocated scan with spaces")
+    job = resolve_scenario_job(scenario, platform, "cld_ecal_3mm", 12345, extra_overrides={"data_dir": selected})
+    assert job.data_dir == job.resolved_config.data_dir == selected
+    assert platform.data_dir == original
+    assert "data_dir" not in job.settings
 
 
 def test_training_scenario_rejects_empty_variants():

@@ -121,3 +121,47 @@ def test_weights_only_checks_keys(checkpoint):
     lr_schedule = get_lr_schedule(_config(lr=1e-3), optimizer, TOTAL_STEPS)
     with pytest.raises(KeyError):
         restore_checkpoint(checkpoint, model, optimizer, lr_schedule, _config(), weights_only=True)
+
+
+@pytest.mark.parametrize("reset", [False, True])
+def test_weights_only_can_recalibrate_task_weights_for_new_data(reset):
+    from mlpf.conf import TaskLossWeights
+    from mlpf.model.losses import make_task_loss_weighter
+
+    task_config = TaskLossWeights()
+    source = torch.nn.Linear(4, 2)
+    source.task_loss_weighter = make_task_loss_weighter(task_config.model_dump())
+    source.task_loss_weighter.weights.fill_(7)
+    source.task_loss_weighter.calibration_count.fill_(100)
+    source.task_loss_weighter.calibration_observations.fill_(400)
+    source.task_loss_weighter.calibrated.fill_(True)
+    checkpoint = {"model_state_dict": source.state_dict()}
+    target = torch.nn.Linear(4, 2)
+    target.task_loss_weighter = make_task_loss_weighter(task_config.model_dump())
+
+    step = restore_checkpoint(
+        checkpoint,
+        target,
+        None,
+        None,
+        _config(reset_task_loss_weights=reset, task_loss_weights=task_config),
+        weights_only=True,
+    )
+
+    assert step == 1
+    torch.testing.assert_close(target.weight, source.weight)
+    torch.testing.assert_close(target.bias, source.bias)
+    weighter = target.task_loss_weighter
+    assert weighter.calibrated.item() == (not reset)
+    assert weighter.calibration_count.item() == (0 if reset else 100)
+    assert weighter.calibration_observations.item() == (0 if reset else 400)
+    torch.testing.assert_close(weighter.weights, torch.full_like(weighter.weights, 1 if reset else 7))
+    # Resetting the target must not modify the source checkpoint.
+    assert checkpoint["model_state_dict"]["task_loss_weighter.calibrated"].item()
+
+
+def test_full_resume_rejects_task_weight_reset(checkpoint):
+    checkpoint, _ = checkpoint
+    model, optimizer, schedule = _setup(lr=1e-3)
+    with pytest.raises(ValueError, match="requires load_weights_only"):
+        restore_checkpoint(checkpoint, model, optimizer, schedule, _config(reset_task_loss_weights=True))
