@@ -6,7 +6,6 @@ variants:
   joint:
     model_name: pyg-cldcliccolliderml-v1
     production_name: cld_clic_colliderml
-    gpus: 1
 seeds: [12345]
 training:
   global_batch_size: 16

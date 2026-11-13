@@ -239,6 +239,13 @@ The site shell launchers expose this as the `SEED` environment variable. Without
 override, seeds come from the scenario file and are recorded in both the resolved
 configuration and run manifest.
 
+The Flatiron profiles request a fixed 24 CPUs per GPU
+(`slurm.cpus_per_gpu: 24`): one GPU requests 24 CPUs, four GPUs request 96,
+and eight GPUs request 192. The request scales with the job's effective GPU
+count, including scenario variant overrides, independently of dataloader workers
+or dataset groups. When set, `cpus_per_gpu` takes precedence over the fixed
+`cpus_per_task` setting. Non-Flatiron profiles retain their explicit CPU requests.
+
 List the available scenarios and accelerators, then submit using the Flatiron
 picker:
 
@@ -387,13 +394,25 @@ scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_readout_50k mi250x --dry-ru
 `scenarios/pf_fm_experts.yaml` defines CLIC, CLD, IDEA and ColliderML PU0
 experts with the same 256-wide, six-layer attention backbone, optimizer, learning
 rate, global batch of 16 events and maximum update budget. Each expert uses one
-GPU and retains its detector's native input layout and train/validation samples.
+GPU with `h100_single` and retains its detector's native input layout and train/validation samples.
 IDEA uses the locally available 0.2.1 data.
 All four experts and the joint run enable input normalization using the
 statistics for their exact dataset versions. Historical expert checkpoints
 from before this setting was enabled used unnormalized inputs.
 Scenario filenames, names, and experiment directories use `pf_fm_experts`,
 `pf_fm_joint`, and `pf_fm_finetuning`.
+GPU counts come from the platform, with no `pf_fm` variant GPU overrides:
+`h100_single` selects one GPU and `h100` selects eight. A four-GPU profile selects
+four (`a100` is the existing four-GPU Flatiron profile). Global batch remains
+16 events in every case, divided across the selected GPUs. The examples below
+use `h100_single`; choose `h100` for multi-GPU training.
+The two H100 training profiles share dataset roots and runtime settings. Flatiron
+training profiles use eight loader workers per GPU and own Slurm CPU/memory/time
+requests; scenarios own the model, optimizer,
+loss patience, validation cadence, dataset selection, and global batch.
+`flatiron_h100_benchmark` preserves the short four-hour, four-worker benchmark
+configuration and environment-provided dataset roots; use it for batch sweeps.
+
 All use six shared attention layers, width 256 (16 heads × 16 channels), native
 Flash attention with padding excluded, and zero feed-forward dropout. HEPTv2
 configuration is cleared. These are fresh runs; archived HEPTv2 checkpoints
@@ -433,7 +452,7 @@ Preview the commands without submitting Slurm jobs:
 ```bash
 uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/pf_fm_experts.yaml \
-  --platform configs/training/platforms/flatiron_h100.yaml --dry-run
+  --platform configs/training/platforms/flatiron_h100_single.yaml --dry-run
 ```
 
 The full joint configuration is `scenarios/pf_fm_joint.yaml`. It uses the
@@ -500,13 +519,13 @@ Then preview the fine-tune:
 ```bash
 uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/pf_fm_finetuning.yaml \
-  --platform configs/training/platforms/flatiron_h100.yaml --variant idea \
+  --platform configs/training/platforms/flatiron_h100_single.yaml --variant idea \
   --set load=/path/to/the/joint/checkpoint-100000.pth --dry-run
 ```
 
 For site submission, set the checkpoint path in the scenario (or a copied
 scenario), then use, for example,
-`scripts/flatiron/train_scenario.sh pf_fm_finetuning h100 --variant idea`.
+`scripts/flatiron/train_scenario.sh pf_fm_finetuning h100_single --variant idea`.
 The direct runner accepts `--set` overrides; the site submitter does not.
 The scenario runner's `--continue` resumes a compatible fine-tune from its
 own checkpoint, retaining optimizer, schedule, sampler, step and calibration
@@ -562,18 +581,21 @@ improvement. The approximately 9k training events imply about 178 dataset passes
 at the maximum budget.
 
 Each variant overrides the nominal production's TFDS directory with
-`/mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/<scan subdirectory>`.
+the platform's `data_dir.cld_granularity` plus its scenario `data_subdir`
+(for example, `ecal_3mm`). Set this platform root to the scan location on the
+training host; the existing `/mnt/work/.../granularity_scan_2025-05-29` location
+is retained in the Flatiron profiles until relocated.
 The runner records this root in the resolved configuration and job manifest and
 emits it as the actual `--data-dir` argument. Preview a matched pair:
 
 ```bash
 uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/pf_fm_experts.yaml \
-  --platform configs/training/platforms/flatiron_h100.yaml \
+  --platform configs/training/platforms/flatiron_h100_single.yaml \
   --variant cld_ecal_3mm --dry-run
 uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/pf_fm_finetuning.yaml \
-  --platform configs/training/platforms/flatiron_h100.yaml \
+  --platform configs/training/platforms/flatiron_h100_single.yaml \
   --variant cld_ecal_3mm --set load=/path/to/joint/checkpoint-100000.pth --dry-run
 ```
 

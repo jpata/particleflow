@@ -1,23 +1,23 @@
 name: flatiron_h100_single
 gpus: 1
-# The site helper runs under uv; child processes inherit its virtual environment.
-python_command: [python3]
 data_dir:
-  cld: ${MLPF_CLD_DATA_DIR}
-  colliderml: ${MLPF_COLLIDERML_DATA_DIR}
+  cld: /mnt/ceph/users/jpata/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
+  clic: /mnt/ceph/users/jpata/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds
+  idea: /mnt/ceph/users/jpata/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/tfds
+  colliderml: /mnt/ceph/users/ewulff/tensorflow_datasets/colliderml/
+  cld_granularity: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29
 experiments_dir: /mnt/home/${USER}/particleflow/experiments
 runtime_overrides:
-  compile: false
   dtype: bfloat16
-  num_workers: 4
+  num_workers: 8
   prefetch_factor: 2
   model.attention.use_flash_attn_varlen: false
 slurm:
   partition: gpu
   constraint: h100
-  time: "04:00:00"
+  time: "48:00:00"
   nodes: 1
   tasks_per_node: 1
-  cpus_per_task: 8
+  cpus_per_gpu: 24
   gpu_request: gpus-per-task
   memory: 128G

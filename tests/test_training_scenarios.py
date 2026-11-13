@@ -41,9 +41,50 @@ CLD_SCAN_VARIATIONS = (
 )
 
 
+@pytest.mark.parametrize("campaign", ["experts", "finetuning", "joint"])
+@pytest.mark.parametrize("gpus", [1, 4, 8])
+def test_pf_fm_profiles_control_resources_without_changing_recipe(campaign, gpus):
+    scenario = load_training_scenario(ROOT / f"configs/training/scenarios/pf_fm_{campaign}.yaml")
+    single = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    multi = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    assert single.runtime_overrides == multi.runtime_overrides
+    assert single.data_dir == multi.data_dir
+    assert all(variant.gpus is None for variant in scenario.variants.values())
+    baseline = resolve_scenario_jobs(scenario, single)
+    jobs = resolve_scenario_jobs(scenario, multi.model_copy(update={"gpus": gpus}))
+    for reference, job in zip(baseline, jobs):
+        assert job.resolved_config.gpus == gpus
+        assert job.global_batch_size == 16
+        assert job.per_gpu_batch_size * gpus == 16
+        expected = reference.resolved_config.model_dump()
+        actual = job.resolved_config.model_dump()
+        for key in ("gpus", "gpu_batch_multiplier"):
+            expected.pop(key)
+            actual.pop(key)
+        assert actual == expected
+
+
+@pytest.mark.parametrize("subdir", ["/absolute", "../escape", "valid/../../escape"])
+def test_variant_data_subdirectory_stays_within_platform_root(subdir):
+    with pytest.raises(ValueError, match="within that root"):
+        ScenarioVariant(model_name="pyg-cld-v1", data_root="cld_granularity", data_subdir=subdir)
+
+
+def test_pf_fm_scan_location_comes_from_platform(tmp_path):
+    from mlpf.training_scenarios import resolve_scenario_job
+
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_experts.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    platform.data_dir["cld_granularity"] = str(tmp_path)
+    job = resolve_scenario_job(scenario, platform, "cld_ecal_3mm", 12345)
+    assert job.data_dir == str(tmp_path / "ecal_3mm")
+    assert job.resolved_config.data_dir == job.data_dir
+    assert scenario.variants["cld_ecal_3mm"].data_root == "cld_granularity"
+
+
 @pytest.mark.parametrize("campaign", ["experts", "joint", "finetuning"])
 def test_attention_campaigns_validate_physics_every_10k_steps(campaign):
-    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
     scenario = load_training_scenario(ROOT / f"configs/training/scenarios/pf_fm_{campaign}.yaml")
     assert scenario.name == f"pf_fm_{campaign}"
     for job in resolve_scenario_jobs(scenario, platform):
@@ -79,7 +120,7 @@ def test_idea_finetuning_matches_expert_exposure_and_loads_joint_model():
     from mlpf.model.mlpf import MLPF
     from mlpf.model.training import restore_checkpoint
 
-    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_finetuning.yaml")
     fine = resolve_scenario_jobs(scenario, platform)[0].resolved_config
     expert = next(
@@ -127,7 +168,7 @@ def test_finetuning_continuation_resumes_its_own_state(tmp_path, capsys):
     import mlpf.training_scenarios as runner
 
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_finetuning.yaml")
-    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
     platform.experiments_dir = str(tmp_path)
     job = resolve_scenario_jobs(scenario, platform)[0]
     experiment = tmp_path / scenario.name / "idea_seed12345_partial"
@@ -159,7 +200,7 @@ def test_idea_finetuning_requires_statistics_for_its_actual_dataset(tmp_path, mo
         conf, "stats_path", lambda dataset, version: tmp_path / "idea_0.2.1.yaml" if dataset == "idea" else original(dataset, version)
     )
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_finetuning.yaml")
-    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
     with pytest.raises(ValueError, match="No input normalization statistics.*idea_0.2.1.yaml"):
         resolve_scenario_jobs(scenario, platform)
 
@@ -169,7 +210,7 @@ def test_attention_expert_and_joint_campaigns_share_training_and_noninput_model_
     from mlpf.model.utils import get_lr_schedule
     from mlpf.optimizers import get_optimizer
 
-    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
     jobs = [
         job
         for name in ("pf_fm_experts", "pf_fm_joint")
@@ -216,7 +257,7 @@ def test_cld_granularity_experts_and_finetunes_are_matched_and_commands_keep_the
     from mlpf.conf import MLPFConfig
     from mlpf.pipeline import get_parser
 
-    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
     scenarios = {kind: load_training_scenario(ROOT / f"configs/training/scenarios/pf_fm_{kind}.yaml") for kind in ("experts", "finetuning")}
     jobs = {kind: {j.variant_name: j for j in resolve_scenario_jobs(scenario, platform)} for kind, scenario in scenarios.items()}
     scan_names = {f"cld_{name}" for name in CLD_SCAN_VARIATIONS}
@@ -277,7 +318,7 @@ def test_variant_data_root_can_be_relocated_without_changing_the_platform(tmp_pa
     from mlpf.training_scenarios import resolve_scenario_job
 
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_experts.yaml")
-    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
     original = dict(platform.data_dir)
     selected = str(tmp_path / "relocated scan with spaces")
     job = resolve_scenario_job(scenario, platform, "cld_ecal_3mm", 12345, extra_overrides={"data_dir": selected})

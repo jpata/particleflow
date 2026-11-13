@@ -81,6 +81,36 @@ def test_slurm_optional_resources_are_omitted_when_unset():
     assert not set(args).intersection({"--constraint", "--account", "--qos", "--reservation", "--mem", "--mem-per-gpu", "--no-requeue"})
 
 
+@pytest.mark.parametrize("gpus,expected", [(1, 24), (4, 96), (8, 192)])
+def test_fixed_cpu_request_per_gpu(gpus, expected):
+    args = slurm_resource_args(SlurmProfile(cpus_per_gpu=24), gpus)
+    assert args[args.index("--cpus-per-task") + 1] == str(expected)
+
+
+@pytest.mark.parametrize("campaign", ["experts", "finetuning", "joint"])
+@pytest.mark.parametrize("profile,gpus", [("flatiron_h100_single", 1), ("flatiron_h100", 8), ("flatiron_a100", 4), ("flatiron_h200", 8)])
+def test_flatiron_h100_campaign_cpu_requests(campaign, profile, gpus):
+    submissions = build_slurm_submissions(
+        ROOT / f"configs/training/scenarios/pf_fm_{campaign}.yaml",
+        ROOT / f"configs/training/platforms/{profile}.yaml",
+        ROOT,
+    )
+    assert len(submissions) == 1
+    command, jobs = submissions[0]
+    assert command[command.index("--cpus-per-task") + 1] == str(24 * gpus)
+    assert all(job.resolved_config.gpus == gpus for job in jobs)
+
+
+def test_submission_scales_cpu_request_with_effective_gpu_count(submission_files):
+    scenario_path, profile_path = submission_files
+    profile_data = yaml.safe_load(profile_path.read_text())
+    profile_data["slurm"]["cpus_per_gpu"] = 24
+    profile_path.write_text(yaml.safe_dump(profile_data))
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT)
+    for (command, _jobs), cpus in zip(submissions, (24, 96)):
+        assert command[command.index("--cpus-per-task") + 1] == str(cpus)
+
+
 def test_picker_discovers_files_for_selected_site(tmp_path):
     scenarios = tmp_path / "configs/training/scenarios"
     profiles = tmp_path / "configs/training/platforms"

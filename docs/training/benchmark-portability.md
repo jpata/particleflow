@@ -47,7 +47,7 @@ From the repository root, preview a submission:
 ```bash
 export MLPF_CLD_DATA_DIR=/path/to/reference/tfds
 python -m scripts.training.submit_batch_sweep \
-  --platform configs/training/platforms/flatiron_h100_single.yaml \
+  --platform configs/training/platforms/flatiron_h100_benchmark.yaml \
   --python-wrapper scripts/flatiron/batch_python.sh \
   --dry-run \
   --data-manifest configs/training/data/cld_ttbar_hits_config1_3.2.2.json \
@@ -62,7 +62,7 @@ resolved cases instead of an sbatch command, call the driver directly:
 
 ```bash
 python -m scripts.training.batch_sweep \
-  --platform configs/training/platforms/flatiron_h100_single.yaml \
+  --platform configs/training/platforms/flatiron_h100_benchmark.yaml \
   --batch-sizes 8 16 --dry-run
 ```
 
@@ -98,7 +98,7 @@ for GH200 that requires an ARM allocation. Select the profile and adapter togeth
 
 ```bash
 python -m scripts.training.submit_batch_sweep \
-  --platform configs/training/platforms/flatiron_h100_single.yaml \
+  --platform configs/training/platforms/flatiron_h100_benchmark.yaml \
   --python-wrapper scripts/flatiron/batch_python.sh \
   --data-manifest configs/training/data/cld_ttbar_hits_config1_3.2.2.json \
   --require-clean-git --batch-sizes 8 --steps 20 --warmup 2

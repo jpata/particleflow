@@ -11,14 +11,13 @@ variants:
   idea:
     model_name: pyg-idea-pipeline-v1
     production_name: idea
-    gpus: 1
   # CLD granularity scan: matched expert/fine-tune variants use only available PF samples.
   cld_ecal_1p5mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: ecal_1p5mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_1p5mm
       train_dataset.cld.physical.samples: &cld_granularity_ecal_samples
         cld_edm_z_tautau_pf:
           version: "3.3.0"
@@ -28,54 +27,54 @@ variants:
   cld_ecal_2mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: ecal_2mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_2mm
       train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
       valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
       test_dataset: *cld_granularity_ecal_samples
   cld_ecal_2p5mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: ecal_2p5mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_2p5mm
       train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
       valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
       test_dataset: *cld_granularity_ecal_samples
   cld_ecal_3mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: ecal_3mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_3mm
       train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
       valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
       test_dataset: *cld_granularity_ecal_samples
   cld_ecal_4mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: ecal_4mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_4mm
       train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
       valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
       test_dataset: *cld_granularity_ecal_samples
   cld_ecal_5p1mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: ecal_5p1mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_5p1mm
       train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
       valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
       test_dataset: *cld_granularity_ecal_samples
   cld_hcal_10mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: hcal_10mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_10mm
       train_dataset.cld.physical.samples: &cld_granularity_hcal_samples
         cld_edm_ttbar_pf:
           version: "3.3.0"
@@ -85,45 +84,45 @@ variants:
   cld_hcal_12mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: hcal_12mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_12mm
       train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
       valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
       test_dataset: *cld_granularity_hcal_samples
   cld_hcal_15mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: hcal_15mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_15mm
       train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
       valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
       test_dataset: *cld_granularity_hcal_samples
   cld_hcal_20mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: hcal_20mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_20mm
       train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
       valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
       test_dataset: *cld_granularity_hcal_samples
   cld_hcal_25mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: hcal_25mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_25mm
       train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
       valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
       test_dataset: *cld_granularity_hcal_samples
   cld_hcal_30mm:
     model_name: pyg-cld-v1
     production_name: cld
-    gpus: 1
+    data_root: cld_granularity
+    data_subdir: hcal_30mm
     overrides:
-      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_30mm
       train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
       valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
       test_dataset: *cld_granularity_hcal_samples
