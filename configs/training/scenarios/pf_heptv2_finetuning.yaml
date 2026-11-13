@@ -36,7 +36,7 @@ training:
     validation_particle_metrics: false
     make_plots: false
     test_dataset: {}
-    load: results/experiments/pf_heptv2_joint/joint_seed12345_20261112_151754_406805/checkpoints/checkpoint-100000.pth
+    load: experiments/pf_heptv2_joint/joint_seed12345_20261112_151754_406805/checkpoints/checkpoint-100000.pth
     load_weights_only: true
     reset_task_loss_weights: true
 common_overrides:
