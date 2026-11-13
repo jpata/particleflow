@@ -1,0 +1,70 @@
+# Fine-tune the joint backbone on individual detector datasets. No jobs are submitted.
+# IDEA matches the expert update budget, sampler, batch and optimizer recipe.
+# Preserve the joint feature bag and normalization for strict checkpoint loading.
+# Generate IDEA 0.2.1 normalization statistics on the training host before resolving.
+# Override load with --set load=/path/to/the/joint/checkpoint-100000.pth on other hosts.
+# Future CLD configuration variants belong alongside idea under variants.
+name: pf_heptv2_finetuning
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  idea:
+    model_name: pyg-idea-pipeline-v1
+    production_name: idea
+    gpus: 1
+seeds: [12345]
+training:
+  global_batch_size: 16
+  parameters:
+    optimizer: lamb
+    lr: 0.0005
+    lr_schedule: onecycle
+    lr_schedule_config.onecycle.pct_start: 0.3
+    num_steps: 100000
+    tensorboard_step_freq: 1000
+    benchmark.enabled: true
+    benchmark.sample_interval_seconds: 1.0
+    benchmark.warmup_steps: 100
+    benchmark.gpu_timing_interval: 0
+    val_freq: 2000
+    checkpoint_freq: 2000
+    patience: 1000
+    nvalid: 256
+    ntest: 0
+    sampler_mode: interleaved-shards
+    pad_to_multiple_elements: 128
+    validation_particle_metrics: false
+    make_plots: false
+    test_dataset: {}
+    load: results/experiments/pf_heptv2_joint/joint_seed12345_20261112_151754_406805/checkpoints/checkpoint-100000.pth
+    load_weights_only: true
+    reset_task_loss_weights: true
+common_overrides:
+  model.type: heptv2
+  model.attention: null
+  model.input_encoding: split
+  model.feature_bag: true
+  model.input_normalization: true
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.heptv2.num_convs: 6
+  model.heptv2.embedding_dim: 256
+  model.heptv2.width: 256
+  model.heptv2.num_heads: 16
+  model.heptv2.dropout_ff: 0.0
+  model.heptv2.block_size: 128
+  model.heptv2.deterministic_hashing: true
+  model.heptv2.activation_checkpointing: true
+  model.heptv2.track_hash_at_calo: true
+  model.heptv2.cluster_hash_at_centroid: false
+  model.trainable: all
+allowed_variant_differences:
+  - data_dir
+  - dataset
+  - hyperparameters.lr
+  - input_dim
+  - train_dataset
+  - valid_dataset
+  - test_dataset
+  - enabled_test_datasets
+  - data_config

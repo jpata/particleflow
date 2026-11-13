@@ -27,6 +27,119 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture
+def idea_normalization_for_shape_tests(monkeypatch):
+    """Identity tables for model-shape tests only; real 0.2.1 stats come from train data."""
+    import mlpf.conf as conf
+    import mlpf.model.input_normalization as normalization
+
+    original = conf.load_stats
+
+    def load_stats(dataset, version):
+        if dataset != "idea":
+            return original(dataset, version)
+        assert version == "0.2.1"
+        return {
+            name: [
+                {"column": column, "clip": None, "log1p_scale": None, "mean": 0.0, "std": 1.0} for column in range(1, len(conf.X_FEATURES["idea"]))
+            ]
+            for name in conf.ELEMENT_TYPES.values()
+        }
+
+    monkeypatch.setattr(conf, "load_stats", load_stats)
+    monkeypatch.setattr(normalization, "load_stats", load_stats)
+
+
+def test_idea_finetuning_matches_expert_exposure_and_loads_joint_model(idea_normalization_for_shape_tests):
+    import torch
+
+    from mlpf.model.losses import make_task_loss_weighter
+    from mlpf.model.mlpf import MLPF
+    from mlpf.model.training import restore_checkpoint
+
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_heptv2_finetuning.yaml")
+    fine = resolve_scenario_jobs(scenario, platform)[0].resolved_config
+    expert = next(
+        job.resolved_config
+        for job in resolve_scenario_jobs(load_training_scenario(ROOT / "configs/training/scenarios/pf_heptv2_experts.yaml"), platform)
+        if job.variant_name == "idea"
+    )
+    joint = resolve_scenario_jobs(load_training_scenario(ROOT / "configs/training/scenarios/pf_heptv2_joint.yaml"), platform)[0].resolved_config
+    for field in (
+        "train_dataset",
+        "valid_dataset",
+        "test_dataset",
+        "num_steps",
+        "lr",
+        "lr_schedule",
+        "lr_schedule_config",
+        "optimizer",
+        "weight_decay",
+        "gpus",
+        "gpu_batch_multiplier",
+        "seed",
+        "nvalid",
+        "sampler_mode",
+        "benchmark",
+    ):
+        assert getattr(fine, field) == getattr(expert, field), field
+    assert fine.dataset_versions() == {"idea": "0.2.1"}
+    assert fine.num_steps == 100000 and fine.gpus == 1 and fine.gpu_batch_multiplier == 16
+    assert fine.load and fine.load_weights_only and fine.reset_task_loss_weights
+    assert not fine.relaxed_load
+    assert fine.model == joint.model
+    source, target = MLPF(joint), MLPF(fine)
+    for model in (source, target):
+        model.task_loss_weighter = make_task_loss_weighter(fine.task_loss_weights.model_dump())
+    source.task_loss_weighter.calibrated.fill_(True)
+    assert restore_checkpoint({"model_state_dict": source.state_dict()}, target, None, None, fine, weights_only=True) == 1
+    assert not target.task_loss_weighter.calibrated.item()
+    for name, parameter in source.named_parameters():
+        torch.testing.assert_close(parameter, dict(target.named_parameters())[name])
+
+
+def test_finetuning_continuation_resumes_its_own_state(tmp_path, capsys, idea_normalization_for_shape_tests):
+    import mlpf.training_scenarios as runner
+
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_heptv2_finetuning.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    platform.experiments_dir = str(tmp_path)
+    job = resolve_scenario_jobs(scenario, platform)[0]
+    experiment = tmp_path / scenario.name / "idea_seed12345_partial"
+    (experiment / "checkpoints").mkdir(parents=True)
+    checkpoint = experiment / "checkpoints/checkpoint-2000.pth"
+    checkpoint.touch()
+    (experiment / "scenario-manifest.json").write_text(
+        json.dumps(
+            {
+                "job": job.model_dump(mode="json", exclude={"resolved_config"}),
+                "resolved_config": job.resolved_config.model_dump(mode="json"),
+            }
+        )
+    )
+
+    runner.run_scenario_job(job, scenario, platform, ROOT / "particleflow_spec.yaml", dry_run=True, continue_run=True)
+
+    command = shlex.split(capsys.readouterr().out.strip())
+    assert command[command.index("--load") + 1] == str(checkpoint)
+    assert command[command.index("--load_weights_only") + 1] == "false"
+    assert command[command.index("--reset_task_loss_weights") + 1] == "false"
+
+
+def test_idea_finetuning_requires_statistics_for_its_actual_dataset(tmp_path, monkeypatch):
+    import mlpf.conf as conf
+
+    original = conf.stats_path
+    monkeypatch.setattr(
+        conf, "stats_path", lambda dataset, version: tmp_path / "idea_0.2.1.yaml" if dataset == "idea" else original(dataset, version)
+    )
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_heptv2_finetuning.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100.yaml")
+    with pytest.raises(ValueError, match="No input normalization statistics.*idea_0.2.1.yaml"):
+        resolve_scenario_jobs(scenario, platform)
+
+
 def test_heptv2_expert_and_joint_campaigns_share_training_and_noninput_model_size():
     from mlpf.model.mlpf import MLPF
     from mlpf.model.utils import get_lr_schedule
@@ -44,7 +157,7 @@ def test_heptv2_expert_and_joint_campaigns_share_training_and_noninput_model_siz
         "clic": 1,
         "idea": 1,
         "colliderml": 1,
-        "joint": 4,
+        "joint": 1,
     }
 
     reference_model = None
@@ -437,7 +550,7 @@ def test_slurm_allocation_validates_task_capacity(monkeypatch, environment, requ
 
 
 @pytest.mark.parametrize("scenario_path", sorted((ROOT / "configs/training/scenarios").glob("*.yaml")), ids=lambda path: path.stem)
-def test_shipped_scenarios_resolve(scenario_path):
+def test_shipped_scenarios_resolve(scenario_path, idea_normalization_for_shape_tests):
     """Recipes may change, but must still produce valid jobs and satisfy their declared invariants."""
     scenario = load_training_scenario(scenario_path)
     platform = PlatformProfile(name="test", gpus=1, data_dir="/tmp/data", experiments_dir="/tmp/experiments")

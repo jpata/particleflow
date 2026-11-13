@@ -31,6 +31,11 @@ training:
     lr_schedule_config.onecycle.pct_start: 0.3
     num_steps: 100000
     tensorboard_step_freq: 1000
+    # Sample telemetry in each worker's background thread, independent of logging.
+    benchmark.enabled: true
+    benchmark.sample_interval_seconds: 1.0
+    benchmark.warmup_steps: 100
+    benchmark.gpu_timing_interval: 0
     val_freq: 2000
     checkpoint_freq: 2000
     patience: 1000

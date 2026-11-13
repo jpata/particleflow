@@ -12,7 +12,8 @@ hits subset at batch 8 for 1,000 steps with matched decoder, features and seed.
 
 Native and Ray training workers collect portable benchmark evidence when enabled
 with `--set benchmark.enabled=true`, under each experiment's `benchmark/` directory.
-Recording is disabled by default; batch sweeps enable it explicitly. Use `python -m mlpf.benchmark_report
+Recording is disabled by default; batch sweeps and the PF HEPTv2 expert/joint
+scenarios enable it explicitly. Use `python -m mlpf.benchmark_report
 experiments/<scenario>` to export per-worker metrics and allocation work totals to
 JSON/CSV. Configuration lives under `benchmark` (`enabled`, `sample_interval_seconds`,
 `warmup_steps`, `gpu_timing_interval`); the scenario runner accepts these through
@@ -394,6 +395,12 @@ from each event's source ID. Cluster centroid hashing stays disabled in these
 campaigns because ColliderML cluster coordinates are already positions.
 
 All experts run 100,000 optimizer updates so their training exposure matches.
+Both the expert and joint scenarios enable per-worker background-thread
+benchmark recording with one-second telemetry sampling, 100 warmup steps excluded
+from steady-state throughput, and optional CUDA-event timing disabled. Per-rank
+telemetry, step measurements and phase boundaries are saved under each run's
+`benchmark/` directory. TensorBoard utilization summaries cover rank zero;
+use the per-rank telemetry files to compare all GPUs.
 Validation runs every 2,000 steps on up to 256 events per sample. Detailed
 TensorBoard diagnostics run every 1,000 steps. Patience is
 set above the total number of validation cycles so the runs complete the fixed
@@ -413,10 +420,74 @@ uv run python3 scripts/training/run_scenario.py \
 The full joint configuration is `scenarios/pf_heptv2_joint.yaml`. It uses the
 `pyg-cldcliccolliderml-v1` recipe from main, including its per-source TFDS roots,
 and enables `model.feature_bag` with input normalization. It runs 100,000 updates
-with 16 events per step on CLIC, CLD, and ColliderML PU0 samples. Its HEPTv2
+on one GPU, with 16 events per step on CLIC, CLD, and ColliderML PU0 samples. Its HEPTv2
 backbone, heads, optimizer, peak learning rate, and OneCycle schedule match the
 experts. Only the input layer size varies with detector feature width and the
 joint feature bag.
+
+## Joint HEPTv2 fine-tuning
+
+[`pf_heptv2_finetuning`](scenarios/pf_heptv2_finetuning.yaml) starts with an
+`idea` variant. Future CLD detector-configuration variants can be added under
+`variants` with their own model/production and dataset overrides, sharing the
+joint checkpoint and training settings.
+
+IDEA fine-tuning uses the expert's IDEA 0.2.1 qq, ttbar and fully hadronic WW
+samples, shard 1, seed 12345, global batch 16 on one GPU, 100,000 **new** updates,
+LAMB and the same 0.0005 OneCycle schedule. Validation/checkpoint intervals,
+sample caps, padding, sampler mode and background benchmarking match the expert.
+All model parameters are trainable. The joint checkpoint's feature bag and input
+normalization remain enabled to keep learned tensor shapes compatible. These
+input settings differ from the original IDEA expert, so the comparison includes
+the input representation as well as pretraining. IDEA remains an engineering
+pipeline dataset with truth-seeded proxy tracks, as documented in its recipe.
+
+`load_weights_only: true` starts a fresh optimizer, schedule, RNG stream, sampler
+and step counter. `reset_task_loss_weights: true` discards the joint task-loss
+calibration and calibrates anew on IDEA for 100 steps. Strict model-weight
+loading remains enabled. Independent calibration means native weighted loss
+totals are not a common objective across the expert and fine-tuned models;
+compare raw components or evaluate with common weights and physics metrics.
+
+The default `load` pins the archived 100k checkpoint at
+`results/experiments/pf_heptv2_joint/joint_seed12345_20261112_151754_406805/checkpoints/checkpoint-100000.pth`.
+Use `--set load=/path/to/checkpoint.pth` to select its location on the training
+host or another compatible joint checkpoint. The source checkpoint's GPU count
+does not constrain this one-GPU fine-tune.
+
+Before resolving or submitting this scenario, generate normalization statistics
+from **the IDEA 0.2.1 training split** on the host holding the dataset. This
+checkout contains IDEA 0.1.0 statistics, which cannot substitute for 0.2.1
+(cluster features changed). No synthetic or renamed statistics are provided.
+For the IDEA directory in the Flatiron profile:
+
+```bash
+export IDEA_TFDS_DIR=/mnt/ceph/users/jpata/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/tfds
+uv run python3 scripts/compute_input_normalization_stats.py map idea 0.2.1 \
+  --data-dir "$IDEA_TFDS_DIR" --work-dir results/input_normalization/idea_0.2.1 \
+  --samples edm_qq edm_ttbar edm_ww_fullhad --shard 0 --num-shards 1
+uv run python3 scripts/compute_input_normalization_stats.py reduce idea 0.2.1 \
+  --work-dir results/input_normalization/idea_0.2.1
+```
+
+This writes `mlpf/model/input_normalization_stats/idea_0.2.1.yaml`. Keep that file
+with the run's provenance and make it available on the submission/training host.
+Then preview the fine-tune:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/pf_heptv2_finetuning.yaml \
+  --platform configs/training/platforms/flatiron_h100.yaml --variant idea \
+  --set load=/path/to/the/joint/checkpoint-100000.pth --dry-run
+```
+
+Submit through the existing site launcher, for example
+`scripts/flatiron/train_scenario.sh pf_heptv2_finetuning h100 --set load=/path/to/the/joint/checkpoint-100000.pth`.
+The scenario runner's `--continue-run` resumes a compatible fine-tune from its
+own checkpoint, retaining optimizer, schedule, sampler, step and calibration
+rather than restarting weights-only fine-tuning. A new experiment records its
+source path and reset settings in the scenario manifest. No jobs are submitted
+by adding this scenario.
 
 ## Portable benchmark sweeps
 

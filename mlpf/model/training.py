@@ -1762,6 +1762,9 @@ def restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config: MLPFCo
 
     Returns the step to start training from: the one after the checkpoint's, or 1 (as for a fresh run) if weights_only.
     """
+    reset_task_weights = getattr(config, "reset_task_loss_weights", False)
+    if reset_task_weights and not weights_only:
+        raise ValueError("reset_task_loss_weights requires load_weights_only; a full resume must retain its calibration")
     model_module = model.module if hasattr(model, "module") else model
     model_state_dict = model_module.state_dict()
     checkpoint_state_dict = checkpoint["model_state_dict"]
@@ -1798,6 +1801,10 @@ def restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config: MLPFCo
 
     if weights_only:
         load_model_weights(checkpoint, model, strict)
+        if reset_task_weights:
+            device = model_module.task_loss_weighter.weights.device
+            model_module.task_loss_weighter = make_task_loss_weighter(config.task_loss_weights.model_dump()).to(device)
+            _logger.info("Reset task loss weights for calibration on the fine-tuning data", color="bold")
         _logger.info("Loaded only the model weights, starting training from step 1", color="bold")
         return 1
 

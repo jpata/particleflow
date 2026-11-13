@@ -544,6 +544,12 @@ def run_scenario_job(job, scenario, platform, spec_file, *, dry_run=False, conti
     )
     if continuation is not None and continuation.checkpoint is not None:
         job.settings["load"] = str(continuation.checkpoint)
+        # A fine-tuning scenario loads source weights only on its first launch.
+        # Continuing its own checkpoint must retain progress and calibration.
+        if job.settings.get("load_weights_only"):
+            job.settings["load_weights_only"] = False
+        if job.settings.get("reset_task_loss_weights"):
+            job.settings["reset_task_loss_weights"] = False
     command = _pipeline_command(job, scenario, platform, spec_file, experiment_dir)
     print(shlex.join(command), flush=True)
     if dry_run:
