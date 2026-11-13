@@ -1,0 +1,197 @@
+# Matched track/cluster attention experts. This defines runs; it submits none.
+# One GPU for each expert, including ColliderML.
+# Every expert presents 16 events per optimizer step and runs 100,000 updates.
+# Patience exceeds the 10 validation cycles, keeping update counts identical.
+name: pf_fm_experts
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  cld:
+    model_name: pyg-cld-v1
+    gpus: 1
+  clic:
+    model_name: pyg-clic-v1
+    production_name: clic
+    gpus: 1
+  idea:
+    model_name: pyg-idea-pipeline-v1
+    production_name: idea
+    gpus: 1
+  colliderml:
+    model_name: pyg-colliderml-v1
+    production_name: colliderml
+    gpus: 1
+  # CLD granularity scan: matched expert/fine-tune variants use only available PF samples.
+  cld_ecal_1p5mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_1p5mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: &cld_granularity_ecal_samples
+        cld_edm_z_tautau_pf:
+          version: "3.3.0"
+          splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      test_dataset: *cld_granularity_ecal_samples
+  cld_ecal_2mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_2mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      test_dataset: *cld_granularity_ecal_samples
+  cld_ecal_2p5mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_2p5mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      test_dataset: *cld_granularity_ecal_samples
+  cld_ecal_3mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_3mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      test_dataset: *cld_granularity_ecal_samples
+  cld_ecal_4mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_4mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      test_dataset: *cld_granularity_ecal_samples
+  cld_ecal_5p1mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/ecal_5p1mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      valid_dataset.cld.physical.samples: *cld_granularity_ecal_samples
+      test_dataset: *cld_granularity_ecal_samples
+  cld_hcal_10mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_10mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: &cld_granularity_hcal_samples
+        cld_edm_ttbar_pf:
+          version: "3.3.0"
+          splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      test_dataset: *cld_granularity_hcal_samples
+  cld_hcal_12mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_12mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      test_dataset: *cld_granularity_hcal_samples
+  cld_hcal_15mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_15mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      test_dataset: *cld_granularity_hcal_samples
+  cld_hcal_20mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_20mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      test_dataset: *cld_granularity_hcal_samples
+  cld_hcal_25mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_25mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      test_dataset: *cld_granularity_hcal_samples
+  cld_hcal_30mm:
+    model_name: pyg-cld-v1
+    production_name: cld
+    gpus: 1
+    overrides:
+      data_dir: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/hcal_30mm
+      model.feature_bag: true
+      train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      valid_dataset.cld.physical.samples: *cld_granularity_hcal_samples
+      test_dataset: *cld_granularity_hcal_samples
+seeds: [12345]
+training:
+  global_batch_size: 16
+  parameters:
+    optimizer: lamb
+    lr: 0.0005
+    lr_schedule: onecycle
+    lr_schedule_config.onecycle.pct_start: 0.3
+    num_steps: 100000
+    tensorboard_step_freq: 1000
+    # Sample telemetry in each worker's background thread, independent of logging.
+    benchmark.enabled: true
+    benchmark.sample_interval_seconds: 1.0
+    benchmark.warmup_steps: 100
+    benchmark.gpu_timing_interval: 0
+    val_freq: 10000
+    checkpoint_freq: 2000
+    patience: 1000
+    nvalid: 256
+    ntest: 256
+    sampler_mode: interleaved-shards
+    pad_to_multiple_elements: 128
+    validation_particle_metrics: true
+    make_plots: true
+common_overrides:
+  model.type: attention
+  model.heptv2: null
+  model.attention:
+    num_convs: 6
+    num_heads: 16
+    head_dim: 16
+    attention_type: flash
+    dropout_ff: 0.0
+  model.input_encoding: split
+  model.input_normalization: true
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+allowed_variant_differences:
+  - model.feature_bag  # scan experts match the joint/fine-tuning input architecture
+  - data_dir
+  - dataset
+  - hyperparameters.lr  # retained recipe metadata; top-level lr is shared
+  - input_dim
+  - train_dataset
+  - valid_dataset
+  - test_dataset
+  - enabled_test_datasets

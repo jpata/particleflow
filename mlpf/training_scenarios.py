@@ -225,6 +225,8 @@ def _serialize_cli_value(value):
         return "true" if value else "false"
     if isinstance(value, list):
         return ",".join(str(item) for item in value)
+    if isinstance(value, dict):
+        return json.dumps(value)
     return str(value)
 
 
@@ -327,7 +329,9 @@ def resolve_scenario_job(
     settings["seed"] = seed
     selected_spec = str(spec_file or scenario.spec_file)
     production_name = scenario.variant_production(variant_name)
-    data_dir = _production_data_dir(platform, selected_spec, production_name)
+    # A detector-configuration variant can replace the production's nominal
+    # TFDS root. Keep the resolved path in both the manifest and --data-dir.
+    data_dir = parse_data_dir(settings.pop("data_dir")) if "data_dir" in settings else _production_data_dir(platform, selected_spec, production_name)
 
     with _temporary_environment(platform.environment):
         config = MLPFConfig.from_spec(
