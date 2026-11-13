@@ -22,7 +22,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: ecal_1p5mm
+    data_subdir: ecal_1p5mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: &cld_granularity_ecal_samples
@@ -35,7 +35,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: ecal_2mm
+    data_subdir: ecal_2mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
@@ -45,7 +45,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: ecal_2p5mm
+    data_subdir: ecal_2p5mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
@@ -55,7 +55,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: ecal_3mm
+    data_subdir: ecal_3mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
@@ -65,7 +65,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: ecal_4mm
+    data_subdir: ecal_4mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
@@ -75,7 +75,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: ecal_5p1mm
+    data_subdir: ecal_5p1mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: *cld_granularity_ecal_samples
@@ -85,7 +85,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: hcal_10mm
+    data_subdir: hcal_10mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: &cld_granularity_hcal_samples
@@ -98,7 +98,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: hcal_12mm
+    data_subdir: hcal_12mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
@@ -108,7 +108,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: hcal_15mm
+    data_subdir: hcal_15mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
@@ -118,7 +118,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: hcal_20mm
+    data_subdir: hcal_20mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
@@ -128,7 +128,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: hcal_25mm
+    data_subdir: hcal_25mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
@@ -138,7 +138,7 @@ variants:
     model_name: pyg-cld-v1
     production_name: cld
     data_root: cld_granularity
-    data_subdir: hcal_30mm
+    data_subdir: hcal_30mm/tfds
     overrides:
       model.feature_bag: true
       train_dataset.cld.physical.samples: *cld_granularity_hcal_samples
