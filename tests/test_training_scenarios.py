@@ -77,7 +77,7 @@ def test_pf_fm_scan_location_comes_from_platform(tmp_path):
     platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
     platform.data_dir["cld_granularity"] = str(tmp_path)
     job = resolve_scenario_job(scenario, platform, "cld_ecal_3mm", 12345)
-    assert job.data_dir == str(tmp_path / "ecal_3mm")
+    assert job.data_dir == str(tmp_path / "ecal_3mm" / "tfds")
     assert job.resolved_config.data_dir == job.data_dir
     assert scenario.variants["cld_ecal_3mm"].data_root == "cld_granularity"
 
@@ -97,11 +97,11 @@ def test_attention_campaigns_validate_physics_every_10k_steps(campaign):
         assert config.model.attention.num_heads == config.model.attention.head_dim == 16
         assert config.model.attention.attention_type.value == "flash"
         assert config.validation_particle_metrics is True
-        assert config.val_freq == 10000
+        assert config.val_freq == (1000 if campaign == "finetuning" else 10000)
         assert config.num_steps % config.val_freq == 0
         assert config.checkpoint_freq == 2000
         if campaign in ("experts", "finetuning"):
-            assert config.patience == 3
+            assert config.patience == (30 if campaign == "finetuning" else 3)
             assert config.patience < config.num_steps // config.val_freq
         assert config.make_plots is True
         assert config.ntest == 256
@@ -137,7 +137,6 @@ def test_idea_finetuning_matches_expert_exposure_and_loads_joint_model():
         "valid_dataset",
         "test_dataset",
         "num_steps",
-        "patience",
         "lr",
         "lr_schedule",
         "lr_schedule_config",
@@ -152,7 +151,9 @@ def test_idea_finetuning_matches_expert_exposure_and_loads_joint_model():
     ):
         assert getattr(fine, field) == getattr(expert, field), field
     assert fine.dataset_versions() == {"idea": "0.2.1"}
-    assert fine.num_steps == 100000 and fine.gpus == 1 and fine.gpu_batch_multiplier == 16
+    assert fine.num_steps == 500000 and fine.gpus == 1 and fine.gpu_batch_multiplier == 16
+    assert fine.val_freq == 1000 and fine.patience == 30
+    assert expert.val_freq == 10000 and expert.patience == 3
     assert fine.load and fine.load_weights_only and fine.reset_task_loss_weights
     assert "pf_fm_joint/" in fine.load
     assert not fine.relaxed_load
@@ -233,7 +234,7 @@ def test_attention_expert_and_joint_campaigns_share_training_and_noninput_model_
         assert config.lr == 0.0005
         assert config.lr_schedule.value == "onecycle"
         assert config.lr_schedule_config == {"onecycle": {"pct_start": 0.3}}
-        assert config.num_steps == 100000
+        assert config.num_steps == 500000
         assert config.tensorboard_step_freq == 1000
         assert job.global_batch_size == 16
         assert job.per_gpu_batch_size == (16 if job.resolved_config.gpus == 1 else 4)
@@ -270,20 +271,22 @@ def test_cld_granularity_experts_and_finetunes_are_matched_and_commands_keep_the
     for variation in CLD_SCAN_VARIATIONS:
         expert, fine = (jobs[kind][f"cld_{variation}"] for kind in ("experts", "finetuning"))
         reference, candidate = (j.resolved_config.model_dump(mode="json") for j in (expert, fine))
-        for field in ("load", "load_weights_only", "reset_task_loss_weights"):
+        for field in ("load", "load_weights_only", "reset_task_loss_weights", "val_freq", "patience"):
             reference.pop(field)
             candidate.pop(field)
         assert candidate == reference, variation
         assert not expert.resolved_config.load and not expert.resolved_config.load_weights_only
         assert fine.resolved_config.load and fine.resolved_config.load_weights_only and fine.resolved_config.reset_task_loss_weights
+        assert expert.resolved_config.val_freq == 10000 and expert.resolved_config.patience == 3
+        assert fine.resolved_config.val_freq == 1000 and fine.resolved_config.patience == 30
         for kind, job in (("experts", expert), ("finetuning", fine)):
             config = job.resolved_config
-            expected_root = f"/mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29/{variation}"
+            expected_root = str(Path(platform.data_dir["cld_granularity"]) / variation / "tfds")
             assert job.data_dir == config.data_dir == expected_root
             assert config.model.feature_bag and config.model.input_normalization
             assert config.dataset_versions() == {"cld": "3.3.0"}
             assert config.gpus == 1 and job.global_batch_size == job.per_gpu_batch_size == 16
-            assert config.num_steps == 100000 and config.benchmark.enabled
+            assert config.num_steps == 500000 and config.benchmark.enabled
             sample = "cld_edm_z_tautau_pf" if variation.startswith("ecal_") else "cld_edm_ttbar_pf"
             assert list(config.test_dataset) == [sample]
             for dataset in (config.train_dataset, config.valid_dataset):

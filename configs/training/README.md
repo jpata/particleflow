@@ -418,17 +418,18 @@ Flash attention with padding excluded, and zero feed-forward dropout. HEPTv2
 configuration is cleared. These are fresh runs; archived HEPTv2 checkpoints
 cannot be resumed or loaded into the attention backbone.
 
-All experts run up to 100,000 optimizer updates, stopping after three consecutive
+All experts run up to 500,000 optimizer updates, stopping after three consecutive
 validation cycles without a strictly lower total validation loss (`patience: 3`).
-Fine-tuning uses the same stopping rule; actual training exposure can differ.
+Fine-tuning checks validation every 1,000 steps and uses `patience: 30`, retaining
+the same 30,000-update stopping window. Actual training exposure can differ.
 Both the expert and joint scenarios enable per-worker background-thread
 benchmark recording with one-second telemetry sampling, 100 warmup steps excluded
 from steady-state throughput, and optional CUDA-event timing disabled. Per-rank
 telemetry, step measurements and phase boundaries are saved under each run's
 `benchmark/` directory. TensorBoard utilization summaries cover rank zero;
 use the per-rank telemetry files to compare all GPUs.
-Validation runs every 10,000 steps on up to 256 events per sample in the
-expert, joint, and fine-tuning campaigns. Each validation records particle
+Validation runs every 10,000 steps for experts and joint training, and every
+1,000 steps for fine-tuning, on up to 256 events per sample. Each validation records particle
 counts, matching efficiency/purity, PID accuracy, matched kinematic errors, and
 event energy, scalar/vector transverse momentum, and MET metrics under
 `metrics/particle/*` in TensorBoard and the validation history. Checkpoints
@@ -437,7 +438,7 @@ remain every 2,000 steps. The lowest-loss validation checkpoint is retained as
 diagnostics run every 1,000 steps. Joint training retains its fixed update budget.
 All runs use LAMB with a 0.0005 peak learning rate and the same OneCycle schedule
 (30% warmup). Runs use validation loss for selection. Every
-10,000 steps they also run test inference and plotting with `ntest: 256` per
+validation cycle they also run test inference and plotting with `ntest: 256` per
 sample (250 events for samples with ten TFDS configurations, due to equal
 per-configuration allocation). Jet response median/IQR, matching counts,
 recall, precision, F1, and fake rate are recorded in TensorBoard and the step
@@ -457,7 +458,7 @@ uv run python3 scripts/training/run_scenario.py \
 
 The full joint configuration is `scenarios/pf_fm_joint.yaml`. It uses the
 `pyg-cldcliccolliderml-v1` recipe from main, including its per-source TFDS roots,
-and enables `model.feature_bag` with input normalization. It runs 100,000 updates
+and enables `model.feature_bag` with input normalization. It runs 500,000 updates
 on one GPU, with 16 events per step on CLIC, CLD, and ColliderML PU0 samples. Its attention
 backbone, heads, optimizer, peak learning rate, and OneCycle schedule match the
 experts. Only the input layer size varies with detector feature width and the
@@ -471,9 +472,9 @@ Further detector-configuration variants can share its joint checkpoint and
 training settings through their own model/production and dataset overrides.
 
 IDEA fine-tuning uses the expert's IDEA 0.2.1 qq, ttbar and fully hadronic WW
-samples, shard 1, seed 12345, global batch 16 on one GPU, up to 100,000 **new** updates,
-LAMB and the same 0.0005 OneCycle schedule. Validation/checkpoint intervals,
-sample caps, padding, sampler mode and background benchmarking match the expert.
+samples, shard 1, seed 12345, global batch 16 on one GPU, up to 500,000 **new** updates,
+LAMB and the same 0.0005 OneCycle schedule. Checkpoint intervals, sample caps,
+padding, sampler mode and background benchmarking match the expert.
 All model parameters are trainable. The joint checkpoint's feature bag and input
 normalization remain enabled to keep learned tensor shapes compatible. The
 feature bag differs from the expert, so the comparison includes the input
@@ -488,11 +489,11 @@ loading remains enabled. Independent calibration means native weighted loss
 totals are not a common objective across the expert and fine-tuned models;
 compare raw components or evaluate with common weights and physics metrics.
 
-Train the attention joint model before starting these fine-tunes. The
-`load` entry is an explicit placeholder under
-`experiments/pf_fm_joint/REPLACE_WITH_JOINT_RUN/checkpoints/checkpoint-100000.pth`.
-Use `--set load=/path/to/the/attention/joint/checkpoint-100000.pth` with the direct
-runner, or edit `load` in the scenario before submitting through a site wrapper.
+The `load` entry is a placeholder for the completed 500k attention joint
+checkpoint. Replace `REPLACE_WITH_JOINT_RUN` with its run directory before site
+submission, or pass `--set load=/path/to/the/attention/joint/checkpoint-500000.pth`
+with the direct runner. The earlier 100k campaign is archived under
+`experiments/pf_fm_100k/`.
 Strict loading rejects the old HEPTv2 checkpoint. The source checkpoint's GPU
 count does not constrain this one-GPU fine-tune.
 
@@ -520,7 +521,7 @@ Then preview the fine-tune:
 uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/pf_fm_finetuning.yaml \
   --platform configs/training/platforms/flatiron_h100_single.yaml --variant idea \
-  --set load=/path/to/the/joint/checkpoint-100000.pth --dry-run
+  --set load=/path/to/the/joint/checkpoint-500000.pth --dry-run
 ```
 
 For site submission, set the checkpoint path in the scenario (or a copied
@@ -570,21 +571,20 @@ They use the same fixed `cld_3.3.0.yaml` normalization tables, measured on the
 nominal CLD training data. These are shared reference statistics, not estimates
 recomputed from each scan or its test events.
 
-Apart from the checkpoint-loading/reset fields, expert and fine-tuning resolved
-configurations are identical within each geometry. The expert starts from
+Apart from checkpoint loading/reset, validation frequency and patience, expert
+and fine-tuning resolved configurations are identical within each geometry. The expert starts from
 scratch, while the fine-tune strictly loads the common joint checkpoint with a
 fresh optimizer, schedule, sampler, step counter and task-loss calibration.
-Both use one GPU, global batch 16, seed 12345, up to 100k updates, LAMB, the 0.0005
-OneCycle schedule, 10k validation intervals, 2k checkpoints, and 1-second background
-telemetry. Both stop after three consecutive validation cycles without loss
-improvement. The approximately 9k training events imply about 178 dataset passes
+Both use one GPU, global batch 16, seed 12345, up to 500k updates, LAMB, the 0.0005
+OneCycle schedule, 2k checkpoints, and 1-second background telemetry. Experts
+validate every 10k steps with patience 3; fine-tunes validate every 1k steps
+with patience 30. The approximately 9k training events imply about 890 dataset passes
 at the maximum budget.
 
 Each variant overrides the nominal production's TFDS directory with
 the platform's `data_dir.cld_granularity` plus its scenario `data_subdir`
-(for example, `ecal_3mm`). Set this platform root to the scan location on the
-training host; the existing `/mnt/work/.../granularity_scan_2025-05-29` location
-is retained in the Flatiron profiles until relocated.
+(for example, `ecal_3mm/tfds`). Set this platform root to the scan location on the
+training host.
 The runner records this root in the resolved configuration and job manifest and
 emits it as the actual `--data-dir` argument. Preview a matched pair:
 
@@ -596,11 +596,11 @@ uv run python3 scripts/training/run_scenario.py \
 uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/pf_fm_finetuning.yaml \
   --platform configs/training/platforms/flatiron_h100_single.yaml \
-  --variant cld_ecal_3mm --set load=/path/to/joint/checkpoint-100000.pth --dry-run
+  --variant cld_ecal_3mm --set load=/path/to/joint/checkpoint-500000.pth --dry-run
 ```
 
 On another host, the direct runner accepts
-`--set data_dir=/path/to/granularity_scan_2025-05-29/ecal_3mm` for the selected
+`--set data_dir=/path/to/granularity_scan_2025-05-29/ecal_3mm/tfds` for the selected
 variant. This takes precedence over the variant's root; `--data-dir` changes
 the platform default, which the variant root otherwise overrides. For site
 submission, adjust the root/checkpoint in the scenario or a copied scenario,
