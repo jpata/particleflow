@@ -1231,22 +1231,83 @@ def compute_jets(particles_p4: Any, min_pt: float = jet_ptcut, with_indices: boo
     return ret
 
 
+def perigee_at_origin(
+    ref_x: np.ndarray, ref_y: np.ndarray, ref_z: np.ndarray, phi: np.ndarray, omega: np.ndarray, tan_lambda: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Convert a track described at some point on its helix into the standard perigee parameters (D0, phi0, Z0).
+
+    Inputs: a point on the helix (ref_x, ref_y, ref_z) [mm], the direction phi at that point, the signed
+    curvature omega [1/mm] and tan_lambda = pz / pt.
+
+    Outputs (EDM4hep/LCIO convention, reference point at the origin): the perigee lies at
+    (-D0 sin phi0, D0 cos phi0, Z0), phi0 is the direction there, and the direction turns by -omega per unit
+    transverse arc length. Z0 is taken on the helix turn nearest the given point.
+    """
+    ref_x, ref_y, ref_z, phi, omega, tan_lambda = (np.asarray(a, dtype=np.float64) for a in (ref_x, ref_y, ref_z, phi, omega, tan_lambda))
+    curved = np.abs(omega) > 1e-12
+    safe_omega = np.where(curved, omega, 1.0)
+    # circle centre, and the point on the circle closest to the origin
+    centre_x, centre_y = ref_x + np.sin(phi) / safe_omega, ref_y - np.cos(phi) / safe_omega
+    centre_r = np.hypot(centre_x, centre_y)
+    scale = 1 - (1 / np.abs(safe_omega)) / np.where(centre_r > 0, centre_r, 1.0)
+    perigee_x, perigee_y = centre_x * scale, centre_y * scale
+    phi0 = np.arctan2(safe_omega * (centre_x - perigee_x), -safe_omega * (centre_y - perigee_y))
+    arc = ((phi0 - phi + np.pi) % (2 * np.pi) - np.pi) / safe_omega  # transverse arc from the perigee to the point
+    # straight track (or a circle centred on the beam axis, where every point is a perigee): keep the direction
+    along = ref_x * np.cos(phi) + ref_y * np.sin(phi)
+    straight = ~curved | (centre_r == 0)
+    phi0 = np.where(straight, phi, phi0)
+    arc = np.where(~curved, along, np.where(centre_r == 0, 0.0, arc))
+    perigee_x = np.where(straight, ref_x - np.where(curved, 0.0, along) * np.cos(phi), perigee_x)
+    perigee_y = np.where(straight, ref_y - np.where(curved, 0.0, along) * np.sin(phi), perigee_y)
+    d0 = -perigee_x * np.sin(phi0) + perigee_y * np.cos(phi0)
+    return d0, phi0, ref_z - arc * tan_lambda
+
+
 def idea_track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Record:
-    """Read the truth-seeded EDM4hep tracks produced by the IDEA example."""
+    """Build the track features of one IDEA event, in the same convention as CLIC/CLD tracks.
+
+    The IDEA samples have no reconstructed tracks; their tracks (TracksFromGenParticles) are built from the
+    generator particles. Two features would differ from CLIC/CLD if read as stored, so they are fixed here:
+
+    - Helix parameters. The first track state (AtIP) gives phi at the particle's production vertex, while
+      D0 and Z0 (for ~98% of tracks) refer to the origin. For particles produced away from the origin
+      (secondaries) the three do not describe one helix. phi, D0 and Z0 are recomputed from the production
+      vertex as the perigee relative to the origin (perigee_at_origin), as CLIC/CLD store them. Prompt
+      tracks change only slightly: phi moves by the small turn between the vertex and the perigee, and for
+      a few low-pt loopers Z0 moves by whole turns of the helix.
+    - radiusOfInnermostHit. Read from the AtIP state, it would be the production-vertex radius; it is taken
+      from the first-hit state (AtFirstHit) instead, as for CLIC/CLD.
+    """
     coll = "TracksFromGenParticles"
     states_coll = f"_{coll}_trackStates"
     tracks = prop_data[coll][iev]
     states = prop_data[states_coll][iev]
     n_tracks = len(tracks[f"{coll}.type"])
     state_idx = awkward.to_numpy(tracks[f"{coll}.trackStates_begin"])
+    state_end = awkward.to_numpy(tracks[f"{coll}.trackStates_end"])
 
     ret = {name: awkward.to_numpy(tracks[f"{coll}.{name}"]) for name in ["type", "chi2", "ndf"]}
     for name in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
         ret[name] = awkward.to_numpy(states[f"{states_coll}.{name}"])[state_idx]
 
-    refx = awkward.to_numpy(states[f"{states_coll}.referencePoint.x"])[state_idx]
-    refy = awkward.to_numpy(states[f"{states_coll}.referencePoint.y"])[state_idx]
-    ret["radiusOfInnermostHit"] = np.hypot(refx, refy)
+    refx, refy, refz = (awkward.to_numpy(states[f"{states_coll}.referencePoint.{c}"]) for c in "xyz")
+    inputs = (refx[state_idx], refy[state_idx], refz[state_idx], ret["phi"], ret["omega"], ret["tanLambda"])
+    # tracks with a non-finite input (e.g. omega = inf for a zero-pt particle) keep their stored values
+    finite = np.logical_and.reduce([np.isfinite(a) for a in inputs])
+    d0, phi0, z0 = perigee_at_origin(*(a[finite] for a in inputs))
+    for name, value in (("D0", d0), ("phi", phi0), ("Z0", z0)):
+        ret[name] = ret[name].astype(np.float32)
+        ret[name][finite] = value
+
+    # AtFirstHit (location 2); a track without one keeps its AtIP reference point (production vertex)
+    location = awkward.to_numpy(states[f"{states_coll}.location"])
+    first_hit = state_idx.copy()
+    for itrack, (begin, end) in enumerate(zip(state_idx, state_end)):
+        at_first_hit = np.flatnonzero(location[begin:end] == 2)
+        if len(at_first_hit):
+            first_hit[itrack] = begin + at_first_hit[0]
+    ret["radiusOfInnermostHit"] = np.hypot(refx[first_hit], refy[first_hit])
     # TracksFromGenParticles has no particle-identification estimator. Keep the
     # established feature layout and use explicit missing-value placeholders.
     ret["dEdx"] = np.zeros(n_tracks, dtype=np.float32)
