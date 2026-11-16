@@ -1,14 +1,14 @@
 # IDEA tracks and clusters
 
-IDEA is a pipeline-validation workflow using truth-seeded proxy tracks and calorimeter clusters. Its oracle reference does not establish reconstructed-physics performance.
+IDEA uses measured GGTF/GenFit tracks and dual-readout calorimeter clusters. Its oracle candidate reference does not establish reconstructed-physics performance.
 
 ## Physics samples
 
 | Physics sample | TFDS dataset | Recipe version |
 |---|---|---|
-| Top-quark pairs | `idea_edm_ttbar_pf` | 0.3.0 |
-| Fully hadronic WW | `idea_edm_ww_fullhad_pf` | 0.3.0 |
-| Inclusive quark pairs | `idea_edm_qq_pf` | 0.3.0 |
+| Top-quark pairs | `idea_edm_ttbar_pf` | 0.4.0 |
+| Fully hadronic WW | `idea_edm_ww_fullhad_pf` | 0.4.0 |
+| Inclusive quark pairs | `idea_edm_qq_pf` | 0.4.0 |
 
 The `pyg-idea-pipeline-v1` recipe uses all three samples with configuration **1**. The [catalog](catalog.md#published-availability) records their public availability.
 
@@ -29,31 +29,46 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 ## Builder and recipe compatibility
 
 The builders, production mapping, and `pyg-idea-pipeline-v1` training, validation,
-and test selections use **0.3.0**. Use data built with this version, which
-uses the November 2026 upstream IDEA simulation/reconstruction with local
-dual-readout truth patches. Regenerate simulation and downstream data for this
-version; geometry, tracking selection, clustering and truth-link behavior changed. Do not relabel
-an older dataset directory to satisfy the recipe.
+and test selections use **0.4.0**. This version selects `FittedTracks` at the IP,
+rejects invalid fits, and derives training truth links from tracker-hit
+associations. Tracks retain their measured kinematics; truth is used only for
+labels. At least 75% of the distinct measurements must vote for one direct,
+charged status-1 particle to give a track a representative label. Secondary,
+fake and low-purity tracks remain inputs without an ancestor-momentum label.
+
+Regenerate **Parquet and TFDS**. Updated ROOT files that already contain
+`FittedTracks` and tracker-hit simulation links can be reused. Published 0.2.1
+ROOT files and proxy-only reconstruction cannot provide these inputs. There is
+no automatic fallback to proxy tracks, and the fitted-track builder rejects
+unmarked or proxy Parquet files. Do not relabel old dataset directories.
+
+Quality selection requires finite parameters, one IP state, nonnegative chi2,
+positive NDF and associated hits. The innermost radius comes from measured hits.
+The dEdx fields are missing-value zeros; the truth-parametrized dN/dx estimator
+is deliberately excluded. These cuts remove broken fit records; they do not
+eliminate the large momentum tails observed in the small tracking study.
 
 For production, review `productions.idea` in `particleflow_spec.yaml` and the builders under `mlpf/heptfds/idea_pf_edm4hep/`, then follow [dataset generation](generate.md). The [detector-comparison runbook](../validation/detector-comparison.md) preserves the separate historical sample inventory and its limitations.
 
-## Local upstream-update branch
+## Local production and validation
 
-The `idea-upstream-2026-11` branch updates the IDEA component pins to upstream
-HEADs checked on 16 November 2026 and ports the MLPF Cherenkov truth and
-per-channel cluster-energy patches. Its new production workspace is
-`IDEA_o1_v03_upstream_20261116`; it does not reuse the previous simulation campaign.
-See the [generator instructions](../../mlpf/data/key4hep/gen/idea/README.md)
-for builds, stack selection and smoke checks.
+The `idea-upstream-2026-11` branch pins upstream components checked on
+16 November 2026 and preserves the local dual-readout truth patches. The
+fitted-track production uses workspace `IDEA_o1_v03_upstream_20261116_fitted` to
+avoid reusing cached proxy Parquet. See the [generator instructions](../../mlpf/data/key4hep/gen/idea/README.md).
 
-The generator runs GGTF/GenFit reconstruction by default, together with the
-truth-seeded tracks still consumed by MLPF postprocessing. The **0.3.0 training
-representation remains a proxy-track workflow**. Fitted-track truth matching and
-reader support are separate work; there is still no reconstructed-PFO baseline.
-The published 0.2.1 dataset remains the older campaign. Version 0.3.0 requires a
-new production and is not established as published by this branch.
+The generator retains proxy collections for diagnostics, but the default MLPF
+reader does not load them. For explicit legacy diagnostics only, use
+`--idea-track-source truth_seeded` and read the resulting Parquet with
+`expected_track_source="truth_seeded"`. TFDS versions below 0.4.0 retain legacy
+proxy metadata; 0.4.0 requires `track_source="ggtf_genfit"` and matching quality
+and truth-policy metadata. The pipeline-preparation helper preserves provenance
+and requires `--legacy-proxy` for old unmarked proxy inputs.
 
-The local electron smoke test completed simulation, reconstruction and loading
-into MLPF tensors, but returned zero GGTF track candidates at the upstream
-thresholds. It therefore did not exercise a successful GenFit fit. See the
-generator validation notes before drawing conclusions about tracking performance.
+On three ttbar events, the fitted path kept **21, 11, 15** tracks, rejecting
+three invalid fits. Hit-majority matching labelled **18, 10, 12** tracks as direct
+primary representatives. The local 0.4.0 TFDS smoke dataset built and read both
+splits successfully. This validates integration, not tracking efficiency or PF
+performance. `ycand` remains a target oracle, and `suitable_for_physics` remains
+false. The published 0.2.1 data and the upstream-update 0.3.0 recipe are proxy
+campaigns, not substitutes for the new fitted-track dataset.

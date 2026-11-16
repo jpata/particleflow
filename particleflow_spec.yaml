@@ -603,13 +603,13 @@ productions:
     source_productions: {cld: cld, clic: clic, colliderml: colliderml}
 
   # IDEA full simulation and the reconstruction currently provided by FCC-config.
-  # This initial ML path deliberately uses truth-seeded proxy tracks and an
-  # oracle ycand reference to validate the software pipeline, not physics.
+  # MLPF uses quality-selected fitted tracks; ycand remains a target oracle
+  # until an independent reconstructed-PFO baseline is available.
   idea:
     type: "key4hep"
     model: "pyg-idea-pipeline-v1"
-    comment: "IDEA_o1_v03 pipeline validation with truth-seeded proxy tracks"
-    workspace_dir: "${project.paths.storage_root}/idea/IDEA_o1_v03_upstream_20261116"
+    comment: "IDEA_o1_v03 pipeline validation with quality-selected GGTF/GenFit tracks"
+    workspace_dir: "${project.paths.storage_root}/idea/IDEA_o1_v03_upstream_20261116_fitted"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
 
@@ -661,20 +661,21 @@ productions:
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
-      args: {}
+      args:
+        idea-track-source: "fitted"
 
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/ttbar"
-        version: "0.3.0"
+        version: "0.4.0"
         config_ids: [1]
       ww_fullhad:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/ww_fullhad"
-        version: "0.3.0"
+        version: "0.4.0"
         config_ids: [1]
       qq:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/qq"
-        version: "0.3.0"
+        version: "0.4.0"
         config_ids: [1]
 
 # -----------------------------------------------------------------------------
@@ -736,7 +737,7 @@ models:
         n_random_steps: 10
 
   # Engineering-only IDEA recipe. The dataset metadata records that tracks
-  # are truth-seeded and the baseline candidate is a target oracle.
+  # come from GGTF/GenFit and the baseline candidate is a target oracle.
   pyg-idea-pipeline-v1:
     <<: *defaults
     dataset: idea
@@ -765,13 +766,13 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.3.0"
+            version: "0.4.0"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.3.0"
+            version: "0.4.0"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.3.0"
+            version: "0.4.0"
             splits: ["1"]
 
     validation_datasets:
@@ -779,24 +780,24 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.3.0"
+            version: "0.4.0"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.3.0"
+            version: "0.4.0"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.3.0"
+            version: "0.4.0"
             splits: ["1"]
 
     test_datasets:
       - name: "idea_edm_qq_pf"
-        version: "0.3.0"
+        version: "0.4.0"
         splits: ["1"]
       - name: "idea_edm_ttbar_pf"
-        version: "0.3.0"
+        version: "0.4.0"
         splits: ["1"]
       - name: "idea_edm_ww_fullhad_pf"
-        version: "0.3.0"
+        version: "0.4.0"
         splits: ["1"]
 
   pyg-cms-v1:
