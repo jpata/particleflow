@@ -617,7 +617,9 @@ productions:
       progress_interval: 60
 
     memory:
-      gen: 16000
+      # GGTF ttbar inference exceeded 28 GiB RSS in the 100-event validation.
+      # Reserve headroom for larger events and avoid concurrent peaks on 64 GB hosts.
+      gen: 64000
       post: 4000
       tfds: 8000
 
