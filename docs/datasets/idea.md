@@ -65,10 +65,39 @@ proxy metadata; 0.4.0 requires `track_source="ggtf_genfit"` and matching quality
 and truth-policy metadata. The pipeline-preparation helper preserves provenance
 and requires `--legacy-proxy` for old unmarked proxy inputs.
 
-On three ttbar events, the fitted path kept **21, 11, 15** tracks, rejecting
-three invalid fits. Hit-majority matching labelled **18, 10, 12** tracks as direct
-primary representatives. The local 0.4.0 TFDS smoke dataset built and read both
-splits successfully. This validates integration, not tracking efficiency or PF
+The 16 November validation generated **100 ttbar events at 365 GeV** in four
+disjoint 25-event batches. The updated ROOT files were postprocessed with both
+proxy and fitted tracks. The reference was freshly postprocessed from the
+published 100-event ROOT file in explicit legacy mode. These are not matched
+generator events across campaigns. The unmodified `tests/validate_parquet.py`
+checked all 100 events in each view:
+
+| View | PASS | FAIL | Track direction within ΔR < 0.1 | Cluster direction within ΔR < 0.3 |
+|---|---:|---:|---:|---:|
+| Published ROOT, proxy tracks | 20 | 0 | 97.33% | 97.49% |
+| Updated ROOT, proxy tracks | 19 | 1 | 90.48% | 93.90% |
+| Updated ROOT, fitted tracks | 18 | 2 | 69.51% | 73.26% |
+
+All three views also have seven warnings and one skipped baseline check. The
+direction gates require at least 95% for tracks and 80% for clusters. The
+updated proxy view already fails track alignment; the fitted view fails both
+direction gates. The fitted path retained **1,543 tracks** from 1,628 stored
+fits, rejecting 85 invalid fits, and assigned **1,335 primary representative
+labels**. Its median input/truth pT ratio is 0.9984, but the range is
+0.000069–99.18; 10.26% of labelled tracks point within ΔR < 0.1 of the opposite
+truth direction. No event reached the configured tracking hit limit. These
+results require further reconstruction and association studies before physics
+use. Local reports, plots, ROOT manifests and Parquet files are under
+`reports/idea-100-ttbar-20261116/`.
+
+One parallel reconstruction worker exited with code 137. Its complete 25-event
+simulation was reconstructed again in isolation with the same settings,
+successfully retaining all events. The isolated reconstruction peaked at
+**28.59 GiB RSS**. The recipe now requests **64,000 MB** for generation and
+reconstruction; avoid concurrent GGTF jobs on a 64 GB host.
+
+The earlier three-event 0.4.0 TFDS smoke dataset built and read both splits
+successfully. This validates integration, not tracking efficiency or PF
 performance. `ycand` remains a target oracle, and `suitable_for_physics` remains
 false. The published 0.2.1 data and the upstream-update 0.3.0 recipe are proxy
 campaigns, not substitutes for the new fitted-track dataset.
