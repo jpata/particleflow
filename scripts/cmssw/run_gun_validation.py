@@ -24,20 +24,21 @@ SAMPLES = {
 }
 
 
-def prepare(directory, events, specialized_events):
+def prepare(directory, events, specialized_events, samples=None, threads=2, streams=1, first_event=1):
     directory.mkdir(parents=True, exist_ok=True)
     manifest = {}
-    for name, settings in SAMPLES.items():
+    for name, settings in (SAMPLES if samples is None else samples).items():
         run = directory / name
         run.mkdir(exist_ok=True)
         count = events if name == "mixed" else specialized_events
-        manifest[name] = dict(**settings, events=count, antiparticles=True, directory=str(run))
+        manifest[name] = dict(**settings, events=count, antiparticles=True, threads=threads, streams=streams, first_event=first_event, directory=str(run))
         sources = [SOURCE / "SinglePiFlatPt0p7To10_cfi_GEN_SIM.py", *sorted(SOURCE.glob("step2_*.py")), *sorted(SOURCE.glob("step3_*.py"))]
         for stage, source in enumerate(sources, start=1):
             text = source.read_text()
             text += f"\n# Independent gun-validation overrides: {name}.\nprocess.maxEvents.input = {count}\n"
-            text += "process.options.numberOfThreads = 2\nprocess.options.numberOfStreams = 1\n"
+            text += f"process.options.numberOfThreads = {threads}\nprocess.options.numberOfStreams = {streams}\n"
             if stage == 1:
+                text += f"process.source.firstEvent = cms.untracked.uint32({first_event})\n"
                 text += f"process.generator.PGunParameters.ParticleID = cms.vint32({', '.join(map(str, settings['ids']))})\n"
                 for field, value in zip(("MinPt", "MaxPt", "MinEta", "MaxEta"), settings["pt"] + settings["eta"]):
                     text += f"process.generator.PGunParameters.{field} = cms.double({value})\n"
@@ -72,6 +73,7 @@ def run_sample(name, settings):
                 str(REPO / "scripts/cmssw/extract_association_metrics.py"),
                 str(run / "step3.root"),
                 "--skip-legacy",
+                "--sparse",
                 "--output",
                 str(run / "truth_postprocessing_weights.json"),
             ],

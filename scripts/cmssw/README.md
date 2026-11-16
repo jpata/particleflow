@@ -2,6 +2,26 @@
 
 ## Current physics validation: fiducial GEN versus new targets
 
+For 10,000 events per species (electron, charged pion, muon, photon), run:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/cmssw/run_single_gun_suite.py \
+  --events 10000 --threads 8 --streams 8 --chunk-events 500
+# Resume using the suite directory printed by the command:
+PYTHONPATH=. .venv/bin/python scripts/cmssw/run_single_gun_suite.py --resume /absolute/path/to/suite
+```
+
+This uses independent single-species particle/antiparticle guns, flat pT
+0.7–10 GeV and |eta| < 3, with PU0. Chunks run sequentially to bound disk and
+memory usage; every CMSSW stage uses the requested thread/stream settings.
+Each chunk retains NanoAOD, sparse overlap weights, assigned targets, configs,
+seeds and logs. Intermediate step1/step2/step3, MiniAOD and DQM ROOT files are
+removed only after successful extraction, assignment, truth-coverage and event-ID
+checks. Event numbers are unique across chunks of each species. The suite writes
+`suite_status.json`; each chunk writes stage status and `postprocessing_complete.json`.
+After each species, its targets are combined and the GEN-only validation runs.
+Outputs are under `reports/cmssw_truth_postprocessing_guns/<suite>/`.
+
 The default validator now compares only visible GEN status-1 particles with the
 new truth-graph targets. It does not run the old normalizer as a physics baseline.
 Both collections independently require particle pT > 0.5 GeV and |eta| < 3;
