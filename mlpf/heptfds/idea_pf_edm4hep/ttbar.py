@@ -27,6 +27,7 @@ be interpreted as reconstructed-physics performance.
 class IdeaEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
     VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.3.0"))
     RELEASE_NOTES = {
+        "0.3.0": "November 2026 upstream IDEA simulation/reconstruction with MLPF dual-readout patches; regenerate.",
         "0.1.0": "Initial pipeline-validation dataset with explicit proxy provenance.",
         "0.2.0": "Add num_muon_hits and energy_muon cluster features (#511); input width 17 -> 19, regenerate",
         "0.2.1": "Compute cluster shower widths from associated calorimeter cells.",
