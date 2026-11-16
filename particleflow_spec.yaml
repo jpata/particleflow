@@ -609,9 +609,9 @@ productions:
     type: "key4hep"
     model: "pyg-idea-pipeline-v1"
     comment: "IDEA_o1_v03 pipeline validation with truth-seeded proxy tracks"
-    workspace_dir: "${project.paths.storage_root}/idea/IDEA_o1_v03_fccconfig_a05a3a9"
+    workspace_dir: "${project.paths.storage_root}/idea/IDEA_o1_v03_upstream_20261116"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea"
-    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
 
     environment:
       progress_interval: 60
