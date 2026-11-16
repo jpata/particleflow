@@ -1,6 +1,6 @@
 # Current capabilities
 
-This page summarizes the codebase prepared for **v3.3.0**. Use it to choose a maintained workflow and understand its validation limits. Checkpoint performance belongs to the corresponding validation results.
+This page summarizes the codebase prepared for **v3.2.0**. Use it to choose a maintained workflow and understand its validation limits. Checkpoint performance belongs to the corresponding validation results.
 
 **Supported** denotes a maintained configuration, documented user path, and
 software checks. **Research workflow** denotes experimental paths whose scientific
@@ -10,21 +10,33 @@ performance or coverage of every configuration combination.
 
 ## Detector and input support
 
-| Detector | Collision setting | Inputs | Data version in recipe | Status |
+| Detector | Collision setting | Inputs | Data version in model recipe | Status |
 |---|---|---|---|---|
-| CMS Run 3 | Proton-proton, with and without pileup | Tracks and calorimeter clusters | 3.2.0 (scenarios: 2.8.0) | **Supported** |
-| CLD | Electron-positron, 365 GeV | Tracks and calorimeter clusters | 3.3.0 | **Supported** |
-| CLICdet | Electron-positron, 380 GeV | Tracks and calorimeter clusters | 3.3.0 | **Supported** |
+| CMS Run 3 | Proton-proton, with and without pileup | Tracks and calorimeter clusters | 3.2.0 | **Supported** |
+| CLD | Electron-positron | Tracks and calorimeter clusters | 3.3.0 | **Supported** |
+| CLICdet | Electron-positron | Tracks and calorimeter clusters | 3.3.0 | **Supported** |
 | CLD | Electron-positron | Tracker and calorimeter hits | 3.2.2 | **Research workflow** |
 | CLICdet | Electron-positron | Tracker and calorimeter hits | 3.2.2 | **Research workflow** |
-| ColliderML Release 1 | Proton-proton ttbar, no pileup or ~200 | Tracks and CLUE calorimeter clusters | 1.5.0 | **Research workflow** |
-| ColliderML Release 1 | Proton-proton ttbar, no pileup | Tracker and calorimeter hits | 1.3.0 | **Research workflow** |
-| MAIA | Muon-collider detector study | Tracks and calorimeter clusters | 1.2.0 | **Partial**: conversion, TFDS, local CPU training; failed validation gates |
-| IDEA | Electron-positron detector concept | Truth-seeded proxy tracks and calorimeter clusters | 0.3.0 | **Partial**: pipeline validation with an oracle reference |
+| ColliderML Release 1 | Proton-proton ttbar, no pileup or pileup ~200 | Tracks and spatial calorimeter clusters | 1.2.0 | **Research workflow** |
+| ColliderML Release 1 | Proton-proton ttbar, no pileup | Tracker and calorimeter hits | 1.0.0 | **Research workflow** |
+| MAIA | Muon-collider detector study | Tracks and calorimeter clusters | 1.1.0 | **Partial**; conversion, TFDS, and local CPU training |
+| IDEA | Electron-positron detector concept | Quality-selected GGTF/GenFit tracks and calorimeter clusters | 0.4.0 | **Partial**; pipeline validation with an oracle reference |
 
-Versions come from `particleflow_spec.yaml`. The [catalog](../datasets/catalog.md#published-availability) lists which of them are published on the Hub; ColliderML 1.5.0 is not yet.
+Versions come from `particleflow_spec.yaml`; they are not a statement of public
+download availability. As verified on 28 October 2026, the Hub provides
+configuration-1 CLD and CLIC track/cluster 3.3.0 and hit 3.2.2 data for the
+standard `ttbar`, `WW`, and `qq` recipes, plus ColliderML track/cluster 1.2.0.
+IDEA builders, production, and model recipes use 0.4.0 with fitted-track provenance;
+published 0.2.1 files use proxy tracks and cannot substitute for it. See the
+[catalog](../datasets/catalog.md) for the verified Hub snapshot and publication
+boundaries; confirm availability of the required version before downloading.
 
-CLD calorimeter granularity scans (six ECAL and six HCAL cell sizes) have their own productions (`cld_ecal_pitch_*`, `cld_hcal_pitch_*`) built from shared geometry; see the [granularity scan runbook](https://github.com/jpata/particleflow/blob/main/scripts/cld_ecal_readout/GRANULARITY_SCAN.md). ColliderML has builders for the other Release-1 samples, and a pileup-200 hit builder, without training recipes.
+ColliderML has radius-graph and CLUE calorimeter clustering, surrogate-ancestor
+truth targets, conversion to MLPF Parquet, and clustered/hit TFDS builders.
+A pileup-200 hit builder also exists, but has no dedicated named training recipe
+in the current specification. It has no PF baseline in the local comparison.
+MAIA validation retains known failures and incomplete detector metadata; IDEA
+proxy tracks and oracle candidates cannot establish reconstructed-physics quality.
 
 ## End-to-end operations
 
@@ -40,12 +52,12 @@ runs the unit suite separately from detector smoke jobs:
 |---|---|
 | CMS | Small data preparation, CPU training, checkpoint loading, ONNX validation |
 | CLD / CLIC | Small ROOT conversion, Parquet checks, TFDS, two-step CPU training |
-| ColliderML | Offline synthetic source conversion, Parquet checks (failures do not stop the job), TFDS, two-step CPU training |
+| ColliderML | Offline synthetic source conversion, report-mode validation, TFDS, two-step CPU training |
 
 MAIA has a local smoke script and unit coverage, but is outside this integration
 matrix. Real ColliderML training and the five-detector feature comparison are
 separate local checks in the [comparison runbook](../validation/detector-comparison.md).
-The ColliderML and MAIA smoke scripts continue past failed Parquet checks, so a passing script does not mean the data passed validation.
+Report-mode validators can report failed gates without failing the script.
 GPU-dependent tests can skip when no GPU is available; CPU CI does not establish
 accelerator, distributed, or full physics validation.
 
@@ -54,23 +66,33 @@ accelerator, distributed, or full physics validation.
 | Model family | Intended use | Status |
 |---|---|---|
 | Multi-head attention | Default CMS, CLD, and CLIC track/cluster recipes | **Supported** |
-| HEPTv2 | Hash-bucketed attention; release checkpoints for all detectors | **Research workflow** |
-| GNNLSH, HEPT | Earlier scalable graph and hashing models | **Research workflow** |
+| GNNLSH | Scalable graph processing with locality-sensitive hashing | **Research workflow** |
+| HEPT and HEPTv2 | Hash-based efficient particle transformers | **Research workflow** |
 | LitePT | Sparse point-transformer studies | **Research workflow**; NVIDIA-oriented dependencies |
+| Shared backbone and task-query readout | Cross-task model studies | **Research workflow** |
 | Particle-set decoder and hit grouping | CLD/CLIC/ColliderML hit-set studies | **Research workflow** |
 
-For CLD raw hits, the recommended research preset is `pyg-cld-hits-heptv2-set-v1`; the [CLD hit-model evidence](../studies/cld_hit_results.md) records the ablations behind it.
+For CLD raw hits, the current recommended research preset is
+`pyg-cld-hits-heptv2-set-v1`, with global decoder attention, supervised hard
+hit grouping, and tracker-neighborhood features. Dedicated tracker momentum
+readout and particle-balanced grouping loss remain opt-in. Sparse pooling,
+sectorized attention, fitted readouts, and auxiliary losses remain experimental.
+The [CLD evidence summary](../cld_hit_results.md) records completed and partial
+ablations, historical dataset versions, and changed metric definitions.
 
-Training features:
+Training supports full checkpoint resume, [weights-only fine-tuning](../training/resume-and-fine-tune.md),
+and the `lr-find` learning-rate range test. [Dataset mixing](../training/data-mixing.md)
+supports per-group step weights, independent data cycling, interleaved shards,
+and per-group losses and exposure metrics. Dataset-section overrides are applied
+after recipe expansion and reject unknown group/sample paths. Per-step history
+includes fractional training epoch and unweighted total losses. Optional reconstruction diagnostics
+and frozen-backbone probes support hit-model studies; see the [repository map](../map.md).
 
-- [Input normalization](../training/train.md#input-normalization) of track/cluster features with per-dataset-version statistics, embedded in checkpoints and ONNX graphs.
-- [Joint training on several detectors](../training/train.md#train-on-several-detectors) (CLD, CLIC, ColliderML) with an optional shared feature vocabulary (`model.feature_bag`). Research workflow.
-- HEPTv2 can hash tracks at their calorimeter entry and Key4HEP clusters at their centroid (`track_hash_at_calo`, `cluster_hash_at_centroid`), so that a track and its cluster land in the same bucket. On by default in the HEPTv2 settings of the CMS, CLD, CLIC, ColliderML, and IDEA recipes.
-- Full checkpoint resume, [weights-only fine-tuning](../training/resume-and-fine-tune.md), and the `lr-find` learning-rate range test.
-- [Dataset mixing](../training/data-mixing.md) with per-group step weights, interleaved shards, and per-group losses.
-- Single-node DDP. Ray Train and Ray Tune remain research workflows requiring cluster-specific setup.
-- [Training scenarios](../training/scenarios.md) with hardware profiles for local, Flatiron, LUMI, Tallinn, and EmpireAI execution, including the fixed `release_checkpoints` recipe used for each release.
-- Opt-in per-worker benchmark telemetry and [portable GPU benchmarks](../training/benchmark-portability.md).
+Single-node distributed PyTorch training and scenario-based seeded job submission
+are implemented. [Training scenarios](../../configs/training/README.md) separate
+scientific recipes from hardware profiles, including local, Flatiron, and LUMI
+execution. LUMI execution uses LAIF containers and has a site smoke check.
+Ray Train and Ray Tune remain research workflows requiring cluster-specific setup.
 
 ## Attention and deployment
 
@@ -89,7 +111,6 @@ their original code, dataset, checkpoint, and metric definitions.
 
 - Hit-level events require substantially more memory and tuning than track/cluster inputs.
 - A reproducible checkpoint includes its saved model configuration and a compatible dataset schema.
-- Dataset versions change features or targets; never relabel an older dataset directory to satisfy a recipe.
-- The standalone Key4HEP evaluator does not yet pass dataset source IDs, so it cannot run checkpoints trained with input normalization (including the v3.3.0 release checkpoints). Use the pipeline `test` command for those.
+- Current Key4HEP track/cluster data include muon-system cluster features; older 3.2.1 data must not be treated as current 3.3.0 input by relabeling directories.
 - Site-specific production and accelerator paths require their own environment checks.
 - Published physics claims remain tied to the artifacts and setup in the corresponding [publication](publications.md).
