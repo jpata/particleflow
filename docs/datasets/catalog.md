@@ -49,7 +49,8 @@ The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/
 | Hits | CLD | `cld_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
 | Hits | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
 
-The IDEA upstream-update branch selects **0.3.0** for a new local production;
+The IDEA upstream-update branch selects **0.4.0** with measured GGTF/GenFit tracks
+for a new local production;
 the published **0.2.1** entry above describes the previous campaign.
 
 Treat the [live Hub tree](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) as the source of truth for data availability. The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects.
