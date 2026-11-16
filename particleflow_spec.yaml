@@ -765,13 +765,13 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.2.1"
+            version: "0.3.0"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.2.1"
+            version: "0.3.0"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.2.1"
+            version: "0.3.0"
             splits: ["1"]
 
     validation_datasets:
@@ -779,24 +779,24 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.2.1"
+            version: "0.3.0"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.2.1"
+            version: "0.3.0"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.2.1"
+            version: "0.3.0"
             splits: ["1"]
 
     test_datasets:
       - name: "idea_edm_qq_pf"
-        version: "0.2.1"
+        version: "0.3.0"
         splits: ["1"]
       - name: "idea_edm_ttbar_pf"
-        version: "0.2.1"
+        version: "0.3.0"
         splits: ["1"]
       - name: "idea_edm_ww_fullhad_pf"
-        version: "0.2.1"
+        version: "0.3.0"
         splits: ["1"]
 
   pyg-cms-v1:
