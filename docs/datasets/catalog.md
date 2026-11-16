@@ -38,7 +38,7 @@ Pass the detector-level directory containing the dataset-name directories as `--
 
 ## Published availability
 
-The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) includes metadata, feature definitions, and all declared split shards for these current-recipe selections:
+The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) includes metadata, feature definitions, and all declared split shards for these selections:
 
 | Representation | Detector | Published datasets | Version | Configuration |
 |---|---|---|---|---|
@@ -48,6 +48,9 @@ The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/
 | Tracks and clusters | IDEA | `idea_edm_{ttbar,ww_fullhad,qq}_pf` | 0.2.1 | 1 |
 | Hits | CLD | `cld_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
 | Hits | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
+
+The IDEA upstream-update branch selects **0.3.0** for a new local production;
+the published **0.2.1** entry above describes the previous campaign.
 
 Treat the [live Hub tree](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) as the source of truth for data availability. The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects.
 
