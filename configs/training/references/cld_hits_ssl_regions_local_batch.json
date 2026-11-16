@@ -1,0 +1,126 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5060 Ti",
+  "total_bytes": 16620060672,
+  "free_before_bytes": 15598616576,
+  "config": {
+    "spec_file": "particleflow_spec.yaml",
+    "model_name": "pyg-cld-hits-heptv2-set-v1",
+    "production": "cld",
+    "model_overrides": {
+      "model": {
+        "backbone": {
+          "mode": "shared"
+        },
+        "heptv2": {
+          "activation_checkpointing": false
+        },
+        "set_decoder": {
+          "hit_grouping_chunk_size": 8192
+        }
+      }
+    },
+    "data_dir": "/mnt/work/mlpf/tensorflow_datasets/cld",
+    "datasets": [
+      "cld_edm_ttbar_hits/1:3.2.1"
+    ],
+    "train_split": "train[:95%]",
+    "valid_split": "train[95%:]",
+    "train_events_per_dataset": 20000,
+    "valid_events_per_dataset": 128,
+    "batch_size": 1,
+    "num_workers": 2,
+    "prefetch_factor": 2,
+    "timing_frequency": 50,
+    "steps": 50000,
+    "validation_frequency": 1000,
+    "checkpoint_frequency": 1000,
+    "lr": 0.0001,
+    "weight_decay": 0.01,
+    "seed": 12345,
+    "dtype": "bfloat16",
+    "ssl": {
+      "mode": "regions",
+      "regions": {
+        "geometry_path": "configs/training/references/cld_hits_region_geometry.json",
+        "tracker_surface_fraction": 0.25,
+        "calo_surface_fraction": 0.4,
+        "tracker_queries": 128,
+        "calo_queries": 512,
+        "activity_weight_power": 0.5,
+        "predictor_dim": 128,
+        "occupancy_weight": 1.0,
+        "count_weight": 0.1,
+        "energy_weight": 1.0,
+        "latent_weight": 0.1
+      },
+      "prototypes": 256,
+      "hidden_dim": 256,
+      "projection_dim": 64,
+      "keep_fraction": 0.6,
+      "student_views": 2,
+      "student_temperature": 0.1,
+      "teacher_temperature": 0.04,
+      "teacher_momentum": 0.996,
+      "center_momentum": 0.9
+    },
+    "probe": {
+      "enabled": true,
+      "frequency": 10000,
+      "at_start": true,
+      "steps": 1000,
+      "batch_size": 16,
+      "train_events_per_dataset": 1024,
+      "valid_events_per_dataset": 256,
+      "lr": 0.001,
+      "weight_decay": 0.01,
+      "seed": 31415,
+      "save_events_per_dataset": 2,
+      "hit_pairs": {
+        "enabled": true,
+        "neighbors": 16,
+        "train_pairs_per_event": 2048,
+        "valid_pairs_per_event": 8192,
+        "epochs": 10,
+        "alpha": 0.0001
+      }
+    },
+    "snapshots": {
+      "enabled": true,
+      "frequency": 1000,
+      "events_per_dataset": 4,
+      "elements_per_event": 2048,
+      "seed": 27182,
+      "teacher": true
+    }
+  },
+  "scan_events": 20000,
+  "elements_quantiles": [
+    1785.0,
+    9731.5,
+    12632.0,
+    14703.0
+  ],
+  "stress_event_index": 18061,
+  "stress_event_elements": 14703,
+  "results": [
+    {
+      "batch_size": 1,
+      "peak_allocated_bytes": 7718969344,
+      "peak_reserved_bytes": 8095006720,
+      "seconds_per_step": 0.37550862692296505,
+      "events_per_second": 2.66305466320258
+    },
+    {
+      "batch_size": 2,
+      "peak_allocated_bytes": 15059323392,
+      "peak_reserved_bytes": 15665725440,
+      "seconds_per_step": 0.7070039827376604,
+      "events_per_second": 2.828838378329357
+    }
+  ],
+  "probe_results": [],
+  "recommendation": {
+    "batch_size": 1,
+    "reason": "Batch 2 reserves 14.59 GiB at the largest of 20000 events for only 6.2% additional throughput; stochastic mask density can increase memory further."
+  }
+}

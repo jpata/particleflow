@@ -236,7 +236,10 @@ or jet-performance measurements. `unweighted_task_loss` sums the seven base PF
 task terms with fixed coefficients. Prefer that sum and its individual components
 for comparisons: `losses.Total` uses the standard task-weight calibration, whose
 scale changes during training and may differ between probes. Set-mode probes
-currently report losses rather than matched-particle physics metrics.
+also report `particle_metrics`, `particle_f1`, and `matched_pid_accuracy`, using
+the ordinary validation matcher in physical coordinates and the configured
+presence threshold. Matching accepts delta-R below 0.1 and relative pT error
+below 0.5. Undefined conditional metrics are null.
 
 The local GPU probe at SSL step 102 trained for 200 updates on 192 events and
 evaluated on 96 events. Presence F1 increased from 0.634 to 0.747, and conditional
@@ -244,6 +247,198 @@ PID accuracy from 0.107 to 0.881. Its artifacts are in
 `experiments/cld_ssl_smoke_v2/probes/step-102.*`. This verifies readout learning;
 measuring the benefit of SSL requires comparison with the step-0 probe and later
 checkpoints under the same probe settings.
+
+### Matched probe learning curves
+
+To distinguish a short readout-training budget from representation quality, run
+longer frozen probes at selected saved SSL checkpoints:
+
+```bash
+PF_SITE=local OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=1 \
+  .venv/bin/python -m mlpf.probe_learning_curves \
+  --run experiments/cld_ssl_fast \
+  --ssl-steps 0 500 5000 --seeds 31415 31416 31417 31418 31419 --updates 2000 \
+  --parallel 3
+```
+
+This extracts the frozen encoders from the saved `probes/step-N.pth` files. Their
+previously trained readouts and calibrated loss weights are replaced completely.
+The original probe seed uses the original untrained readout from `student.pth`,
+so its result at the original update budget can be checked against the periodic probe. Other seeds
+use fresh readout initializations. Within each seed, all SSL checkpoints receive
+identical initial heads and minibatch sequences. The original data subsets,
+batch size, AdamW settings, loss calibration, and precision are retained.
+
+Embeddings are cached once per SSL checkpoint. Training and validation metrics
+are recorded at 0, 50, 100, 200, 500, 1000, 2000, and the final requested update budget
+(excluding budgets above that final value). Evaluation preserves RNG state, and
+hash checks verify unchanged encoders and identical paired head initializations.
+The default comparison uses five seeds, 192 training events, 96 validation events,
+and 2,000 updates per trial: 15 trials across the three SSL checkpoints.
+
+Results go to `RUN/probe_learning_curves`: each trial has `metrics.jsonl`,
+`result.json`, and final `readout.pth`. `learning_curves.png/pdf` show training
+and validation means with one seed standard deviation; `paired_differences.png/pdf`
+show differences from the initialized backbone within each seed. `summary.json`
+retains individual seed values. Bands describe seed variation, not confidence
+intervals over the event population. The official test split remains untouched.
+Rerunning the exact command skips completed trials and resumes incomplete trials
+from their most recent evaluation-budget checkpoint, including readout weights,
+optimizer, minibatch generator, and Torch RNG state. Older unfinished trials
+without a `latest.pth` checkpoint restart from initialization;
+use a new `--output` directory for a different experiment configuration.
+`--parallel` controls concurrent GPU workers (default 1). Workers are separate
+processes with independent model and RNG state; the coordinator alone writes the
+combined plots. Their logs are saved as `worker.log` in the trial directories.
+Concurrency can be changed when restarting the same experiment.
+
+For the completed raw-hit run, use its available checkpoints and bound allocator
+memory when running two workers on the local 16 GB GPU:
+
+```bash
+PF_SITE=local OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=1 \
+  .venv/bin/python -m mlpf.probe_learning_curves \
+  --run experiments/cld_hits_ssl --ssl-steps 0 500 1000 \
+  --seeds 31415 31416 31417 31418 31419 --updates 2000 \
+  --parallel 2 --gpu-memory-fraction 0.46
+```
+
+Set-mode curves report matched-particle F1 and matched PID accuracy. Additional
+`particle_counts_*` and `energy_*` plots/summaries track precision, recall,
+particle counts, event energy response, MET error, and matched-particle energy
+error. Each trial retains all standard particle metrics at every evaluation
+budget. Curves and paired differences refresh as trials finish; worker logs and
+`metrics.jsonl` expose intermediate budgets. Trials are scheduled by seed, then
+SSL checkpoint, so paired comparisons become available before all seeds finish.
+The memory fraction is an execution limit, not a change to probe batch size or
+training budget. Initialization hashes and frozen-encoder hashes are verified.
+Parallel campaigns first extract `embeddings-step-N.pth` caches in a single GPU
+process, then share those CPU caches across all seeds. This avoids overlapping
+the encoder-extraction memory peaks of multiple workers. Each cache records its
+encoder hash, dataset selection, split, event counts, precision, and extraction
+batch size; incompatible caches are rejected. Cache preparation logs go to
+`cache.log` separately from the per-trial logs.
+
+To compare the completed region and thinning runs, use:
+
+```bash
+bash scripts/local/probe_hits_comparison.sh
+```
+
+This schedules 40 trials: five paired seeds, four checkpoints per method, and
+5,000 probe updates per trial. Region steps 0/60k/80k/100k and thinning steps
+0/30k/40k/50k match sampled-event exposures. The existing 1,024/256 probe event
+cohorts and batch size 16 are retained. Two workers share the GPU; each method's
+embedding caches are prepared serially before fitting. The methods run in
+sequence to keep the global worker count at two. The original trained probe
+heads are discarded, and initial-head hashes are checked within and across
+methods. This varies probe seeds, not SSL pretraining seeds.
+
+Artifacts are under `experiments/cld_hits_ssl_comparison_5k_5seeds`: `manifest.json`
+records the primary endpoint (particle F1 at 5,000 probe updates and final SSL
+exposure), `regions/` and `thinning/` contain resumable trials and per-method
+plots, and `comparison.json/png/pdf` are produced once all trials complete.
+The analysis script `compare.py` is retained in that experiment directory.
+`status.txt`, `run.log`, each method's `cache.log`, and each trial's `worker.log`
+record progress. An exclusive lock prevents duplicate launchers. Rerunning the
+command resumes the same experiment; it does not start new SSL pretraining.
+
+To add the intermediate region checkpoints at 20k and 40k with the same five
+seeds and 5,000-update budget:
+
+```bash
+bash scripts/local/probe_hits_early_checkpoints.sh
+```
+
+This runs ten additional trials in `regions_early/` under the comparison directory
+and reuses the completed controls. `early_run.log` and `early_status.txt` track
+progress. On completion, `ssl_step_benefit.py` refreshes the benefit plots and JSON
+using all six region checkpoints. Only complete five-seed groups are merged;
+configurations and paired initial-head hashes must match the original trials.
+
+## Raw-hit CLD student/teacher training
+
+```bash
+bash scripts/local/pretrain_hits.sh --output experiments/cld_hits_ssl
+```
+
+The recipe `configs/training/cld_hits_ssl.yaml` pins the local dataset to
+`cld_edm_ttbar_hits/1:3.2.1` under `/mnt/work/mlpf/tensorflow_datasets/cld`.
+It uses the existing six-layer, width-256 HEPTv2 backbone with tracker-neighborhood
+features and the 256-slot particle-set decoder. The full teacher and two 60%
+student views use the same objective as the track/cluster baseline. Each
+encoding call pads to HEPTv2's bucket size with masked rows and restores the
+original row axis afterwards. This includes compact student views, probe
+extraction, and snapshots; no backbone layers are modified.
+
+The local default is SSL batch 2 with activation checkpointing disabled, and PF
+probe batch 16. Stress testing repeats the largest event in the configured
+512-event pool (13,446 hits). SSL batch 2 reserved 9.1 GiB and processed
+4.10 events/s on the 16 GB RTX 5060 Ti; batch 3 reserved 13.5 GiB for less than
+1% more throughput, and batch 4 ran out of memory. Activation checkpointing
+allowed batch 16 but was slower at 3.56 events/s. The PF probe stress test at
+batch 16 reserved 8.4 GiB, including the resident SSL model and optimizer.
+These bounds apply to this configured pool and architecture, not arbitrary hit
+datasets. Increasing the batch changes event exposure per update; retain the
+same probe settings when comparing SSL checkpoints.
+
+Recheck capacity when changing the data pool or model:
+
+```bash
+PF_SITE=local PYTHONPATH=. OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=1 \
+  .venv/bin/python scripts/local/benchmark_ssl_batch.py \
+  --config configs/training/cld_hits_ssl.yaml --scan-per-dataset 512 \
+  --batches 1 2 3 4 --probe-batches 8 16 24 \
+  --output experiments/cld_hits_ssl_batch_benchmark.json
+```
+
+The benchmark includes warmup, Adam state, both student views, and the teacher.
+Per-step training logs include a Unix start time and CUDA peak allocated/reserved
+memory to correlate training intervals with external GPU-utilization samples.
+CPU hit-pair fits and checkpoint I/O are separate diagnostic overhead.
+On 51 real-data SSL steps after warmup, batch 2 sustained 4.46 events/s with
+82.3% mean GPU utilization (22 device-wide one-second samples), 8.34 GiB peak
+allocated / 9.13 GiB reserved memory, and 0.21 ms median exposed data wait.
+These utilization numbers exclude periodic probes, snapshots, and validation.
+The set probe uses grouping chunks of 8192 instead of 1024: a ten-update
+batch-16 stress comparison reduced readout training time from 10.36 to 6.69 s
+without changing the objective. Both the batch sweeps and real-data measurements
+are saved in [the local evidence record](../../configs/training/references/cld_hits_ssl_local_batch.json).
+
+SSL reads only inputs. Periodic diagnostics use disjoint training/validation
+slices of the training split; the official test split remains untouched:
+
+- Fresh PF set-decoder probes use the same initialization, data, seed, and
+  update budget at each SSL checkpoint. They report supervised losses and
+  matched-particle metrics and save trained readout checkpoints/predictions.
+- `probe.hit_pairs.enabled: true` fits four additional linear logistic probes:
+  tracker/raw, tracker/embedding, calorimeter/raw, and calorimeter/embedding.
+  Each uses absolute pairwise feature differences on the same union of spatial
+  and directional nearest-neighbor edges. Pairs are sampled deterministically,
+  standardization uses training events only, and fitting balances events and
+  the classes present in each event. Validation retains natural pair prevalence.
+  Particle IDs are used only for within-event equality, never as global classes.
+- Pair probes deliberately use an **oracle foreground mask** (positive
+  `particle_number`). They report equal-event mean AP, ROC AUC, positive-pair
+  prevalence, and per-event values. These measure pair discrimination, not full
+  clustering or background rejection. Degenerate evaluation events are excluded
+  from AP/AUC and the number with both classes is recorded.
+- Pair coefficients and training scalers are saved in
+  `probes/step-N-hit-pairs.npz`; metrics and settings are in `step-N.json`.
+  Frozen embeddings are reused from the PF probe cache. No labels, fitted probe
+  weights, or probe RNG changes feed back into the SSL training.
+
+Refresh embedding, PF-probe, hit-pair-probe, and combined training plots with:
+
+```bash
+OPENBLAS_NUM_THREADS=1 .venv/bin/python scripts/local/plot_ssl_evolution.py \
+  experiments/cld_hits_ssl
+```
+
+Do not pass the track/cluster-specific `--input-schema` flag for hits.
+The pair plot includes the positive-pair fraction because calorimeter neighbor
+pairs are often overwhelmingly from the same particle. Compare raw and learned
+features within a detector, not absolute AP between detectors.
 
 ## Verification and interpretation
 
@@ -297,6 +492,51 @@ particle identity. Probe curves include both the initial and trained readout
 at each checkpoint; useful representation learning must be judged against
 the step-0 trained probe, not just an untrained head.
 
+Additional offline diagnostics are generated by the same script. For CLD
+track/cluster physics maps and kinematic probe bins, opt into the input schema:
+
+```bash
+OPENBLAS_NUM_THREADS=1 .venv/bin/python scripts/local/plot_ssl_evolution.py \
+  experiments/cld_ssl_fast --input-schema cld-track-cluster --max-step 1200
+```
+
+Omit `--max-step` to include all available artifacts. The extra plots are saved
+as both PNG and PDF, with numerical results in JSON:
+
+- `training_and_probes`: training/validation distillation loss, teacher entropy,
+  prototype usage, and trained-probe metrics from `metrics.jsonl`. Every standard
+  plot refresh updates this dashboard; its title and JSON metadata record the
+  latest included steps. An incomplete final log record is ignored while training
+  is running. `--max-step` also applies to this dashboard.
+- `neighborhood_stability`: checkpoint-by-checkpoint overlap of the 15 nearest
+  neighbors, using cosine and Euclidean distances, overall and within each input
+  type. Queries and candidates come from the same fixed cohort, excluding the
+  query itself. `neighborhood_history.json` records selected rows, steps, and
+  overlap matrices. Default limits of 12 checkpoints and 2,000 rows bound the
+  quadratic computation; adjust `--max-snapshots`, `--max-elements`, and
+  `--neighbors` as needed. Subsampling is deterministic and shared across steps.
+- `embedding_physics`: aligned first/middle/last embedding maps colored by input
+  pT/ET, eta, and phi. Axes and color scales are shared across steps. This requires
+  `--input-schema cld-track-cluster`; other modalities still support the generic
+  embedding and neighborhood plots without assuming the meaning of input columns.
+- `probe_subgroups`: presence F1 and PID accuracy by input type, plus fixed
+  pT/ET and eta quantile bins when the CLD schema is selected. Counts refer to
+  input elements; PID accuracy includes only rows with nonzero particle targets.
+- `probe_precision_recall`: presence threshold sweeps and average precision,
+  overall and per input type. Dots mark the existing probability-0.5 decision.
+  Average precision groups tied scores and uses a stepwise integral, allowing
+  changes in ranking to be distinguished from changes at one decision threshold.
+  `probe_subgroups.json` contains subgroup counts, metrics, and average precision.
+
+The probe detail plots use the bounded prediction export cohort (12 events in
+the default CLD recipe), rather than the full 96-event probe validation sample.
+They are descriptive estimates without uncertainty intervals. The script checks
+that inputs, targets, and event identities agree across prediction exports.
+It skips input-aligned probe details for set outputs, whose predictions require
+particle matching. Embedding comparisons also verify row identities and inputs,
+in addition to the cohort hash. All plots run on CPU without loading checkpoints,
+TFDS, or modifying the ongoing training job.
+
 A two-step GPU integration run at batch 768 saved three embedding snapshots
 and three probe prediction/checkpoint sets under
 `experiments/cld_ssl_evolution_smoke`. It used five-update probes on small
@@ -315,3 +555,137 @@ Targets evolve during SSL, so decreasing loss is not a fixed-target quality
 comparison. This verifies execution and basic numerical behavior, not reconstruction gains.
 Assess benefit with frozen probes and supervised fine-tuning at matched label
 fractions and compute budgets, using independent final evaluation events.
+
+## Raw-hit context and individual-hit diagnostics
+
+Run the input-only audits on a completed raw-hit SSL run:
+
+```bash
+PF_SITE=local OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=1 \
+  .venv/bin/python -m mlpf.ssl_diagnostics --run experiments/cld_hits_ssl_large
+OPENBLAS_NUM_THREADS=1 .venv/bin/python scripts/local/plot_ssl_diagnostics.py \
+  experiments/cld_hits_ssl_large/diagnostics
+```
+
+The context audit loads the final student/teacher from `latest.pth` and the
+initialized encoder from `probes/step-0.pth`. It holds 16 query hits of each
+detector type fixed in each of 64 validation events and compares repeated full
+context, the actual 60% sampling augmentation, same-type hits from other events,
+query-only context, and individually isolated hits. Queries are selected from
+the sampled view so they remain present in every condition. Replacement preserves
+event length, detector types, query measurements, and row positions. Four other
+events supply donor hits; donor reuse is recorded if the pool is insufficient.
+Feature engineering is recomputed for every view. Isolated and foreign contexts
+are stress tests outside the training distribution, not realistic detector models.
+
+Individual-hit predictors fit the final full-event teacher's soft prototype
+targets using only raw measurements of one hit. Defaults are 256 training events,
+128 disjoint validation events, up to 256 hits/type/event, two 256-wide hidden
+layers, 4,000 updates, and three seeds. Geometry-only predictors omit energy,
+transverse energy, and time; all-feature predictors use all 15 raw columns.
+Both exclude neighborhood features. Standardization uses training samples only,
+and sampling/evaluation balance events and detector types. A detector-type
+marginal predictor controls for prototype imbalance. No particle labels are read.
+
+Outputs include event-level context metrics, cached teacher targets, predictor
+checkpoints/learning curves, and PNG/PDF plots under `RUN/diagnostics`.
+Context intervals bootstrap events; predictor bands show seed standard deviation.
+Agreement refers to prototype argmax, not particle ID or PF reconstruction.
+The initialized encoder is an embedding-context control only: the original SSL
+projection head is not saved with its probe checkpoint. Strong single-hit
+prediction establishes target predictability, not that the backbone ignores
+context or that all of its information is geometric.
+
+## Masked detector regions
+
+`configs/training/cld_hits_ssl_regions.yaml` selects `ssl.mode: regions` for
+the EDM4hep 15-column raw-hit schema. Existing configurations default to
+`thinning`; their state dictionaries and exported MLPF architecture are unchanged.
+The new mode adds an auxiliary query predictor outside the backbone. Track/cluster
+inputs continue to use the thinning mode; region masking rejects incompatible schemas.
+
+The fixed region address is `(element type, subdetector, system, side, layer,
+eta bin, phi bin)`. Default coarse bin widths are 0.5 in eta and 2*pi/16 in phi;
+each region has a fixed 2x2 prediction grid. This first implementation uses angular
+bins on detector surfaces, not exact sensor pixels or a volumetric voxel grid.
+Phi is periodic. Resolution can be changed when building a new catalogue.
+
+The provided `configs/training/references/cld_hits_region_geometry.json` is an
+empirical support map from 2,048 training events, with 23,617 regions. It is not
+a complete active-channel map. Only fine bins observed somewhere in the training
+catalogue contribute to measurement losses. No current-event occupancy is used to
+mark a cell valid. `catalogue_target_coverage` monitors the fraction of removed
+hits covered by this fixed support. New geometries need their own catalogue;
+build it before training, using training inputs only:
+
+```bash
+PF_SITE=local OPENBLAS_NUM_THREADS=1 .venv/bin/python -m mlpf.ssl_region_geometry \
+  --config configs/training/cld_hits_ssl_regions.yaml \
+  --output /path/to/new_geometry.json --events 2048
+```
+
+Set `ssl.regions.geometry_path` to that path. The builder refuses to overwrite
+an existing catalogue. Catalogue tensors are included in SSL checkpoints.
+
+For each view, the sampler first chooses target surfaces independently of the
+event's hidden contents. It selects query regions using angular activity on
+other, non-target surfaces. Sampling weights are the square root of visible hit
+counts in each angular bin. Defaults select up to 128 tracker and 512 calorimeter
+regions, on random subsets of 25% and 40% of catalogue surfaces respectively.
+Regions are layer-local patches; this version does not force consecutive-depth
+calorimeter blocks. These surface fractions are not hit-removal fractions.
+A 64-event held-out audit measured mean hit removal of 9.6% tracker / 19.1% calo,
+with ranges 3.3–28.9% / 9.5–36.0%. Mean catalogue target coverage was 99.991%.
+
+All hits inside selected regions are removed before student feature engineering.
+The student predictor sees fixed region-center metadata and visible backbone
+embeddings; it receives no hidden point positions, centroids, counts, energies,
+or per-hidden-hit tokens. Query validity depends on the fixed catalogue and
+visible context. Empty and occupied query cells both contribute to the loss.
+
+The objective is occupancy BCE + 0.1 * count Poisson NLL + log1p-energy Huber
+loss + 0.1 * optional teacher-prototype CE. Energy targets are sums of measured
+calorimeter hit energies, including zero-energy cells; tracker energy is excluded.
+Reduction balances detector types and events, averaging supported cells within
+each type. Precision/recall/F1 and occupied fraction accompany occupancy accuracy
+to expose the all-empty shortcut. All targets are derived from input hits.
+
+The full-event EMA teacher supplies mean embeddings of hits in each nonempty
+hidden region for the optional latent term. Empty regions have no latent target.
+The existing centering/sharpening projection is reused on these pooled embeddings;
+`latent_valid_queries` reports target support. Set `latent_weight: 0` for the
+measured-content-only ablation, or set the three measurement weights to zero
+for a latent-only ablation. A zero total objective is rejected. Legacy per-hit
+prototype diagnostics deliberately reject region-mode checkpoints: their targets
+are different. Context-dependence and coordinate-only baselines for the new
+region targets remain a follow-up evaluation, not a claimed result of this implementation.
+
+Start a new run (the objective cannot be changed with `--resume`):
+
+The local recipe uses batch 1 and 100,000 updates, retaining the prior run's
+100,000 sampled-event exposure. On the largest event in the full 20,000-event
+pool (14,703 hits), batch 1 reserved 7.54 GiB at 2.66 events/s; batch 2 reserved
+14.59 GiB at 2.83 events/s. Batch 1 leaves room for stochastic variation in mask
+density. Evidence is in `configs/training/references/cld_hits_ssl_regions_local_batch.json`.
+Equal event exposure is not equal wall time or optimizer-step count.
+
+```bash
+CONFIG=configs/training/cld_hits_ssl_regions.yaml \
+OUTPUT=experiments/cld_hits_ssl_regions \
+  bash scripts/local/pretrain_hits.sh
+```
+
+The ordinary periodic frozen PF probes, optional hit-pair probes, snapshots,
+checkpoint resume, and standard `student.pth` export remain available. The
+auxiliary predictor is not included in the downstream MLPF export. A fixed
+`region_view.npz` preview is saved at initialization without changing training RNG:
+
+```bash
+.venv/bin/python scripts/local/plot_ssl_regions.py experiments/cld_hits_ssl_regions
+.venv/bin/python scripts/local/plot_ssl_evolution.py experiments/cld_hits_ssl_regions
+```
+
+The combined training/probe dashboard switches to region total loss, occupancy
+loss, and energy loss for this mode. No detector-resolution jitter, calibration
+variation, timing shift, or background overlay is enabled. These are separate
+ablations; this implementation establishes the masked prediction task first.

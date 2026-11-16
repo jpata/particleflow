@@ -1,0 +1,66 @@
+# Input-derived masked-region prediction. Build the fixed training-only catalogue:
+# PF_SITE=local .venv/bin/python -m mlpf.ssl_region_geometry --config configs/training/cld_hits_ssl_regions.yaml --output configs/training/references/cld_hits_region_geometry.json
+model_name: pyg-cld-hits-heptv2-set-v1
+production: cld
+data_dir: /mnt/work/mlpf/tensorflow_datasets/cld
+datasets:
+  - cld_edm_ttbar_hits/1:3.2.1
+train_split: train[:95%]
+valid_split: train[95%:]
+model_overrides:
+  model:
+    backbone:
+      mode: shared
+    heptv2:
+      activation_checkpointing: false
+    set_decoder:
+      hit_grouping_chunk_size: 8192
+# Full 20,000-event pool: largest 14,703 hits. Batch 1 reserves 7.54 GiB;
+# batch 2 reserves 14.59 GiB for only 6.2% extra throughput. Keep mask headroom.
+batch_size: 1
+num_workers: 2
+prefetch_factor: 2
+timing_frequency: 50
+# Same 100,000 sampled-event exposure as the previous batch-2, 50k-step run.
+steps: 100000
+train_events_per_dataset: 20000
+valid_events_per_dataset: 128
+validation_frequency: 2000
+checkpoint_frequency: 2000
+dtype: bfloat16
+ssl:
+  mode: regions
+  student_views: 2
+  regions:
+    geometry_path: configs/training/references/cld_hits_region_geometry.json
+    tracker_surface_fraction: 0.25
+    calo_surface_fraction: 0.4
+    tracker_queries: 128
+    calo_queries: 512
+    activity_weight_power: 0.5
+    predictor_dim: 128
+    occupancy_weight: 1.0
+    count_weight: 0.1
+    energy_weight: 1.0
+    latent_weight: 0.1
+probe:
+  enabled: true
+  frequency: 20000
+  at_start: true
+  steps: 1000
+  batch_size: 16
+  train_events_per_dataset: 1024
+  valid_events_per_dataset: 256
+  save_events_per_dataset: 2
+  hit_pairs:
+    enabled: true
+    neighbors: 16
+    train_pairs_per_event: 2048
+    valid_pairs_per_event: 8192
+    epochs: 10
+snapshots:
+  enabled: true
+  frequency: 2000
+  events_per_dataset: 4
+  elements_per_event: 2048
+  teacher: true

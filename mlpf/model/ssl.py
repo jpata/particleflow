@@ -6,15 +6,37 @@ point dropout, and DINO centering/sharpening with event/type-balanced reductions
 
 import copy
 from contextlib import nullcontext
+from typing import Literal
 
 import torch
 from torch import nn
 from torch.nn import functional as F
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from mlpf.conf import ModelType
+from mlpf.model.ssl_regions import RegionConfig, RegionPredictor, RegionSampler, measurement_loss, pool_teacher
+
+
+def encode_ssl_embeddings(model, X, mask, source_id=None):
+    """Pad each view for HEPTv2 buckets, then restore the original row axis.
+
+    SSL compacts arbitrary subsets, so dataset-time padding is insufficient.
+    Padding stays masked during feature engineering and never enters the loss.
+    The encoder and its attention layers are unchanged.
+    """
+    length = X.shape[1]
+    if model.conv_type == ModelType.HEPTV2:
+        padding = (-length) % model.config.heptv2.block_size
+        if padding:
+            X = F.pad(X, (0, 0, 0, padding))
+            mask = F.pad(mask, (0, padding), value=False)
+    return model.encode_backbone(X, mask, source_id)[:, :length]
 
 
 class DistillationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    mode: Literal["thinning", "regions"] = "thinning"
+    regions: RegionConfig | None = None
     prototypes: int = Field(default=256, ge=2)
     hidden_dim: int = Field(default=256, ge=1)
     projection_dim: int = Field(default=64, ge=1)
@@ -24,6 +46,12 @@ class DistillationConfig(BaseModel):
     teacher_temperature: float = Field(default=0.04, gt=0)
     teacher_momentum: float = Field(default=0.996, ge=0, lt=1)
     center_momentum: float = Field(default=0.9, ge=0, lt=1)
+
+    @model_validator(mode="after")
+    def check_regions(self):
+        if self.mode == "regions" and self.regions is None:
+            raise ValueError("Region SSL requires ssl.regions geometry and predictor settings")
+        return self
 
 
 def collate_inputs(records):
@@ -129,6 +157,11 @@ class StudentTeacher(nn.Module):
         self.teacher = copy.deepcopy(student).requires_grad_(False).eval()
         self.teacher_head = copy.deepcopy(self.student_head).requires_grad_(False).eval()
         self.register_buffer("center", torch.zeros(1, 1, config.prototypes))
+        if config.mode == "regions":
+            if not student.is_hit_dataset or student.raw_input_dim != 15:
+                raise ValueError("Region SSL currently requires the EDM4hep 15-column raw-hit schema")
+            self.region_sampler = RegionSampler(config.regions)
+            self.region_predictor = RegionPredictor(dimension, config.regions, self.region_sampler.fine_bins**2)
 
     def train(self, mode=True):
         super().train(mode)
@@ -145,18 +178,20 @@ class StudentTeacher(nn.Module):
                 t.copy_(s)
 
     def forward(self, X, source_id=None, generator=None, timings=None):
+        if self.config.mode == "regions":
+            return self.forward_regions(X, source_id, generator, timings)
         cfg = self.config
         mask = X[..., 0] != 0
         full_weights = element_weights(X[..., 0], mask, self.num_element_types)
         with torch.no_grad(), timings.phase("teacher") if timings else nullcontext():
-            teacher_logits = self.teacher_head(self.teacher.encode_backbone(X, mask, source_id))
+            teacher_logits = self.teacher_head(encode_ssl_embeddings(self.teacher, X, mask, source_id))
             targets = ((teacher_logits - self.center) / cfg.teacher_temperature).softmax(-1)
         losses = []
         for _ in range(cfg.student_views):
             with timings.phase("view_sampling") if timings else nullcontext():
                 view, valid, idx = subsample_view(X, mask, cfg.keep_fraction, generator, self.num_element_types)
             with timings.phase("student") if timings else nullcontext():
-                logits = self.student_head(self.student.encode_backbone(view, valid, source_id))
+                logits = self.student_head(encode_ssl_embeddings(self.student, view, valid, source_id))
             with timings.phase("loss") if timings else nullcontext():
                 target = targets.gather(1, idx[..., None].expand(-1, -1, cfg.prototypes))
                 ce = -(target * (logits / cfg.student_temperature).log_softmax(-1)).sum(-1)
@@ -173,4 +208,47 @@ class StudentTeacher(nn.Module):
             if self.training:
                 mean = weighted_mean(teacher_logits, full_weights)
                 self.center.lerp_(mean[None, None], 1 - cfg.center_momentum)
+        return loss, metrics
+
+    def forward_regions(self, X, source_id=None, generator=None, timings=None):
+        cfg = self.config
+        mask = X[..., 0] != 0
+        teacher = None
+        if cfg.regions.latent_weight:
+            with torch.no_grad(), timings.phase("teacher") if timings else nullcontext():
+                teacher = encode_ssl_embeddings(self.teacher, X, mask, source_id)
+        losses, summaries, centers = [], [], []
+        for _ in range(cfg.student_views):
+            with timings.phase("view_sampling") if timings else nullcontext():
+                sample = self.region_sampler(X, mask, generator)
+            with timings.phase("student") if timings else nullcontext():
+                embeddings = encode_ssl_embeddings(self.student, sample["view"], sample["mask"], source_id)
+                prediction = self.region_predictor(embeddings, sample["mask"], sample["features"])
+            with timings.phase("loss") if timings else nullcontext():
+                loss, metrics = measurement_loss(prediction, sample, cfg.regions)
+                if teacher is not None:
+                    with torch.no_grad():
+                        pooled, present = pool_teacher(teacher, sample)
+                        teacher_logits = self.teacher_head(pooled.to(teacher.dtype))
+                        targets = ((teacher_logits - self.center) / cfg.teacher_temperature).softmax(-1)
+                        weights = element_weights(sample["types"], present, self.num_element_types)
+                        weights = weights / weights.sum().clamp_min(1e-12)
+                    logits = self.student_head(prediction[-1]) / cfg.student_temperature
+                    latent = weighted_mean(-(targets * logits.log_softmax(-1)).sum(-1), weights)
+                    loss = loss + cfg.regions.latent_weight * latent
+                    metrics["latent_loss"] = latent.detach()
+                    metrics["latent_valid_queries"] = present.sum(1).float().mean()
+                    with torch.no_grad():
+                        metrics["teacher_entropy"] = weighted_mean(-(targets * targets.clamp_min(1e-12).log()).sum(-1), weights)
+                        marginal = weighted_mean(targets, weights)
+                        metrics["effective_prototypes"] = (-(marginal * marginal.clamp_min(1e-12).log()).sum()).exp()
+                        if present.any():
+                            centers.append(weighted_mean(teacher_logits, weights))
+                losses.append(loss)
+                summaries.append(metrics)
+        loss = torch.stack(losses).mean()
+        metrics = {key: torch.stack([m[key] for m in summaries]).mean() for key in summaries[0]}
+        metrics["loss"] = loss.detach()
+        if self.training and centers:
+            self.center.lerp_(torch.stack(centers).mean(0)[None, None], 1 - cfg.center_momentum)
         return loss, metrics

@@ -1,0 +1,748 @@
+MLPF SELF-SUPERVISED PRETRAINING — RESEARCH LOG
+Updated: 2026-11-16, Europe/Tallinn
+Workspace branch at time of writing: feat/panda-ssl-pretraining
+Paths below are relative to the repository root.
+
+PURPOSE AND EVIDENCE STATUS
+
+Investigate input-only pretraining for MLPF without changing its transformer or
+HEPTv2 backbone. The initial implementation used CLD tracks/clusters; the current
+investigation uses raw tracker and calorimeter hits. Supervised particle targets
+are used only for downstream probes, not the distillation loss.
+
+This log consolidates the findings reported in the working session. The current
+large-run artifacts were checked directly while writing this log. The earlier
+experiments/cld_ssl_fast and experiments/cld_hits_ssl directories are no longer
+present in this workspace. Results from those runs below are historical records
+from the preceding analyses, not newly reverified measurements. Their historical
+paths are retained for identification, not as claims of current availability.
+
+Current evidence:
+  experiments/cld_hits_ssl_large/pretrain-config.yaml
+  experiments/cld_hits_ssl_large/train-config.yaml
+  experiments/cld_hits_ssl_large/metrics.jsonl
+  experiments/cld_hits_ssl_large/probes/step-{0,10000,...,50000}.json
+  experiments/cld_hits_ssl_large/evolution/analysis.json
+  experiments/cld_hits_ssl_large/evolution/interpretation.txt
+  experiments/cld_hits_ssl_large/diagnostics/summary.json
+  experiments/cld_hits_ssl_large/diagnostics/interpretation.txt
+
+1. IMPLEMENTED TRAINING MECHANISM
+
+The implementation is Panda-inspired, with a DINO-style normalized projection
+head, teacher-output centering/sharpening, and an exponential-moving-average
+teacher. It is not a reproduction of either paper's complete recipe.
+
+Teacher view:
+  Complete measured event; no gradient; evaluation mode.
+
+Student views:
+  Two independent subsets of the same event. For each observed element type,
+  retain max(1, floor(0.6 * number_of_elements)) uniformly without replacement.
+  For raw hits the types are tracker and calorimeter. Sampling is not stratified
+  by particle, layer, or ECAL/HCAL subdivision. Original row order is preserved.
+
+Retained raw measurements are unchanged. Dropped rows are physically removed
+before feature engineering and attention. Neighborhood features and HEPT groups
+are recomputed using only retained rows. HEPT inputs are padded to a multiple of
+128 with masking; padded rows do not enter the objective.
+
+For each retained hit, the student predicts the full-event teacher's prototype
+distribution at the corresponding original input row. No particle ownership is
+used for correspondence. There is no prediction at removed-hit locations and no
+explicit objective associating different hits from the same particle.
+
+Defaults used in the hit runs:
+  Prototype count 256; projection bottleneck 64; projection hidden width 256.
+  Student temperature 0.1; teacher temperature 0.04.
+  Teacher EMA momentum 0.996; center momentum 0.9.
+  Loss averages hits within type, types within event, events, then student views.
+  PF readouts remain frozen during SSL; periodic probes train copies of them.
+
+With large hit counts, the two student views overlap on approximately 36% of
+original hits and jointly cover approximately 84%. At least one hit per type
+does not guarantee survival of any particular trajectory, shower, or layer.
+
+Implementation references:
+  mlpf/model/ssl.py
+  mlpf/model/ssl_probe.py
+  mlpf/model/ssl_snapshots.py
+  mlpf/model/ssl_hit_probe.py
+  mlpf/pretrain.py
+  docs/training/self-supervised.md
+
+2. RAW-HIT DATA AND PERFORMANCE WORK
+
+Dataset: cld_edm_ttbar_hits/1:3.2.1
+Data root: /mnt/work/mlpf/tensorflow_datasets/cld
+Dataset metadata: 90,000 training events and 10,000 official test events.
+SSL/probe training uses train[:95%]; validation uses train[95%:]. The official
+test split has not been used in these studies.
+
+Model: pyg-cld-hits-heptv2-set-v1, shared six-layer HEPTv2 backbone, width 256,
+with a 256-slot PF set decoder. Geometry, tracker-neighborhood, and calorimeter-
+neighborhood features are enabled. Tracker doublets/momentum features are off.
+
+Historical GPU tuning on the RTX 5060 Ti 16 GB:
+  On the largest event in the original 512-event pool (13,446 hits), SSL batch 2
+  reserved approximately 9.1 GiB and processed 4.10 events/s. Batch 3 bought less
+  than 1% throughput for approximately 13.5 GiB reserved; batch 4 ran out of memory.
+  Activation checkpointing allowed larger batches but reduced throughput.
+  The selected recipe uses BF16, SSL batch 2, and no activation checkpointing.
+  Probe batch 16 and hit-grouping chunk size 8192 reduced probe overhead.
+
+Performance changes included prefetched input-only loading, vectorized view
+sampling and balanced reductions, fused AdamW, batched EMA updates, CUDA/CPU
+phase timings, and frozen embedding caches for probe fitting.
+
+Matched multi-seed probe workers prepare shared embedding caches serially before
+concurrent readout training. This resolved GPU memory failures during simultaneous
+encoder extraction. Probe runs save optimizer/readout/RNG state at evaluations.
+
+Capacity evidence/configuration:
+  configs/training/references/cld_hits_ssl_local_batch.json
+  scripts/local/benchmark_ssl_batch.py
+  configs/training/cld_hits_ssl.yaml
+  configs/training/cld_hits_ssl_large.yaml
+
+3. HISTORICAL SMALL RAW-HIT RUN AND MATCHED PROBES
+
+Historical run: experiments/cld_hits_ssl
+SSL: 512 training events, 1,000 updates, batch 2.
+Periodic probes: 64 training events, 16 validation events, 200 updates, batch 16.
+
+The early analysis found expanding embedding covariance rank and no indication
+of constant-vector collapse on the saved cohort. Falling SSL loss coincided with
+sharpening teacher assignments; it did not reliably predict PF improvements.
+Hit-pair probes showed no clear tracker association gain and only small,
+uncertain calorimeter changes. Calorimeter pair prevalence was high, so absolute
+average precision alone was misleading; geometry baselines remained important.
+
+Completed longer matched campaign:
+  SSL checkpoints 0, 500, 1000.
+  Seeds 31415, 31416, 31417, 31418, 31419.
+  2,000 probe updates each; 15 completed trials.
+  Identical initial readouts and minibatch sequences across SSL checkpoints
+  within each seed; frozen encoders; same 64/16 event split and optimizer.
+
+Validation particle F1, mean +/- seed standard deviation:
+  Probe updates     SSL 0           SSL 500         SSL 1000
+  200               .289 +/- .017   .316 +/- .012   .297 +/- .020
+  500               .332 +/- .044   .349 +/- .011   .349 +/- .011
+  1000              .358 +/- .009   .346 +/- .013   .342 +/- .008
+  2000              .347 +/- .009   .352 +/- .010   .338 +/- .010
+
+At 200 updates, SSL 500 improved F1 in all seeds: paired mean +.0266, nominal
+95% paired t interval [.0196, .0335]. At 2,000 updates the difference was +.0054
+with interval [-.0145, .0252]. Intervals describe probe-seed variation on one
+fixed event sample; they are not corrected for multiple comparisons.
+
+At 2,000 updates, training F1 was .396/.467/.476 for SSL 0/500/1000, while
+validation loss was 2.737/2.887/2.974. This indicated stronger training fits and
+overfitting, without an established lasting validation advantage.
+
+The replay differed from the original periodic probes. The matched campaign
+therefore used its own initialized-backbone baseline; its results were not
+stitched onto the earlier periodic curves. The numerical cause was not established.
+
+Conclusion at that stage: increase the labeled probe sample as well as the SSL
+data. Merely extending probes on 64 events was unlikely to resolve generalization.
+
+4. COMPLETED LARGER RAW-HIT RUN
+
+Run: experiments/cld_hits_ssl_large
+SSL: 20,000 training events, 128 validation events, batch 2, 50,000 updates.
+This is five passes' worth of sampled event exposure, not a guarantee of five
+visits to every event. Learning rate .0001, weight decay .01, BF16.
+Periodic PF probes: 1,024 training / 256 validation events, 1,000 updates,
+batch 16, learning rate .001, weight decay .01, seed 31415.
+Probes at initialization and every 10,000 SSL updates; hit-pair probes disabled.
+Embedding snapshots every 1,000 steps, four fixed validation events, up to
+2,048 saved hits/event after encoding each complete event.
+
+Verified: all 50,000 training updates, finite training metrics and gradient norms,
+six completed probes, and 51 finite snapshots with identical input-row identities.
+
+SSL step   PF loss   Particle F1   Matched PID accuracy   Event-energy error*
+0          2.4754    .3303         .6830                  .2208
+10000      2.5244    .3594         .6764                  .2362
+20000      2.3753    .3569         .6545                  .1779
+30000      2.4160    .3557         .6905                  .1681
+40000      2.3871    .3824         .6943                  .1342
+50000      2.3808    .3746         .6890                  .1315
+*Mean absolute relative error in total event energy.
+
+Step 40,000 gives the best observed F1: +.0521 absolute, +15.8% relative to
+initialization. Recall rises .2820 -> .3742; precision changes .3985 -> .3910.
+Predicted multiplicity improves 67.34 -> 91.07 versus 95.16 targets/event.
+
+At step 50,000, multiplicity drops to 74.72; precision increases to .4258 but
+recall falls to .3343. The final checkpoint is not uniformly better than 40,000.
+Event-energy absolute relative error improves by 39.2% at 40,000 and 40.4% at
+50,000 relative to initialization. MET magnitude error changes only modestly:
+18.28 -> 17.75 -> 18.00 GeV for steps 0/40000/50000.
+
+PID gains are uneven. At 50,000, matched PID accuracy is .537 for charged
+hadrons, .160 for neutral hadrons, .915 for photons, .161 for electrons, and
+0 for muons. Charged-hadron PID was .670 at initialization. These are conditional
+on kinematically matched populations, which change between checkpoints.
+Particle F1 itself does not require correct PID.
+
+Embedding evolution on the fixed 8,192-hit cohort (846 tracker, 7,346 calorimeter):
+  Covariance entropy rank: all 10.02 -> 32.41; tracker 8.38 -> 18.48;
+  calorimeter 5.74 -> 22.60.
+  First-PC variance share: all 43.9% -> 10.2%.
+  Final linear CKA to initialization: .291.
+  Final student/teacher CKA: .995; CKA to previous 1,000-step snapshot: .990.
+  Mean feature std: .457 -> 4.377; representation scale changes substantially.
+  Cosine k=15 neighbor retention versus initialization: 34.5% on a fixed
+  2,000-hit subsample. This is a structural diagnostic, not a semantic score.
+
+Validation distillation loss is .0886 at 10,000 and .0950 at 50,000, and does not
+rank the PF checkpoints reliably. Final teacher entropy is .0306 nats; effective
+prototype count is 27.28. The latter averages batch-local marginal effective
+counts and is not the number of globally active prototypes.
+
+Training-only throughput averages 5.34 events/s over 5.20 hours. Elapsed time
+from first update through final diagnostics is 6.16 hours, excluding initial
+diagnostics. All six probes together take .82 hours. Peak logged training memory
+is 9.40 GiB allocated / 11.11 GiB reserved.
+
+Conclusion: promising fixed-budget transfer, particularly recall and event-energy
+closure. Step 40,000 is a provisional reconstruction checkpoint; retain 50,000
+for comparison. One SSL seed and one probe seed cannot establish convergence or
+seed robustness. Different samples/budgets prevent a controlled numerical
+comparison with the earlier small run. Longer multi-seed probes on this large
+run have been recommended but have not been run in this session.
+
+Plots and reproducible analysis:
+  experiments/cld_hits_ssl_large/evolution/training_and_probes.png
+  experiments/cld_hits_ssl_large/evolution/representation_diagnostics.png
+  experiments/cld_hits_ssl_large/evolution/pf_physics.png
+  experiments/cld_hits_ssl_large/evolution/analyze_run.py
+
+5. AUGMENTATION ASSESSMENT
+
+Hit thinning is more defensible than deleting whole tracks/clusters because a
+trajectory or shower may have redundant measurements. Recomputing neighborhood
+features makes this a real context perturbation. However:
+  - Uniform 40% removal is an aggressive, uncalibrated detector corruption.
+  - Sparse trajectories and dense showers have different redundancy.
+  - Expected retained calorimeter hit-energy sum is approximately 60% of full.
+  - All retained-hit geometry and measurements remain unchanged, allowing an
+    individual-hit predictor to solve much of the prototype task.
+  - The projection output is constrained; the whole backbone embedding need
+    not become invariant. PF information can remain outside the projection.
+
+Proposed, not implemented: milder modality-specific thinning; bounded structured
+surface/region losses; detector-calibrated measurement perturbations; context-
+dependent prediction with masked measurement groups. Derived/redundant features
+must be updated to prevent information leakage or inconsistent measurements.
+Changing thinning strength alone does not remove the individual-hit shortcut.
+
+6. COMPLETED CONTEXT AND INDIVIDUAL-HIT DIAGNOSTICS
+
+Run: experiments/cld_hits_ssl_large/diagnostics
+Checkpoint: final step 50,000, from latest.pth.
+All data access is input-only. No particle labels were used.
+
+Context protocol:
+  64 validation events, 16 query hits/type/event, chosen among survivors of the
+  actual 60% view sampler. Query measurements are identical in every condition.
+  Evaluate initialized encoder, final teacher, and final student.
+  Conditions: full repeat; 60% retained; foreign context; query-only; isolated.
+  Foreign context preserves event length, types, query positions, and query
+  features. Four other events supply donor rows; no recycling was required.
+  Query-only events contain 32 query hits. Isolated hits are separate one-hit
+  events. These are extreme stress tests, not realistic detector models.
+  Initial-reference comparisons cover embeddings only: the original SSL
+  projection head was not saved with the initial PF probe checkpoint.
+
+Teacher prototype agreement with its own full-event targets:
+Condition           Tracker, 95% event-bootstrap CI     Calorimeter, CI
+Full repeat         100%                               100%
+60% retained        96.97% [95.90,97.85]                 99.02% [98.44,99.51]
+Foreign context     83.69% [81.25,86.04]                 93.46% [91.70,95.12]
+Queries only        81.93% [79.30,84.57]                 71.39% [67.97,74.90]
+Isolated hits       71.00% [68.16,73.63]                 34.77% [30.57,38.87]
+
+Student agreement with the full teacher is similar: 96.29%/98.14% under thinning
+and 84.38%/92.58% under foreign context (tracker/calorimeter).
+Teacher relative embedding L2 changes are 9.75%/10.65% under thinning and
+35.67%/38.07% under foreign context. Full-repeat numerical differences are about
+.1-.2%; prototype argmax stays identical.
+
+Relative to within-type query embedding spread, thinning changes shrink from
+.192/.260 for the initialized encoder to .106/.118 for the teacher. Context
+sensitivity exists even at initialization, so it alone is not evidence of learned
+particle association. Bootstrap intervals condition on one SSL checkpoint.
+
+Individual-hit predictor protocol:
+  256 training events, 128 disjoint validation events, up to 256 hits/type/event.
+  Three seeds (8123,8124,8125), each fitted for 4,000 updates.
+  MLP: two 256-wide GELU hidden layers; soft full-event teacher targets.
+  Training-only standardization; equal event/type weighting.
+  Geometry input: position/direction and detector metadata; excludes energy,
+  transverse energy, and time. All-feature input: all 15 raw columns.
+  Neither predictor receives neighborhood features or other hits.
+
+Held-out prototype agreement, mean across three seeds:
+Predictor                        Tracker    Calorimeter    Equal-type average
+Detector-type marginal           12.52%     10.64%         11.58%
+Geometry-only MLP                86.06%     93.54%         89.80%
+All-raw-feature MLP              87.49%     93.59%         90.54%
+
+Equal-type seed std is .031 percentage points for geometry-only and .129 for
+all-feature predictors. These do not quantify event-sampling uncertainty.
+Held-out KL is approximately .220 nats for geometry-only and .203 for all
+features, versus 2.865 for the detector-type marginal baseline.
+
+Interpretation:
+  The teacher's prototype choices are largely predictable from individual-hit
+  geometry and detector identity. Additional energy/time measurements contribute
+  little to aggregate agreement, especially in calorimetry. Thinning leaves the
+  predictive individual-hit features unchanged.
+
+  The actual encoder nevertheless uses context. Poor isolated-model behavior
+  does not contradict the pointwise predictor: isolated events are outside the
+  encoder's usual neighborhood distribution, while the separate predictor is
+  explicitly trained to predict full-event targets from individual-hit inputs.
+
+  These tests establish target predictability and network context sensitivity.
+  They do not prove that all embedding information is geometric, that the PF
+  gains are spurious, or that prototype assignments correspond to particles.
+  Geometry-only also mixes absolute position and useful detector/layer metadata;
+  separating those requires further feature ablations.
+
+Artifacts and implementation:
+  experiments/cld_hits_ssl_large/diagnostics/context_dependence.png
+  experiments/cld_hits_ssl_large/diagnostics/individual_hit_predictors.png
+  experiments/cld_hits_ssl_large/diagnostics/context_events.json
+  experiments/cld_hits_ssl_large/diagnostics/individual_hit_results.json
+  mlpf/ssl_diagnostics.py
+  scripts/local/plot_ssl_diagnostics.py
+  tests/test_ssl_diagnostics.py
+
+Verification completed: three unit tests; GPU smoke test; full GPU extraction
+and six predictor fits; plotting; lint/complexity and diff-whitespace checks.
+
+7. NEXT EXPERIMENTS — PROPOSED, NOT YET EXECUTED
+
+1. Longer matched PF learning curves on the large-run checkpoints 0/40000/50000,
+   using five seeds and the same 1,024/256 event sample. This tests whether the
+   observed PF advantage persists after longer readout optimization.
+2. Restore hit-pair association probes to distinguish geometry encoding from
+   track/shower grouping improvements. Retain raw-feature baselines and account
+   for positive-pair prevalence.
+3. Design a context-dependent target that cannot largely be recovered from the
+   query hit's unchanged geometry. Masking must cover redundant/derived fields.
+4. Keep the present augmentation as a control; compare milder and structured
+   corruptions at matched data/compute budgets, followed by the same diagnostics.
+5. Separate position-only, detector/layer-only, and combined individual-hit
+   predictors if identifying the specific shortcut is needed before redesign.
+
+BACKGROUND REFERENCES CONSULTED
+
+DINO: Emerging Properties in Self-Supervised Vision Transformers
+  https://arxiv.org/abs/2104.14294
+CLD — A Detector Concept for the FCC-ee
+  https://arxiv.org/abs/1911.12230
+
+The numerical findings in this log come from local experiments, not those papers.
+
+8. MASKED DETECTOR REGION IMPLEMENTATION — 2026-11-14
+
+Implemented ssl.mode=regions in mlpf/model/ssl_regions.py and mlpf/model/ssl.py.
+The MLPF backbone is unchanged. An auxiliary cross-attention predictor reads
+visible-hit embeddings and fixed surface/angular region queries. All hits in
+queried regions are removed before student feature engineering. Target-surface
+selection is random; angular query selection uses only activity on other,
+non-target surfaces. No hidden hit positions, centroids, counts, or energies
+are supplied to the predictor. Two independently masked student views are used.
+
+Input-derived targets are supported-cell occupancy, hit count, and measured
+calorimeter deposited energy, including empty cells. Optional EMA teacher
+prototype targets use mean embeddings of hits within each nonempty region.
+Loss weights: occupancy BCE 1, Poisson NLL 0.1, log1p-energy Huber 1, latent CE 0.1.
+Detector types and events are balanced. Tracker energy is not a training target.
+The old thinning objective remains available; incompatible track/cluster schemas
+are rejected by region mode. Standard MLPF exports exclude the auxiliary head.
+
+The fixed catalogue contains 23,617 angular regions from 2,048 training events.
+This is empirical support, not a complete detector active-channel map. Regions
+are layer-local eta/phi patches, not exact modules or consecutive-depth blocks.
+Default query budgets are 128 tracker and 512 calo regions. A 64-event held-out
+sampling audit measured mean removal of 9.60% tracker / 19.11% calo, with mean
+catalogue target coverage 99.991%. These are measured mask rates, not detector
+inefficiency estimates. Query selection invariance to hidden content is tested.
+
+GPU benchmark on the maximum-size event among the full 20,000-event input pool
+(14,703 hits), RTX 5060 Ti 16GB, two views, bfloat16:
+  Batch 1: 7.54 GiB reserved, 2.663 events/s.
+  Batch 2: 14.59 GiB reserved, 2.829 events/s.
+Batch 1 is the local default to leave headroom for random mask density; batch 2
+offers only 6.2% additional throughput. The recipe uses 100,000 updates to retain
+the previous run's 100,000 sampled-event exposure. This does not match optimizer
+step count or wall time. No long training run was launched in this implementation.
+
+Validation: 36 tests passed across region SSL, legacy SSL, hit probes,
+visualization, and diagnostics. Tests include exact interrupted/resumed training,
+strict standard MLPF export, gradients/frozen teacher, periodic phi, padding,
+and empty/occupied targets. GPU smoke completed 30 updates and resumed through
+31, including PF probes, CPU hit-pair probes, embedding snapshots, and plots.
+The combined training_and_probes plot now shows the region objective terms.
+
+Smoke results are pipeline checks only: 64 training / 4 validation events,
+10-update PF probes. At step 30, validation occupancy BCE was 0.4074, energy
+Huber loss 0.00614, and total loss 1.1323. Occupancy accuracy was 0.8578 but
+precision/recall/F1 were all zero at threshold 0.5: the head predicted all cells
+empty at that threshold. A constant low occupancy probability can already lower
+BCE substantially; declining loss alone is not evidence of useful context.
+PF F1 also fell from 0.0863 to zero with these deliberately tiny probe budgets.
+Neither result establishes the long-run behavior of the new objective. Longer
+training, matched probes, and geometry-only/context-ablation controls are needed.
+
+Artifacts:
+  configs/training/cld_hits_ssl_regions.yaml
+  configs/training/references/cld_hits_region_geometry.json
+  configs/training/references/cld_hits_ssl_regions_local_batch.json
+  experiments/cld_hits_ssl_regions_sampling/summary.json
+  experiments/cld_hits_ssl_regions_smoke/region_view.png
+  experiments/cld_hits_ssl_regions_smoke/evolution/training_and_probes.png
+  docs/training/self-supervised.md (configuration and commands)
+
+9. COMPLETED REGION TRAINING ANALYSIS — 2026-11-15
+
+Run: experiments/cld_hits_ssl_regions. Completed 100,000 updates, batch 1,
+20,000-event training pool (100,000 sampled-event exposures). Probes use 1,024
+training / 256 validation events and 1,000 readout updates with seed 31415.
+SSL validation uses 128 events with fixed masks; two views per event.
+
+PF results (untrained means an initialized encoder with a trained PF readout):
+                          Initial    40k       60k       80k       100k
+  Matched particle F1     0.34361    0.37721   0.40014   0.40306   0.41620
+  Matched PID accuracy    0.67248    0.68512   0.75880   0.76549   0.75403
+  Unweighted task loss    2.37238    2.23135   2.00954   2.04818   2.04909
+  Event energy rel. MAE   0.22449    0.15501   0.12397   0.09837   0.11026
+  Particle count MAE      16.4336    13.1953   17.0234   17.5352   17.3594
+
+Final versus initialized PF F1 improves by 0.0726 (21.1% relative). Most of the
+matching improvement is purity (0.3487 -> 0.4603); efficiency improves less
+(0.3386 -> 0.3798). Final mean count is 78.52 versus 95.16 targets, a -16.64
+bias versus initial -2.75. Matched-particle relative energy error worsens from
+0.2067 to 0.2301 even though total-event energy error improves substantially.
+MET absolute error improves 21.61 -> 16.68. These metrics measure distinct tasks;
+the gain is not uniform across all reconstruction criteria.
+
+Earlier thinning run at equal final exposure (batch 2 x 50k updates): PF F1
+0.37457, matched PID 0.68901, event energy rel. MAE 0.13151, task loss 2.38084.
+Its best sampled PF F1 was 0.38237 at 80k event exposure. Region masking is
+promising by these measures, but this is one SSL/probe seed and changes both
+the objective and batch/update count. Initial encoder tensors in saved step-0
+probe checkpoints are exactly equal. Stored initial embedding arrays differ
+slightly (mean abs difference 0.000913), and trained initial PF results differ
+(region F1 0.34361 versus thinning 0.33032). A definitive comparison requires
+matched repeated probe fitting; nominally equal seeds do not remove observed
+numerical/optimization variability. No causal attribution to augmentation alone.
+
+Region objective: first logged validation (2k) -> final (100k):
+  Occupancy BCE 0.37397 -> 0.19330; count NLL 1.28581 -> 0.47568.
+  Log1p-energy Huber 0.005032 -> 0.003027.
+  Total loss 0.96668 -> 0.29290; latent CE 4.59096 -> 0.49005.
+  Occupancy F1 ~0 -> 0.69968; precision 0.76847, recall 0.64495 at final.
+  Accuracy 0.92202 versus all-empty baseline 0.85814.
+The all-empty behavior observed in the smoke run did not persist. Last-2k mean
+train loss 0.29364 is close to validation 0.29290: no obvious aggregate SSL
+overfitting, although this is not a generalization guarantee. Mask rates are
+9.25% tracker / 18.40% calo, catalogue coverage 99.9929% on 128 validation events.
+Energy is only about 1% of the final scalar objective; loss scale alone does not
+measure its gradient contribution. Final teacher effective prototypes average
+8.21 per event/view out of 256, versus 176.54 at 2k. This narrowing deserves an
+ablation; it is not evidence that the full embeddings have collapsed.
+
+NEW INFERENCE-ONLY CONTEXT CHECK:
+Checkpoint 100k; first 64 held-out events, two fixed masks each. Kept recipient
+queries, geometry, targets, token count and detector composition fixed; replaced
+visible student embeddings with those from the next held-out event (cyclic donor,
+deterministically resampled within detector type to match token counts).
+                          Correct context     Foreign-event context
+  Occupancy F1, balanced   0.70283             0.11290
+  Tracker occupancy F1    0.56602             0.06097
+  Calo occupancy F1       0.77018             0.14113
+  Occupancy BCE           0.19168             0.91513
+  Count NLL               0.47403             3.40408
+  Calo energy Huber       0.003001            0.006160
+Zero memory gives F1 0; it is an out-of-distribution control, not a separately
+trained geometry-only baseline. The fixed trained region predictor depends on
+event-specific memory. This does not isolate backbone contextual reasoning from
+auxiliary-head attention, nor rule out simple geometric interpolation/density
+estimation, nor establish particle association. No weights were updated.
+
+HIT-PAIR PROBES (oracle foreground, fixed local candidate edges, 256 events):
+                     Raw       Init embedding    Final embedding
+  Tracker AP         0.38573   0.46401           0.48896
+  Tracker ROC AUC    0.70298   0.72622           0.77067
+  Calo AP            0.97760   0.94659           0.96330
+  Calo ROC AUC       0.85462   0.69069           0.77230
+Tracker AP gain over initialized embeddings is +0.02496, event-bootstrap 95%
+interval [0.02084, 0.02912]; calo AUC gain is +0.08161 [0.07776, 0.08563].
+These intervals condition on fitted models, not SSL/probe seed uncertainty.
+Calo pair prevalence is 90.34%; high AP alone is weak evidence. Its final AUC
+still trails raw features by 0.08232. The new representation does not yet beat
+raw geometry/measurements for this calorimeter association probe.
+
+EMBEDDING EVOLUTION:
+Fixed four-event cohort: 8,192 hits, 846 tracker / 7,346 calo. Global CKA to
+initialization 0.61594. Centered covariance entropy-effective rank changes
+tracker 8.38 -> 6.64, calo 5.74 -> 4.07 (256 embedding dimensions). Feature
+scale grows substantially. These are anisotropic embeddings, not constant
+embeddings; rank is not a direct measure of PF information. Late cosine-kNN
+overlap (90k -> 100k, 15 neighbors, fixed 2,000-hit subset) is 93.2% tracker /
+86.5% calo, versus 63.4% / 40.2% initial -> final. Late structure is relatively
+stable. The small cohort and cross-event neighbor selection limit interpretation.
+
+PERFORMANCE:
+100k training updates total 8.06 hours, mean 3.45 events/s. Logged period from
+first training step through final probe/checkpoint is 9.86 hours, excluding the
+initial probe. Maximum recorded step allocated GPU memory is 7.15 GiB; this does
+not include the initial probe peak. These timings are not GPU utilization samples.
+
+NEXT DECISIVE COMPARISONS:
+  1. Longer matched PF probes, several seeds, initial / 60k / 80k / 100k and
+     corresponding thinning checkpoints. Choose metric before selecting epoch.
+  2. Remove latent loss at matched budgets to test whether teacher distillation
+     adds value beyond masked input prediction; do not infer this from CE alone.
+  3. Fit geometry-only and simple neighboring-layer interpolation baselines for
+     region targets. Test stronger contiguous-depth masks only after this control.
+  4. Investigate calo association with raw+embedding probes and per-class PF
+     diagnostics; improved occupancy completion is not automatically grouping.
+
+Updated plots and reproducible analysis artifacts:
+  experiments/cld_hits_ssl_regions/evolution/training_and_probes.png
+  experiments/cld_hits_ssl_regions/evolution/hit_pair_probes.png
+  experiments/cld_hits_ssl_regions/analysis/comparison.png
+  experiments/cld_hits_ssl_regions/analysis/region_objective.png
+  experiments/cld_hits_ssl_regions/analysis/embedding_spectrum.png
+  experiments/cld_hits_ssl_regions/analysis/summary.json
+  experiments/cld_hits_ssl_regions/analysis/summarize.py
+  experiments/cld_hits_ssl_regions/analysis/context_check.json
+  experiments/cld_hits_ssl_regions/analysis/context_check.py
+
+10. NEXT EXPERIMENT LAUNCHED — 2026-11-15
+
+Selected longer matched PF probes before another SSL objective ablation. The
+region predictor demonstrably uses event context, but the observed downstream
+advantage is still conditional on a short, single-seed readout fit. The next
+experiment isolates readout budget and seed variation on existing encoders.
+
+Output: experiments/cld_hits_ssl_comparison_5k_5seeds
+Launcher: bash scripts/local/probe_hits_comparison.sh
+Detached controller PID at launch: 4014174 (08:24 Europe/Tallinn).
+Status at this log entry: running; serial GPU embedding-cache preparation.
+
+Design fixed before new results:
+  Five paired probe seeds: 31415, 31416, 31417, 31418, 31419.
+  5,000 updates per trial, same 1,024/256 event cohorts and batch size 16.
+  Evaluate at 0/50/100/200/500/1000/2000/5000 updates.
+  Region checkpoints: 0, 60k, 80k, 100k.
+  Thinning checkpoints: 0, 30k, 40k, 50k.
+  These match sampled-event exposures 0/60k/80k/100k; 40 trials total.
+  Primary endpoint: particle F1 at 5,000 probe updates and 100k SSL exposure.
+  Earlier epochs and PID/energy/count/loss metrics are secondary comparisons.
+  Two concurrent GPU workers, allocator fraction 0.46 each. Serial extraction
+  before each method's fits prevents overlapping encoder-extraction peaks.
+  Region campaign runs first, then thinning; global concurrency stays at two.
+
+Preflight audit confirms exactly equal architecture, original untrained readout
+weights and initialized encoder weights across the two methods. Every trial
+discards the previously trained probe heads. Head hashes are checked within and
+across methods; encoder immutability is checked after fitting. Full manifests,
+initialization hashes, per-trial metrics and restart checkpoints are retained.
+Five probe-runner tests pass, including exact resume. The cross-method summary
+and plotting script was checked with temporary synthetic artifacts; those are
+not experiment results. The original-probe reproduction check now compares at
+the configured original budget (1,000 here), correcting a hard-coded 200 update
+comparison. A 2,000-update evaluation point was added for the longer curves.
+
+GPU activity during initial extraction: 99%, about 10.2 GB used. This is an
+extraction sample, not a sustained readout-throughput measurement. Expected
+campaign duration is approximately one day based on prior 1,000-update timings;
+actual concurrent throughput remains to be measured. No measurement-only SSL
+ablation has been launched alongside it.
+
+Progress: status.txt and run.log at the output root, regions/cache.log and
+regions/step-N-seed-S/worker.log, then equivalent thinning/ files. Per-method
+curves refresh as trials complete. Cross-method comparison.json/png/pdf are
+produced after all 40 trials finish. Restart with the same launcher; an exclusive
+lock prevents duplicate controllers and completed trials are skipped.
+This repeats probe seeds, not SSL seeds, and reuses the existing validation
+cohort. It does not establish robustness across pretraining seeds or an untouched
+test sample. Event exposure remains matched, not compute or optimizer-step count.
+
+11. MATCHED FIVE-SEED PROBES COMPLETED — 2026-11-16
+
+All 40 trials completed every evaluation budget through 5,000 probe updates.
+The campaign ran about 18 hours. Training succeeded; the final cross-method
+report failed on None-valued PID accuracy at early checkpoints with no matches.
+Fixed compare.py to represent unavailable metrics as null, report valid-seed
+counts, and aggregate only finite paired values. No unavailable value is replaced
+with zero. All primary/final metrics have five valid seeds. Regenerated comparison
+JSON/PNG/PDF and final_checkpoint_learning_curves PNG/PDF without rerunning fits.
+Verified partial/all-missing aggregation, strict JSON serialization, all 40 trial
+outputs and matching initial-readout hashes across methods/checkpoints per seed.
+
+PRIMARY ENDPOINT: validation particle F1 after 5,000 readout updates, at 100,000
+sampled SSL event exposures. Numbers below are mean +/- sample SD over five
+probe seeds, not confidence intervals and not variation across SSL seeds.
+
+                                  Regions             Thinning
+  Particle F1                     0.46211 +/- .00669   0.39820 +/- .00761
+  Matched PID accuracy            0.80966 +/- .00363   0.75264 +/- .00971
+  Unweighted PF task loss         1.78237 +/- .04718   2.19457 +/- .04269
+  Event energy relative abs err   0.14111 +/- .01985   0.16573 +/- .01683
+  Particle count MAE              11.2867 +/- 1.6932   15.7422 +/- 1.8405
+  Matching efficiency             0.44793 +/- .01479   0.38329 +/- .02249
+  Matching purity                 0.47781 +/- .01388   0.41546 +/- .01008
+  Matched energy relative error   0.20930 +/- .00411   0.21690 +/- .00255
+  MET absolute error              19.6332 +/- 1.3513   21.9391 +/- 1.4913
+
+Paired F1 differences in seed order 31415..31419:
+  +0.06880, +0.07405, +0.07194, +0.05868, +0.04606.
+Mean difference +0.06391, paired SD .01159; about 16.0% relative to thinning.
+All five seeds favor regions for F1, PID, task loss, event energy error and recall.
+Count MAE improves in four seeds and is worse by 0.1445 in the fifth.
+
+Initialized-encoder F1: regions campaign .37252 +/- .01216, thinning campaign
+.38037 +/- .01206. Identical initialized encoder/head weights do not eliminate
+observed numerical/cache/fitting variability. Relative to each campaign's own
+initialized control, F1 improves +.08959 +/- .01528 for regions and +.01783 +/-
+.00900 for thinning (paired seed-difference SD). The region advantage is not
+explained by its initialized baseline being better; its mean baseline is lower.
+
+SSL exposure -> mean F1 after 5,000 probe updates:
+  Exposure          0          60k         80k         100k
+  Regions           .37252     .44490      .45512      .46211
+  Thinning          .38037     .37687      .38715      .39820
+The final region checkpoint has the best sampled mean F1, PID and task loss.
+Its gain from 80k to 100k exposure is modest (.00699 F1); checkpoint differences
+should not be presented as equally strong as the cross-method difference.
+
+Probe budget -> mean F1 at final SSL exposure:
+  Updates           500        1000        2000        5000
+  Regions           .39333     .42506      .43386      .46211
+  Thinning          .35251     .36288      .37432      .39820
+The advantage persists with longer fitting, and regions at 1,000 probe updates
+already exceed thinning at 5,000. Both curves are still improving: this is not
+evidence of their converged limits. Final train/validation F1 is .47347/.46211
+for regions and .40615/.39820 for thinning. Task-loss gaps are larger:
+1.59624/1.78237 and 1.95744/2.19457 respectively. There is some readout overfitting,
+but no observed late reversal in the region validation F1 curve.
+
+The previous short-probe undercounting concern is substantially reduced with
+longer training: region mean count bias is now -5.85 particles/event, versus
+-16.64 in the single-seed periodic 1,000-update final probe. This comparison also
+changes seed aggregation, so it is not a pure within-seed causal estimate.
+Mean region event energy error .141 differs from the earlier .110 single-seed
+result; use the matched multi-seed result for the cross-method conclusion.
+
+CONCLUSION AND NEXT STEP:
+The masked-region recipe gives a consistent PF advantage over thinning under
+this matched five-seed readout evaluation. It is not merely an artifact of a
+short readout budget or one favorable probe seed. Evidence remains conditional
+on one SSL training seed per method, reused validation events, and equal event
+exposure rather than equal optimizer steps or compute. This does not attribute
+the gain specifically to masking, measured-content prediction, or latent loss.
+Next useful ablation: the same region recipe with latent_weight=0, preserving
+data, masks, initialization and event exposure, then the same matched probes.
+The new ablation was not launched during this results check.
+
+Artifacts:
+  experiments/cld_hits_ssl_comparison_5k_5seeds/comparison.json
+  experiments/cld_hits_ssl_comparison_5k_5seeds/comparison.png
+  experiments/cld_hits_ssl_comparison_5k_5seeds/final_checkpoint_learning_curves.png
+  experiments/cld_hits_ssl_comparison_5k_5seeds/final_endpoint.json
+  experiments/cld_hits_ssl_comparison_5k_5seeds/original_controller_status.txt
+  experiments/cld_hits_ssl_comparison_5k_5seeds/status.txt
+
+12. REGION SSL BENEFIT AS A FUNCTION OF SSL UPDATES — 2026-11-16
+
+Computed from existing matched five-seed probes; no new training. Hold readout
+training budget fixed and compare each checkpoint against the initialized encoder
+with an equally trained readout, paired by probe seed. Use unweighted_task_loss:
+the fixed sum of binary classification, PID classification, pT/eta/sin(phi)/
+cos(phi)/energy losses. It excludes Cardinality, HitGrouping and Auxiliary.
+Calibrated Total weights can differ across readouts, making Total a less direct
+representation-quality comparison. Component sums were checked numerically.
+
+At 5,000 readout updates (mean +/- sample SD across five probe seeds):
+  SSL updates    PF task loss        Reduction versus SSL 0    Particle F1
+  0              2.18852 +/- .02811  0                         .37252
+  60,000         1.87455 +/- .01556  .31397 (14.35%)            .44490
+  80,000         1.80068 +/- .02192  .38784 (17.72%)            .45512
+  100,000        1.78237 +/- .04718  .40615 (18.56%)            .46211
+Percent reductions divide mean paired reduction by mean baseline loss.
+
+Incremental PF loss reduction, paired by seed:
+  0 -> 60k:   .31397 +/- .02395; .05233 per 10k SSL updates, 5/5 improve.
+  60k -> 80k: .07387 +/- .03044; .03694 per 10k SSL updates, 5/5 improve.
+  80k -> 100k:.01831 +/- .04634; .00915 per 10k SSL updates, 4/5 improve.
+The last interval has a small mean improvement relative to seed variation;
+these SDs are not confidence intervals. No claim of a confirmed saturation point.
+60k captures 77.3% and 80k captures 95.5% of the observed 0->100k loss reduction.
+80k is therefore a reasonable compute-saving candidate, while 100k has the best
+sampled mean PF loss/F1 under the longest evaluated readout budget.
+
+The shape depends on readout budget. At 1,000 readout updates, PF loss means
+for SSL 0/60k/80k/100k are 2.37763/2.09288/2.01806/2.03536. At 2,000 updates
+they are 2.35486/1.96536/1.90425/1.88553. A short probe could misleadingly suggest
+that 80k is better than 100k; hold the probe budget fixed and inspect several
+budgets. The 5,000-update probe itself is not demonstrably fully converged.
+
+At 100k versus SSL 0, absolute base loss reductions are .11265 PID classification,
+.11048 pT regression, .11012 energy regression, .07064 binary classification,
+and .00226 combined angular regressions. PID/pT/energy account for 82.1% of the
+fixed-sum reduction. This describes contributions to this scalar loss, not a
+unit-independent physical importance ranking. HitGrouping improves .04382 but
+is excluded from the quoted base-task sum. Calibrated Total decreases overall
+3.88383 -> 3.67228, but increases slightly from 80k to 100k; do not conflate
+that calibrated objective with the fixed unweighted comparison above.
+
+Only SSL 0/60k/80k/100k have matched multiseed long probes. Earlier periodic
+20k/40k probes have a different budget/seed design and were not merged into
+these curves. Early-time scaling needs matched probes at those checkpoints.
+Lines connect observed checkpoints, not a fitted scaling law. All results remain
+conditional on this SSL trajectory and reused validation sample.
+
+Artifacts and reproducible calculation:
+  experiments/cld_hits_ssl_comparison_5k_5seeds/ssl_step_benefit.py
+  experiments/cld_hits_ssl_comparison_5k_5seeds/ssl_step_benefit.json
+  experiments/cld_hits_ssl_comparison_5k_5seeds/ssl_step_benefit.png
+  experiments/cld_hits_ssl_comparison_5k_5seeds/ssl_step_benefit.pdf
+
+13. EARLY SSL CHECKPOINT PROBES LAUNCHED — 2026-11-16
+
+User requested equivalent probes at SSL steps 20k and 40k. Launched ten trials
+with seeds 31415..31419 and 5,000 updates each, retaining the exact previous
+probe settings (1,024/256 events, batch size 16, optimizer, dtype, and intermediate
+evaluation budgets). New runner config matches regions/config.json exactly after
+removing ssl_steps. Existing 0/60k/80k/100k probes are reused, not refitted.
+
+Output: experiments/cld_hits_ssl_comparison_5k_5seeds/regions_early
+Design: experiments/cld_hits_ssl_comparison_5k_5seeds/early_manifest.json
+Launcher: bash scripts/local/probe_hits_early_checkpoints.sh
+Detached controller PID 121243, started 09:48 Europe/Tallinn.
+Status at this entry: active, preparing the two frozen-embedding caches on GPU.
+Two concurrent probe workers follow serial cache extraction. Approximate expected
+duration 4–5 hours based on the completed campaign. No new SSL pretraining.
+
+ssl_step_benefit.py now merges fully completed early checkpoints with the original
+region trials, checking configurations and paired initial-head hashes. It excludes
+partially completed seed groups and records pending steps. The launcher refreshes
+the benefit PNG/PDF/JSON after all ten trials finish, yielding SSL steps
+0/20k/40k/60k/80k/100k. Original region-versus-thinning results remain separate.
+Verified full six-checkpoint merge, partial-group exclusion and mismatched-config
+rejection using temporary synthetic extension results; those are not measurements.
+
+Progress: early_status.txt and early_run.log at the comparison root, plus
+regions_early/cache.log and per-trial worker.log/metrics.jsonl. Restart with the
+same launcher to resume; it shares the campaign lock to avoid duplicate jobs.

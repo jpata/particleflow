@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from pydantic import BaseModel, ConfigDict, Field
 
-from mlpf.model.ssl import collate_inputs
+from mlpf.model.ssl import collate_inputs, encode_ssl_embeddings
 
 
 class SnapshotConfig(BaseModel):
@@ -57,7 +57,7 @@ def save_snapshot(model, dataset, settings, output, step, device, dtype):
                 for name in ("student", "teacher") if config.teacher else ("student",):
                     encoder = getattr(model, name)
                     with torch.autocast(device.type, dtype=dtype, enabled=dtype != torch.float32):
-                        embeddings = encoder.encode_backbone(batch["X"], mask, batch["source_id"])
+                        embeddings = encode_ssl_embeddings(encoder, batch["X"], mask, batch["source_id"])
                     columns[name].append(embeddings[0, selected].float().cpu().numpy())
                 columns["X"].append(np.asarray(record["X"])[original[selected]])
                 columns["dataset_index"].append(np.full(len(selected), source, dtype=np.int64))

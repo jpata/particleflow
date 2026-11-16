@@ -2,6 +2,7 @@
 
 import copy
 import json
+import time
 
 import numpy as np
 import torch
@@ -13,6 +14,8 @@ from mlpf.model.losses import LOSS_TASKS, REGRESSION_FEATURES, mlpf_loss
 from mlpf.model.PFDataset import Collater, PFDataset
 from mlpf.model.utils import unpack_predictions, unpack_target
 from mlpf.model.ssl_snapshots import cohort_indices
+from mlpf.model.ssl import encode_ssl_embeddings
+from mlpf.model.ssl_hit_probe import HitPairProbeConfig, fit_hit_pair_probes
 
 
 class ProbeConfig(BaseModel):
@@ -28,6 +31,7 @@ class ProbeConfig(BaseModel):
     weight_decay: float = Field(default=0.01, ge=0)
     seed: int = Field(default=31415, ge=0)
     save_events_per_dataset: int = Field(default=4, ge=0)
+    hit_pairs: HitPairProbeConfig = Field(default_factory=HitPairProbeConfig)
 
 
 def probe_collater(model):
@@ -64,7 +68,7 @@ def cache_embeddings(model, dataset, batch_size, device, dtype):
         records = [dataset[i] for i in range(start, min(start + batch_size, len(dataset)))]
         batch = collate(records).to(device)
         with torch.autocast(device.type, dtype=dtype, enabled=dtype != torch.float32):
-            embeddings = model.encode_backbone(batch.X, batch.mask, batch.source_id)
+            embeddings = encode_ssl_embeddings(model, batch.X, batch.mask, batch.source_id)
         for i, record in enumerate(records):
             valid = batch.mask[i]
             item = {key: record[key] for key in collate.per_particle_keys_to_get + collate.per_event_keys_to_get if key in record}
@@ -106,6 +110,7 @@ def probe_loss(model, batch, embeddings):
 def evaluate_probe(model, cache, device, dtype):
     model.eval()
     totals = {}
+    particle_totals = {}
     tp = fp = fn = correct = particles = 0
     # Equal-event validation, independent of the probe training batch size.
     for record in cache:
@@ -123,6 +128,21 @@ def evaluate_probe(model, cache, device, dtype):
             fn += int((positive & ~predicted).sum())
             correct += int(((predictions["cls_id_onehot"].argmax(-1) == target) & positive).sum())
             particles += int(positive.sum())
+        else:
+            from mlpf.model.validation_metrics import compute_validation_particle_metrics, validation_particle_collections
+
+            physical = dict(predictions)
+            physical["pt"] = predictions["pt"].float().clamp(-20, 20).exp()
+            physical["energy"] = predictions["energy"].float().clamp(-20, 20).exp()
+            active = predictions["cls_binary"].float().softmax(-1)[..., 1] >= model.config.set_decoder.presence_threshold
+            physical["cls_id"] = torch.where(active, predictions["cls_id_onehot"][..., 1:].argmax(-1) + 1, 0)
+            values = compute_validation_particle_metrics(
+                *validation_particle_collections(batch, physical, model.output_mode), num_classes=model.num_classes
+            )
+            for key, (total, count) in values.items():
+                previous = particle_totals.setdefault(key, [0.0, 0.0])
+                previous[0] += total
+                previous[1] += count
     # Calibrated task weights can differ between probes. Report the same fixed
     # sum of base task losses as well; Total remains the actual training objective.
     result = {"losses": totals, "events": len(cache), "unweighted_task_loss": sum(totals.get(task, 0) for task in LOSS_TASKS)}
@@ -133,10 +153,44 @@ def evaluate_probe(model, cache, device, dtype):
             presence_f1=2 * tp / max(2 * tp + fp + fn, 1),
             pid_accuracy_on_targets=correct / max(particles, 1),
         )
+    else:
+        result["particle_metrics"] = {key: total / count if count else None for key, (total, count) in particle_totals.items()}
+        result["particle_f1"] = result["particle_metrics"]["matching/f1"]
+        result["matched_pid_accuracy"] = result["particle_metrics"]["matched/pid_accuracy"]
     return result
 
 
-def fit_probe(student, train_data, valid_data, config, device, dtype):
+def configure_probe_readouts(model):
+    """Freeze the encoder and enable only the PF readout and loss calibration."""
+    model.eval().requires_grad_(False)
+    readouts = []
+    for name in (
+        "nn_binary_particle",
+        "nn_pid",
+        "nn_pt",
+        "nn_eta",
+        "nn_sin_phi",
+        "nn_cos_phi",
+        "nn_energy",
+        "classification_norm",
+        "regression_norm",
+        "classification_readout",
+        "regression_readout",
+        "set_decoder",
+        "task_loss_weighter",
+    ):
+        module = getattr(model, name, None)
+        if module is not None:
+            module.requires_grad_(True)
+            readouts.append(module)
+    for name in ("classification_query", "regression_query"):
+        parameter = getattr(model, name, None)
+        if parameter is not None:
+            parameter.requires_grad_(True)
+    return readouts
+
+
+def fit_probe(student, train_data, valid_data, config, device, dtype, pair_artifact_path=None, timings=None):
     """Fresh identical readout initialization each time; never mutate the SSL model.
 
     The student PF heads are frozen throughout SSL, so a copy gives the same
@@ -147,39 +201,21 @@ def fit_probe(student, train_data, valid_data, config, device, dtype):
     with torch.random.fork_rng(devices=devices):
         torch.manual_seed(config.seed)
         model = copy.deepcopy(student).eval().requires_grad_(False)
+        print(f"Caching frozen embeddings for {len(train_data)} training and {len(valid_data)} validation events", flush=True)
+        started = time.perf_counter()
         train_cache = cache_embeddings(model, train_data, config.batch_size, device, dtype)
         valid_cache = cache_embeddings(model, valid_data, config.batch_size, device, dtype)
-        readouts = []
-        for name in (
-            "nn_binary_particle",
-            "nn_pid",
-            "nn_pt",
-            "nn_eta",
-            "nn_sin_phi",
-            "nn_cos_phi",
-            "nn_energy",
-            "classification_norm",
-            "regression_norm",
-            "classification_readout",
-            "regression_readout",
-            "set_decoder",
-            "task_loss_weighter",
-        ):
-            module = getattr(model, name, None)
-            if module is not None:
-                module.requires_grad_(True)
-                readouts.append(module)
-        for name in ("classification_query", "regression_query"):
-            parameter = getattr(model, name, None)
-            if parameter is not None:
-                parameter.requires_grad_(True)
+        if timings is not None:
+            timings["embedding_seconds"] = time.perf_counter() - started
+        readouts = configure_probe_readouts(model)
         parameters = [p for p in model.parameters() if p.requires_grad]
         optimizer = torch.optim.AdamW(parameters, lr=config.lr, weight_decay=config.weight_decay)
         initial = evaluate_probe(model, valid_cache, device, dtype)
         for module in readouts:
             module.train()
         generator = torch.Generator().manual_seed(config.seed)
-        for _ in range(config.steps):
+        started = time.perf_counter()
+        for update in range(config.steps):
             indices = torch.randint(len(train_cache), (config.batch_size,), generator=generator)
             batch, embeddings = cached_batch(model, [train_cache[int(i)] for i in indices], device)
             optimizer.zero_grad(set_to_none=True)
@@ -190,6 +226,12 @@ def fit_probe(student, train_data, valid_data, config, device, dtype):
             loss.backward()
             torch.nn.utils.clip_grad_norm_(parameters, 1.0, error_if_nonfinite=True)
             optimizer.step()
+            if config.steps >= 50 and (update + 1) % 50 == 0:
+                print(f"PF probe update {update + 1}/{config.steps}", flush=True)
+        if timings is not None:
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            timings["readout_training_seconds"] = time.perf_counter() - started
         final = evaluate_probe(model, valid_cache, device, dtype)
         metrics = {
             "initial": initial,
@@ -198,18 +240,28 @@ def fit_probe(student, train_data, valid_data, config, device, dtype):
             "steps": config.steps,
             "trainable_parameters": sum(p.numel() for p in parameters),
         }
+        if config.hit_pairs.enabled:
+            print("Fitting CPU hit-pair probes on cached embeddings", flush=True)
+            started = time.perf_counter()
+            metrics["hit_pairs"] = fit_hit_pair_probes(train_cache, valid_cache, config.hit_pairs, config.seed, pair_artifact_path)
+            if timings is not None:
+                timings["hit_pair_seconds"] = time.perf_counter() - started
         return metrics, model
 
 
 def run_probe(student, settings, model_config, output, step, device, dtype):
+    started = time.perf_counter()
     config = settings.probe
     train = load_probe_data(settings, model_config, settings.train_split, config.train_events_per_dataset)
     valid = load_probe_data(settings, model_config, settings.valid_split, config.valid_events_per_dataset)
     print(f"Training frozen-embedding PF probe at SSL step {step} ({config.steps} updates)", flush=True)
-    metrics, model = fit_probe(student, train, valid, config, device, dtype)
     directory = output / "probes"
     directory.mkdir(exist_ok=True)
+    timings = {}
+    metrics, model = fit_probe(student, train, valid, config, device, dtype, directory / f"step-{step}-hit-pairs.npz", timings=timings)
     metrics.update(ssl_step=step, config=config.model_dump(mode="json"))
+    metrics["fit_seconds"] = time.perf_counter() - started
+    metrics["timings"] = timings
     (directory / f"step-{step}.json").write_text(json.dumps(metrics, indent=2) + "\n")
     temporary = directory / f"step-{step}.tmp"
     torch.save(
@@ -245,7 +297,8 @@ def save_probe_predictions(model, dataset, count, path, device, dtype):
     for source, event, index in cohort_indices(dataset, count):
         batch = probe_collater(model)([dataset[index]]).to(device)
         with torch.autocast(device.type, dtype=dtype, enabled=dtype != torch.float32):
-            raw = model(batch.X, batch.mask, batch.source_id)
+            embeddings = encode_ssl_embeddings(model, batch.X, batch.mask, batch.source_id)
+            raw = model.decode_backbone(embeddings, batch.X, batch.mask)
         valid = batch.mask[0]
         pred_mask = torch.ones(raw[0].shape[1], dtype=torch.bool, device=device) if model.output_mode == OutputMode.SET else valid
         targets = batch.ytarget_set[0, batch.target_mask[0]] if model.output_mode == OutputMode.SET else batch.ytarget[0, valid]

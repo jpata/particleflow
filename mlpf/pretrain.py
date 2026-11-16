@@ -17,7 +17,7 @@ from mlpf.conf import MLPFConfig
 from mlpf.model.losses import make_task_loss_weighter
 from mlpf.model.mlpf import MLPF
 from mlpf.model.PFDataset import PFDataset
-from mlpf.model.ssl import DistillationConfig, StudentTeacher, collate_inputs
+from mlpf.model.ssl import DistillationConfig, StudentTeacher, collate_inputs, encode_ssl_embeddings
 from mlpf.model.ssl_probe import ProbeConfig, run_probe
 from mlpf.model.ssl_snapshots import SnapshotConfig, save_snapshot
 from mlpf.model.ssl_io import fetch_records, training_loader
@@ -129,7 +129,7 @@ def save_checkpoint(path, model, optimizer, step, config, model_config):
         "step": step,
         "pretrain_config": config.model_dump(mode="json"),
         "model_config": model_config.model_dump(mode="json"),
-        "ssl_implementation": "vectorized-v2",
+        "ssl_implementation": "detector-regions-v1" if config.ssl.mode == "regions" else "vectorized-v2",
         "torch_rng": torch.get_rng_state(),
         "cuda_rng": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
     }
@@ -141,7 +141,7 @@ def save_checkpoint(path, model, optimizer, step, config, model_config):
         "model_state_dict": model.student.state_dict(),
         "extra_state": {"step": step},
         "model_config": model_config.model_dump(mode="json"),
-        "pretraining": "observable-element-distillation",
+        "pretraining": "masked-detector-regions" if config.ssl.mode == "regions" else "observable-element-distillation",
     }
     temporary = path.parent / "student.tmp"
     torch.save(export, temporary)
@@ -167,7 +167,7 @@ def run(config, output, device, resume=False):
     first = batch_at(train_data, [0], device)
     student.eval()
     with torch.no_grad(), torch.autocast(device.type, dtype=dtype, enabled=dtype != torch.float32):
-        dimension = student.encode_backbone(first["X"], first["X"][..., 0] != 0, first["source_id"]).shape[-1]
+        dimension = encode_ssl_embeddings(student, first["X"], first["X"][..., 0] != 0, first["source_id"]).shape[-1]
     model = StudentTeacher(student, dimension, config.ssl).to(device).train()
     optimizer = torch.optim.AdamW(
         [p for p in model.parameters() if p.requires_grad], lr=config.lr, weight_decay=config.weight_decay, fused=device.type == "cuda"
@@ -206,6 +206,12 @@ def run(config, output, device, resume=False):
         output.mkdir(parents=True, exist_ok=False)
     (output / "pretrain-config.yaml").write_text(yaml.safe_dump(config.model_dump(mode="json")))
     (output / "train-config.yaml").write_text(yaml.safe_dump(model_config.model_dump(mode="json")))
+    if config.ssl.mode == "regions" and start == 1:
+        # Preview is isolated from training RNG and never used as a model input.
+        generator = torch.Generator(device=device).manual_seed(config.seed + 27182)
+        preview = model.region_sampler(first["X"], first["X"][..., 0] != 0, generator)
+        np.savez_compressed(output / "region_view.npz", X=first["X"].cpu().numpy(),
+                            **{k: v.cpu().numpy() for k, v in preview.items()})
     with (output / "metrics.jsonl").open("a") as log:
         if config.snapshots.enabled and (start == 1 or not (output / "embeddings/cohort.json").exists()):
             snapshot = save_snapshot(model, valid_data, config, output, start - 1, device, dtype)
@@ -218,7 +224,10 @@ def run(config, output, device, resume=False):
         loader = training_loader(train_data, config, start, device)
         batches = iter(loader)
         for step in range(start, config.steps + 1):
+            timestamp = time.time()
             tick = time.perf_counter()
+            if device.type == "cuda":
+                torch.cuda.reset_peak_memory_stats(device)
             timings = StepTimings(device, step == start or step % config.timing_frequency == 0)
             with timings.phase("data_wait"):
                 cpu_batch = next(batches)
@@ -238,7 +247,16 @@ def run(config, output, device, resume=False):
                 model.update_teacher()
             record = {"step": step, "train": {k: float(v) for k, v in metrics.items()}, "gradient_norm": float(norm)}
             training_seconds = time.perf_counter() - tick
-            record["performance"] = {"training_seconds": training_seconds, "events_per_second": config.batch_size / training_seconds}
+            record["performance"] = {
+                "start_unix_time": timestamp,
+                "training_seconds": training_seconds,
+                "events_per_second": config.batch_size / training_seconds,
+            }
+            if device.type == "cuda":
+                record["performance"].update(
+                    training_peak_allocated_bytes=torch.cuda.max_memory_allocated(device),
+                    training_peak_reserved_bytes=torch.cuda.max_memory_reserved(device),
+                )
             if step % config.validation_frequency == 0 or step == config.steps:
                 with timings.phase("validation"):
                     record["valid"] = validate(model, valid_data, config, device, dtype)
@@ -254,6 +272,8 @@ def run(config, output, device, resume=False):
             if timings.enabled:
                 record["timings"] = timings.results()
             record["performance"]["step_seconds"] = time.perf_counter() - tick
+            if device.type == "cuda":
+                record["performance"]["step_peak_allocated_bytes"] = torch.cuda.max_memory_allocated(device)
             log.write(json.dumps(record) + "\n")
             log.flush()
             if step == 1 or step % 10 == 0 or "valid" in record:
