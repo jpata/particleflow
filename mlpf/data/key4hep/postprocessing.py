@@ -294,6 +294,9 @@ def hits_to_features(
     # guessing an encoding. Collections without a side field (for example
     # LumiCal) use the neutral value zero.
     cellids = np.asarray(feat_arr["cellID"], dtype=np.uint64)
+    # Older Marlin conversions can persist an empty string for absent metadata.
+    if not require_cellid_encoding and cellid_encoding is not None and not cellid_encoding.strip():
+        cellid_encoding = None
     cellid_fields = parse_cellid_encoding(cellid_encoding) if cellid_encoding is not None else {}
     if np.any(feat_arr[sdcoll] == 3) and not {"system", "side", "layer"}.issubset(cellid_fields):
         if require_cellid_encoding:

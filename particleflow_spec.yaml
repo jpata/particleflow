@@ -363,9 +363,12 @@ productions:
     type: "key4hep"
     model: "pyg-cld-v1"
     comment: "CLD production with Key4Hep"
-    workspace_dir: "${project.paths.storage_root}/cld/v1.3.0_key4hep_2026-04-08"
+    workspace_dir: "${project.paths.storage_root}/cld/v1.3.1_key4hep_2026-04-08_core1.6"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
-    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
+    gen_environment:
+      KEY4HEP_RELEASE: "2026-04-08"
+      LD_PRELOAD: "/usr/lib64/libffi.so.8"
 
     memory:
       gen: 4000
@@ -490,9 +493,12 @@ productions:
     type: "key4hep"
     model: "pyg-clic-v1"
     comment: "CLIC production with Key4Hep"
-    workspace_dir: "${project.paths.storage_root}/clic/v1.3.0_key4hep_2026-04-08"
+    workspace_dir: "${project.paths.storage_root}/clic/v1.3.1_key4hep_2026-04-08_core1.6"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/clic"
-    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
+    gen_environment:
+      KEY4HEP_RELEASE: "2026-04-08"
+      LD_PRELOAD: "/usr/lib64/libffi.so.8"
 
     memory:
       gen: 4000
@@ -607,14 +613,14 @@ productions:
     type: "key4hep"
     model: "pyg-ild-v1"
     comment: "ILD_FCCee_v02 qualification; Clupatra/DDKalTest tracking and Pandora PF"
-    workspace_dir: "${project.paths.storage_root}/ild/ILD_FCCee_v02_10k_beamspot2025_20261117"
+    workspace_dir: "${project.paths.storage_root}/ild/ILD_FCCee_v02_10k_key4hep_2026-04-08_core1.6_beamspot2025"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/ild"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     # Never build TFDS from an incomplete set of generation jobs.
     allow_partial: false
     gen_environment:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
-      IDEA_STACK_RELEASE: "Mon"
+      KEY4HEP_RELEASE: "2026-04-08"
     memory: {gen: 16000, post: 8000, tfds: 8000}
     slurm_partition: "main"
     slurm_runtime: "48h"
@@ -656,9 +662,12 @@ productions:
     type: "key4hep"
     model: "pyg-idea-pipeline-v1"
     comment: "IDEA_o1_v03 pipeline validation with quality-selected GGTF/GenFit tracks"
-    workspace_dir: "${project.paths.storage_root}/idea/IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117_beamspot2025"
+    workspace_dir: "${project.paths.storage_root}/idea/IDEA_o1_v03_key4hep_2026-04-08_core1.6_beamspot2025"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
+    gen_environment:
+      KEY4HEP_RELEASE: "2026-04-08"
+      LD_PRELOAD: "/usr/lib64/libffi.so.8"
 
     environment:
       progress_interval: 60

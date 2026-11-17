@@ -11,22 +11,20 @@ does not establish reconstruction performance.
 The generator is under `mlpf/data/key4hep/gen/ild`. Its ILDConfig submodule pins
 `fc1c9f58f9912b4d1fb10da5defbaca2133d60a0`. It reuses the pinned k4geo and
 k4RecTracker installations and development container from the IDEA recipe.
-The qualified environment is the LCG `devkey-head/Mon`, GCC 16 view. The
-Tuesday view tested on 17 November 2026 did not expose `TrackMerger`, which
-the ILD steering imports even with optional track merging disabled. Builds
-must match the view checksum; see the [IDEA build instructions](../../mlpf/data/key4hep/gen/idea/README.md).
+All CLD, CLIC, ILD and IDEA productions now use stable **Key4hep 2026-04-08**
+(GCC 14.2), with locally compiled **k4FWCore v1.6** and **MarlinReco v1.38.1**.
+The latter fixes an upstream TOF crash on ILD tracks without subtracks.
+The tracker fork supports stable EDM4hep's explicit TrackState lookup.
+See the [shared build instructions](../../mlpf/data/key4hep/gen/README.md).
 
-Initialize submodules recursively. In a clean AlmaLinux shell, build the shared
-geometry and tracking installations in the same view if they are absent:
+Initialize submodules and build all shared components in the development image:
 
 ```bash
 git submodule update --init --recursive
-apptainer exec --bind /cvmfs,"$PWD" \
-  --env IDEA_STACK_RELEASE=Mon mlpf/data/key4hep/gen/idea/idea-dev.sif \
-  bash mlpf/data/key4hep/gen/idea/build_k4geo.sh
-apptainer exec --bind /cvmfs,"$PWD" \
-  --env IDEA_STACK_RELEASE=Mon mlpf/data/key4hep/gen/idea/idea-dev.sif \
-  bash mlpf/data/key4hep/gen/idea/build_k4rectracker.sh
+apptainer exec --bind /cvmfs,"$PWD",/tmp \
+  --env LD_PRELOAD=/usr/lib64/libffi.so.8 \
+  mlpf/data/key4hep/gen/idea/idea-dev.sif \
+  bash mlpf/data/key4hep/gen/build_all.sh
 ```
 
 For example, generate ten 10 GeV muons:
@@ -89,7 +87,7 @@ The `ild` production requests **10,000 events per physics sample** at 365 GeV:
 | qq | 500000–500100 | 100 | 100 |
 
 Its workspace is
-`/local/joosep/mlpf/ild/ILD_FCCee_v02_10k_beamspot2025_20261117`, with `gen/`, `post/` and
+`/local/joosep/mlpf/ild/ILD_FCCee_v02_10k_key4hep_2026-04-08_core1.6_beamspot2025`, with `gen/`, `post/` and
 `tfds/` subdirectories. With 100 complete, independent input shards, each
 dataset has **9,000 train / 1,000 test events**, configuration `1`, version
 `0.1.0`, in ArrayRecord format. Train and test use disjoint ROOT jobs.
@@ -104,14 +102,17 @@ pixi run init
 bash scripts/check_ild_runtime.sh
 ```
 
-The runtime check verifies the development image, Monday-view checksum against
-both local installations, pinned ILDConfig, DDG4 and TrackMerger imports, and
-the staged geometry/CAD assets. The image and local installations are ignored
-by Git: a fresh checkout needs the image built as described in the IDEA README
-and geometry/tracker builds using the commands above. Reuse existing matching
-builds; rebuilding shared IDEA installations changes the runtime used by other
-jobs. Each generated ILD job explicitly exports the qualified Monday view and
-`LD_PRELOAD=/usr/lib64/libffi.so.8`.
+The runtime check verifies the development image, stable-stack and source
+identities against the local installations, pinned ILDConfig, DDG4 and tracking
+imports, and staged geometry/CAD assets. The image and compiled installations
+are ignored by Git, so build them on a fresh checkout using the commands above.
+Each generated ILD job exports `KEY4HEP_RELEASE=2026-04-08` and
+`LD_PRELOAD=/usr/lib64/libffi.so.8`. Do not rebuild libraries while jobs use them.
+
+The stable-runtime compatibility smoke test completed three qq events with
+full simulation, fitted tracks and Pandora clusters, followed by Parquet
+conversion. This does not replace the detector-performance qualification below
+or a larger ttbar/qq/WW campaign on the corrected beam spot.
 
 Preview the complete production and then submit it:
 
