@@ -363,7 +363,7 @@ productions:
     type: "key4hep"
     model: "pyg-cld-v1"
     comment: "CLD production with Key4Hep"
-    workspace_dir: "${project.paths.storage_root}/cld/v1.3.1_key4hep_2026-04-08_core1.6"
+    workspace_dir: "${project.paths.storage_root}/cld/v1.4.0"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     gen_environment:
@@ -493,7 +493,7 @@ productions:
     type: "key4hep"
     model: "pyg-clic-v1"
     comment: "CLIC production with Key4Hep"
-    workspace_dir: "${project.paths.storage_root}/clic/v1.3.1_key4hep_2026-04-08_core1.6"
+    workspace_dir: "${project.paths.storage_root}/clic/v1.4.0"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/clic"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     gen_environment:
@@ -613,7 +613,7 @@ productions:
     type: "key4hep"
     model: "pyg-ild-v1"
     comment: "ILD_FCCee_v02 qualification; Clupatra/DDKalTest tracking and Pandora PF"
-    workspace_dir: "${project.paths.storage_root}/ild/ILD_FCCee_v02_10k_key4hep_2026-04-08_core1.6_beamspot2025"
+    workspace_dir: "${project.paths.storage_root}/ild/v1.4.0"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/ild"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     # Never build TFDS from an incomplete set of generation jobs.
@@ -662,7 +662,7 @@ productions:
     type: "key4hep"
     model: "pyg-idea-pipeline-v1"
     comment: "IDEA_o1_v03 pipeline validation with quality-selected GGTF/GenFit tracks"
-    workspace_dir: "${project.paths.storage_root}/idea/IDEA_o1_v03_key4hep_2026-04-08_core1.6_beamspot2025"
+    workspace_dir: "${project.paths.storage_root}/idea/v1.4.0"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     gen_environment:

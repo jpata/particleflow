@@ -87,7 +87,7 @@ The `ild` production requests **10,000 events per physics sample** at 365 GeV:
 | qq | 500000–500100 | 100 | 100 |
 
 Its workspace is
-`/local/joosep/mlpf/ild/ILD_FCCee_v02_10k_key4hep_2026-04-08_core1.6_beamspot2025`, with `gen/`, `post/` and
+`/local/joosep/mlpf/ild/v1.4.0`, with `gen/`, `post/` and
 `tfds/` subdirectories. With 100 complete, independent input shards, each
 dataset has **9,000 train / 1,000 test events**, configuration `1`, version
 `0.1.0`, in ArrayRecord format. Train and test use disjoint ROOT jobs.
