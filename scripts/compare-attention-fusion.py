@@ -185,7 +185,7 @@ def main():
                     MIGRAPHX_DISABLE_MLIR="0",
                     MIGRAPHX_MLIR_USE_SPECIFIC_OPS="attention" if mode == "fused" else "!attention",
                     MIGRAPHX_TRACE_COMPILE="1",
-                    MIGRAPHX_DISABLE_PASSES="",
+                    MIGRAPHX_DISABLE_PASSES="fuse_horizontal",
                     MIGRAPHX_GPU_HIP_FLAGS="",
                 )
             dest = args.outdir / Path(case["file"]).stem / mode

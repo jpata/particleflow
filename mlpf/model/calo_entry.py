@@ -87,7 +87,15 @@ def calo_entry_eta_phi(phi0, z0, tan_lambda, omega, radius, endcap_z, d0=None):
     q = 2 sin(omega * s / 2) / omega along azimuth phi0 - omega * s / 2, at a transverse distance
     r^2 = d0^2 + (1 - omega * d0) q^2 from the beam axis, which gives the barrel arc in closed form.
     """
-    phi0, z0, tan_lambda, omega = (t.float() for t in (phi0, z0, tan_lambda, omega))
+    eta, sin_phi, cos_phi, reached = _calo_entry_eta_direction(
+        torch.sin(phi0.float()), torch.cos(phi0.float()), z0, tan_lambda, omega, radius, endcap_z, d0
+    )
+    return eta, torch.atan2(sin_phi, cos_phi), reached
+
+
+def _calo_entry_eta_direction(sin_phi0, cos_phi0, z0, tan_lambda, omega, radius, endcap_z, d0=None):
+    """Extrapolate a unit transverse direction without inverse-trig round trips."""
+    sin_phi0, cos_phi0, z0, tan_lambda, omega = (t.float() for t in (sin_phi0, cos_phi0, z0, tan_lambda, omega))
     d0 = torch.zeros_like(z0) if d0 is None else d0.float()
     curvature = omega.abs().clamp_min(1e-12)
     no_hit = torch.full_like(curvature, float("inf"))
@@ -97,7 +105,7 @@ def calo_entry_eta_phi(phi0, z0, tan_lambda, omega, radius, endcap_z, d0=None):
     inside = (d0.abs() < radius) & (stretch > 0)
     chord_sq = (radius**2 - d0**2) / torch.where(inside, stretch, torch.ones_like(stretch))
     half_chord = curvature * chord_sq.clamp_min(0).sqrt() / 2
-    arc_barrel = torch.where(inside & (half_chord < 1), 2 * torch.asin(half_chord.clamp(max=1.0)) / curvature, no_hit)
+    arc_barrel = torch.where(inside & (half_chord < 1), 2 * _asin(half_chord.clamp(max=1.0)) / curvature, no_hit)
 
     forward = tan_lambda.abs() > 1e-6
     safe_tan_lambda = torch.where(forward, tan_lambda, torch.ones_like(tan_lambda))
@@ -112,14 +120,66 @@ def calo_entry_eta_phi(phi0, z0, tan_lambda, omega, radius, endcap_z, d0=None):
     safe_omega = torch.where(omega == 0, torch.ones_like(omega), omega)
     # signed: past a full turn (endcap entries only) the chord points backwards
     chord = torch.where(half_turn.abs() > 1e-6, 2 * torch.sin(half_turn) / safe_omega, arc)
-    x = -d0 * torch.sin(phi0) + chord * torch.cos(phi0 - half_turn)
-    y = d0 * torch.cos(phi0) + chord * torch.sin(phi0 - half_turn)
+    sin_turn, cos_turn = torch.sin(half_turn), torch.cos(half_turn)
+    x = -d0 * sin_phi0 + chord * (cos_phi0 * cos_turn + sin_phi0 * sin_turn)
+    y = d0 * cos_phi0 + chord * (sin_phi0 * cos_turn - cos_phi0 * sin_turn)
     z = z0 + arc * tan_lambda
     eta = _asinh(z / torch.sqrt(x.square() + y.square()).clamp_min(1.0))
-    phi = torch.atan2(y, x)
+    sin_phi, cos_phi = _unit_direction(x, y)
     eta = torch.where(reached, eta, _asinh(tan_lambda))
-    phi = torch.where(reached, phi, torch.atan2(torch.sin(phi0), torch.cos(phi0)))
-    return eta, phi, reached
+    sin_phi = torch.where(reached, sin_phi, sin_phi0)
+    cos_phi = torch.where(reached, cos_phi, cos_phi0)
+    return eta, sin_phi, cos_phi, reached
+
+
+def _asin(value):
+    """FP32 asin on [-1, 1] using only portable elementwise ONNX operations.
+
+    Reduce |x| > 1/2 with asin(x) = pi/2 - 2 asin(sqrt((1-x)/2)).
+    On [0, 1/2], evaluate the degree-21 Taylor polynomial in Horner form;
+    coefficients are binomial(2n,n) / (4**n * (2n+1)). Its truncation error
+    is below 2.4e-9 radians, including the factor two after range reduction.
+    Eager and export use the same arithmetic to avoid different hash inputs.
+    """
+    magnitude = value.abs()
+    reduced = torch.where(magnitude > 0.5, torch.sqrt((1 - magnitude) * 0.5), magnitude)
+    squared = reduced.square()
+    coefficients = (
+        1.0,
+        1 / 6,
+        3 / 40,
+        5 / 112,
+        35 / 1152,
+        63 / 2816,
+        231 / 13312,
+        143 / 10240,
+        6435 / 557056,
+        12155 / 1245184,
+        46189 / 5505024,
+    )
+    polynomial = coefficients[-1]
+    for coefficient in reversed(coefficients[1:-1]):
+        polynomial = coefficient + squared * polynomial
+    # Add the leading x separately to retain precision near zero.
+    angle = reduced + reduced * squared * polynomial
+    # Compensate for rounding pi/2 to FP32, especially just above x=1/2.
+    upper = (1.5707963705062866 - 2 * angle) - 4.3711390001862426e-8
+    angle = torch.where(magnitude > 0.5, upper, angle)
+    return torch.where(value < 0, -angle, angle)
+
+
+def _unit_direction(x, y):
+    """Return (sin(phi), cos(phi)); the zero vector has atan2(0,0)'s direction.
+
+    Scale first to avoid overflow/underflow for non-unit input directions.
+    """
+    scale = torch.maximum(x.abs(), y.abs())
+    scale = torch.where(scale == 0, torch.ones_like(scale), scale)
+    x, y = x / scale, y / scale
+    norm = torch.sqrt(x.square() + y.square())
+    nonzero = norm > 0
+    norm = torch.where(nonzero, norm, torch.ones_like(norm))
+    return y / norm, torch.where(nonzero, x / norm, torch.ones_like(x))
 
 
 def _asinh(value):
@@ -145,11 +205,11 @@ def _column_indices(names, wanted, dataset, flag):
     return [names.index(name) for name in wanted]
 
 
-def _replace_coordinates(X_features, replace, eta, phi):
+def _replace_coordinates(X_features, replace, eta, sin_phi, cos_phi):
     out = X_features.clone()
     out[..., 2] = torch.where(replace, eta.to(X_features.dtype), X_features[..., 2])
-    out[..., 3] = torch.where(replace, torch.sin(phi).to(X_features.dtype), X_features[..., 3])
-    out[..., 4] = torch.where(replace, torch.cos(phi).to(X_features.dtype), X_features[..., 4])
+    out[..., 3] = torch.where(replace, sin_phi.to(X_features.dtype), X_features[..., 3])
+    out[..., 4] = torch.where(replace, cos_phi.to(X_features.dtype), X_features[..., 4])
     return out
 
 
@@ -199,8 +259,14 @@ class TrackCaloEntry:
 
     @torch.no_grad()
     def __call__(self, X_features, source_id=None):
-        eta, phi, defined = self.eta_phi(X_features)
-        return _replace_coordinates(X_features, (X_features[..., 0] == TRACK_ELEMTYPE) & defined, eta, phi)
+        if self.mode == "helix":
+            z0, tan_lambda, omega, d0 = (X_features[..., column] for column in self.columns)
+            sin_phi0, cos_phi0 = _unit_direction(X_features[..., 4].float(), X_features[..., 3].float())
+            eta, sin_phi, cos_phi, defined = _calo_entry_eta_direction(sin_phi0, cos_phi0, z0, tan_lambda, omega, self.radius, self.endcap_z, d0)
+        else:
+            eta, phi, defined = self.eta_phi(X_features)
+            sin_phi, cos_phi = torch.sin(phi), torch.cos(phi)
+        return _replace_coordinates(X_features, (X_features[..., 0] == TRACK_ELEMTYPE) & defined, eta, sin_phi, cos_phi)
 
 
 class MultiSourceTrackCaloEntry:
@@ -242,5 +308,5 @@ class ClusterCentroid:
     def __call__(self, X_features):
         x, y, z = (X_features[..., column].float() for column in self.columns)
         eta = _asinh(z / torch.sqrt(x.square() + y.square()).clamp_min(1.0))
-        phi = torch.atan2(y, x)
-        return _replace_coordinates(X_features, X_features[..., 0] == CLUSTER_ELEMTYPE, eta, phi)
+        sin_phi, cos_phi = _unit_direction(x, y)
+        return _replace_coordinates(X_features, X_features[..., 0] == CLUSTER_ELEMTYPE, eta, sin_phi, cos_phi)

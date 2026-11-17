@@ -291,8 +291,9 @@ PYTHON_BIN=/tmp/heptv2-native-venv/bin/python bash ngt/run-heptv2-onnx.sh \
 ```
 
 Wheel libraries must precede system `/opt/rocm` libraries. The runner preserves
-existing disabled passes and adds `eliminate_data_type` before starting Python,
-preventing lossy narrowing of hash arithmetic. It limits compiler parallelism
+existing disabled passes and adds `eliminate_data_type` and `fuse_horizontal`
+before starting Python, preventing lossy narrowing of hash arithmetic and
+mixed-type normalization gather fusion failures. It limits compiler parallelism
 to four workers and retains O3, adding the targeted LLVM flag
 `-mllvm -enable-gvn-memdep=false` to avoid very slow GVN memory-dependence
 analysis on large integer sorts. These are correctness runs; optimized
@@ -350,6 +351,89 @@ uses PyTorch allocator statistics to estimate ONNX Runtime memory.
 `scripts/summarize-model-evidence.py PACKAGE_ROOT --plots` produces the matrix
 status, CSV and scaling plots; it requires all expected cells before declaring
 the package complete. The initial package uses seeded, untrained weights.
+
+## Rebase export check (2026-11-17)
+
+Revision `389bb194` was checked after rebasing onto main `d1aee898`, retaining
+the new d0 extrapolation and unreachable-track behavior. The CPU export,
+calorimeter and feature-bag regression suites passed (165 passed, 4 GPU/offline
+checks skipped), using PyTorch 2.11.0+cpu and ORT 1.30.0.
+
+Identical static FP32 decomposed graphs and eager PyTorch references were
+replayed on L40S (ORT CUDA 1.29.0) and W7900 (the native ORT 1.23.2 /
+MIGraphX 2.18 / ROCm SDK 10.1 environment above):
+
+| Model profile | Cases | L40S | W7900 |
+| --- | --- | --- | --- |
+| Normalized attention, shared backbone | 3 | GPU-only pass | GPU-only pass with compiler workaround below |
+| Normalized attention, split backbone | 3 | GPU-only pass | GPU-only pass with compiler workaround below |
+| Normalized attention with feature bag | 3 | GPU-only pass | GPU-only pass with compiler workaround below |
+| HEPTv2 | 3 | GPU-only pass | GPU-only pass |
+| HEPTv2 with track/cluster calorimeter coordinates | 3 | Numerical pass with CPU fallback; strict GPU-only fails | GPU-only pass |
+
+The three shapes are B=2/N=16, B=1/N=24 and B=3/N=32, with unequal valid
+lengths, right padding and tied HEPT coordinates. Normalized models exercise
+CLD, CLIC, IDEA and ColliderML source routing. Every successful numerical run
+has finite outputs, exact zero padding and maximum absolute error below 1e-6
+against the common eager reference (`atol=1e-3, rtol=3e-3`). These are small,
+seeded, untrained models; this check does not requalify trained checkpoints,
+large shapes, fusion or reduced precision.
+
+On this AMD stack, normalized graphs initially failed in `fuse_horizontal`
+with `concat: Types do not match`. A fresh process with
+`MIGRAPHX_DISABLE_PASSES=eliminate_data_type,fuse_horizontal` passed all nine
+cases with GPU-only profiles. The six HEPTv2 cases passed with only
+`eliminate_data_type` disabled, using the existing compiler flags above.
+
+On CUDA, the calorimeter graph places four `Atan` nodes and one `Asin` node
+on CPU. Enabling fallback gives correct predictions, but the strict GPU-only
+check correctly rejects it. Do not report this profile as full GPU execution.
+
+Graphs, references, qualification harness, JSON reports, placement profiles,
+JUnit output, package versions and original failure logs are retained locally
+under `onnx_validation/rebase-2026-11-17/` (ignored by Git).
+
+## Portable calorimeter export follow-up (2026-11-17)
+
+The follow-up removes inverse-trig operations from the model's calorimeter
+path. It rotates transverse direction vectors directly and normalizes final
+track/cluster vectors rather than converting through phi. The angle-returning
+diagnostic API remains available. Barrel arc lengths use a degree-21 FP32
+asin polynomial with half-angle range reduction and compensated pi/2 rounding;
+eager and export use identical arithmetic. Unreachable tracks retain their
+original features, including d0-dependent perigee and endcap exclusions.
+
+The isolated asin and direction probes pass on CPU, L40S and W7900 with
+provider-only profiles. Across 131,088 asin inputs (a dense [-1,1] grid and
+neighbors of the endpoints and range-reduction boundary), the maximum asin
+error is 1.1921e-7 radians / 2 FP32 ULP. Direction tests include zero vectors,
+all quadrants and non-unit inputs ranging from 1e-20 to 1e20.
+
+The regression suite passed 176 tests (7 skipped; two unrelated data-preparation
+cases deselected). All 18 static FP32 model cases passed on CPU, L40S CUDA and
+W7900 MIGraphX: the preceding five profiles plus three calorimeter edge cases
+covering d0, straight tracks, near tangency, multi-turn endcaps and unreachable
+tracks. GPU runs disable CPU fallback and retain GPU-only placement profiles.
+Maximum output errors were 1.19e-6 (CPU), 9.54e-7 (L40S), and 1.43e-6 (W7900),
+against the identical eager CPU references. These are seeded models and static
+shapes, not a trained-checkpoint, dynamic GPU, fusion or performance qualification.
+
+Both NGT evidence runners ensure `eliminate_data_type,fuse_horizontal` are
+disabled on AMD while preserving other disabled passes. The CMS qualification
+and attention-fusion control tools also keep `fuse_horizontal` disabled.
+
+Compared with the preceding eager geometry, the three seeded calorimeter
+batches change six quantized coordinate components by one integer unit;
+maximum feature error is 2.09e-7 and output error remains below 1e-6. The
+rewrite is not bitwise equivalent at hash quantization boundaries. On the
+negative x axis, the previous FP32 sin(pi) residual selected phi near -pi;
+the exact (sin=0, cos=-1) direction now selects +pi. This branch-cut change
+can alter hash ordering and positional encoding despite equivalent physical
+direction. Trained
+checkpoint and physics qualification remain separate from these seeded tests.
+
+Artifacts and reproduction harnesses are retained locally under
+`onnx_validation/portable-calo-2026-11-17/` (ignored by Git).
 
 ## Save results and release the GPU
 

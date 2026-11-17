@@ -117,7 +117,11 @@ def test_heptv2_calo_coordinates_export(tmp_path):
     x, mask = inputs([13, 9], 16)
     path = tmp_path / "calo_coordinates.onnx"
     export_mlpf(model, x, mask, path, attention_format="decomposed")
-    onnx.checker.check_model(onnx.load(path), full_check=True)
+    graph = onnx.load(path)
+    onnx.checker.check_model(graph, full_check=True)
+    # These inverse-trig operators have no ORT CUDA kernels. The full model
+    # must retain the portable barrel arc and direct direction arithmetic.
+    assert not {"Atan", "Asin", "Acos"} & {node.op_type for node in graph.graph.node}
     session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
     for lengths, size in [([13, 9], 16), ([19], 24)]:
         x, mask = inputs(lengths, size)
