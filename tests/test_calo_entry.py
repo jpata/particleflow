@@ -72,9 +72,57 @@ def test_track_starting_beyond_the_endcap_keeps_its_vertex_direction():
     assert not reached.any()
 
 
+def test_straight_displaced_track_enters_the_barrel_off_its_direction():
+    # a straight track with impact parameter d0 crosses r = R after a transverse arc sqrt(R^2 - d0^2)
+    radius, d0, phi0 = 1500.0, 300.0, 0.4
+    eta, phi, reached = calo_entry_eta_phi(_t(phi0), _t(0.0), _t(0.0), _t(0.0), radius=radius, endcap_z=2300.0, d0=_t(d0))
+    arc = math.sqrt(radius**2 - d0**2)
+    x, y = -d0 * math.sin(phi0) + arc * math.cos(phi0), d0 * math.cos(phi0) + arc * math.sin(phi0)
+    assert reached.all()
+    torch.testing.assert_close(phi, _t(math.atan2(y, x)))
+    torch.testing.assert_close(eta, _t(0.0))
+
+
+def _helix_scan(phi0, d0, z0, tan_lambda, omega, radius, endcap_z, steps=200_000):
+    """Reference: walk the helix from its perigee in small steps until it reaches the barrel or an endcap plane."""
+    s = torch.linspace(0, 4 * math.pi / abs(omega), steps, dtype=torch.float64)
+    x = -d0 * math.sin(phi0) + (math.sin(phi0) - torch.sin(phi0 - omega * s)) / omega
+    y = d0 * math.cos(phi0) + (torch.cos(phi0 - omega * s) - math.cos(phi0)) / omega
+    z = z0 + s * tan_lambda
+    out = (torch.hypot(x, y) >= radius) | (z.abs() >= endcap_z)
+    i = int(out.to(torch.int8).argmax())
+    return math.asinh(z[i] / math.hypot(x[i], y[i])), math.atan2(y[i], x[i])
+
+
+@pytest.mark.parametrize(
+    "phi0, d0, z0, tan_lambda, omega",
+    [
+        (0.3, 0.0, 0.0, 0.2, 2e-4),  # prompt, barrel
+        (0.3, 400.0, -50.0, 0.2, 2e-4),  # displaced, barrel
+        (-2.0, -400.0, 50.0, -0.3, -5e-4),  # displaced, other charge and side, barrel
+        (1.0, 150.0, 0.0, 0.4, 2e-3),  # displaced curler: endcap after several turns
+        (2.5, -600.0, 200.0, 1.5, -1e-4),  # displaced, endcap
+    ],
+)
+def test_helix_entry_matches_a_step_by_step_helix(phi0, d0, z0, tan_lambda, omega):
+    radius, endcap_z = 1500.0, 2300.0
+    eta, phi, reached = calo_entry_eta_phi(_t(phi0), _t(z0), _t(tan_lambda), _t(omega), radius=radius, endcap_z=endcap_z, d0=_t(d0))
+    ref_eta, ref_phi = _helix_scan(phi0, d0, z0, tan_lambda, omega, radius, endcap_z)
+    assert reached.all()
+    torch.testing.assert_close(eta, _t(ref_eta), atol=2e-3, rtol=0)
+    torch.testing.assert_close(phi, _t(ref_phi), atol=2e-3, rtol=0)
+
+
+def test_perigee_outside_the_barrel_keeps_its_direction():
+    eta, phi, reached = calo_entry_eta_phi(_t(0.3), _t(0.0), _t(0.5), _t(1e-4), radius=1500.0, endcap_z=2300.0, d0=_t(1600.0))
+    assert not reached.any()
+    torch.testing.assert_close(eta, torch.asinh(_t(0.5)))
+    torch.testing.assert_close(phi, _t(0.3))
+
+
 def test_tracks_that_reach_no_surface_keep_their_features():
     entry = TrackCaloEntry("clic")
-    z0, tan_lambda, omega = entry.columns
+    z0, tan_lambda, omega, _ = entry.columns
     X = torch.zeros(1, 2, len(X_FEATURES["clic"]))
     X[..., 0] = 1
     X[..., 2] = _t(0.7, 0.7)  # stored eta, deliberately not asinh(tan_lambda)
@@ -209,8 +257,9 @@ def test_joint_hashing_uses_each_events_source(backbone_mode, method):
     X[:, 1, 0] = 2
     X[:, -1, 0] = 0
     for event, source in enumerate(sources):
-        z0, tan_lambda, omega = TrackCaloEntry(source).columns
+        z0, tan_lambda, omega, d0 = TrackCaloEntry(source).columns
         X[event, :, z0] = 0
+        X[event, :, d0] = 0
         X[event, :, tan_lambda] = 0.2
         X[event, :, omega] = 1e-4
     original = X.clone()

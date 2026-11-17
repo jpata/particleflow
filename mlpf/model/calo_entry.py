@@ -6,7 +6,7 @@ vertex. A charged track bends in the solenoid field before it reaches the calori
 in a 3 T field turns by ~0.6 rad in phi before r = 1.3 m), so it can be far from its own clusters.
 
 heptv2.track_hash_at_calo (TrackCaloEntry) moves each track to the (eta, phi) of its calorimeter
-entry point, seen from the origin: helix-extrapolated from the track parameters (z0, tanLambda,
+entry point, seen from the origin: helix-extrapolated from the track parameters (d0, z0, tanLambda,
 omega) to the middle of the ECAL on the key4hep-style datasets, read from the eta_ecal/phi_ecal
 features on CMS.
 
@@ -55,7 +55,7 @@ CALO_ENTRY_GEOMETRY_MM[Dataset.IDEA.value] = (2500.0, 2500.0)
 
 # PF datasets whose tracks carry the helix parameters, by name in X_FEATURES.
 HELIX_DATASETS = (Dataset.COLLIDERML.value, Dataset.CLIC.value, Dataset.CLD.value, Dataset.IDEA.value, Dataset.MAIA.value)
-HELIX_COLUMNS = ("z0", "tanlambda", "omega")
+HELIX_COLUMNS = ("z0", "tanlambda", "omega", "d0")
 # Datasets whose tracks carry their calorimeter entry (eta, phi) as features.
 PRECOMPUTED_COLUMNS = {Dataset.CMS.value: ("eta_ecal", "phi_ecal")}
 
@@ -65,27 +65,39 @@ CENTROID_DATASETS = (Dataset.CLIC.value, Dataset.CLD.value, Dataset.IDEA.value, 
 CENTROID_COLUMNS = ("position.x", "position.y", "position.z")
 
 
-def calo_entry_eta_phi(phi0, z0, tan_lambda, omega, radius, endcap_z):
+def calo_entry_eta_phi(phi0, z0, tan_lambda, omega, radius, endcap_z, d0=None):
     """(eta, phi, reached) of the point where a track enters the calorimeter, seen from the origin.
 
-    The track is a helix from (0, 0, z0) (d0 neglected) with initial azimuth phi0, signed
-    transverse curvature omega [1/mm] and tan_lambda = pz / pt. It ends at the first of the
-    barrel cylinder r = radius [mm] and the endcap planes |z| = endcap_z [mm]. A track that curls
-    up inside the barrel radius can only reach an endcap plane (at any transverse radius: the
-    endcap's inner and outer radii are not checked). reached is False for a track that reaches
-    neither surface or starts at or beyond an endcap plane (|z0| >= endcap_z); its eta and phi are
-    then its vertex direction (asinh(tan_lambda), phi0). After a transverse arc s the entry point
-    lies at signed chord length 2 sin(omega * s / 2) / omega along azimuth phi0 - omega * s / 2.
-    This is the sign of the EDM4hep/LCIO omega convention (and of ColliderML's q/pT-based omega):
-    it puts the most cluster energy around the tracks on ColliderML, CLIC and CLD; the opposite
-    sign puts less there than the vertex direction does.
+    The track is a helix with its point of closest approach to the beam axis (perigee) at
+    (-d0 sin phi0, d0 cos phi0, z0), azimuth phi0 there, signed transverse curvature omega [1/mm] and
+    tan_lambda = pz / pt (d0 = None: d0 = 0). This is the EDM4hep/LCIO track-state convention with the
+    reference point at the origin, which the CLIC, CLD, MAIA and ColliderML (ACTS) tracks follow: their
+    tracker hits, or their AtFirstHit state, lie on this helix and not on the one with -d0. The direction
+    turns by -omega per unit transverse arc, the sign that puts the most cluster energy around the
+    tracks on ColliderML, CLIC and CLD; the opposite sign puts less there than the vertex direction does.
+
+    The helix ends at the first of the barrel cylinder r = radius [mm] and the endcap planes
+    |z| = endcap_z [mm], following the track forward from its perigee. A track that curls up inside the
+    barrel radius can only reach an endcap plane (at any transverse radius: the endcap's inner and outer
+    radii are not checked). reached is False for a track that reaches neither surface, or whose perigee
+    lies at or beyond an endcap plane (|z0| >= endcap_z) or outside the barrel (|d0| >= radius); its eta
+    and phi are then its direction at the perigee (asinh(tan_lambda), phi0).
+
+    After a transverse arc s the track lies at the perigee plus a chord of signed length
+    q = 2 sin(omega * s / 2) / omega along azimuth phi0 - omega * s / 2, at a transverse distance
+    r^2 = d0^2 + (1 - omega * d0) q^2 from the beam axis, which gives the barrel arc in closed form.
     """
     phi0, z0, tan_lambda, omega = (t.float() for t in (phi0, z0, tan_lambda, omega))
+    d0 = torch.zeros_like(z0) if d0 is None else d0.float()
     curvature = omega.abs().clamp_min(1e-12)
     no_hit = torch.full_like(curvature, float("inf"))
 
-    half_chord = curvature * radius / 2
-    arc_barrel = torch.where(half_chord < 1, 2 * torch.asin(half_chord.clamp(max=1.0)) / curvature, no_hit)
+    # barrel: q^2 = (radius^2 - d0^2) / (1 - omega d0), and sin(|omega| s / 2) = |omega| |q| / 2
+    stretch = 1 - omega * d0
+    inside = (d0.abs() < radius) & (stretch > 0)
+    chord_sq = (radius**2 - d0**2) / torch.where(inside, stretch, torch.ones_like(stretch))
+    half_chord = curvature * chord_sq.clamp_min(0).sqrt() / 2
+    arc_barrel = torch.where(inside & (half_chord < 1), 2 * torch.asin(half_chord.clamp(max=1.0)) / curvature, no_hit)
 
     forward = tan_lambda.abs() > 1e-6
     safe_tan_lambda = torch.where(forward, tan_lambda, torch.ones_like(tan_lambda))
@@ -93,19 +105,20 @@ def calo_entry_eta_phi(phi0, z0, tan_lambda, omega, radius, endcap_z):
     arc_endcap = torch.where(forward & (arc_endcap > 0), arc_endcap, no_hit)
 
     arc = torch.minimum(arc_barrel, arc_endcap)
-    reached = torch.isfinite(arc) & (z0.abs() < endcap_z)
+    reached = torch.isfinite(arc) & (z0.abs() < endcap_z) & (d0.abs() < radius)
     arc = torch.where(reached, arc, torch.zeros_like(arc))
 
     half_turn = omega * arc / 2
     safe_omega = torch.where(omega == 0, torch.ones_like(omega), omega)
+    # signed: past a full turn (endcap entries only) the chord points backwards
     chord = torch.where(half_turn.abs() > 1e-6, 2 * torch.sin(half_turn) / safe_omega, arc)
-    # past a full turn (|omega| * s > 2 pi, endcap entries only) the chord is negative: the entry point is on the opposite side
-    direction = phi0 - half_turn + torch.where(chord < 0, torch.full_like(chord, torch.pi), torch.zeros_like(chord))
-    phi = torch.atan2(torch.sin(direction), torch.cos(direction))
+    x = -d0 * torch.sin(phi0) + chord * torch.cos(phi0 - half_turn)
+    y = d0 * torch.cos(phi0) + chord * torch.sin(phi0 - half_turn)
     z = z0 + arc * tan_lambda
-    eta = torch.asinh(z / chord.abs().clamp_min(1.0))
-    # arc = 0 already gives phi = phi0; the vertex eta needs tan_lambda
+    eta = torch.asinh(z / torch.hypot(x, y).clamp_min(1.0))
+    phi = torch.atan2(y, x)
     eta = torch.where(reached, eta, torch.asinh(tan_lambda))
+    phi = torch.where(reached, phi, torch.atan2(torch.sin(phi0), torch.cos(phi0)))
     return eta, phi, reached
 
 
@@ -168,10 +181,10 @@ class TrackCaloEntry:
     def eta_phi(self, X_features):
         """(eta, phi, defined) of every row's calorimeter entry, computed as if the row were a track."""
         if self.mode == "helix":
-            z0, tan_lambda, omega = (X_features[..., column] for column in self.columns)
+            z0, tan_lambda, omega, d0 = (X_features[..., column] for column in self.columns)
             phi0 = torch.atan2(X_features[..., 3], X_features[..., 4]).float()
             # tracks that reach no calorimeter surface keep their vertex direction
-            return calo_entry_eta_phi(phi0, z0, tan_lambda, omega, self.radius, self.endcap_z)
+            return calo_entry_eta_phi(phi0, z0, tan_lambda, omega, self.radius, self.endcap_z, d0=d0)
         eta, phi = (X_features[..., column].float() for column in self.columns)
         # tracks without an ECAL extrapolation carry eta_ecal = phi_ecal = 0: they keep their vertex direction (as would
         # non-finite values)
