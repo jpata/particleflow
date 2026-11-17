@@ -50,9 +50,7 @@ class ScenarioVariant(BaseModel):
 
     @model_validator(mode="after")
     def reject_derived_overrides(self):
-        if self.data_subdir is not None and (
-            self.data_root is None or Path(self.data_subdir).is_absolute() or ".." in Path(self.data_subdir).parts
-        ):
+        if self.data_subdir is not None and (self.data_root is None or Path(self.data_subdir).is_absolute() or ".." in Path(self.data_subdir).parts):
             raise ValueError("data_subdir requires data_root and must stay within that root")
         invalid = DERIVED_KEYS.intersection(self.overrides)
         if invalid:

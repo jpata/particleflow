@@ -174,10 +174,7 @@ class MultiSourceTrackCaloEntry:
     """Use each event's detector layout and calorimeter geometry for track coordinates."""
 
     def __init__(self, sources, radius_mm=None, endcap_z_mm=None):
-        self.entries = {
-            SOURCE_IDS[source]: TrackCaloEntry(source, radius_mm=radius_mm, endcap_z_mm=endcap_z_mm)
-            for source in sources
-        }
+        self.entries = {SOURCE_IDS[source]: TrackCaloEntry(source, radius_mm=radius_mm, endcap_z_mm=endcap_z_mm) for source in sources}
 
     @torch.no_grad()
     def __call__(self, X_features, source_id):

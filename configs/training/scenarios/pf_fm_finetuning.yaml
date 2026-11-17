@@ -151,7 +151,7 @@ training:
     validation_particle_metrics: true
     make_plots: true
     # Set load to a completed attention joint run; HEPTv2 weights are incompatible.
-    load: experiments/pf_fm_joint/REPLACE_WITH_JOINT_RUN/checkpoints/checkpoint-500000.pth
+    load: experiments/pf_fm_joint/joint_seed12345_20261114_063930_566389/checkpoints/checkpoint-500000.pth
     load_weights_only: true
     reset_task_loss_weights: true
 common_overrides:
