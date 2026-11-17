@@ -274,33 +274,31 @@ def test_lumi_worker_preserves_single_gpu_binding(tmp_path, monkeypatch, task_gp
 def test_lumi_component_scripts_pin_runs_and_resources(tmp_path):
     from mlpf.training_submission import write_component_scripts
 
-    scenario_path = resolve_scenario_path('cms_backbone_comparison', ROOT)
-    profile_data = yaml.safe_load(resolve_platform_profile_path('mi250x', ROOT, 'lumi').read_text())
-    profile_data['experiments_dir'] = str(tmp_path / 'experiments')
-    profile_path = tmp_path / 'profile.yaml'
+    scenario_path = resolve_scenario_path("cms_backbone_comparison", ROOT)
+    profile_data = yaml.safe_load(resolve_platform_profile_path("mi250x", ROOT, "lumi").read_text())
+    profile_data["experiments_dir"] = str(tmp_path / "experiments")
+    profile_path = tmp_path / "profile.yaml"
     profile_path.write_text(yaml.safe_dump(profile_data))
-    repo = tmp_path / 'repo'
+    repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / 'particleflow_spec.yaml').write_text((ROOT / 'particleflow_spec.yaml').read_text())
-    submissions = build_slurm_submissions(
-        scenario_path, profile_path, repo, worker=repo / 'scripts/lumi/run_scenario.sh', seed=2468
-    )
+    (repo / "particleflow_spec.yaml").write_text((ROOT / "particleflow_spec.yaml").read_text())
+    submissions = build_slurm_submissions(scenario_path, profile_path, repo, worker=repo / "scripts/lumi/run_scenario.sh", seed=2468)
     generated = write_component_scripts(submissions, scenario_path, profile_path, repo)
     assert len(generated) == 2
     manifests = []
-    for (command, jobs) in generated:
+    for command, jobs in generated:
         script = Path(command[1])
         content = script.read_text()
-        subprocess.run(['bash', '-n', str(script)], check=True)
-        assert '#SBATCH --array' not in content
-        assert '#SBATCH --gpus-per-task=8' in content
-        assert '--run-manifest' in content
+        subprocess.run(["bash", "-n", str(script)], check=True)
+        assert "#SBATCH --array" not in content
+        assert "#SBATCH --gpus-per-task=8" in content
+        assert "--run-manifest" in content
         launch = shlex.split(content.splitlines()[-1])
-        manifest_path = Path(launch[launch.index('--run-manifest') + 1])
+        manifest_path = Path(launch[launch.index("--run-manifest") + 1])
         manifest = json.loads(manifest_path.read_text())
-        assert manifest['job']['seed'] == 2468
-        assert manifest['command'][manifest['command'].index('--experiment-dir') + 1] == str(manifest_path.parent)
-        assert Path(manifest['command'][manifest['command'].index('--spec-file') + 1]).is_file()
+        assert manifest["job"]["seed"] == 2468
+        assert manifest["command"][manifest["command"].index("--experiment-dir") + 1] == str(manifest_path.parent)
+        assert Path(manifest["command"][manifest["command"].index("--spec-file") + 1]).is_file()
         manifests.append(manifest_path)
     assert len(set(manifests)) == 2
 
@@ -308,10 +306,10 @@ def test_lumi_component_scripts_pin_runs_and_resources(tmp_path):
 def test_lumi_component_continue_keeps_saved_manifest(tmp_path):
     from mlpf.training_submission import write_component_scripts
 
-    scenario_path = resolve_scenario_path('cms_backbone_comparison', ROOT)
-    profile_data = yaml.safe_load(resolve_platform_profile_path('mi250x', ROOT, 'lumi').read_text())
-    profile_data['experiments_dir'] = str(tmp_path / 'experiments')
-    profile_path = tmp_path / 'profile.yaml'
+    scenario_path = resolve_scenario_path("cms_backbone_comparison", ROOT)
+    profile_data = yaml.safe_load(resolve_platform_profile_path("mi250x", ROOT, "lumi").read_text())
+    profile_data["experiments_dir"] = str(tmp_path / "experiments")
+    profile_path = tmp_path / "profile.yaml"
     profile_path.write_text(yaml.safe_dump(profile_data))
     scenario = load_training_scenario(scenario_path)
     profile = load_platform_profile(profile_path)
@@ -319,19 +317,22 @@ def test_lumi_component_continue_keeps_saved_manifest(tmp_path):
     for job in jobs:
         run = Path(profile.experiments_dir) / scenario.name / f"{job.variant_name}_seed{job.seed}_test"
         (run / "checkpoints").mkdir(parents=True)
-        (run / "scenario-manifest.json").write_text(json.dumps({
-            "job": job.model_dump(mode="json", exclude={"resolved_config"}),
-            "resolved_config": job.resolved_config.model_dump(mode="json"),
-        }))
-        step = 10000 if job.variant_name == 'heptv2' else job.resolved_config.num_steps
+        (run / "scenario-manifest.json").write_text(
+            json.dumps(
+                {
+                    "job": job.model_dump(mode="json", exclude={"resolved_config"}),
+                    "resolved_config": job.resolved_config.model_dump(mode="json"),
+                }
+            )
+        )
+        step = 10000 if job.variant_name == "heptv2" else job.resolved_config.num_steps
         (run / "checkpoints" / f"checkpoint-{step}.pth").touch()
-    run_manifest = next(Path(profile.experiments_dir).glob('*/heptv2*/scenario-manifest.json'))
+    run_manifest = next(Path(profile.experiments_dir).glob("*/heptv2*/scenario-manifest.json"))
     original = run_manifest.read_text()
-    repo = tmp_path / 'repo'
+    repo = tmp_path / "repo"
     repo.mkdir()
-    (repo / 'particleflow_spec.yaml').write_text((ROOT / 'particleflow_spec.yaml').read_text())
-    submissions = build_slurm_submissions(scenario_path, profile_path, repo,
-        worker=repo / 'scripts/lumi/run_scenario.sh', continue_run=True)
+    (repo / "particleflow_spec.yaml").write_text((ROOT / "particleflow_spec.yaml").read_text())
+    submissions = build_slurm_submissions(scenario_path, profile_path, repo, worker=repo / "scripts/lumi/run_scenario.sh", continue_run=True)
     generated = write_component_scripts(submissions, scenario_path, profile_path, repo, continue_run=True)
     assert len(generated) == 1
     assert str(run_manifest.resolve()) in Path(generated[0][0][1]).read_text()

@@ -211,9 +211,7 @@ def write_component_scripts(submissions, scenario_path, profile_path, repo_root,
     """Persist one independently resubmittable Slurm script per resolved job."""
     scenario = load_training_scenario(scenario_path)
     profile = load_platform_profile(profile_path)
-    directory = repo_root / "logs_slurm" / "submissions" / (
-        scenario.name + "_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    )
+    directory = repo_root / "logs_slurm" / "submissions" / (scenario.name + "_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
     directory.mkdir(parents=True)
     spec = Path(scenario.spec_file)
     if not spec.is_absolute():
@@ -243,7 +241,7 @@ def write_component_scripts(submissions, scenario_path, profile_path, repo_root,
                 manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
             options = command[1:worker_index]
             array_index = options.index("--array")
-            del options[array_index:array_index + 2]
+            del options[array_index : array_index + 2]
             name = f"{job.variant_name}_seed{job.seed}"
             options[options.index("--job-name") + 1] = f"{scenario.name}_{name}"
             for flag, suffix in (("--output", "out"), ("--error", "err")):
@@ -259,18 +257,30 @@ def write_component_scripts(submissions, scenario_path, profile_path, repo_root,
                 else:
                     lines.append("#SBATCH " + flag + "=" + shlex.quote(options[i + 1]))
                     i += 2
-            lines.extend([
-                "# Resubmit this component: sbatch " + shlex.quote(str(script)),
-                "set -euo pipefail",
-                "cd " + shlex.quote(str(repo_root)),
-            ])
+            lines.extend(
+                [
+                    "# Resubmit this component: sbatch " + shlex.quote(str(script)),
+                    "set -euo pipefail",
+                    "cd " + shlex.quote(str(repo_root)),
+                ]
+            )
             for variable in ("IMG", "LUMI_VENV"):
                 if variable in os.environ:
                     lines.append("export " + variable + "=" + shlex.quote(os.environ[variable]))
-            lines.append("exec bash " + shlex.join([
-                str(_worker_for_site(repo_root, "lumi")), str(scenario_path), str(profile_path),
-                "--repo-root", str(repo_root), "--run-manifest", str(manifest_path),
-            ]))
+            lines.append(
+                "exec bash "
+                + shlex.join(
+                    [
+                        str(_worker_for_site(repo_root, "lumi")),
+                        str(scenario_path),
+                        str(profile_path),
+                        "--repo-root",
+                        str(repo_root),
+                        "--run-manifest",
+                        str(manifest_path),
+                    ]
+                )
+            )
             script.write_text("\n".join(lines) + "\n")
             script.chmod(0o755)
             print(f"Component script: {script}", flush=True)
@@ -311,7 +321,9 @@ def main(argv=None, *, site="flatiron"):
         type=Path,
         help="Write the sbatch command to a shell script for submission outside the container",
     )
-    parser.add_argument("--component-scripts", action="store_true", help="Persist a Slurm script per LUMI component; each submission resumes its saved run")
+    parser.add_argument(
+        "--component-scripts", action="store_true", help="Persist a Slurm script per LUMI component; each submission resumes its saved run"
+    )
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -346,9 +358,7 @@ def main(argv=None, *, site="flatiron"):
     if args.component_scripts:
         if site != "lumi":
             parser.error("--component-scripts currently requires LUMI")
-        submissions = write_component_scripts(
-            submissions, scenario_path, profile_path, repo_root, continue_run=args.continue_run
-        )
+        submissions = write_component_scripts(submissions, scenario_path, profile_path, repo_root, continue_run=args.continue_run)
     if args.submission_script is not None:
         args.submission_script.write_text("#!/bin/bash\nset -euo pipefail\n" + "\n".join(shlex.join(command) for command, _ in submissions) + "\n")
         return

@@ -959,6 +959,26 @@ def _particle_metric_event_indices(num_events, max_events, seed):
     return {rng.randrange(i * num_events // max_events, (i + 1) * num_events // max_events) for i in range(max_events)}
 
 
+def _prepare_validation_particle_metrics(valid_loader, config, rank, diagnostic_accum):
+    """Select reproducible validation events and initialize shared reduction keys."""
+    metric_event_indices = None
+    if config.validation_particle_metrics:
+        num_events = _validation_event_count(valid_loader)
+        metric_event_indices = _particle_metric_event_indices(
+            num_events, config.validation_particle_metrics_max_events, config.seed + (rank if isinstance(rank, int) else 0)
+        )
+        matched_events = num_events if metric_event_indices is None else len(metric_event_indices)
+        _logger.info(f"Particle metrics on rank{rank}: sampling {matched_events}/{num_events} validation events")
+        _add_accumulator(diagnostic_accum, "metrics/particle/event_samples", torch.tensor(0.0, device=rank))
+        # Some ranks may sample no events in the detailed-diagnostic batches.
+        # Keep reduction keys identical even when their detailed counts are zero.
+        if config.validation_diagnostics_batches > 0:
+            for name in empty_momentum_metrics(config.num_classes):
+                _add_accumulator(diagnostic_accum, f"metrics/particle/{name}", torch.tensor(0.0, device=rank), count=0)
+
+    return metric_event_indices
+
+
 @record_phase("validation")
 def evaluate(
     rank: int | str,
@@ -1005,21 +1025,8 @@ def evaluate(
 
         probe = ValidationCaloProbe(config.validation_linear_probe_max_events)
     group_losses = _GroupLossMeans(getattr(valid_loader, "names", []))
-    metric_event_indices = None
+    metric_event_indices = _prepare_validation_particle_metrics(valid_loader, config, rank, diagnostic_accum)
     event_offset = 0
-    if config.validation_particle_metrics:
-        num_events = _validation_event_count(valid_loader)
-        metric_event_indices = _particle_metric_event_indices(
-            num_events, config.validation_particle_metrics_max_events, config.seed + (rank if isinstance(rank, int) else 0)
-        )
-        matched_events = num_events if metric_event_indices is None else len(metric_event_indices)
-        _logger.info(f"Particle metrics on rank{rank}: sampling {matched_events}/{num_events} validation events")
-        _add_accumulator(diagnostic_accum, "metrics/particle/event_samples", torch.tensor(0.0, device=rank))
-        # Some ranks may sample no events in the detailed-diagnostic batches.
-        # Keep reduction keys identical even when their detailed counts are zero.
-        if config.validation_diagnostics_batches > 0:
-            for name in empty_momentum_metrics(config.num_classes):
-                _add_accumulator(diagnostic_accum, f"metrics/particle/{name}", torch.tensor(0.0, device=rank), count=0)
 
     # Only show progress bar on rank 0
     is_interactive = ((world_size <= 1) or (rank == 0)) and sys.stdout.isatty()
@@ -1036,9 +1043,7 @@ def evaluate(
         batch = batch.to(rank, non_blocking=True)
         batch_size = batch.X.shape[0]
         metric_events = (
-            list(range(batch_size))
-            if metric_event_indices is None
-            else [i for i in range(batch_size) if event_offset + i in metric_event_indices]
+            list(range(batch_size)) if metric_event_indices is None else [i for i in range(batch_size) if event_offset + i in metric_event_indices]
         )
         event_offset += batch_size
 
