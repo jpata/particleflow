@@ -246,10 +246,10 @@ def test_snakemake_routes_ild_generation_postprocessing_and_builders(tmp_path, m
     assert "gun_" not in " ".join(path.name for path in (jobs / "tfds").glob("*.sh"))
     assert "export LD_PRELOAD=/usr/lib64/libffi.so.8" in (jobs / "gen/gen_qq.sh").read_text()
     assert "export KEY4HEP_RELEASE=2026-04-08" in (jobs / "gen/gen_qq.sh").read_text()
-    assert set(spec["productions"]["ild"]["samples"]) == {"ttbar", "qq", "ww_fullhad"}
+    assert set(spec["productions"]["ild"]["samples"]) == {"ttbar", "qq", "ww_fullhad", "z_qq", "z_tautau"}
     for sample in spec["productions"]["ild"]["samples"].values():
         begin, end = sample["seed_range"]
-        assert (end - begin) * sample["events_per_job"] == 10000
+        assert (end - begin) * sample["events_per_job"] == 50000
     graph = (jobs / "Snakefile").read_text()
     assert "glob_wildcards" not in graph  # ILD forbids partial datasets, including with --allow-partial.
     assert all(f"rule {stage}" in graph for stage in ("gen_task", "post_task", "tfds_task"))
@@ -271,5 +271,5 @@ def test_snakemake_routes_ild_generation_postprocessing_and_builders(tmp_path, m
         check=True,
     )
     output = run.stdout + run.stderr
-    for rule, count in (("gen_task", 299), ("post_task", 300), ("tfds_task", 3)):
+    for rule, count in (("gen_task", 2499), ("post_task", 2500), ("tfds_task", 5)):
         assert re.search(rf"^\s*{rule}\s+{count}\s*$", output, re.MULTILINE), output[-5000:]

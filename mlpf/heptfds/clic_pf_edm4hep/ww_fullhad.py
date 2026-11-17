@@ -21,8 +21,9 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.3.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.4.0"))
     RELEASE_NOTES = {
+        "3.4.0": "Regenerated with key4hep-sim v1.4.0 and stable Key4hep 2026-04-08 for the 50k-event campaign.",
         "1.3.0": "Update stats to ~1M events",
         "1.4.0": "Fix ycand matching",
         "1.5.0": "Regenerate with ARRAY_RECORD",

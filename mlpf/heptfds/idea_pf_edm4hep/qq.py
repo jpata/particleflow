@@ -24,15 +24,18 @@ from mlpf.heptfds.edm4hep_utils.utils_idea import (
 
 _DESCRIPTION = """
 IDEA_o1_v03 ee -> qq at 365 GeV, for MLPF pipeline validation.
-Versions 0.4.x use quality-selected GGTF/GenFit tracks and hit-majority truth
+Versions 0.4.0 and later use quality-selected GGTF/GenFit tracks and hit-majority truth
 labels. ycand is still a target oracle, not an independent physics baseline.
 Versions below 0.4.0 use truth-seeded proxy tracks.
 """
 
 
 class IdeaEdmQqPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.4.0"))
+    DESCRIPTION = _DESCRIPTION
+    PROCESS_NAME = "p8_ee_qq_ecm365"
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.5.0"))
     RELEASE_NOTES = {
+        "0.5.0": "Regenerated with key4hep-sim v1.4.0 and stable Key4hep 2026-04-08 for the 50k-event campaign.",
         "0.4.0": "November 2026 upstream simulation/reconstruction and dual-readout patches; measured GGTF/GenFit tracks with seed-orientation and fitted-charge fixes, quality cuts and hit-majority labels; regenerate reconstruction, Parquet and TFDS.",
         "0.1.0": "Initial pipeline-validation dataset with explicit proxy provenance.",
         "0.2.0": "Add num_muon_hits and energy_muon cluster features (#511); input width 17 -> 19, regenerate",
@@ -49,7 +52,7 @@ class IdeaEdmQqPf(tfds.core.GeneratorBasedBuilder):
     def _info(self):
         return tfds.core.DatasetInfo(
             builder=self,
-            description=_DESCRIPTION,
+            description=self.DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
                     "X": tfds.features.Tensor(
@@ -80,7 +83,7 @@ class IdeaEdmQqPf(tfds.core.GeneratorBasedBuilder):
         )
 
     def _split_generators(self, dl_manager):
-        files = find_idea_parquets(Path(dl_manager.manual_dir), process_name="p8_ee_qq_ecm365")
+        files = find_idea_parquets(Path(dl_manager.manual_dir), process_name=self.PROCESS_NAME)
         return {name: self._generate_examples(refs) for name, refs in split_event_references(files).items()}
 
     def _generate_examples(self, references):

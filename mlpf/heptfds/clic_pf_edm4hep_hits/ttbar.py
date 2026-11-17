@@ -25,8 +25,9 @@ FIXME
 
 
 class ClicEdmTtbarHits(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.2"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.3.0"))
     RELEASE_NOTES = {
+        "3.3.0": "Regenerated with key4hep-sim v1.4.0 and stable Key4hep 2026-04-08 for the 50k-event campaign.",
         "3.1.0": "Hit-level version with separated tracker and calorimeter hits",
         "3.2.0": "add particle_number to Y_FEATURES",
         "3.2.1": "Corrected tracker hit elemtype, updated target and truth definitions, and fixed energy accounting",

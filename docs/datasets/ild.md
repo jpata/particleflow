@@ -2,7 +2,7 @@
 
 The `ild` production uses **ILD_FCCee_v02**, a 2 T field, full Geant4 simulation,
 Clupatra pattern recognition and DDKalTest refits (`MarlinTrkTracks`), followed
-by Pandora calorimeter clustering and particle flow. TFDS version **0.1.0**
+by Pandora calorimeter clustering and particle flow. TFDS version **0.2.0**
 is an experimental qualification dataset. Passing conversion or building TFDS
 does not establish reconstruction performance.
 
@@ -67,86 +67,49 @@ The production, TFDS mappings and `pyg-ild-v1` recipe are in
 `particleflow_spec.yaml`. Guns remain available through the runner for manual
 calibration checks; the batch campaign below contains only collision samples.
 
-## Tallinn 10k-event campaign
+## Tallinn 50k-event campaign
 
-Collision generation uses the FCC-ee 2025 beam-spot widths: 26.17 µm in x,
-31.1 nm in y, and 1.198 mm in z at 365 GeV. Pythia supplies the vertex spread;
-no extra GenAlg spatial or timing smear is applied. A native 2,000-event
-generator check per process measured widths consistent with these settings.
-The `beamspot2025` workspace suffix prevents reuse of earlier ROOT files.
-When switching from the previous workspace, archive its completion markers
-under `snakemake_jobs/ild/` before regenerating the workflow; old `.done` files
-must not mark the corrected campaign complete.
+The release campaign requests **50,000 events for each of ttbar, qq, WW
+fullhad, Z→qq and Z→tautau**, using 500 independent jobs of 100 events per
+sample. ttbar/qq/WW run at 365 GeV; the Z samples run at 91 GeV with their own
+shared FCC-ee cards and matching reconstruction energy. Pythia alone applies
+the energy-dependent FCC-ee 2025 beam spot.
 
-The `ild` production requests **10,000 events per physics sample** at 365 GeV:
+| Sample | Seeds (end exclusive) | Events |
+|---|---|---:|
+| ttbar | 300000–300500 | 50,000 |
+| WW fullhad | 400000–400500 | 50,000 |
+| qq | 500000–500500 | 50,000 |
+| Z→qq | 600000–600500 | 50,000 |
+| Z→tautau | 700000–700500 | 50,000 |
 
-| Sample | Seeds (end exclusive) | Jobs | Events per job |
-|---|---|---:|---:|
-| ttbar | 300000–300100 | 100 | 100 |
-| WW full-hadronic | 400000–400100 | 100 | 100 |
-| qq | 500000–500100 | 100 | 100 |
+The workspace is `/local/joosep/mlpf/ild/v1.4.0/50k`, containing `gen/`, `post/`
+and `tfds/`. Each dataset uses TFDS **0.2.0**, configuration `1`, ArrayRecord,
+and independent ROOT jobs for its **45,000 train / 5,000 test** events.
+The full million-event CLD/CLIC/IDEA/ILD workflow, including all prerequisites,
+is described in the [joint campaign runbook](key4hep-50k.md).
 
-Its workspace is
-`/local/joosep/mlpf/ild/v1.4.0`, with `gen/`, `post/` and
-`tfds/` subdirectories. With 100 complete, independent input shards, each
-dataset has **9,000 train / 1,000 test events**, configuration `1`, version
-`0.1.0`, in ArrayRecord format. Train and test use disjoint ROOT jobs.
-
-On Tallinn, update the checkout and select and initialize the SLURM profile:
+On Tallinn, after building the shared native runtime:
 
 ```bash
-git pull --ff-only
-git submodule update --init --recursive
 ln -sfn configs/tallinn/pixi.toml pixi.toml
 pixi run init
 bash scripts/check_ild_runtime.sh
+pixi run datasets_key4hep --jobs 20 --dry-run
+pixi run datasets_key4hep --jobs 20
 ```
 
-The runtime check verifies the development image, stable-stack and source
-identities against the local installations, pinned ILDConfig, DDG4 and tracking
-imports, and staged geometry/CAD assets. The image and compiled installations
-are ignored by Git, so build them on a fresh checkout using the commands above.
-Each generated ILD job exports `KEY4HEP_RELEASE=2026-04-08` and
-`LD_PRELOAD=/usr/lib64/libffi.so.8`. Do not rebuild libraries while jobs use them.
+This targets dataset generation rather than training, with one global SLURM
+job limit across all detectors. Fresh campaign completion markers and exact
+event-count checks prevent old or partial outputs from completing this run.
+ILD jobs request 16 GB for generation/reconstruction, 8 GB for postprocessing
+and TFDS, and a 48-hour runtime limit. Size scratch/storage for the retained
+simulation intermediates as well as published ROOT, Parquet and TFDS data.
 
-The stable-runtime compatibility smoke test completed three qq events with
-full simulation, fitted tracks and Pandora clusters, followed by Parquet
-conversion. This does not replace the detector-performance qualification below
-or a larger ttbar/qq/WW campaign on the corrected beam spot.
-
-Preview the complete production and then submit it:
-
-```bash
-PROD=ild pixi run datasets --executor slurm --jobs 20 --dry-run --printshellcmds
-PROD=ild pixi run datasets --executor slurm --jobs 20
-```
-
-`datasets` targets `tfds` in the combined generated `Snakefile`. It schedules
-simulation/reconstruction, postprocessing and dataset building as dependencies;
-it does not request training. `--jobs 20` bounds simultaneous batch jobs and can
-be adjusted to the site allocation. The resource requests are 16 GB per
-generation/reconstruction job, 8 GB per postprocessing or TFDS job, and a
-48-hour runtime limit. `datasets_ild` is the ILD convenience alias. For
-generation only, use `PROD=ild pixi run gen`.
-
-ILD explicitly forbids partial production, including when the shared Pixi
-workflow generator receives `--allow-partial`. An existing subset of successful
-jobs cannot shrink the required input set. Failed jobs block their dataset
-instead of silently producing fewer than the requested events. Rerun the same
-command to resume completed work.
-
-Scaling the measured 600-event campaign suggests approximately **300 GB of
-retained work directories** on scratch, **150 GB of published ROOT files**, and
-**22 GB of Parquet files**, plus TFDS and temporary builds. Reserve headroom;
-the native runner retains simulation and reconstruction intermediates.
-
-The complete graph was dry-run with 300 generation jobs, 300 postprocessing
-jobs and three TFDS builds. A local Snakemake execution reused the six qualified
-ROOT/Parquet shards and built all three datasets; all 600 decoded records had
-finite, aligned features and targets. That two-shard check has 100 train / 100
-test events per sample; the full campaign uses the 90/10 file split above.
-Validation artifacts are in `reports/ild-snakemake-10k-20261117/`. Submission on
-Tallinn remains an operator action; the physics limitations below still apply.
+The earlier three-sample 10k workflow was tested separately with a 600-event
+fixture. Its records and logs remain in `reports/ild-snakemake-10k-20261117/`.
+Those tests and the stable-runtime smoke tests do not constitute physics
+qualification of the new 50k campaign or its 91 GeV samples.
 
 ## Inputs, target policy and baseline
 
@@ -230,7 +193,7 @@ and the unchanged validator thresholds. A structurally valid file may still
 fail reconstruction quality gates.
 
 Builders are `ild_edm_qq_pf`, `ild_edm_ttbar_pf` and `ild_edm_ww_fullhad_pf`,
-configuration **1**, version **0.1.0**. They require compatible ILD provenance,
+configuration **1**, version **0.2.0**. They require compatible ILD provenance,
 finite arrays and at least two independent generation jobs per process. Sorted
 files are divided into disjoint train/test sets; events from the same ROOT job
 cannot cross the split. Duplicate source ROOT checksums are rejected even if
