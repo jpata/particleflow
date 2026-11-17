@@ -20,11 +20,11 @@ job_scratch_dir=/scratch/local/joosep/tfds_tmp/${tfds_id}_${SLURM_JOB_ID:-manual
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export KERAS_BACKEND=torch
 hostname
-export TFDS_VERSION=0.3.0
+export TFDS_VERSION=0.4.0
 env
 
 echo "Building TFDS for mlpf/heptfds/idea_pf_edm4hep/qq config $config_id"
-echo "Manual dir: /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/post"
+echo "Manual dir: /local/joosep/mlpf/idea/IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117/post"
 echo "Scratch dir: $job_scratch_dir"
 
 mkdir -p $job_scratch_dir
@@ -39,6 +39,6 @@ export TMPDIR=$job_scratch_dir
 export TEMPDIR=$job_scratch_dir
 export TEMP=$job_scratch_dir
 export TMP=$job_scratch_dir
-tfds build mlpf/heptfds/idea_pf_edm4hep/qq --config $config_id --data_dir $job_scratch_dir --manual_dir /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/post --overwrite
-echo "Copying from $job_scratch_dir to /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/tfds"
-cp -r $job_scratch_dir/* /local/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/tfds/
+tfds build mlpf/heptfds/idea_pf_edm4hep/qq --config $config_id --data_dir $job_scratch_dir --manual_dir /local/joosep/mlpf/idea/IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117/post --overwrite
+echo "Copying from $job_scratch_dir to /local/joosep/mlpf/idea/IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117/tfds"
+cp -r $job_scratch_dir/* /local/joosep/mlpf/idea/IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117/tfds/

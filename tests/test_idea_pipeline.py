@@ -179,6 +179,34 @@ def test_perigee_at_origin_keeps_tracks_from_the_origin_and_straight_tracks():
     np.testing.assert_allclose([d0[0], phi0[0], z0[0]], [50.0, 0.0, 20.0 - 100.0 * 0.5])
 
 
+def test_proxy_features_keep_upstream_perigee_and_first_hit_fixes():
+    from mlpf.data.key4hep.postprocessing import idea_track_to_features
+
+    coll = "TracksFromGenParticles"
+    states = f"_{coll}_trackStates"
+    x, y, z, phi = _point_on_helix(5.0, 0.3, 20.0, 0.001, 0.5, 100.0)
+    track_fields = {"type": [0], "chi2": [0.0], "ndf": [0], "trackStates_begin": [0], "trackStates_end": [2]}
+    state_fields = {
+        "location": [1, 2],
+        "phi": [phi, phi],
+        "omega": [0.001, 0.001],
+        "tanLambda": [0.5, 0.5],
+        "D0": [999.0, 0.0],
+        "Z0": [999.0, 0.0],
+        "time": [0.0, 0.0],
+        "referencePoint.x": [x, 30.0],
+        "referencePoint.y": [y, 40.0],
+        "referencePoint.z": [z, 0.0],
+    }
+    prop = {
+        coll: [ak.Array({f"{coll}.{key}": value for key, value in track_fields.items()})],
+        states: [ak.Array({f"{states}.{key}": value for key, value in state_fields.items()})],
+    }
+    features = idea_track_to_features(prop, 0, 2.0, coll=coll)
+    np.testing.assert_allclose([features[name][0] for name in ("D0", "phi", "Z0")], [5.0, 0.3, 20.0])
+    np.testing.assert_allclose(features["radiusOfInnermostHit"], [50.0])
+
+
 @pytest.mark.parametrize("source", [None, PROXY_TRACK_SOURCE, "mixed"])
 def test_current_loader_rejects_missing_proxy_or_mixed_provenance(source):
     fields = {"X_track": ak.Array([[], []])}

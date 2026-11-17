@@ -669,15 +669,15 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/ttbar"
-        version: "0.4.1"
+        version: "0.4.0"
         config_ids: [1]
       ww_fullhad:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/ww_fullhad"
-        version: "0.4.1"
+        version: "0.4.0"
         config_ids: [1]
       qq:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/qq"
-        version: "0.4.1"
+        version: "0.4.0"
         config_ids: [1]
 
 # -----------------------------------------------------------------------------
@@ -768,13 +768,13 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.4.1"
+            version: "0.4.0"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.4.1"
+            version: "0.4.0"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.4.1"
+            version: "0.4.0"
             splits: ["1"]
 
     validation_datasets:
@@ -782,24 +782,24 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.4.1"
+            version: "0.4.0"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.4.1"
+            version: "0.4.0"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.4.1"
+            version: "0.4.0"
             splits: ["1"]
 
     test_datasets:
       - name: "idea_edm_qq_pf"
-        version: "0.4.1"
+        version: "0.4.0"
         splits: ["1"]
       - name: "idea_edm_ttbar_pf"
-        version: "0.4.1"
+        version: "0.4.0"
         splits: ["1"]
       - name: "idea_edm_ww_fullhad_pf"
-        version: "0.4.1"
+        version: "0.4.0"
         splits: ["1"]
 
   pyg-cms-v1:
