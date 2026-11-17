@@ -22,6 +22,7 @@ class Dataset(Enum):
     CLIC = "clic"
     CLD = "cld"
     IDEA = "idea"
+    ILD = "ild"
     MAIA = "maia"
     CLIC_HITS = "clic_hits"
     CLD_HITS = "cld_hits"
@@ -75,6 +76,7 @@ SOURCE_IDS = {
     Dataset.IDEA.value: 4,
     Dataset.COLLIDERML.value: 5,
     Dataset.MAIA.value: 6,
+    Dataset.ILD.value: 7,
 }
 SOURCE_LABELS = {source_id: source_name for source_name, source_id in SOURCE_IDS.items()}
 
@@ -263,6 +265,10 @@ class EDM4HEP:
         # collection rather than by subdetector, because subdetector 2 also holds other
         # systems (LumiCal on CLIC).
         muon_collections: Tuple[str, ...] = ()
+        track_collection: str = "SiTracks_Refitted"
+        track_truth_collection: str = "SiTracksMCTruthLink"
+        tracker_relations: Optional[Dict[str, Tuple[str, str]]] = None
+        track_has_dqdx: bool = True
         # Reco -> SimCalorimeterHit relations to follow for hit collections that CalohitMCTruthLink
         # does not cover; the sim hits' CaloHitContributions name the MCParticles and their energies.
         hit_truth_relations: Tuple[str, ...] = ()
@@ -283,6 +289,56 @@ class EDM4HEP:
     # mlpf/data/key4hep/postprocessing.py and tests/validate_parquet.py pick up
     # the B-field and hit collections from this configuration.
     DETECTORS = {
+        "ild": Detector(
+            name="ild",
+            b_field=2.0,
+            hit_collections=[
+                "EcalBarrelCollectionRec",
+                "EcalBarrelCollectionGapHits",
+                "EcalEndcapsCollectionRec",
+                "EcalEndcapsCollectionGapHits",
+                "EcalEndcapRingCollectionRec",
+                "HcalBarrelCollectionRec",
+                "HcalEndcapsCollectionRec",
+                "HcalEndcapRingCollectionRec",
+                "MUON",
+                "LCAL",
+                "LHCAL",
+                "VertexBarrelTrackerHits",
+                "VertexEndcapTrackerHits",
+                "InnerTrackerBarrelHits",
+                "InnerTrackerEndcapHits",
+                "TPCTrackerHits",
+                "SETSpacePoints",
+            ],
+            muon_collections=("MUON",),
+            track_collection="MarlinTrkTracks",
+            track_has_dqdx=False,
+            # Wrapped Marlin reconstruction loses collection CellIDEncoding
+            # metadata. This qualification exposes PF inputs only.
+            require_cellid_encoding=False,
+            track_truth_collection="MarlinTrkTracksMCTruthLink",
+            tracker_relations={
+                "VertexBarrelTrackerHits": (
+                    "VertexBarrelTrackerHitRelations",
+                    "VertexBarrelCollection",
+                ),
+                "VertexEndcapTrackerHits": (
+                    "VertexEndcapTrackerHitRelations",
+                    "VertexEndcapCollection",
+                ),
+                "InnerTrackerBarrelHits": (
+                    "InnerTrackerBarrelHitRelations",
+                    "InnerTrackerBarrelCollection",
+                ),
+                "InnerTrackerEndcapHits": (
+                    "InnerTrackerEndcapHitRelations",
+                    "InnerTrackerEndcapCollection",
+                ),
+                "TPCTrackerHits": ("TPCTrackerHitRelations", "TPCCollection"),
+                "SETSpacePoints": ("SETSpacePointRelations", "SETCollection"),
+            },
+        ),
         "idea": Detector(
             name="idea",
             b_field=2.0,
@@ -423,6 +479,7 @@ ELEM_TYPES = {
     Dataset.CLD.value: [0, 1, 2],  # 1 - track, 2 - cluster
     Dataset.IDEA.value: [0, 1, 2],  # 1 - truth-seeded proxy track, 2 - cluster
     Dataset.MAIA.value: [0, 1, 2],  # 1 - track, 2 - cluster
+    Dataset.ILD.value: [0, 1, 2],
     Dataset.CLIC_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
     Dataset.CLD_HITS.value: [0, 1, 2],  # 1 - tracker hit, 2 - calorimeter hit
     Dataset.COLLIDERML.value: [0, 1, 2],  # 1 - track, 2 - cluster
@@ -436,6 +493,7 @@ ELEM_TYPES_NONZERO = {
     Dataset.CLD.value: [1, 2],
     Dataset.IDEA.value: [1, 2],
     Dataset.MAIA.value: [1, 2],
+    Dataset.ILD.value: [1, 2],
     Dataset.CLIC_HITS.value: [1, 2],
     Dataset.CLD_HITS.value: [1, 2],
     Dataset.COLLIDERML.value: [1, 2],
@@ -457,6 +515,7 @@ CLASS_LABELS = {
     Dataset.CLIC.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLD.value: [0, 211, 130, 22, 11, 13],
     Dataset.IDEA.value: [0, 211, 130, 22, 11, 13],
+    Dataset.ILD.value: [0, 211, 130, 22, 11, 13],
     Dataset.MAIA.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLIC_HITS.value: [0, 211, 130, 22, 11, 13],
     Dataset.CLD_HITS.value: [0, 211, 130, 22, 11, 13],
@@ -516,9 +575,38 @@ CLASS_NAMES_LATEX = {
         r"$e^\pm$",
         r"$\mu^\pm$",
     ],
-    Dataset.MAIA.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    Dataset.COLLIDERML.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
-    Dataset.COLLIDERML_HITS.value: ["none", "Charged Hadron", "Neutral Hadron", r"$\gamma$", r"$e^\pm$", r"$\mu^\pm$"],
+    Dataset.MAIA.value: [
+        "none",
+        "Charged Hadron",
+        "Neutral Hadron",
+        r"$\gamma$",
+        r"$e^\pm$",
+        r"$\mu^\pm$",
+    ],
+    Dataset.ILD.value: [
+        "none",
+        "Charged Hadron",
+        "Neutral Hadron",
+        r"$\gamma$",
+        r"$e^\pm$",
+        r"$\mu^\pm$",
+    ],
+    Dataset.COLLIDERML.value: [
+        "none",
+        "Charged Hadron",
+        "Neutral Hadron",
+        r"$\gamma$",
+        r"$e^\pm$",
+        r"$\mu^\pm$",
+    ],
+    Dataset.COLLIDERML_HITS.value: [
+        "none",
+        "Charged Hadron",
+        "Neutral Hadron",
+        r"$\gamma$",
+        r"$e^\pm$",
+        r"$\mu^\pm$",
+    ],
 }
 CLASS_NAMES = {
     Dataset.CMS.value: [
@@ -536,6 +624,7 @@ CLASS_NAMES = {
     Dataset.CLD.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.IDEA.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.MAIA.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
+    Dataset.ILD.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLIC_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.CLD_HITS.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
     Dataset.COLLIDERML.value: ["none", "chhad", "nhad", "gamma", "ele", "mu"],
@@ -593,9 +682,38 @@ CLASS_NAMES_CAPITALIZED = {
         "Electron",
         "Muon",
     ],
-    Dataset.MAIA.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    Dataset.COLLIDERML.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
-    Dataset.COLLIDERML_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
+    Dataset.MAIA.value: [
+        "none",
+        "Charged hadron",
+        "Neutral hadron",
+        "Photon",
+        "Electron",
+        "Muon",
+    ],
+    Dataset.ILD.value: [
+        "none",
+        "Charged hadron",
+        "Neutral hadron",
+        "Photon",
+        "Electron",
+        "Muon",
+    ],
+    Dataset.COLLIDERML.value: [
+        "none",
+        "Charged hadron",
+        "Neutral hadron",
+        "Photon",
+        "Electron",
+        "Muon",
+    ],
+    Dataset.COLLIDERML_HITS.value: [
+        "none",
+        "Charged hadron",
+        "Neutral hadron",
+        "Photon",
+        "Electron",
+        "Muon",
+    ],
 }
 
 X_FEATURES = {
@@ -660,6 +778,7 @@ X_FEATURES = {
     Dataset.CLD.value: get_edm4hep_x_features(),
     Dataset.IDEA.value: get_edm4hep_x_features(),
     Dataset.MAIA.value: get_edm4hep_x_features(EDM4HEP.DETECTORS["maia"].track_feature_names()),
+    Dataset.ILD.value: get_edm4hep_x_features(),
     Dataset.CLIC_HITS.value: EDM4HEP.HitFeatures.get_names(),
     Dataset.CLD_HITS.value: EDM4HEP.HitFeatures.get_names(),
     Dataset.COLLIDERML.value: [
@@ -701,6 +820,14 @@ class JetConfig:
 
 
 JET_CONFIG = {
+    Dataset.ILD.value: JetConfig(
+        algorithm="ee_genkt_algorithm",
+        radius=0.4,
+        p=-1.0,
+        pt_cut=5.0,
+        match_dr=0.1,
+        match_rel_pt=0.5,
+    ),
     Dataset.MAIA.value: JetConfig(
         algorithm="ee_genkt_algorithm",
         radius=0.4,

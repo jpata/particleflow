@@ -8,7 +8,7 @@ Start with the input representation. Each detector page lists its physics sample
 
 | Input representation | Detector or dataset family | Typical use |
 |---|---|---|
-| [Tracks and clusters](track-cluster.md) | [CMS](cms.md), [CLD](cld.md), [CLICdet](clic.md), [ColliderML](colliderml.md), [MAIA](maia.md), [IDEA](idea.md) | Reconstructed tracks and calorimeter clusters; the default starting point for CMS, CLD, and CLIC. |
+| [Tracks and clusters](track-cluster.md) | [CMS](cms.md), [CLD](cld.md), [CLICdet](clic.md), [ColliderML](colliderml.md), [MAIA](maia.md), [IDEA](idea.md), [ILD@FCC-ee](ild.md) | Reconstructed tracks and calorimeter clusters; the default starting point for CMS, CLD, and CLIC. |
 | [Hits](hit-based.md) | [CLD](cld-hits.md), [CLICdet](clic-hits.md), [ColliderML](colliderml-hits.md) | Tracker and calorimeter measurements for dedicated hit-model research. |
 
 The catalog includes maintained recipes and explicitly identified partial workflows. A builder's existence does not imply a trained model, physics validation, or public download. Detector pages identify those boundaries. Dataset schema, Python package, and model artifact versions are independent.
@@ -20,7 +20,7 @@ input representations and reference particles.
 
 ## Configuration partitions and event splits
 
-CMS, CLD, CLIC, MAIA, and ColliderML recipes use configuration partitions `1` through `10`; IDEA uses configuration `1`. A configuration partition contains its own `train` and `test` event splits: the number identifies the partition, while `train` or `test` identifies the event split. The standard ten-partition model recipes combine all ten partitions. Configuration `1` provides a one-partition subset for a small experiment; the configured training corpus spans all ten.
+CMS, CLD, CLIC, MAIA, and ColliderML recipes use configuration partitions `1` through `10`; IDEA and ILD@FCC-ee use configuration `1`. A configuration partition contains its own `train` and `test` event splits: the number identifies the partition, while `train` or `test` identifies the event split. The standard ten-partition model recipes combine all ten partitions. Configuration `1` provides a one-partition subset for a small experiment; the configured training corpus spans all ten.
 
 The on-disk layout is:
 
