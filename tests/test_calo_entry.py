@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 import torch
 
-from mlpf.conf import X_FEATURES, MLPFConfig
-from mlpf.model.calo_entry import TrackCaloEntry, calo_entry_eta_phi
+from mlpf.conf import X_FEATURES, MLPFConfig, SOURCE_IDS
+from mlpf.model.calo_entry import MultiSourceTrackCaloEntry, TrackCaloEntry, calo_entry_eta_phi
 from mlpf.model.mlpf import MLPF
 
 
@@ -181,6 +181,62 @@ def test_geometry_override_and_unsupported_datasets():
 
     with pytest.raises(ValueError, match="not supported"):
         _heptv2("clic_hits", track_hash_at_calo=True)
+
+
+@pytest.mark.parametrize("backbone_mode", ["shared", "split"])
+@pytest.mark.parametrize("method", ["forward", "encode_backbone", "encode_backbone_layers"])
+def test_joint_hashing_uses_each_events_source(backbone_mode, method):
+    sources = ("clic", "cld", "colliderml", "cld")
+    config = MLPFConfig.model_validate(
+        {
+            "dataset": "cld",
+            "data_dir": "/tmp",
+            "input_dim": 19,
+            "model": {
+                "type": "heptv2",
+                "input_encoding": "split",
+                "backbone": {"mode": backbone_mode},
+                "heptv2": {"num_convs": 1, "num_heads": 2, "embedding_dim": 16, "width": 16, "block_size": 8, "track_hash_at_calo": True},
+            },
+            "conv_type": "heptv2",
+            "test_dataset": {f"{source}_fixture_pf": {"version": "1.0.0", "splits": ["fixture"]} for source in sources},
+        }
+    )
+    model = MLPF(config).eval()
+    X = torch.zeros(len(sources), 8, config.input_dim)
+    X[..., 0] = 1
+    X[..., 4] = 1
+    X[:, 1, 0] = 2
+    X[:, -1, 0] = 0
+    for event, source in enumerate(sources):
+        z0, tan_lambda, omega = TrackCaloEntry(source).columns
+        X[event, :, z0] = 0
+        X[event, :, tan_lambda] = 0.2
+        X[event, :, omega] = 1e-4
+    original = X.clone()
+    source_id = torch.tensor([SOURCE_IDS[source] for source in sources])
+    expected = torch.cat([TrackCaloEntry(source)(X[event : event + 1]) for event, source in enumerate(sources)])
+    seen = []
+    backbones = [model.conv_id] if backbone_mode == "shared" or method != "forward" else [model.conv_id, model.conv_reg]
+    for backbone in backbones:
+        backbone[0].register_forward_pre_hook(lambda module, args: seen.append(args[2].clone()))
+
+    getattr(model, method)(X, X[..., 0] != 0, source_id=source_id)
+
+    assert len(seen) == len(backbones)
+    for coordinates in seen:
+        torch.testing.assert_close(coordinates, expected)
+    torch.testing.assert_close(X, original)
+    torch.testing.assert_close(expected[X[..., 0] != 1], X[X[..., 0] != 1])
+    torch.testing.assert_close(expected[..., 5:], X[..., 5:])
+    assert not torch.allclose(expected[0, 0, 3:5], expected[1, 0, 3:5])
+
+
+@pytest.mark.parametrize("source_id", [None, torch.tensor([SOURCE_IDS["cld"]])], ids=["missing", "wrong-batch-size"])
+def test_multi_source_hashing_requires_one_source_id_per_event(source_id):
+    entry = MultiSourceTrackCaloEntry(("cld", "clic"))
+    with pytest.raises(ValueError, match="source_id"):
+        entry(torch.zeros(2, 8, 19), source_id)
 
 
 @pytest.mark.parametrize("dataset", ["clic", "cld"])

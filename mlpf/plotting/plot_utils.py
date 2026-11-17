@@ -141,6 +141,7 @@ EVALUATION_DATASET_NAMES = {
     "idea_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$ (proxy tracks)",
     "idea_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$ (proxy tracks)",
     "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "cld_edm_z_tautau_pf": r"$e^+e^- \rightarrow Z \rightarrow \tau^+\tau^-$",
     "cld_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
     "cld_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "cld_edm_ttbar_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
