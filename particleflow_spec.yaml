@@ -602,59 +602,38 @@ productions:
     comment: "Joint CLD+CLIC+ColliderML pu0 tracks/clusters"
     source_productions: {cld: cld, clic: clic, colliderml: colliderml}
 
-  # IDEA full simulation and the reconstruction currently provided by FCC-config.
-  # MLPF uses quality-selected fitted tracks; ycand remains a target oracle
-  # until an independent reconstructed-PFO baseline is available.
+  # ILD full simulation, fitted Clupatra tracks and Pandora particle flow.
   ild:
     type: "key4hep"
     model: "pyg-ild-v1"
     comment: "ILD_FCCee_v02 qualification; Clupatra/DDKalTest tracking and Pandora PF"
-    workspace_dir: "${project.paths.storage_root}/ild/ILD_FCCee_v02_qualification_20261117"
+    workspace_dir: "${project.paths.storage_root}/ild/ILD_FCCee_v02_10k_20261117"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/ild"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
+    # Never build TFDS from an incomplete set of generation jobs.
+    allow_partial: false
+    gen_environment:
+      LD_PRELOAD: "/usr/lib64/libffi.so.8"
+      IDEA_STACK_RELEASE: "Mon"
     memory: {gen: 16000, post: 8000, tfds: 8000}
     slurm_partition: "main"
     slurm_runtime: "48h"
     samples:
-      gun_e_10gev:
-        process_name: "gun_e_10gev"
-        gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [424242, 424243]
-        events_per_job: 10
-      gun_mu_10gev:
-        process_name: "gun_mu_10gev"
-        gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [434242, 434243]
-        events_per_job: 10
-      gun_pi_10gev:
-        process_name: "gun_pi_10gev"
-        gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [444242, 444243]
-        events_per_job: 10
-      gun_gamma_10gev:
-        process_name: "gun_gamma_10gev"
-        gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [454242, 454243]
-        events_per_job: 10
-      gun_kaon0L_10gev:
-        process_name: "gun_kaon0L_10gev"
-        gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [464242, 464243]
-        events_per_job: 10
+      # 100 independent jobs of 100 events per physics sample; ends are exclusive.
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [300000, 300002]
+        seed_range: [300000, 300100]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [400000, 400002]
+        seed_range: [400000, 400100]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [500000, 500002]
+        seed_range: [500000, 500100]
         events_per_job: 100
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
@@ -672,6 +651,7 @@ productions:
         version: "0.1.0"
         config_ids: [1]
 
+  # IDEA full simulation with fitted tracks; ycand remains a target oracle.
   idea:
     type: "key4hep"
     model: "pyg-idea-pipeline-v1"

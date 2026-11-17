@@ -1,6 +1,7 @@
 import os
 import stat
 import argparse
+import shlex
 from mlpf.utils import load_spec, resolve_path
 
 # Configuration
@@ -100,6 +101,7 @@ def main():  # noqa: C901
         raise ValueError(f"Production {args.production} not found in {SPEC_FILE}")
 
     prod_config = spec["productions"][args.production]
+    allow_partial = args.allow_partial and prod_config.get("allow_partial", True)
     prod_type = prod_config.get("type", "cms")
     if prod_config.get("generation_only", False):
         req_steps = ["gen"]
@@ -150,8 +152,8 @@ def main():  # noqa: C901
     os.makedirs(tmpdir, exist_ok=True)
 
     # Apptainer/Singularity configuration
-    main_container_img = spec["project"].get("container")
-    gen_container_img = prod_config.get("gen_container", main_container_img)
+    main_container_img = resolve_path(spec["project"].get("container", ""), spec)
+    gen_container_img = resolve_path(prod_config.get("gen_container", main_container_img), spec)
 
     bind_mounts = spec["project"].get("bind_mounts", [])
     bind_args = "--writable-tmpfs"
@@ -249,6 +251,8 @@ def main():  # noqa: C901
             + f" && export NEV={events_per_job}"
             + (f" && export PROGRESS_INTERVAL={progress_interval}" if progress_interval is not None else "")
         )
+        for name, value in prod_config.get("gen_environment", {}).items():
+            exports += f" && export {name}={shlex.quote(resolve_path(str(value), spec))}"
         if prod_type == "key4hep":
             compact_file = prod_config.get("compact_file")
             if compact_file:
@@ -384,7 +388,7 @@ done
         if "post" in req_steps and (sample_key in tfds_mappings or sample_key in tfds_hit_mappings):
             step_data["post"]["targets"].append(f'"{jobs_dir}/post/post_{sample_key}_all.done"')
 
-            if args.allow_partial:
+            if allow_partial:
                 # Dynamically determine which chunks to post-process based on existing gen sentinels
                 post_input = (
                     f'lambda wildcards: expand("{jobs_dir}/post/post_{sample_key}_{{seed}}.done", '
@@ -737,6 +741,15 @@ rule train_{rule_model_name}:{train_rule_input}
     for step, data in step_data.items():
         if data["targets"] or data["rules"]:
             write_snakefile(f"{jobs_dir}/Snakefile_{step}", data["targets"], data["rules"], tmpdir=tmpdir)
+
+    # The combined graph allows any stage target to build its prerequisites.
+    # The stage-specific Snakefiles remain available for explicitly staged runs.
+    write_snakefile(
+        f"{jobs_dir}/Snakefile",
+        [target for data in step_data.values() for target in data["targets"]],
+        "".join(data["rules"] for data in step_data.values()),
+        tmpdir=tmpdir,
+    )
 
     print(f"Generated Snakemake workflow in {jobs_dir}")
 
