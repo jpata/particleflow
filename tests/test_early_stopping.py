@@ -8,15 +8,15 @@ from mlpf.model import training
 
 @pytest.mark.parametrize("rank", ["cpu", 0, 1])
 @pytest.mark.parametrize(
-    "validation_losses,patience,expected_step,best_step",
+    "validation_losses,patience,expected_step,best_steps",
     [
-        ([5, 5, 6, 7, 1], 3, 8, 2),  # Equal loss is stale; stop on the third failure.
-        ([5, 6, 4, 4, 5, 6, 1], 3, 12, 6),  # Improvement resets patience.
-        ([5, 4, 3, 2, 1, 0], 3, 12, 12),  # Keep improving up to the step budget.
-        ([5, 5, 1], 0, 4, 2),  # Zero patience still allows improvements.
+        ([5, 5, 6, 7, 1], 3, 8, [2]),  # Equal loss is stale; stop on the third failure.
+        ([5, 6, 4, 4, 5, 6, 1], 3, 12, [2, 6]),  # Improvement resets patience.
+        ([5, 4, 3, 2, 1, 0], 3, 12, [2, 4, 6, 8, 10, 12]),  # Keep improving up to the step budget.
+        ([5, 5, 1], 0, 4, [2]),  # Zero patience still allows improvements.
     ],
 )
-def test_training_stops_on_validation_patience(tmp_path, monkeypatch, rank, validation_losses, patience, expected_step, best_step):
+def test_training_stops_on_validation_patience(tmp_path, monkeypatch, rank, validation_losses, patience, expected_step, best_steps):
     """Exercise the loop and real validation state updates on main and worker ranks."""
     losses = iter(validation_losses)
     evaluate = Mock(side_effect=lambda **kwargs: {"Total": next(losses), "Total_unweighted": 1.0})
@@ -44,6 +44,9 @@ def test_training_stops_on_validation_patience(tmp_path, monkeypatch, rank, vali
     class Loader:
         names = []
 
+        def __init__(self, split):
+            self.split = split
+
         def __len__(self):
             return 12
 
@@ -51,18 +54,21 @@ def test_training_stops_on_validation_patience(tmp_path, monkeypatch, rank, vali
             return iter([SimpleNamespace(X=SimpleNamespace(shape=(1,)))] * 12)
 
         def state_dict(self):
-            return {}
+            return {"split": self.split}
 
         def reset(self):
             pass
 
+    schedule = Mock()
+    schedule.state_dict.return_value = {"position": 3}
     training.train_all_steps(
         rank=rank,
         world_size=1 if rank == "cpu" else 2,
         model=None,
         optimizer=None,
-        train_loader=Loader(),
-        valid_loader=Loader(),
+        train_loader=Loader("train"),
+        valid_loader=Loader("valid"),
+        lr_schedule=schedule,
         num_steps=12,
         patience=patience,
         outdir=str(tmp_path),
@@ -74,7 +80,11 @@ def test_training_stops_on_validation_patience(tmp_path, monkeypatch, rank, vali
     assert train_step.call_count == expected_step
     assert evaluate.call_count == expected_step // 2
     if rank in ("cpu", 0):
-        assert save.call_args.args[0] == tmp_path / "best.pth"
-        assert save.call_args.args[3]["step"] == best_step
+        assert [call.args[3]["step"] for call in save.call_args_list] == best_steps
+        for call in save.call_args_list:
+            assert call.args[0] == tmp_path / "best.pth"
+            assert call.args[3]["lr_schedule_state_dict"] == schedule.state_dict()
+            assert call.args[3]["train_loader_state_dict"] == {"split": "train"}
+            assert call.args[3]["valid_loader_state_dict"] == {"split": "valid"}
     else:
         save.assert_not_called()

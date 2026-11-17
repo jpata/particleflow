@@ -229,9 +229,7 @@ def _serialize_cli_value(value):
         return "null"
     if isinstance(value, bool):
         return "true" if value else "false"
-    if isinstance(value, list):
-        return ",".join(str(item) for item in value)
-    if isinstance(value, dict):
+    if isinstance(value, (list, dict)):
         return json.dumps(value)
     return str(value)
 
