@@ -45,7 +45,7 @@ def source(name):
 
 def test_vocabulary_is_the_union_of_the_dataset_features():
     assert list(FEATURE_VOCABULARY) == sorted(set(FEATURE_VOCABULARY))
-    assert set(TRACK_CLUSTER_SOURCES) == {"cld", "clic", "colliderml", "idea", "maia"}
+    assert set(TRACK_CLUSTER_SOURCES) == {"cld", "clic", "colliderml", "idea", "maia", "ild"}
     # Features that are constant in today's data keep their slot.
     assert {"dEdx", "dEdxError", "time", "iTheta", "energy_other"} <= set(FEATURE_VOCABULARY)
     # The element type and "Null" columns are not features.
@@ -62,6 +62,13 @@ def test_same_quantity_in_different_columns_shares_a_slot():
     assert colliderml[0, 0, SLOT["tanLambda"]] / scale("colliderml", TRACK) == pytest.approx(0.7)
     # Column 11 of a ColliderML track is omega, not tanLambda.
     assert bag(one_row(TRACK, {11: 0.3}), source("colliderml"))[0, 0, SLOT["tanLambda"]] == 0
+
+
+@pytest.mark.parametrize("elemtype", [TRACK, CLUSTER])
+def test_ild_uses_the_shared_edm4hep_feature_layout(elemtype):
+    bag = FeatureBag(19)
+    row = one_row(elemtype, {1: 2.0, 5: 3.0, 11: 0.7, 18: 1.5}, input_dim=19)
+    torch.testing.assert_close(bag(row, source("ild")), bag(row, source("cld")))
 
 
 def test_aliases_share_a_slot():
