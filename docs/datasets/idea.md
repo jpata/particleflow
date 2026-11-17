@@ -6,9 +6,9 @@ IDEA uses measured GGTF/GenFit tracks and dual-readout calorimeter clusters. Its
 
 | Physics sample | TFDS dataset | Recipe version |
 |---|---|---|
-| Top-quark pairs | `idea_edm_ttbar_pf` | 0.4.1 |
-| Fully hadronic WW | `idea_edm_ww_fullhad_pf` | 0.4.1 |
-| Inclusive quark pairs | `idea_edm_qq_pf` | 0.4.1 |
+| Top-quark pairs | `idea_edm_ttbar_pf` | 0.4.0 |
+| Fully hadronic WW | `idea_edm_ww_fullhad_pf` | 0.4.0 |
+| Inclusive quark pairs | `idea_edm_qq_pf` | 0.4.0 |
 
 The `pyg-idea-pipeline-v1` recipe uses all three samples with configuration **1**. The [catalog](catalog.md#published-availability) records their public availability.
 
@@ -29,17 +29,22 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 ## Builder and recipe compatibility
 
 The builders, production mapping, and `pyg-idea-pipeline-v1` training, validation,
-and test selections use **0.4.1**. Versions 0.4.x select `FittedTracks` at the IP,
-reject invalid fits, and derive training truth links from tracker-hit
+and test selections use **0.4.0**. This version selects `FittedTracks` at the IP,
+rejects invalid fits, and derives training truth links from tracker-hit
 associations. Tracks retain their measured kinematics; truth is used only for
 labels. At least 75% of the distinct measurements must vote for one direct,
 charged status-1 particle to give a track a representative label. Secondary,
 fake and low-purity tracks remain inputs without an ancestor-momentum label.
 
-For **0.4.1**, regenerate reconstruction, Parquet and TFDS. This release fixes
+Upstream **0.3.0** preserves proxy tracks with origin-referenced perigee
+parameters and an AtFirstHit radius (PR #581); explicit proxy mode retains
+those fixes. The fitted-track pipeline and local reconstruction patches are
+released together as **0.4.0**, superseding development version labels.
+
+For **0.4.0**, regenerate reconstruction, Parquet and TFDS. This release fixes
 circle-seed orientation and writes GENFIT's fitted charge instead of the seed
 hypothesis. Stored simulation or GGTF candidates can be reused for reconstruction;
-unpatched 0.4.0 `FittedTracks` must be refitted. Published 0.2.1
+development `FittedTracks` produced before the tracking fix must be refitted. Published 0.2.1
 ROOT files and proxy-only reconstruction cannot provide these inputs. There is
 no automatic fallback to proxy tracks, and the fitted-track builder rejects
 unmarked or proxy Parquet files. Do not relabel old dataset directories.
@@ -68,7 +73,7 @@ proxy metadata; 0.4.x requires `track_source="ggtf_genfit"` and matching quality
 and truth-policy metadata. The pipeline-preparation helper preserves provenance
 and requires `--legacy-proxy` for old unmarked proxy inputs.
 
-Before the tracking fix (0.4.0), the 16 November validation generated
+Before the tracking fix, the 16 November validation generated
 **100 ttbar events at 365 GeV** in four disjoint 25-event batches. The updated
 ROOT files were postprocessed with both
 proxy and fitted tracks. The reference was freshly postprocessed from the
@@ -124,10 +129,10 @@ reconstruction; avoid concurrent GGTF jobs on a 64 GB host.
 The earlier three-event 0.4.0 TFDS smoke dataset built and read both splits
 successfully. This validates integration, not tracking efficiency or PF
 performance. `ycand` remains a target oracle, and `suitable_for_physics` remains
-false. The published 0.2.1 data and the upstream-update 0.3.0 recipe are proxy
+false. The published 0.2.1 data and the intermediate upstream-update proxy recipe are proxy
 campaigns, not substitutes for the new fitted-track dataset.
 
-## Tracking fix in 0.4.1
+## Tracking fix in 0.4.0
 
 The local k4RecTracker patch orients the circle seed using the signed angular
 progression of all ordered measurements. The old PCA-to-second-hit direction
@@ -161,7 +166,7 @@ outputs are under `reports/idea-tracking-fix-20261117/`.
 
 This fixes the dominant reversal mechanism. Overall track alignment still
 fails the 95% quality gate, and the cluster and legacy proxy target-definition
-limitations above remain. Do not relabel existing 0.4.0 files as 0.4.1.
+limitations above remain. Regenerate development files produced before the tracking fix; do not relabel them.
 
 ## Calorimeter clustering
 
@@ -190,7 +195,7 @@ have signal below 100 MeV but carry 24.78% of the clustered signal; 70.43%
 contain only one positive-energy cell. Clustering retains 99.571% of input
 C+S. Cell-energy sums and centroids agree with the stored output within float
 precision. The calorimeter code and geometry are unchanged by the tracking
-0.4.1 patch, so the pre-refit ROOT sample applies to this implementation.
+0.4.0 patch, so the pre-refit ROOT sample applies to this implementation.
 
 Two native implementation defects were reproduced without changing the
 production code:
