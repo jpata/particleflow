@@ -24,15 +24,16 @@ from mlpf.heptfds.edm4hep_utils.utils_idea import (
 
 _DESCRIPTION = """
 IDEA_o1_v03 ee -> qq at 365 GeV, for MLPF pipeline validation.
-Version 0.4.0 uses quality-selected GGTF/GenFit tracks and hit-majority truth
+Versions 0.4.x use quality-selected GGTF/GenFit tracks and hit-majority truth
 labels. ycand is still a target oracle, not an independent physics baseline.
-Older versions use truth-seeded proxy tracks.
+Versions below 0.4.0 use truth-seeded proxy tracks.
 """
 
 
 class IdeaEdmQqPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.4.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.4.1"))
     RELEASE_NOTES = {
+        "0.4.1": "Fix GenFit circle-seed orientation and fitted-charge output; regenerate reconstruction, Parquet and TFDS.",
         "0.4.0": "Use measured GGTF/GenFit tracks, reconstructed quality cuts, and direct hit-majority truth labels; regenerate Parquet/TFDS.",
         "0.3.0": "November 2026 upstream IDEA simulation/reconstruction with MLPF dual-readout patches; regenerate.",
         "0.1.0": "Initial pipeline-validation dataset with explicit proxy provenance.",

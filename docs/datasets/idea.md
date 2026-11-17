@@ -6,9 +6,9 @@ IDEA uses measured GGTF/GenFit tracks and dual-readout calorimeter clusters. Its
 
 | Physics sample | TFDS dataset | Recipe version |
 |---|---|---|
-| Top-quark pairs | `idea_edm_ttbar_pf` | 0.4.0 |
-| Fully hadronic WW | `idea_edm_ww_fullhad_pf` | 0.4.0 |
-| Inclusive quark pairs | `idea_edm_qq_pf` | 0.4.0 |
+| Top-quark pairs | `idea_edm_ttbar_pf` | 0.4.1 |
+| Fully hadronic WW | `idea_edm_ww_fullhad_pf` | 0.4.1 |
+| Inclusive quark pairs | `idea_edm_qq_pf` | 0.4.1 |
 
 The `pyg-idea-pipeline-v1` recipe uses all three samples with configuration **1**. The [catalog](catalog.md#published-availability) records their public availability.
 
@@ -29,15 +29,17 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 ## Builder and recipe compatibility
 
 The builders, production mapping, and `pyg-idea-pipeline-v1` training, validation,
-and test selections use **0.4.0**. This version selects `FittedTracks` at the IP,
-rejects invalid fits, and derives training truth links from tracker-hit
+and test selections use **0.4.1**. Versions 0.4.x select `FittedTracks` at the IP,
+reject invalid fits, and derive training truth links from tracker-hit
 associations. Tracks retain their measured kinematics; truth is used only for
 labels. At least 75% of the distinct measurements must vote for one direct,
 charged status-1 particle to give a track a representative label. Secondary,
 fake and low-purity tracks remain inputs without an ancestor-momentum label.
 
-Regenerate **Parquet and TFDS**. Updated ROOT files that already contain
-`FittedTracks` and tracker-hit simulation links can be reused. Published 0.2.1
+For **0.4.1**, regenerate reconstruction, Parquet and TFDS. This release fixes
+circle-seed orientation and writes GENFIT's fitted charge instead of the seed
+hypothesis. Stored simulation or GGTF candidates can be reused for reconstruction;
+unpatched 0.4.0 `FittedTracks` must be refitted. Published 0.2.1
 ROOT files and proxy-only reconstruction cannot provide these inputs. There is
 no automatic fallback to proxy tracks, and the fitted-track builder rejects
 unmarked or proxy Parquet files. Do not relabel old dataset directories.
@@ -54,19 +56,21 @@ For production, review `productions.idea` in `particleflow_spec.yaml` and the bu
 
 The `idea-upstream-2026-11` branch pins upstream components checked on
 16 November 2026 and preserves the local dual-readout truth patches. The
-fitted-track production uses workspace `IDEA_o1_v03_upstream_20261116_fitted` to
-avoid reusing cached proxy Parquet. See the [generator instructions](../../mlpf/data/key4hep/gen/idea/README.md).
+fitted-track production uses workspace
+`IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117` to avoid reusing
+cached proxy or unpatched fitted data. See the [generator instructions](../../mlpf/data/key4hep/gen/idea/README.md).
 
 The generator retains proxy collections for diagnostics, but the default MLPF
 reader does not load them. For explicit legacy diagnostics only, use
 `--idea-track-source truth_seeded` and read the resulting Parquet with
 `expected_track_source="truth_seeded"`. TFDS versions below 0.4.0 retain legacy
-proxy metadata; 0.4.0 requires `track_source="ggtf_genfit"` and matching quality
+proxy metadata; 0.4.x requires `track_source="ggtf_genfit"` and matching quality
 and truth-policy metadata. The pipeline-preparation helper preserves provenance
 and requires `--legacy-proxy` for old unmarked proxy inputs.
 
-The 16 November validation generated **100 ttbar events at 365 GeV** in four
-disjoint 25-event batches. The updated ROOT files were postprocessed with both
+Before the tracking fix (0.4.0), the 16 November validation generated
+**100 ttbar events at 365 GeV** in four disjoint 25-event batches. The updated
+ROOT files were postprocessed with both
 proxy and fitted tracks. The reference was freshly postprocessed from the
 published 100-event ROOT file in explicit legacy mode. These are not matched
 generator events across campaigns. The unmodified `tests/validate_parquet.py`
@@ -122,3 +126,39 @@ successfully. This validates integration, not tracking efficiency or PF
 performance. `ycand` remains a target oracle, and `suitable_for_physics` remains
 false. The published 0.2.1 data and the upstream-update 0.3.0 recipe are proxy
 campaigns, not substitutes for the new fitted-track dataset.
+
+## Tracking fix in 0.4.1
+
+The local k4RecTracker patch orients the circle seed using the signed angular
+progression of all ordered measurements. The old PCA-to-second-hit direction
+could reverse the transverse seed in the presence of misassigned inner hits.
+The output helix, covariance and calorimeter extrapolation now also use the
+actual fitted charge; GENFIT can change q/p sign relative to the seed.
+
+Refitting the same 3,046 GGTF candidates in the 100 simulated events gives:
+
+| Quantity | Before | Patched |
+|---|---:|---:|
+| Accepted fitted inputs | 1,543 | 1,567 |
+| Primary representative labels | 1,335 | 1,349 |
+| Nearly reversed representatives | 137 (10.26%) | 3 (0.22%) |
+| Direction within ΔR < 0.1 | 69.51% | 80.58% |
+| Wrong charge sign | 239 | 108 |
+
+The three development events went from five reversals to zero; the remaining
+97 events went from 132/1,295 reversals to 3/1,308. Of the original 137 reversed
+candidates, 113 now align, 13 no longer pass fit/truth selection, eight remain
+other direction outliers and three remain reversed. All three residual
+reversals have truth pT below 0.55 GeV. No simulation, digitization, GGTF
+inference, truth-based fit corrections or threshold changes were used.
+
+Numerical circle-seed regressions include measured hits from a reversed
+candidate, both flight directions, and arcs exceeding a full turn. A native
+charge audit found six serialized/fitted-charge mismatches in 23 baseline
+outputs and zero in 23 patched outputs. The original three-event refit was
+bit-identical before the patch, establishing the comparison baseline. Detailed
+outputs are under `reports/idea-tracking-fix-20261117/`.
+
+This fixes the dominant reversal mechanism. Overall track alignment still
+fails the 95% quality gate, and the cluster and legacy proxy target-definition
+limitations above remain. Do not relabel existing 0.4.0 files as 0.4.1.
