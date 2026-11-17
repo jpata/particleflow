@@ -150,7 +150,7 @@ def test_idea_finetuning_matches_expert_exposure_and_loads_joint_model():
         "benchmark",
     ):
         assert getattr(fine, field) == getattr(expert, field), field
-    assert fine.dataset_versions() == {"idea": "0.2.1"}
+    assert fine.dataset_versions() == {"idea": "0.3.0"}
     assert fine.num_steps == 500000 and fine.gpus == 1 and fine.gpu_batch_multiplier == 16
     assert fine.val_freq == 1000 and fine.patience == 30
     assert expert.val_freq == 10000 and expert.patience == 3
@@ -196,16 +196,44 @@ def test_finetuning_continuation_resumes_its_own_state(tmp_path, capsys):
     assert command[command.index("--reset_task_loss_weights") + 1] == "false"
 
 
+@pytest.mark.parametrize("campaign", ["experts", "finetuning"])
+def test_idea_campaign_keeps_dataset_version_when_spec_advances(tmp_path, campaign):
+    from mlpf.conf import MLPFConfig
+    from mlpf.pipeline import get_parser
+    from mlpf.training_scenarios import resolve_scenario_job
+
+    spec = yaml.safe_load((ROOT / "particleflow_spec.yaml").read_text())
+    model = spec["models"]["pyg-idea-pipeline-v1"]
+    for section in ("train_datasets", "validation_datasets"):
+        for sample in model[section]["physical"]["samples"]:
+            sample["version"] = "0.4.0"
+    for sample in model["test_datasets"]:
+        sample["version"] = "0.4.0"
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.safe_dump(spec))
+
+    scenario = load_training_scenario(ROOT / f"configs/training/scenarios/pf_fm_{campaign}.yaml")
+    platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+    job = resolve_scenario_job(scenario, platform, "idea", 12345, spec_file=spec_path)
+
+    assert job.resolved_config.dataset_versions() == {"idea": "0.3.0"}
+    assert job.resolved_config._samples() == {(name, "0.3.0") for name in ("idea_edm_qq_pf", "idea_edm_ttbar_pf", "idea_edm_ww_fullhad_pf")}
+    command = _pipeline_command(job, scenario, platform, spec_path, tmp_path / "experiment")
+    args, extra_args = get_parser().parse_known_args(command[command.index("mlpf/pipeline.py") + 1 :])
+    config = MLPFConfig.from_spec(str(spec_path), job.model_name, job.production_name, args=args, extra_args=extra_args)
+    assert config.dataset_versions() == {"idea": "0.3.0"}
+
+
 def test_idea_finetuning_requires_statistics_for_its_actual_dataset(tmp_path, monkeypatch):
     import mlpf.conf as conf
 
     original = conf.stats_path
     monkeypatch.setattr(
-        conf, "stats_path", lambda dataset, version: tmp_path / "idea_0.2.1.yaml" if dataset == "idea" else original(dataset, version)
+        conf, "stats_path", lambda dataset, version: tmp_path / "idea_0.3.0.yaml" if dataset == "idea" else original(dataset, version)
     )
     scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_finetuning.yaml")
     platform = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
-    with pytest.raises(ValueError, match="No input normalization statistics.*idea_0.2.1.yaml"):
+    with pytest.raises(ValueError, match="No input normalization statistics.*idea_0.3.0.yaml"):
         resolve_scenario_jobs(scenario, platform)
 
 

@@ -76,12 +76,11 @@ to start its configured task-loss calibration from scratch. This requires
 `--load_weights_only true`; a full resume retains its existing calibration.
 
 The reusable `configs/training/scenarios/pf_fm_finetuning.yaml` scenario
-fine-tunes an attention joint checkpoint on IDEA 0.2.1 or the CLD granularity
+fine-tunes an attention joint checkpoint on IDEA 0.3.0 or the CLD granularity
 variations with each matching expert's update budget and sampler.
 See the [scenario setup](../../configs/training/README.md#joint-attention-fine-tuning)
 for checkpoint selection and the required dataset normalization statistics. Set
-`load` to a completed attention joint run; the archived HEPTv2 checkpoint is
-incompatible with this backbone.
+`load` to a compatible attention joint checkpoint.
 
 For a full resume that only restarts data iteration, use `--sampler_from_scratch true` instead. That option retains the checkpoint step, optimizer, and scheduler. A full resume also retains the saved learning-rate schedule; a changed configured learning rate is ignored with a warning. Simply extending `--num_steps` does not create a fresh schedule.
 

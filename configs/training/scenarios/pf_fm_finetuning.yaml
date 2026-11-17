@@ -1,7 +1,7 @@
 # Fine-tune the joint backbone on individual detector datasets. No jobs are submitted.
 # IDEA matches the expert maximum update budget, sampler, batch and optimizer recipe.
 # Preserve the joint feature bag and normalization for strict checkpoint loading.
-# Uses the committed IDEA 0.2.1 normalization statistics.
+# Uses IDEA 0.3.0 data and matching normalization statistics.
 # Set load to the completed 500k joint checkpoint before starting fine-tuning.
 # CLD granularity variants pair with the same-named variants in pf_fm_experts.yaml.
 name: pf_fm_finetuning
@@ -11,6 +11,17 @@ variants:
   idea:
     model_name: pyg-idea-pipeline-v1
     production_name: idea
+    # Match the expert even when the model spec advances to a newer dataset.
+    overrides:
+      train_dataset.idea.physical.samples.idea_edm_qq_pf.version: "0.3.0"
+      train_dataset.idea.physical.samples.idea_edm_ttbar_pf.version: "0.3.0"
+      train_dataset.idea.physical.samples.idea_edm_ww_fullhad_pf.version: "0.3.0"
+      valid_dataset.idea.physical.samples.idea_edm_qq_pf.version: "0.3.0"
+      valid_dataset.idea.physical.samples.idea_edm_ttbar_pf.version: "0.3.0"
+      valid_dataset.idea.physical.samples.idea_edm_ww_fullhad_pf.version: "0.3.0"
+      test_dataset.idea_edm_qq_pf.version: "0.3.0"
+      test_dataset.idea_edm_ttbar_pf.version: "0.3.0"
+      test_dataset.idea_edm_ww_fullhad_pf.version: "0.3.0"
   # CLD granularity scan: matched expert/fine-tune variants use only available PF samples.
   cld_ecal_1p5mm:
     model_name: pyg-cld-v1
