@@ -34,6 +34,7 @@ project:
             - file: datasets/colliderml.md
             - file: datasets/maia.md
             - file: datasets/idea.md
+            - file: datasets/ild.md
         - file: datasets/hit-based.md
           children:
             - file: datasets/cld-hits.md
