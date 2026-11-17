@@ -60,9 +60,11 @@ For production, review `productions.idea` in `particleflow_spec.yaml` and the bu
 ## Local production and validation
 
 The `idea-upstream-2026-11` branch pins upstream components checked on
-16 November 2026 and preserves the local dual-readout truth patches. The
+16 November 2026 and preserves the local dual-readout truth patches. All four
+detectors use stable Key4hep 2026-04-08 with local k4FWCore v1.6 and
+MarlinReco v1.38.1; rebuild the shared overlays before launching. The
 fitted-track production uses workspace
-`IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117_beamspot2025` to avoid reusing
+`IDEA_o1_v03_key4hep_2026-04-08_core1.6_beamspot2025` to avoid reusing
 cached proxy, unpatched fitted data, or pre-PR-527 vertex smearing.
 Collision generation now uses the energy-dependent FCC-ee 2025 beam-spot
 widths in the shared Pythia cards, with no additional GenAlg spatial or timing
