@@ -26,15 +26,14 @@ uv run python3 mlpf/pipeline.py \
   --prefix cld-ddp- \
   train \
   --gpus 4 \
+  --sampler_mode interleaved-shards \
   --dtype bfloat16 \
   --num_steps 100000
 ```
 
-Each rank gets its own data-loader process and GPU. The effective event mix depends on dataset-group batch sizes, `gpu_batch_multiplier`, world size, and sampler behavior. Record all of these values alongside the nominal batch size. Use `interleaved-shards` when early mixing across several TFDS shards or domains is required:
+Each rank gets its own data-loader process and GPU. The effective event mix depends on dataset-group batch sizes, `gpu_batch_multiplier`, world size, and sampler behavior. Record all of these values alongside the nominal batch size.
 
-```bash
-... train --gpus 4 --sampler_mode interleaved-shards
-```
+Choose the event order and group step shares using [Dataset mixing and loss monitoring](data-mixing.md). These settings apply to both single-GPU and DDP training. For groups containing several physics samples, use `--sampler_mode interleaved-shards`.
 
 All ranks must see the same files and experiment directory. Typical failures are mismatched visible GPUs, NCCL networking, insufficient file-descriptor limits, and one rank running out of memory.
 
@@ -55,6 +54,7 @@ uv run python3 mlpf/pipeline.py \
   --ray-local \
   --ray-cpus 2 \
   --ray-gpus 0 \
+  --model.attention.attention_type math \
   --num_steps 2 \
   --ntrain 10 \
   --nvalid 10 \
@@ -80,6 +80,7 @@ uv run python3 mlpf/pipeline.py \
   --ray-local \
   --ray-cpus 2 \
   --ray-gpus 0 \
+  --model.attention.attention_type math \
   --raytune-num-samples 2 \
   --num_steps 2 \
   --ntrain 10 \

@@ -21,8 +21,10 @@ set -euo pipefail
 #   # e.g. --array=0-19 gives 20 tasks of 5 shards each, --array=0-99 gives 100 tasks of 1):
 #   sbatch --array=0-19 scripts/flatiron/colliderml_convert_array.sh 0 100
 #
-#   # same but for the pu200 sample (third arg is the pileup label, default pu0):
+#   # same but for the pu200 sample (third arg is the sample <process>_<pileup>; a bare
+#   # pu0/pu200 means ttbar_<pileup>; default pu0):
 #   sbatch --array=0-19 scripts/flatiron/colliderml_convert_array.sh 0 100 pu200
+#   sbatch --array=0-19 scripts/flatiron/colliderml_convert_array.sh 0 100 zee_pu200
 #
 #   # custom output dir (4th positional arg; --export=NONE means env vars don't propagate):
 #   sbatch --array=0-19 scripts/flatiron/colliderml_convert_array.sh 0 100 pu0 /path/to/outdir
@@ -34,11 +36,16 @@ set -euo pipefail
 # Default: shards 0 to 100, sample ttbar_pu0.
 #
 # Output:
-#   /mnt/ceph/users/ewulff/data/colliderml/mlpf_parquet/clue/ttbar_${PU}/train-NN-of-01000.parquet
-#   (or the 4th positional arg's directory; the pre-CLUE bfs parquet stays in mlpf_parquet/clustered/)
+#   /mnt/ceph/users/ewulff/data/colliderml/mlpf_parquet/clue/<sample>/train-NN-of-01000.parquet
+#   (or the 4th positional arg's directory)
 S0="${1:-0}"
 S1="${2:-100}"
-PU="${3:-pu0}"
+SAMPLE="${3:-pu0}"
+# a bare pileup label is the ttbar sample (the original usage); otherwise <process>_<pileup>
+case "${SAMPLE}" in
+  pu0|pu200) SAMPLE="ttbar_${SAMPLE}" ;;
+esac
+PU="${SAMPLE##*_}"
 # Optional 4th positional arg: output dir override. Jobs run with --export=NONE, so pass it
 # positionally; COLLIDERML_OUT_DIR below only helps direct/local runs.
 OUTDIR_ARG="${4:-}"
@@ -67,7 +74,6 @@ PYTHON=/mnt/home/ewulff/repositories/particleflow/.venv/bin/python
 export PYTHONPATH="/mnt/home/ewulff/repositories/particleflow"
 export KERAS_BACKEND=torch
 
-SAMPLE="ttbar_${PU}"
 SOURCE_DIR="/mnt/ceph/users/ewulff/data/colliderml/CERN__ColliderML-Release-1"
 # COLLIDERML_OUT_DIR overrides the output root (default: the production CLUE dir);
 # the optional 4th positional arg wins over it.
@@ -83,7 +89,7 @@ mkdir -p "${OUT_DIR}"
 # bfs (pu200, merge-frac 0, radii 16.25/36 mm); that parquet is in mlpf_parquet/clustered/.
 case "${PU}" in
   pu0|pu200) CLUE_PRESET="${PU}" ;;
-  *) echo "no CLUE preset for pileup label '${PU}' (known: pu0, pu200)" >&2; exit 2 ;;
+  *) echo "no CLUE preset for pileup label '${PU}' of sample ${SAMPLE} (known: pu0, pu200)" >&2; exit 2 ;;
 esac
 
 ${PYTHON} -m mlpf.data.colliderml.postprocessing \

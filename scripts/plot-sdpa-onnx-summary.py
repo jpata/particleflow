@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Create summary plots for SDPA ONNX benchmark CSV outputs."""
+"""Plot attention scaling with separate panels for device, precision and workload."""
 
 import argparse
 import csv
+import json
 import math
 from pathlib import Path
 
@@ -10,231 +11,189 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter
 
 
-PREFERRED_ORDER = [
-    "pt_math_fp32_unmasked",
-    "pt_math_fp32_masked",
-    "pt_math_fp16_unmasked",
-    "pt_math_fp16_masked",
-    "pt_flash_fp16_unmasked",
-    "pt_efficient_fp32_unmasked",
-    "pt_efficient_fp32_masked",
-    "onnx_sdpa_export_fp32_unmasked",
-    "onnx_sdpa_export_fp32_masked",
-    "onnx_sdpa_export_fp16_unmasked",
-    "onnx_sdpa_export_fp16_masked",
-    "ort_mha_fp32_unmasked",
-    "ort_mha_fp32_masked",
-    "ort_mha_fp16_unmasked",
-    "ort_mha_fp16_masked",
-    "onnx_sdpa_static_int8_unmasked",
-    "onnx_sdpa_static_int8_masked",
-]
-
-LABELS = {
-    "pt_math_fp32_unmasked": "PyTorch math FP32",
-    "pt_math_fp32_masked": "PyTorch math FP32 masked",
-    "pt_math_fp16_unmasked": "PyTorch math FP16",
-    "pt_math_fp16_masked": "PyTorch math FP16 masked",
-    "pt_flash_fp16_unmasked": "PyTorch flash FP16",
-    "pt_efficient_fp32_unmasked": "PyTorch efficient FP32",
-    "pt_efficient_fp32_masked": "PyTorch efficient FP32 masked",
-    "onnx_sdpa_export_fp32_unmasked": "ORT decomposed SDPA FP32",
-    "onnx_sdpa_export_fp32_masked": "ORT decomposed SDPA FP32 masked",
-    "onnx_sdpa_export_fp16_unmasked": "ORT decomposed SDPA FP16",
-    "onnx_sdpa_export_fp16_masked": "ORT decomposed SDPA FP16 masked",
-    "ort_mha_fp32_unmasked": "ORT fused MHA FP32",
-    "ort_mha_fp32_masked": "ORT fused MHA FP32 masked",
-    "ort_mha_fp16_unmasked": "ORT fused MHA FP16",
-    "ort_mha_fp16_masked": "ORT fused MHA FP16 masked",
-    "onnx_sdpa_static_int8_unmasked": "ORT quantized SDPA INT8",
-    "onnx_sdpa_static_int8_masked": "ORT quantized SDPA INT8 masked",
-}
-
-VARIANT_COLORS = {
-    "pt_math_fp32_unmasked": "#1f77b4",
-    "pt_math_fp32_masked": "#aec7e8",
-    "pt_math_fp16_unmasked": "#17becf",
-    "pt_math_fp16_masked": "#9edae5",
-    "pt_flash_fp16_unmasked": "#ff7f0e",
-    "pt_efficient_fp32_unmasked": "#2ca02c",
-    "pt_efficient_fp32_masked": "#98df8a",
-    "onnx_sdpa_export_fp32_unmasked": "#9467bd",
-    "onnx_sdpa_export_fp32_masked": "#c5b0d5",
-    "onnx_sdpa_export_fp16_unmasked": "#8c564b",
-    "onnx_sdpa_export_fp16_masked": "#c49c94",
-    "ort_mha_fp32_unmasked": "#d62728",
-    "ort_mha_fp32_masked": "#ff9896",
-    "ort_mha_fp16_unmasked": "#7f7f7f",
-    "ort_mha_fp16_masked": "#c7c7c7",
-    "onnx_sdpa_static_int8_unmasked": "#bcbd22",
-    "onnx_sdpa_static_int8_masked": "#dbdb8d",
-    "other": "#111111",
-}
-
-VARIANT_MARKERS = {
-    "pt_math": "o",
-    "pt_flash": "P",
-    "pt_efficient": "h",
-    "onnx_sdpa_export": "D",
-    "onnx_sdpa_static": "X",
-    "ort_mha": "s",
-    "other": "^",
-}
-
-MASK_LINESTYLES = {
-    "unmasked": "-",
-    "masked": (0, (4, 2)),
+# Color, marker and dash all encode implementation, consistently across figures.
+STYLES = {
+    "pt_math": ("PyTorch math", "#0072B2", "o", "-"),
+    "pt_flash": ("PyTorch Flash", "#0072B2", "o", "-"),
+    "pt_efficient": ("PyTorch efficient", "#CC79A7", "v", "-."),
+    "ort_attention24": ("ORT Attention-24", "#009E73", "D", "--"),
+    "ort_mha": ("ORT MHA", "#D55E00", "s", ":"),
+    "onnx_sdpa_export": ("ORT decomposed", "#CC79A7", "^", "-."),
+    "onnx_sdpa_static": ("ORT INT8", "#555555", "X", "-."),
 }
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Plot SDPA ONNX benchmark runtime and memory summaries.")
-    parser.add_argument("--cpu-csv", type=Path, required=True)
-    parser.add_argument("--gpu-csv", type=Path, required=True)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cpu-csv", type=Path, help="CPU results (legacy input option).")
+    parser.add_argument("--gpu-csv", type=Path, help="GPU results (legacy input option).")
+    parser.add_argument("--input", action="append", default=[], metavar="LABEL=CSV", help="Add labeled results, e.g. A100=path/summary.csv.")
     parser.add_argument("--outdir", type=Path, required=True)
-    parser.add_argument("--include-int8", action="store_true", help="Include successful INT8 rows if any exist.")
+    parser.add_argument("--include-int8", action="store_true")
+    parser.add_argument("--sweep", choices=["sequence", "batch"], default="sequence")
     return parser.parse_args()
 
 
-def read_rows(path: Path, device: str, include_int8: bool):
+def read_rows(path, device, include_int8):
     if not path.exists():
         return []
+    # Older CSVs omitted batch size and valid lengths; recover them from JSON.
+    summary = path.with_suffix(".json")
+    payload = json.loads(summary.read_text()) if summary.exists() else {}
+    config = payload.get("config", {})
+    raw_rows = payload.get("results")
+    if raw_rows is None:
+        with path.open(newline="") as stream:
+            raw_rows = list(csv.DictReader(stream))
     rows = []
-    with open(path, newline="") as f:
-        for row in csv.DictReader(f):
-            if row.get("status") != "ok":
-                continue
-            variant = row.get("variant", "")
-            if not include_int8 and "int8" in variant:
-                continue
-            try:
-                rows.append(
-                    {
-                        "device": device,
-                        "variant": variant,
-                        "sequence_length": int(row["sequence_length"]),
-                        "mean_ms": float(row["mean_ms"]),
-                        "peak_memory_mib": float(row["peak_memory_mib"]) if row.get("peak_memory_mib") else math.nan,
-                    }
-                )
-            except (KeyError, ValueError):
-                continue
+    for row in raw_rows:
+        variant = row["variant"]
+        if row["status"] != "ok":
+            print(f"Excluded {device} {variant}: {row.get('error', row['status'])}")
+            continue
+        if "int8" in variant and not include_int8:
+            continue
+        batch = int(row.get("batch_size", config.get("batch_size", 1)))
+        length = int(row["sequence_length"])
+        masked = variant.endswith("_masked")
+        valid = row.get("valid_elements")
+        if valid is None and "mask_fraction" in config:
+            nmasked = int(length * config["mask_fraction"])
+            offset = 0.5 if config.get("length_policy") == "balanced" else 1
+            valid = sum(length - min(length - 1, int(nmasked * (i + offset) / batch)) for i in range(batch)) if masked else length * batch
+        latency = float(row["p50_ms"])
+        family = next((key for key in STYLES if variant.startswith(key)), variant)
+        export_shape = row.get("export_shape", "native" if family.startswith("pt_") else "dynamic")
+        rows.append(
+            {
+                "device": device,
+                "variant": variant,
+                "family": family,
+                "export_shape": export_shape,
+                "dtype": row.get("dtype", next((d for d in ["fp32", "fp16", "int8"] if d in variant), "unknown")),
+                "masked": masked,
+                "batch_size": batch,
+                "sequence_length": length,
+                "latency": latency,
+                "throughput": 1000 * batch / latency,
+                "tokens": 1000 * float(valid) / latency if valid is not None else math.nan,
+                "memory": float(row.get("peak_memory_mib") or math.nan),
+            }
+        )
     return rows
 
 
-def variant_order(variant):
-    try:
-        return PREFERRED_ORDER.index(variant)
-    except ValueError:
-        return len(PREFERRED_ORDER), variant
-
-
-def variant_family(variant):
-    if variant.startswith("pt_math"):
-        return "pt_math"
-    if variant.startswith("pt_flash"):
-        return "pt_flash"
-    if variant.startswith("pt_efficient"):
-        return "pt_efficient"
-    if variant.startswith("onnx_sdpa_export"):
-        return "onnx_sdpa_export"
-    if variant.startswith("onnx_sdpa_static"):
-        return "onnx_sdpa_static"
-    if variant.startswith("ort_mha"):
-        return "ort_mha"
-    return "other"
-
-
-def variant_dtype(variant):
-    for dtype in ["fp32", "fp16", "bf16", "int8"]:
-        if dtype in variant:
-            return dtype
-    return "other"
-
-
-def variant_mask_state(variant):
-    return "masked" if variant.endswith("_masked") else "unmasked"
-
-
-def variant_style(variant):
-    masked = variant_mask_state(variant) == "masked"
-    color = VARIANT_COLORS.get(variant, VARIANT_COLORS["other"])
-    return {
-        "color": color,
-        "marker": VARIANT_MARKERS[variant_family(variant)],
-        "linestyle": MASK_LINESTYLES[variant_mask_state(variant)],
-        "markerfacecolor": "white" if masked else color,
-    }
-
-
-def plot_panel(ax, rows, metric, title, ylabel):
-    if not rows:
-        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
-        ax.set_title(title)
-        return
-
-    variants = sorted({row["variant"] for row in rows}, key=variant_order)
-    for variant in variants:
-        vals = sorted([row for row in rows if row["variant"] == variant], key=lambda row: row["sequence_length"])
-        xs = [row["sequence_length"] for row in vals]
-        ys = [row[metric] for row in vals]
-        style = variant_style(variant)
-        ax.plot(
-            xs,
-            ys,
-            color=style["color"],
-            marker=style["marker"],
-            linestyle=style["linestyle"],
-            linewidth=2.2,
-            markersize=6,
-            markerfacecolor=style["markerfacecolor"],
-            markeredgewidth=1.0,
-            markeredgecolor="black",
-            label=LABELS.get(variant, variant),
-        )
-
-    ax.set_title(title)
-    ax.set_xlabel("Sequence length")
-    ax.set_ylabel(ylabel)
+def plot_panel(ax, rows, xkey, metric, title):
+    for family in sorted({r["family"] for r in rows}, key=lambda f: list(STYLES).index(f) if f in STYLES else len(STYLES)):
+        shapes = sorted({r["export_shape"] for r in rows if r["family"] == family})
+        for shape in shapes:
+            vals = sorted((r for r in rows if r["family"] == family and r["export_shape"] == shape), key=lambda r: r[xkey])
+            xs = [r[xkey] for r in vals]
+            if len(xs) != len(set(xs)):
+                raise ValueError("Multiple workloads at the same x value; split by batch size / mask mode before plotting")
+            label, color, marker, dash = STYLES.get(family, (family, "black", "x", "-"))
+            if family == "pt_flash" and vals[0]["masked"]:
+                label = "PyTorch varlen Flash"
+            if shape == "static" or len(shapes) > 1:
+                label += f" ({shape})"
+            ax.plot(
+                xs,
+                [r[metric] for r in vals],
+                label=label,
+                color=color,
+                marker=marker,
+                linestyle="-" if shape == "static" else dash,
+                linewidth=2.3,
+                markersize=10 if marker == "D" else (8 if marker == "o" else 6),
+                markerfacecolor=color if shape == "static" else "white",
+                markeredgewidth=1.7,
+            )
+    ax.set_title(title, loc="left", fontweight="bold", fontsize=11)
+    ticks = sorted({r[xkey] for r in rows})
     ax.set_xscale("log", base=2)
+    ax.set_xticks(ticks)
+    ax.xaxis.set_major_formatter(ScalarFormatter())
     ax.set_yscale("log")
-    ax.grid(True, which="both", alpha=0.25)
+    ax.grid(axis="y", which="major", alpha=0.2)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.set_xlabel("Batch size" if xkey == "batch_size" else "Padded sequence length")
+    ax.legend(fontsize=9, frameon=True, framealpha=0.95, handlelength=3.5)
+
+
+def make_figure(rows, sweep, metric, outdir):
+    xkey = "batch_size" if sweep == "batch" else "sequence_length"
+    # Split precision as well as device to avoid many nearly identical curves.
+    row_keys = sorted({(r["device"], r["dtype"]) for r in rows})
+    if sweep == "batch":
+        columns = sorted({(r["sequence_length"], r["masked"]) for r in rows})
+    else:
+        columns = sorted({(r["batch_size"], r["masked"]) for r in rows})
+    fig, axes = plt.subplots(
+        len(row_keys), len(columns), figsize=(6 * len(columns), 3.8 * len(row_keys)), squeeze=False, sharey="row", layout="constrained"
+    )
+    labels = {
+        "latency": "Median latency [ms / batch]",
+        "throughput": "Throughput [events / s]",
+        "tokens": "Valid elements / s",
+        "memory": "Peak process memory [MiB]",
+    }
+    for i, (device, dtype) in enumerate(row_keys):
+        for j, (fixed, masked) in enumerate(columns):
+            fixedkey = "sequence_length" if sweep == "batch" else "batch_size"
+            selected = [r for r in rows if (r["device"], r["dtype"], r[fixedkey], r["masked"]) == (device, dtype, fixed, masked)]
+            mode = "unequal valid lengths" if masked else "no padding"
+            size = f"L={fixed}" if sweep == "batch" else f"B={fixed}"
+            title = f"{device} · {dtype.upper()} · {size}\n{mode}"
+            if selected:
+                plot_panel(axes[i, j], selected, xkey, metric, title)
+            else:
+                axes[i, j].set_visible(False)
+            axes[i, j].set_ylabel(labels[metric] if metric != "memory" else ("Process RSS [MiB]" if device == "CPU" else "Process VRAM [MiB]"))
+    fig.suptitle(f"Attention {'batch-size' if sweep == 'batch' else 'sequence-length'} scaling — {labels[metric].split(' [')[0]}", fontsize=15)
+    fig.supxlabel(
+        (
+            "ORT includes host↔device transfers on GPU; PyTorch inputs are device-resident. Memory is sampled process usage."
+            if metric == "memory"
+            else "Warm measurements · ORT includes GPU transfers · PyTorch includes packing for variable lengths"
+        ),
+        fontsize=9,
+    )
+    name = "sdpa_onnx_summary" if sweep == "sequence" and metric == "latency" else f"{sweep}_scaling_{metric}"
+    for extension in ["png", "pdf"]:
+        path = outdir / f"{name}.{extension}"
+        fig.savefig(path, dpi=170)
+        print(f"Wrote {path}")
+    plt.close(fig)
 
 
 def main():
     args = parse_args()
     args.outdir.mkdir(parents=True, exist_ok=True)
-
-    cpu_rows = read_rows(args.cpu_csv, "CPU", args.include_int8)
-    gpu_rows = read_rows(args.gpu_csv, "GPU", args.include_int8)
-
-    fig, axes = plt.subplots(2, 2, figsize=(18, 12), constrained_layout=True)
-    plot_panel(axes[0, 0], cpu_rows, "mean_ms", "CPU Runtime", "Mean runtime [ms]")
-    plot_panel(axes[0, 1], cpu_rows, "peak_memory_mib", "CPU Memory", "Peak RSS [MiB]")
-    plot_panel(axes[1, 0], gpu_rows, "mean_ms", "GPU Runtime", "Mean runtime [ms]")
-    plot_panel(axes[1, 1], gpu_rows, "peak_memory_mib", "GPU Memory", "Peak VRAM [MiB]")
-
-    handles, labels = [], []
-    for ax in axes.flat:
-        axis_handles, axis_labels = ax.get_legend_handles_labels()
-        for handle, label in zip(axis_handles, axis_labels, strict=False):
-            if label not in labels:
-                handles.append(handle)
-                labels.append(label)
-    legend = fig.legend(handles, labels, loc="outside lower center", ncol=3, fontsize=9, handlelength=3.2)
-    for text in legend.get_texts():
-        if text.get_text() == "ORT fused MHA FP16":
-            text.set_fontweight("bold")
-    fig.suptitle("SDPA ONNX Benchmark Summary", fontsize=16)
-
-    png_path = args.outdir / "sdpa_onnx_summary.png"
-    pdf_path = args.outdir / "sdpa_onnx_summary.pdf"
-    fig.savefig(png_path, dpi=160)
-    fig.savefig(pdf_path)
-    print(f"Wrote {png_path}")
-    print(f"Wrote {pdf_path}")
+    sources = []
+    if args.cpu_csv is not None:
+        sources.append(("CPU", args.cpu_csv))
+    if args.gpu_csv is not None:
+        sources.append(("GPU", args.gpu_csv))
+    for item in args.input:
+        label, separator, path = item.partition("=")
+        if not separator or not label or not path:
+            raise ValueError(f"Invalid --input {item!r}; expected LABEL=CSV")
+        sources.append((label, Path(path)))
+    if not sources:
+        raise ValueError("Provide --input LABEL=CSV or a legacy --cpu-csv/--gpu-csv input")
+    if len({label for label, _ in sources}) != len(sources):
+        raise ValueError("Input labels must be unique")
+    for _, path in sources:
+        if not path.exists():
+            raise FileNotFoundError(path)
+    rows = [row for label, path in sources for row in read_rows(path, label, args.include_int8)]
+    if not rows:
+        raise ValueError("No successful benchmark rows")
+    for metric in ["latency", "throughput", "tokens", "memory"]:
+        make_figure(rows, args.sweep, metric, args.outdir)
 
 
 if __name__ == "__main__":

@@ -99,7 +99,7 @@ uv run python tests/validate_parquet.py \
   --plots-dir validation_plots/cld
 ```
 
-Strict mode is the default and exits nonzero on a failed gate. It writes `validation_report.json` plus diagnostic plots. Use the matching `clic` detector and process path for CLIC. CMS postprocessing emits compressed pickle and uses the [CMS-specific checks](cms.md).
+The validator runs every check, writes `validation_report.json` and plots, and exits nonzero if a check fails. Use the matching `clic` detector and process path for CLIC. CMS postprocessing emits compressed pickle and uses the [CMS-specific checks](cms.md).
 
 ## Build and verify TFDS
 
@@ -117,6 +117,9 @@ PROD=cld pixi run tfds_hit
 
 Adapt the metadata and single-event checks in [Download a dataset](download.md) to the workspace's `tfds/` directory and exact configured version. A successful read is the final dataset-production gate.
 
+To make a completed version available from the Tallinn Grid storage endpoint,
+follow the [WebDAV transfer guide](webdav.md).
+
 ## Publish selected outputs
 
 Publishing changes a shared external repository. Authenticate with a Hugging Face account that has write access, and always preview the exact selection:
@@ -124,7 +127,7 @@ Publishing changes a shared external repository. Authenticate with a Hugging Fac
 ```bash
 # One TFDS configuration and version
 uv run python scripts/upload_hf.py tfds clic 1 \
-  --version 3.2.1 \
+  --version 3.3.0 \
   --dry-run
 
 # At most two ROOT files from each configured CLIC sample

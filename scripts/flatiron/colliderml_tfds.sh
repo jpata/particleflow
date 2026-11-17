@@ -26,6 +26,10 @@ set -euo pipefail
 #   # pu200 (colliderml_ttbar_pu200_pf):
 #   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu200
 #
+#   # any other Release-1 sample <process>_<pileup>: builder colliderml_pf/<process>.py for pu0
+#   # (dataset colliderml_<process>_nopu_pf), colliderml_pf/<process>_pu200.py for pu200:
+#   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh zee_pu200
+#
 #   # rebuilt parquet in a custom dir (2nd positional arg; --export=NONE means env
 #   # vars don't propagate):
 #   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu0 /path/to/mlpf_parquet
@@ -36,16 +40,25 @@ set -euo pipefail
 # skipped). Re-running after a converter change requires either deleting the prepared
 # <data_dir>/<dataset>/<config>/<version>/ tree first or bumping the builder VERSION.
 
-PU="${1:-pu0}"
-SAMPLE="ttbar_${PU}"
+SAMPLE="${1:-pu0}"
+# a bare pileup label is the ttbar sample (the original usage); otherwise <process>_<pileup>
+case "${SAMPLE}" in
+    pu0|pu200) SAMPLE="ttbar_${SAMPLE}" ;;
+esac
+PROCESS="${SAMPLE%_*}"
+PU="${SAMPLE##*_}"
 MANUAL_DIR="${2:-/mnt/ceph/users/ewulff/data/colliderml/mlpf_parquet/clue/${SAMPLE}}"
 TFDS_DATA_DIR="/mnt/ceph/users/ewulff/tensorflow_datasets/colliderml"
 
 case "${PU}" in
-    pu0) BUILDER="mlpf/heptfds/colliderml_pf/ttbar" ;;
-    pu200) BUILDER="mlpf/heptfds/colliderml_pf/ttbar_pu200" ;;
-    *) echo "ERROR: no TFDS builder registered for pileup label '${PU}' (known: pu0, pu200)" >&2; exit 2 ;;
+    pu0) BUILDER="mlpf/heptfds/colliderml_pf/${PROCESS}" ;;
+    pu200) BUILDER="mlpf/heptfds/colliderml_pf/${PROCESS}_pu200" ;;
+    *) echo "ERROR: unknown pileup label '${PU}' in sample ${SAMPLE} (known: pu0, pu200)" >&2; exit 2 ;;
 esac
+if [ ! -f "${BUILDER}.py" ]; then
+    echo "ERROR: no TFDS builder ${BUILDER}.py for sample ${SAMPLE}" >&2
+    exit 2
+fi
 
 # array mode: one config per task; non-array: all configs sequentially in one job
 if [ -n "${SLURM_ARRAY_TASK_ID:-}" ]; then
@@ -70,11 +83,15 @@ export PYTHONPATH="$(pwd)"
 # ~100+ parquet shards are required for the build to succeed at all. Nothing in the build
 # verifies that ALL converted shards are present (a partially converted manual_dir with
 # >=100 shards yields a silently truncated dataset) — check the count matches your intent.
-N_PARQUET=$(ls "${MANUAL_DIR}"/*.parquet 2>/dev/null | wc -l)
+# (a nullglob array, not `ls | wc -l`: under pipefail a missing dir made that exit silently)
+shopt -s nullglob
+PARQUET_FILES=("${MANUAL_DIR}"/*.parquet)
+shopt -u nullglob
+N_PARQUET="${#PARQUET_FILES[@]}"
 echo "manual_dir ${MANUAL_DIR}: ${N_PARQUET} parquet shards"
 if [ "${N_PARQUET}" -lt 100 ]; then
     echo "ERROR: need >=100 converted shards for the 10-config/90-10 split, found ${N_PARQUET}." >&2
-    echo "  finish conversion first: sbatch --array=0-99%25 scripts/flatiron/colliderml_convert_array.sh 0 1000 ${PU}" >&2
+    echo "  finish conversion first: sbatch scripts/flatiron/colliderml_convert.sh 0 1000 ${SAMPLE}" >&2
     exit 2
 fi
 

@@ -1,0 +1,131 @@
+<lccdd>
+    <define>
+        <constant name="HCalEndcap_layers" value="44"/>
+        <constant name="HCalEndcap_layer_thickness" value="2.0*cm + 0.65*cm"/>
+        <constant name="HCal_cell_size" value="3.0*cm"/>
+        <constant name="HCalEndcap_cutout_layers" value="- floor( -HCalEndcap_zcutout / HCalEndcap_layer_thickness)"/>
+        <constant name="HCalRing_layers" value=" floor( (HCalEndcap_min_z - HCalRing_min_z) / HCalEndcap_layer_thickness + 0.5)"/>
+    </define>
+
+
+    <detectors>
+        <detector name="HCalEndcaps" type="DD4hep_SubdetectorAssembly" vis="HCALVis">
+
+                <shape type="BooleanShape" operation="Subtraction" material="Air">
+                    <shape type="BooleanShape" operation="Subtraction">
+                        <shape type="BooleanShape" operation="Subtraction">
+                            <shape type="BooleanShape" operation="Subtraction">
+                                <shape type="PolyhedraRegular"  numsides="HCalEndcap_symmetry" rmin="0" rmax="HCalEndcap_outer_radius+5*env_safety" dz="2.0*HCalEndcap_max_z+10*env_safety"/>
+                                <shape type="PolyhedraRegular"  numsides="HCalEndcap_symmetry" rmin="0" rmax="HCalEndcap_outer_radius+10*env_safety" dz="2.0*HCalRing_min_z-5*env_safety"/>
+                            </shape>
+                            <shape type="PolyhedraRegular"  numsides="HCalEndcap_symmetry" rmin="0" rmax="HCalRing_inner_radius-5*env_safety" dz="2.0*HCalEndcap_min_z-10*env_safety"/>
+                        </shape>
+                        <shape type="PolyhedraRegular"  numsides="HCalEndcap_symmetry" rmin="0" rmax="HCalEndcap_inner_radius + HCalEndcap_rcutout" dz="2.0*HCalEndcap_min_z + 2*HCalEndcap_zcutout"/>
+                    </shape>
+                    <shape type="Tube" rmin="0" rmax="HCalEndcap_inner_radius-env_safety" dz="2.0*HCalEndcap_max_z + 2*HCalEndcap_zcutout"/>
+                </shape>
+                <rotation x="0*deg" y="0*deg" z="90*deg-180*deg/HCalEndcap_symmetry"/>
+
+
+            <comment>HCalEndcap Assembly</comment>
+            <composite name="HCalEndcap"/>
+            <composite name="HCalRing"/>
+        </detector>
+    </detectors>
+
+
+
+
+    <!--  Definition of the readout segmentation/definition  -->
+    <readouts>
+        <readout name="HCalEndcapCollection">
+            <segmentation type="CartesianGridXY" grid_size_x="HCal_cell_size" grid_size_y="HCal_cell_size" />
+            <id>system:5,side:2,module:8,stave:4,layer:9,submodule:4,x:32:-16,y:-16</id>
+        </readout>
+        <readout name="HCalRingCollection">
+            <segmentation type="CartesianGridXY" grid_size_x="HCal_cell_size" grid_size_y="HCal_cell_size" />
+            <id>system:5,side:2,module:8,stave:4,layer:9,submodule:4,x:32:-16,y:-16</id>
+        </readout>
+    </readouts>
+
+
+    <detectors>
+
+        <detector name="HCalEndcap" type="GenericCalEndcap_o1_v01" id="DetID_HCAL_Endcap" readout="HCalEndcapCollection" vis="HCALVis" >
+
+            <comment>Hadronic Calorimeter Endcap</comment>
+
+	    <type_flags type=" DetType_CALORIMETER + DetType_HADRONIC + DetType_ENDCAP"/>
+
+            <envelope vis="HCALVis">
+                <shape type="Assembly"/>
+            </envelope>
+
+
+            <dimensions nsides_inner="HCalEndcap_symmetry" nsides_outer="(int) HCalEndcap_symmetry" zmin="HCalEndcap_min_z" rmin="HCalEndcap_inner_radius" rmax="HCalEndcap_outer_radius" phi0="0" rmin2="HCalEndcap_rcutout" z2="HCalEndcap_cutout_layers * HCalEndcap_layer_thickness"/>
+
+            <layer repeat="HCalEndcap_cutout_layers" gap="HCalEndcap_rcutout" vis="HCalEndcapLayerVis">
+                <slice material="Steel235" thickness="0.5*mm" vis="HCalAbsorberVis" radiator="yes"/>
+                <slice material="Steel235" thickness="19*mm" vis="HCalAbsorberVis" radiator="yes"/>
+                <slice material="Polystyrene" thickness="3*mm" sensitive="yes" limits="cal_limits" vis="HCalSensorVis"/>
+                <slice material="Copper" thickness="0.1*mm" vis="HCalCopperVis"/>
+                <slice material="PCB" thickness="0.7*mm" vis="HCalPCBVis"/>
+                <slice material="Steel235" thickness="0.5*mm" vis="HCalAbsorberVis" radiator="yes"/>
+                <slice material="Air" thickness="2.7*mm" vis="InvisibleNoDaughters"/>
+            </layer>
+
+            <layer repeat="HCalEndcap_layers - HCalEndcap_cutout_layers" vis="HCalEndcapLayerVis">
+                <slice material="Steel235" thickness="0.5*mm" vis="HCalAbsorberVis" radiator="yes"/>
+                <slice material="Steel235" thickness="19*mm" vis="HCalAbsorberVis" radiator="yes"/>
+                <slice material="Polystyrene" thickness="3*mm" sensitive="yes" limits="cal_limits" vis="HCalSensorVis"/>
+                <slice material="Copper" thickness="0.1*mm" vis="HCalCopperVis"/>
+                <slice material="PCB" thickness="0.7*mm" vis="HCalPCBVis"/>
+                <slice material="Steel235" thickness="0.5*mm" vis="HCalAbsorberVis" radiator="yes"/>
+                <slice material="Air" thickness="2.7*mm" vis="InvisibleNoDaughters"/>
+            </layer>
+
+
+        </detector>
+
+    </detectors>
+
+
+
+    <detectors>
+
+        <detector name="HCalRing" type="GenericCalEndcap_o1_v01" id="DetID_HCAL_Ring" readout="HCalRingCollection" vis="HCALVis" >
+
+            <comment>Hadronic Calorimeter Endcap</comment>
+
+	    <type_flags type=" DetType_CALORIMETER + DetType_HADRONIC + DetType_ENDCAP + DetType_AUXILIARY"/>
+
+            <envelope vis="HCALVis">
+                <shape type="Assembly"/>
+            </envelope>
+
+
+            <dimensions nsides_inner="HCalEndcap_symmetry" nsides_outer="(int) HCalEndcap_symmetry" zmin="HCalRing_min_z" rmin="HCalRing_inner_radius" rmax="HCalRing_outer_radius" phi0="0" rmin2="0" z2="HCalRing_layers * HCalEndcap_layer_thickness"/>
+
+
+            <layer repeat="HCalRing_layers" vis="HCalEndcapLayerVis">
+                <slice material="Steel235" thickness="19*mm" vis="HCalAbsorberVis" radiator="yes"/>
+                <slice material="Steel235" thickness="0.5*mm" vis="HCalAbsorberVis" radiator="yes"/>
+                <slice material="Polystyrene" thickness="3*mm" sensitive="yes" limits="cal_limits" vis="HCalSensorVis"/>
+                <slice material="Copper" thickness="0.1*mm" vis="HCalCopperVis"/>
+                <slice material="PCB" thickness="0.7*mm" vis="HCalPCBVis"/>
+                <slice material="Steel235" thickness="0.5*mm" vis="HCalAbsorberVis" radiator="yes"/>
+                <slice material="Air" thickness="2.7*mm" vis="InvisibleNoDaughters"/>
+            </layer>
+
+
+        </detector>
+
+    </detectors>
+
+
+
+
+
+
+
+</lccdd>

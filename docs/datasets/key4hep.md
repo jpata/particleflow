@@ -1,6 +1,6 @@
 # Shared Key4HEP data production
 
-[CLD](cld.md) and [CLICdet](clic.md) share the Key4HEP/EDM4hep production and postprocessing path. This page records the common workflow; use [Generate a dataset](generate.md) for the full execution procedure.
+CLD and CLICdet share the Key4HEP/EDM4hep production and postprocessing path for both [tracks and clusters](track-cluster.md) and [hits](hit-based.md). This page records the common workflow; use [Generate a dataset](generate.md) for the full execution procedure.
 
 ## Requirements
 
@@ -21,7 +21,7 @@ CLD uses the detector configuration under `mlpf/data/key4hep/gen/cld/CLDConfig`.
 
 CLD also configures particle-gun and additional 91/240/365 GeV samples for detector studies. The `tfds_mapping` and `tfds_hit_mapping` entries restrict training-data production to the samples in the table.
 
-Track/cluster and hit builders use version 3.2.1 and configuration partitions 1--10. The default model recipes select `ttbar`, `WW`, and `qq`; CLD `ZZ` is available through an additional builder.
+Track/cluster builders use version 3.3.0 and hit builders use 3.2.2 and configuration partitions 1--10. The default model recipes select `ttbar`, `WW`, and `qq`; CLD `ZZ` is available through an additional builder.
 
 ## Detector commands and paths
 

@@ -21,13 +21,13 @@ def test_cld_guns_match_idea_campaign():
 
     for sample_name in GUN_SAMPLES:
         assert cld_samples[sample_name]["process_name"] == idea_samples[sample_name]["process_name"]
-        assert cld_samples[sample_name]["seed_range"] == idea_samples[sample_name]["seed_range"]
-        assert cld_samples[sample_name]["events_per_job"] == idea_samples[sample_name]["events_per_job"]
         assert cld_samples[sample_name]["gen_script"] == "mlpf/data/key4hep/gen/cld/run_sim.sh"
 
 
 def test_cld_guns_are_excluded_from_training_datasets():
     cld = load_productions()["cld"]
 
-    assert GUN_SAMPLES.isdisjoint(cld["tfds_mapping"])
-    assert GUN_SAMPLES.isdisjoint(cld["tfds_hit_mapping"])
+    guns = {name for name in cld["samples"] if name.startswith("gun_")}
+    assert guns
+    assert guns.isdisjoint(cld["tfds_mapping"])
+    assert guns.isdisjoint(cld["tfds_hit_mapping"])

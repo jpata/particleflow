@@ -210,7 +210,6 @@ def lr_range_test(
             device_type=device_type,
             dtype=dtype,
             scaler=scaler,
-            loader_state_dict=train_loader.state_dict()["loader_state_dict"],
         )
         if step <= warmup_steps:
             continue

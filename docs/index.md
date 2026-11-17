@@ -2,7 +2,7 @@
 
 MLPF reconstructs the particles produced in a collision from detector measurements. It uses a neural network to combine information from tracking detectors and calorimeters and produces a list of particle candidates for the full event. The project supports studies with the CMS detector and with the CLD and CLIC future-detector concepts.
 
-This documentation describes the current development version of the repository. Each published performance result belongs to the code, data, detector setup, and model used in that study. Performance claims for the current branch require a current validation result.
+This documentation describes the codebase prepared for **v3.2.0**: supported workflows, configuration, and validation limits. Dataset schemas and model artifacts have independent versions. Published physics results remain tied to their original code, data, detector setup, and checkpoints.
 
 ## Where should I start?
 
@@ -14,12 +14,13 @@ This documentation describes the current development version of the repository. 
 | Download a prepared training dataset | [Dataset download](datasets/download.md) |
 | Produce a dataset from simulation | [Dataset generation](datasets/generate.md) |
 | Train or continue a model | [Train a model](training/train.md) |
+| Balance training samples and monitor their losses | [Dataset mixing](training/data-mixing.md) |
 | Evaluate a published CLD or CLIC model | [Key4HEP evaluation](validation/key4hep.md) |
 | Choose the right validation check | [Validation overview](validation/overview.md) |
 | Export and compare an ONNX model | [ONNX validation](validation/onnx.md) |
 | See which detectors and features are implemented | [Current capabilities](science/capabilities.md) |
 | Read the scientific results | [Publications](science/publications.md) |
-| Understand planned work | [Roadmap](science/roadmap.md) |
+| Understand remaining limits and priorities | [Development priorities](science/roadmap.md) |
 | Find a code component | [Repository map](map.md) |
 
 ## The workflow at a glance
@@ -68,4 +69,3 @@ See [Current capabilities](science/capabilities.md) for the detailed matrix.
 - [Models](https://huggingface.co/jpata/particleflow)
 - [Issues](https://github.com/jpata/particleflow/issues)
 - [Discussions](https://github.com/jpata/particleflow/discussions)
-- [Documentation plan](https://github.com/jpata/particleflow/issues/500)

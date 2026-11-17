@@ -5,10 +5,11 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from mlpf.data.colliderml.make_test_fixture import make_fixture
-from mlpf.data.colliderml.postprocessing import _event_record_one, particle_feature_order, process_one_file
+from mlpf.data.colliderml.postprocessing import _event_record_one, particle_feature_order, pileup_sample, process_one_file
 from mlpf.data.colliderml.reader import shard_paths
 
 PN = particle_feature_order.index("particle_number")
+ISPU = particle_feature_order.index("ispu")
 
 
 def _record(fields):
@@ -68,6 +69,23 @@ def test_track_x_carries_perigee_track_state_parameters():
     assert np.isclose(x[0, 12], 30.0, atol=1e-6)
 
 
+def test_all_pileup_marks_every_target_ispu():
+    # vertex_primary is 1 everywhere, so the default rule gives ispu=0; all_pileup (set for
+    # pileup_only samples) overrides it on every target row of every view and on the element pufrac
+    assert pileup_sample("pileup_only_pu0") and not pileup_sample("ttbar_pu200")
+    particles, tracks, calo, tracker = _shared_hits_event()
+    for all_pileup, expected in ((False, 0.0), (True, 1.0)):
+        rec = _event_record_one(0, particles, tracks, calo, tracker, all_pileup=all_pileup)
+        for key in ("ytarget_track", "ytarget_cluster", "ytarget_hit_calo"):
+            y = rec[key]
+            targets = y[y[:, 0] != 0]
+            assert len(targets) and np.all(targets[:, ISPU] == expected), key
+        assert np.all(rec["pufrac_track"] == expected) and np.all(rec["pufrac_cluster"][rec["pufrac_cluster"] > 0] == 1.0)
+        assert len(rec["pufrac_track"]) and np.any(rec["pufrac_cluster"] == expected)
+        # the hard-scatter gen reference is empty for an all-pileup event; *_withpu keeps it all
+        assert (len(rec["genjet"]) == 0) == all_pileup and rec["genmet_withpu"] > 0
+
+
 def test_calo_hit_pn_is_largest_contributor():
     particles, tracks, calo, tracker = _shared_hits_event()
     rec = _event_record_one(0, particles, tracks, calo, tracker)
@@ -125,6 +143,34 @@ def test_event_missing_from_one_table_is_dropped(tmp_path):
     assert ofn.stat().st_mtime_ns == mtime
 
 
+def test_events_with_corrupt_calo_hits_are_dropped(tmp_path):
+    # release-1 dihiggs/ggf/higgs_portal/hidden_valley_pu0 shards carry events with region code
+    # 255 hits, or hits whose contrib_particle_ids and contrib_energies lengths differ
+    make_fixture(tmp_path / "src", n_events=8)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    process_one_file(*paths, ofn)
+    ids_clean = pq.read_table(ofn)["event_id"].to_pylist()
+    assert len(ids_clean) >= 3
+    ofn.unlink()
+
+    calo = ak.from_parquet(paths[2])
+    rows = [list(calo["event_id"]).index(e) for e in ids_clean[:2]]
+    det = ak.to_list(calo["detector"])
+    det[rows[0]][0] = 255
+    energies = ak.to_list(calo["contrib_energies"])
+    energies[rows[1]][0] = []
+    calo = ak.with_field(calo, ak.values_astype(ak.Array(det), np.uint8), "detector")
+    calo = ak.with_field(calo, ak.values_astype(ak.Array(energies), np.float32), "contrib_energies")
+    pq.write_table(ak.to_arrow_table(calo, extensionarray=False), paths[2])
+
+    process_one_file(*paths, ofn)
+    assert pq.read_table(ofn)["event_id"].to_pylist() == ids_clean[2:]
+    mtime = ofn.stat().st_mtime_ns
+    process_one_file(*paths, ofn)  # the reduced output counts as complete: skipped
+    assert ofn.stat().st_mtime_ns == mtime
+
+
 def test_unsplit_pi0_target_is_a_photon():
     # a pi0 without recorded decay products stays a leaf in truth.py; the converter labels its
     # target a photon (like the split ones), not the shared mapping's neutral hadron
@@ -137,3 +183,102 @@ def test_unsplit_pi0_target_is_a_photon():
     y = rec["ytarget_cluster"]
     classes = sorted(y[y[:, 0] != 0, 0].tolist())
     assert classes == [22.0, 22.0]
+
+
+def test_pileup_fraction_of_elements_and_hard_scatter_gen_reference():
+    # Photon B (pid 2) comes from a pileup collision and leaves one of the three track hits.
+    particles, tracks, calo, tracker = _shared_hits_event()
+    particles = _record({k: ([1, 2, 1] if k == "vertex_primary" else particles[k]) for k in particles.fields})
+    tracker = _record({k: ([3, 3, 2] if k == "particle_id" else tracker[k]) for k in tracker.fields})
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+
+    assert rec["pufrac_track"].tolist() == [np.float32(1 / 3)]
+    # one cluster per cell: its pileup fraction is B's share of the cell energy
+    pufrac_cell = np.array([0.1 / 3.1, 2.0 / 2.1, 0.05 / 1.05, 0.8 / 0.85])
+    assert np.allclose(rec["pufrac_cluster"][rec["hit_to_cluster"]], pufrac_cell, rtol=1e-5)
+    # the hard-scatter gen reference drops B (150 GeV along y): one jet less, smaller MET
+    assert len(rec["genjet"]) == len(rec["genjet_withpu"]) - 1
+    assert rec["genmet"] < rec["genmet_withpu"]
+
+
+def test_resume_reconverts_greedy_targets_with_same_event_count(tmp_path):
+    make_fixture(tmp_path / "src", n_events=6)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    process_one_file(*paths, ofn)
+    table = pq.read_table(ofn)
+    assert table.schema.metadata[b"mlpf.target_assignment"] == b"majority_energy-v1"
+    pq.write_table(table.replace_schema_metadata(None), ofn)
+    process_one_file(*paths, ofn)
+    assert pq.read_metadata(ofn).metadata[b"mlpf.target_assignment"] == b"majority_energy-v1"
+    # a complete output of another rule is reconverted, not skipped
+    process_one_file(*paths, ofn, assignment="greedy")
+    assert pq.read_metadata(ofn).metadata[b"mlpf.target_assignment"] == b"greedy-v1"
+
+
+def test_converter_track_target_uses_majority_hits_over_particle_energy():
+    particles, tracks, calo, tracker = _shared_hits_event()
+    # The high-energy photon contributes only one of the three track hits.
+    tracker = _record({k: ([3, 3, 1] if k == "particle_id" else tracker[k]) for k in tracker.fields})
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+    assert rec["ytarget_track"][0, PN] == 3
+    assert rec["ytarget_track"][0, 0] == 211
+
+
+def test_resume_reconverts_outputs_without_pileup_truth(tmp_path):
+    make_fixture(tmp_path / "src", n_events=6)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    process_one_file(*paths, ofn)
+    table = pq.read_table(ofn)
+    metadata = dict(table.schema.metadata)
+    del metadata[b"mlpf.pileup_truth"]
+    old_fields = ["genmet_withpu", "genjet_withpu", "pufrac_track", "pufrac_cluster"]
+    pq.write_table(table.drop(old_fields).replace_schema_metadata(metadata), ofn)
+
+    process_one_file(*paths, ofn)
+
+    restored = pq.read_table(ofn)
+    assert restored.schema.metadata[b"mlpf.pileup_truth"] == b"energy-fraction-v1"
+    assert restored.schema.metadata[b"mlpf.target_assignment"] == b"majority_energy-v1"
+    assert set(old_fields).issubset(restored.column_names)
+
+
+def test_resume_reconverts_outputs_without_forward_truth(tmp_path):
+    make_fixture(tmp_path / "src", n_events=6)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    process_one_file(*paths, ofn)
+    table = pq.read_table(ofn)
+    assert table.schema.metadata[b"mlpf.forward_truth"] == b"drop-eta3.5-v1"
+    metadata = dict(table.schema.metadata)
+    del metadata[b"mlpf.forward_truth"]
+    pq.write_table(table.replace_schema_metadata(metadata), ofn)
+
+    process_one_file(*paths, ofn)
+
+    assert pq.read_metadata(ofn).metadata[b"mlpf.forward_truth"] == b"drop-eta3.5-v1"
+
+
+def test_pileup_fields_roundtrip_to_tfds(tmp_path):
+    from mlpf.data.colliderml.postprocessing import _batch_arrow_arrays
+    from mlpf.heptfds.colliderml_utils.utils import generate_examples
+    import pyarrow as pa
+
+    particles, tracks, calo, tracker = _shared_hits_event()
+    particles = _record({k: ([1, 2, 1] if k == "vertex_primary" else particles[k]) for k in particles.fields})
+    tracker = _record({k: ([3, 3, 2] if k == "particle_id" else tracker[k]) for k in tracker.fields})
+    rec = _event_record_one(123, particles, tracks, calo, tracker)
+    cols = _batch_arrow_arrays([rec])
+    ofn = tmp_path / "events.parquet"
+    pq.write_table(pa.Table.from_arrays([a for _, a in cols], names=[k for k, _ in cols]), ofn)
+
+    ((_, example),) = generate_examples([ofn])
+
+    assert example["event_id"] == 123
+    assert example["pufrac"].shape == (len(example["X"]),)
+    np.testing.assert_array_equal(example["pufrac"], np.concatenate([rec["pufrac_track"], rec["pufrac_cluster"]]))
+    np.testing.assert_array_equal(example["genjets"], rec["genjet"])
+    np.testing.assert_array_equal(example["genjets_withpu"], rec["genjet_withpu"])
+    assert example["genmet"] == rec["genmet"]
+    assert example["genmet_withpu"] == rec["genmet_withpu"]

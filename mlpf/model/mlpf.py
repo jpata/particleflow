@@ -9,6 +9,7 @@ from torch.utils.checkpoint import checkpoint
 
 from mlpf.logger import _logger
 from mlpf.model.gnnlsh import CombinedGraphLayer
+from mlpf.model.onnx_attention import export_attention
 
 try:
     from mlpf.model.litept import LitePTLayer
@@ -17,6 +18,9 @@ except ImportError:
 
 from mlpf.model.hept import HEPTLayer, trunc_normal_
 from mlpf.model.heptv2 import HEPTv2Layer
+from mlpf.model.input_normalization import InputNormalization
+from mlpf.model.feature_bag import FeatureBag
+from mlpf.model.calo_entry import ClusterCentroid, TrackCaloEntry
 from mlpf.model.tracker_features import TrackerDoubletFeatures
 from mlpf.model.set_decoder import ParticleSetDecoder
 
@@ -127,6 +131,8 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
         self.head_dim = int(embed_dim // num_heads)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)
         self.export_onnx_fused = export_onnx_fused
+        self.onnx_attention_dtype = None
+        self.onnx_attention_format = None
         self.attention_type = AttentionType(attention_type)
         self.use_flash_attn_varlen = use_flash_attn_varlen
         if self.use_flash_attn_varlen and self.attention_type != AttentionType.FLASH:
@@ -144,9 +150,11 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, need_weights=False, key_padding_mask=None) -> torch.Tensor:
         # q, k, v: 3D tensors (batch_size, seq_len, embed_dim), embed_dim = num_heads*head_dim
         jagged_input = is_jagged_tensor(q)
+        exporting = torch.onnx.is_in_onnx_export() and self.onnx_attention_format is not None
+        export_path = self.export_onnx_fused or exporting
         if jagged_input != is_jagged_tensor(k) or jagged_input != is_jagged_tensor(v):
             raise ValueError("q, k, and v must all use the same dense or jagged layout")
-        if jagged_input and (key_padding_mask is not None or self.export_onnx_fused):
+        if jagged_input and (key_padding_mask is not None or export_path):
             raise ValueError("Jagged attention does not use padding masks and cannot use the ONNX-fused path")
         if self.use_flash_attn_varlen and not jagged_input:
             raise ValueError("flash_attn_varlen_func requires packed jagged q, k, and v")
@@ -190,26 +198,17 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
                 )
                 nested_qkv.append(nested.transpose(1, 2))
             q_attn, k_attn, v_attn = nested_qkv
-        elif not self.export_onnx_fused:
+        else:
             q_attn = q_values.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
             k_attn = k_values.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
             v_attn = v_values.reshape(bs, -1, num_heads, head_dim).transpose(1, 2)
-        else:
-            q_attn, k_attn, v_attn = q_values, k_values, v_values
-
-        # this function will have different shape signatures in native pytorch sdpa and in ONNX com.microsoft.MultiHeadAttention
-        # in pytorch: (bs, num_heads, seq_len, head_dim)
-        # in ONNX: (bs, seq_len, num_heads*head_dim)
-
         # Dense flash SDPA does not accept a non-null mask. Callers that need
         # correct variable-length flash attention must pass jagged q/k/v.
         attn_mask = None
         if key_padding_mask is not None:
             # key_padding_mask: [bs, seq_len], True where elements are to be ignored
             # scaled_dot_product_attention expects attn_mask: [bs, 1, 1, seq_len], False where elements are to be ignored
-            if self.export_onnx_fused:
-                attn_mask = ~key_padding_mask.unsqueeze(1)
-            elif self.attention_type == AttentionType.FLASH:
+            if self.attention_type == AttentionType.FLASH and not export_path:
                 raise ValueError("Dense flash attention cannot use key_padding_mask; enable jagged attention")
             else:
                 attn_mask = ~key_padding_mask.view(bs, 1, 1, k_len)
@@ -227,11 +226,24 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
                 dropout_p=self.dropout if self.training else 0.0,
                 causal=False,
             )
-        elif self.export_onnx_fused:
-            attn_output = torch.nn.functional.scaled_dot_product_attention(q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout)
+        elif export_path:
+            if self.onnx_attention_dtype is not None:
+                q_attn, k_attn, v_attn = (t.to(self.onnx_attention_dtype) for t in (q_attn, k_attn, v_attn))
+            valid = ~key_padding_mask if key_padding_mask is not None else torch.ones_like(k_values[..., 0], dtype=torch.bool)
+            if torch.onnx.is_in_onnx_export():
+                attn_output = export_attention(
+                    q_attn, k_attn, v_attn, valid, attention_format=self.onnx_attention_format or "attention24", head_dim=self.head_dim
+                )
+            else:
+                with sdpa_kernel(SDPBackend.MATH):
+                    attn_output = torch.nn.functional.scaled_dot_product_attention(
+                        q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout if self.training else 0.0
+                    )
         else:
             with sdpa_kernel(self.attn_params[self.attention_type]):
-                attn_output = torch.nn.functional.scaled_dot_product_attention(q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout)
+                attn_output = torch.nn.functional.scaled_dot_product_attention(
+                    q_attn, k_attn, v_attn, attn_mask=attn_mask, dropout_p=self.dropout if self.training else 0.0
+                )
 
         # Keep residual paths type-stable for half-precision ONNX export.
         attn_output = attn_output.to(q_values.dtype)
@@ -242,7 +254,7 @@ class SimpleMultiheadAttention(nn.MultiheadAttention):
                 attn_output = attn_output.reshape(-1, num_heads * head_dim)
             else:
                 attn_output = attn_output.transpose(1, 2).values().reshape(-1, num_heads * head_dim)
-        elif not self.export_onnx_fused:
+        else:
             attn_output = attn_output.transpose(1, 2).reshape(bs, -1, num_heads * head_dim)
 
         # assert list(attn_output.size()) == [bs, seq_len, num_heads * head_dim]
@@ -329,7 +341,8 @@ class PreLnSelfAttentionLayer(nn.Module):
         if mask is not None and not jagged_input:
             q = q * mask_
 
-        mha_out = self.mha(q, x_norm, x_norm, need_weights=False)[0]
+        key_padding_mask = None if jagged_input or mask is None else ~mask.bool()
+        mha_out = self.mha(q, x_norm, x_norm, need_weights=False, key_padding_mask=key_padding_mask)[0]
 
         self.mha_res_norm = (mha_out.values if jagged_input else mha_out).norm().detach()
 
@@ -1188,7 +1201,7 @@ class RegressionOutput(nn.Module):
         elif self.mode == RegressionMode.DIRECT_ELEMTYPE:
             nn_out = self.nn(x)
             elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
-            nn_out = torch.sum(elemtype_mask * nn_out, axis=-1, keepdims=True)
+            nn_out = torch.sum(elemtype_mask.to(nn_out.dtype) * nn_out, axis=-1, keepdims=True)
             return nn_out
         elif self.mode == RegressionMode.DIRECT_ELEMTYPE_SPLIT:
             elem_outs = []
@@ -1196,7 +1209,7 @@ class RegressionOutput(nn.Module):
                 elem_outs.append(self.nn[elem](x))
             elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
             elem_outs = torch.cat(elem_outs, axis=-1)
-            return torch.sum(elem_outs * elemtype_mask, axis=-1, keepdims=True)
+            return torch.sum(elem_outs * elemtype_mask.to(elem_outs.dtype), axis=-1, keepdims=True)
         elif self.mode == RegressionMode.ADDITIVE:
             nn_out = self.nn(x)
             return orig_value + nn_out
@@ -1210,8 +1223,8 @@ class RegressionOutput(nn.Module):
             nn_out1 = self.nn1(x)
             nn_out2 = self.nn2(x)
             elemtype_mask = torch.cat([elems[..., 0:1] == elemtype for elemtype in self.elemtypes], axis=-1)
-            a = torch.sum(elemtype_mask * nn_out1, axis=-1, keepdims=True)
-            b = torch.sum(elemtype_mask * nn_out2, axis=-1, keepdims=True)
+            a = torch.sum(elemtype_mask.to(nn_out1.dtype) * nn_out1, axis=-1, keepdims=True)
+            b = torch.sum(elemtype_mask.to(nn_out2.dtype) * nn_out2, axis=-1, keepdims=True)
             return orig_value * a + b
 
 
@@ -1239,6 +1252,10 @@ class MLPF(nn.Module):
             else nn.Identity()
         )
         self.input_dim = self.raw_input_dim + (self.feature_engineering.num_output_features if self.uses_hit_feature_engineering else 0)
+        self.input_normalization = InputNormalization(self.raw_input_dim, config.dataset_versions()) if config.model.input_normalization else None
+        self.feature_bag = FeatureBag(self.raw_input_dim) if config.model.feature_bag else None
+        if self.feature_bag is not None:
+            self.input_dim = self.feature_bag.num_features
         self.num_classes = config.num_classes
         self.elemtypes_nonzero = config.elemtypes_nonzero
 
@@ -1300,7 +1317,9 @@ class MLPF(nn.Module):
             backbone_dropout_mha = sub_config.dropout_conv_id_mha
             backbone_dropout_ff = sub_config.dropout_conv_id_ff
             self.use_pre_layernorm = sub_config.use_pre_layernorm
-            self.use_jagged_attention = sub_config.use_jagged_attention
+            self.use_jagged_attention = sub_config.use_jagged_attention or (
+                attention_type == AttentionType.FLASH and not sub_config.export_onnx_fused
+            )
             self.use_flash_attn_varlen = sub_config.use_flash_attn_varlen
             export_onnx_fused = sub_config.export_onnx_fused
             save_attention = sub_config.save_attention
@@ -1362,6 +1381,20 @@ class MLPF(nn.Module):
             width = sub_config.width
             num_heads = sub_config.num_heads
             self.use_pre_layernorm = False
+
+        # heptv2.track_hash_at_calo: the backbone sees X_features with the tracks' (eta, sin_phi,
+        # cos_phi) moved to their calorimeter entry point; the encoder and heads keep the raw ones.
+        self.track_calo_entry = None
+        if self.conv_type == ModelType.HEPTV2 and sub_config.track_hash_at_calo:
+            self.track_calo_entry = TrackCaloEntry(
+                config.dataset.value,
+                radius_mm=sub_config.track_hash_calo_radius_mm,
+                endcap_z_mm=sub_config.track_hash_calo_endcap_z_mm,
+            )
+        # heptv2.cluster_hash_at_centroid: likewise for the clusters, moved to their centroid direction.
+        self.cluster_centroid = None
+        if self.conv_type == ModelType.HEPTV2 and sub_config.cluster_hash_at_centroid:
+            self.cluster_centroid = ClusterCentroid(config.dataset.value)
 
         if self.use_detector_backbone and self.conv_type != ModelType.ATTENTION:
             raise ValueError("Detector-specific tracker/calo/common layers are only supported by the attention model")
@@ -1683,7 +1716,19 @@ class MLPF(nn.Module):
         if self.conv_type == ModelType.HEPTV2:
             heptv2_conf = self.config.heptv2.model_dump()
             heptv2_conf.pop("activation_checkpointing")
-            for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff", "num_heads"]:
+            for key in [
+                "num_convs",
+                "conv_type",
+                "embedding_dim",
+                "width",
+                "activation",
+                "dropout_ff",
+                "num_heads",
+                "track_hash_at_calo",
+                "track_hash_calo_radius_mm",
+                "track_hash_calo_endcap_z_mm",
+                "cluster_hash_at_centroid",
+            ]:
                 if key in heptv2_conf:
                     heptv2_conf.pop(key)
             return HEPTv2Layer(
@@ -1696,16 +1741,18 @@ class MLPF(nn.Module):
             )
         raise ValueError(f"Unsupported conv type {self.conv_type}")
 
-    def _encode_inputs(self, X_features, mask=None, encoder=None):
+    def _encode_inputs(self, X_features, mask=None, encoder=None, source_id=None):
         encoder = self.nn0 if encoder is None else encoder
+        X_features = X_features if self.input_normalization is None else self.input_normalization(X_features, source_id)
+        inputs = X_features if self.feature_bag is None else self.feature_bag(X_features, source_id)
         if self.input_encoding == InputEncoding.JOINT:
-            encoded = encoder(X_features)
+            encoded = encoder(inputs)
         if self.input_encoding == InputEncoding.SPLIT:
             B, S, _ = X_features.shape
             num_types = len(self.elemtypes_nonzero)
-            all_embeddings = encoder(X_features).view(B, S, num_types, -1)
+            all_embeddings = encoder(inputs).view(B, S, num_types, -1)
             elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
-            encoded = torch.sum(all_embeddings * elemtype_mask.unsqueeze(-1), axis=2)
+            encoded = torch.sum(all_embeddings * elemtype_mask.unsqueeze(-1).to(all_embeddings.dtype), axis=2)
         elif self.input_encoding not in [InputEncoding.JOINT, InputEncoding.SPLIT]:
             raise ValueError(f"Unsupported input encoding {self.input_encoding}")
         if mask is not None:
@@ -1737,6 +1784,10 @@ class MLPF(nn.Module):
         if len(backbone) == 0:
             embeddings.append(x)
             return embeddings
+        if self.track_calo_entry is not None:
+            X_features = self.track_calo_entry(X_features)
+        if self.cluster_centroid is not None:
+            X_features = self.cluster_centroid(X_features)
 
         for conv in backbone:
             if self.conv_type == ModelType.HEPTV2 and self.config.heptv2.activation_checkpointing and self.training and torch.is_grad_enabled():
@@ -1810,33 +1861,33 @@ class MLPF(nn.Module):
             representations.extend(jagged_to_dense(embedding, valid_mask) for embedding in common_embeddings)
         return representations
 
-    def encode_backbone(self, X_features, mask):
+    def encode_backbone(self, X_features, mask, source_id=None):
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_detector_backbone:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             embeddings = self._run_detector_backbone_layers(x, mask, X_features)
             return embeddings[-1]
         if self.use_split_backbone:
-            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
+            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id, source_id=source_id)
             x = self._prepare_backbone_input(x, mask)
             embeddings = self._run_backbone(x, mask, x, X_features, backbone=self._backbone_id)
         else:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             x = self._prepare_backbone_input(x, mask)
             embeddings = self._run_backbone(x, mask, x, X_features)
         return self._restore_backbone_output(self._collect_representation(embeddings), mask)
 
-    def encode_backbone_layers(self, X_features, mask):
+    def encode_backbone_layers(self, X_features, mask, source_id=None):
         """Return the input encoding and each successive backbone representation."""
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_detector_backbone:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             return [x, *self._run_detector_backbone_layers(x, mask, X_features)]
         if self.use_split_backbone:
-            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
+            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id, source_id=source_id)
             backbone = self._backbone_id
         else:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             backbone = self.backbone
         x = self._prepare_backbone_input(x, mask)
         representations = [x]
@@ -1869,14 +1920,14 @@ class MLPF(nn.Module):
         return self.regression_norm
 
     # @torch.compile
-    def forward(self, X_features, mask):
+    def forward(self, X_features, mask, source_id=None):
         if self.output_mode == OutputMode.SET:
-            return self.set_decoder(self.encode_backbone(X_features, mask), mask, X_features)
+            return self.set_decoder(self.encode_backbone(X_features, mask, source_id=source_id), mask, X_features)
 
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_split_backbone:
-            x_id = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
-            x_reg = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_reg)
+            x_id = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id, source_id=source_id)
+            x_reg = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_reg, source_id=source_id)
             x_id = self._prepare_backbone_input(x_id, mask)
             x_reg = self._prepare_backbone_input(x_reg, mask)
             embeddings_id = self._run_backbone(x_id, mask, x_id, X_features, backbone=self._backbone_id)
@@ -1884,7 +1935,7 @@ class MLPF(nn.Module):
             final_embedding_cls = self._restore_backbone_output(self._collect_representation(embeddings_id), mask)
             final_embedding_reg = self._restore_backbone_output(self._collect_representation(embeddings_reg), mask)
         else:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             if self.use_detector_backbone:
                 final_embedding = self._run_detector_backbone_layers(x, mask, X_features)[-1]
             else:
@@ -1930,10 +1981,10 @@ class MLPF(nn.Module):
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
 
-    def predict_particles(self, X_features, mask):
+    def predict_particles(self, X_features, mask, source_id=None):
         from mlpf.model.utils import unpack_predictions
 
-        ypred_raw = self.forward(X_features, mask)
+        ypred_raw = self.forward(X_features, mask, source_id=source_id)
         ypred_raw = [y.to(torch.float32) for y in ypred_raw]
 
         if self.output_mode == OutputMode.SET:

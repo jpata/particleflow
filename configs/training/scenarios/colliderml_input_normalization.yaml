@@ -1,0 +1,38 @@
+# Does input normalization (mlpf/model/input_normalization.py) change the training of the
+# ColliderML pu0 track/cluster model? Two runs that differ only in model.input_normalization
+# (enforced by allowed_variant_differences):
+#
+# - norm: each input column is clipped, log1p-transformed where configured and standardized
+#   with the ColliderML 1.5.0 statistics (mlpf/model/input_normalization_stats/colliderml_1.5.0.yaml).
+# - no_norm: the raw columns go to the first layer.
+#
+# Compare the validation losses for the training curve and the logged forward and step times
+# for the speed.
+name: colliderml_input_normalization
+spec_file: particleflow_spec.yaml
+production_name: colliderml
+
+variants:
+  norm:
+    model_name: pyg-colliderml-v1
+    overrides:
+      model.input_normalization: true
+  no_norm:
+    model_name: pyg-colliderml-v1
+
+seeds: [12345]
+
+training:
+  global_batch_size: 128
+  parameters:
+    num_steps: 10000
+    val_freq: 500
+    checkpoint_freq: 5000
+    nvalid: 2000
+    ntest: 2000
+    sampler_mode: interleaved-shards
+    pad_to_multiple_elements: 128
+    make_plots: true
+
+allowed_variant_differences:
+  - model.input_normalization

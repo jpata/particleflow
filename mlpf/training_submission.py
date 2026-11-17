@@ -55,6 +55,7 @@ def _worker_for_site(repo_root, site):
         "flatiron": "scripts/flatiron/run_uv_scenario.sh",
         "tallinn": "scripts/tallinn/run_scenario.sh",
         "lumi": "scripts/lumi/run_scenario.sh",
+        "empireai": "scripts/empireai/run_scenario.sh",
     }
     try:
         return repo_root / relative_paths[site]
@@ -73,7 +74,37 @@ def _gpu_request_args(slurm, gpus):
     return ["--gres", resource]
 
 
-def build_slurm_submission(
+def slurm_resource_args(slurm, gpus):
+    """One resource mapping for training arrays and serial benchmark sweeps."""
+    args = [
+        "--time",
+        slurm.time,
+        "--nodes",
+        str(slurm.nodes),
+        "--ntasks-per-node",
+        str(slurm.tasks_per_node),
+        "--partition",
+        slurm.partition,
+        *_gpu_request_args(slurm, gpus),
+        "--cpus-per-task",
+        str(slurm.cpus_per_task),
+    ]
+    for flag, value in (
+        ("--constraint", slurm.constraint),
+        ("--account", slurm.account),
+        ("--qos", slurm.qos),
+        ("--reservation", slurm.reservation),
+        ("--mem", slurm.memory),
+        ("--mem-per-gpu", slurm.memory_per_gpu),
+    ):
+        if value:
+            args.extend([flag, value])
+    if slurm.no_requeue:
+        args.append("--no-requeue")
+    return args
+
+
+def build_slurm_submissions(
     scenario_path,
     profile_path,
     repo_root,
@@ -81,6 +112,7 @@ def build_slurm_submission(
     seed=None,
     worker=None,
     continue_run=False,
+    variants=None,
 ):
     scenario = load_training_scenario(scenario_path)
     if seed is not None:
@@ -99,9 +131,15 @@ def build_slurm_submission(
         raise ValueError("Scenario did not resolve to any jobs")
 
     selected_indices = list(range(len(jobs)))
+    if variants:
+        unknown = sorted(set(variants) - {job.variant_name for job in jobs})
+        if unknown:
+            raise ValueError(f"Unknown variants {unknown}; scenario has {sorted({job.variant_name for job in jobs})}")
+        selected_indices = [index for index in selected_indices if jobs[index].variant_name in variants]
     if continue_run:
-        selected_indices = []
-        for index, job in enumerate(jobs):
+        candidates, selected_indices = selected_indices, []
+        for index in candidates:
+            job = jobs[index]
             continuation = find_scenario_continuation(job, profile)
             if continuation is None:
                 print(f"Skipping {job.variant_name} seed {job.seed}: no compatible prior run")
@@ -116,57 +154,50 @@ def build_slurm_submission(
         if not selected_indices:
             raise ValueError("No unfinished compatible scenario jobs found")
 
-    slurm = profile.slurm
-    logs_dir = repo_root / "logs_slurm"
-    worker = Path(worker) if worker is not None else _worker_for_site(repo_root, "flatiron")
-    command = [
-        "sbatch",
-        "--time",
-        slurm.time,
-        "--nodes",
-        str(slurm.nodes),
-        "--ntasks-per-node",
-        str(slurm.tasks_per_node),
-        "--partition",
-        slurm.partition,
-        *_gpu_request_args(slurm, profile.gpus),
-        "--cpus-per-task",
-        str(slurm.cpus_per_task),
-    ]
-    if slurm.constraint:
-        command.extend(["--constraint", slurm.constraint])
-    if slurm.account:
-        command.extend(["--account", slurm.account])
-    if slurm.memory:
-        command.extend(["--mem", slurm.memory])
-    if slurm.memory_per_gpu:
-        command.extend(["--mem-per-gpu", slurm.memory_per_gpu])
-    if slurm.no_requeue:
-        command.append("--no-requeue")
-    command.extend(
-        [
-            "--array",
-            ",".join(str(index) for index in selected_indices) if continue_run else f"0-{len(jobs) - 1}",
-            "--job-name",
-            scenario.name,
-            "--output",
-            str(logs_dir / "log_%x_%A_%a.out"),
-            "--error",
-            str(logs_dir / "log_%x_%A_%a.err"),
-            "--chdir",
-            str(repo_root),
-            str(worker),
-            str(Path(scenario_path).resolve()),
-            str(Path(profile_path).resolve()),
-            "--repo-root",
-            str(repo_root),
-        ]
-    )
-    if seed is not None:
-        command.extend(["--seed", str(seed)])
-    if continue_run:
-        command.append("--continue")
-    return command, [jobs[index] for index in selected_indices]
+    # Slurm array tasks share resource requests. Keep original task indices
+    # while submitting a separate array for each effective GPU count.
+    groups = {}
+    for index in selected_indices:
+        groups.setdefault(jobs[index].resolved_config.gpus, []).append(index)
+    submissions = []
+    for gpus, indices in groups.items():
+        slurm = profile.slurm
+        logs_dir = repo_root / "logs_slurm"
+        worker = Path(worker) if worker is not None else _worker_for_site(repo_root, "flatiron")
+        command = ["sbatch", *slurm_resource_args(slurm, gpus)]
+        command.extend(
+            [
+                "--array",
+                ",".join(str(index) for index in indices) if len(indices) < len(jobs) else f"0-{len(jobs) - 1}",
+                "--job-name",
+                scenario.name,
+                "--output",
+                str(logs_dir / "log_%x_%A_%a.out"),
+                "--error",
+                str(logs_dir / "log_%x_%A_%a.err"),
+                "--chdir",
+                str(repo_root),
+                str(worker),
+                str(Path(scenario_path).resolve()),
+                str(Path(profile_path).resolve()),
+                "--repo-root",
+                str(repo_root),
+            ]
+        )
+        if seed is not None:
+            command.extend(["--seed", str(seed)])
+        if continue_run:
+            command.append("--continue")
+        submissions.append((command, [jobs[index] for index in indices]))
+    return submissions
+
+
+def build_slurm_submission(*args, **kwargs):
+    """Compatibility API for scenarios with one resource group."""
+    submissions = build_slurm_submissions(*args, **kwargs)
+    if len(submissions) != 1:
+        raise ValueError("Scenario requires multiple GPU resource groups; use build_slurm_submissions")
+    return submissions[0]
 
 
 def main(argv=None, *, site="flatiron"):
@@ -191,6 +222,13 @@ def main(argv=None, *, site="flatiron"):
         help="Resubmit only compatible jobs whose latest checkpoint is below num_steps",
     )
     parser.add_argument(
+        "--variant",
+        dest="variants",
+        action="append",
+        metavar="NAME",
+        help="Submit only this variant (repeatable); array task indices stay those of the full scenario",
+    )
+    parser.add_argument(
         "--submission-script",
         type=Path,
         help="Write the sbatch command to a shell script for submission outside the container",
@@ -208,26 +246,29 @@ def main(argv=None, *, site="flatiron"):
 
     scenario_path = resolve_scenario_path(args.scenario, repo_root)
     profile_path = resolve_platform_profile_path(args.accelerator, repo_root, site)
-    command, jobs = build_slurm_submission(
+    submissions = build_slurm_submissions(
         scenario_path,
         profile_path,
         repo_root,
         seed=args.seed,
         worker=_worker_for_site(repo_root, site),
         continue_run=args.continue_run,
+        variants=args.variants,
     )
-    print(
-        f"Submitting {len(jobs)} jobs for {args.scenario} on {args.accelerator}:\n" + shlex.join(command),
-        flush=True,
-    )
+    for command, jobs in submissions:
+        print(
+            f"Submitting {len(jobs)} jobs for {args.scenario} on {args.accelerator}:\n" + shlex.join(command),
+            flush=True,
+        )
     if args.dry_run:
         return
 
     (repo_root / "logs_slurm").mkdir(parents=True, exist_ok=True)
     if args.submission_script is not None:
-        args.submission_script.write_text("#!/bin/bash\nexec " + shlex.join(command) + "\n")
+        args.submission_script.write_text("#!/bin/bash\nset -euo pipefail\n" + "\n".join(shlex.join(command) for command, _ in submissions) + "\n")
         return
-    subprocess.run(command, check=True)
+    for command, _ in submissions:
+        subprocess.run(command, check=True)
 
 
 if __name__ == "__main__":

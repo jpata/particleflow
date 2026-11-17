@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sdpa-w7900
+  labels:
+    home: "eos"
+    mount-eos: "true"
+    mount-cvmfs: "true"
+    mount-afs: "true"
+    lifetime: "10h"
+spec:
+  restartPolicy: Never
+  containers:
+    - name: container
+      image: registry.cern.ch/ngt/lxplus-like:9
+      command: ["/usr/bin/tini", "--", "sleep", "infinity"]
+      resources:
+        limits:
+          amd.com/gpu: 1
+  nodeSelector:
+    amd.com/gpu.product-name: AMD_Radeon_PRO_W7900

@@ -1,0 +1,57 @@
+<lccdd>
+
+
+
+    <!--  Definition of the readout segmentation/definition  -->
+    <readouts>
+        <readout name="ECalEndcapCollection">
+            <segmentation type="CartesianGridXY" grid_size_x="ECal_cell_size" grid_size_y="ECal_cell_size" />
+            <id>system:5,side:2,module:8,stave:4,layer:9,submodule:4,x:32:-16,y:-16</id>
+        </readout>
+    </readouts>
+
+    <!--  Includes for sensitives and support                -->
+    <detectors>
+
+        <detector name="ECalEndcap" type="GenericCalEndcap_o1_v01" id="DetID_ECal_Endcap" readout="ECalEndcapCollection" vis="ECALVis" >
+
+            <comment>Electromagnetic Calorimeter Endcap</comment>
+
+            <type_flags type=" DetType_CALORIMETER + DetType_ELECTROMAGNETIC + DetType_ENDCAP"/>
+
+            <envelope vis="ECALVis">
+                <shape type="BooleanShape" operation="Subtraction" material="Air">
+                        <shape type="PolyhedraRegular"  numsides="ECalEndcap_outer_symmetry" rmin="ECalEndcap_inner_radius-env_safety" rmax="ECalEndcap_outer_radius+ 10.0*env_safety" dz="2.0*ECalEndcap_max_z+2*env_safety"/>
+                        <shape type="PolyhedraRegular"  numsides="ECalEndcap_outer_symmetry" rmin="0" rmax="ECalEndcap_outer_radius+ 100.0*env_safety" dz="2.0*ECalEndcap_min_z-2*env_safety"/>
+                    </shape>
+                <rotation x="0*deg" y="0*deg" z="90*deg-180*deg/ECalEndcap_outer_symmetry"/>
+            </envelope>
+
+
+            <dimensions nsides_inner="ECalEndcap_inner_symmetry" nsides_outer="(int) ECalEndcap_outer_symmetry" zmin="ECalEndcap_min_z" rmin="ECalEndcap_inner_radius" rmax="ECalEndcap_outer_radius"/>
+
+            <layer repeat="40" vis="ECalLayerVis">
+                <slice material = "TungstenDens24" thickness = "1.90*mm" vis="ECalAbsorberVis" radiator="yes"/>
+                <slice material = "G10"            thickness = "0.15*mm" vis="InvisibleNoDaughters"/>
+                <slice material = "GroundOrHVMix"  thickness = "0.10*mm" vis="ECalAbsorberVis"/>
+                <slice material = "Silicon"        thickness = "0.50*mm" sensitive="yes" limits="cal_limits" vis="ECalSensitiveVis"/>
+                <slice material = "Air"            thickness = "0.10*mm" vis="InvisibleNoDaughters"/>
+                <slice material = "siPCBMix"       thickness = "1.30*mm" vis="ECalAbsorberVis"/>
+                <slice material = "Air"            thickness = "0.25*mm" vis="InvisibleNoDaughters"/>
+                <slice material = "G10"            thickness = "0.75*mm" vis="InvisibleNoDaughters"/>
+            </layer>
+
+        </detector>
+    </detectors>
+
+    <plugins>
+        <plugin name="DD4hep_CaloFaceEndcapSurfacePlugin">
+            <argument value="ECalEndcap"/>
+	        <argument value="zpos=ECalEndcap_min_z"    />
+	        <argument value="radius=ECalEndcap_outer_radius"  />
+	        <argument value="phi0=0"    />
+	        <argument value="symmetry=ECalEndcap_outer_symmetry"/>
+	        <argument value="systemID=DetID_ECal_Endcap"/>
+	  </plugin>
+    </plugins>
+</lccdd>

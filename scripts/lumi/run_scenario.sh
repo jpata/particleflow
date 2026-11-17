@@ -54,10 +54,12 @@ export NCCL_NET_GDR_LEVEL=${NCCL_NET_GDR_LEVEL:-3}
 export NCCL_DEBUG=${NCCL_DEBUG:-INFO}
 export PYTHONPATH="$REPO_ROOT"
 
-# A standard-g allocation is a complete node and this profile requests all
-# eight MI250X GCDs for one task. Do not inherit a login-shell or Slurm binding
-# that would hide devices from the eight-process torch DDP launcher.
-unset ROCR_VISIBLE_DEVICES
+# Only the full-node, eight-GPU task needs the historical binding workaround.
+# Preserve Slurm's device selection for single-GPU track/cluster tasks, even
+# when the batch allocation reports all eight GPUs on the node.
+if [[ "${SLURM_GPUS_PER_TASK:-}" == "8" ]]; then
+  unset ROCR_VISIBLE_DEVICES
+fi
 
 if [[ ! -r "$IMG" ]]; then
   echo "LUMI PyTorch container is not readable at '$IMG'; set IMG" >&2
@@ -78,6 +80,7 @@ mkdir -p "$MIOPEN_USER_DB_PATH"
 rocm-smi --showdriverversion
 echo "SLURM_JOB_ID=${SLURM_JOB_ID:-none}"
 echo "SLURM_ARRAY_TASK_ID=${SLURM_ARRAY_TASK_ID:-none}"
+echo "SLURM_GPUS_PER_TASK=${SLURM_GPUS_PER_TASK:-unset} SLURM_GPUS_ON_NODE=${SLURM_GPUS_ON_NODE:-unset} SLURM_GPUS_PER_NODE=${SLURM_GPUS_PER_NODE:-unset}"
 echo "ROCR_VISIBLE_DEVICES=${ROCR_VISIBLE_DEVICES:-all} OMP_NUM_THREADS=${OMP_NUM_THREADS:-unset}"
 echo "scenario=$SCENARIO_FILE platform=$PLATFORM_FILE task_index=$TASK_INDEX"
 

@@ -264,7 +264,8 @@ def find_representative_elements(g, elem_to_cp, cp_to_elem, elem_type, pid_type=
             unused_elems.append(elem)
 
 
-def prepare_normalized_table(g, iev):  # noqa: C901
+def prepare_normalized_table(g, iev, assignment_fn=None):  # noqa: C901
+    """Build native CMS targets; assignment_fn is an optional comparison-study hook."""
     # for GSF, keep only links from electrons, because CMSSW expects to reconstruct
     # only electrons from GSF (and vice versa, only GSF should give rise to electrons)
     elem_gsf = [n for n in g.nodes if n[0] == "elem" and g.nodes[n]["typ"] == 6]
@@ -305,14 +306,17 @@ def prepare_normalized_table(g, iev):  # noqa: C901
     cp_to_elem = {}  # map of caloparticle -> element
 
     # assign caloparticles in reverse pt order uniquely to best element
-    find_representative_elements(g, elem_to_cp, cp_to_elem, 6)  # gsf first, to ensure electrons get associated to gsf
-    find_representative_elements(g, elem_to_cp, cp_to_elem, 1)  # tracks
-    find_representative_elements(g, elem_to_cp, cp_to_elem, 4)  # ecal
-    find_representative_elements(g, elem_to_cp, cp_to_elem, 5)  # hcal
-    find_representative_elements(g, elem_to_cp, cp_to_elem, 8)  # HF
-    find_representative_elements(g, elem_to_cp, cp_to_elem, 9)  # HF
-    find_representative_elements(g, elem_to_cp, cp_to_elem, 10)  #
-    find_representative_elements(g, elem_to_cp, cp_to_elem, 11)
+    if assignment_fn is None:
+        find_representative_elements(g, elem_to_cp, cp_to_elem, 6)  # gsf first, to ensure electrons get associated to gsf
+        find_representative_elements(g, elem_to_cp, cp_to_elem, 1)  # tracks
+        find_representative_elements(g, elem_to_cp, cp_to_elem, 4)  # ecal
+        find_representative_elements(g, elem_to_cp, cp_to_elem, 5)  # hcal
+        find_representative_elements(g, elem_to_cp, cp_to_elem, 8)  # HF
+        find_representative_elements(g, elem_to_cp, cp_to_elem, 9)  # HF
+        find_representative_elements(g, elem_to_cp, cp_to_elem, 10)  #
+        find_representative_elements(g, elem_to_cp, cp_to_elem, 11)
+    else:
+        elem_to_cp, cp_to_elem = assignment_fn(g, all_caloparticles, all_elements)
 
     s1 = set(list(cp_to_elem.keys()))
     s2 = set(all_caloparticles)
@@ -328,7 +332,9 @@ def prepare_normalized_table(g, iev):  # noqa: C901
             reverse=True,
         )
         _, elem = elems_sorted[0]
-        elem_to_cp[elem] += [cp]
+        # Alternative matchers may deliberately leave a weakly linked input unused.
+        # The existing fallback still places the particle on its best input.
+        elem_to_cp.setdefault(elem, []).append(cp)
 
     # Find primary element for each PFCandidate
     unmatched_cand = []

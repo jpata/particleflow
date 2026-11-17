@@ -1,31 +1,31 @@
-# CLD datasets
+# CLD tracks and clusters
 
-CLD datasets use Key4HEP/EDM4hep production at 365 GeV. The configured samples
-are `ttbar`, fully hadronic `WW`, inclusive `qq`, and `ZZ`; the standard model
-recipe uses the first three.
+CLD track/cluster datasets use Key4HEP/EDM4hep production at 365 GeV. The schema version is **3.3.0**, and the standard model recipe is `pyg-cld-v1`.
 
-| Representation | Dataset names | Model recipe |
+## Physics samples
+
+| Physics sample | TFDS dataset | Training selection |
 |---|---|---|
-| Tracks and clusters | `cld_edm_{ttbar,ww_fullhad,qq,zz}_pf` | `pyg-cld-v1` |
-| Detector hits | `cld_edm_{ttbar,ww_fullhad,qq,zz}_hits` | `pyg-cld-hits-v1` |
+| Top-quark pairs | `cld_edm_ttbar_pf` | Included in default recipe |
+| Fully hadronic WW | `cld_edm_ww_fullhad_pf` | Included in default recipe |
+| Inclusive quark pairs | `cld_edm_qq_pf` | Included in default recipe |
+| ZZ | `cld_edm_zz_pf` | Additional builder; add to a custom recipe |
 
-Both representations use dataset version 3.2.1 and configuration partitions
-1--10. The corpus contains about one million events for each standard sample
-and half a million `ZZ` events, or 3.5 million events in total.
+The recipes configure partitions 1--10; the [verified public selection](catalog.md#published-availability) provides configuration 1. Use `--data_config 1` for the download-based training path. The default recipe combines `ttbar`, `WW`, and `qq`; their ordering and relative exposure are described in [Dataset mixing](../training/data-mixing.md).
 
 ## Event view
 
-Tracks and calorimeter clusters are shown beside the target particles for a
-representative `ttbar` event in the transverse plane.
+These views show the same simulated `ttbar` event (index 0) at 365 GeV in the transverse plane. The particle panel shows the Pandora reference reconstruction.
 
-| Tracks and clusters | Target particles |
+| Tracks and clusters | Pandora reconstructed particles |
 |:---:|:---:|
-| ![CLD reconstructed tracks and calorimeter clusters.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/cld_event_5_pf_5x5cm.svg) | ![CLD target particles.](../../notebooks/studies/20260916_clic_cld_pf_set_hits_comparison/inputs/event_displays/cld_event_5_targets_5x5cm.svg) |
+| ![CLD: tracks and clusters for event 0.](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/cld/event_0_tracks_clusters.png) | ![CLD: pandora reconstructed particles for the same event.](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/cld/event_0_particles.png) |
 
-Target labels use $e$, $\mu$, $\tau$, $\nu$, $\gamma$, $\pi$, and $K^0$.
+[All-component overlay](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/cld/event_0_overlay.png),
+[vector input view](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/cld/event_0_tracks_clusters.svg) and
+[vector particle view](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/cld/event_0_particles.svg) are available for reuse.
+See [event-view conventions](event-displays.md) for particle sources, sampling and scale.
 
-## Production
+## Production and related inputs
 
-Use the [shared Key4HEP workflow](key4hep.md) with `PROD=cld`. Build the
-track/cluster representation with `pixi run tfds`, or follow [Hit-based
-datasets](hit-based.md) for detector-hit inputs.
+Use [shared Key4HEP production](key4hep.md) with `PROD=cld` and build this representation with `pixi run tfds`. For tracker and calorimeter measurements, use the separate [CLD hit datasets](cld-hits.md).

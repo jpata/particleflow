@@ -223,6 +223,142 @@ productions:
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   # CLD Production
+  # Independent, paired CLD granularity scans. Six complete 10k-event runs
+  # per detector subsystem; the opposite calorimeter retains its baseline pitch.
+  # All ECAL variants share an ECAL-only 1 mm Geant step cap, including 5.1 mm.
+  cld_ecal_pitch_5p1: &cld_ecal_pitch_scan
+    type: "key4hep"
+    model: "pyg-cld-v1"
+    dataset_only: true
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 5.1 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_5p1mm"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_5p1mm/CLD_o2_v07.xml"
+    cms_energy: 91
+    pythia_card: "${project.paths.project_root}/scripts/cld_ecal_readout/cards/p8_ee_Z_tautau_ecm91_scan.cmd"
+    memory:
+      gen: 8000
+      post: 8000
+      tfds: 8000
+    slurm_partition: "main"
+    slurm_runtime: "48h"
+    samples:
+      z_tautau:
+        process_name: "p8_ee_Z_tautau_ecm91"
+        gen_script: "scripts/cld_ecal_readout/run_sim.sh"
+        seed_range: [700000, 700100]
+        events_per_job: 100
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
+      args: {}
+    tfds_mapping:
+      z_tautau:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/z_tautau"
+        version: "3.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    tfds_hit_mapping:
+      z_tautau:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/z_tautau"
+        version: "3.2.2"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+  cld_ecal_pitch_4:
+    <<: *cld_ecal_pitch_scan
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 4 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_4mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_4mm/CLD_o2_v07.xml"
+
+  cld_ecal_pitch_3:
+    <<: *cld_ecal_pitch_scan
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 3 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_3mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_3mm/CLD_o2_v07.xml"
+
+  cld_ecal_pitch_2p5:
+    <<: *cld_ecal_pitch_scan
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 2.5 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_2p5mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_2p5mm/CLD_o2_v07.xml"
+
+  cld_ecal_pitch_2:
+    <<: *cld_ecal_pitch_scan
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 2 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_2mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_2mm/CLD_o2_v07.xml"
+
+  cld_ecal_pitch_1p5:
+    <<: *cld_ecal_pitch_scan
+    comment: "CLD ECAL pitch scan, Z->tautau at 91 GeV, 1.5 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/ecal_1p5mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/ecal_1p5mm/CLD_o2_v07.xml"
+
+  cld_hcal_pitch_30: &cld_hcal_pitch_scan
+    type: "key4hep"
+    model: "pyg-cld-v1"
+    dataset_only: true
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 30 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_30mm"
+    config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
+    gen_container: "/cvmfs/unpacked.cern.ch/gitlab-registry.cern.ch/key4hep/k4-deploy/alma9:latest"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_30mm/CLD_o2_v07.xml"
+    cms_energy: 365
+    memory:
+      gen: 12000
+      post: 16000
+      tfds: 16000
+    slurm_partition: "main"
+    slurm_runtime: "48h"
+    samples:
+      ttbar:
+        process_name: "p8_ee_ttbar_ecm365"
+        gen_script: "scripts/cld_ecal_readout/run_sim.sh"
+        seed_range: [300000, 300100]
+        events_per_job: 100
+    postprocessing:
+      script: "mlpf/data/key4hep/postprocessing.py"
+      args: {}
+    tfds_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
+        version: "3.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    tfds_hit_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ttbar"
+        version: "3.2.2"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+  cld_hcal_pitch_25:
+    <<: *cld_hcal_pitch_scan
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 25 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_25mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_25mm/CLD_o2_v07.xml"
+
+  cld_hcal_pitch_20:
+    <<: *cld_hcal_pitch_scan
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 20 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_20mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_20mm/CLD_o2_v07.xml"
+
+  cld_hcal_pitch_15:
+    <<: *cld_hcal_pitch_scan
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 15 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_15mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_15mm/CLD_o2_v07.xml"
+
+  cld_hcal_pitch_12:
+    <<: *cld_hcal_pitch_scan
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 12 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_12mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_12mm/CLD_o2_v07.xml"
+
+  cld_hcal_pitch_10:
+    <<: *cld_hcal_pitch_scan
+    comment: "CLD HCAL pitch scan, ttbar at 365 GeV, 10 mm"
+    workspace_dir: "${project.paths.storage_root}/cld/granularity_scan_2025-05-29/hcal_10mm"
+    compact_file: "${project.paths.project_root}/mlpf/data/key4hep/geometry/granularity_scan/hcal_10mm/CLD_o2_v07.xml"
+
   cld:
     type: "key4hep"
     model: "pyg-cld-v1"
@@ -442,22 +578,29 @@ productions:
     tfds_mapping:
       ttbar_pu0:
         builder_path: "mlpf/heptfds/colliderml_pf/ttbar"
-        version: "1.2.0"
+        version: "1.5.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ttbar_pu200:
         builder_path: "mlpf/heptfds/colliderml_pf/ttbar_pu200"
-        version: "1.2.0"
+        version: "1.5.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     tfds_hit_mapping:
       ttbar_pu0:
         builder_path: "mlpf/heptfds/colliderml_hits/ttbar"
-        version: "1.0.0"
+        version: "1.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ttbar_pu200:
         builder_path: "mlpf/heptfds/colliderml_hits/ttbar_pu200"
-        version: "1.0.0"
+        version: "1.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+  # Training-only: each detector's samples are read from the tfds directory of its own production.
+  cld_clic_colliderml:
+    type: "key4hep"
+    model: "pyg-cldcliccolliderml-v1"
+    comment: "Joint CLD+CLIC+ColliderML pu0 tracks/clusters"
+    source_productions: {cld: cld, clic: clic, colliderml: colliderml}
 
   # IDEA full simulation and the reconstruction currently provided by FCC-config.
   # This initial ML path deliberately uses truth-seeded proxy tracks and an
@@ -523,15 +666,15 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/ttbar"
-        version: "0.2.0"
+        version: "0.2.1"
         config_ids: [1]
       ww_fullhad:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/ww_fullhad"
-        version: "0.2.0"
+        version: "0.2.1"
         config_ids: [1]
       qq:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/qq"
-        version: "0.2.0"
+        version: "0.2.1"
         config_ids: [1]
 
 # -----------------------------------------------------------------------------
@@ -555,7 +698,6 @@ models:
     load: null
     num_steps: 100000
     comet: false
-    comet_step_freq: 10000
     tensorboard_step_freq: 100
     ntrain: null #use full train dataset for training
     nvalid: null #use full valid dataset for validation
@@ -615,19 +757,21 @@ models:
         num_heads: 16
         dropout_ff: 0.0
         block_size: 100
+        # hash tracks at their calorimeter entry (the dual-readout calorimeter front face)
+        track_hash_at_calo: true
 
     train_datasets:
       physical:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
 
     validation_datasets:
@@ -635,24 +779,24 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.2.0"
+            version: "0.2.1"
             splits: ["1"]
 
     test_datasets:
       - name: "idea_edm_qq_pf"
-        version: "0.2.0"
+        version: "0.2.1"
         splits: ["1"]
       - name: "idea_edm_ttbar_pf"
-        version: "0.2.0"
+        version: "0.2.1"
         splits: ["1"]
       - name: "idea_edm_ww_fullhad_pf"
-        version: "0.2.0"
+        version: "0.2.1"
         splits: ["1"]
 
   pyg-cms-v1:
@@ -732,10 +876,13 @@ models:
     # Architecture Definition
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         num_convs: 3
-        head_dim: 16
+        head_dim: 32
         num_heads: 16
 
   # Example: CLD Model
@@ -750,6 +897,10 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry and clusters at their centroid
+      heptv2:
+        track_hash_at_calo: true
+        cluster_hash_at_centroid: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -977,6 +1128,10 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry and clusters at their centroid
+      heptv2:
+        track_hash_at_calo: true
+        cluster_hash_at_centroid: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -1133,7 +1288,7 @@ models:
         version: "1.1.0"
         splits: ["10"]
 
-  pyg-colliderml-v1:
+  pyg-colliderml-v1: &pyg_colliderml_v1
     <<: *defaults
     dataset: colliderml
     gpu_batch_multiplier: 8
@@ -1144,6 +1299,9 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         attention_type: flash
@@ -1157,7 +1315,7 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_nopu_pf"
-            version: "1.2.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1165,12 +1323,121 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_nopu_pf"
-            version: "1.2.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "colliderml_ttbar_nopu_pf"
-        version: "1.2.0"
+        version: "1.5.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  # Joint CLD+CLIC+ColliderML pu0 model: one group per detector, a third of the steps each.
+  # TODO: Test config, hyperparameters such as learning rate should be tuned
+  pyg-cldcliccolliderml-v1:
+    <<: *defaults
+    dataset: cld
+    gpu_batch_multiplier: 1024
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0005
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 3
+        head_dim: 16
+        num_heads: 16
+
+    train_datasets:
+      cld:
+        batch_size: 1
+        weight: 1.0
+        samples:
+          - name: "cld_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      clic:
+        batch_size: 1
+        weight: 1.0
+        samples:
+          - name: "clic_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      colliderml:
+        batch_size: 1
+        weight: 1.0
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.5.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      cld:
+        batch_size: 1
+        samples:
+          - name: "cld_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      clic:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      colliderml:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.5.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "cld_edm_ttbar_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_ww_fullhad_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_qq_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_ttbar_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_ww_fullhad_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_qq_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "colliderml_ttbar_nopu_pf"
+        version: "1.5.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # Same recipe as pyg-colliderml-v1 but on the ~200-pileup dataset (ispu flag carried per
@@ -1186,6 +1453,9 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         attention_type: flash
@@ -1199,7 +1469,7 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_pu200_pf"
-            version: "1.2.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1207,12 +1477,53 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_pu200_pf"
-            version: "1.2.0"
+            version: "1.5.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "colliderml_ttbar_pu200_pf"
-        version: "1.2.0"
+        version: "1.5.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  pyg-colliderml-pu0pu200-groups-v1:
+    <<: *pyg_colliderml_v1
+    gpu_batch_multiplier: 1
+
+    # Dataset Selection (two groups, per-group batch sizes)
+    train_datasets:
+      pu0:
+        batch_size: 12
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.5.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      pu200:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_pu200_pf"
+            version: "1.5.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      pu0:
+        batch_size: 12
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.5.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      pu200:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_pu200_pf"
+            version: "1.5.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "colliderml_ttbar_nopu_pf"
+        version: "1.5.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "colliderml_ttbar_pu200_pf"
+        version: "1.5.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # Hits view: TFDS builder mlpf/heptfds/colliderml_hits/ttbar.py -> colliderml_ttbar_hits
@@ -1241,7 +1552,7 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_hits"
-            version: "1.0.0"
+            version: "1.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1249,12 +1560,12 @@ models:
         batch_size: 1
         samples:
           - name: "colliderml_ttbar_hits"
-            version: "1.0.0"
+            version: "1.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "colliderml_ttbar_hits"
-        version: "1.0.0"
+        version: "1.3.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   # Set-prediction variant of the hits model (cf. pyg-cld-hits-set-v1). Regresses absolute

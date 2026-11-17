@@ -6,8 +6,14 @@
 #   X_hit_tracker, ytarget_hit_tracker  (raw tracker hits; PN marks for target-owned hits),
 #   X_hit_calo,  ytarget_hit_calo       (raw calo hits; also hosts the exclusive target rows),
 #   genmet, genjet, targetjet, event_id
-# genmet/genjet are clustered from the *measurable truth* set (pre-visibility, pre-allocator,
-# see truth.py genref_features); targetjet from the ytarget representatives.
+#   genmet_withpu, genjet_withpu        (gen reference including pileup)
+#   pufrac_track, pufrac_cluster        (truth pileup fraction of every track / cluster)
+# genmet/genjet are clustered from the hard-scatter part of the *measurable truth* set
+# (pre-visibility, pre-allocator, see truth.py genref_features), genmet_withpu/genjet_withpu from
+# all of it; targetjet from the ytarget representatives.
+# Pileup: a target's ispu is the pileup share of its energy (0 or 1 unless the allocator merged
+# particles from the hard scatter and from pileup into it); see _element_pu_fraction for the
+# per-element fractions.
 # (ycand is zero-filled by the TFDS builder because ColliderML has no PF-candidate baseline.)
 #
 # The converter runs the shared allocator (mlpf.data.target_building) over one EventData built
@@ -50,6 +56,11 @@ from mlpf.data.target_building import (
 jetdef = fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4)
 jet_ptcut = 3.0
 
+# Target assignment rules (target_building.assign_genparticles_to_obj_and_merge). The parquet
+# metadata records the rule, so resume never mixes outputs of different rules.
+ASSIGNMENTS = ("majority_energy", "greedy")
+DEFAULT_ASSIGNMENT = "majority_energy"
+
 particle_feature_order = [
     "PDG",
     "charge",
@@ -73,6 +84,87 @@ cluster_feature_order = EDM4HEP.ClusterFeatures.get_names()  # 17 names
 _hit_feature_order = EDM4HEP.HitFeatures.get_names()  # 15 names
 
 
+def _met_and_jets(features: Dict[str, np.ndarray]):
+    """MET (GeV) and anti-kt jets (rows of pt, eta, phi, energy) of a set of truth particles."""
+    p4 = vector.awk(
+        ak.zip(
+            {
+                "px": features["pt"] * np.cos(features["phi"]),
+                "py": features["pt"] * np.sin(features["phi"]),
+                # pz from eta and pt
+                "pz": features["pt"] * np.sinh(features["eta"]),
+                "energy": features["energy"],
+            }
+        )
+    )
+    met = float(compute_met(ak.unflatten(p4, [len(p4)], axis=0))[0])
+    if len(p4):
+        jets = compute_jets(p4, min_pt=jet_ptcut, jetdef=jetdef)
+        jets = np.array([jets.pt, jets.eta, jets.phi, jets.energy]).T.astype(np.float32)
+    else:
+        jets = np.zeros((0, 4), dtype=np.float32)
+    return met, jets
+
+
+def _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_of: np.ndarray, n_cluster: int, all_pileup: bool = False):
+    """Truth pileup fraction of every track and cluster, from the raw release tables only.
+
+    Every particle of the release, Geant4 secondaries included, carries the vertex_primary of
+    the collision it comes from (1 = hard scatter), so each hit can be labelled directly:
+      track:   fraction of the track's hits left by pileup particles
+               (tracks.hit_ids -> tracker_hits.particle_id -> particles.vertex_primary != 1)
+      cluster: pileup fraction of the cluster's calibrated energy (calo_hits.contrib_particle_ids
+               and contrib_energies of its hits, with the calibration of the cluster energy)
+
+    Unlike ytarget's ispu, which describes the target particle assigned to an element, this
+    describes the element itself, and is defined also for the elements without a target. Hits left
+    unclustered (cluster_of == -1) count for no cluster, as for the cluster energy.
+    all_pileup=True counts every particle as pileup (see pileup_sample).
+    Returns (pufrac_track, pufrac_cluster), float32 arrays in X_track / X_cluster order.
+    """
+    pid = ak.to_numpy(particles_ev["particle_id"]).astype(np.int64)
+    is_pu_particle = ak.to_numpy(particles_ev["vertex_primary"]) != 1
+    if all_pileup:
+        is_pu_particle = np.ones_like(is_pu_particle)
+    order = np.argsort(pid, kind="stable")
+
+    def is_pu(ids):
+        # particle_id -> vertex_primary; every id in the release resolves to a particle
+        pos = np.clip(np.searchsorted(pid[order], ids), 0, len(pid) - 1)
+        return is_pu_particle[order[pos]]
+
+    # tracks: share of hits from pileup
+    n_hits = ak.to_numpy(ak.num(tracks_ev["hit_ids"])).astype(np.int64)
+    hit_ids = ak.to_numpy(ak.flatten(tracks_ev["hit_ids"])).astype(np.int64)
+    hit_pid = ak.to_numpy(tracker_ev["particle_id"]).astype(np.int64)
+    pu_hits = np.zeros(len(n_hits))
+    np.add.at(pu_hits, np.repeat(np.arange(len(n_hits)), n_hits), is_pu(hit_pid[hit_ids]).astype(np.float64))
+    pufrac_track = pu_hits / np.maximum(n_hits, 1)
+
+    # clusters: share of calibrated deposited energy from pileup
+    n_contrib = ak.to_numpy(ak.num(calo_ev["contrib_particle_ids"], axis=-1)).astype(np.int64)
+    contrib_pid = ak.to_numpy(ak.flatten(calo_ev["contrib_particle_ids"], axis=None)).astype(np.int64)
+    contrib_e = ak.to_numpy(ak.flatten(calo_ev["contrib_energies"], axis=None)).astype(np.float64)
+    hit = np.repeat(np.arange(len(n_contrib)), n_contrib)
+    e = contrib_e * calibration_factors(ak.to_numpy(calo_ev["detector"]).astype(np.int64), DEFAULT_CALIBRATION)[hit]
+    cl = np.asarray(cluster_of, dtype=np.int64)[hit]
+    clustered = cl >= 0
+    e_cluster, e_cluster_pu = np.zeros(n_cluster), np.zeros(n_cluster)
+    np.add.at(e_cluster, cl[clustered], e[clustered])
+    np.add.at(e_cluster_pu, cl[clustered], np.where(is_pu(contrib_pid), e, 0.0)[clustered])
+    pufrac_cluster = np.divide(e_cluster_pu, e_cluster, out=np.zeros(n_cluster), where=e_cluster > 0)
+    return pufrac_track.astype(np.float32), pufrac_cluster.astype(np.float32)
+
+
+def pileup_sample(sample: str) -> bool:
+    """Whether every event of the sample is pileup only (Release-1 `pileup_only_pu0`): its
+    particles carry vertex_primary 1 like a hard scatter's, so truth.py's vertex_primary != 1
+    rule would mark them as hard scatter; the converter counts all of them as pileup instead
+    (target ispu = 1, element pufrac = 1, empty hard-scatter genmet/genjets, everything in the
+    *_withpu gen reference)."""
+    return sample.startswith("pileup_only")
+
+
 def _event_record_one(
     event_id: int,
     particles_ev: ak.Record,
@@ -84,14 +176,17 @@ def _event_record_one(
     radii_mm: Dict[int, float] | None = None,
     clue_params: Dict[int, Dict[str, float]] | None = None,
     clue_options: Dict[str, Any] | None = None,
+    assignment: str = DEFAULT_ASSIGNMENT,
     event_index: int = -1,
     shard_label: str = "",
+    all_pileup: bool = False,
 ) -> Dict[str, Any]:
     """Convert one ColliderML event into the MLPF record fields.
 
     merge_frac=None and radii_mm=None take cluster_event's per-algorithm defaults
     (DEFAULT_MERGE_FRAC for bfs_merge; DEFAULT_REGION_RADII_MM), the same resolution as
-    the CLI.
+    the CLI. all_pileup=True counts every particle as pileup, for samples made only of pileup
+    interactions, whose vertex_primary is 1 like a hard scatter's (see pileup_sample).
     """
     # raw inputs
     hit_x = ak.to_numpy(calo_ev["x"]).astype(np.float32)
@@ -106,30 +201,21 @@ def _event_record_one(
     gen_features, gp_to_hit, gp_to_track, genref_features = compute_gen_tables(
         particles_ev, calo_ev, tracks_ev, DEFAULT_CALIBRATION, tracker_ev=tracker_ev
     )
+    if all_pileup:
+        gen_features["ispu"] = np.ones_like(gen_features["ispu"])
+        genref_features["ispu"] = np.ones_like(genref_features["ispu"])
 
-    # -- gen reference (measurable truth): genmet / genjet ---------------------
+    # -- gen reference (measurable truth): genmet / genjet, with and without pileup --
     # Built from genref_features — the pre-visibility, pre-allocator measurable set (any
     # attributed calibrated deposit or track hit share, minus neutrinos; the key4hep
     # status-1-and-propagated analogue, see truth.py). Deliberately independent of the
     # allocator so the gen jets/MET stay a truth-level reference instead of restating the
     # target.
-    genref_p4 = vector.awk(
-        ak.zip(
-            {
-                "px": genref_features["pt"] * np.cos(genref_features["phi"]),
-                "py": genref_features["pt"] * np.sin(genref_features["phi"]),
-                # pz from eta and pt
-                "pz": genref_features["pt"] * np.sinh(genref_features["eta"]),
-                "energy": genref_features["energy"],
-            }
-        )
-    )
-    genmet = float(compute_met(ak.unflatten(genref_p4, [len(genref_p4)], axis=0))[0])
-    if len(genref_p4):
-        genjet_np = compute_jets(genref_p4, min_pt=jet_ptcut, jetdef=jetdef)
-        genjet_np = np.array([genjet_np.pt, genjet_np.eta, genjet_np.phi, genjet_np.energy]).T.astype(np.float32)
-    else:
-        genjet_np = np.zeros((0, 4), dtype=np.float32)
+    # genmet/genjet use the hard scatter only (ispu == 0, vertex_primary == 1): the truth that
+    # pileup mitigation is measured against. The *_withpu versions include all collisions.
+    hs = np.asarray(genref_features["ispu"]) == 0
+    genmet, genjet_np = _met_and_jets({k: np.asarray(v)[hs] for k, v in genref_features.items()})
+    genmet_withpu, genjet_withpu_np = _met_and_jets(genref_features)
 
     # -- tracks -> features ---------------------------------------------------
     tfeat = track_features_cml(tracks_ev, tracker_ev)
@@ -149,6 +235,7 @@ def _event_record_one(
         clue_options=clue_options,
     )
     n_cluster = len(cl_feats)
+    pufrac_track, pufrac_cluster = _element_pu_fraction(particles_ev, tracks_ev, tracker_ev, calo_ev, cluster_of, n_cluster, all_pileup=all_pileup)
 
     # -- build EventData and run the shared allocator --------------------------
     # The allocator indexes hits in the extended calo-then-tracker space (truth.py appends
@@ -166,7 +253,7 @@ def _event_record_one(
         (np.array([]), np.array([])),
     )
     gpdata_cleaned, gp_to_obj, gp_to_hit_idx, track_to_gp_inclusive, cluster_to_gp_inclusive, hit_to_gp_inclusive = (
-        assign_genparticles_to_obj_and_merge(gpdata)
+        assign_genparticles_to_obj_and_merge(gpdata, assignment=assignment)
     )
     n_gp = len(gpdata_cleaned.gen_features["PDG"])
 
@@ -450,12 +537,16 @@ def _event_record_one(
         "genmet": np.float32(genmet),
         "genjet": genjet_np,
         "targetjet": targetjet_np,
+        "genmet_withpu": np.float32(genmet_withpu),
+        "genjet_withpu": genjet_withpu_np,
+        "pufrac_track": pufrac_track,
+        "pufrac_cluster": pufrac_cluster,
     }
 
 
-# Explicit per-event scalar fields (the only two in the record dict). Routing is by name, not
+# Explicit per-event scalar fields of the record dict. Routing is by name, not
 # by shape: a 1-D field whose first event has length 1 must not be mistaken for a scalar.
-_SCALAR_FIELDS = {"event_id", "genmet"}
+_SCALAR_FIELDS = {"event_id", "genmet", "genmet_withpu"}
 
 
 def _from_events(key: str, vals):
@@ -494,26 +585,46 @@ def _batch_arrow_arrays(events_batch: List[Dict[str, Any]]):
     return [(k, _from_events(k, [r[k] for r in events_batch])) for k in events_batch[0]]
 
 
-def _parquet_usable(ofn: Path, expected_rows: int | None = None) -> bool:
-    """True iff the named parquet file exists, pyarrow can open it and (if given) it holds
-    expected_rows events. A truncated write crashes pyarrow on the footer, so corrupted outputs
-    from a killed mid-shard job are reconvertible instead of being mistaken for done by the
-    resume logic; the row count does the same for a --num-events partial output."""
+def _assignment_tag(assignment: str) -> bytes:
+    """Parquet metadata value recording the target assignment rule that wrote a file."""
+    return f"{assignment}-v1".encode()
+
+
+def _forward_truth_tag() -> bytes:
+    """Parquet metadata value recording the out-of-acceptance truth handling (truth.drop_out_of_acceptance)."""
+    from mlpf.data.colliderml import truth
+
+    return f"drop-eta{truth.OUT_OF_ACCEPTANCE_ABS_ETA:g}-v1".encode() if truth.drop_out_of_acceptance else b"none-v1"
+
+
+def _parquet_usable(ofn: Path, expected_rows: int | None = None, assignment: str = DEFAULT_ASSIGNMENT) -> bool:
+    """Check current target metadata, readability and the expected event count.
+
+    Outputs predating pileup truth or the out-of-acceptance truth handling, legacy greedy outputs, corrupted
+    writes and partial --num-events outputs must be reconverted rather than skipped by resume.
+    """
     if not os.path.isfile(ofn):
         return False
     try:
         import pyarrow.parquet as pq
 
-        n_rows = pq.ParquetFile(ofn).metadata.num_rows
+        metadata = pq.ParquetFile(ofn).metadata
+        if (metadata.metadata or {}).get(b"mlpf.target_assignment") != _assignment_tag(assignment):
+            return False
+        if (metadata.metadata or {}).get(b"mlpf.pileup_truth") != b"energy-fraction-v1":
+            return False
+        if (metadata.metadata or {}).get(b"mlpf.forward_truth") != _forward_truth_tag():
+            return False
+        n_rows = metadata.num_rows
     except Exception:
         return False
     return expected_rows is None or n_rows == expected_rows
 
 
-def _shard_done(ofn: Path, source_fns: List[Path]) -> bool:
+def _shard_done(ofn: Path, source_fns: List[Path], assignment: str = DEFAULT_ASSIGNMENT) -> bool:
     """A full-shard output is done iff it is readable and holds every source event present in
     all four tables (the reader drops the rare event missing from one)."""
-    return _parquet_usable(ofn, expected_rows=n_shard_events(source_fns))
+    return _parquet_usable(ofn, expected_rows=n_shard_events(source_fns), assignment=assignment)
 
 
 def process_one_file(
@@ -530,15 +641,19 @@ def process_one_file(
     radii_mm: Dict[int, float] | None = None,
     clue_params: Dict[int, Dict[str, float]] | None = None,
     clue_options: Dict[str, Any] | None = None,
+    assignment: str = DEFAULT_ASSIGNMENT,
+    all_pileup: bool = False,
 ) -> None:
     source_fns = [particles_fn, tracks_fn, calo_fn, tracker_fn]
-    if num_events == -1 and _shard_done(ofn, source_fns):
+    if num_events == -1 and _shard_done(ofn, source_fns, assignment):
         print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} already exists, skipping")
         return
     if os.path.isfile(ofn) and num_events == -1:
         # a corrupted leftover (e.g. from an OOM-killed job) or a partial --num-events output
         # just falls through to the convert + rename path below, which overwrites it atomically
-        print(f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} exists but is corrupted or incomplete; reconverting")
+        print(
+            f"[shard {shard_index + 1}/{job_total_shards}] {Path(ofn).name} exists but has outdated targets, is corrupted or incomplete; reconverting"
+        )
 
     # events per shard from the parquet metadata (1000 for pu0, 100 for pu200); tqdm uses it
     # for the ETA. num_events (debug cap) overrides.
@@ -569,6 +684,14 @@ def process_one_file(
 
             cols = _batch_arrow_arrays(out)
             table = pa.Table.from_arrays([c for _, c in cols], names=[k for k, _ in cols])
+            table = table.replace_schema_metadata(
+                {
+                    **(table.schema.metadata or {}),
+                    b"mlpf.target_assignment": _assignment_tag(assignment),
+                    b"mlpf.pileup_truth": b"energy-fraction-v1",
+                    b"mlpf.forward_truth": _forward_truth_tag(),
+                }
+            )
             if writer is None:
                 writer = pq.ParquetWriter(inflight, table.schema, compression="snappy")
             writer.write_table(table)
@@ -599,8 +722,10 @@ def process_one_file(
                 radii_mm=radii_mm,
                 clue_params=clue_params,
                 clue_options=clue_options,
+                assignment=assignment,
                 event_index=i,
                 shard_label=Path(ofn).name,
+                all_pileup=all_pileup,
             )
             out.append(event)
             del event
@@ -694,6 +819,15 @@ def main():
         default=None,
         help="json overrides of clue.DEFAULT_CLUE_OPTIONS, e.g. '{\"drop_E\": 0.1}' (algorithm clue only)",
     )
+    parser.add_argument(
+        "--assignment",
+        type=str,
+        choices=ASSIGNMENTS,
+        default=DEFAULT_ASSIGNMENT,
+        help="target assignment (target_building.assign_genparticles_to_obj_and_merge): majority_energy = majority-owned "
+        "tracks, then a bipartite cluster matching with the energy score (particle energy + shared deposit); "
+        "greedy = the former energy-ordered rule",
+    )
     parser.add_argument("--num-events", type=int, default=-1, help="cap number of events per shard (for tests)")
     args = parser.parse_args()
     from mlpf.data.colliderml.clue import resolve_clue_config
@@ -720,17 +854,25 @@ def main():
 
     shard_ids = args.shards.split(":")
     a, b = int(shard_ids[0]), int(shard_ids[1])
-    pa = shard_paths(Path(args.input), args.sample, "particles")[a:b]
-    tr = shard_paths(Path(args.input), args.sample, "tracks")[a:b]
-    ch = shard_paths(Path(args.input), args.sample, "calo_hits")[a:b]
-    # tracker_hits is required input: its per-hit truth feeds the gp->track hit-fraction links
-    # (truth.py) and the X_hit_tracker geometry written for the validator.
-    th = shard_paths(Path(args.input), args.sample, "tracker_hits")[a:b]
-    if len(th) != len(pa):
-        raise RuntimeError(
-            f"tracker_hits shard count mismatch in the requested range: {len(th)} tracker_hits shards vs {len(pa)} particles shards "
-            f"(expected matching four-table layout under {Path(args.input) / f'{args.sample}_tracker_hits'})"
-        )
+    # Pair the four tables' shards by file name, not list position: an upstream config can lack
+    # shards (dihiggs_pu200_tracker_hits had 295 of 1000 before revision f8ae2aea), where a
+    # positional zip would pair different shards. --shards slices the particles table; a shard
+    # missing from any other table is skipped. tracker_hits is required input: its per-hit truth
+    # feeds the gp->track hit-fraction links (truth.py) and the X_hit_tracker geometry written
+    # for the validator.
+    objects = ("particles", "tracks", "calo_hits", "tracker_hits")
+    tables = {obj: {p.name: p for p in shard_paths(Path(args.input), args.sample, obj)} for obj in objects}
+    absent = [obj for obj in objects if not tables[obj]]
+    if absent:
+        raise RuntimeError(f"no {'/'.join(absent)} shards for {args.sample} under {args.input}")
+    requested = sorted(tables["particles"].values())[a:b]
+    shards = []
+    for p in requested:
+        missing = [obj for obj in objects[1:] if p.name not in tables[obj]]
+        if missing:
+            print(f"WARNING: skipping {p.name}: no {'/'.join(missing)} shard of that name under {args.input}", flush=True)
+            continue
+        shards.append(tuple(tables[obj][p.name] for obj in objects))
 
     from mlpf.data.colliderml.clustering import DEFAULT_MERGE_FRAC, DEFAULT_REGION_RADII_MM
 
@@ -743,20 +885,22 @@ def main():
         if args.radii_hcal is not None:
             radii_mm.update({12: args.radii_hcal, 13: args.radii_hcal, 14: args.radii_hcal})
 
-    n_files = len(pa)
+    n_files = len(shards)
+    n_skipped = len(requested) - n_files
+    all_pileup = pileup_sample(args.sample)
     print(
         f"planning {n_files} shards (range {args.shards}) -> {args.outpath} with algorithm={args.algorithm} merge_frac={merge_frac} radii_mm={radii_mm}"
         + (f" clue_params={clue_params} clue_options={clue_options}" if args.algorithm == "clue" else "")
+        + (" all_pileup=True (every particle counted as pileup)" if all_pileup else "")
     )
     n_done = 0
-    for i, (p, t, c) in enumerate(zip(pa, tr, ch)):
+    for i, (p, t, c, tracker_fn) in enumerate(shards):
         out_name = Path(args.outpath) / (p.stem + ".parquet")
         # --num-events is a debug cap: always (re)write, and never count a capped output as done
-        if args.num_events == -1 and _shard_done(out_name, [Path(p), Path(t), Path(c), Path(th[i])]):
+        if args.num_events == -1 and _shard_done(out_name, [p, t, c, tracker_fn], args.assignment):
             n_done += 1
             print(f"[shard {i + 1}/{n_files}] {out_name.name} already exists, skipping")
             continue
-        tracker_fn = Path(th[i])
         process_one_file(
             Path(p),
             Path(t),
@@ -771,8 +915,13 @@ def main():
             radii_mm=radii_mm,
             clue_params=clue_params,
             clue_options=clue_options,
+            assignment=args.assignment,
+            all_pileup=all_pileup,
         )
-    print(f"all {n_files} shards accounted for ({n_done} already present, {n_files - n_done} newly converted)")
+    print(
+        f"all {n_files} shards accounted for ({n_done} already present, {n_files - n_done} newly converted"
+        + (f"; {n_skipped} requested shards skipped for a missing table)" if n_skipped else ")")
+    )
 
 
 if __name__ == "__main__":

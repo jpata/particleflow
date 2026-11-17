@@ -7,6 +7,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -79,7 +80,7 @@ class TestDataloaderRestoration(unittest.TestCase):
             shuffle_train=False,
         )
 
-        train_data_loader = loaders["train"].data_loader.data_loaders[0]
+        train_data_loader = loaders["train"].data_loaders[0]
         valid_loader = loaders["valid"]
         valid_data_loader = valid_loader.data_loaders[0]
 
@@ -87,6 +88,80 @@ class TestDataloaderRestoration(unittest.TestCase):
         self.assertFalse(valid_data_loader.drop_last)
         self.assertEqual(len(valid_loader), 1)
         self.assertEqual(next(iter(valid_loader)).X.shape[0], 13)
+
+    def _two_group_config(self, sampler_mode):
+        def group(batch_size, weight, sample):
+            return {"batch_size": batch_size, "weight": weight, "samples": {sample: {"version": "1.0.0", "splits": ["1"]}}}
+
+        return MLPFConfig.model_validate(
+            {
+                "dataset": "cms",
+                "data_dir": "/tmp/dummy_data",
+                "model": {"type": "attention", "attention": {"num_convs": 2}},
+                "conv_type": "attention",
+                "train_dataset": {"cms": {"big": group(2, 2.0, "sample_big"), "small": group(1, 1.0, "sample_small")}},
+                "valid_dataset": {"cms": {"big": group(2, None, "sample_big"), "small": group(1, None, "sample_small")}},
+                "num_workers": 0,
+                "sort_data": False,
+                "pad_to_multiple_elements": None,
+                "gpu_batch_multiplier": 1,
+                "sampler_mode": sampler_mode,
+            }
+        )
+
+    @staticmethod
+    def _fake_pfdataset(data_dir, name, split, **kwargs):
+        # sample_big: 48 events (values 0..47), sample_small: 40 events (values 1000..1039)
+        size, offset = (48, 0) if name.startswith("sample_big") else (40, 1000)
+        return SimpleNamespace(ds=MockDictDataset(size=size, offset=offset, keys=("X", "ytarget", "genmet"), shapes=((1, 2), (1, 2), (1,))))
+
+    def _check_multi_rank_resume(self, sampler_mode):
+        """Every rank resumes its own batch sequence from rank 0's saved loader state, as in DDP."""
+        world_size, n_steps, stop = 4, 30, 12
+        config = self._two_group_config(sampler_mode)
+
+        def train_loader(rank):
+            with patch("mlpf.model.PFDataset.PFDataset", side_effect=self._fake_pfdataset):
+                loaders, _ = get_interleaved_dataloaders(world_size, rank, config, use_cuda=False, use_ray=False)
+            return loaders["train"]
+
+        def take(loader, n):
+            return [next(loader).X[:, 0, 0].tolist() for _ in range(n)]
+
+        reference = {rank: take(train_loader(rank), n_steps) for rank in range(world_size)}
+        first = {rank: train_loader(rank) for rank in range(world_size)}
+        part1 = {rank: take(first[rank], stop) for rank in range(world_size)}
+        state = first[0].state_dict()  # only rank 0 writes the checkpoint
+        for rank in range(world_size):
+            self.assertEqual(first[rank].state_dict(), state)
+            resumed = train_loader(rank)
+            resumed.load_state_dict(state)
+            self.assertEqual(part1[rank] + take(resumed, n_steps - stop), reference[rank])
+
+        # all ranks draw the same group at every step (batch size 2 = big, 1 = small), 2:1 overall
+        sizes = [[len(b) for b in reference[rank]] for rank in range(world_size)]
+        self.assertTrue(all(s == sizes[0] for s in sizes))
+        self.assertEqual(sizes[0].count(2), 20)
+        # big has 6 batches per rank and epoch, so 20 steps cover 3+ epochs; ranks see disjoint events
+        first_epoch = [{v for b in reference[rank][:12] if len(b) == 2 for v in b} for rank in range(world_size)]
+        self.assertEqual(len(set().union(*first_epoch)), 48)
+
+    def test_multi_rank_resume_shard_consecutive(self):
+        self._check_multi_rank_resume("shard-consecutive")
+
+    def test_multi_rank_resume_interleaved_shards(self):
+        self._check_multi_rank_resume("interleaved-shards")
+
+    def test_validation_reports_group_names(self):
+        config = self._two_group_config("shard-consecutive")
+        with patch("mlpf.model.PFDataset.PFDataset", side_effect=self._fake_pfdataset):
+            loaders, _ = get_interleaved_dataloaders(1, 0, config, use_cuda=False, use_ray=False)
+        valid = loaders["valid"]
+        self.assertEqual(valid.names, ["big", "small"])
+        seen = set()
+        for batch in valid:
+            seen.add((valid.names[valid.last_loader_index], len(batch.X)))
+        self.assertEqual(seen, {("big", 2), ("small", 1)})
 
     @patch("mlpf.model.PFDataset.PFDataset")
     def test_restoration(self, MockPFDataset):
@@ -414,7 +489,7 @@ def test_shuffled_restoration_matches_uninterrupted(MockPFDataset, stop_at_batch
     assert not all(torch.equal(a, b) for a, b in zip(gt_data[0:5], gt_data[5:10]))  # the epochs are shuffled differently
     for i, (batch, gt_batch) in enumerate(zip(data, gt_data)):
         assert torch.equal(batch, gt_batch), f"batch {i} differs"
-    assert resumed.epoch == uninterrupted.epoch
+    assert resumed.epochs == uninterrupted.epochs
 
 
 @pytest.mark.parametrize("size", [10, 11])  # full / partial last validation batch

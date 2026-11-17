@@ -1,0 +1,68 @@
+<lccdd>
+    <!--  Definition of global dictionary constants          -->
+    <define>
+        <constant name="YokeBarrel_layers" value="7"/>
+        <constant name="YokeBarrel_layer_thickness" value="10.0*cm + 4.0*cm"/>
+        <constant name="Yoke_cell_size" value="3.0*cm"/>
+
+    </define>
+
+    <!--  Definition of the used visualization attributes    -->
+    <display>
+        <vis name="YokeBarrelVis"          alpha="1" r="1"    g="0.4"  b="0.62" showDaughters="true" visible="true"/>
+        <vis name="YokeStavesVis"    alpha="1" r="0"    g="0.7"  b="0.3" showDaughters="true" visible="true"/>
+        <vis name="YokeLayerVis"     alpha="1" r="0"    g="1"    b="0.3" showDaughters="true" visible="true"/>
+        <vis name="YokeSensorVis"    alpha="1" r="0.54" g="0.4"  b="0.41" visible="true"/>
+        <vis name="YokeAbsorberVis"  alpha="1" r="0.28" g="0.4"  b="0.62" visible="true"/>
+    </display>
+
+    <!--  Definition of the readout segmentation/definition  -->
+    <readouts>
+        <readout name="YokeBarrelCollection">
+            <segmentation type="CartesianGridXY" grid_size_x="Yoke_cell_size" grid_size_y="Yoke_cell_size" />
+            <id>system:5,side:2,layer:9,module:8,stave:4,submodule:4,x:32:-16,y:-16</id>
+        </readout>
+    </readouts>
+
+
+    <detectors>
+        <detector id="DetID_Yoke_Barrel" name="YokeBarrel" type="GenericCalBarrel_o1_v01" readout="YokeBarrelCollection" vis="YOKEVis" calorimeterType="MUON_BARREL" gap="0.*cm" material="Steel235">
+
+            <comment>Yoke Calorimeter Barrel</comment>
+
+            <type_flags type=" DetType_CALORIMETER + DetType_MUON + DetType_BARREL"/>
+
+
+            <envelope vis="YOKEVis">
+                <shape type="PolyhedraRegular" numsides="YokeBarrel_symmetry"  rmin="YokeBarrel_inner_radius-10*env_safety" rmax="YokeBarrel_outer_radius+10*env_safety" dz="2*YokeBarrel_half_length"  material = "Air" />
+                <rotation x="0*deg" y="0*deg" z="90*deg-180*deg/YokeBarrel_symmetry"/>
+            </envelope>
+
+            <dimensions numsides="(int) YokeBarrel_symmetry" rmin="YokeBarrel_inner_radius" z="YokeBarrel_half_length * 2"/>
+            <staves vis="YokeStavesVis"/>
+
+
+            <layer repeat="(int) YokeBarrel_layers" vis="YokeLayerVis">
+                <slice material="Aluminium" thickness="0.1*cm" />
+                <slice material="Air" thickness="0.35*cm" />
+                <slice material="PyrexGlass" thickness="0.2*cm" />
+                <slice material="RPCGasDefault" thickness="0.2*cm" sensitive="yes" vis="YokeSensorVis"/>
+                <slice material="PyrexGlass" thickness="0.2*cm" />
+                <slice material="Air" thickness="0.35*cm" />
+                <slice material="Aluminium" thickness="0.1*cm" />
+                <slice material="Aluminium" thickness="0.1*cm" />
+                <slice material="Air" thickness="0.35*cm" />
+                <slice material="PyrexGlass" thickness="0.2*cm" />
+                <slice material="RPCGasDefault" thickness="0.2*cm" vis="YokeSensorVis"/>
+                <slice material="PyrexGlass" thickness="0.2*cm" />
+                <slice material="Air" thickness="0.35*cm" />
+                <slice material="Aluminium" thickness="0.1*cm" />
+                <slice material="Air" thickness="1.0*cm" />
+                <slice material="Iron" thickness="17.7*cm" vis="YokeAbsorberVis" radiator="yes"/>
+            </layer>
+
+
+        </detector>
+    </detectors>
+
+</lccdd>

@@ -12,6 +12,12 @@ Particle-flow reconstruction combines these signals into one list of reconstruct
 
 The difficult part is deciding which detector signals came from the same particle and which came from nearby particles. The number of signals and particles also changes from event to event. Good particle reconstruction matters because jets, missing transverse momentum, and many later analysis quantities are built from this particle list.
 
+![Reconstruction of one CLD event, showing track/cluster and raw-hit MLPF routes](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/pf_event.png)
+
+The figure uses one CLD event and reconstructed Pandora particles as the reference
+output. [Reusable event views](../datasets/event-displays.md) separate the hits,
+tracks, clusters and particles for five detector families.
+
 ## Where particle flow came from
 
 Particle flow did not begin as one standard algorithm with a single name. A widely cited early implementation was the “energy-flow” reconstruction used by ALEPH at the LEP electron-positron collider. It combined tracking and calorimeter measurements to build charged and neutral reconstructed objects. The approach and its detector performance are described in the [1995 ALEPH detector paper](https://doi.org/10.1016/0168-9002(95)00138-7).
@@ -27,6 +33,8 @@ Traditional particle-flow algorithms use a sequence of detector-specific rules. 
 For each event, the model receives a variable-length set of detector elements. Depending on the detector and dataset, these elements can be tracks and calorimeter clusters or lower-level tracker and calorimeter hits. The network lets elements exchange information, then predicts particle identity and kinematics. Outputs classified as “no particle” are removed from the final list.
 
 Training is supervised: simulated particles provide targets for the detector signals. The loss combines several tasks, including deciding whether a particle is present, identifying its type, and estimating its kinematics. The exact target definition is detector-specific and is part of the data-processing pipeline.
+
+Continue with [inputs, targets, and outputs](inputs-targets-and-outputs.md) for the event representation, [model architectures](model-architectures.md) for elementwise and particle-set prediction, and [the end-to-end workflow](end-to-end-workflow.md) for the stages from simulation to validation.
 
 The original study used a graph neural network and showed that full-event reconstruction can be learned as one task. Later work explored scalable graph and transformer models with full detector simulation. See the [2021 method paper](https://doi.org/10.1140/epjc/s10052-021-09158-w) and the [2024 future-collider study](https://doi.org/10.1038/s42005-024-01599-5).
 

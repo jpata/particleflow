@@ -3,6 +3,13 @@ Spec: Validates 'InterleavedShardSampler' for mixed-source training.
 Key tests: Ensures early batches cover multiple ConcatDataset shards, verifies
 deterministic shuffled ordering, and checks distributed ranks cover the same
 global interleaved sequence without overlap when no padding is required.
+'_build_interleaved_shard_indices' (the interleaved event order) mixes the shards in
+proportion to their sizes over the whole epoch: the order is a permutation with each
+shard's own order shuffled, every prefix holds each shard's proportional share to
+within less than one plus the number of shards (no tail of only the largest shards),
+equal-size shards give one event per shard per round, the order is deterministic per
+seed, empty shards are skipped, and each rank of the distributed sampler gets a
+contiguous, hence proportional, block of the order.
 """
 
 import pytest
@@ -10,7 +17,14 @@ import numpy as np
 from torch.utils.data import ConcatDataset
 
 from mlpf.conf import INPUT_TYPE_IDS, SOURCE_IDS, dataset_input_type_id, dataset_source_id
-from mlpf.model.PFDataset import Collater, DistributedInterleavedShardSampler, InterleavedShardSampler, ShardConsecutiveSampler, TFDSDataSource
+from mlpf.model.PFDataset import (
+    Collater,
+    DistributedInterleavedShardSampler,
+    InterleavedShardSampler,
+    ShardConsecutiveSampler,
+    TFDSDataSource,
+    _build_interleaved_shard_indices,
+)
 from tests.mock_data import MockDataset
 
 
@@ -36,6 +50,14 @@ class DummyTFDS:
 
 def shard_id(index, shard_size):
     return index // shard_size
+
+
+def _concat(sizes):
+    return ConcatDataset([MockDataset(n) for n in sizes])
+
+
+def _shard_of(dataset, indices):
+    return np.searchsorted(dataset.cumulative_sizes, indices, side="right")
 
 
 def test_interleaved_sampler_cycles_across_shards_without_shuffle():
@@ -137,6 +159,62 @@ def test_distributed_interleaved_sampler_padding_lengths_match():
     combined = [idx for indices in rank_indices for idx in indices]
     assert len(combined) == 12
     assert set(range(len(concat_ds))).issubset(set(combined))
+
+
+@pytest.mark.parametrize("shuffle", [True, False])
+@pytest.mark.parametrize("sizes", [[10, 30, 60], [7, 1, 100, 13], [50, 50, 50]])
+def test_interleaved_order_every_prefix_holds_the_proportional_shares(sizes, shuffle):
+    dataset = _concat(sizes)
+    indices = _build_interleaved_shard_indices(dataset, shuffle=shuffle, seed=3)
+    assert sorted(indices) == list(range(sum(sizes)))
+
+    shards = _shard_of(dataset, np.array(indices))
+    counts = np.zeros(len(sizes))
+    total = sum(sizes)
+    for position, shard in enumerate(shards, start=1):
+        counts[shard] += 1
+        expected = position * np.array(sizes) / total
+        assert np.all(np.abs(counts - expected) < 1.0 + len(sizes)), f"prefix {position}: {counts} vs {expected}"
+
+
+def test_interleaved_order_is_shuffled_and_seeded():
+    dataset = _concat([10, 30, 60])
+    first = _build_interleaved_shard_indices(dataset, shuffle=True, seed=1)
+    assert first == _build_interleaved_shard_indices(dataset, shuffle=True, seed=1)
+    assert first != _build_interleaved_shard_indices(dataset, shuffle=True, seed=2)
+
+    largest = [index for index in first if index >= 40]
+    assert largest != sorted(largest)  # events within a shard are shuffled
+
+    unshuffled = _build_interleaved_shard_indices(dataset, shuffle=False)
+    assert [index for index in unshuffled if index >= 40] == list(range(40, 100))
+
+
+def test_interleaved_order_takes_one_event_per_equal_shard_per_round():
+    sizes = [20, 20, 20, 20]
+    dataset = _concat(sizes)
+    shards = _shard_of(dataset, np.array(_build_interleaved_shard_indices(dataset, shuffle=True, seed=5)))
+    rounds = shards.reshape(-1, len(sizes))
+    assert all(list(row) == list(range(len(sizes))) for row in rounds)  # equal positions tie, in shard order
+
+
+def test_interleaved_order_skips_empty_shards():
+    assert _build_interleaved_shard_indices(_concat([0, 0]), shuffle=True, seed=0) == []
+    dataset = _concat([0, 5, 0, 5])
+    assert sorted(_build_interleaved_shard_indices(dataset, shuffle=True, seed=0)) == list(range(10))
+
+
+def test_distributed_interleaved_ranks_split_the_proportional_order():
+    sizes = [10, 30, 60]
+    dataset = _concat(sizes)
+    ranks = []
+    for rank in range(4):
+        sampler = DistributedInterleavedShardSampler(dataset, world_size=4, rank=rank, shuffle=True, seed=7)
+        ranks.append(list(sampler))
+    assert sorted(index for rank_indices in ranks for index in rank_indices) == list(range(sum(sizes)))
+    for rank_indices in ranks:
+        counts = np.bincount(_shard_of(dataset, np.array(rank_indices)), minlength=len(sizes))
+        assert np.all(np.abs(counts - np.array(sizes) / 4) < 2 * (1 + len(sizes)))  # a block = difference of two prefixes
 
 
 def test_tfds_datasource_adds_source_and_input_type_metadata_and_pads_features():

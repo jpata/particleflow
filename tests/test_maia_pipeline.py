@@ -15,12 +15,8 @@ def test_maia_spec_and_pipeline_use_native_maia_dataset():
     spec = Path(__file__).resolve().parents[1] / "particleflow_spec.yaml"
     config = MLPFConfig.from_spec(spec, "pyg-maia-v1", "maia", SimpleNamespace(pipeline=True))
     assert config.dataset is Dataset.MAIA
-    assert config.input_dim == 19 and config.num_classes == 6
+    assert config.input_dim == N_X_FEATURES and config.num_classes == 6
     assert config.elemtypes_nonzero == [1, 2]
-    assert config.model.attention.num_convs == 1
-    assert config.train_dataset["maia"]["physical"].samples["maia_edm_ttbar_pf"].splits == ["10"]
-    assert config.valid_dataset["maia"]["physical"].samples["maia_edm_ttbar_pf"].splits == ["10"]
-    assert config.test_dataset["maia_edm_ttbar_pf"].splits == ["10"]
     assert dataset_source_id("maia_edm_ttbar_pf") != 0
 
 

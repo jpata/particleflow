@@ -184,11 +184,13 @@ def test_flash_attn_varlen_flag_propagates_to_backbone(monkeypatch):
     assert all(layer.mha.use_flash_attn_varlen for layer in model.backbone)
 
 
-def test_flash_attn_varlen_requires_jagged_backbone():
+def test_flash_attn_varlen_automatically_enables_jagged_backbone(monkeypatch):
+    monkeypatch.setattr(mlpf_module, "_flash_attn_varlen_func", lambda *args, **kwargs: args[0])
     config = make_config(use_jagged_attention=False, use_flash_attn_varlen=True)
+    model = MLPF(config)
 
-    with pytest.raises(ValueError, match="requires use_jagged_attention=True"):
-        MLPF(config)
+    assert model.use_jagged_attention
+    assert all(layer.mha.use_flash_attn_varlen for layer in model.backbone)
 
 
 def test_detector_specific_backbone_preserves_layer_budget_and_shapes():

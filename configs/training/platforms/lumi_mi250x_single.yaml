@@ -1,0 +1,28 @@
+# Single GCD for comparisons with the single-GPU GH200/H100 sweeps.
+name: lumi_mi250x_single
+gpus: 1
+python_command: [python3]
+data_dir:
+  cld: ${MLPF_CLD_DATA_DIR}
+experiments_dir: /scratch/project_465001293/${USER}/particleflow/experiments
+environment:
+  OMP_NUM_THREADS: "1"
+  MLPF_SHARING_STRATEGY: file_descriptor
+  KERAS_BACKEND: torch
+  ROCM_PATH: /opt/rocm
+runtime_overrides:
+  compile: false
+  dtype: bfloat16
+  num_workers: 2
+  prefetch_factor: 2
+  model.attention.use_flash_attn_varlen: true
+slurm:
+  partition: small-g
+  account: project_465001293
+  time: "04:00:00"
+  nodes: 1
+  tasks_per_node: 1
+  cpus_per_task: 7
+  gpu_request: gpus-per-task
+  memory: 60G
+  no_requeue: true

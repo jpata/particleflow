@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sdpa-l40s
+  labels:
+    home: "eos"
+    mount-eos: "true"
+    mount-cvmfs: "true"
+    mount-afs: "true"
+    profiling: "true"
+    lifetime: "10h"
+spec:
+  restartPolicy: Never
+  containers:
+    - name: container
+      image: registry.cern.ch/ngt/lxplus-like:9
+      command: ["/usr/bin/tini", "--", "sleep", "infinity"]
+      resources:
+        limits:
+          nvidia.com/gpu: 1
+  nodeSelector:
+    nvidia.com/gpu.product: NVIDIA-L40S

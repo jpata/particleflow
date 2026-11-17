@@ -59,7 +59,8 @@ class SdpaModule(nn.Module):
         if self.masked:
             attn_mask = mask.to(torch.bool).view(batch, 1, 1, seq_len)
         out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=0.0)
-        return out.transpose(1, 2).reshape(batch, seq_len, self.num_heads * self.head_dim)
+        out = out.transpose(1, 2).reshape(batch, seq_len, self.num_heads * self.head_dim)
+        return out * mask.to(out.dtype).unsqueeze(-1) if self.masked else out
 
 
 @dataclass
@@ -71,6 +72,7 @@ class Variant:
     masked: bool = False
     provider_option_sdpa_kernel: int | None = None
     use_tf32: bool | None = None
+    export_shape: str = "native"
 
 
 class SingleBatchCalibrationDataReader(CalibrationDataReader):
@@ -88,9 +90,15 @@ class SingleBatchCalibrationDataReader(CalibrationDataReader):
 def parse_args():
     parser = argparse.ArgumentParser(description="Benchmark PyTorch SDPA and ONNX Runtime attention variants.")
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
+    parser.add_argument("--ort-provider", choices=["cpu", "cuda", "migraphx"], default=None)
+    parser.add_argument("--require-full-gpu", action="store_true", help="Disable ORT CPU node fallback")
     parser.add_argument("--outdir", type=Path, default=Path("sdpa_onnx_bench"))
     parser.add_argument("--seq-lens", type=int, nargs="+", default=[512, 1024, 2048, 4096, 8192, 10000])
     parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--batch-sizes", type=int, nargs="+", help="Sweep batch sizes instead of --batch-size")
+    parser.add_argument(
+        "--length-policy", choices=["staggered", "balanced"], default="staggered", help="Balanced keeps mean valid length fixed across batch sizes"
+    )
     parser.add_argument("--num-heads", type=int, default=16)
     parser.add_argument("--head-dim", type=int, default=16)
     parser.add_argument("--iters", type=int, default=10)
@@ -102,6 +110,12 @@ def parse_args():
     parser.add_argument("--modes", choices=["unmasked", "masked", "both"], default="both")
     parser.add_argument("--profile", action="store_true", help="Enable ORT profiling.")
     parser.add_argument("--keep-models", action="store_true", help="Keep exported ONNX files.")
+    parser.add_argument(
+        "--export-shapes",
+        choices=["dynamic", "static", "both"],
+        default="dynamic",
+        help="Export ONNX models with symbolic dimensions, fixed batch/sequence dimensions, or both.",
+    )
     parser.add_argument(
         "--variants",
         nargs="+",
@@ -125,10 +139,11 @@ def dtype_from_name(name: str):
     return torch.float32, np.float32, TensorProto.FLOAT
 
 
-def make_variants(device: str, modes: list[str], selected: set[str] | None, provider_sdpa_kernel: int | None):
+def make_variants(device: str, modes: list[str], selected: set[str] | None, provider_sdpa_kernel: int | None, export_shapes: str):
     variants = [
         Variant("pt_math_fp32", "pytorch", "fp32", "math"),
         Variant("onnx_sdpa_export_fp32", "onnx_export", "fp32"),
+        Variant("ort_attention24_fp32", "ort_attention24", "fp32", provider_option_sdpa_kernel=provider_sdpa_kernel),
         Variant("ort_mha_fp32", "ort_mha", "fp32", provider_option_sdpa_kernel=provider_sdpa_kernel),
     ]
     if device == "cpu":
@@ -136,6 +151,7 @@ def make_variants(device: str, modes: list[str], selected: set[str] | None, prov
             [
                 Variant("pt_math_fp16", "pytorch", "fp16", "math"),
                 Variant("onnx_sdpa_export_fp16", "onnx_export", "fp16"),
+                Variant("ort_attention24_fp16", "ort_attention24", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
                 Variant("ort_mha_fp16", "ort_mha", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
                 Variant("onnx_sdpa_static_int8", "onnx_static_quant", "int8"),
             ]
@@ -143,8 +159,11 @@ def make_variants(device: str, modes: list[str], selected: set[str] | None, prov
     if device == "cuda":
         variants.extend(
             [
+                Variant("pt_math_fp16", "pytorch", "fp16", "math"),
+                Variant("onnx_sdpa_export_fp16", "onnx_export", "fp16"),
                 Variant("pt_flash_fp16", "pytorch", "fp16", "flash"),
                 Variant("pt_efficient_fp32", "pytorch", "fp32", "efficient"),
+                Variant("ort_attention24_fp16", "ort_attention24", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
                 Variant("ort_mha_fp16", "ort_mha", "fp16", provider_option_sdpa_kernel=provider_sdpa_kernel),
                 Variant("onnx_sdpa_static_int8", "onnx_static_quant", "int8"),
             ]
@@ -153,11 +172,20 @@ def make_variants(device: str, modes: list[str], selected: set[str] | None, prov
     expanded = []
     for variant in variants:
         for mode in modes:
-            v = Variant(**asdict(variant))
-            v.masked = mode == "masked"
-            v.name = f"{variant.name}_{mode}"
-            if selected is None or v.name in selected or variant.name in selected:
-                expanded.append(v)
+            if variant.engine == "pytorch":
+                shapes = ["native"]
+            elif export_shapes == "both":
+                shapes = ["dynamic", "static"]
+            else:
+                shapes = [export_shapes]
+            for shape in shapes:
+                v = Variant(**asdict(variant))
+                v.masked = mode == "masked"
+                v.export_shape = shape
+                shape_base = f"{variant.name}{'_static' if shape == 'static' else ''}"
+                v.name = f"{shape_base}_{mode}"
+                if selected is None or any(name in selected for name in (v.name, f"{variant.name}_{mode}", shape_base, variant.name)):
+                    expanded.append(v)
     return expanded
 
 
@@ -171,7 +199,7 @@ def provider_options_from_args(args):
     return opts
 
 
-def make_inputs(batch, seq_len, hidden, dtype, device, masked, mask_fraction, seed):
+def make_inputs(batch, seq_len, hidden, dtype, device, masked, mask_fraction, seed, length_policy="staggered"):
     gen = torch.Generator(device="cpu")
     gen.manual_seed(seed + seq_len)
     query = torch.randn(batch, seq_len, hidden, generator=gen, dtype=torch.float32).to(device=device, dtype=dtype)
@@ -182,7 +210,11 @@ def make_inputs(batch, seq_len, hidden, dtype, device, masked, mask_fraction, se
         mask = torch.ones(batch, seq_len, dtype=torch.int32, device=device)
         num_masked = int(seq_len * mask_fraction)
         if num_masked > 0:
-            mask[:, seq_len - num_masked :] = 0
+            for i in range(batch):
+                position = i + 0.5 if length_policy == "balanced" else i + 1
+                count = min(seq_len - 1, int(num_masked * position / batch))
+                if count:
+                    mask[i, seq_len - count :] = 0
     return query, key, value, mask
 
 
@@ -201,37 +233,53 @@ def run_pytorch_variant(variant, query, key, value, mask, num_heads, head_dim):
         "efficient": torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION,
     }[variant.backend]
     with torch.no_grad(), torch.nn.attention.sdpa_kernel(backend):
+        if variant.backend == "flash" and mask is not None:
+            from flash_attn import flash_attn_varlen_func
+
+            valid = mask.bool()
+            lengths = valid.sum(-1, dtype=torch.int32)
+            cu = F.pad(lengths.cumsum(0, dtype=torch.int32), (1, 0))
+            q, k, v = [x[valid].reshape(-1, num_heads, head_dim) for x in (query, key, value)]
+            packed = flash_attn_varlen_func(q, k, v, cu, cu, query.shape[1], key.shape[1], dropout_p=0.0, causal=False)
+            out = torch.zeros_like(query)
+            out[valid] = packed.reshape(-1, num_heads * head_dim)
+            return out
         return module(query, key, value, mask)
 
 
-def export_sdpa_model(path, query, key, value, mask, num_heads, head_dim, masked):
+def export_sdpa_model(path, query, key, value, mask, num_heads, head_dim, masked, export_shape="dynamic"):
     module = SdpaModule(num_heads, head_dim, masked).eval().to(device=query.device)
     args = (query, key, value, mask) if masked else (query, key, value)
     input_names = ["query", "key", "value", "mask"] if masked else ["query", "key", "value"]
-    dynamic_axes = {name: {0: "batch", 1: "seq"} for name in input_names}
-    dynamic_axes["output"] = {0: "batch", 1: "seq"}
-    torch.onnx.export(
-        module,
-        args,
-        path,
-        opset_version=20,
-        input_names=input_names,
-        output_names=["output"],
-        dynamic_axes=dynamic_axes,
-        dynamo=False,
-    )
+    dynamic_axes = None
+    if export_shape == "dynamic":
+        dynamic_axes = {name: {0: "batch", 1: "seq"} for name in input_names}
+        dynamic_axes["output"] = {0: "batch", 1: "seq"}
+    # Export the unfused MATH decomposition; ORT/MIGraphX may fuse it independently.
+    with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
+        torch.onnx.export(
+            module,
+            args,
+            path,
+            opset_version=20,
+            input_names=input_names,
+            output_names=["output"],
+            dynamic_axes=dynamic_axes,
+            dynamo=False,
+        )
 
 
-def make_mha_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked):
+def make_mha_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked, export_shape="dynamic"):
+    dims = ["batch", "seq"] if export_shape == "dynamic" else [batch, seq_len]
     inputs = ["query", "key", "value"]
     value_infos = [
-        helper.make_tensor_value_info("query", dtype_proto, ["batch", "seq", hidden]),
-        helper.make_tensor_value_info("key", dtype_proto, ["batch", "seq", hidden]),
-        helper.make_tensor_value_info("value", dtype_proto, ["batch", "seq", hidden]),
+        helper.make_tensor_value_info("query", dtype_proto, [*dims, hidden]),
+        helper.make_tensor_value_info("key", dtype_proto, [*dims, hidden]),
+        helper.make_tensor_value_info("value", dtype_proto, [*dims, hidden]),
     ]
     if masked:
         inputs.extend(["", "mask"])
-        value_infos.append(helper.make_tensor_value_info("mask", TensorProto.INT32, ["batch", "seq"]))
+        value_infos.append(helper.make_tensor_value_info("mask", TensorProto.INT32, dims))
 
     node = helper.make_node(
         "MultiHeadAttention",
@@ -246,13 +294,49 @@ def make_mha_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked)
         [node],
         "SDPA_MHA_Graph",
         value_infos,
-        [helper.make_tensor_value_info("output", dtype_proto, ["batch", "seq", hidden])],
+        [helper.make_tensor_value_info("output", dtype_proto, [*dims, hidden])],
     )
     model = helper.make_model(
         graph,
         opset_imports=[helper.make_opsetid("", 20), helper.make_opsetid("com.microsoft", 1)],
     )
     model.ir_version = min(model.ir_version, 10)
+    onnx.save(model, path)
+
+
+def make_attention24_model(path, batch, seq_len, hidden, dtype_proto, num_heads, masked, export_shape="dynamic"):
+    dims = ["batch", "seq"] if export_shape == "dynamic" else [batch, seq_len]
+    inputs = [helper.make_tensor_value_info(n, dtype_proto, [*dims, hidden]) for n in ("query", "key", "value")]
+    nodes = []
+    attention_inputs = ["query", "key", "value"]
+    if masked:
+        inputs.append(helper.make_tensor_value_info("mask", TensorProto.INT32, dims))
+        nodes.extend(
+            [
+                helper.make_node("Cast", ["mask"], ["mask64"], to=TensorProto.INT64),
+                helper.make_node("Constant", [], ["axes"], value=helper.make_tensor("axes", TensorProto.INT64, [1], [1])),
+                helper.make_node("ReduceSum", ["mask64", "axes"], ["lengths"], keepdims=0),
+            ]
+        )
+        attention_inputs += ["", "", "", "lengths"]
+    nodes.append(
+        helper.make_node("Attention", attention_inputs, ["raw" if masked else "output"], q_num_heads=num_heads, kv_num_heads=num_heads, is_causal=0)
+    )
+    if masked:
+        nodes.extend(
+            [
+                helper.make_node("Cast", ["mask"], ["mask_float"], to=dtype_proto),
+                helper.make_node("Constant", [], ["last_axis"], value=helper.make_tensor("last_axis", TensorProto.INT64, [1], [2])),
+                helper.make_node("Unsqueeze", ["mask_float", "last_axis"], ["query_mask"]),
+                helper.make_node("Mul", ["raw", "query_mask"], ["output"]),
+            ]
+        )
+    model = helper.make_model(
+        helper.make_graph(nodes, "Attention24", inputs, [helper.make_tensor_value_info("output", dtype_proto, [*dims, hidden])]),
+        opset_imports=[helper.make_opsetid("", 24)],
+        ir_version=10,
+    )
+    onnx.checker.check_model(model)
     onnx.save(model, path)
 
 
@@ -322,19 +406,32 @@ def create_session(path, args, variant, model_dir):
     so.intra_op_num_threads = args.num_threads
     so.inter_op_num_threads = args.num_threads
     so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    so.optimized_model_filepath = str(model_dir / f"{Path(path).stem}.optimized.onnx")
+    # MIGraphX compiled nodes cannot be serialized by ONNX Runtime.
+    if args.ort_provider != "migraphx":
+        so.optimized_model_filepath = str(model_dir / f"{Path(path).stem}.optimized.onnx")
     if args.profile:
         so.enable_profiling = True
         so.profile_file_prefix = str(model_dir / Path(path).stem)
 
-    if args.device == "cuda":
+    if args.require_full_gpu:
+        so.add_session_config_entry("session.disable_cpu_ep_fallback", "1")
+    if args.ort_provider != "cpu":
         opts = provider_options_from_args(args)
-        if variant.provider_option_sdpa_kernel is not None:
+        if args.ort_provider == "cuda" and variant.provider_option_sdpa_kernel is not None:
             opts.setdefault("sdpa_kernel", str(variant.provider_option_sdpa_kernel))
-        providers = [("CUDAExecutionProvider", opts), "CPUExecutionProvider"]
+        providers = [(args.ort_provider_name, opts)]
+        if not args.require_full_gpu:
+            providers.append("CPUExecutionProvider")
     else:
         providers = ["CPUExecutionProvider"]
-    return ort.InferenceSession(str(path), so, providers=providers)
+    if args.ort_provider == "cuda":
+        ort.preload_dlls()
+    session = ort.InferenceSession(str(path), so, providers=providers)
+    if args.ort_provider_name not in session.get_providers():
+        raise RuntimeError(f"{args.ort_provider_name} failed to initialize; refusing CPU fallback")
+    if args.require_full_gpu:
+        session.disable_fallback()
+    return session
 
 
 def to_numpy_inputs(query, key, value, mask, variant):
@@ -379,6 +476,8 @@ class MemorySampler:
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        # Callers stop their inference timer before cleanup: the final GPU
+        # sample launches nvidia-smi and can dominate short attention calls.
         self._stop.set()
         if self._thread is not None:
             self._thread.join()
@@ -399,6 +498,8 @@ class MemorySampler:
         return self.process.memory_info().rss / (1024**2)
 
     def _sample_gpu_vram_mib(self):
+        if torch.version.hip:
+            return None
         try:
             output = subprocess.check_output(
                 [
@@ -441,21 +542,27 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
         variant.masked,
         args.mask_fraction,
         args.seed,
+        args.length_policy,
     )
     reference = run_pytorch_reference(query, key, value, mask, args.num_heads, args.head_dim)
 
     result = {
         "variant": variant.name,
         "engine": variant.engine,
+        "export_shape": variant.export_shape,
         "dtype": variant.dtype,
         "backend": variant.backend,
         "device": args.device,
+        "ort_provider": args.ort_provider,
+        "require_full_gpu": args.require_full_gpu,
         "masked": variant.masked,
         "batch_size": args.batch_size,
         "sequence_length": seq_len,
         "num_heads": args.num_heads,
         "head_dim": args.head_dim,
         "hidden": hidden,
+        "lengths": mask.sum(-1).cpu().tolist() if mask is not None else [seq_len] * args.batch_size,
+        "valid_elements": int(mask.sum().item()) if mask is not None else seq_len * args.batch_size,
         "status": "ok",
         "error": "",
         "graph_nodes": {},
@@ -486,7 +593,7 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
                     output = run_pytorch_variant(variant, query, key, value, mask, args.num_heads, args.head_dim)
                     if args.device == "cuda":
                         torch.cuda.synchronize()
-                elapsed = time.perf_counter() - t0
+                    elapsed = time.perf_counter() - t0
                 times.append(elapsed)
                 result["runs"].append({"runtime_s": elapsed, "memory_mib": memory.peak_mib})
 
@@ -494,9 +601,11 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
         else:
             model_path = model_dir / f"{variant.name}_s{seq_len}.onnx"
             if variant.engine == "onnx_export":
-                export_sdpa_model(model_path, query, key, value, mask, args.num_heads, args.head_dim, variant.masked)
+                export_sdpa_model(model_path, query, key, value, mask, args.num_heads, args.head_dim, variant.masked, variant.export_shape)
+            elif variant.engine == "ort_attention24":
+                make_attention24_model(model_path, args.batch_size, seq_len, hidden, onnx_dtype, args.num_heads, variant.masked, variant.export_shape)
             elif variant.engine == "ort_mha":
-                make_mha_model(model_path, args.batch_size, seq_len, hidden, onnx_dtype, args.num_heads, variant.masked)
+                make_mha_model(model_path, args.batch_size, seq_len, hidden, onnx_dtype, args.num_heads, variant.masked, variant.export_shape)
             elif variant.engine == "onnx_static_quant":
                 fp32_model_path = model_dir / f"{variant.name}_s{seq_len}.fp32.onnx"
                 export_sdpa_model(
@@ -508,6 +617,7 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
                     args.num_heads,
                     args.head_dim,
                     variant.masked,
+                    variant.export_shape,
                 )
                 feeds = to_numpy_inputs(query, key, value, mask, variant)
                 result["source_graph_nodes"] = graph_stats(fp32_model_path)
@@ -521,7 +631,7 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
             result["graph_nodes"] = graph_stats(model_path)
             sess = create_session(model_path, args, variant, model_dir)
             optimized_path = Path(sess.get_session_options().optimized_model_filepath)
-            if optimized_path.exists():
+            if optimized_path.is_file():
                 result["optimized_graph_nodes"] = graph_stats(optimized_path)
             feeds = to_numpy_inputs(query, key, value, mask, variant)
             for _ in range(args.warmup):
@@ -540,7 +650,7 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
                     output_np = sess.run(None, feeds)[0]
                     if args.device == "cuda":
                         torch.cuda.synchronize()
-                elapsed = time.perf_counter() - t0
+                    elapsed = time.perf_counter() - t0
                 times.append(elapsed)
                 result["runs"].append({"runtime_s": elapsed, "memory_mib": memory.peak_mib})
 
@@ -559,6 +669,8 @@ def benchmark_variant(args, variant, seq_len, hidden, model_dir):
 
         result.update(summarize_times(times))
         result.update(summarize_memory(result["runs"]))
+        if variant.masked:
+            output_np = np.where(mask.cpu().numpy()[..., None].astype(bool), output_np, 0)
         diff = np.abs(reference - output_np.astype(np.float32))
         result["mae"] = float(np.nanmean(diff))
         result["max_abs_err"] = float(np.nanmax(diff))
@@ -622,9 +734,13 @@ def write_outputs(outdir, payload):
         "status",
         "device",
         "engine",
+        "export_shape",
         "dtype",
         "backend",
         "masked",
+        "batch_size",
+        "lengths",
+        "valid_elements",
         "sequence_length",
         "num_heads",
         "head_dim",
@@ -652,28 +768,33 @@ def print_ranking(results):
     ok = [r for r in results if r.get("status") == "ok" and "mean_ms" in r]
     failed = [r for r in results if r.get("status") != "ok"]
     print("\nRuntime ranking:")
-    for row in sorted(ok, key=lambda r: (r["sequence_length"], r["mean_ms"])):
+    for row in sorted(ok, key=lambda r: (r["batch_size"], r["sequence_length"], r["mean_ms"])):
         peak_memory_mib = row.get("peak_memory_mib")
         if peak_memory_mib is None:
             peak_memory_mib = float("nan")
         print(
-            f"  S={row['sequence_length']:5d} {row['variant']:<32s} "
-            f"{row['mean_ms']:10.3f} ms  "
-            f"peak_mem={peak_memory_mib:10.1f} MiB  "
-            f"MAE={row.get('mae', float('nan')):.3e}"
+            f"  B={row['batch_size']:2d} S={row['sequence_length']:5d} {row['variant']:<32s} {row['mean_ms']:10.3f} ms  peak_mem={peak_memory_mib:10.1f} MiB  MAE={row.get('mae', float('nan')):.3e}"
         )
     if failed:
         print("\nFailures:")
         for row in failed:
-            print(f"  S={row['sequence_length']:5d} {row['variant']:<32s} {row['error']}")
+            print(f"  B={row['batch_size']:2d} S={row['sequence_length']:5d} {row['variant']:<32s} {row['error']}")
 
 
 def main():
     args = parse_args()
+    args.ort_provider = args.ort_provider or args.device
+    args.ort_provider_name = {"cpu": "CPUExecutionProvider", "cuda": "CUDAExecutionProvider", "migraphx": "MIGraphXExecutionProvider"}[
+        args.ort_provider
+    ]
+    if args.require_full_gpu and args.ort_provider == "cpu":
+        raise ValueError("--require-full-gpu requires a GPU ORT provider")
+    if args.ort_provider != "cuda" and any(opt.startswith("sdpa_kernel=") for opt in args.provider_option):
+        raise ValueError("sdpa_kernel is only supported by the CUDA provider")
     if args.device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("--device cuda requested, but torch.cuda.is_available() is false")
-    if args.device == "cuda" and "CUDAExecutionProvider" not in ort.get_available_providers():
-        raise RuntimeError("--device cuda requested, but CUDAExecutionProvider is not available")
+    if args.ort_provider_name not in ort.get_available_providers():
+        raise RuntimeError(f"{args.ort_provider_name} is not available")
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -683,7 +804,7 @@ def main():
     provider_opts = provider_options_from_args(args)
     provider_sdpa_kernel = int(provider_opts["sdpa_kernel"]) if "sdpa_kernel" in provider_opts else None
     selected = set(args.variants) if args.variants else None
-    variants = make_variants(args.device, modes, selected, provider_sdpa_kernel)
+    variants = make_variants(args.device, modes, selected, provider_sdpa_kernel, args.export_shapes)
     if not variants:
         raise RuntimeError("No variants selected")
 
@@ -692,16 +813,25 @@ def main():
     model_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
-    for seq_len in args.seq_lens:
-        for variant in variants:
-            print(f"Running {variant.name} S={seq_len} on {args.device}")
-            results.append(benchmark_variant(args, variant, seq_len, hidden, model_dir))
+    batch_sizes = args.batch_sizes or [args.batch_size]
+    if any(batch < 1 for batch in batch_sizes):
+        raise ValueError("Batch sizes must be positive")
+    for batch in batch_sizes:
+        args.batch_size = batch
+        batch_model_dir = model_dir / f"batch_{batch}"
+        batch_model_dir.mkdir(exist_ok=True)
+        for seq_len in args.seq_lens:
+            for variant in variants:
+                print(f"Running {variant.name} B={batch} S={seq_len} on {args.device}", flush=True)
+                results.append(benchmark_variant(args, variant, seq_len, hidden, batch_model_dir))
 
     payload = {
         "system": system_info(args),
         "config": {
             "seq_lens": args.seq_lens,
-            "batch_size": args.batch_size,
+            "batch_size": batch_sizes[0] if len(batch_sizes) == 1 else None,
+            "batch_sizes": batch_sizes,
+            "length_policy": args.length_policy,
             "num_heads": args.num_heads,
             "head_dim": args.head_dim,
             "iters": args.iters,
@@ -709,6 +839,7 @@ def main():
             "memory_sample_interval": args.memory_sample_interval,
             "mask_fraction": args.mask_fraction,
             "modes": modes,
+            "export_shapes": args.export_shapes,
         },
         "results": results,
     }

@@ -1,0 +1,30 @@
+# Hardware qualification only: one copied TFDS config, small batch and short run.
+name: cld_gh200_smoke
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  heptv2:
+    model_name: pyg-cld-hits-heptv2-set-v1
+seeds: [12345]
+training:
+  global_batch_size: 2
+  parameters:
+    lr: 0.001
+    num_steps: 20
+    checkpoint_freq: 10
+    val_freq: 10
+    ntrain: 32
+    nvalid: 4
+    ntest: 4
+    task_loss_weights.calibration_steps: 2
+    sampler_mode: interleaved-shards
+    pad_to_multiple_elements: 128
+    make_plots: false
+    tensorboard_step_freq: 1
+common_overrides:
+  train_dataset.cld_hits.physical.samples: &samples
+    cld_edm_ttbar_hits:
+      version: "3.2.2"
+      splits: ["1"]
+  valid_dataset.cld_hits.physical.samples: *samples
+  test_dataset: *samples

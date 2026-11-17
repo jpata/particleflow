@@ -1,6 +1,6 @@
-# CMS data production
+# CMS tracks and clusters
 
-This page covers the CMS-specific choices. Use the shared [generation procedure](generate.md) for site selection, dry runs, restart behavior, TFDS verification, and publication.
+CMS provides track/cluster samples for three physics processes, each with and without pileup. This page lists those samples and their CMSSW production choices. Use the shared [generation procedure](generate.md) for site selection, dry runs, restart behavior, TFDS verification, and publication.
 
 ## Environment and representation
 
