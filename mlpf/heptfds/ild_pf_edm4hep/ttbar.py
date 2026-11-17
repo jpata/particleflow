@@ -21,8 +21,11 @@ _CITATION = ""
 
 
 class IldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("0.1.0")
-    RELEASE_NOTES = {"0.1.0": "ILD_FCCee_v02 qualification with fitted Clupatra tracks and Pandora clusters/PFOs"}
+    VERSION = tfds.core.Version("0.2.0")
+    RELEASE_NOTES = {
+        "0.2.0": "Regenerated with key4hep-sim v1.4.0 and stable Key4hep 2026-04-08 for the 50k-event campaign.",
+        "0.1.0": "ILD_FCCee_v02 qualification with fitted Clupatra tracks and Pandora clusters/PFOs",
+    }
     MANUAL_DOWNLOAD_INSTRUCTIONS = "Run the ILD generation and postprocessing recipe; pass its post directory as manual_dir."
     # One configuration, with train and test drawn from independent generation jobs.
     BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, 2)]

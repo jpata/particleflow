@@ -21,8 +21,13 @@ _CITATION = ""
 
 
 class IldEdmQqPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("0.1.0")
-    RELEASE_NOTES = {"0.1.0": "ILD_FCCee_v02 qualification with fitted Clupatra tracks and Pandora clusters/PFOs"}
+    DESCRIPTION = _DESCRIPTION
+    PROCESS_NAME = "p8_ee_qq_ecm365"
+    VERSION = tfds.core.Version("0.2.0")
+    RELEASE_NOTES = {
+        "0.2.0": "Regenerated with key4hep-sim v1.4.0 and stable Key4hep 2026-04-08 for the 50k-event campaign.",
+        "0.1.0": "ILD_FCCee_v02 qualification with fitted Clupatra tracks and Pandora clusters/PFOs",
+    }
     MANUAL_DOWNLOAD_INSTRUCTIONS = "Run the ILD generation and postprocessing recipe; pass its post directory as manual_dir."
     # One configuration, with train and test drawn from independent generation jobs.
     BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(group)) for group in range(1, 2)]
@@ -35,7 +40,7 @@ class IldEdmQqPf(tfds.core.GeneratorBasedBuilder):
         """Returns the dataset metadata."""
         return tfds.core.DatasetInfo(
             builder=self,
-            description=_DESCRIPTION,
+            description=self.DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
                     "X": tfds.features.Tensor(
@@ -69,7 +74,7 @@ class IldEdmQqPf(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_qq_ecm365"), self.builder_config)
+        return split_sample(Path(path / self.PROCESS_NAME), self.builder_config)
 
     def _generate_examples(self, files):
         return generate_examples(files)

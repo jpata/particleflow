@@ -25,8 +25,9 @@ FIXME
 
 
 class CldEdmWwFullhadPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.3.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.4.0"))
     RELEASE_NOTES = {
+        "3.4.0": "Regenerated with key4hep-sim v1.4.0 and stable Key4hep 2026-04-08 for the 50k-event campaign.",
         "2.5.0": "Use 10 splits, skip 2.4.0 to unify with CMS datasets",
         "3.0.0": "New generation with v1.2.2_key4hep_2025-05-29_CLD_3edac3",
         "3.1.0": "New generation with v1.2.5_key4hep_2025-05-29, 500k events",
