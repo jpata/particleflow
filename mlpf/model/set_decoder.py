@@ -294,6 +294,7 @@ class ParticleSetDecoder(nn.Module):
         self.aggregate_grid_size = config.aggregate_grid_size
         self.use_auxiliary_losses = config.auxiliary_loss_weight > 0
         self.hit_grouping = config.hit_grouping
+        self.hit_grouping_refinement = config.hit_grouping_refinement
         self.hit_grouping_chunk_size = config.hit_grouping_chunk_size
         self.hit_grouping_dim = config.hit_grouping_dim
         self.hit_grouping_sparse = config.hit_grouping_sparse
@@ -688,6 +689,20 @@ class ParticleSetDecoder(nn.Module):
             )
         return slots, (hit_keys, slot_keys, background), tracker_geometry, tracker_summary
 
+    def _tracker_readout_anchors(self, tracker_geometry, references, scale_anchors, scale_anchor_mask):
+        """Apply this grouping's fit to the original calorimeter seed anchors."""
+        tracker_fit = fit_valid = None
+        if tracker_geometry is not None:
+            log_pt, fit_valid = tracker_geometry
+            fit_valid = fit_valid & ~scale_anchor_mask
+            if self.tracker_fit_correction:
+                tracker_fit = (log_pt, fit_valid)
+            else:
+                tracker_anchors = torch.stack((log_pt, log_pt + torch.log(torch.cosh(references[..., 0].clamp(-10, 10)))), dim=-1)
+                scale_anchors = torch.where(fit_valid[..., None], tracker_anchors, scale_anchors)
+                scale_anchor_mask = scale_anchor_mask | fit_valid
+        return tracker_fit, fit_valid, scale_anchors, scale_anchor_mask
+
     def forward(self, memory, memory_mask, input_features=None):
         memory_mask = memory_mask.bool()
         references = reference_mask = memory_positions = None
@@ -697,23 +712,13 @@ class ParticleSetDecoder(nn.Module):
         tracker_summary = None
         if self.query_init == "input-conditioned":
             slots, references, reference_mask, scale_anchors, scale_anchor_mask = self._input_conditioned_queries(memory, memory_mask, input_features)
+            seed_scale_anchors, seed_scale_anchor_mask = scale_anchors, scale_anchor_mask
             grouping = None
             if self.hit_grouping:
                 slots, grouping, tracker_geometry, tracker_summary = self._group_hits(slots, memory, memory_mask, input_features)
-                if tracker_geometry is not None:
-                    log_pt, fit_valid = tracker_geometry
-                    # Keep calorimeter seed anchors in both readout modes.
-                    fit_valid = fit_valid & ~scale_anchor_mask
-                    if self.tracker_fit_correction:
-                        # Keep the ordinary readout for invalid fits and neutral
-                        # predictions, including its independently learned energy.
-                        tracker_fit = (log_pt, fit_valid)
-                    else:
-                        # Legacy mode supplies pT and massless seed energy priors.
-                        tracker_anchors = torch.stack((log_pt, log_pt + torch.log(torch.cosh(references[..., 0].clamp(-10, 10)))), dim=-1)
-                        scale_anchors = torch.where(fit_valid[..., None], tracker_anchors, scale_anchors)
-                        scale_anchor_mask = scale_anchor_mask | fit_valid
-                    tracker_fit_valid = fit_valid
+                tracker_fit, tracker_fit_valid, scale_anchors, scale_anchor_mask = self._tracker_readout_anchors(
+                    tracker_geometry, references, seed_scale_anchors, seed_scale_anchor_mask
+                )
             memory_positions = torch.stack(
                 [
                     torch.nan_to_num(
@@ -753,6 +758,14 @@ class ParticleSetDecoder(nn.Module):
                 phi = references[..., 1] + step_size * delta[..., 1]
                 references = torch.stack([eta, torch.atan2(torch.sin(phi), torch.cos(phi))], dim=-1)
             is_final_layer = layer_index == len(self.layers) - 1
+            if is_final_layer and self.hit_grouping_refinement:
+                # Membership, pooled features and tracker readout must all use
+                # the same refined queries. Chunked pooling retains O(hits)
+                # ownership indices rather than a full hit-by-slot matrix.
+                slots, grouping, tracker_geometry, tracker_summary = self._group_hits(slots, memory, memory_mask, input_features)
+                tracker_fit, tracker_fit_valid, scale_anchors, scale_anchor_mask = self._tracker_readout_anchors(
+                    tracker_geometry, references, seed_scale_anchors, seed_scale_anchor_mask
+                )
             if self.use_auxiliary_losses or is_final_layer:
                 outputs.append(self._predict(slots, references, scale_anchors, scale_anchor_mask, tracker_fit, tracker_summary))
 

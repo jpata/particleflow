@@ -10,7 +10,7 @@ from mlpf.conf import MLPFConfig
 from mlpf.model.mlpf import MLPF
 
 
-def make_model(checkpointing=False, dropout=0.2):
+def make_model(checkpointing=False, dropout=0.2, refinement=False):
     config = MLPFConfig.model_validate(
         {
             "dataset": "cld_hits",
@@ -39,6 +39,7 @@ def make_model(checkpointing=False, dropout=0.2):
                     "attention_mode": "global-flash",
                     "query_init": "input-conditioned",
                     "hit_grouping": True,
+                    "hit_grouping_refinement": refinement,
                 },
             },
         }
@@ -63,9 +64,10 @@ def output_tensors(output):
 
 @pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required"))])
 @pytest.mark.parametrize("freeze_encoder", [False, True])
-def test_checkpoint_outputs_gradients_and_rng(device, freeze_encoder):
+@pytest.mark.parametrize("refinement", [False, True])
+def test_checkpoint_outputs_gradients_and_rng(device, freeze_encoder, refinement):
     torch.manual_seed(123)
-    baseline = make_model().to(device).train()
+    baseline = make_model(refinement=refinement).to(device).train()
     replayed = copy.deepcopy(baseline)
     replayed.config.heptv2.activation_checkpointing = True
     # Checkpointing adds no parameters or buffers; old checkpoints load strictly.

@@ -154,13 +154,15 @@ def test_hit_grouping_uses_predicted_membership_and_event_local_truth():
 
 
 @pytest.mark.parametrize("fit_weight", [0.0, 0.1])
-def test_hit_grouping_is_included_in_set_training_loss(fit_weight):
+@pytest.mark.parametrize("refinement", [False, True])
+def test_hit_grouping_is_included_in_set_training_loss(fit_weight, refinement):
     from mlpf.model.training import model_step
 
     config = make_config(
         num_slots=4,
         query_init="input-conditioned",
         hit_grouping=True,
+        hit_grouping_refinement=refinement,
         tracker_geometry_loss_weight=fit_weight,
         tracker_curvature_loss_weight=fit_weight,
     )

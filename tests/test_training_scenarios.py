@@ -27,6 +27,19 @@ from mlpf.training_scenarios import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_membership_refinement_scenario_changes_only_refinement():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_pf_heptv2_membership_refinement_50k.yaml")
+    platform = PlatformProfile(name="test", gpus=8, data_dir="/tmp/data", experiments_dir="/tmp/experiments")
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+    assert len(jobs) == 2
+    validate_variant_invariants(jobs, ["model.set_decoder.hit_grouping_refinement"])
+    baseline, refined = (job.resolved_config for job in jobs)
+    assert not baseline.model.set_decoder.hit_grouping_refinement
+    assert refined.model.set_decoder.hit_grouping_refinement
+    assert refined.model.set_decoder.tracker_momentum_readout
+    assert refined.model.heptv2.num_convs == 6
+
+
 @pytest.mark.parametrize(
     "root,subdir",
     [(None, "relative"), ("scan", "/absolute"), ("scan", "../escape"), ("scan", "valid/../../escape")],

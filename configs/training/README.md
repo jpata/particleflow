@@ -389,6 +389,38 @@ checkpoint intervals of 1,000. See [implementation and comparison details](../..
 scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_readout_50k mi250x --dry-run
 ```
 
+## CLD hit membership refinement
+
+[`cld_pf_heptv2_membership_refinement_50k`](scenarios/cld_pf_heptv2_membership_refinement_50k.yaml)
+compares two CLD hit-based HEPTv2 models:
+
+| Variant | `model.set_decoder.hit_grouping_refinement` |
+| --- | --- |
+| `baseline` | `false`: membership from initial particle proposals |
+| `final_membership_refinement` | `true`: regroup and pool hits using final decoder queries |
+
+Both use the October 28 CLD hit HEPTv2 recipe: width 256, six backbone layers,
+four global Flash decoder layers, 256 slots, supervised hard grouping, tracker
+momentum readout and tracker-neighborhood features. They start from scratch with
+seed 12345, global batch 128, 50,000 steps, LAMB, LR 0.001 and a OneCycle schedule.
+Validation and checkpoints run every 1,000 steps. Data uses CLD ttbar, WW fullhad
+and qq hits, TFDS 3.2.2, configurations 1–10. The only allowed resolved
+configuration difference is the refinement flag. Repeat with `--seed` for
+additional training seeds. Resource benchmarking samples every second after a
+100-step warmup, with per-step GPU timing disabled.
+
+Preview both jobs or submit them on LUMI:
+
+```bash
+scripts/lumi/train_scenario.sh cld_pf_heptv2_membership_refinement_50k mi250x --dry-run
+scripts/lumi/train_scenario.sh cld_pf_heptv2_membership_refinement_50k mi250x
+```
+
+Select one arm with `--variant baseline` or
+`--variant final_membership_refinement`. This full comparison retains the
+benchmark data and training budget; the separate short local stability run uses
+smaller batches and the locally available 3.2.1 data.
+
 ## Track/cluster attention experts
 
 Use the PF attention scenarios to train detector experts, a shared model, or

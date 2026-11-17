@@ -117,10 +117,11 @@ def test_readout_zero_initialization_neutral_fallback_and_empty_tracker():
     torch.testing.assert_close(charged[2][1], neutral_base[2][1])
 
 
+@pytest.mark.parametrize("refinement", [False, True])
 @pytest.mark.parametrize("sparse", [False, True])
-def test_full_decoder_backward_under_bfloat16(sparse):
+def test_full_decoder_backward_under_bfloat16(sparse, refinement):
     m, mask, x = inputs()
-    d = decoder(hit_grouping_sparse=sparse, tracker_momentum_readout=True, auxiliary_loss_weight=0.1)
+    d = decoder(hit_grouping_sparse=sparse, tracker_momentum_readout=True, auxiliary_loss_weight=0.1, hit_grouping_refinement=refinement)
     with torch.autocast("cpu", dtype=torch.bfloat16):
         result = d(m, mask, x)
     assert len(result.auxiliary_predictions) == 1

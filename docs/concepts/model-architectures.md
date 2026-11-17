@@ -46,6 +46,25 @@ Elementwise prediction learns which input positions represent particles. Set pre
 
 Optional hit grouping learns an assignment from each hit to a matched particle slot or background, using `particle_number` supervision. Tracker momentum readouts can use these groups. The CLD preset `pyg-cld-hits-heptv2-set-v1` combines HEPTv2, input-conditioned queries, global decoder attention, and supervised hit grouping. Its evidence and optional readout experiments are described in the [CLD hit results](../cld_hit_results.md).
 
+Set `model.set_decoder.hit_grouping_refinement: true` to recompute membership from
+the final decoder queries before the final particle readout. This requires
+`hit_grouping: true` and defaults to false. The initial grouping still seeds the
+decoder and supplies intermediate auxiliary predictions. After the last decoder
+layer, a second chunked grouping pass recomputes slot affinities, pools hit
+embeddings, and refreshes tracker summaries or fitted anchors. Final grouping
+losses and diagnostics use these refined assignments. A rejected refined fit
+falls back to the original seed/readout rather than retaining an initial fit.
+Calorimeter seed anchors retain their original semantics.
+
+Refinement reuses existing parameters and supports strict state-dict loading.
+Enabling it changes the computation and requires training or fine-tuning to
+evaluate its physics performance. Hard membership remains discrete and learns
+through grouping supervision; the optional sparse association path retains its
+existing selected-weight gradients. This adds one grouping/pooling pass, without
+retaining a full hit-by-slot matrix. It does not update membership after every
+decoder layer or add intermediate mask losses. The controlled CLD comparison is
+`configs/training/scenarios/cld_pf_heptv2_membership_refinement_50k.yaml`.
+
 ## Learning objectives
 
 The elementwise objective combines particle-presence classification, PID classification, and kinematic regression. PID and regression use rows with a particle target; presence also uses valid rows with no particle. Kinematic errors are weighted by the square root of target transverse momentum. Configuration selects fixed regression weights or calibrated task weights.

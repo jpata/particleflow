@@ -1018,6 +1018,7 @@ class SetDecoderConfig(BaseModel):
     momentum_loss: Literal["mse", "huber"] = "mse"
     momentum_huber_delta: float = Field(default=0.2, gt=0.0)
     hit_grouping: bool = False
+    hit_grouping_refinement: bool = Field(default=False, description="Reassign and pool hits from final decoder queries before particle readout.")
     hit_grouping_dim: int = Field(default=32, gt=0)
     hit_grouping_chunk_size: int = Field(default=1024, gt=0)
     hit_grouping_loss_weight: float = Field(default=0.1, ge=0.0)
@@ -1054,6 +1055,8 @@ class SetDecoderConfig(BaseModel):
             raise ValueError("set decoder hit grouping requires query_init='input-conditioned'")
         if self.hit_grouping and self.hit_grouping_loss_weight == 0:
             raise ValueError("set decoder hit grouping requires a positive hit_grouping_loss_weight")
+        if self.hit_grouping_refinement and not self.hit_grouping:
+            raise ValueError("hit membership refinement requires hit_grouping")
         if (self.tracker_group_readout or self.hit_grouping_detector_balanced) and not self.hit_grouping:
             raise ValueError("tracker group readout and detector balancing require hit_grouping")
         if (self.hit_grouping_tracker_particle_balanced or self.tracker_overlap_loss_weight) and not self.hit_grouping:
