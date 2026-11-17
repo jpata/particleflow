@@ -49,7 +49,7 @@ The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/
 | Hits | CLD | `cld_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
 | Hits | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
 
-The IDEA upstream-update branch selects **0.4.1** with measured GGTF/GenFit tracks
+The IDEA upstream-update branch selects **0.4.0** with measured GGTF/GenFit tracks
 for a new local production;
 the published **0.2.1** entry above describes the previous campaign.
 

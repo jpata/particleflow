@@ -82,6 +82,8 @@ def test_features_use_ip_fit_and_never_proxy_or_mc_momentum():
     features = pp.idea_track_to_features(prop, 0, 2.0, selection=selection)
     np.testing.assert_allclose(features["pt"], [1.0, 2.0])
     np.testing.assert_allclose(features["phi"], [0.4, -0.3])
+    np.testing.assert_allclose(features["D0"], [1.0, 2.0])
+    np.testing.assert_allclose(features["Z0"], [2.0, 3.0])
     assert "TracksFromGenParticles" not in prop
     assert "MCParticles.momentum.x" not in prop
 

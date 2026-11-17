@@ -31,11 +31,9 @@ Versions below 0.4.0 use truth-seeded proxy tracks.
 
 
 class IdeaEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.4.1"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "0.4.0"))
     RELEASE_NOTES = {
-        "0.4.1": "Fix GenFit circle-seed orientation and fitted-charge output; regenerate reconstruction, Parquet and TFDS.",
-        "0.4.0": "Use measured GGTF/GenFit tracks, reconstructed quality cuts, and direct hit-majority truth labels; regenerate Parquet/TFDS.",
-        "0.3.0": "November 2026 upstream IDEA simulation/reconstruction with MLPF dual-readout patches; regenerate.",
+        "0.4.0": "November 2026 upstream simulation/reconstruction and dual-readout patches; measured GGTF/GenFit tracks with seed-orientation and fitted-charge fixes, quality cuts and hit-majority labels; regenerate reconstruction, Parquet and TFDS.",
         "0.1.0": "Initial pipeline-validation dataset with explicit proxy provenance.",
         "0.2.0": "Add num_muon_hits and energy_muon cluster features (#511); input width 17 -> 19, regenerate",
         "0.2.1": "Compute cluster shower widths from associated calorimeter cells.",
