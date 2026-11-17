@@ -62,8 +62,15 @@ For production, review `productions.idea` in `particleflow_spec.yaml` and the bu
 The `idea-upstream-2026-11` branch pins upstream components checked on
 16 November 2026 and preserves the local dual-readout truth patches. The
 fitted-track production uses workspace
-`IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117` to avoid reusing
-cached proxy or unpatched fitted data. See the [generator instructions](../../mlpf/data/key4hep/gen/idea/README.md).
+`IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117_beamspot2025` to avoid reusing
+cached proxy, unpatched fitted data, or pre-PR-527 vertex smearing.
+Collision generation now uses the energy-dependent FCC-ee 2025 beam-spot
+widths in the shared Pythia cards, with no additional GenAlg spatial or timing
+smear. The historical full-simulation qualification results below predate this
+correction and need repeating for the corrected campaign. See the [generator instructions](../../mlpf/data/key4hep/gen/idea/README.md).
+Archive the previous campaign's completion markers under `snakemake_jobs/idea/`
+before generating workflows for the new workspace; old `.done` files do not
+establish completion of the corrected campaign.
 
 The generator retains proxy collections for diagnostics, but the default MLPF
 reader does not load them. For explicit legacy diagnostics only, use
