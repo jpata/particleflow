@@ -108,6 +108,23 @@ def map_neutral_to_charged(pdg: int) -> int:
     return pdg
 
 
+def represented_pid(pdgid: int, charge: float, on_track: bool, on_cluster: bool) -> Tuple[int, bool]:
+    """Target class of a particle represented by a track or a cluster, and whether that flipped its charge.
+
+    A track stands for a charged particle and a cluster for a neutral one, as in conventional PF: a
+    charged particle without a track becomes a neutral hadron (an electron a photon), and a neutral
+    particle that owns a track (a converted photon, a V0) a charged hadron. The flag marks these.
+    """
+    pid = map_pdgid_to_candid(pdgid, charge)
+    if on_track:
+        forced = map_neutral_to_charged(pid)
+    elif on_cluster:
+        forced = map_charged_to_neutral(pid)
+    else:
+        forced = pid
+    return forced, forced != pid
+
+
 def sanitize(arr: np.ndarray) -> None:
     arr[np.isnan(arr)] = 0.0
     arr[np.isinf(arr)] = 0.0

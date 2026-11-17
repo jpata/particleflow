@@ -133,7 +133,7 @@ def collect(events, detector, features=None, match_dr=0.1):
         "cluster_et_kinematics_failures": 0,
         "target_energy_below_momentum": 0,
     }
-    track_names = CML_TRACK if detector == "colliderml" else EDM4HEP.TrackFeatures.get_names()
+    track_names = CML_TRACK if detector == "colliderml" else EDM4HEP.DETECTORS[detector].track_feature_names()
     cluster_names = EDM4HEP.ClusterFeatures.get_names()
     y_names = ParticleFeatures.get_names()
 

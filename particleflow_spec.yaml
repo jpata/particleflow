@@ -1274,18 +1274,18 @@ models:
         batch_size: 1
         samples:
           - name: "maia_edm_ttbar_pf"
-            version: "1.1.0"
+            version: "1.2.0"
             splits: ["10"]
     validation_datasets:
       physical:
         batch_size: 1
         samples:
           - name: "maia_edm_ttbar_pf"
-            version: "1.1.0"
+            version: "1.2.0"
             splits: ["10"]
     test_datasets:
       - name: "maia_edm_ttbar_pf"
-        version: "1.1.0"
+        version: "1.2.0"
         splits: ["10"]
 
   pyg-colliderml-v1: &pyg_colliderml_v1

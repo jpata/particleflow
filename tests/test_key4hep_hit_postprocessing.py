@@ -12,7 +12,9 @@ from mlpf.data.key4hep.postprocessing import (
     hit_cluster_adj,
     hits_to_features,
     parse_cellid_encoding,
+    track_to_features,
 )
+from mlpf.data.target_building import represented_pid
 from mlpf.heptfds.edm4hep_utils.utils_hits import X_FEATURES
 
 
@@ -119,7 +121,7 @@ def make_calo_hits(collection, energies):
     return ak.Array({f"{collection}.{feature}": [value] for feature, value in values.items()})
 
 
-def make_clustered_event():
+def make_clustered_event(position=(1.0, 0.0, 1.0), itheta=1.0, phi=0.0):
     # A CLIC-like event. LumiCal shares subdetector 2 with the muon system, so only selecting
     # muon hits by collection keeps it out of the muon features.
     collection_ids = {"ECALBarrel": 11, "HCALBarrel": 12, "MUON": 13, "LumiCal_Hits": 14}
@@ -141,11 +143,11 @@ def make_clustered_event():
     clusters = [
         {
             "PandoraClusters.type": 0,
-            "PandoraClusters.position.x": 1.0,
-            "PandoraClusters.position.y": 0.0,
-            "PandoraClusters.position.z": 1.0,
-            "PandoraClusters.iTheta": 1.0,
-            "PandoraClusters.phi": 0.0,
+            "PandoraClusters.position.x": position[0],
+            "PandoraClusters.position.y": position[1],
+            "PandoraClusters.position.z": position[2],
+            "PandoraClusters.iTheta": itheta,
+            "PandoraClusters.phi": phi,
             "PandoraClusters.energy": 1.0,
             "PandoraClusters.hits_begin": b,
             "PandoraClusters.hits_end": b + len(r),
@@ -191,6 +193,110 @@ def test_cluster_schema_appends_muon_features():
     assert names[-2:] == ["num_muon_hits", "energy_muon"]
     # appended, so every existing column keeps its index
     assert names.index("energy_other") == 12 and names.index("sigma_z") == 16
+
+
+def test_cluster_angles_can_come_from_the_centroid():
+    # Pandora's iTheta/phi (here pointing along +x) are the shower axis; the cluster sits at +y, z = r
+    prop_data, hit_features, hit_to_cluster, _ = make_clustered_event(position=(0.0, 2.0, 2.0), itheta=np.pi / 2, phi=0.0)
+
+    axis = cluster_to_features(prop_data, hit_features, hit_to_cluster, 0)
+    centroid = cluster_to_features(prop_data, hit_features, hit_to_cluster, 0, angles_from_position=True)
+
+    np.testing.assert_allclose(axis["eta"], 0.0, atol=1e-6)
+    np.testing.assert_allclose(axis["sin_phi"], 0.0, atol=1e-6)
+    np.testing.assert_allclose(centroid["eta"], np.arcsinh(1.0), rtol=1e-6)
+    np.testing.assert_allclose(centroid["sin_phi"], 1.0, rtol=1e-6)
+    np.testing.assert_allclose(centroid["cos_phi"], 0.0, atol=1e-6)
+    # et follows the same polar angle; the inertia-axis iTheta stays a feature
+    np.testing.assert_allclose(centroid["et"], np.sin(np.pi / 4), rtol=1e-6)
+    np.testing.assert_allclose(centroid["iTheta"], np.pi / 2)
+
+
+def make_track_event():
+    # track 0 has a state AtCalorimeter (location 4) at (1000, 1000, 500) mm; track 1 has none
+    states = [
+        (1, 0.0, 0.0, 0.0),
+        (2, 30.0, 0.0, 0.0),
+        (3, 1400.0, 0.0, 0.0),
+        (4, 1000.0, 1000.0, 500.0),
+        (1, 0.0, 0.0, 0.0),
+        (2, 30.0, 0.0, 0.0),
+    ]
+    trk = "SiTracks_Refitted"
+    n_states = len(states)
+    # as uproot reads a collection: per event, one record whose fields are the per-object arrays
+    return ak.Array(
+        [
+            {
+                trk: {
+                    f"{trk}.type": [0, 0],
+                    f"{trk}.chi2": [1.0, 1.0],
+                    f"{trk}.ndf": [10, 10],
+                    f"{trk}.trackStates_begin": [0, 4],
+                    f"{trk}.trackStates_end": [4, 6],
+                },
+                f"{trk}_dQdx": {f"{trk}_dQdx.dQdx.value": [0.0, 0.0], f"{trk}_dQdx.dQdx.error": [0.0, 0.0]},
+                f"_{trk}_trackStates": {
+                    f"_{trk}_trackStates.location": [s[0] for s in states],
+                    f"_{trk}_trackStates.referencePoint.x": [s[1] for s in states],
+                    f"_{trk}_trackStates.referencePoint.y": [s[2] for s in states],
+                    f"_{trk}_trackStates.referencePoint.z": [s[3] for s in states],
+                    f"_{trk}_trackStates.tanLambda": [0.5] * n_states,
+                    f"_{trk}_trackStates.D0": [0.0] * n_states,
+                    f"_{trk}_trackStates.phi": [0.3] * n_states,
+                    f"_{trk}_trackStates.omega": [1e-4] * n_states,
+                    f"_{trk}_trackStates.Z0": [0.0] * n_states,
+                    f"_{trk}_trackStates.time": [0.0] * n_states,
+                },
+            }
+        ]
+    )
+
+
+def test_track_ecal_entry_is_the_state_at_the_calorimeter():
+    prop_data = make_track_event()
+
+    features = track_to_features(prop_data, 0, 5.0, ecal_entry=True)
+
+    np.testing.assert_allclose(features["eta_ecal"], [np.arcsinh(500.0 / np.hypot(1000.0, 1000.0)), 0.0], rtol=1e-6)
+    np.testing.assert_allclose(features["phi_ecal"], [np.pi / 4, 0.0], rtol=1e-6)
+    # the vertex direction is unchanged
+    np.testing.assert_allclose(features["sin_phi"], np.sin(0.3))
+    assert "eta_ecal" not in track_to_features(prop_data, 0, 5.0).fields
+
+
+@pytest.mark.parametrize(
+    ("pdg", "charge", "on_track", "expected"),
+    [
+        (211, 1, True, (211, False)),
+        (11, -1, True, (11, False)),
+        (22, 0, False, (22, False)),
+        (2112, 0, False, (130, False)),
+        # charged particles without a track become neutral, like a conventional PF candidate
+        (211, 1, False, (130, True)),
+        (13, -1, False, (130, True)),
+        (11, 1, False, (22, True)),
+        # neutral particles that own a track (conversion, V0) become charged hadrons
+        (22, 0, True, (211, True)),
+        (310, 0, True, (211, True)),
+    ],
+)
+def test_represented_pid_flags_charge_flips(pdg, charge, on_track, expected):
+    assert represented_pid(pdg, charge, on_track, not on_track) == expected
+
+
+def test_only_maia_changes_track_inputs_cluster_angles_and_target_assignment():
+    for name, detector in EDM4HEP.DETECTORS.items():
+        if name == "maia":
+            assert detector.track_ecal_entry and detector.cluster_angles_from_position
+            assert detector.target_assignment == "majority_energy"
+            assert detector.track_feature_names()[-2:] == ["eta_ecal", "phi_ecal"]
+        else:
+            assert not detector.track_ecal_entry and not detector.cluster_angles_from_position, name
+            assert detector.target_assignment == "greedy", name
+            assert detector.track_feature_names() == EDM4HEP.TrackFeatures.get_names(), name
+    # the extra track columns fill the padding of the shared track/cluster layout
+    assert len(EDM4HEP.DETECTORS["maia"].track_feature_names()) <= len(EDM4HEP.ClusterFeatures.get_names())
 
 
 def test_registered_muon_collections_are_read():
