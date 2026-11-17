@@ -90,6 +90,27 @@ results require further reconstruction and association studies before physics
 use. Local reports, plots, ROOT manifests and Parquet files are under
 `reports/idea-100-ttbar-20261116/`.
 
+The 17 November follow-up traced the failures to native ROOT identities and
+states. All 475 proxy direction failures are secondary tracks relabelled with
+status-1 ancestor momenta; all proxies agree with their directly linked MC
+particles. The fitted-track tail is already present in ROOT: 137 labelled
+tracks are nearly reversed, 128 also have the wrong charge sign, and the
+failure persists at high pT and high hit purity. Relaxing the track gate would
+hide reconstruction failures.
+
+The aggregate cluster gate has a different limitation. Original neutral-source
+particles pass at 95.50%, while original charged-source particles represented
+by clusters pass at 35.62% against their production directions. For the same
+1,994 charged-source clusters with simulated endpoint radius above 1,800 mm,
+using the transported endpoint direction instead raises alignment from 46.04%
+to 94.58%. Cluster checks should distinguish original source charge and use a
+transport reference for charged particles, rather than relax a universal cone.
+The mapped cluster target charge is always zero and cannot supply that
+distinction. Changing the representative to the largest attributed-energy
+cluster only raises aggregate alignment from 73.26% to 73.85%. The detailed
+study and figure are in `reports/idea-alignment-20261117/`; the original
+validation thresholds and data remain unchanged.
+
 One parallel reconstruction worker exited with code 137. Its complete 25-event
 simulation was reconstructed again in isolation with the same settings,
 successfully retaining all events. The isolated reconstruction peaked at
