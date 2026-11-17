@@ -71,6 +71,15 @@ calibration checks; the batch campaign below contains only collision samples.
 
 ## Tallinn 10k-event campaign
 
+Collision generation uses the FCC-ee 2025 beam-spot widths: 26.17 µm in x,
+31.1 nm in y, and 1.198 mm in z at 365 GeV. Pythia supplies the vertex spread;
+no extra GenAlg spatial or timing smear is applied. A native 2,000-event
+generator check per process measured widths consistent with these settings.
+The `beamspot2025` workspace suffix prevents reuse of earlier ROOT files.
+When switching from the previous workspace, archive its completion markers
+under `snakemake_jobs/ild/` before regenerating the workflow; old `.done` files
+must not mark the corrected campaign complete.
+
 The `ild` production requests **10,000 events per physics sample** at 365 GeV:
 
 | Sample | Seeds (end exclusive) | Jobs | Events per job |
@@ -80,7 +89,7 @@ The `ild` production requests **10,000 events per physics sample** at 365 GeV:
 | qq | 500000–500100 | 100 | 100 |
 
 Its workspace is
-`/local/joosep/mlpf/ild/ILD_FCCee_v02_10k_20261117`, with `gen/`, `post/` and
+`/local/joosep/mlpf/ild/ILD_FCCee_v02_10k_beamspot2025_20261117`, with `gen/`, `post/` and
 `tfds/` subdirectories. With 100 complete, independent input shards, each
 dataset has **9,000 train / 1,000 test events**, configuration `1`, version
 `0.1.0`, in ArrayRecord format. Train and test use disjoint ROOT jobs.
@@ -233,6 +242,10 @@ tfds build mlpf/heptfds/ild_pf_edm4hep/qq.py --config 1 \
 
 ## Qualification results, 17 November 2026
 
+These full-simulation results predate the PR #527 beam-spot correction. They
+use the old card widths and additional GenAlg smearing; repeat the physics
+checks with the corrected production before qualifying that campaign.
+
 **Execution and structural integration pass; physics qualification fails.**
 The artifacts are under `reports/ild-fccee-qualification-20261117/` in the
 qualification workspace. They include ROOT and Parquet files, manifests,
@@ -334,7 +347,8 @@ event-paired measurement. CLD's existing track associations and ILD's direct
 hit-majority target policy also differ, so this compares both reconstruction
 and the resulting dataset definitions.
 
-The 17 November 2026 comparison used two 100-event ROOT shards per process
+The comparison below predates the PR #527 beam-spot correction.
+It used two 100-event ROOT shards per process
 and detector, **1,200 reconstructed events** in total. All twelve conversions
 completed. Stable-particle PDG lists differ in every corresponding event,
 confirming that shared seed names do not give paired generator events.
