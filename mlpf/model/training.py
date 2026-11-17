@@ -1288,14 +1288,30 @@ def _run_validation_cycle(
         metrics = {f"step_valid_loss_{name}": value for name, value in losses_valid_combined.items()}
         comet_experiment.log_metrics({**metrics, **_comet_group_metrics(losses_valid_group, "valid")}, step=step)
 
+    # evaluate() reduces losses across ranks, so every worker must update its
+    # stopping state to leave the training loop at the same validation cycle.
+    improved = losses_valid["Total"] < best_val_loss
+    if improved:
+        best_val_loss = losses_valid["Total"]
+        stale_steps = 0
+    else:
+        stale_steps += 1
+
     # All subsequent actions are only done on the main process
     if (rank == 0) or (rank == "cpu"):
-        # Save the best model checkpoint if validation loss improves
-        if losses_valid["Total"] < best_val_loss:
-            best_val_loss = losses_valid["Total"]
-            stale_steps = 0
-        else:
-            stale_steps += 1
+        if improved:
+            # Keep this outside checkpoint-*.pth periodic retention.
+            save_checkpoint(
+                Path(checkpoint_dir) / "best.pth",
+                model,
+                optimizer,
+                {
+                    "step": step,
+                    "lr_schedule_state_dict": lr_schedule.state_dict() if lr_schedule is not None else None,
+                    "train_loader_state_dict": train_loader.state_dict(),
+                    "valid_loader_state_dict": valid_loader.state_dict(),
+                },
+            )
 
         # Log validation losses to TensorBoard
         _log_validation_results_to_tensorboard(tensorboard_writer_valid, losses_valid_combined, step)
@@ -1637,10 +1653,10 @@ def train_all_steps(
                 losses_train_group=losses_train_group,
             )
 
-        # Check for early stopping
-        if stale_steps > patience:
-            _logger.info(f"Stopping early due to stale steps: {stale_steps} > {patience}")
-            break
+            # Patience counts consecutive validation cycles without improvement.
+            if stale_steps > 0 and stale_steps >= patience:
+                _logger.info(f"Stopping early after {stale_steps} validation cycles without loss improvement (patience={patience})")
+                break
 
     # End of training loop
     _logger.info(f"Training completed. Total time on device {rank}: {(time.time() - t0_initial)/60:.3f}min")
@@ -1762,6 +1778,9 @@ def restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config: MLPFCo
 
     Returns the step to start training from: the one after the checkpoint's, or 1 (as for a fresh run) if weights_only.
     """
+    reset_task_weights = getattr(config, "reset_task_loss_weights", False)
+    if reset_task_weights and not weights_only:
+        raise ValueError("reset_task_loss_weights requires load_weights_only; a full resume must retain its calibration")
     model_module = model.module if hasattr(model, "module") else model
     model_state_dict = model_module.state_dict()
     checkpoint_state_dict = checkpoint["model_state_dict"]
@@ -1798,6 +1817,10 @@ def restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config: MLPFCo
 
     if weights_only:
         load_model_weights(checkpoint, model, strict)
+        if reset_task_weights:
+            device = model_module.task_loss_weighter.weights.device
+            model_module.task_loss_weighter = make_task_loss_weighter(config.task_loss_weights.model_dump()).to(device)
+            _logger.info("Reset task loss weights for calibration on the fine-tuning data", color="bold")
         _logger.info("Loaded only the model weights, starting training from step 1", color="bold")
         return 1
 

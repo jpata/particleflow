@@ -121,3 +121,51 @@ def test_weights_only_checks_keys(checkpoint):
     lr_schedule = get_lr_schedule(_config(lr=1e-3), optimizer, TOTAL_STEPS)
     with pytest.raises(KeyError):
         restore_checkpoint(checkpoint, model, optimizer, lr_schedule, _config(), weights_only=True)
+
+
+@pytest.mark.parametrize("reset", [False, True])
+@pytest.mark.parametrize("calibrated", [False, True], ids=["partial-calibration", "completed-calibration"])
+def test_weights_only_can_recalibrate_task_weights_for_new_data(reset, calibrated):
+    from mlpf.conf import TaskLossWeights
+    from mlpf.model.losses import make_task_loss_weighter
+
+    task_config = TaskLossWeights(calibration_steps=3, epsilon=1e-6, min_weight=0.2, max_weight=9)
+    source = torch.nn.Linear(4, 2)
+    source.task_loss_weighter = make_task_loss_weighter(task_config.model_dump())
+    source.task_loss_weighter.weights.fill_(7)
+    source.task_loss_weighter.loss_sums.fill_(11)
+    source.task_loss_weighter.calibration_count.fill_(2)
+    source.task_loss_weighter.calibration_observations.fill_(4)
+    source.task_loss_weighter.calibrated.fill_(calibrated)
+    checkpoint = {"model_state_dict": source.state_dict()}
+    original = {name: value.clone() for name, value in checkpoint["model_state_dict"].items()}
+    target = torch.nn.Linear(4, 2)
+    target.task_loss_weighter = make_task_loss_weighter(TaskLossWeights().model_dump())
+    fresh = make_task_loss_weighter(task_config.model_dump())
+    expected = fresh.state_dict() if reset else source.task_loss_weighter.state_dict()
+
+    step = restore_checkpoint(
+        checkpoint,
+        target,
+        None,
+        None,
+        _config(reset_task_loss_weights=reset, task_loss_weights=task_config),
+        weights_only=True,
+    )
+
+    assert step == 1
+    torch.testing.assert_close(target.weight, source.weight)
+    torch.testing.assert_close(target.bias, source.bias)
+    weighter = target.task_loss_weighter
+    torch.testing.assert_close(weighter.state_dict(), expected)
+    if reset:
+        for setting in task_config.model_dump():
+            assert getattr(weighter, setting) == getattr(fresh, setting)
+    torch.testing.assert_close(checkpoint["model_state_dict"], original)
+
+
+def test_full_resume_rejects_task_weight_reset(checkpoint):
+    checkpoint, _ = checkpoint
+    model, optimizer, schedule = _setup(lr=1e-3)
+    with pytest.raises(ValueError, match="requires load_weights_only"):
+        restore_checkpoint(checkpoint, model, optimizer, schedule, _config(reset_task_loss_weights=True))

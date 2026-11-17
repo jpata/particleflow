@@ -12,7 +12,8 @@ hits subset at batch 8 for 1,000 steps with matched decoder, features and seed.
 
 Native and Ray training workers collect portable benchmark evidence when enabled
 with `--set benchmark.enabled=true`, under each experiment's `benchmark/` directory.
-Recording is disabled by default; batch sweeps enable it explicitly. Use `python -m mlpf.benchmark_report
+Recording is disabled by default; batch sweeps and the PF attention expert/joint
+scenarios enable it explicitly. Use `python -m mlpf.benchmark_report
 experiments/<scenario>` to export per-worker metrics and allocation work totals to
 JSON/CSV. Configuration lives under `benchmark` (`enabled`, `sample_interval_seconds`,
 `warmup_steps`, `gpu_timing_interval`); the scenario runner accepts these through
@@ -238,6 +239,13 @@ The site shell launchers expose this as the `SEED` environment variable. Without
 override, seeds come from the scenario file and are recorded in both the resolved
 configuration and run manifest.
 
+The Flatiron profiles request a fixed 24 CPUs per GPU
+(`slurm.cpus_per_gpu: 24`): one GPU requests 24 CPUs, four GPUs request 96,
+and eight GPUs request 192. The request scales with the job's effective GPU
+count, including scenario variant overrides, independently of dataloader workers
+or dataset groups. When set, `cpus_per_gpu` takes precedence over the fixed
+`cpus_per_task` setting. Non-Flatiron profiles retain their explicit CPU requests.
+
 List the available scenarios and accelerators, then submit using the Flatiron
 picker:
 
@@ -380,6 +388,135 @@ checkpoint intervals of 1,000. See [implementation and comparison details](../..
 ```bash
 scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_readout_50k mi250x --dry-run
 ```
+
+## Track/cluster attention experts
+
+Use the PF attention scenarios to train detector experts, a shared model, or
+fine-tunes of the shared model:
+
+| Scenario | Training data | Initialization |
+| --- | --- | --- |
+| [`pf_fm_experts`](scenarios/pf_fm_experts.yaml) | Separate CLD, CLIC, IDEA 0.3.0 and ColliderML PU0 experts, plus CLD granularity variants | Fresh weights |
+| [`pf_fm_joint`](scenarios/pf_fm_joint.yaml) | CLD, CLIC and ColliderML PU0, using `pyg-cldcliccolliderml-v1` | Fresh weights |
+| [`pf_fm_finetuning`](scenarios/pf_fm_finetuning.yaml) | IDEA 0.3.0 and CLD granularity variants | Compatible joint attention checkpoint |
+
+All use six shared attention layers of width 256 (16 heads × 16 channels),
+native Flash attention, input normalization, LAMB with peak learning rate
+0.0005, and a OneCycle schedule with 30% warmup. The maximum budget is 500,000
+updates with a global batch of 16 events. Nominal experts use native detector
+inputs; joint training, fine-tuning and CLD scan experts enable the feature bag.
+
+GPU counts, dataset roots and Slurm resources come from the platform profile.
+`h100_single` uses one GPU, `a100` four, and `h100` eight; the global batch stays
+16. The H100 training profiles share runtime settings and use eight loader
+workers per GPU. Use `flatiron_h100_benchmark` for four-hour batch sweeps with
+four workers and environment-provided dataset roots.
+
+| Scenario | Validation interval | Early stopping |
+| --- | ---: | --- |
+| Experts | 10,000 updates | 3 consecutive validation cycles without lower total loss |
+| Joint | 10,000 updates | Full update budget |
+| Fine-tuning | 1,000 updates | 30 consecutive validation cycles without lower total loss |
+
+Validation and test inference use up to 256 events per sample. Validation
+records particle matching, PID, kinematic and event-level metrics under
+`metrics/particle/*`. Test inference writes predictions, plots and jet-response
+metrics. Periodic checkpoints are saved every 2,000 updates; the lowest-loss
+checkpoint is retained separately as `checkpoints/best.pth`.
+Per-worker benchmark telemetry is saved under `benchmark/`, sampled every
+second with 100 warmup steps excluded from steady-state throughput.
+
+Preview expert commands without submitting jobs:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/pf_fm_experts.yaml \
+  --platform configs/training/platforms/flatiron_h100_single.yaml --dry-run
+```
+
+## Joint attention fine-tuning
+
+[`pf_fm_finetuning`](scenarios/pf_fm_finetuning.yaml) trains all model parameters
+on IDEA or a CLD granularity variant. IDEA selects qq, ttbar and fully hadronic
+WW samples at version 0.3.0, configuration 1. Its tracks are truth-seeded
+proxies; see the [IDEA dataset description](../../docs/datasets/idea.md).
+
+Set `load` to a compatible joint attention checkpoint in the scenario or pass
+`--set load=/path/to/joint/checkpoint.pth` to the direct runner:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/pf_fm_finetuning.yaml \
+  --platform configs/training/platforms/flatiron_h100_single.yaml --variant idea \
+  --set load=/path/to/joint/checkpoint.pth --dry-run
+```
+
+`load_weights_only: true` starts a fresh optimizer, schedule, RNG stream,
+sampler and step counter. `reset_task_loss_weights: true` recalibrates task-loss
+weights on the fine-tuning data. Use `--continue` to resume the fine-tune's own
+checkpoint with its training state and calibration intact. See
+[resume and fine-tuning](../../docs/training/resume-and-fine-tune.md) for loading
+options and compatibility requirements. Compare raw loss components or physics
+metrics when runs use independently calibrated task-loss weights.
+
+For site submission, set `load` in the scenario or a copied scenario, then run
+`scripts/flatiron/train_scenario.sh pf_fm_finetuning h100_single --variant idea`.
+The direct runner accepts `--set` overrides; the site submitter uses the scenario
+settings.
+
+Input normalization requires statistics for the selected dataset version.
+IDEA 0.3.0 uses `mlpf/model/input_normalization_stats/idea_0.3.0.yaml`.
+To regenerate statistics from the training splits on a host holding the data:
+
+```bash
+export IDEA_TFDS_DIR=/path/to/idea/tfds
+uv run python3 scripts/compute_input_normalization_stats.py map idea 0.3.0 \
+  --data-dir "$IDEA_TFDS_DIR" --work-dir results/input_normalization/idea_0.3.0 \
+  --samples edm_qq edm_ttbar edm_ww_fullhad --shard 0 --num-shards 1
+uv run python3 scripts/compute_input_normalization_stats.py reduce idea 0.3.0 \
+  --work-dir results/input_normalization/idea_0.3.0
+```
+
+The generated YAML must be available on the submission and training hosts.
+
+## CLD granularity experts and fine-tuning
+
+The expert and fine-tuning scenarios provide 12 matched pairs using CLD
+track/cluster datasets at version 3.3.0:
+
+| Variant names | Scan subdirectories | Sample |
+| --- | --- | --- |
+| `cld_ecal_{1p5mm,2mm,2p5mm,3mm,4mm,5p1mm}` | `ecal_<size>/tfds` | `cld_edm_z_tautau_pf` |
+| `cld_hcal_{10mm,12mm,15mm,20mm,25mm,30mm}` | `hcal_<size>/tfds` | `cld_edm_ttbar_pf` |
+
+Each variant uses TFDS configurations 1–10 for its selected sample in training,
+validation and testing. Expert and fine-tuning pairs share the architecture,
+feature bag, optimizer, global batch and sample selection. Experts start from
+fresh weights; fine-tunes load the joint checkpoint and reset training state
+and task-loss calibration. Validation cadence and patience follow the table
+above. All scan variants use the nominal `cld_3.3.0.yaml` normalization tables
+as shared reference statistics.
+
+Set the platform's `data_dir.cld_granularity` to the scan root. The runner
+appends each variant's `data_subdir`, such as `ecal_3mm/tfds`, and passes the
+resolved directory to training. Use `--variant` to select a geometry:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/pf_fm_experts.yaml \
+  --platform configs/training/platforms/flatiron_h100_single.yaml \
+  --variant cld_ecal_3mm --dry-run
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/pf_fm_finetuning.yaml \
+  --platform configs/training/platforms/flatiron_h100_single.yaml \
+  --variant cld_ecal_3mm --set load=/path/to/joint/checkpoint.pth --dry-run
+```
+
+The direct runner's `--set data_dir=/path/to/variation/tfds` overrides the variant
+root. `--data-dir` sets the platform default; a variant-specific root takes
+precedence over that default. For site submission, configure the platform root
+and scenario checkpoint, and select geometries with repeatable `--variant`
+options. Experiments are stored under `<scenario>/<variant>_seed...`.
 
 ## Portable benchmark sweeps
 
