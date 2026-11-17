@@ -6,9 +6,11 @@ IDEA uses measured GGTF/GenFit tracks and dual-readout calorimeter clusters. Its
 
 | Physics sample | TFDS dataset | Recipe version |
 |---|---|---|
-| Top-quark pairs | `idea_edm_ttbar_pf` | 0.4.0 |
-| Fully hadronic WW | `idea_edm_ww_fullhad_pf` | 0.4.0 |
-| Inclusive quark pairs | `idea_edm_qq_pf` | 0.4.0 |
+| Top-quark pairs | `idea_edm_ttbar_pf` | 0.5.0 |
+| Fully hadronic WW | `idea_edm_ww_fullhad_pf` | 0.5.0 |
+| Inclusive quark pairs | `idea_edm_qq_pf` | 0.5.0 |
+| Z→qq at 91 GeV | `idea_edm_z_qq_pf` | 0.5.0 |
+| Z→tautau at 91 GeV | `idea_edm_z_tautau_pf` | 0.5.0 |
 
 The `pyg-idea-pipeline-v1` recipe uses all three samples with configuration **1**. The [catalog](catalog.md#published-availability) records their public availability.
 
@@ -29,7 +31,7 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 ## Builder and recipe compatibility
 
 The builders, production mapping, and `pyg-idea-pipeline-v1` training, validation,
-and test selections use **0.4.0**. This version selects `FittedTracks` at the IP,
+and test selections use **0.5.0** for the v1.4.0 50k campaign. These versions select `FittedTracks` at the IP,
 rejects invalid fits, and derives training truth links from tracker-hit
 associations. Tracks retain their measured kinematics; truth is used only for
 labels. At least 75% of the distinct measurements must vote for one direct,
@@ -64,12 +66,14 @@ The `idea-upstream-2026-11` branch pins upstream components checked on
 detectors use stable Key4hep 2026-04-08 with local k4FWCore v1.6 and
 MarlinReco v1.38.1; rebuild the shared overlays before launching. The
 fitted-track production uses workspace
-`v1.4.0` to avoid reusing
+`v1.4.0/50k` to avoid reusing
 cached proxy, unpatched fitted data, or pre-PR-527 vertex smearing.
 Collision generation now uses the energy-dependent FCC-ee 2025 beam-spot
 widths in the shared Pythia cards, with no additional GenAlg spatial or timing
 smear. The historical full-simulation qualification results below predate this
 correction and need repeating for the corrected campaign. See the [generator instructions](../../mlpf/data/key4hep/gen/idea/README.md).
+The new five-sample, 50k-event campaign uses TFDS **0.5.0** and the
+[joint Tallinn workflow](key4hep-50k.md).
 Archive the previous campaign's completion markers under `snakemake_jobs/idea/`
 before generating workflows for the new workspace; old `.done` files do not
 establish completion of the corrected campaign.

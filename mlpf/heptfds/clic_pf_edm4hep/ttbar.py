@@ -21,8 +21,9 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.3.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.4.0"))
     RELEASE_NOTES = {
+        "3.4.0": "Regenerated with key4hep-sim v1.4.0 and stable Key4hep 2026-04-08 for the 50k-event campaign.",
         "1.0.0": "Initial release.",
         "1.1.0": "update stats, move to 380 GeV",
         "1.2.0": "sin/cos phi separately",

@@ -25,8 +25,9 @@ FIXME
 
 
 class CldEdmWwFullhadHits(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.2.2"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.3.0"))
     RELEASE_NOTES = {
+        "3.3.0": "Regenerated with key4hep-sim v1.4.0 and stable Key4hep 2026-04-08 for the 50k-event campaign.",
         "3.1.0": "Hit-level version with separated tracker and calorimeter hits",
         "3.1.1": "New generation with v1.2.5_key4hep_2025-05-29, 1M events",
         "3.2.0": "Added particle_number target for Object Condensation",

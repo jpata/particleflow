@@ -78,6 +78,13 @@ project:
 #   $workspace_dir/post - Postprocessed intermediate files (parquet/pkl)
 #   $workspace_dir/tfds - Final TensorFlow Datasets
 # -----------------------------------------------------------------------------
+# All dataset stages, without model training, in one SLURM graph.
+campaigns:
+  key4hep_50k:
+    productions: [cld, clic, idea, ild]
+    jobs_dir: "snakemake_jobs/key4hep_v1.4.0_50k"
+    expected_events_per_sample: 50000
+
 productions:
   maia:
     type: "maia"
@@ -363,7 +370,7 @@ productions:
     type: "key4hep"
     model: "pyg-cld-v1"
     comment: "CLD production with Key4Hep"
-    workspace_dir: "${project.paths.storage_root}/cld/v1.4.0"
+    workspace_dir: "${project.paths.storage_root}/cld/v1.4.0/50k"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/cld/CLDConfig"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     gen_environment:
@@ -371,81 +378,42 @@ productions:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
 
     memory:
-      gen: 4000
-      post: 2000
+      gen: 8000
+      post: 8000
       tfds: 16000
 
     slurm_partition: "main"
     slurm_runtime: "48h"
 
+    validate_events: true
+    allow_partial: false
+
     samples:
-      # Single-particle samples for detector validation and calibration only.
-      # Keep these out of tfds_mapping/tfds_hit_mapping so they cannot enter
-      # either CLD training pipeline.
-      gun_e_10gev:
-        process_name: "gun_e_10gev"
-        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [424242, 424342]
-        events_per_job: 100
-      gun_mu_10gev:
-        process_name: "gun_mu_10gev"
-        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [600000, 600100]
-        events_per_job: 100
-      gun_pi_10gev:
-        process_name: "gun_pi_10gev"
-        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [700000, 700100]
-        events_per_job: 100
-      zz:
-        process_name: "p8_ee_ZZ_ecm365"
-        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [100000, 105010]
-        events_per_job: 100
-      zz_tautau_365:
-        process_name: "p8_ee_ZZ_tautau_ecm365"
-        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [100000, 110010]
-        events_per_job: 100
-      zz_tautau_240:
-        process_name: "p8_ee_ZZ_tautau_ecm240"
-        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [100000, 100110]
-        events_per_job: 100
-      zh_tautau_365:
-        process_name: "p8_ee_ZH_Htautau_ecm365"
-        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [200000, 200110]
-        events_per_job: 100
-      zh_tautau_240:
-        process_name: "p8_ee_ZH_Htautau_ecm240"
-        gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [200000, 200110]
-        events_per_job: 100
+      # 500 jobs x 100 events per sample; seed-range ends are exclusive.
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [300000, 310010]
+        seed_range: [300000, 300500]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [400000, 410010]
+        seed_range: [400000, 400500]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [500000, 510010]
+        seed_range: [500000, 500500]
         events_per_job: 100
       z_qq:
         process_name: "p8_ee_Z_qq_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [600000, 650010]
+        seed_range: [600000, 600500]
         events_per_job: 100
       z_tautau:
         process_name: "p8_ee_Z_tautau_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [700000, 750010]
+        seed_range: [700000, 700500]
         events_per_job: 100
 
     postprocessing:
@@ -455,45 +423,52 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
-        version: "3.3.0"
+        version: "3.4.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ww_fullhad"
-        version: "3.3.0"
-        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      zz:
-        builder_path: "mlpf/heptfds/cld_pf_edm4hep/zz"
-        version: "3.3.0"
+        version: "3.4.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/qq"
-        version: "3.3.0"
+        version: "3.4.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      z_qq:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/z_qq"
+        version: "3.4.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      z_tautau:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep/z_tautau"
+        version: "3.4.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     tfds_hit_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ttbar"
-        version: "3.2.2"
+        version: "3.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ww_fullhad"
-        version: "3.2.2"
-        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      zz:
-        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/zz"
-        version: "3.2.2"
+        version: "3.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/qq"
-        version: "3.2.2"
+        version: "3.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      z_qq:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/z_qq"
+        version: "3.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      z_tautau:
+        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/z_tautau"
+        version: "3.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-  # CLIC Production
   clic:
     type: "key4hep"
     model: "pyg-clic-v1"
     comment: "CLIC production with Key4Hep"
-    workspace_dir: "${project.paths.storage_root}/clic/v1.4.0"
+    workspace_dir: "${project.paths.storage_root}/clic/v1.4.0/50k"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/clic"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     gen_environment:
@@ -501,28 +476,42 @@ productions:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
 
     memory:
-      gen: 4000
-      post: 2000
+      gen: 8000
+      post: 8000
       tfds: 16000
 
     slurm_partition: "main"
     slurm_runtime: "48h"
 
+    validate_events: true
+    allow_partial: false
+
     samples:
+      # 500 jobs x 100 events per sample; seed-range ends are exclusive.
       ttbar:
         process_name: "p8_ee_ttbar_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [300000, 310010]
+        seed_range: [300000, 300500]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [400000, 410010]
+        seed_range: [400000, 400500]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [500000, 510010]
+        seed_range: [500000, 500500]
+        events_per_job: 100
+      z_qq:
+        process_name: "p8_ee_Z_qq_ecm91"
+        gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
+        seed_range: [600000, 600500]
+        events_per_job: 100
+      z_tautau:
+        process_name: "p8_ee_Z_tautau_ecm91"
+        gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
+        seed_range: [700000, 700500]
         events_per_job: 100
 
     postprocessing:
@@ -532,31 +521,47 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/ttbar"
-        version: "3.3.0"
+        version: "3.4.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/ww_fullhad"
-        version: "3.3.0"
+        version: "3.4.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep/qq"
-        version: "3.3.0"
+        version: "3.4.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      z_qq:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep/z_qq"
+        version: "3.4.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      z_tautau:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep/z_tautau"
+        version: "3.4.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     tfds_hit_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/ttbar"
-        version: "3.2.2"
+        version: "3.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/ww_fullhad"
-        version: "3.2.2"
+        version: "3.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
         builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/qq"
-        version: "3.2.2"
+        version: "3.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-  # ColliderML Release 1 (OpenDataDetector, pp @ 14 TeV)
+      z_qq:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/z_qq"
+        version: "3.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+      z_tautau:
+        builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/z_tautau"
+        version: "3.3.0"
+        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
   colliderml:
     type: "colliderml"
     comment: "ColliderML Release 1 ttbar (no pileup), clustered view (tracks + our spatial clusters)"
@@ -613,10 +618,11 @@ productions:
     type: "key4hep"
     model: "pyg-ild-v1"
     comment: "ILD_FCCee_v02 qualification; Clupatra/DDKalTest tracking and Pandora PF"
-    workspace_dir: "${project.paths.storage_root}/ild/v1.4.0"
+    workspace_dir: "${project.paths.storage_root}/ild/v1.4.0/50k"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/ild"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     # Never build TFDS from an incomplete set of generation jobs.
+    validate_events: true
     allow_partial: false
     gen_environment:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
@@ -625,44 +631,62 @@ productions:
     slurm_partition: "main"
     slurm_runtime: "48h"
     samples:
-      # 100 independent jobs of 100 events per physics sample; ends are exclusive.
+      # 500 jobs x 100 events per sample; seed-range ends are exclusive.
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [300000, 300100]
+        seed_range: [300000, 300500]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [400000, 400100]
+        seed_range: [400000, 400500]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [500000, 500100]
+        seed_range: [500000, 500500]
         events_per_job: 100
+      z_qq:
+        process_name: "p8_ee_Z_qq_ecm91"
+        gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
+        seed_range: [600000, 600500]
+        events_per_job: 100
+      z_tautau:
+        process_name: "p8_ee_Z_tautau_ecm91"
+        gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
+        seed_range: [700000, 700500]
+        events_per_job: 100
+
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/ild_pf_edm4hep/ttbar"
-        version: "0.1.0"
+        version: "0.2.0"
         config_ids: [1]
       ww_fullhad:
         builder_path: "mlpf/heptfds/ild_pf_edm4hep/ww_fullhad"
-        version: "0.1.0"
+        version: "0.2.0"
         config_ids: [1]
       qq:
         builder_path: "mlpf/heptfds/ild_pf_edm4hep/qq"
-        version: "0.1.0"
+        version: "0.2.0"
+        config_ids: [1]
+      z_qq:
+        builder_path: "mlpf/heptfds/ild_pf_edm4hep/z_qq"
+        version: "0.2.0"
+        config_ids: [1]
+      z_tautau:
+        builder_path: "mlpf/heptfds/ild_pf_edm4hep/z_tautau"
+        version: "0.2.0"
         config_ids: [1]
 
-  # IDEA full simulation with fitted tracks; ycand remains a target oracle.
   idea:
     type: "key4hep"
     model: "pyg-idea-pipeline-v1"
     comment: "IDEA_o1_v03 pipeline validation with quality-selected GGTF/GenFit tracks"
-    workspace_dir: "${project.paths.storage_root}/idea/v1.4.0"
+    workspace_dir: "${project.paths.storage_root}/idea/v1.4.0/50k"
     config_dir: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea"
     gen_container: "${project.paths.project_root}/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     gen_environment:
@@ -671,6 +695,8 @@ productions:
 
     environment:
       progress_interval: 60
+
+    threads: {gen: 4}
 
     memory:
       # GGTF ttbar inference exceeded 28 GiB RSS in the 100-event validation.
@@ -682,39 +708,35 @@ productions:
     slurm_partition: "main"
     slurm_runtime: "48h"
 
+    validate_events: true
+    allow_partial: false
+
     samples:
-      # Initial campaign: exactly 100 generation jobs per sample. The
-      # Snakemake launcher currently uses CHUNK_SIZE=1 and seed-range ends are
-      # exclusive, so each interval below contains 100 jobs.
-      gun_e_10gev:
-        process_name: "gun_e_10gev"
-        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [424242, 424342]
-        events_per_job: 100
-      gun_mu_10gev:
-        process_name: "gun_mu_10gev"
-        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [600000, 600100]
-        events_per_job: 100
-      gun_pi_10gev:
-        process_name: "gun_pi_10gev"
-        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [700000, 700100]
-        events_per_job: 100
+      # 500 jobs x 100 events per sample; seed-range ends are exclusive.
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [300000, 300100]
+        seed_range: [300000, 300500]
         events_per_job: 100
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [400000, 400100]
+        seed_range: [400000, 400500]
         events_per_job: 100
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [500000, 500100]
+        seed_range: [500000, 500500]
+        events_per_job: 100
+      z_qq:
+        process_name: "p8_ee_Z_qq_ecm91"
+        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
+        seed_range: [600000, 600500]
+        events_per_job: 100
+      z_tautau:
+        process_name: "p8_ee_Z_tautau_ecm91"
+        gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
+        seed_range: [700000, 700500]
         events_per_job: 100
 
     postprocessing:
@@ -725,15 +747,23 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/ttbar"
-        version: "0.4.0"
+        version: "0.5.0"
         config_ids: [1]
       ww_fullhad:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/ww_fullhad"
-        version: "0.4.0"
+        version: "0.5.0"
         config_ids: [1]
       qq:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/qq"
-        version: "0.4.0"
+        version: "0.5.0"
+        config_ids: [1]
+      z_qq:
+        builder_path: "mlpf/heptfds/idea_pf_edm4hep/z_qq"
+        version: "0.5.0"
+        config_ids: [1]
+      z_tautau:
+        builder_path: "mlpf/heptfds/idea_pf_edm4hep/z_tautau"
+        version: "0.5.0"
         config_ids: [1]
 
 # -----------------------------------------------------------------------------
@@ -809,14 +839,14 @@ models:
       physical:
         batch_size: 1
         samples:
-          - {name: "ild_edm_qq_pf", version: "0.1.0", splits: ["1"]}
+          - {name: "ild_edm_qq_pf", version: "0.2.0", splits: ["1"]}
     validation_datasets:
       physical:
         batch_size: 1
         samples:
-          - {name: "ild_edm_qq_pf", version: "0.1.0", splits: ["1"]}
+          - {name: "ild_edm_qq_pf", version: "0.2.0", splits: ["1"]}
     test_datasets:
-      - {name: "ild_edm_qq_pf", version: "0.1.0", splits: ["1"]}
+      - {name: "ild_edm_qq_pf", version: "0.2.0", splits: ["1"]}
 
   pyg-idea-pipeline-v1:
     <<: *defaults
@@ -846,13 +876,13 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.4.0"
+            version: "0.5.0"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.4.0"
+            version: "0.5.0"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.4.0"
+            version: "0.5.0"
             splits: ["1"]
 
     validation_datasets:
@@ -860,24 +890,24 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.4.0"
+            version: "0.5.0"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.4.0"
+            version: "0.5.0"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.4.0"
+            version: "0.5.0"
             splits: ["1"]
 
     test_datasets:
       - name: "idea_edm_qq_pf"
-        version: "0.4.0"
+        version: "0.5.0"
         splits: ["1"]
       - name: "idea_edm_ttbar_pf"
-        version: "0.4.0"
+        version: "0.5.0"
         splits: ["1"]
       - name: "idea_edm_ww_fullhad_pf"
-        version: "0.4.0"
+        version: "0.5.0"
         splits: ["1"]
 
   pyg-cms-v1:
@@ -994,13 +1024,13 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1008,24 +1038,24 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "cld_edm_ttbar_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_ww_fullhad_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_qq_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-cld-hits-v1: &pyg_cld_hits_v1
@@ -1055,13 +1085,13 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1069,24 +1099,24 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "cld_edm_ttbar_hits"
-        version: "3.2.2"
+        version: "3.3.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_ww_fullhad_hits"
-        version: "3.2.2"
+        version: "3.3.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_qq_hits"
-        version: "3.2.2"
+        version: "3.3.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-cld-hits-set-v1:
@@ -1225,13 +1255,13 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1239,24 +1269,24 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "clic_edm_ttbar_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_ww_fullhad_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_qq_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-clic-hits-v1: &pyg_clic_hits_v1
@@ -1284,13 +1314,13 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     validation_datasets:
@@ -1298,24 +1328,24 @@ models:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_hits"
-            version: "3.2.2"
+            version: "3.3.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
     test_datasets:
       - name: "clic_edm_ttbar_hits"
-        version: "3.2.2"
+        version: "3.3.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_ww_fullhad_hits"
-        version: "3.2.2"
+        version: "3.3.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_qq_hits"
-        version: "3.2.2"
+        version: "3.3.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
   pyg-clic-hits-set-v1:
@@ -1437,26 +1467,26 @@ models:
         weight: 1.0
         samples:
           - name: "cld_edm_ttbar_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       clic:
         batch_size: 1
         weight: 1.0
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       colliderml:
         batch_size: 1
@@ -1471,25 +1501,25 @@ models:
         batch_size: 1
         samples:
           - name: "cld_edm_ttbar_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_ww_fullhad_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "cld_edm_qq_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       clic:
         batch_size: 1
         samples:
           - name: "clic_edm_ttbar_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_ww_fullhad_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
           - name: "clic_edm_qq_pf"
-            version: "3.3.0"
+            version: "3.4.0"
             splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       colliderml:
         batch_size: 1
@@ -1500,22 +1530,22 @@ models:
 
     test_datasets:
       - name: "cld_edm_ttbar_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_ww_fullhad_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "cld_edm_qq_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_ttbar_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_ww_fullhad_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "clic_edm_qq_pf"
-        version: "3.3.0"
+        version: "3.4.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
       - name: "colliderml_ttbar_nopu_pf"
         version: "1.5.0"

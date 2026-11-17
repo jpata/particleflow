@@ -117,8 +117,8 @@ def test_idea_tfds_mapping_excludes_validation_gun():
         production = yaml.safe_load(handle)["productions"]["idea"]
 
     guns = {name for name in production["samples"] if name.startswith("gun_")}
-    assert guns
-    assert guns.isdisjoint(production["tfds_mapping"])
+    assert not guns
+    assert all(not name.startswith("gun_") for name in production["tfds_mapping"])
 
 
 def test_idea_parquet_discovery_selects_requested_process(tmp_path):

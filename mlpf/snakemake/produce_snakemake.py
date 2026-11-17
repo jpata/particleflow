@@ -25,10 +25,10 @@ def write_bash_script(path, content, project_root=None, tmpdir=None):
         f.write("export OPENBLAS_NUM_THREADS=1\n")
         f.write("export VECLIB_MAXIMUM_THREADS=1\n")
         if tmpdir:
-            f.write(f"export TMPDIR={tmpdir}\n")
-            f.write(f"export TEMPDIR={tmpdir}\n")
-            f.write(f"export TEMP={tmpdir}\n")
-            f.write(f"export TMP={tmpdir}\n")
+            f.write(f'export TMPDIR="{tmpdir}/job_${{SLURM_JOB_ID:-manual-$$}}"\n')
+            f.write("export TEMPDIR=$TMPDIR\n")
+            f.write("export TEMP=$TMPDIR\n")
+            f.write("export TMP=$TMPDIR\n")
             f.write("mkdir -p $TMPDIR\n")
         if project_root:
             f.write(f"cd {project_root}\n")
@@ -78,12 +78,14 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
     return ", ".join([f"{k}={v}" for k, v in res.items()])
 
 
-def main():  # noqa: C901
+def main(argv=None):  # noqa: C901
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
     parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
     parser.add_argument("--allow-partial", action="store_true", help="Allow partial production by only post-processing successful gen jobs")
-    args = parser.parse_args()
+    parser.add_argument("--jobs-root", default=LOCAL_JOBS_DIR, help="Root for generated scripts and completion markers")
+    parser.add_argument("--steps", nargs="+", choices=["gen", "post", "tfds", "tfds_hit", "train"], help="Stages to include")
+    args = parser.parse_args(argv)
 
     spec = load_spec(SPEC_FILE)
 
@@ -107,6 +109,9 @@ def main():  # noqa: C901
         req_steps = ["gen"]
     elif prod_config.get("dataset_only", False):
         req_steps = ["post", "tfds", "tfds_hit"]
+
+    if args.steps is not None:
+        req_steps = args.steps
 
     # Determine models to train
     models_to_train = []
@@ -140,6 +145,7 @@ def main():  # noqa: C901
     mem_post = memory_config.get("post", 2000)
     mem_tfds = memory_config.get("tfds", 4000)
     mem_train = memory_config.get("train", 8000)
+    gen_threads = prod_config.get("threads", {}).get("gen", 1)
 
     # Resolve workspace dir and TFDS dir
     workspace_dir = resolve_path(prod_config["workspace_dir"], spec)
@@ -174,7 +180,7 @@ def main():  # noqa: C901
     tfds_hit_mappings = prod_config.get("tfds_hit_mapping", {})
 
     # Update jobs dir to include production name to avoid conflicts
-    jobs_dir = f"{LOCAL_JOBS_DIR}/{args.production}"
+    jobs_dir = f"{args.jobs_root}/{args.production}"
 
     ensure_dir(f"{jobs_dir}/gen")
     ensure_dir(f"{jobs_dir}/post")
@@ -247,7 +253,7 @@ def main():  # noqa: C901
             f"export OUTDIR={gen_base_dir}/"
             + f" && export CONFIG_DIR={config_dir}"
             + (f" && export CMSSWDIR={cmssw_dir}" if cmssw_dir else "")
-            + f' && export WORKDIR="{scratch_root}/{process_name}_${{seed}}_${{SLURM_JOB_ID:-manual-$$}}"'
+            + f' && export WORKDIR="{scratch_root}/{args.production}_{process_name}_${{seed}}_${{SLURM_JOB_ID:-manual-$$}}"'
             + f" && export NEV={events_per_job}"
             + (f" && export PROGRESS_INTERVAL={progress_interval}" if progress_interval is not None else "")
         )
@@ -264,6 +270,14 @@ def main():  # noqa: C901
             if pythia_card:
                 exports += f' && export CLD_PYTHIA_CARD="{resolve_path(pythia_card, spec)}"'
 
+        validate_events = prod_config.get("validate_events", False)
+        gen_event_check = (
+            f"python3 -c 'import ROOT,sys; f=ROOT.TFile.Open(sys.argv[1]); "
+            f'assert f and not f.IsZombie(), sys.argv[1]; t=f.Get("events"); '
+            f'assert t and t.GetEntries()=={events_per_job}, sys.argv[1]\' "{root_file_proto}"'
+            if validate_events
+            else ""
+        )
         gen_proto_content = f"""
 start_seed=$1
 for (( i=0; i<{CHUNK_SIZE}; i++ )); do
@@ -275,6 +289,7 @@ for (( i=0; i<{CHUNK_SIZE}; i++ )); do
     else
         echo "Skipping {root_file_proto}, already exists"
     fi
+    {gen_event_check}
 done
 """
         write_bash_script(gen_proto_path, gen_proto_content, project_root=project_root, tmpdir=tmpdir)
@@ -363,12 +378,19 @@ done
         echo "Skipping {post_file_final_proto}, already exists"
     fi
 """
+        post_event_check = (
+            f"python3 -c \"import awkward as ak; a=ak.from_parquet('{post_file_final_proto}'); "
+            f"assert len(a.X_track)=={events_per_job}, '{post_file_final_proto}'\""
+            if validate_events
+            else ""
+        )
         post_proto_content = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
 start_seed=$1
 for (( i=0; i<{CHUNK_SIZE}; i++ )); do
     seed=$((start_seed + i))
     {post_cmd.lstrip()}
+    {post_event_check}
 done
 """
         write_bash_script(post_proto_path, post_proto_content, project_root=project_root, tmpdir=tmpdir)
@@ -421,10 +443,13 @@ rule gen:
         "touch {{output}}"
 
 rule gen_task:
+    threads: {gen_threads}
+    params:
+        workspace={workspace_dir!r}
     output:
         "{jobs_dir}/gen/gen_{{sample}}_{{seed}}.done"
     resources:
-        {get_resource_str(executor, mem_gen, cpu_partition, cpu_runtime, slurm_account=slurm_account, tmpdir=tmpdir)}
+        {get_resource_str(executor, mem_gen, cpu_partition, cpu_runtime, threads=gen_threads, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{gen_container_img}"
     shell:
@@ -466,6 +491,8 @@ rule post:
         "touch {{output}}"
 
 rule post_task:{post_rule_input}
+    params:
+        workspace={workspace_dir!r}
     output:
         "{jobs_dir}/post/post_{{sample}}_{{seed}}.done"
     resources:
@@ -565,6 +592,18 @@ rule val_data_task:
             tfds_script_path = f"{jobs_dir}/{step_name}/{step_name}_{sample_key}.sh"
             version = mapping.get("version")
 
+            tfds_event_check = ""
+            if prod_config.get("validate_events", False):
+                begin, end = sample_data["seed_range"]
+                expected = (end - begin) * sample_data["events_per_job"]
+                if expected % len(config_ids):
+                    raise ValueError("Dataset event count must divide evenly across TFDS configurations")
+                tfds_event_check = (
+                    "python3 -c 'import pathlib,sys,tensorflow_datasets as tfds; "
+                    'infos=list(pathlib.Path(sys.argv[1]).rglob("dataset_info.json")); assert len(infos)==1; '
+                    "info=tfds.builder_from_directory(infos[0].parent).info; "
+                    f'assert sum(s.num_examples for s in info.splits.values())=={expected // len(config_ids)}\' "$job_scratch_dir"'
+                )
             cmd = f"""
 config_id=$1
 tfds_id={args.production}_{sample_key}_{step_name}_$config_id
@@ -593,8 +632,9 @@ export TEMPDIR=$job_scratch_dir
 export TEMP=$job_scratch_dir
 export TMP=$job_scratch_dir
 tfds build {builder_path} --config $config_id --data_dir $job_scratch_dir --manual_dir {manual_dir} --overwrite
+{tfds_event_check}
 echo "Copying from $job_scratch_dir to {tfds_root_dir}"
-cp -r $job_scratch_dir/* {tfds_root_dir}/
+python3 -c 'import shutil,sys; shutil.copytree(sys.argv[1], sys.argv[2], dirs_exist_ok=True)' "$job_scratch_dir" "{tfds_root_dir}"
 """
             write_bash_script(tfds_script_path, cmd, project_root=project_root, tmpdir=tmpdir)
 
@@ -608,8 +648,11 @@ cp -r $job_scratch_dir/* {tfds_root_dir}/
             if "post" in req_steps:
                 tfds_rule_input = f'\n    input:\n        "{jobs_dir}/post/post_{{sample}}_all.done"'
 
+            tfds_versions = {key: value.get("version") for key, value in tfds_mappings.items()}
             step_data[step_name]["rules"] += f"""
 rule {step_name}_task:{tfds_rule_input}
+    params:
+        workspace={workspace_dir!r}, versions={tfds_versions!r}
     output:
         "{jobs_dir}/{step_name}/{step_name}_{{sample}}_{step_name}_{{config}}.done"
     resources:
