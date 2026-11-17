@@ -91,3 +91,18 @@ The software compatibility checks and DAG validation do not establish physics
 performance. IDEA's fitted-track efficiency and target/truth jet behavior
 remain qualification topics; the new 91 GeV reconstruction samples require
 validation after generation.
+
+## Generation smoke test
+
+Run this on Tallinn after the same runtime and profile setup.
+
+```bash
+pixi run gen_key4hep_smoke --jobs 20 --dry-run
+pixi run gen_key4hep_smoke --jobs 20
+```
+
+The smoke workflow uses the first ten seeds per detector and sample and keeps
+the production setting of 100 events per job. It runs 200 simulation and
+reconstruction jobs with the same ROOT event-count checks as production.
+Outputs go under each campaign workspace's `smoke/gen/` directory and
+completion markers go under `snakemake_jobs/key4hep_v1.4.0_50k_smoke/`.
