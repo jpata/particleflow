@@ -66,9 +66,77 @@ perfect PFA. The default final track collection refits Clupatra's silicon-hit
 pickup; optional separate silicon/TPC track merging is not enabled.
 
 The production, TFDS mappings and `pyg-ild-v1` recipe are in
-`particleflow_spec.yaml`. On the tested host, run the batch entry point with
-`APPTAINERENV_LD_PRELOAD=/usr/lib64/libffi.so.8 pixi run -m configs/tallinn/pixi.toml gen_ild`.
-Guns are excluded from TFDS mappings.
+`particleflow_spec.yaml`. Guns remain available through the runner for manual
+calibration checks; the batch campaign below contains only collision samples.
+
+## Tallinn 10k-event campaign
+
+The `ild` production requests **10,000 events per physics sample** at 365 GeV:
+
+| Sample | Seeds (end exclusive) | Jobs | Events per job |
+|---|---|---:|---:|
+| ttbar | 300000–300100 | 100 | 100 |
+| WW full-hadronic | 400000–400100 | 100 | 100 |
+| qq | 500000–500100 | 100 | 100 |
+
+Its workspace is
+`/local/joosep/mlpf/ild/ILD_FCCee_v02_10k_20261117`, with `gen/`, `post/` and
+`tfds/` subdirectories. With 100 complete, independent input shards, each
+dataset has **9,000 train / 1,000 test events**, configuration `1`, version
+`0.1.0`, in ArrayRecord format. Train and test use disjoint ROOT jobs.
+
+On Tallinn, update the checkout and select and initialize the SLURM profile:
+
+```bash
+git pull --ff-only
+git submodule update --init --recursive
+ln -sfn configs/tallinn/pixi.toml pixi.toml
+pixi run init
+bash scripts/check_ild_runtime.sh
+```
+
+The runtime check verifies the development image, Monday-view checksum against
+both local installations, pinned ILDConfig, DDG4 and TrackMerger imports, and
+the staged geometry/CAD assets. The image and local installations are ignored
+by Git: a fresh checkout needs the image built as described in the IDEA README
+and geometry/tracker builds using the commands above. Reuse existing matching
+builds; rebuilding shared IDEA installations changes the runtime used by other
+jobs. Each generated ILD job explicitly exports the qualified Monday view and
+`LD_PRELOAD=/usr/lib64/libffi.so.8`.
+
+Preview the complete production and then submit it:
+
+```bash
+PROD=ild pixi run datasets --executor slurm --jobs 20 --dry-run --printshellcmds
+PROD=ild pixi run datasets --executor slurm --jobs 20
+```
+
+`datasets` targets `tfds` in the combined generated `Snakefile`. It schedules
+simulation/reconstruction, postprocessing and dataset building as dependencies;
+it does not request training. `--jobs 20` bounds simultaneous batch jobs and can
+be adjusted to the site allocation. The resource requests are 16 GB per
+generation/reconstruction job, 8 GB per postprocessing or TFDS job, and a
+48-hour runtime limit. `datasets_ild` is the ILD convenience alias. For
+generation only, use `PROD=ild pixi run gen`.
+
+ILD explicitly forbids partial production, including when the shared Pixi
+workflow generator receives `--allow-partial`. An existing subset of successful
+jobs cannot shrink the required input set. Failed jobs block their dataset
+instead of silently producing fewer than the requested events. Rerun the same
+command to resume completed work.
+
+Scaling the measured 600-event campaign suggests approximately **300 GB of
+retained work directories** on scratch, **150 GB of published ROOT files**, and
+**22 GB of Parquet files**, plus TFDS and temporary builds. Reserve headroom;
+the native runner retains simulation and reconstruction intermediates.
+
+The complete graph was dry-run with 300 generation jobs, 300 postprocessing
+jobs and three TFDS builds. A local Snakemake execution reused the six qualified
+ROOT/Parquet shards and built all three datasets; all 600 decoded records had
+finite, aligned features and targets. That two-shard check has 100 train / 100
+test events per sample; the full campaign uses the 90/10 file split above.
+Validation artifacts are in `reports/ild-snakemake-10k-20261117/`. Submission on
+Tallinn remains an operator action; the physics limitations below still apply.
 
 ## Inputs, target policy and baseline
 

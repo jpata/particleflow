@@ -237,10 +237,39 @@ def test_snakemake_routes_ild_generation_postprocessing_and_builders(tmp_path, m
     (tmp_path / "particleflow_spec.yaml").write_text(yaml.safe_dump(spec))
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("PF_SITE", raising=False)
-    monkeypatch.setattr("sys.argv", ["produce_snakemake", "--production", "ild"])
+    monkeypatch.setattr("sys.argv", ["produce_snakemake", "--production", "ild", "--allow-partial"])
     produce_snakemake.main()
     jobs = tmp_path / "snakemake_jobs/ild"
     assert "gen/ild/run_sim.sh p8_ee_qq_ecm365" in (jobs / "gen/gen_qq.sh").read_text()
     assert "--detector ild" in (jobs / "post/post_qq.sh").read_text()
     assert "ild_pf_edm4hep/qq" in (jobs / "tfds/tfds_qq.sh").read_text()
     assert "gun_" not in " ".join(path.name for path in (jobs / "tfds").glob("*.sh"))
+    assert "export LD_PRELOAD=/usr/lib64/libffi.so.8" in (jobs / "gen/gen_qq.sh").read_text()
+    assert "export IDEA_STACK_RELEASE=Mon" in (jobs / "gen/gen_qq.sh").read_text()
+    assert set(spec["productions"]["ild"]["samples"]) == {"ttbar", "qq", "ww_fullhad"}
+    for sample in spec["productions"]["ild"]["samples"].values():
+        begin, end = sample["seed_range"]
+        assert (end - begin) * sample["events_per_job"] == 10000
+    graph = (jobs / "Snakefile").read_text()
+    assert "glob_wildcards" not in graph  # ILD forbids partial datasets, including with --allow-partial.
+    assert all(f"rule {stage}" in graph for stage in ("gen_task", "post_task", "tfds_task"))
+
+    # An existing generation marker must not shrink the requested dataset.
+    pytest.importorskip("snakemake")
+    import os
+    import subprocess
+    import sys
+    import re
+
+    (jobs / "gen/gen_qq_500000.done").touch()
+    run = subprocess.run(
+        [sys.executable, "-m", "snakemake", "-s", str(jobs / "Snakefile"), "--cores", "1", "--executor", "local", "--dry-run", "tfds"],
+        cwd=tmp_path,
+        env=os.environ | {"XDG_CACHE_HOME": str(tmp_path / "cache")},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    output = run.stdout + run.stderr
+    for rule, count in (("gen_task", 299), ("post_task", 300), ("tfds_task", 3)):
+        assert re.search(rf"^\s*{rule}\s+{count}\s*$", output, re.MULTILINE), output[-5000:]
