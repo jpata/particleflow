@@ -14,13 +14,13 @@ mkdir -p $TMPDIR
 cd /home/joosep/particleflow
 
 config_id=$1
-tfds_id=ttbar_tfds_$config_id
-job_scratch_dir=/scratch/local/joosep/tfds_tmp/$tfds_id
+tfds_id=idea_ttbar_tfds_$config_id
+job_scratch_dir=/scratch/local/joosep/tfds_tmp/${tfds_id}_${SLURM_JOB_ID:-manual-$$}
 
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export KERAS_BACKEND=torch
 hostname
-export TFDS_VERSION=0.2.1
+export TFDS_VERSION=0.3.0
 env
 
 echo "Building TFDS for mlpf/heptfds/idea_pf_edm4hep/ttbar config $config_id"
