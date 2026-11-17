@@ -162,3 +162,57 @@ outputs are under `reports/idea-tracking-fix-20261117/`.
 This fixes the dominant reversal mechanism. Overall track alignment still
 fails the 95% quality gate, and the cluster and legacy proxy target-definition
 limitations above remain. Do not relabel existing 0.4.0 files as 0.4.1.
+
+## Calorimeter clustering
+
+The current `CaloTopoClusterFCCee` builds calorimeter-only topological clusters
+from digitized Cherenkov (C) and scintillation (S) fibre signals. It uses an
+ad-hoc constant noise RMS of 1 MeV: seed significance must exceed 4, recursive
+growth significance must exceed 2, and a final one-cell halo accepts every
+present neighbouring cell, including zero-energy cells. Seeds are processed
+in descending cell energy; growing clusters can merge. There is no shower
+splitting, timing cut, track association or charged-shower subtraction.
+Truth links are computed afterwards and do not guide cluster construction.
+
+Geometry supplies cell-ID adjacency: eight immediate neighbours inside a
+tower, with additional stitching across tower and detector boundaries. C and
+S fibres alternate and can join the same cluster. Hit positions project onto
+the fibre front surface, so this representation does not resolve longitudinal
+shower depth. The cluster position is the signal-weighted Cartesian centroid.
+Its energy is raw **C+S**, with separate channel sums retained. These are two
+measurements of the same shower: the existing 10 GeV electron smoke event has
+C=10.003 GeV and S=10.048 GeV. Their sum is a response feature, without a
+calibrated hadronic dual-readout combination at this stage.
+
+An audit of the same 100 ttbar events at 365 GeV found 547,752 clusters,
+averaging 5,477.52 per event, with median signal 14.77 MeV. Of these, 92.29%
+have signal below 100 MeV but carry 24.78% of the clustered signal; 70.43%
+contain only one positive-energy cell. Clustering retains 99.571% of input
+C+S. Cell-energy sums and centroids agree with the stored output within float
+precision. The calorimeter code and geometry are unchanged by the tracking
+0.4.1 patch, so the pre-refit ROOT sample applies to this implementation.
+
+Two native implementation defects were reproduced without changing the
+production code:
+
+- After merging, neighbour traversal can abandon part of its growth frontier.
+  Five adjacent cells with signals `[10,0,8,3,3]` MeV produce only 21 MeV:
+  the last growing cell is missed. An independent same-tower connectivity
+  audit finds 69 missed growing cells connected to seeds in 51 events,
+  totalling 0.252335 GeV across the sample. This is a small energy lower bound,
+  rather than an explanation for all unclustered signal.
+- The native `dR_over_E` shape parameter repeatedly resets its azimuth
+  reference, effectively using the last cell instead of the weighted mean.
+  Correcting the reference changes the width by more than 10% in 93.8% of
+  multicell clusters. Centroids are unaffected. MLPF ignores this parameter
+  and recomputes Cartesian widths from cells, so this bug does not explain
+  its direction-validation failures.
+
+MLPF receives one input per fragment and currently chooses the first owned
+cluster as a particle's representative, after giving tracks priority. A
+cluster is therefore neither a complete particle shower nor a calibrated PF
+object. Fix the native defects before tuning thresholds, and validate channel
+response, charged-particle transport and representative selection separately.
+Detailed source tracing, plots, ROOT statistics and native-plugin reproductions
+are in `reports/idea-clustering-20261117/analysis.md`; production clustering
+code and thresholds were left unchanged by this analysis.
