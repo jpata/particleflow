@@ -245,7 +245,7 @@ def test_snakemake_routes_ild_generation_postprocessing_and_builders(tmp_path, m
     assert "ild_pf_edm4hep/qq" in (jobs / "tfds/tfds_qq.sh").read_text()
     assert "gun_" not in " ".join(path.name for path in (jobs / "tfds").glob("*.sh"))
     assert "export LD_PRELOAD=/usr/lib64/libffi.so.8" in (jobs / "gen/gen_qq.sh").read_text()
-    assert "export IDEA_STACK_RELEASE=Mon" in (jobs / "gen/gen_qq.sh").read_text()
+    assert "export KEY4HEP_RELEASE=2026-04-08" in (jobs / "gen/gen_qq.sh").read_text()
     assert set(spec["productions"]["ild"]["samples"]) == {"ttbar", "qq", "ww_fullhad"}
     for sample in spec["productions"]["ild"]["samples"].values():
         begin, end = sample["seed_range"]
