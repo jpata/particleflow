@@ -78,7 +78,7 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
     return ", ".join([f"{k}={v}" for k, v in res.items()])
 
 
-def main(argv=None):  # noqa: C901
+def main(argv=None, *, spec=None):  # noqa: C901
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
     parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
@@ -87,7 +87,8 @@ def main(argv=None):  # noqa: C901
     parser.add_argument("--steps", nargs="+", choices=["gen", "post", "tfds", "tfds_hit", "train"], help="Stages to include")
     args = parser.parse_args(argv)
 
-    spec = load_spec(SPEC_FILE)
+    if spec is None:
+        spec = load_spec(SPEC_FILE)
 
     if "cms" in args.production:
         req_steps = ["gen", "post", "tfds", "train"]

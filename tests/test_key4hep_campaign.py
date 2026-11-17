@@ -210,3 +210,34 @@ def test_z_hit_dataset_arrayrecord_roundtrip(tmp_path, detector):
     assert example["X"].shape == (1, len(X_FEATURES))
     assert example["ytarget"].shape == (1, len(Y_FEATURES))
     assert not example["ycand"].any()
+
+
+def test_smoke_graph_runs_ten_generation_jobs_per_sample(tmp_path, monkeypatch):
+    pytest.importorskip("snakemake")
+    spec = local_spec(tmp_path)
+    (tmp_path / "particleflow_spec.yaml").write_text(yaml.safe_dump(spec))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PF_SITE", raising=False)
+    produce_key4hep_snakemake.main(["--smoke"])
+    jobs = tmp_path / (spec["campaigns"]["key4hep_50k"]["jobs_dir"] + "_smoke")
+    for detector in DETECTORS:
+        graph = (jobs / detector / "Snakefile").read_text()
+        assert "rule post_task" not in graph
+        assert "rule tfds_task" not in graph
+        for sample, settings in spec["productions"][detector]["samples"].items():
+            first, _ = settings["seed_range"]
+            assert f"gen_{sample}_{{seed}}.done', seed=range({first}, {first + 10}, 1)" in graph
+            script = (jobs / detector / "gen" / f"gen_{sample}.sh").read_text()
+            assert "/50k/smoke/gen/" in script
+            assert "t.GetEntries()==100" in script
+
+    run = subprocess.run(
+        [sys.executable, "-m", "snakemake", "-s", str(jobs / "Snakefile"), "--cores", "1", "--dry-run", "--quiet", "rules"],
+        env=os.environ | {"XDG_CACHE_HOME": str(tmp_path / "cache")},
+        capture_output=True,
+        text=True,
+    )
+    output = run.stdout + run.stderr
+    assert run.returncode == 0, output
+    for detector in DETECTORS:
+        assert re.search(rf"^\s*{detector}_gen_task\s+50\s*$", output, re.MULTILINE), output

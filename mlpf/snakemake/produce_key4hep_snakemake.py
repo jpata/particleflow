@@ -11,6 +11,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--campaign", default="key4hep_50k")
     parser.add_argument("--productions", nargs="+", help="Optional subset of the campaign's detectors")
+    parser.add_argument("--smoke", action="store_true", help="Run only the first ten generation jobs per sample")
     args = parser.parse_args(argv)
     spec = load_spec(produce_snakemake.SPEC_FILE)
     campaign = spec["campaigns"][args.campaign]
@@ -18,6 +19,8 @@ def main(argv=None):
     if not detectors or len(set(detectors)) != len(detectors) or not set(detectors).issubset(campaign["productions"]):
         raise ValueError("Select distinct productions from this campaign")
     jobs = Path(campaign["jobs_dir"])
+    if args.smoke:
+        jobs = jobs.with_name(jobs.name + "_smoke")
     stages = {stage: [] for stage in ("gen", "post", "tfds", "tfds_hit")}
     modules = []
     for detector in detectors:
@@ -33,13 +36,23 @@ def main(argv=None):
         steps = ["gen", "post", "tfds"]
         if production.get("tfds_hit_mapping"):
             steps.append("tfds_hit")
-        produce_snakemake.main(["--production", detector, "--jobs-root", str(jobs), "--steps", *steps])
+        if args.smoke:
+            production["workspace_dir"] += "/smoke"
+            for settings in production["samples"].values():
+                begin, end = settings["seed_range"]
+                if end - begin < 10:
+                    raise ValueError(f"{detector}: smoke test requires ten seeds per sample")
+                settings["seed_range"] = [begin, begin + 10]
+            steps = ["gen"]
+        produce_snakemake.main(["--production", detector, "--jobs-root", str(jobs), "--steps", *steps], spec=spec)
         for step in steps:
             stages[step].append(str(jobs / detector / step / "all.done"))
         modules.append(f'\nmodule {detector}:\n    snakefile: "{detector}/Snakefile"\n\n' f"use rule * from {detector} as {detector}_*\n")
-    targets = stages["tfds"] + stages["tfds_hit"]
-    text = "# Generated dataset campaign: simulation through TFDS; no training.\n"
-    text += f"rule all:\n    input: {targets!r}\n\nrule datasets:\n    input: {targets!r}\n"
+    targets = stages["gen"] if args.smoke else stages["tfds"] + stages["tfds_hit"]
+    text = "# Generated Key4hep campaign.\n"
+    text += f"rule all:\n    input: {targets!r}\n"
+    if not args.smoke:
+        text += f"\nrule datasets:\n    input: {targets!r}\n"
     for stage, outputs in stages.items():
         if outputs:
             text += f"\nrule {stage}:\n    input: {outputs!r}\n"
