@@ -93,8 +93,13 @@ Training selection:
 
 The set recipes (`pyg-cld-hits-set-v1`, `pyg-cld-hits-heptv2-set-v1`,
 `pyg-cld-hits-heptv2-sector-set-v1`, `pyg-clic-hits-set-v1`,
-`pyg-colliderml-hits-set-v1`, and the new `pyg-idea-hits-heptv2-set-v1` with the
-`idea_hits` model family) read the full datasets. The full datasets support only the set output mode, so elementwise
+`pyg-colliderml-hits-set-v1`, and the HEPTv2 set recipes `pyg-clic-hits-heptv2-set-v1`
+(4 T field for the optional fit readout) and `pyg-idea-hits-heptv2-set-v1` (new
+`idea_hits` model family)) read the full datasets. The attention set recipes use learned
+queries and start slowly: on 300 CLIC training events they had not yet predicted any
+particles after 300 steps, while the HEPTv2 recipe with input-conditioned queries
+reached validation F1 0.26 (hits), 0.45 (tracks + calorimeter hits) and 0.49
+(tracks + clusters) after 500 steps. The full datasets support only the set output mode, so elementwise
 recipes keep reading previously built `*_hits` 3.2.2 datasets. Their comparison
 scenario uses `pyg-cld-hits-set-legacy-v1`, the same set model on that data.
 
@@ -156,6 +161,11 @@ The builder validates:
 
 - **Covered:** CLD (all mapped samples, including the granularity scans), CLIC (ttbar, WW, qq), MAIA (ttbar builder), IDEA (ttbar, WW, qq) and ColliderML (ttbar without pileup and with pileup 200).
 - **Validated on converted events:** CLD, CLIC, IDEA and ColliderML (no pileup). The strict Parquet validator runs the TFDS contract on every event (`full_view_labels` gate).
+
+**CLIC.**
+- Uses the shared key4hep path and the CLD collection names.
+- On converted ttbar events, fits to primary tracker hits give a 0.7% relative-pT half-width (6.6% with inclusive `particle_number`), at 4 T.
+- The strict validator passes all gates on ttbar. On qq, two track/cluster-view gates (Pandora baseline energy and target-truth closure) fail identically on `main`.
 
 ## Detector specifics
 
