@@ -34,11 +34,11 @@ set -euo pipefail
 #   # vars don't propagate):
 #   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu0 /path/to/mlpf_parquet
 #
-#   # track/calo targets (third positional arg):
-#   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu0 /path/to/mlpf_parquet track_calo
-#   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu200 /path/to/mlpf_parquet track_calo
+#   # general (full) view: tracks, clusters and hits with truth labels (third positional arg):
+#   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu0 /path/to/mlpf_parquet full
+#   sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu200 /path/to/mlpf_parquet full
 #
-# Safe to parallelize: both the PF and track/calo builders give each config a
+# Safe to parallelize: both the PF and full builders give each config a
 # disjoint slice of the manual_dir parquet shards, and each config prepares
 # into its own directory under --data_dir (TFDS
 # preparation is atomic per config: tmp dir + rename; an already-prepared config is
@@ -59,9 +59,9 @@ TFDS_DATA_DIR="/mnt/ceph/users/ewulff/tensorflow_datasets/colliderml"
 case "${VIEW}:${PU}" in
     pf:pu0) BUILDER="mlpf/heptfds/colliderml_pf/${PROCESS}" ;;
     pf:pu200) BUILDER="mlpf/heptfds/colliderml_pf/${PROCESS}_pu200" ;;
-    track_calo:pu0) BUILDER="mlpf/heptfds/colliderml_track_calo/${PROCESS}" ;;
-    track_calo:pu200) BUILDER="mlpf/heptfds/colliderml_track_calo/${PROCESS}_pu200" ;;
-    *) echo "ERROR: unknown view '${VIEW}' or pileup label '${PU}' in sample ${SAMPLE} (views: pf, track_calo; pileup: pu0, pu200)" >&2; exit 2 ;;
+    full:pu0) BUILDER="mlpf/heptfds/colliderml_full/${PROCESS}" ;;
+    full:pu200) BUILDER="mlpf/heptfds/colliderml_full/${PROCESS}_pu200" ;;
+    *) echo "ERROR: unknown view '${VIEW}' or pileup label '${PU}' in sample ${SAMPLE} (views: pf, full; pileup: pu0, pu200)" >&2; exit 2 ;;
 esac
 if [ ! -f "${BUILDER}.py" ]; then
     echo "ERROR: no TFDS builder ${BUILDER}.py for sample ${SAMPLE}" >&2

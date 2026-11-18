@@ -7,7 +7,7 @@ import tensorflow_datasets as tfds
 
 from mlpf.data.full_targets import ACCOUNTING_FEATURES, ELEMENT_KINDS, INSTANCE_FEATURES, LABEL_FEATURES, ORIGIN_NAMES
 
-from .utils import CLASS_LABELS, X_FEATURES, Y_FEATURES, generate_examples, split_files
+from .utils import CLASS_LABELS, OPTIONAL_EVENT_FIELDS, Y_FEATURES, generate_examples, split_files, x_features
 
 
 class FullBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
@@ -31,8 +31,9 @@ class FullBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
 
     def _info(self):
         features = {}
+        x_names = x_features(self.DETECTOR)
         for kind in ELEMENT_KINDS:
-            features[f"X_{kind}"] = tfds.features.Tensor(shape=(None, len(X_FEATURES[kind])), dtype=np.float32)
+            features[f"X_{kind}"] = tfds.features.Tensor(shape=(None, len(x_names[kind])), dtype=np.float32)
             features[f"ylabel_{kind}"] = tfds.features.Tensor(shape=(None, len(LABEL_FEATURES)), dtype=np.float32)
         features.update(
             {
@@ -44,6 +45,11 @@ class FullBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
                 "targetjets": tfds.features.Tensor(shape=(None, 4), dtype=np.float32),
             }
         )
+        for name in OPTIONAL_EVENT_FIELDS.get(self.DETECTOR, ()):
+            if name == "genmet_withpu":
+                features[name] = tfds.features.Scalar(dtype=np.float32)
+            else:
+                features[name.replace("genjet_", "genjets_")] = tfds.features.Tensor(shape=(None, 4), dtype=np.float32)
         return tfds.core.DatasetInfo(
             builder=self,
             description=f"{self.DETECTOR} {self.PROCESS}: tracks, clusters, tracker hits and calorimeter hits with "
@@ -55,7 +61,7 @@ class FullBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
                 sample=self.PROCESS,
                 input_type="full",
                 element_kinds=list(ELEMENT_KINDS),
-                x_features=X_FEATURES,
+                x_features=x_names,
                 y_features=Y_FEATURES,
                 label_features=LABEL_FEATURES,
                 instance_features=INSTANCE_FEATURES,
@@ -71,4 +77,4 @@ class FullBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
         return {name: self._generate_examples(files) for name, files in split_files(dl_manager.manual_dir, self.builder_config.name).items()}
 
     def _generate_examples(self, files):
-        yield from generate_examples(files)
+        yield from generate_examples(files, self.DETECTOR)

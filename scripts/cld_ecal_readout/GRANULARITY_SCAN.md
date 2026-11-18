@@ -81,7 +81,7 @@ manually:
 ```bash
 PROD=cld_ecal_pitch_5p1 pixi run post --jobs 20
 PROD=cld_ecal_pitch_5p1 pixi run tfds --jobs 5
-PROD=cld_ecal_pitch_5p1 pixi run tfds_hit --jobs 3
+PROD=cld_ecal_pitch_5p1 pixi run tfds_full --jobs 3
 ```
 
 The original ROOT-generation helper and controller are retained in

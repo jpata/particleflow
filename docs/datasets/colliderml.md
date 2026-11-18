@@ -30,7 +30,7 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 
 `productions.colliderml` in `particleflow_spec.yaml` defines the source revision, download and workspace roots, postprocessing, and TFDS mappings. The converter supports radius-graph and CLUE clustering and surrogate-ancestor truth targets. Follow [dataset generation](generate.md) with the reviewed source and workspace paths, and use the shared Parquet validator with `--detector colliderml`.
 
-The [detector-comparison runbook](../validation/detector-comparison.md) records the real-data training check and feature-validation limits. [ColliderML hit datasets](colliderml-hits.md) use separate names and recipes.
+The [detector-comparison runbook](../validation/detector-comparison.md) records the real-data training check and feature-validation limits. The [general ColliderML datasets](colliderml-hits.md) add raw hits and truth labels.
 
 ## Target assignment
 

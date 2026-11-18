@@ -5,9 +5,8 @@ from pathlib import Path
 import awkward as ak
 import numpy as np
 
-from mlpf.conf import EDM4HEP, ParticleFeatures
+from mlpf.conf import EDM4HEP, X_FEATURES as DATASET_X_FEATURES, Dataset, ParticleFeatures
 from mlpf.data.full_targets import ACCOUNTING_FEATURES, ELEMENT_KINDS, INSTANCE_FEATURES, LABEL_FEATURES, ORIGIN_NAMES
-from mlpf.heptfds.track_calo_utils.utils import split_files  # noqa: F401  (shared deterministic file split)
 
 Y_FEATURES = ParticleFeatures.get_names()
 CLASS_LABELS = [0, 211, 130, 22, 11, 13]
@@ -17,6 +16,23 @@ X_FEATURES = {
     "hit_tracker": EDM4HEP.HitFeatures.get_names(),
     "hit_calo": EDM4HEP.HitFeatures.get_names(),
 }
+# ColliderML writes tracks and clusters in its 17-column union layout ("track | cluster" names).
+_COLLIDERML_UNION = [name.split(" | ") for name in DATASET_X_FEATURES[Dataset.COLLIDERML.value]]
+X_FEATURES_BY_DETECTOR = {
+    "colliderml": {
+        **X_FEATURES,
+        "track": [track for track, _ in _COLLIDERML_UNION],
+        "cluster": [cluster for _, cluster in _COLLIDERML_UNION],
+    },
+}
+# Optional per-event fields copied through when the source writes them (ColliderML pileup references).
+OPTIONAL_EVENT_FIELDS = {"colliderml": ("genmet_withpu", "genjet_withpu")}
+
+
+def x_features(detector):
+    return X_FEATURES_BY_DETECTOR.get(detector, X_FEATURES)
+
+
 PN = Y_FEATURES.index("particle_number")
 JET = Y_FEATURES.index("jet_idx")
 ENERGY = Y_FEATURES.index("energy")
@@ -51,11 +67,12 @@ def _integer_column(values, low, high, name):
         raise ValueError(f"{name}: values outside [{low}, {high}] or not integers")
 
 
-def convert_event(event):
+def convert_event(event, detector=None):
     """Validate one Parquet event and return the TFDS example (without key)."""
+    features = x_features(detector)
     example = {}
     for kind in ELEMENT_KINDS:
-        x = matrix(event[f"X_{kind}"], len(X_FEATURES[kind]), f"X_{kind}")
+        x = matrix(event[f"X_{kind}"], len(features[kind]), f"X_{kind}")
         labels = matrix(event[f"ylabel_{kind}"], len(LABEL_FEATURES), f"ylabel_{kind}")
         if len(labels) != len(x):
             raise ValueError(f"X_{kind} and ylabel_{kind} are not aligned")
@@ -114,20 +131,59 @@ def convert_event(event):
             "targetjets": jets,
         }
     )
+    for name in OPTIONAL_EVENT_FIELDS.get(detector, ()):
+        if name == "genmet_withpu":
+            value = np.asarray(ak.to_numpy(event[name])).reshape(-1)
+            if value.size != 1 or not np.isfinite(value).all():
+                raise ValueError(f"{name} must be one finite scalar per event")
+            example[name] = np.float32(value[0])
+        else:
+            example[name.replace("genjet_", "genjets_")] = matrix(event[name], 4, name)
     return example
 
 
-def generate_examples(files):
+def generate_examples(files, detector=None):
+    required = REQUIRED | set(OPTIONAL_EVENT_FIELDS.get(detector, ()))
     for filename in files:
-        missing = REQUIRED - set(ak.metadata_from_parquet(filename)["form"].fields)
+        missing = required - set(ak.metadata_from_parquet(filename)["form"].fields)
         if missing:
             raise ValueError(f"{filename}: missing {sorted(missing)}; regenerate Parquet with the current postprocessor")
-        data = ak.from_parquet(filename, columns=sorted(REQUIRED))
+        data = ak.from_parquet(filename, columns=sorted(required))
         n_events = len(data["X_track"])
         for index in range(n_events):
-            event = {name: data[name][index] for name in REQUIRED}
+            event = {name: data[name][index] for name in required}
             try:
-                example = convert_event(event)
+                example = convert_event(event, detector)
             except ValueError as error:
                 raise ValueError(f"{filename}, event {index}: {error}") from error
             yield f"{Path(filename).name}:{index}", example
+
+
+def split_files(manual_dir, config_name):
+    """Keep the existing deterministic file-based 90/10 split and 1..10 configs.
+
+    Explicit train/ and test/ directories override the automatic split. Files
+    must contain event-disjoint samples; this function never randomly splits rows.
+    """
+    root = Path(manual_dir)
+    if (root / "train").is_dir() or (root / "test").is_dir():
+        splits = {name: sorted((root / name).glob("*.parquet")) for name in ("train", "test")}
+    else:
+        files = sorted(root.glob("*.parquet"))
+        boundary = int(0.9 * len(files))
+        splits = {"train": files[:boundary], "test": files[boundary:]}
+    if any(not files for files in splits.values()):
+        raise ValueError("Provide event-disjoint Parquet in train/ and test/, or at least two files directly in manual_dir")
+    if set(path.resolve() for path in splits["train"]) & set(path.resolve() for path in splits["test"]):
+        raise ValueError("Train and test reference the same source file")
+    selected = {}
+    group = int(config_name) - 1
+    for name, files in splits.items():
+        # Reject ambiguous example keys (also avoids silently combining duplicate files).
+        if len({file.name for file in files}) != len(files):
+            raise ValueError(f"Duplicate file names in {name} split")
+        size = len(files) // 10
+        selected[name] = files[group * size : (group + 1) * size] if group < 9 else files[9 * size :]
+        if not selected[name]:
+            raise ValueError(f"No {name} files for config {config_name}; use config 10 for small samples")
+    return selected

@@ -18,7 +18,7 @@ The project uses a hierarchical configuration system.
 Complex data production and training pipelines are managed using Snakemake or site-specific shell scripts.
 
 - **`mlpf/snakemake/`**: Contains scripts to generate Snakemake workflows.
-  - **`produce_snakemake.py`**: Generates workflows for generation, postprocessing, TFDS creation (including the `tfds_full` stage for the general Key4hep datasets and the `tfds_track_calo` stage for IDEA), and training.
+  - **`produce_snakemake.py`**: Generates workflows for generation, postprocessing, TFDS creation (including the `tfds_full` stage for the general datasets), and training.
   - **`produce_cms_validation_snakemake.py`**: Orchestrates validation workflows specifically for CMS.
   - **`produce_validation_snakemake.py`**: Orchestrates validation workflows for Key4Hep detectors (CLD, CLIC).
 - **`mlpf/pipeline.py`**: The main CLI for training, testing, LR range tests (`lr-find`), and hyperparameter optimization. Supports standard and Ray-based execution.
@@ -33,8 +33,7 @@ Complex data production and training pipelines are managed using Snakemake or si
   - **`key4hep/`**: Scripts for Key4Hep-based generation (`gen/`) and postprocessing (`postprocessing.py`). CLD ECAL/HCAL scan definitions and conversion are in [the granularity runbook](../scripts/cld_ecal_readout/GRANULARITY_SCAN.md).
 - **`mlpf/heptfds/`**: TFDS (TensorFlow Datasets) builders for CMS, CLD, CLIC, IDEA, MAIA, and ColliderML datasets, including cluster-based data and the general track/cluster/hit datasets (`cld_full`, `clic_full`, `maia_full`). Shared EDM4Hep utilities in `edm4hep_utils/`. ColliderML support: `colliderml_pf/ttbar.py` (clustered view; the other Release-1 samples subclass it as `colliderml_pf/<process>[_pu200].py`), `colliderml_hits/{ttbar,ttbar_pu200}.py` (hits view)
   + shared conversion in `colliderml_utils/utils.py` reading the MLPF-format parquet written by `mlpf/data/colliderml/postprocessing.py`.
-  - **General datasets**: `{cld,clic,maia}_full/` builders share `full_utils/`. Tracks, clusters, tracker and calorimeter hits come with a cluster-independent target table and per-element particle/instance/origin labels built by `mlpf/data/full_targets.py`; `mlpf/model/full_view.py` selects element kinds at load time. See [the dataset guide](datasets/full.md).
-  - **Track/calo target builders**: IDEA and ColliderML `*_track_calo/` modules share the `track_calo_utils/` 25-column schema; IDEA uses the `tfds_track_calo` production step, ColliderML `scripts/flatiron/colliderml_tfds.sh` with its `track_calo` view.
+  - **General datasets**: `{cld,clic,maia,idea,colliderml}_full/` builders share `full_utils/`. Tracks, clusters, tracker and calorimeter hits come with a cluster-independent target table and per-element particle/instance/origin labels built by `mlpf/data/full_targets.py`; `mlpf/model/full_view.py` selects element kinds at load time. See [the dataset guide](datasets/full.md).
 
 ## 4. Machine Learning Core (`mlpf/model/`)
 - **`mlpf.py`**: Implementation of the MLPF model, featuring multi-head attention and configurable sub-networks. Supports fused attention, simplified math attention for ONNX export, and HEPT/HEPTv2/LitePT layers that consume detector coordinates.

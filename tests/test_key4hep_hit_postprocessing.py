@@ -11,7 +11,6 @@ from mlpf.data.key4hep.postprocessing import (
     hits_to_features,
     parse_cellid_encoding,
 )
-from mlpf.heptfds.edm4hep_utils.utils_hits import X_FEATURES
 
 
 HIT_FEATURES = ["type", "cellID", "energy", "energyError", "time", "position.x", "position.y", "position.z"]
@@ -198,6 +197,8 @@ def test_registered_muon_collections_are_read():
         assert EDM4HEP.DETECTORS[name].muon_collections == ("MUON",)
 
 
-def test_tfds_hit_schema_retains_detector_surface_fields():
+def test_full_hit_schema_retains_detector_surface_fields():
+    from mlpf.heptfds.full_utils.utils import X_FEATURES
+
     assert EDM4HEP.HitFeatures.get_names()[-3:] == ["system", "side", "layer"]
-    assert X_FEATURES[-3:] == ["system", "side", "layer"]
+    assert X_FEATURES["hit_tracker"][-3:] == ["system", "side", "layer"]

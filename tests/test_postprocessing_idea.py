@@ -134,7 +134,7 @@ def test_idea_cluster_widths_use_associated_cell_energy_and_positions():
 
 
 def _idea_hit_fixture():
-    from mlpf.data.key4hep.idea_track_calo import CHANNELS, LINK
+    from mlpf.data.key4hep.idea_full import CHANNELS, LINK
 
     data = {}
     ids = {"MCParticles": 99}
@@ -153,7 +153,7 @@ def _idea_hit_fixture():
 
 
 def test_idea_hit_channels_use_collection_identity_and_stored_fractions():
-    from mlpf.data.key4hep.idea_track_calo import hit_inputs_and_links
+    from mlpf.data.key4hep.idea_full import hit_inputs_and_links
 
     data, ids = _idea_hit_fixture()
     x, links = hit_inputs_and_links(data, 0, ids, 3)
@@ -167,7 +167,7 @@ def test_idea_hit_channels_use_collection_identity_and_stored_fractions():
 
 @pytest.mark.parametrize("field,value", [("collectionID", 555), ("index", 50)])
 def test_idea_hit_links_reject_invalid_object_ids(field, value):
-    from mlpf.data.key4hep.idea_track_calo import hit_inputs_and_links, LINK
+    from mlpf.data.key4hep.idea_full import hit_inputs_and_links, LINK
 
     data, ids = _idea_hit_fixture()
     data[f"_{LINK}_from/_{LINK}_from.{field}"][0][0] = value
@@ -175,37 +175,27 @@ def test_idea_hit_links_reject_invalid_object_ids(field, value):
         hit_inputs_and_links(data, 0, ids, 3)
 
 
-def test_idea_descendant_tracks_are_members_not_representatives():
-    import fastjet
-    from mlpf.conf import ParticleFeatures
-    from mlpf.data.key4hep.idea_track_calo import build_idea_track_calo
+def test_idea_tracker_hits_follow_digi_sim_mc_links():
+    from mlpf.data.key4hep.idea_full import TRACKER_DIGIS, tracker_hit_features
 
-    data, ids = _idea_hit_fixture()
-    gen = {name: np.zeros(3) for name in ParticleFeatures.get_names()}
-    gen.update(
-        PDG=np.array([211, 211, 22]),
-        charge=np.array([1, 1, 0]),
-        energy=np.array([10, 1, 10]),
-        pt=np.array([10, 1, 10]),
-        phi=np.zeros(3),
-        generatorStatus=np.array([1, 0, 1]),
-        daughters_begin=np.array([0, 1, 1]),
-        daughters_end=np.array([1, 1, 1]),
-        index=np.array([1]),
-    )
-    result = build_idea_track_calo(
-        data,
-        0,
-        ids,
-        gen,
-        ak.Record({"type": [0]}),
-        (np.array([1]), np.array([0]), np.array([1.0])),
-        fastjet.JetDefinition(fastjet.antikt_algorithm, 0.4),
-        0.1,
-    )
-    track = result["ytarget_track_calo_track"]
-    assert track[0, 0] == 0  # Secondary's track must not anchor ancestor kinematics.
-    assert track[0, 13] == 1  # It may still support the ancestor's PF membership.
-    assert result["track_calo_target_particles"][0, 0] == 130
-    assert result["track_calo_target_particles"][0, 1] == 0
-    assert len(result["X_hit_calo"]) == 5
+    data = {}
+    for digi, (sim, link, system) in TRACKER_DIGIS.items():
+        n = 2 if digi == "VTXBDigis" else 0
+        data[f"{digi}/{digi}.eDep"] = [[1e-5] * n]
+        data[f"{digi}/{digi}.time"] = [[0.1] * n]
+        data[f"{digi}/{digi}.position.x"] = [[20.0, 40.0][:n]]
+        data[f"{digi}/{digi}.position.y"] = [[0.0] * n]
+        data[f"{digi}/{digi}.position.z"] = [[5.0] * n]
+        # digi 0 -> sim 1 -> MC 7 (quality bit 30 set); digi 1 -> sim 0 -> MC 3
+        data[f"_{link}_from/_{link}_from.index"] = [[0, 1][:n]]
+        data[f"_{link}_to/_{link}_to.index"] = [[1, 0][:n]]
+        data[f"_{sim}_particle/_{sim}_particle.index"] = [[3, 7][:n]]
+        data[f"_{sim}_particle/_{sim}_particle.collectionID"] = [[99, 99][:n]]
+        data[f"{sim}/{sim}.quality"] = [[0, 1 << 30][:n]]
+        for axis, values in zip("xyz", ([1.0, -2.0], [0.0, 0.0], [0.5, 0.5])):
+            data[f"{sim}/{sim}.momentum.{axis}"] = [values[:n]]
+    x, producer, momentum, unsaved = tracker_hit_features(data, 0, 99)
+    assert x.shape == (2, 15) and np.all(x[:, 0] == 1) and np.all(x[:, 10] == 3) and np.all(x[:, 12] == 1)
+    assert producer.tolist() == [7, 3]
+    np.testing.assert_allclose(momentum[:, 0], [-2.0, 1.0])
+    assert unsaved.tolist() == [True, False]

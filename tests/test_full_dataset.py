@@ -335,3 +335,41 @@ def test_mixed_selection_matches_hit_selection_on_hit_rows():
     b = mixed._engineer_input_features(X_mixed, torch.ones(X_mixed.shape[:2], dtype=torch.bool))
     # the same hits get the same engineered features whether or not tracks are present
     torch.testing.assert_close(b[0, 2:, 16:], a[0, :, 15:])
+
+
+def test_decay_rule_uses_species_and_vertex_groups():
+    from mlpf.data.full_targets import decay_products
+
+    # 0 pi+ -> 1 mu+ (+ 2 nu at the same vertex); 0 pi+ also knocks out 3 p + 4 n elsewhere;
+    # 5 K0S -> 6 pi+ 7 pi-; 8 pi- emits a lone 9 e- (delta-ray-like); 10 mu -> lone 11 e
+    parent = np.array([-1, 0, 0, 0, 0, -1, 5, 5, -1, 8, -1, 10])
+    pdg = np.array([211, -13, 14, 2212, 2112, 310, 211, -211, -211, 11, 13, 11])
+    vertex = np.zeros((12, 3))
+    vertex[[1, 2]] = [100, 0, 0]
+    vertex[[3, 4]] = [200, 0, 0]
+    vertex[[6, 7]] = [50, 0, 0]
+    vertex[9] = [30, 0, 0]
+    vertex[11] = [70, 0, 0]
+    decay = decay_products(parent, pdg, vertex)
+    assert decay.tolist() == [False, True, True, False, False, False, True, True, False, False, False, False]
+    # along-path products (edm4hep bit 28) are never decays
+    continues = np.zeros(12, dtype=bool)
+    continues[[1, 2]] = True
+    assert not decay_products(parent, pdg, vertex, continues)[[1, 2]].any()
+
+
+def test_inward_hits_by_time_and_calorimeter_entry():
+    from mlpf.data.colliderml.full_view import calorimeter_entry_rows
+    from mlpf.data.full_targets import inward_hits_by_time
+
+    producer = np.array([0, 0, 0, 0, 1])
+    positions = np.array([[100.0, 0, 0], [300, 0, 0], [500, 0, 0], [350, 0, 0], [50, 0, 0]])
+    times = np.array([0.1, 0.2, 0.3, 0.4, 0.0])
+    assert inward_hits_by_time(producer, positions, times, np.ones(5, dtype=bool)).tolist() == [False, False, False, True, False]
+
+    # 0 target photon (tracker region) -> 1 e (calorimeter) -> 2 e (calorimeter); 3 is a target
+    # produced in the calorimeter region and stays itself.
+    parent_row = np.array([-1, 0, 1, -1])
+    vertex = np.array([[0.0, 0, 0], [1300, 0, 0], [1400, 0, 0], [1300, 0, 0]])
+    target_index = np.array([0, -1, -1, 1])
+    assert calorimeter_entry_rows(np.array([2, 1, 3, -1]), parent_row, vertex, target_index).tolist() == [0, 0, 3, -1]

@@ -25,6 +25,7 @@ class Dataset(Enum):
     MAIA = "maia"
     CLIC_HITS = "clic_hits"
     CLD_HITS = "cld_hits"
+    IDEA_HITS = "idea_hits"
     COLLIDERML = "colliderml"
     COLLIDERML_HITS = "colliderml_hits"
 
@@ -82,7 +83,6 @@ INPUT_TYPE_IDS = {
     "unknown": 0,
     "hits": 1,
     "pf": 2,
-    "track_calo": 3,
     "full": 4,
 }
 INPUT_TYPE_LABELS = {input_type_id: input_type_name for input_type_name, input_type_id in INPUT_TYPE_IDS.items()}
@@ -99,8 +99,6 @@ def dataset_input_type_id(dataset_name: str) -> int:
     # General datasets: the loader reports "hits" instead when only hit kinds are selected.
     if dataset_name.endswith("_full") or "_full:" in dataset_name or "_full/" in dataset_name:
         return INPUT_TYPE_IDS["full"]
-    if "_track_calo_" in dataset_name:
-        return INPUT_TYPE_IDS["track_calo"]
     if "_hits" in dataset_name:
         return INPUT_TYPE_IDS["hits"]
     return INPUT_TYPE_IDS["pf"]
@@ -585,6 +583,8 @@ FULL_ELEMENT_WIDTHS = {
     "hit_tracker": len(EDM4HEP.HitFeatures.get_names()),
     "hit_calo": len(EDM4HEP.HitFeatures.get_names()),
 }
+# ColliderML writes tracks and clusters in a 17-column union layout.
+FULL_ELEMENT_WIDTHS_BY_SOURCE = {"colliderml": {**FULL_ELEMENT_WIDTHS, "track": 17, "cluster": 17}}
 
 
 X_FEATURES = {
@@ -670,8 +670,7 @@ X_FEATURES = {
         "Null | sigma_y",
         "Null | sigma_z",
     ],
-    # ColliderML hits view mirrors the key4hep hits view (edm4hep_utils/utils_hits.py):
-    # hits in the 15-wide EDM4hep hit layout carry targets directly.
+    # ColliderML hit inputs use the 15-wide key4hep EDM4hep hit layout.
     Dataset.COLLIDERML_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
@@ -760,6 +759,20 @@ JET_CONFIG = {
         match_rel_pt=0.5,
     ),
 }
+
+# IDEA hit inputs (general idea_edm_*_full datasets): hit-input layout of cld_hits, physics
+# conventions (classes, jets) of the IDEA track/cluster model.
+for _table, _source in (
+    (ELEM_TYPES, Dataset.CLD_HITS),
+    (ELEM_TYPES_NONZERO, Dataset.CLD_HITS),
+    (X_FEATURES, Dataset.CLD_HITS),
+    (CLASS_LABELS, Dataset.IDEA),
+    (CLASS_NAMES_LATEX, Dataset.IDEA),
+    (CLASS_NAMES, Dataset.IDEA),
+    (CLASS_NAMES_CAPITALIZED, Dataset.IDEA),
+    (JET_CONFIG, Dataset.IDEA),
+):
+    _table[Dataset.IDEA_HITS.value] = _table[_source.value]
 
 
 Y_FEATURES = ParticleFeatures.get_names()
@@ -1491,8 +1504,9 @@ class MLPFConfig(BaseModel):
             unknown = set(self.full_elements) - set(FULL_ELEMENT_WIDTHS)
             if not self.full_elements or unknown or len(set(self.full_elements)) != len(self.full_elements):
                 raise ValueError(f"full_elements must be distinct kinds from {sorted(FULL_ELEMENT_WIDTHS)}, got {self.full_elements}")
+            widths = FULL_ELEMENT_WIDTHS_BY_SOURCE.get(self.dataset.value.split("_")[0], FULL_ELEMENT_WIDTHS)
             if self.input_dim is None:
-                self.input_dim = max(FULL_ELEMENT_WIDTHS[kind] for kind in self.full_elements)
+                self.input_dim = max(widths[kind] for kind in self.full_elements)
             if self.elemtypes_nonzero is None:
                 self.elemtypes_nonzero = list(range(1, len(self.full_elements) + 1))
         if self.dataset.value in X_FEATURES:
@@ -1503,7 +1517,7 @@ class MLPFConfig(BaseModel):
             if self.elemtypes_nonzero is None:
                 self.elemtypes_nonzero = ELEM_TYPES_NONZERO[self.dataset.value]
         if self.model.output_mode == OutputMode.SET:
-            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.COLLIDERML_HITS):
+            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.COLLIDERML_HITS, Dataset.IDEA_HITS):
                 raise ValueError("model.output_mode='set' is currently supported only for the CLD/CLIC/ColliderML hit datasets")
             if self.model.set_decoder is None:
                 self.model.set_decoder = SetDecoderConfig()

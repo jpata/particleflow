@@ -106,9 +106,8 @@ def main():  # noqa: C901
         req_steps = ["gen"]
     elif prod_config.get("dataset_only", False):
         req_steps = ["post", "tfds", "tfds_full"]
-    for optional_step in ("tfds_track_calo", "tfds_full"):
-        if prod_config.get(f"{optional_step}_mapping") and optional_step not in req_steps:
-            req_steps.append(optional_step)
+    if prod_config.get("tfds_full_mapping") and "tfds_full" not in req_steps:
+        req_steps.append("tfds_full")
 
     # Determine models to train
     models_to_train = []
@@ -173,8 +172,6 @@ def main():  # noqa: C901
 
     samples = prod_config["samples"]
     tfds_mappings = prod_config.get("tfds_mapping", {})
-    tfds_hit_mappings = prod_config.get("tfds_hit_mapping", {})
-    tfds_track_calo_mappings = prod_config.get("tfds_track_calo_mapping", {})
     tfds_full_mappings = prod_config.get("tfds_full_mapping", {})
 
     # Update jobs dir to include production name to avoid conflicts
@@ -183,10 +180,8 @@ def main():  # noqa: C901
     ensure_dir(f"{jobs_dir}/gen")
     ensure_dir(f"{jobs_dir}/post")
     ensure_dir(f"{jobs_dir}/tfds")
-    ensure_dir(f"{jobs_dir}/tfds_hit")
-    for optional_step in ("tfds_track_calo", "tfds_full"):
-        if optional_step in req_steps:
-            ensure_dir(f"{jobs_dir}/{optional_step}")
+    if "tfds_full" in req_steps:
+        ensure_dir(f"{jobs_dir}/tfds_full")
     ensure_dir(f"{jobs_dir}/val")
     ensure_dir(tfds_root_dir)
 
@@ -200,8 +195,6 @@ def main():  # noqa: C901
         "gen": {"targets": [], "rules": ""},
         "post": {"targets": [], "rules": ""},
         "tfds": {"targets": [], "rules": ""},
-        "tfds_hit": {"targets": [], "rules": ""},
-        "tfds_track_calo": {"targets": [], "rules": ""},
         "tfds_full": {"targets": [], "rules": ""},
         "train": {"targets": [], "rules": ""},
         "val": {"targets": [], "rules": ""},
@@ -392,12 +385,7 @@ done
                     f"expand('{jobs_dir}/val/val_{sample_key}_{job_type}_{{seed}}.done', seed=range({seed_start}, {seed_end}, {CHUNK_SIZE}))"
                 )
 
-        if "post" in req_steps and (
-            sample_key in tfds_mappings
-            or sample_key in tfds_hit_mappings
-            or sample_key in tfds_track_calo_mappings
-            or sample_key in tfds_full_mappings
-        ):
+        if "post" in req_steps and (sample_key in tfds_mappings or sample_key in tfds_full_mappings):
             step_data["post"]["targets"].append(f'"{jobs_dir}/post/post_{sample_key}_all.done"')
 
             if args.allow_partial:
@@ -554,14 +542,10 @@ rule val_data_task:
     # PART 2: TFDS Conversion
     # -------------------------------------------------------------------------
     tfds_sentinels = []
-    tfds_hit_sentinels = []
-    tfds_track_calo_sentinels = []
     tfds_full_sentinels = []
 
     tfds_mappings_to_process = {
         "tfds": (prod_config.get("tfds_mapping", {}), tfds_sentinels),
-        "tfds_hit": (prod_config.get("tfds_hit_mapping", {}), tfds_hit_sentinels),
-        "tfds_track_calo": (tfds_track_calo_mappings, tfds_track_calo_sentinels),
         "tfds_full": (tfds_full_mappings, tfds_full_sentinels),
     }
 
@@ -579,7 +563,7 @@ rule val_data_task:
             output_subdir = sample_data.get("output_subdir", process_name)
 
             # Determine manual_dir for TFDS
-            if step_name in ("tfds_track_calo", "tfds_full"):
+            if step_name == "tfds_full":
                 # This builder consumes Parquet from one physics sample, rather than
                 # discovering process subdirectories under the production post root.
                 manual_dir = os.path.join(workspace_dir, "post", output_subdir)
@@ -665,32 +649,6 @@ rule tfds:
         "touch {{output}}"
 """
 
-    if tfds_hit_sentinels and "tfds_hit" in req_steps:
-        step_data["tfds_hit"][
-            "rules"
-        ] += f"""
-rule tfds_hit:
-    input:
-        {", ".join(tfds_hit_sentinels)}
-    output:
-        "{jobs_dir}/tfds_hit/all.done"
-    shell:
-        "touch {{output}}"
-"""
-
-    if tfds_track_calo_sentinels and "tfds_track_calo" in req_steps:
-        step_data["tfds_track_calo"][
-            "rules"
-        ] += f"""
-rule tfds_track_calo:
-    input:
-        {", ".join(tfds_track_calo_sentinels)}
-    output:
-        "{jobs_dir}/tfds_track_calo/all.done"
-    shell:
-        "touch {{output}}"
-"""
-
     if tfds_full_sentinels and "tfds_full" in req_steps:
         step_data["tfds_full"][
             "rules"
@@ -744,8 +702,9 @@ nvidia-smi
             train_inputs = []
             model_dataset = model_spec.get("dataset", prod_config.get("type"))
             if "hits" in model_dataset:
-                if "tfds_hit" in req_steps:
-                    train_inputs.append(f'"{jobs_dir}/tfds_hit/all.done"')
+                # hit-input models read the general full datasets
+                if "tfds_full" in req_steps:
+                    train_inputs.append(f'"{jobs_dir}/tfds_full/all.done"')
             else:
                 if "tfds" in req_steps:
                     train_inputs.append(f'"{jobs_dir}/tfds/all.done"')

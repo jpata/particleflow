@@ -22,9 +22,9 @@ The production and representation comparison below applies to **CLD and CLIC**. 
 
 ## CLD and CLIC representation
 
-| Property | Track/cluster (`*_pf`) | Hit (`*_hits`) |
+| Property | Track/cluster (`*_pf`) | General with hits (`*_full`) |
 |---|---|---|
-| Input elements | Reconstructed tracks and calorimeter clusters | Tracker hits and calorimeter hits |
+| Input elements | Reconstructed tracks and calorimeter clusters | Tracks, clusters, tracker hits and calorimeter hits (selected with `full_elements`) |
 | TFDS task | `pixi run tfds` | `pixi run tfds_full` ([general dataset](full.md)) |
 | CLD model | `pyg-cld-v1` | `pyg-cld-hits-v1` |
 | CLIC model | `pyg-clic-v1` | `pyg-clic-hits-v1` |

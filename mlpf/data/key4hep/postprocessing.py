@@ -1551,8 +1551,8 @@ def _idea_relation(prop_data: Any, name: str, iev: int) -> SparseMatrixCOO:
 
 
 def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: int = -1) -> None:
-    """Convert IDEA events to track/cluster and track/calo target views."""
-    from mlpf.data.key4hep.idea_track_calo import build_idea_track_calo, required_branches
+    """Convert IDEA events to the track/cluster view and the general (full) view."""
+    from mlpf.data.key4hep.idea_full import build_idea_full, required_branches
 
     started = time.monotonic()
     print(f"idea_postprocessing: opening input={fn}", flush=True)
@@ -1614,8 +1614,6 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         flush=True,
     )
     b_field = EDM4HEP.DETECTORS["idea"].b_field
-    empty_x_hit = np.empty((0, len(hit_feature_order)), dtype=np.float32)
-    empty_y_hit = np.empty((0, len(particle_feature_order)), dtype=np.float32)
     ret = []
 
     # Truth reference uses the same propagated-particle definition as the
@@ -1652,8 +1650,22 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         tracks = idea_track_to_features(prop_data, local_iev, b_field)
         clusters = idea_cluster_to_features(prop_data, local_iev, cell_collection_id)
         gp_to_track = _idea_relation(prop_data, "TracksFromGenParticlesAssociation", local_iev)
-        hybrid_targets = build_idea_track_calo(prop_data, local_iev, collection_ids, gen, tracks, gp_to_track, jetdef, jet_ptcut)
         gp_to_cluster = _idea_relation(prop_data, "ClusterMCParticleLinks", local_iev)
+        # General view from the direct (not ancestor-propagated) links.
+        full_view = build_idea_full(
+            prop_data,
+            local_iev,
+            collection_ids,
+            gen,
+            len(tracks["type"]),
+            len(clusters["elemtype"]),
+            gp_to_track,
+            gp_to_cluster,
+            awkward.to_numpy(clusters["energy"]),
+            float(awkward.sum(truth_p4[local_iev].energy)),
+            jetdef,
+            jet_ptcut,
+        )
         # Propagate reconstructed-object links from generator descendants to
         # their status-1 ancestor, matching the existing target convention.
         #
@@ -1788,14 +1800,11 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
             sanitize(arr)
         ret.append(
             {
-                **hybrid_targets,
+                **full_view,
                 "X_track": xtrack,
                 "X_cluster": xcluster,
-                "X_hit_tracker": empty_x_hit,
                 "ytarget_track": ytrack,
                 "ytarget_cluster": ycluster,
-                "ytarget_hit_tracker": empty_y_hit,
-                "ytarget_hit_calo": empty_y_hit,
                 # IDEA_o1_v03 does not produce reconstructed PFOs.
                 "genmet": float(genmet[local_iev]),
                 "genjet": get_feature_matrix(genjets[local_iev], ["pt", "eta", "phi", "energy"]),
@@ -1832,15 +1841,6 @@ FULL_VIEW_FIELDS = {
 }
 
 
-def _has_track_calo_targets(ofn: str) -> bool:
-    """IDEA still writes the track/calo target view."""
-    try:
-        fields = set(awkward.metadata_from_parquet(ofn)["form"].fields)
-    except Exception:
-        return False
-    return {"track_calo_target_particles", "ytarget_track_calo_track", "ytarget_track_calo_hit", "targetjet_track_calo"}.issubset(fields)
-
-
 def _has_full_targets(ofn: str) -> bool:
     try:
         fields = set(awkward.metadata_from_parquet(ofn)["form"].fields)
@@ -1851,12 +1851,7 @@ def _has_full_targets(ofn: str) -> bool:
 
 def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
     # A complete output with the requested target view can be reused.
-    if (
-        os.path.isfile(ofn)
-        and num_events == -1
-        and first_event == 0
-        and (_has_track_calo_targets(ofn) if detector == "idea" else _has_full_targets(ofn))
-    ):
+    if os.path.isfile(ofn) and num_events == -1 and first_event == 0 and _has_full_targets(ofn):
         print("{} exists".format(ofn))
         return
 

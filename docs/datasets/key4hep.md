@@ -19,9 +19,9 @@ CLD uses the detector configuration under `mlpf/data/key4hep/gen/cld/CLDConfig`.
 | CLD | 365 GeV | `ttbar`, fully hadronic `WW`, inclusive `qq`, and `ZZ` |
 | CLICdet | 380 GeV | `ttbar`, fully hadronic `WW`, and inclusive `qq` |
 
-CLD also configures particle-gun and additional 91/240/365 GeV samples for detector studies. The `tfds_mapping` and `tfds_hit_mapping` entries restrict training-data production to the samples in the table.
+CLD also configures particle-gun and additional 91/240/365 GeV samples for detector studies. The `tfds_mapping` and `tfds_full_mapping` entries restrict training-data production to the samples in the table.
 
-Track/cluster builders use version 3.3.0 and hit builders use 3.2.2 and configuration partitions 1--10. The default model recipes select `ttbar`, `WW`, and `qq`; CLD `ZZ` is available through an additional builder.
+Track/cluster builders use version 3.3.0 and the [general builders](full.md) version 1.0.0, both with configuration partitions 1--10. The default model recipes select `ttbar`, `WW`, and `qq`; CLD `ZZ` is available through an additional builder.
 
 ## Detector commands and paths
 
@@ -40,7 +40,7 @@ For either detector, the path evolves as:
     -> <workspace>/tfds/<dataset>/<configuration>/<version>/
 ```
 
-The shared postprocessor writes track/cluster and lower-level hit fields to Parquet. `pixi run tfds` builds track/cluster datasets. `pixi run tfds_hit` builds hit datasets with separate names and model recipes.
+The shared postprocessor writes the track/cluster view and the [general view](full.md) (tracks, clusters and hits with truth labels) to Parquet. `pixi run tfds` builds track/cluster datasets. `pixi run tfds_full` builds the general `*_full` datasets.
 
 ## Validate postprocessing
 
@@ -65,8 +65,8 @@ After validation:
 ```bash
 PROD=cld pixi run tfds
 
-# For studies requiring detector hits
-PROD=cld pixi run tfds_hit
+# For studies requiring detector hits (general dataset)
+PROD=cld pixi run tfds_full
 ```
 
 Read one event from every resulting dataset/configuration using the method in [Download a dataset](download.md). Validate the training Parquet and TFDS artifacts at this stage. The standalone EDM4hep evaluator consumes ROOT files and checkpoints later for model evaluation.

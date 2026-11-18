@@ -97,6 +97,17 @@ class TruthLinks:
     tracker_unsaved_secondary: np.ndarray  # [n_hit] SimTrackerHit produced-by-secondary flag
     is_tracker_hit: np.ndarray  # [n_hit]
     hit_positions: np.ndarray  # [n_hit, 3]
+    # Optional detector-specific truth. Defaults reproduce the key4hep convention.
+    # target_row: [n_mc] owning target row per MC particle (default: nearest ancestor-or-self in targets)
+    target_row: Optional[np.ndarray] = None
+    # decay_product: [n_mc] produced in a decay of its parent (default: decay_products_from_mc)
+    decay_product: Optional[np.ndarray] = None
+    # mc_to_cluster: direct (mc, cluster, weight) links, used instead of hit truth propagated through hit_to_cluster
+    mc_to_cluster: Optional[tuple] = None
+    # tracker_time: [n_hit] hit times; with momentum_available=False, inward legs are found from the
+    # time-ordered hit radius of each producing particle instead of the simulated momentum direction
+    tracker_time: Optional[np.ndarray] = None
+    momentum_available: bool = True
 
 
 def parents_from_daughters(n_mc, daughters_begin, daughters_end, daughter_index):
@@ -135,20 +146,111 @@ def target_ancestors(parent, targets):
     return result
 
 
-def instance_origins(parent, target_row, targets, simulator_status):
-    """Origin of each MC particle relative to its target: primary, decay product or other secondary."""
-    status = np.asarray(simulator_status, dtype=np.int64)
-    decayed = (status & ((1 << BIT_DECAYED_IN_TRACKER) | (1 << BIT_DECAYED_IN_CALORIMETER))) != 0
+NEUTRINOS = {12, 14, 16}
+# Allowed decay products (|PDG|) of long-lived species that the simulation decays.
+# Neutrinos and photons (radiative decays) are allowed everywhere.
+DECAY_DAUGHTERS = {
+    211: {13, 11},
+    321: {13, 11, 211, 111},
+    130: {211, 111, 11, 13},
+    310: {211, 111, 11},
+    3122: {2212, 2112, 211, 111},
+    3222: {2212, 2112, 211, 111},
+    3112: {2112, 211},
+    3212: {3122},
+    3312: {3122, 211},
+    3322: {3122, 111},
+    3334: {3122, 321, 3312, 3322, 211, 111},
+    13: {11},
+    111: {11},
+}
+# Decays that can leave a single stored product (the neutrino is not always stored).
+# Any other single product (for example a delta-ray electron from a pion) is not a decay.
+SINGLE_PRODUCT_DECAYS = {211: {13}, 321: {13, 211}}
+VERTEX_TOLERANCE_MM = 1.0e-3
+
+
+def decay_products(parent, pdg, vertex, continues=None):
+    """Mark particles produced in a decay of their parent.
+
+    The simulator's "decayed in tracker/calorimeter" status is set whenever the parent's track
+    ends there, also for inelastic interactions. A product is therefore a decay product only if
+    its parent is a long-lived decaying species and every particle produced at the same vertex is
+    an allowed decay product of that species. ``continues`` (optional) marks products created
+    along the parent's path, such as delta rays and bremsstrahlung photons, which are never decays.
+    """
+    parent = np.asarray(parent, dtype=np.int64)
+    pdg = np.abs(np.asarray(pdg, dtype=np.int64))
+    vertex = np.asarray(vertex, dtype=np.float64).reshape(len(parent), 3)
+    result = np.zeros(len(parent), dtype=bool)
+    children = {}
+    for child in np.flatnonzero(parent >= 0):
+        children.setdefault(int(parent[child]), []).append(int(child))
+    for mother, kids in children.items():
+        allowed = DECAY_DAUGHTERS.get(int(pdg[mother]))
+        if allowed is None:
+            continue
+        kids = np.asarray(kids)
+        if continues is not None:
+            kids = kids[~np.asarray(continues, dtype=bool)[kids]]
+        remaining = list(kids)
+        while remaining:
+            seed = remaining[0]
+            same = [k for k in remaining if np.all(np.abs(vertex[k] - vertex[seed]) <= VERTEX_TOLERANCE_MM)]
+            remaining = [k for k in remaining if k not in same]
+            species = {int(pdg[k]) for k in same}
+            visible_species = species - NEUTRINOS - {22}
+            if not visible_species <= allowed:
+                continue
+            charged_or_massive = [k for k in same if int(pdg[k]) not in NEUTRINOS | {22}]
+            if len(same) == 1 and not (species & SINGLE_PRODUCT_DECAYS.get(int(pdg[mother]), set())):
+                continue
+            if not charged_or_massive and not (species & NEUTRINOS):
+                continue
+            result[same] = True
+    return result
+
+
+def decay_products_from_mc(parent, mc):
+    """key4hep: decay products from species and vertices; edm4hep bit 28 marks along-path products."""
+    status = np.asarray(mc["simulatorStatus"], dtype=np.int64)
     continues = (status & (1 << BIT_VERTEX_IS_NOT_ENDPOINT_OF_PARENT)) != 0
-    origin = np.full(len(parent), ORIGIN_NONE, dtype=np.int64)
+    vertex = np.stack([mc["vertex_x"], mc["vertex_y"], mc["vertex_z"]], axis=-1)
+    return decay_products(parent, mc["PDG"], vertex, continues)
+
+
+def instance_origins(target_row, targets, decay_product):
+    """Origin of each MC particle relative to its target: primary, decay product or other secondary."""
+    origin = np.full(len(target_row), ORIGIN_NONE, dtype=np.int64)
     targets = np.asarray(targets, dtype=np.int64)
     for mc in np.flatnonzero(target_row >= 0):
         if mc == targets[target_row[mc]]:
             origin[mc] = ORIGIN_PRIMARY
-            continue
-        mother = parent[mc]
-        origin[mc] = ORIGIN_DECAY if mother >= 0 and decayed[mother] and not continues[mc] else ORIGIN_SECONDARY
+        else:
+            origin[mc] = ORIGIN_DECAY if decay_product[mc] else ORIGIN_SECONDARY
     return origin
+
+
+def inward_hits_by_time(producer, positions, times, candidates):
+    """Hits on an inward leg: smaller radius than an earlier hit of the same producer (no momentum needed)."""
+    inward = np.zeros(len(producer), dtype=bool)
+    rows = np.flatnonzero(candidates)
+    if len(rows) == 0:
+        return inward
+    radius = np.hypot(positions[rows, 0], positions[rows, 1])
+    order = np.lexsort((times[rows], producer[rows]))
+    rows, radius, owners = rows[order], radius[order], producer[rows][order]
+    start = 0
+    # A margin keeps measurement noise on one surface from flagging the outgoing leg.
+    margin_mm = 1.0
+    while start < len(rows):
+        stop = start
+        while stop < len(rows) and owners[stop] == owners[start]:
+            stop += 1
+        running_max = np.maximum.accumulate(radius[start:stop])
+        inward[rows[start:stop]] = radius[start:stop] < running_max - margin_mm
+        start = stop
+    return inward
 
 
 def _csc(edges, shape):
@@ -210,14 +312,18 @@ def build_full_targets(truth: TruthLinks, gen_features, n_track: int, n_cluster:
     n_mc = len(truth.parent)
     n_hit = len(truth.is_tracker_hit)
     targets = np.asarray(truth.targets, dtype=np.int64)
-    target_row = target_ancestors(truth.parent, targets)
-    origin_of_mc = instance_origins(truth.parent, target_row, targets, truth.mc["simulatorStatus"])
+    target_row = target_ancestors(truth.parent, targets) if truth.target_row is None else np.asarray(truth.target_row, dtype=np.int64)
+    decay_product = decay_products_from_mc(truth.parent, truth.mc) if truth.decay_product is None else truth.decay_product
+    origin_of_mc = instance_origins(target_row, targets, np.asarray(decay_product, dtype=bool))
 
     hit_weights = _csc(truth.mc_to_hit, (n_mc, n_hit))
     track_weights = _csc(truth.mc_to_track, (n_mc, n_track))
     hit_to_cluster = _csc(truth.hit_to_cluster, (n_hit, n_cluster))
-    # Clusters inherit the calorimeter-hit truth of their hits, weighted by the hit fraction in the cluster.
-    cluster_weights = (hit_weights @ hit_to_cluster).tocsc()
+    if truth.mc_to_cluster is not None:
+        cluster_weights = _csc(truth.mc_to_cluster, (n_mc, n_cluster))
+    else:
+        # Clusters inherit the calorimeter-hit truth of their hits, weighted by the hit fraction in the cluster.
+        cluster_weights = (hit_weights @ hit_to_cluster).tocsc()
 
     kinds = {}
     for kind, weights in (("track", track_weights), ("cluster", cluster_weights), ("hit", hit_weights)):
@@ -227,8 +333,13 @@ def build_full_targets(truth: TruthLinks, gen_features, n_track: int, n_cluster:
     owner, producer, origin, purity = kinds["hit"]
     tracker = np.asarray(truth.is_tracker_hit, dtype=bool)
     primary = tracker & (origin == ORIGIN_PRIMARY)
-    radial = np.einsum("ij,ij->i", truth.tracker_momentum[:, :2], truth.hit_positions[:, :2])
-    looping = primary & (radial < 0)
+    if truth.momentum_available:
+        radial = np.einsum("ij,ij->i", truth.tracker_momentum[:, :2], truth.hit_positions[:, :2])
+        looping = primary & (radial < 0)
+    else:
+        if truth.tracker_time is None:
+            raise ValueError("tracker_time is required when the simulated hit momentum is unavailable")
+        looping = inward_hits_by_time(producer, truth.hit_positions, np.asarray(truth.tracker_time, dtype=np.float64), primary)
     unsaved = primary & np.asarray(truth.tracker_unsaved_secondary, dtype=bool)
     origin = origin.copy()
     origin[looping] = ORIGIN_PRIMARY_LOOPING

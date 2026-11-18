@@ -1,15 +1,15 @@
 # General datasets: tracks, clusters and hits
 
-Key4HEP detectors (CLD, CLIC, MAIA) have two dataset kinds:
+CLD, CLIC, MAIA, IDEA and ColliderML have two dataset kinds:
 
 | Kind | TFDS name | Inputs | Use |
 |---|---|---|---|
-| Track/cluster (PF) | `<det>_edm_<process>_pf` | Reconstructed tracks and calorimeter clusters | Standard MLPF ([track/cluster](track-cluster.md)) |
-| General (full) | `<det>_edm_<process>_full` | Tracks, clusters, tracker hits and calorimeter hits | Reconstruction from raw hits, or from any combination of element kinds |
+| Track/cluster (PF) | `<det>_edm_<process>_pf` (ColliderML: `colliderml_<process>_<pileup>_pf`) | Reconstructed tracks and calorimeter clusters | Standard MLPF ([track/cluster](track-cluster.md)) |
+| General (full) | `<det>_edm_<process>_full` (ColliderML: `colliderml_ttbar_full`, `colliderml_ttbar_pu200_full`) | Tracks, clusters, tracker hits and calorimeter hits | Reconstruction from raw hits, or from any combination of element kinds |
 
-The general dataset replaces the former `<det>_edm_<process>_hits` and
-`<det>_track_calo_<process>` views. Training selects which element kinds to use.
-The target particles are the same for every selection.
+The general dataset replaces the former hit (`*_hits`) and track/calorimeter-hit
+(`*_track_calo_*`) views. Training selects which element kinds to use. The target
+particles are the same for every selection.
 
 ## Targets
 
@@ -45,11 +45,14 @@ Each element kind has a label matrix `ylabel_<kind>` aligned with `X_<kind>`:
 | 1 | `primary` | Produced by the target particle itself (tracker hits: outgoing leg) |
 | 2 | `primary_looping` | Tracker hit of the target itself on an inward-moving leg (p·r < 0) |
 | 3 | `primary_unsaved_secondary` | Tracker hit attributed to the target but produced by a secondary not stored as an MC particle (SimTrackerHit quality bit 30, for example a delta ray) |
-| 4 | `decay_product` | Produced by a descendant created in a decay of its parent (simulatorStatus decayed in tracker or calorimeter) |
+| 4 | `decay_product` | Produced by a descendant created in a decay of its parent: a long-lived species (π±, K, K0S/K0L, Λ, Σ, Ξ, Ω, μ, π0) whose products at that vertex are all allowed decay products (for example π→μν, K0S→ππ, Λ→pπ) |
 | 5 | `secondary` | Produced by another descendant: interaction products, conversions, bremsstrahlung, delta rays |
 
+The simulator's "decayed in tracker/calorimeter" status is set whenever a track ends
+there, including inelastic interactions, so it is not used to identify decays.
+
 Producers come from the direct truth links, before descendants are folded into
-their status-1 ancestor:
+their status-1 ancestor (key4hep; IDEA and ColliderML are listed below):
 - tracker hits: SimTrackerHit → MCParticle;
 - calorimeter hits: the largest `CalohitMCTruthLink` contribution;
 - tracks: the largest `SiTracksMCTruthLink` weight;
@@ -78,8 +81,8 @@ Origin shares among labelled CLD tracker hits are:
 | primary | 62% |
 | primary looping | 3% |
 | primary, unsaved secondary | 3.5% |
-| decay product | 16% |
-| other secondary | 9% |
+| decay product | 5% |
+| other secondary | 20% |
 
 Training selection:
 - Supervise primary trajectories with the `primary` origin.
@@ -89,8 +92,9 @@ Training selection:
 ## Training
 
 The set recipes (`pyg-cld-hits-set-v1`, `pyg-cld-hits-heptv2-set-v1`,
-`pyg-cld-hits-heptv2-sector-set-v1`, `pyg-clic-hits-set-v1`) read the full
-datasets. The full datasets support only the set output mode, so elementwise
+`pyg-cld-hits-heptv2-sector-set-v1`, `pyg-clic-hits-set-v1`,
+`pyg-colliderml-hits-set-v1`, and the new `pyg-idea-hits-heptv2-set-v1` with the
+`idea_hits` model family) read the full datasets. The full datasets support only the set output mode, so elementwise
 recipes keep reading previously built `*_hits` 3.2.2 datasets. Their comparison
 scenario uses `pyg-cld-hits-set-legacy-v1`, the same set model on that data.
 
@@ -118,8 +122,8 @@ python mlpf/pipeline.py --spec-file particleflow_spec.yaml \
 
 ## Produce
 
-The key4hep postprocessor writes the full view into every Parquet file next to the
-track/cluster targets: `ylabel_{track,cluster,hit_tracker,hit_calo}`,
+The key4hep (CLD, CLIC, MAIA, IDEA) and ColliderML postprocessors write the full view
+into every Parquet file next to the track/cluster targets: `ylabel_{track,cluster,hit_tracker,hit_calo}`,
 `target_particles`, `target_instances`, `target_energy_accounting` and
 `targetjet_full`. It no longer writes the legacy `ytarget_hit_*` or
 `*_track_calo_*` fields. Rerunning it on a file without the full view regenerates
@@ -150,6 +154,25 @@ The builder validates:
 
 ## Scope
 
-- **Covered:** CLD (all mapped samples, including the granularity scans), CLIC (ttbar, WW, qq) and MAIA (ttbar builder) use the shared key4hep path.
-- **Validated:** only CLD has been checked on converted events.
-- **Not yet migrated:** IDEA and ColliderML keep their [track/calorimeter-hit view](../track_calo_targets.md) and, for ColliderML, its hit view.
+- **Covered:** CLD (all mapped samples, including the granularity scans), CLIC (ttbar, WW, qq), MAIA (ttbar builder), IDEA (ttbar, WW, qq) and ColliderML (ttbar without pileup and with pileup 200).
+- **Validated on converted events:** CLD, CLIC, IDEA and ColliderML (no pileup). The strict Parquet validator runs the TFDS contract on every event (`full_view_labels` gate).
+
+## Detector specifics
+
+**IDEA.**
+- Tracker hits come from the vertex detector (`VTXB/VTXD`), the silicon wrapper (`SiWrB/SiWrD`) and the drift chamber (`DCH_DigiCollection`), each linked digi → SimTrackerHit → MCParticle.
+- `system` codes are 1/2 for the vertex barrel/endcap, 3 for the drift chamber and 5/6 for the silicon wrapper barrel/endcap.
+- `side` and `layer` are zero, because the files carry no CellIDEncoding metadata.
+- Drift-chamber hits (`type` = 1) store the position on the sense wire without the drift distance, so they are not suitable for circle fits. An event has 1–4 × 10⁴ of them.
+- Calorimeter hits are the separate Cherenkov (`type` 1) and scintillation (`type` 2) channels. Their signals are not calibrated particle energy.
+- Tracks are truth-seeded (`TracksFromGenParticles`). Clusters use `ClusterMCParticleLinks`.
+- On converted ttbar events, fits to primary silicon hits give a 0.6% relative-pT half-width (17% with inclusive `particle_number`).
+
+**ColliderML.**
+- Producers come from `tracker_hits.particle_id` and `calo_hits.contrib_particle_ids`. Target ownership uses the converter's leaf walk, so the owning target matches the existing attribution.
+- ColliderML stores Geant4 shower particles. Deposits of particles produced beyond the tracker envelope (r > 1150 mm or |z| > 3100 mm) are credited to the ancestor that entered the calorimeter, as in key4hep.
+- Tracker hits have no simulated momentum. `true_px/py/pz` stay zero, and inward legs are found from the time-ordered hit radius of each producer.
+- There is no unsaved-secondary flag.
+- Secondary electrons (delta rays, conversions) are stored as separate particles, so about half of the labelled tracker hits are `secondary`.
+- Tracks and clusters use the 17-column union layout, and the pileup reference fields `genmet_withpu`/`genjets_withpu` are copied through.
+- On 20 converted events, fits to primary tracker hits give a 5% relative-pT half-width (68% within 5%), at 3 T.
