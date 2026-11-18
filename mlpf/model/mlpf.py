@@ -1238,6 +1238,13 @@ class MLPF(nn.Module):
         self.config = config.model
         self.output_mode = OutputMode(self.config.output_mode)
         self.is_hit_dataset = config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS)
+        # General *_full datasets: element type codes follow config.full_elements. Hit
+        # feature engineering sees only hit rows, with the legacy tracker=1, calo=2 codes.
+        full_elements = tuple(config.full_elements) if config.uses_full_datasets() else ("hit_tracker", "hit_calo")
+        self.hit_only_elements = full_elements == ("hit_tracker", "hit_calo")
+        self.hit_element_codes = {
+            legacy_code: full_elements.index(kind) + 1 for legacy_code, kind in ((1, "hit_tracker"), (2, "hit_calo")) if kind in full_elements
+        }
         self.raw_input_dim = config.input_dim
         hit_feature_config = config.model.hit_feature_engineering
         self.feature_engineering = (
@@ -1765,6 +1772,8 @@ class MLPF(nn.Module):
         return isinstance(self.feature_engineering, HitFeatureEngineering)
 
     def _engineer_input_features(self, X_features, mask):
+        if self.is_hit_dataset and not self.hit_only_elements:
+            return self._engineer_mixed_input_features(X_features, mask)
         if self.is_hit_dataset:
             # Temporary compatibility fix for hit TFDS 3.2.0, where postprocessing
             # incorrectly stored elemtype=2 for tracker hits. Remove this rewrite
@@ -1778,6 +1787,23 @@ class MLPF(nn.Module):
         if self.uses_hit_feature_engineering:
             return self.feature_engineering(X_features, mask)
         return X_features
+
+    def _engineer_mixed_input_features(self, X_features, mask):
+        """Selections mixing hits with tracks/clusters: engineer hit features on hit rows only."""
+        if not self.uses_hit_feature_engineering:
+            return X_features
+        elemtype = X_features[..., 0]
+        hit_view = torch.zeros_like(X_features)
+        is_hit = torch.zeros_like(elemtype, dtype=torch.bool)
+        for legacy_code, code in self.hit_element_codes.items():
+            rows = elemtype == code
+            hit_view[rows] = X_features[rows]
+            hit_view[..., 0] = torch.where(rows, torch.full_like(elemtype, legacy_code), hit_view[..., 0])
+            is_hit = is_hit | rows
+        hit_mask = is_hit if mask is None else (mask.bool() & is_hit)
+        engineered = self.feature_engineering(hit_view, hit_mask)[..., X_features.shape[-1] :]
+        engineered = engineered * hit_mask.unsqueeze(-1).to(engineered.dtype)
+        return torch.cat([X_features, engineered.to(X_features.dtype)], dim=-1)
 
     def _run_backbone(self, x, mask, initial_embedding, X_features, backbone=None, source_id=None):
         backbone = self.backbone if backbone is None else backbone

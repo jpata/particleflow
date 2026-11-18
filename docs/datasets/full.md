@@ -103,10 +103,11 @@ scenario uses `pyg-cld-hits-set-legacy-v1`, the same set model on that data.
 The default selection reproduces the legacy hit input layout: tracker hits are
 type 1, calorimeter hits type 2, 15 hit features, input type `hits`. The current
 hit recipes therefore train unchanged. Other selections pad each kind to the
-widest kind's feature count, and the batch's `input_type_id` is `full`. The
-current models do not yet have encoders for tracks and hits in one event; such
-selections are a data-level capability for the next step. Batches expose the
-labels as `batch.ylabel`.
+widest kind's feature count (`input_dim` and `elemtypes_nonzero` follow the
+selection), and the batch's `input_type_id` is `full`. In mixed selections the
+hit feature engineering runs only on hit rows; tracks and clusters keep their raw
+features. Batches expose the labels as `batch.ylabel`. For example, train the
+HEPTv2 set recipe on tracks and calorimeter hits with `--full_elements [track,hit_calo]`.
 
 ```bash
 python mlpf/pipeline.py --spec-file particleflow_spec.yaml \

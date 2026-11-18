@@ -265,3 +265,73 @@ def test_grouping_origins():
     batch.ylabel = None
     with pytest.raises(ValueError, match="ylabel"):
         hit_grouping_loss(grouping, batch, matches, origins=[ORIGIN_PRIMARY])
+
+
+def full_model_config(elements, hit_features=True):
+    from mlpf.conf import MLPFConfig
+
+    samples = {"physical": {"batch_size": 1, "samples": {"cld_edm_ttbar_full": {"version": "1.0.0", "splits": ["10"]}}}}
+    return MLPFConfig.model_validate(
+        {
+            "dataset": "cld_hits",
+            "data_dir": "/tmp",
+            "full_elements": elements,
+            "train_dataset": {"cld_hits": samples},
+            "model": {
+                "type": "heptv2",
+                "output_mode": "set",
+                "input_encoding": "split",
+                "heptv2": {"num_convs": 1, "num_heads": 2, "embedding_dim": 16, "width": 16, "block_size": 8},
+                "set_decoder": {"num_slots": 6, "num_layers": 2, "num_heads": 2, "query_init": "input-conditioned", "hit_grouping": True},
+                "hit_feature_engineering": {"enabled": hit_features},
+            },
+            "conv_type": "heptv2",
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "elements,width,types",
+    [
+        (["hit_tracker", "hit_calo"], 15, [1, 2]),
+        (["track", "hit_calo"], 16, [1, 2]),
+        (["track", "cluster"], 19, [1, 2]),
+        (["track", "cluster", "hit_tracker", "hit_calo"], 19, [1, 2, 3, 4]),
+    ],
+)
+def test_model_config_and_forward_for_selections(elements, width, types):
+    from mlpf.model.mlpf import MLPF
+
+    config = full_model_config(elements)
+    assert config.uses_full_datasets()
+    assert config.input_dim == width and config.elemtypes_nonzero == types
+    model = MLPF(config)
+    example = convert_event(parquet_event())
+    out = materialize_full_example(example, elements)
+    X = torch.as_tensor(out["X"])[None]
+    X[..., 1] = X[..., 1].abs() + 0.1
+    X[..., 5] = X[..., 5].abs() + 0.1
+    X = torch.nn.functional.pad(X, (0, 0, 0, 16 - X.shape[1]))  # HEPTv2 block size; the loader pads to a multiple
+    mask = X[..., 0] != 0
+    engineered = model._engineer_input_features(X, mask)
+    # raw features (including element codes) are untouched; engineered columns are zero off hit rows
+    assert torch.equal(engineered[..., :width][mask], X[mask])
+    hit_codes = [code for code, kind in enumerate(elements, start=1) if kind.startswith("hit_")]
+    off_hit = ~torch.isin(X[..., 0], torch.tensor(hit_codes, dtype=X.dtype)) & mask
+    assert torch.all(engineered[..., width:][off_hit] == 0)
+    predictions = model(X, mask)
+    assert all(torch.isfinite(output).all() for output in predictions)
+
+
+def test_mixed_selection_matches_hit_selection_on_hit_rows():
+    from mlpf.model.mlpf import MLPF
+
+    hits = MLPF(full_model_config(["hit_tracker", "hit_calo"]))
+    mixed = MLPF(full_model_config(["track", "hit_tracker", "hit_calo"]))
+    example = convert_event(parquet_event())
+    X_hits = torch.as_tensor(materialize_full_example(example, ["hit_tracker", "hit_calo"])["X"])[None]
+    X_mixed = torch.as_tensor(materialize_full_example(example, ["track", "hit_tracker", "hit_calo"])["X"])[None]
+    a = hits._engineer_input_features(X_hits, torch.ones(X_hits.shape[:2], dtype=torch.bool))
+    b = mixed._engineer_input_features(X_mixed, torch.ones(X_mixed.shape[:2], dtype=torch.bool))
+    # the same hits get the same engineered features whether or not tracks are present
+    torch.testing.assert_close(b[0, 2:, 16:], a[0, :, 15:])

@@ -578,6 +578,15 @@ CLASS_NAMES_CAPITALIZED = {
     Dataset.COLLIDERML_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
+# Feature widths of the element kinds of the general *_full datasets.
+FULL_ELEMENT_WIDTHS = {
+    "track": len(EDM4HEP.TrackFeatures.get_names()),
+    "cluster": len(EDM4HEP.ClusterFeatures.get_names()),
+    "hit_tracker": len(EDM4HEP.HitFeatures.get_names()),
+    "hit_calo": len(EDM4HEP.HitFeatures.get_names()),
+}
+
+
 X_FEATURES = {
     Dataset.CMS.value: [
         "typ_idx",
@@ -1222,9 +1231,9 @@ def _build_base_config(spec, model_config, production_config):
         config["data_dir"] = _tfds_dir(spec, production_config)
 
     dataset_name = config["dataset"].value
-    config["input_dim"] = len(X_FEATURES[dataset_name])
+    # input_dim and elemtypes_nonzero are derived in MLPFConfig.populate_defaults, which also
+    # accounts for the element kinds selected from general *_full datasets.
     config["num_classes"] = len(CLASS_LABELS[dataset_name])
-    config["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[dataset_name]
     return config, dataset_name
 
 
@@ -1476,6 +1485,16 @@ class MLPFConfig(BaseModel):
             sub_config = getattr(self.model, self.conv_type.value)
             if sub_config is not None and hasattr(sub_config, "num_convs"):
                 self.model.backbone.num_convs = sub_config.num_convs
+        if self.uses_full_datasets():
+            # General *_full datasets: the selected element kinds define the input layout
+            # (element type = position in full_elements + 1, width = widest selected kind).
+            unknown = set(self.full_elements) - set(FULL_ELEMENT_WIDTHS)
+            if not self.full_elements or unknown or len(set(self.full_elements)) != len(self.full_elements):
+                raise ValueError(f"full_elements must be distinct kinds from {sorted(FULL_ELEMENT_WIDTHS)}, got {self.full_elements}")
+            if self.input_dim is None:
+                self.input_dim = max(FULL_ELEMENT_WIDTHS[kind] for kind in self.full_elements)
+            if self.elemtypes_nonzero is None:
+                self.elemtypes_nonzero = list(range(1, len(self.full_elements) + 1))
         if self.dataset.value in X_FEATURES:
             if self.input_dim is None:
                 self.input_dim = len(X_FEATURES[self.dataset.value])
@@ -1519,6 +1538,10 @@ class MLPFConfig(BaseModel):
         if isinstance(self.data_dir, str):
             return self.data_dir
         return self.data_dir[SOURCE_LABELS[dataset_source_id(sample_name)]]
+
+    def uses_full_datasets(self):
+        """True if any train/validation/test sample is a general *_full dataset."""
+        return any(name.endswith("_full") for name, _ in self._samples())
 
     def _samples(self):
         """{(name, version)} of the train, validation and test samples."""
