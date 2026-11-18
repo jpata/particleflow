@@ -140,4 +140,4 @@ def test_scan_workflow_selects_runner_and_geometry(tmp_path, monkeypatch, produc
     assert f"bash {sample['gen_script']} {sample['process_name']}" in script
     for path in (runner, generated):
         subprocess.run(["bash", "-n", str(path)], check=True)
-    assert {p.name for p in directory.glob("Snakefile_*")} == {"Snakefile_post", "Snakefile_tfds", "Snakefile_tfds_hit"}
+    assert {p.name for p in directory.glob("Snakefile_*")} == {"Snakefile_post", "Snakefile_tfds", "Snakefile_tfds_full"}

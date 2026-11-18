@@ -11,7 +11,9 @@ import torch
 import torch.utils.data
 
 from mlpf.logger import _logger
-from mlpf.conf import DatasetSamplerMode, MLPFConfig, OutputMode, Y_FEATURES, dataset_input_type_id, dataset_source_id
+from mlpf.conf import INPUT_TYPE_IDS, DatasetSamplerMode, MLPFConfig, OutputMode, Y_FEATURES, dataset_input_type_id, dataset_source_id
+from mlpf.model.full_view import DEFAULT_ELEMENTS as DEFAULT_FULL_ELEMENTS
+from mlpf.model.full_view import HIT_KINDS, is_full_example, materialize_full_example
 
 
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
@@ -33,7 +35,7 @@ except Exception as e:
 
 
 class TFDSDataSource:
-    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None, max_open_readers=None, build_target_set=False):
+    def __init__(self, ds, sort, pad_to_multiple=None, feature_dim=None, max_open_readers=None, build_target_set=False, full_elements=None):
         self.ds = ds
         tmp = self.ds.dataset_info
         self.ds.dataset_info = SimpleNamespace()
@@ -45,6 +47,7 @@ class TFDSDataSource:
         self.feature_dim = feature_dim
         self.max_open_readers = max_open_readers
         self.build_target_set = build_target_set
+        self.full_elements = tuple(full_elements) if full_elements is not None else DEFAULT_FULL_ELEMENTS
 
     def _close_extra_readers(self):
         # ArrayRecordDataSource caches one reader per shard file forever, so the
@@ -80,6 +83,18 @@ class TFDSDataSource:
         ret["source_id"] = np.int64(dataset_source_id(ds_name))
         ret["input_type_id"] = np.int64(dataset_input_type_id(ds_name))
 
+        if is_full_example(ret):
+            if not self.build_target_set:
+                raise ValueError(f"{ds_name}: full datasets currently support only the set output mode")
+            raw_keys = [key for key in ret if key.startswith(("X_", "ylabel_"))] + ["ytarget_particles", "target_instances"]
+            ret.update(materialize_full_example(ret, self.full_elements))
+            for key in raw_keys:
+                ret.pop(key, None)
+            # Hit-only selections are indistinguishable from the legacy hit inputs for
+            # input-type-dependent layers (feature bags, normalization).
+            if set(self.full_elements) <= set(HIT_KINDS):
+                ret["input_type_id"] = np.int64(INPUT_TYPE_IDS["hits"])
+
         Xshape = ret["X"].shape
         _logger.debug(f"Getting item={item}, ds={ds_name}:{self.ds.dataset_info.config_name}, X={Xshape}")
 
@@ -101,13 +116,15 @@ class TFDSDataSource:
             ret["X"] = ret["X"][sortidx]
             ret["ycand"] = ret["ycand"][sortidx]
             ret["ytarget"] = ret["ytarget"][sortidx]
+            if "ylabel" in ret:
+                ret["ylabel"] = ret["ylabel"][sortidx]
 
         # Pad elements to the nearest multiple if specified
         if self.pad_to_multiple and self.pad_to_multiple > 0:
             current_len = ret["X"].shape[0]
             if current_len % self.pad_to_multiple != 0:
                 num_to_pad = self.pad_to_multiple - (current_len % self.pad_to_multiple)
-                for key_to_pad in ["X", "ycand", "ytarget"]:
+                for key_to_pad in ["X", "ycand", "ytarget", "ylabel"]:
                     if key_to_pad in ret:  # Ensure key exists
                         array_to_pad = ret[key_to_pad]
                         pad_width = ((0, num_to_pad), (0, 0))  # Pad only the first axis
@@ -152,7 +169,7 @@ class TFDSDataSource:
             e = ret["X"][:, 5][msk_ho]
             ret["X"][:, 1][msk_ho] = np.sqrt(e**2 - (np.tanh(eta) * e) ** 2)
 
-        if self.build_target_set:
+        if self.build_target_set and "ytarget_set" not in ret:
             # Existing hit datasets store one full target row on an exclusive
             # representative hit for every particle. Other related hits contain
             # only particle_number, so nonzero class rows form the compact set.
@@ -177,14 +194,14 @@ class TFDSDataSource:
 
         # transform pt -> log(pt / elem pt), same for energy
         # where target does not exist, set to 0
-        with np.errstate(divide="ignore"):
+        with np.errstate(divide="ignore", invalid="ignore"):
             target_pt = np.log(ret["ytarget"][:, 2] / ret["X"][:, 1])
         target_pt[np.isnan(target_pt)] = 0
         target_pt[np.isinf(target_pt)] = 0
         ret["ytarget_pt_orig"] = ret["ytarget"][:, 2].copy()
         ret["ytarget"][:, 2] = target_pt
 
-        with np.errstate(divide="ignore"):
+        with np.errstate(divide="ignore", invalid="ignore"):
             target_e = np.log(ret["ytarget"][:, 6] / ret["X"][:, 5])
         target_e[ret["ytarget"][:, 0] == 0] = 0
         target_e[np.isnan(target_e)] = 0
@@ -215,6 +232,7 @@ class PFDataset:
         feature_dim=None,
         max_open_readers=None,
         build_target_set=False,
+        full_elements=None,
     ):
         """
         Args
@@ -242,6 +260,7 @@ class PFDataset:
             feature_dim=feature_dim,
             max_open_readers=max_open_readers,
             build_target_set=build_target_set,
+            full_elements=full_elements,
         )
 
         if num_samples and num_samples < len(self.ds):
@@ -259,6 +278,8 @@ class PFBatch:
         self.X = kwargs["X"]
         self.ytarget = kwargs.get("ytarget")
         self.ytarget_set = kwargs.get("ytarget_set")
+        # per-element truth labels of full datasets (mlpf.data.full_targets.LABEL_FEATURES)
+        self.ylabel = kwargs.get("ylabel")
         self.ytarget_pt_orig = kwargs.get("ytarget_pt_orig", None)
         self.ytarget_e_orig = kwargs.get("ytarget_e_orig", None)
         self.pythia = kwargs.get("pythia", None)
@@ -807,6 +828,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                         feature_dim=config.input_dim,
                         max_open_readers=config.max_open_readers,
                         build_target_set=config.model.output_mode == OutputMode.SET,
+                        full_elements=config.full_elements,
                     ).ds
 
                     if (rank == 0) or (rank == "cpu"):
@@ -837,6 +859,8 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             per_particle_keys = ["X", "ytarget"]
             if config.model.output_mode == OutputMode.SET:
                 per_particle_keys.append("ytarget_set")
+            if any(sample_name.endswith("_full") for sample_name in physical_ds.samples):
+                per_particle_keys.append("ylabel")
             loader_generator = torch.Generator()
             rank_index = int(rank) if isinstance(rank, int) else 0
             split_offset = 0 if split == "train" else 1000

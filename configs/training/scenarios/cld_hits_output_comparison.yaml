@@ -6,7 +6,8 @@ variants:
   elementwise:
     model_name: pyg-cld-hits-v1
   set:
-    model_name: pyg-cld-hits-set-v1
+    # same set model on the archived hit data the elementwise recipe reads
+    model_name: pyg-cld-hits-set-legacy-v1
     overrides:
       # Start slots from energetic detector inputs so their initial direction is
       # physical, then refine within a local eta-phi neighborhood.

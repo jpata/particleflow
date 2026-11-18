@@ -82,6 +82,8 @@ INPUT_TYPE_IDS = {
     "unknown": 0,
     "hits": 1,
     "pf": 2,
+    "track_calo": 3,
+    "full": 4,
 }
 INPUT_TYPE_LABELS = {input_type_id: input_type_name for input_type_name, input_type_id in INPUT_TYPE_IDS.items()}
 
@@ -94,6 +96,11 @@ def dataset_source_id(dataset_name: str) -> int:
 
 
 def dataset_input_type_id(dataset_name: str) -> int:
+    # General datasets: the loader reports "hits" instead when only hit kinds are selected.
+    if dataset_name.endswith("_full") or "_full:" in dataset_name or "_full/" in dataset_name:
+        return INPUT_TYPE_IDS["full"]
+    if "_track_calo_" in dataset_name:
+        return INPUT_TYPE_IDS["track_calo"]
     if "_hits" in dataset_name:
         return INPUT_TYPE_IDS["hits"]
     return INPUT_TYPE_IDS["pf"]
@@ -104,7 +111,8 @@ def dataset_for_sample(sample_name: str, default: "Dataset") -> "Dataset":
     source = SOURCE_LABELS.get(dataset_source_id(sample_name), "unknown")
     if source == "unknown":
         return default
-    if dataset_input_type_id(sample_name) == INPUT_TYPE_IDS["hits"]:
+    # Full datasets are read by the raw-hit model family (default element selection: hits).
+    if dataset_input_type_id(sample_name) in (INPUT_TYPE_IDS["hits"], INPUT_TYPE_IDS["full"]):
         source = f"{source}_hits"
     try:
         return Dataset(source)
@@ -570,6 +578,15 @@ CLASS_NAMES_CAPITALIZED = {
     Dataset.COLLIDERML_HITS.value: ["none", "Charged hadron", "Neutral hadron", "Photon", "Electron", "Muon"],
 }
 
+# Feature widths of the element kinds of the general *_full datasets.
+FULL_ELEMENT_WIDTHS = {
+    "track": len(EDM4HEP.TrackFeatures.get_names()),
+    "cluster": len(EDM4HEP.ClusterFeatures.get_names()),
+    "hit_tracker": len(EDM4HEP.HitFeatures.get_names()),
+    "hit_calo": len(EDM4HEP.HitFeatures.get_names()),
+}
+
+
 X_FEATURES = {
     Dataset.CMS.value: [
         "typ_idx",
@@ -1024,6 +1041,13 @@ class SetDecoderConfig(BaseModel):
     hit_grouping_background_weight: float = Field(default=0.1, gt=0.0)
     hit_grouping_detector_balanced: bool = False
     hit_grouping_tracker_particle_balanced: bool = False
+    # Full datasets only: element origin codes (mlpf.data.full_targets.ORIGIN_NAMES) that count as
+    # members of their particle in the grouping loss. None keeps every labelled element (inclusive).
+    # [1] supervises only hits the particle produced itself on its outgoing trajectory.
+    hit_grouping_origins: Optional[List[int]] = None
+    # How elements of a particle with an excluded origin enter the grouping loss: "ignore" (zero
+    # weight) or "background" (supervised as unowned).
+    hit_grouping_excluded_as: Literal["ignore", "background"] = "ignore"
     tracker_overlap_loss_weight: float = Field(default=0.0, ge=0.0)
     hit_grouping_sparse: bool = False
     hit_grouping_topk: int = Field(default=4, gt=0)
@@ -1207,9 +1231,9 @@ def _build_base_config(spec, model_config, production_config):
         config["data_dir"] = _tfds_dir(spec, production_config)
 
     dataset_name = config["dataset"].value
-    config["input_dim"] = len(X_FEATURES[dataset_name])
+    # input_dim and elemtypes_nonzero are derived in MLPFConfig.populate_defaults, which also
+    # accounts for the element kinds selected from general *_full datasets.
     config["num_classes"] = len(CLASS_LABELS[dataset_name])
-    config["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[dataset_name]
     return config, dataset_name
 
 
@@ -1405,6 +1429,9 @@ class MLPFConfig(BaseModel):
     task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
     lr_finder: LRFinderConfig = Field(default_factory=LRFinderConfig)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
+    # Element kinds read from general *_full datasets, in element-type order (type = position + 1).
+    # Kinds: track, cluster, hit_tracker, hit_calo. Only used for datasets whose name ends in _full.
+    full_elements: List[str] = Field(default_factory=lambda: ["hit_tracker", "hit_calo"])
     validation_diagnostics_batches: int = 0  # batches per rank for domain, momentum, and hit-grouping diagnostics; 0 disables extras
 
     validation_linear_probe: bool = False  # frozen hit-instance ARI and calo continuation probes on diagnostic batches
@@ -1458,6 +1485,16 @@ class MLPFConfig(BaseModel):
             sub_config = getattr(self.model, self.conv_type.value)
             if sub_config is not None and hasattr(sub_config, "num_convs"):
                 self.model.backbone.num_convs = sub_config.num_convs
+        if self.uses_full_datasets():
+            # General *_full datasets: the selected element kinds define the input layout
+            # (element type = position in full_elements + 1, width = widest selected kind).
+            unknown = set(self.full_elements) - set(FULL_ELEMENT_WIDTHS)
+            if not self.full_elements or unknown or len(set(self.full_elements)) != len(self.full_elements):
+                raise ValueError(f"full_elements must be distinct kinds from {sorted(FULL_ELEMENT_WIDTHS)}, got {self.full_elements}")
+            if self.input_dim is None:
+                self.input_dim = max(FULL_ELEMENT_WIDTHS[kind] for kind in self.full_elements)
+            if self.elemtypes_nonzero is None:
+                self.elemtypes_nonzero = list(range(1, len(self.full_elements) + 1))
         if self.dataset.value in X_FEATURES:
             if self.input_dim is None:
                 self.input_dim = len(X_FEATURES[self.dataset.value])
@@ -1501,6 +1538,10 @@ class MLPFConfig(BaseModel):
         if isinstance(self.data_dir, str):
             return self.data_dir
         return self.data_dir[SOURCE_LABELS[dataset_source_id(sample_name)]]
+
+    def uses_full_datasets(self):
+        """True if any train/validation/test sample is a general *_full dataset."""
+        return any(name.endswith("_full") for name, _ in self._samples())
 
     def _samples(self):
         """{(name, version)} of the train, validation and test samples."""

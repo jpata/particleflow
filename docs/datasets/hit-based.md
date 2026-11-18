@@ -25,7 +25,7 @@ The production and representation comparison below applies to **CLD and CLIC**. 
 | Property | Track/cluster (`*_pf`) | Hit (`*_hits`) |
 |---|---|---|
 | Input elements | Reconstructed tracks and calorimeter clusters | Tracker hits and calorimeter hits |
-| TFDS task | `pixi run tfds` | `pixi run tfds_hit` |
+| TFDS task | `pixi run tfds` | `pixi run tfds_full` ([general dataset](full.md)) |
 | CLD model | `pyg-cld-v1` | `pyg-cld-hits-v1` |
 | CLIC model | `pyg-clic-v1` | `pyg-clic-hits-v1` |
 | Baseline candidates | Stored in `ycand` | `ycand` is a zero-filled placeholder |
@@ -38,7 +38,7 @@ Both representations are derived from the same validated Key4HEP Parquet files. 
 Follow [shared Key4HEP production](key4hep.md) through strict Parquet validation, then build the hit representation:
 
 ```bash
-PROD=cld pixi run tfds_hit
+PROD=cld pixi run tfds_full
 ```
 
 Verify the exact TFDS name, configuration, and version. For example, after producing CLD `ttbar` configuration 1:
