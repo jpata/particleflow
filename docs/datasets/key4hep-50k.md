@@ -116,13 +116,5 @@ A missing stage log means that stage did not start. Slurm output identifies
 the log directory and also contains wrapper and output validation errors.
 Large intermediate files stay on node-local scratch.
 
-To test the patched ILD mass refitter on a fresh checkout, build the overlay
-inside the stable Key4hep image after building the shared runtime:
-
-```bash
-apptainer exec --bind /cvmfs,"$PWD",/tmp \
-  --env LD_PRELOAD=/usr/lib64/libffi.so.8 --env BUILD_JOBS=16 \
-  mlpf/data/key4hep/gen/idea/idea-dev.sif \
-  bash mlpf/data/key4hep/gen/build_marlintrkprocessors.sh
-ILD_USE_PATCHED_REFITTER=1 pixi run gen_key4hep_smoke --rerun-incomplete
-```
+The standard Key4hep build installs the patched ILD mass refitter. ILD
+uses it automatically for both smoke and production runs.
