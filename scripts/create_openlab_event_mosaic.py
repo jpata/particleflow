@@ -15,7 +15,6 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-
 DETECTORS = ("colliderml", "clic", "cld", "idea")
 HALF_WIDTH = {"colliderml": 310, "clic": 290, "cld": 365, "idea": 395}
 NAVY = (5, 15, 36)

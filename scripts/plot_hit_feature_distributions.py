@@ -20,7 +20,6 @@ import torch
 from mlpf.conf import EDM4HEP
 from mlpf.model.mlpf import HitFeatureEngineering
 
-
 COLORS = {"tracker": "#0072B2", "calorimeter": "#D55E00"}
 
 

@@ -18,7 +18,6 @@ from mlpf.conf import MLPFConfig, SOURCE_IDS
 from mlpf.model.mlpf import MLPF
 from mlpf.model.onnx_attention import export_mlpf
 
-
 VERSIONS = {"cld": "3.3.0", "clic": "3.3.0", "colliderml": "1.5.0", "idea": "0.1.0"}
 
 

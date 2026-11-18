@@ -16,6 +16,7 @@ Below the table the output carries a "Rows" glossary (per-row `expl` strings in 
 "Data and versions" section (datasets, source paths, event ranges) built from the columns, and
 a "Caveats" section (the spec's top-level `caveats` list).
 """
+
 import argparse
 import re
 from pathlib import Path

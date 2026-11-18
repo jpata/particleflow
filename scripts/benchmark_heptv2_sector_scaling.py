@@ -13,7 +13,6 @@ import torch
 from mlpf.conf import MLPFConfig
 from mlpf.model.mlpf import MLPF
 
-
 MODEL_NAME = "pyg-cld-hits-heptv2-sector-set-v1"
 HIT_COUNTS = (1024, 4096, 16384, 32768, 65536, 100000)
 SLOT_COUNTS = (256, 512, 1024, 2048, 4096, 8192, 10000)

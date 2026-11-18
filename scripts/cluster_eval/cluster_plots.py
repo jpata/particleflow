@@ -19,6 +19,7 @@ Figures (<out-dir>/<name>.<format>; name = the entry's `name`, else its kind):
                       numbers are these above 1 GeV (dotted line). `rule: dm` (default, double
                       majority) or `alloc` (the allocator, clusters only)
 """
+
 import argparse
 from pathlib import Path
 

@@ -6,6 +6,7 @@ DETECTOR (default LABEL) selects the feature layout. Columns can be detectors (t
 CLIC, CLD, IDEA, MAIA; see scripts/run_detector_feature_comparison.sh) or samples of one detector,
 e.g. --tfds ttbar_pu0:colliderml=... --tfds zprime_pu0:colliderml=...
 """
+
 import argparse
 from collections import defaultdict
 from collections import Counter
@@ -23,7 +24,6 @@ import tensorflow_datasets as tfds  # noqa: E402
 
 from mlpf.conf import EDM4HEP, X_FEATURES, ParticleFeatures  # noqa: E402
 from mlpf.jet_utils import _match_jets_event  # noqa: E402
-
 
 DETECTORS = ["colliderml", "clic", "cld", "idea", "maia"]
 COLORS = ["#a23b72", "#0072b2", "#d55e00", "#009e73", "#9467bd", "#e69f00", "#56b4e9", "#8c564b", "#cc79a7", "#7f7f7f", "#bcbd22", "#17becf"]

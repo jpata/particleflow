@@ -14,7 +14,6 @@ from benchmark_set_object_formation import PLATFORM_PATH, SCENARIO_PATH, VARIANT
 from mlpf.model.mlpf import MLPF
 from mlpf.training_scenarios import load_platform_profile, load_training_scenario, resolve_scenario_job
 
-
 HIT_COUNTS = (4096, 16384, 32768, 65536, 100000)
 SLOT_COUNTS = (256, 512, 1024, 2048, 4096, 8192, 10000)
 CASES = tuple(

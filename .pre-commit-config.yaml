@@ -4,7 +4,7 @@ exclude: ^(images)|^(mlpf/data/key4hep/gen/clic/clicRec_e4h_input.py)|^(mlpf/dat
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v5.0.0
+  rev: v6.0.0
   hooks:
   - id: trailing-whitespace
     # Pinned k4geo copies must remain byte-for-byte identical to their source.
@@ -31,7 +31,7 @@ repos:
 #    args: ['--profile', 'black', '--filter-files']
 
 - repo: https://github.com/psf/black
-  rev: 25.1.0
+  rev: 26.10.1
   hooks:
     - id: black
       # It is recommended to specify the latest version of Python
@@ -42,7 +42,7 @@ repos:
       args: [--line-length=150]
 
 - repo: https://github.com/PyCQA/flake8
-  rev: 7.2.0
+  rev: 7.5.0
   hooks:
   - id: flake8
     # black-compatible flake-8 config
@@ -53,7 +53,7 @@ repos:
            '--extend-ignore=E203,E402,W605,E501']
 
 - repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.12.10
+  rev: v0.17.5
   hooks:
   - id: ruff-check
     name: check first-party cyclomatic complexity

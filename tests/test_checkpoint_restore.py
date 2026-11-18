@@ -61,6 +61,26 @@ def checkpoint(tmp_path):
     return torch.load(path, weights_only=False), model
 
 
+def test_failed_checkpoint_write_preserves_previous_checkpoint(tmp_path, monkeypatch):
+    model = torch.nn.Linear(4, 2)
+    checkpoint = tmp_path / "checkpoint-10.pth"
+    save_checkpoint(checkpoint, model, extra_state={"step": 10})
+    previous = checkpoint.read_bytes()
+
+    def interrupted_save(state, path):
+        path.write_bytes(b"partial checkpoint")
+        raise OSError("interrupted write")
+
+    monkeypatch.setattr(torch, "save", interrupted_save)
+    with pytest.raises(OSError, match="interrupted write"):
+        save_checkpoint(checkpoint, model)
+    with pytest.raises(OSError, match="interrupted write"):
+        save_checkpoint(tmp_path / "checkpoint-20.pth", model)
+
+    assert list(tmp_path.iterdir()) == [checkpoint]
+    assert checkpoint.read_bytes() == previous
+
+
 def test_full_resume(checkpoint):
     checkpoint, saved_model = checkpoint
     model, optimizer, lr_schedule = _setup(lr=1e-3)

@@ -27,7 +27,8 @@ fi
 # Keep the same release if the latest symlink changes while jobs are queued.
 export IMG=$(readlink -f "$IMG")
 
-# Resolve configs with container Python, then submit using the host Slurm client.
+# Resolve configs and persist one resubmittable Slurm script per component
+# under logs_slurm/submissions/, then submit using the host Slurm client.
 SUBMISSION_SCRIPT=$(mktemp /tmp/mlpf-lumi-submit.XXXXXX)
 trap 'rm -f "$SUBMISSION_SCRIPT"' EXIT
 singularity run \
@@ -36,7 +37,7 @@ singularity run \
   "$IMG" \
   bash -c 'set -e; if [[ -n "${LUMI_VENV:-}" ]]; then source "$LUMI_VENV/bin/activate"; fi; exec "${PYTHON_EXECUTABLE:-python3}" "$@"' \
   bash "$REPO_ROOT/scripts/lumi/submit_scenario.py" \
-  "$@" --submission-script "$SUBMISSION_SCRIPT"
+  "$@" --component-scripts --submission-script "$SUBMISSION_SCRIPT"
 
 # --dry-run and --list do not write a submission script.
 if [[ -s "$SUBMISSION_SCRIPT" ]]; then

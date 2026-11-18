@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Download one aligned ttbar/no-pileup shard for detector feature validation."""
+
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json

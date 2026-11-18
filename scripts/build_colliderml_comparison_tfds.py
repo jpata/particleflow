@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build a small ColliderML or MAIA TFDS sample through its native builder."""
+
 import argparse
 from pathlib import Path
 

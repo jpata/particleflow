@@ -16,7 +16,6 @@ from mlpf.model.losses import (
 )
 from mlpf.model.PFDataset import PFBatch
 
-
 REGRESSION_WEIGHTS = {feature: 1.0 for feature in REGRESSION_FEATURES}
 
 

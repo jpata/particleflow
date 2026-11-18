@@ -13,7 +13,6 @@ import json
 import math
 from pathlib import Path
 
-
 CHEREN_DIGI = "DRcaloSiPMreadoutDigiHit"
 SCINT_DIGI = "DRcaloSiPMreadoutDigiHit_scint"
 CHEREN_SIM = "DRcaloSiPMreadoutSimHit"

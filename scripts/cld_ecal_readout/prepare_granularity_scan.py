@@ -10,7 +10,6 @@ import hashlib
 import json
 from pathlib import Path
 
-
 ECAL_MM = (5.1, 4.0, 3.0, 2.5, 2.0, 1.5)
 HCAL_MM = (30.0, 25.0, 20.0, 15.0, 12.0, 10.0)
 ROOT = Path(__file__).resolve().parents[2] / "mlpf/data/key4hep/geometry/granularity_scan"

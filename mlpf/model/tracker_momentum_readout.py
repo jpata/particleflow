@@ -9,7 +9,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-
 RADIAL_BINS = 4
 GEOMETRY_DIM = 10
 TRACKER_SUMMARY_DIM = RADIAL_BINS * (GEOMETRY_DIM + 1)
