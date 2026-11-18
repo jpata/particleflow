@@ -7,6 +7,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from mlpf.conf import Y_FEATURES
+from mlpf.data.full_targets import LABEL_FEATURES
 from mlpf.logger import _logger
 from mlpf.model.losses import LOSS_TASKS, REGRESSION_FEATURES
 
@@ -198,6 +199,8 @@ def set_mlpf_loss(
     hit_grouping_background_weight=0.1,
     hit_grouping_detector_balanced=False,
     hit_grouping_tracker_particle_balanced=False,
+    hit_grouping_origins=None,
+    hit_grouping_excluded_as="ignore",
     tracker_overlap_loss_weight=0.0,
     tracker_geometry_loss_weight=0.0,
     tracker_curvature_loss_weight=0.0,
@@ -243,6 +246,8 @@ def set_mlpf_loss(
             background_weight=hit_grouping_background_weight,
             detector_balanced=hit_grouping_detector_balanced,
             tracker_particle_balanced=hit_grouping_tracker_particle_balanced,
+            origins=hit_grouping_origins,
+            excluded_as=hit_grouping_excluded_as,
         )
         losses["HitGrouping"] = hit_grouping_loss_weight * grouping_loss
         loss_opt = loss_opt + losses["HitGrouping"]
@@ -331,8 +336,35 @@ def _grouping_targets(batch, event_idx, match, num_slots):
     return labels, charged
 
 
-def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weight=0.1, detector_balanced=False, tracker_particle_balanced=False):
-    """Supervise event-local hit ownership without a dense hit-pair matrix."""
+def _origin_excluded(batch, event_idx, hit_mask, origins):
+    """Labelled elements whose truth origin is not among ``origins`` (full datasets only)."""
+    if origins is None:
+        return None
+    if getattr(batch, "ylabel", None) is None:
+        raise ValueError("hit_grouping_origins requires a full dataset with per-element ylabel truth labels")
+    labels = batch.ylabel[event_idx, hit_mask]
+    owned = labels[:, LABEL_FEATURES.index("particle_number")] > 0
+    origin = labels[:, LABEL_FEATURES.index("origin")].long()
+    allowed = torch.as_tensor(list(origins), device=origin.device, dtype=origin.dtype)
+    return owned & ~torch.isin(origin, allowed)
+
+
+def hit_grouping_loss(
+    grouping,
+    batch,
+    matches,
+    chunk_size=1024,
+    background_weight=0.1,
+    detector_balanced=False,
+    tracker_particle_balanced=False,
+    origins=None,
+    excluded_as="ignore",
+):
+    """Supervise event-local hit ownership without a dense hit-pair matrix.
+
+    With ``origins`` (full datasets), a particle's elements whose truth origin is not
+    listed are either ignored or supervised as background (``excluded_as``).
+    """
     hit_keys, slot_keys, background = grouping
     num_slots = slot_keys.shape[1]
     pn_index = Y_FEATURES.index("particle_number")
@@ -367,11 +399,16 @@ def hit_grouping_loss(grouping, batch, matches, chunk_size=1024, background_weig
     for event_idx, (slot_indices, target_indices) in enumerate(matches):
         hit_mask = batch.mask[event_idx].bool()
         labels, _ = _grouping_targets(batch, event_idx, (slot_indices, target_indices), num_slots)
-        weight_sum = weight_sum + torch.where(labels == num_slots, background_weight, 1.0).sum()
+        excluded = _origin_excluded(batch, event_idx, hit_mask, origins)
+        if excluded is not None and excluded_as == "background":
+            labels = torch.where(excluded, torch.full_like(labels, num_slots), labels)
+        hit_weights = torch.where(labels == num_slots, background_weight, 1.0)
+        if excluded is not None and excluded_as == "ignore":
+            hit_weights = torch.where(excluded, torch.zeros_like(hit_weights), hit_weights)
+        weight_sum = weight_sum + hit_weights.sum()
         event_hit_keys = hit_keys[event_idx, hit_mask]
         event_background = background[event_idx, hit_mask]
         event_slot_keys = slot_keys[event_idx]
-        hit_weights = torch.where(labels == num_slots, background_weight, 1.0)
         if tracker_particle_balanced:
             counts, selected = tracker_counts[event_idx]
             # Redistribute the original charged-tracker foreground weight, keeping

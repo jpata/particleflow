@@ -1,8 +1,13 @@
 # Track and calorimeter-hit target datasets
 
-The Key4hep and ColliderML postprocessors produce particle targets on reconstructed
-tracks and individual calorimeter hits for CLD, CLIC, MAIA, ColliderML, and IDEA.
-These targets form a separate view alongside the existing track/cluster targets.
+The IDEA and ColliderML postprocessors produce particle targets on reconstructed
+tracks and individual calorimeter hits. These targets form a separate view
+alongside the existing track/cluster targets.
+
+For CLD, CLIC and MAIA this view has been replaced by the [general datasets](datasets/full.md),
+which contain tracks, clusters, tracker and calorimeter hits with per-element truth
+labels. The CLD, CLIC and MAIA material below is kept as the historical record of the
+original audit; their `*_track_calo` builders and Parquet fields no longer exist.
 The converters regenerate Parquet files that lack the complete track/calo view.
 
 ## Parquet output

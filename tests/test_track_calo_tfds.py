@@ -151,7 +151,11 @@ def test_split_files(tmp_path):
         split_files(tmp_path, "10")
 
 
-@pytest.mark.parametrize("detector", DETECTORS)
+# Key4hep CLD/CLIC/MAIA moved to the general *_full datasets (tests/test_full_dataset.py).
+TRACK_CALO_BUILDERS = {"idea": DETECTORS["idea"], "colliderml": DETECTORS["colliderml"]}
+
+
+@pytest.mark.parametrize("detector", TRACK_CALO_BUILDERS)
 def test_array_record_roundtrip(tmp_path, detector):
     module = importlib.import_module(f"mlpf.heptfds.{detector}_track_calo.ttbar")
     builder = getattr(module, DETECTORS[detector])(config="10", data_dir=tmp_path / "tfds")
@@ -184,8 +188,8 @@ def test_smoke_builder_checks_real_scalar_roundtrip(tmp_path):
     from scripts.build_track_calo_tfds import build
 
     path = tmp_path / "input.parquet"
-    write(path, [example("cld"), example("cld"), example("cld")], record=True)
-    directory = build(path, "cld", tmp_path / "out")
+    write(path, [example("idea"), example("idea"), example("idea")], record=True)
+    directory = build(path, "idea", tmp_path / "out")
     loaded = tfds.builder_from_directory(directory)
     assert loaded.info.splits["train"].num_examples == 2
     assert loaded.info.splits["test"].num_examples == 1

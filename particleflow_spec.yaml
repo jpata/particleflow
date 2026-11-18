@@ -259,10 +259,10 @@ productions:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/z_tautau"
         version: "3.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    tfds_hit_mapping:
+    tfds_full_mapping:
       z_tautau:
-        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/z_tautau"
-        version: "3.2.2"
+        builder_path: "mlpf/heptfds/cld_full/z_tautau"
+        version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   cld_ecal_pitch_4:
@@ -325,10 +325,10 @@ productions:
         builder_path: "mlpf/heptfds/cld_pf_edm4hep/ttbar"
         version: "3.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    tfds_hit_mapping:
+    tfds_full_mapping:
       ttbar:
-        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ttbar"
-        version: "3.2.2"
+        builder_path: "mlpf/heptfds/cld_full/ttbar"
+        version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
   cld_hcal_pitch_25:
@@ -468,63 +468,45 @@ productions:
         version: "3.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-    tfds_hit_mapping:
+    tfds_full_mapping:
       ttbar:
-        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ttbar"
-        version: "3.2.2"
-        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      ww_fullhad:
-        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/ww_fullhad"
-        version: "3.2.2"
-        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      zz:
-        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/zz"
-        version: "3.2.2"
-        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      qq:
-        builder_path: "mlpf/heptfds/cld_pf_edm4hep_hits/qq"
-        version: "3.2.2"
-        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-
-    tfds_track_calo_mapping:
-      ttbar:
-        builder_path: "mlpf/heptfds/cld_track_calo/ttbar"
+        builder_path: "mlpf/heptfds/cld_full/ttbar"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
-        builder_path: "mlpf/heptfds/cld_track_calo/ww_fullhad"
+        builder_path: "mlpf/heptfds/cld_full/ww_fullhad"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       zz:
-        builder_path: "mlpf/heptfds/cld_track_calo/zz"
+        builder_path: "mlpf/heptfds/cld_full/zz"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       zz_tautau_365:
-        builder_path: "mlpf/heptfds/cld_track_calo/zz_tautau_365"
+        builder_path: "mlpf/heptfds/cld_full/zz_tautau_365"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       zz_tautau_240:
-        builder_path: "mlpf/heptfds/cld_track_calo/zz_tautau_240"
+        builder_path: "mlpf/heptfds/cld_full/zz_tautau_240"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       zh_tautau_365:
-        builder_path: "mlpf/heptfds/cld_track_calo/zh_tautau_365"
+        builder_path: "mlpf/heptfds/cld_full/zh_tautau_365"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       zh_tautau_240:
-        builder_path: "mlpf/heptfds/cld_track_calo/zh_tautau_240"
+        builder_path: "mlpf/heptfds/cld_full/zh_tautau_240"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
-        builder_path: "mlpf/heptfds/cld_track_calo/qq"
+        builder_path: "mlpf/heptfds/cld_full/qq"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       z_qq:
-        builder_path: "mlpf/heptfds/cld_track_calo/z_qq"
+        builder_path: "mlpf/heptfds/cld_full/z_qq"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       z_tautau:
-        builder_path: "mlpf/heptfds/cld_track_calo/z_tautau"
+        builder_path: "mlpf/heptfds/cld_full/z_tautau"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
@@ -579,30 +561,17 @@ productions:
         version: "3.3.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-    tfds_hit_mapping:
+    tfds_full_mapping:
       ttbar:
-        builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/ttbar"
-        version: "3.2.2"
-        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      ww_fullhad:
-        builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/ww_fullhad"
-        version: "3.2.2"
-        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      qq:
-        builder_path: "mlpf/heptfds/clic_pf_edm4hep_hits/qq"
-        version: "3.2.2"
-        config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    tfds_track_calo_mapping:
-      ttbar:
-        builder_path: "mlpf/heptfds/clic_track_calo/ttbar"
+        builder_path: "mlpf/heptfds/clic_full/ttbar"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       ww_fullhad:
-        builder_path: "mlpf/heptfds/clic_track_calo/ww_fullhad"
+        builder_path: "mlpf/heptfds/clic_full/ww_fullhad"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
       qq:
-        builder_path: "mlpf/heptfds/clic_track_calo/qq"
+        builder_path: "mlpf/heptfds/clic_full/qq"
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
@@ -1088,6 +1057,45 @@ models:
 
   pyg-cld-hits-set-v1:
     <<: *pyg_cld_hits_v1
+    # General datasets (tracks, clusters and hits); the hit model reads full_elements (default: hits)
+    train_datasets: &cld_full_datasets_train
+      physical:
+        batch_size: 1
+        samples:
+          - name: "cld_edm_ttbar_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets: &cld_full_datasets_valid
+      physical:
+        batch_size: 1
+        samples:
+          - name: "cld_edm_ttbar_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets: &cld_full_datasets_test
+      - name: "cld_edm_ttbar_full"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_ww_fullhad_full"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_qq_full"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
     gpu_batch_multiplier: 1
     pad_to_multiple_elements: 128
 
@@ -1105,8 +1113,30 @@ models:
         ffn_multiplier: 4.0
         dropout: 0.0
 
+
+  # pyg-cld-hits-set-v1 on the archived *_hits 3.2.2 data (inherited from pyg-cld-hits-v1).
+  # Only for comparisons with the elementwise recipe, which cannot read the *_full datasets.
+  pyg-cld-hits-set-legacy-v1:
+    <<: *pyg_cld_hits_v1
+    gpu_batch_multiplier: 1
+    pad_to_multiple_elements: 128
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0001
+    architecture:
+      <<: *pyg_cld_hits_architecture
+      output_mode: "set"
+      set_decoder:
+        num_slots: 256
+        num_layers: 2
+        num_heads: 8
+        ffn_multiplier: 4.0
+        dropout: 0.0
   pyg-cld-hits-heptv2-sector-set-v1:
     <<: *pyg_cld_hits_v1
+    train_datasets: *cld_full_datasets_train
+    validation_datasets: *cld_full_datasets_valid
+    test_datasets: *cld_full_datasets_test
     gpu_batch_multiplier: 1
     pad_to_multiple_elements: 128
 
@@ -1136,6 +1166,9 @@ models:
   # Recommended CLD hit model: grouped HEPTv2 with tracker-neighborhood features.
   pyg-cld-hits-heptv2-set-v1:
     <<: *pyg_cld_hits_v1
+    train_datasets: *cld_full_datasets_train
+    validation_datasets: *cld_full_datasets_valid
+    test_datasets: *cld_full_datasets_test
     hyperparameters:
       batch_size: 1
       lr: 0.001
@@ -1317,6 +1350,45 @@ models:
 
   pyg-clic-hits-set-v1:
     <<: *pyg_clic_hits_v1
+    # General datasets (tracks, clusters and hits); the hit model reads full_elements (default: hits)
+    train_datasets: &clic_full_datasets_train
+      physical:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets: &clic_full_datasets_valid
+      physical:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets: &clic_full_datasets_test
+      - name: "clic_edm_ttbar_full"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_ww_fullhad_full"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_qq_full"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
     gpu_batch_multiplier: 16
 
     hyperparameters:

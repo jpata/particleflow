@@ -83,6 +83,7 @@ INPUT_TYPE_IDS = {
     "hits": 1,
     "pf": 2,
     "track_calo": 3,
+    "full": 4,
 }
 INPUT_TYPE_LABELS = {input_type_id: input_type_name for input_type_name, input_type_id in INPUT_TYPE_IDS.items()}
 
@@ -95,6 +96,9 @@ def dataset_source_id(dataset_name: str) -> int:
 
 
 def dataset_input_type_id(dataset_name: str) -> int:
+    # General datasets: the loader reports "hits" instead when only hit kinds are selected.
+    if dataset_name.endswith("_full") or "_full:" in dataset_name or "_full/" in dataset_name:
+        return INPUT_TYPE_IDS["full"]
     if "_track_calo_" in dataset_name:
         return INPUT_TYPE_IDS["track_calo"]
     if "_hits" in dataset_name:
@@ -107,7 +111,8 @@ def dataset_for_sample(sample_name: str, default: "Dataset") -> "Dataset":
     source = SOURCE_LABELS.get(dataset_source_id(sample_name), "unknown")
     if source == "unknown":
         return default
-    if dataset_input_type_id(sample_name) == INPUT_TYPE_IDS["hits"]:
+    # Full datasets are read by the raw-hit model family (default element selection: hits).
+    if dataset_input_type_id(sample_name) in (INPUT_TYPE_IDS["hits"], INPUT_TYPE_IDS["full"]):
         source = f"{source}_hits"
     try:
         return Dataset(source)
@@ -1027,6 +1032,13 @@ class SetDecoderConfig(BaseModel):
     hit_grouping_background_weight: float = Field(default=0.1, gt=0.0)
     hit_grouping_detector_balanced: bool = False
     hit_grouping_tracker_particle_balanced: bool = False
+    # Full datasets only: element origin codes (mlpf.data.full_targets.ORIGIN_NAMES) that count as
+    # members of their particle in the grouping loss. None keeps every labelled element (inclusive).
+    # [1] supervises only hits the particle produced itself on its outgoing trajectory.
+    hit_grouping_origins: Optional[List[int]] = None
+    # How elements of a particle with an excluded origin enter the grouping loss: "ignore" (zero
+    # weight) or "background" (supervised as unowned).
+    hit_grouping_excluded_as: Literal["ignore", "background"] = "ignore"
     tracker_overlap_loss_weight: float = Field(default=0.0, ge=0.0)
     hit_grouping_sparse: bool = False
     hit_grouping_topk: int = Field(default=4, gt=0)
@@ -1408,6 +1420,9 @@ class MLPFConfig(BaseModel):
     task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
     lr_finder: LRFinderConfig = Field(default_factory=LRFinderConfig)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
+    # Element kinds read from general *_full datasets, in element-type order (type = position + 1).
+    # Kinds: track, cluster, hit_tracker, hit_calo. Only used for datasets whose name ends in _full.
+    full_elements: List[str] = Field(default_factory=lambda: ["hit_tracker", "hit_calo"])
     validation_diagnostics_batches: int = 0  # batches per rank for domain, momentum, and hit-grouping diagnostics; 0 disables extras
 
     validation_linear_probe: bool = False  # frozen hit-instance ARI and calo continuation probes on diagnostic batches

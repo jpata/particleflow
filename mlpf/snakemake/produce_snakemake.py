@@ -89,7 +89,8 @@ def main():  # noqa: C901
     if "cms" in args.production:
         req_steps = ["gen", "post", "tfds", "train"]
     elif "cld" in args.production or "clic" in args.production:
-        req_steps = ["gen", "post", "tfds", "tfds_hit", "train"]
+        # key4hep detectors: the general full view replaces the hit and track/calo views
+        req_steps = ["gen", "post", "tfds", "tfds_full", "train"]
     else:
         req_steps = ["gen", "post", "tfds", "train"]
 
@@ -104,9 +105,10 @@ def main():  # noqa: C901
     if prod_config.get("generation_only", False):
         req_steps = ["gen"]
     elif prod_config.get("dataset_only", False):
-        req_steps = ["post", "tfds", "tfds_hit"]
-    if prod_config.get("tfds_track_calo_mapping"):
-        req_steps.append("tfds_track_calo")
+        req_steps = ["post", "tfds", "tfds_full"]
+    for optional_step in ("tfds_track_calo", "tfds_full"):
+        if prod_config.get(f"{optional_step}_mapping") and optional_step not in req_steps:
+            req_steps.append(optional_step)
 
     # Determine models to train
     models_to_train = []
@@ -173,6 +175,7 @@ def main():  # noqa: C901
     tfds_mappings = prod_config.get("tfds_mapping", {})
     tfds_hit_mappings = prod_config.get("tfds_hit_mapping", {})
     tfds_track_calo_mappings = prod_config.get("tfds_track_calo_mapping", {})
+    tfds_full_mappings = prod_config.get("tfds_full_mapping", {})
 
     # Update jobs dir to include production name to avoid conflicts
     jobs_dir = f"{LOCAL_JOBS_DIR}/{args.production}"
@@ -181,8 +184,9 @@ def main():  # noqa: C901
     ensure_dir(f"{jobs_dir}/post")
     ensure_dir(f"{jobs_dir}/tfds")
     ensure_dir(f"{jobs_dir}/tfds_hit")
-    if "tfds_track_calo" in req_steps:
-        ensure_dir(f"{jobs_dir}/tfds_track_calo")
+    for optional_step in ("tfds_track_calo", "tfds_full"):
+        if optional_step in req_steps:
+            ensure_dir(f"{jobs_dir}/{optional_step}")
     ensure_dir(f"{jobs_dir}/val")
     ensure_dir(tfds_root_dir)
 
@@ -198,6 +202,7 @@ def main():  # noqa: C901
         "tfds": {"targets": [], "rules": ""},
         "tfds_hit": {"targets": [], "rules": ""},
         "tfds_track_calo": {"targets": [], "rules": ""},
+        "tfds_full": {"targets": [], "rules": ""},
         "train": {"targets": [], "rules": ""},
         "val": {"targets": [], "rules": ""},
         "val_data": {"targets": [], "rules": ""},
@@ -387,7 +392,12 @@ done
                     f"expand('{jobs_dir}/val/val_{sample_key}_{job_type}_{{seed}}.done', seed=range({seed_start}, {seed_end}, {CHUNK_SIZE}))"
                 )
 
-        if "post" in req_steps and (sample_key in tfds_mappings or sample_key in tfds_hit_mappings or sample_key in tfds_track_calo_mappings):
+        if "post" in req_steps and (
+            sample_key in tfds_mappings
+            or sample_key in tfds_hit_mappings
+            or sample_key in tfds_track_calo_mappings
+            or sample_key in tfds_full_mappings
+        ):
             step_data["post"]["targets"].append(f'"{jobs_dir}/post/post_{sample_key}_all.done"')
 
             if args.allow_partial:
@@ -546,11 +556,13 @@ rule val_data_task:
     tfds_sentinels = []
     tfds_hit_sentinels = []
     tfds_track_calo_sentinels = []
+    tfds_full_sentinels = []
 
     tfds_mappings_to_process = {
         "tfds": (prod_config.get("tfds_mapping", {}), tfds_sentinels),
         "tfds_hit": (prod_config.get("tfds_hit_mapping", {}), tfds_hit_sentinels),
         "tfds_track_calo": (tfds_track_calo_mappings, tfds_track_calo_sentinels),
+        "tfds_full": (tfds_full_mappings, tfds_full_sentinels),
     }
 
     for step_name, (tfds_mappings, sentinels_list) in tfds_mappings_to_process.items():
@@ -567,7 +579,7 @@ rule val_data_task:
             output_subdir = sample_data.get("output_subdir", process_name)
 
             # Determine manual_dir for TFDS
-            if step_name == "tfds_track_calo":
+            if step_name in ("tfds_track_calo", "tfds_full"):
                 # This builder consumes Parquet from one physics sample, rather than
                 # discovering process subdirectories under the production post root.
                 manual_dir = os.path.join(workspace_dir, "post", output_subdir)
@@ -675,6 +687,19 @@ rule tfds_track_calo:
         {", ".join(tfds_track_calo_sentinels)}
     output:
         "{jobs_dir}/tfds_track_calo/all.done"
+    shell:
+        "touch {{output}}"
+"""
+
+    if tfds_full_sentinels and "tfds_full" in req_steps:
+        step_data["tfds_full"][
+            "rules"
+        ] += f"""
+rule tfds_full:
+    input:
+        {", ".join(tfds_full_sentinels)}
+    output:
+        "{jobs_dir}/tfds_full/all.done"
     shell:
         "touch {{output}}"
 """

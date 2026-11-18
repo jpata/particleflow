@@ -30,4 +30,4 @@ def test_cld_guns_are_excluded_from_training_datasets():
     guns = {name for name in cld["samples"] if name.startswith("gun_")}
     assert guns
     assert guns.isdisjoint(cld["tfds_mapping"])
-    assert guns.isdisjoint(cld["tfds_hit_mapping"])
+    assert guns.isdisjoint(cld["tfds_full_mapping"])

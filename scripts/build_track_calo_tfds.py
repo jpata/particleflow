@@ -10,11 +10,9 @@ import tensorflow_datasets as tfds
 
 from mlpf.heptfds.track_calo_utils.utils import required_fields
 
+# Key4hep CLD, CLIC and MAIA now produce the general *_full datasets instead.
 BUILDERS = {
     "idea": "IdeaTrackCaloTtbar",
-    "cld": "CldTrackCaloTtbar",
-    "clic": "ClicTrackCaloTtbar",
-    "maia": "MaiaTrackCaloTtbar",
     "colliderml": "CollidermlTrackCaloTtbar",
 }
 

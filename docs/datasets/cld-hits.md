@@ -30,4 +30,4 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 
 ## Production and related inputs
 
-Follow [shared Key4HEP production](key4hep.md) through strict Parquet validation, then use `PROD=cld pixi run tfds_hit`. The [hit overview](hit-based.md) explains row targets, placeholder baseline candidates, decoding checks, and memory requirements. Use [CLD tracks and clusters](cld.md) for the reconstructed-object representation.
+Follow [shared Key4HEP production](key4hep.md) through strict Parquet validation, then use `PROD=cld pixi run tfds_full` to build the [general datasets](full.md) (`cld_edm_<process>_full`), which contain the raw hits together with tracks, clusters and truth labels. They replace the `cld_edm_<process>_hits` builders; previously built hit datasets remain readable for the elementwise recipe. The [hit overview](hit-based.md) explains row targets, placeholder baseline candidates, decoding checks, and memory requirements. Use [CLD tracks and clusters](cld.md) for the reconstructed-object representation.
