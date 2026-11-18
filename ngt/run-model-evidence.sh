@@ -9,7 +9,13 @@ python=${PYTHON_BIN:-python3}
 models=("${@:4}")
 if [[ ${#models[@]} == 0 ]]; then models=(attention heptv2); fi
 if [[ $provider == migraphx ]]; then
-    export MIGRAPHX_DISABLE_PASSES=${MIGRAPHX_DISABLE_PASSES-eliminate_data_type}
+    # Keep exact hash integers and avoid mixed-type normalization gather fusion.
+    for pass in eliminate_data_type fuse_horizontal; do
+        case ",${MIGRAPHX_DISABLE_PASSES:-}," in
+            *,$pass,*) ;;
+            *) export MIGRAPHX_DISABLE_PASSES="${MIGRAPHX_DISABLE_PASSES:+${MIGRAPHX_DISABLE_PASSES},}$pass" ;;
+        esac
+    done
     export MIGRAPHX_GPU_COMPILE_PARALLEL=4
     export MIGRAPHX_GPU_OPTIMIZE=3
     export MIGRAPHX_GPU_HIP_FLAGS=${MIGRAPHX_GPU_HIP_FLAGS-'-mllvm -enable-gvn-memdep=false'}

@@ -277,12 +277,12 @@ def migraphx_environment(model, profile, fusion):
     settings = {
         "MIGRAPHX_DISABLE_MLIR": "0",
         "MIGRAPHX_MLIR_USE_SPECIFIC_OPS": "!attention",
-        "MIGRAPHX_DISABLE_PASSES": "",
+        "MIGRAPHX_DISABLE_PASSES": "fuse_horizontal",
         "MIGRAPHX_GPU_HIP_FLAGS": "",
     }
     if model == "heptv2":
         settings.update(
-            MIGRAPHX_DISABLE_PASSES="eliminate_data_type",
+            MIGRAPHX_DISABLE_PASSES="eliminate_data_type,fuse_horizontal",
             MIGRAPHX_GPU_COMPILE_PARALLEL="4",
             MIGRAPHX_GPU_OPTIMIZE="3",
             MIGRAPHX_GPU_HIP_FLAGS="-mllvm -enable-gvn-memdep=false",

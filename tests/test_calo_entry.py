@@ -356,3 +356,65 @@ def test_spec_hit_models_keep_vertex_hashing():
     heptv2 = MLPFConfig.from_spec(SPEC_FILE, "pyg-cld-hits-heptv2-set-v1", "cld").model.heptv2
     assert not heptv2.track_hash_at_calo
     assert not heptv2.cluster_hash_at_centroid
+
+
+def test_portable_asin_matches_fp32_reference():
+    from mlpf.model.calo_entry import _asin
+
+    # Dense coverage plus tiny arguments and adjacent FP32 values around the
+    # range-reduction boundary and the ill-conditioned endpoints.
+    grid = torch.linspace(-1, 1, 131073)
+    tiny = torch.logspace(-40, -2, 1000)
+    edges = _t(-1, -0.5, 0, 0.5, 1)
+    neighbors = torch.cat(
+        (torch.nextafter(edges, torch.full_like(edges, -torch.inf)), edges, torch.nextafter(edges, torch.full_like(edges, torch.inf)))
+    ).clamp(-1, 1)
+    values = torch.cat((grid, tiny, -tiny, neighbors)).sort().values
+    expected = torch.asin(values.double()).float()
+    actual = _asin(values)
+    spacing = torch.nextafter(expected.abs(), torch.full_like(expected, torch.inf)) - expected.abs()
+    assert torch.all((actual - expected).abs() <= 2 * spacing)
+    assert torch.all(actual[1:] >= actual[:-1])
+    assert torch.isfinite(actual).all()
+
+
+@pytest.mark.parametrize("scale", [0.0, 1e-20, 0.3, 1.0, 1e20])
+def test_unit_direction_matches_atan2_without_angle_round_trip(scale):
+    from mlpf.model.calo_entry import _unit_direction
+
+    # Both axes, all quadrants and zero; include non-unit vectors.
+    x = _t(0, 1, -1, 0, 0, 2, -3, -4, 5) * scale
+    y = _t(0, 0, 0, 1, -1, 3, 4, -5, -6) * scale
+    sine, cosine = _unit_direction(x, y)
+    angle = torch.where((x == 0) & (y == 0), torch.zeros_like(x), torch.atan2(y, x))
+    torch.testing.assert_close(sine, angle.sin(), atol=2e-7, rtol=2e-7)
+    torch.testing.assert_close(cosine, angle.cos(), atol=2e-7, rtol=2e-7)
+    assert torch.isfinite(sine).all() and torch.isfinite(cosine).all()
+    # Exact axis directions must not acquire the sin(pi) residual that can
+    # move deterministic hashing across the phi branch cut.
+    assert torch.all(sine[y == 0] == 0)
+    assert torch.all(cosine[(x == 0) & (y != 0)] == 0)
+
+
+def test_direct_track_direction_matches_native_asin_geometry(monkeypatch):
+    import mlpf.model.calo_entry as calo
+
+    entry = TrackCaloEntry("cld")
+    generator = torch.Generator().manual_seed(731)
+    x = torch.randn(2, 256, len(X_FEATURES["cld"]), generator=generator)
+    x[..., 0] = 1
+    z0, _tan_lambda, omega, d0 = entry.columns
+    x[..., z0] *= 3000  # includes tracks outside the endcaps
+    x[..., omega] *= 0.002  # includes curlers and both charge signs
+    x[..., d0] *= 2000  # includes displaced tracks outside the barrel
+    x[..., 3:5] *= 3  # non-unit input directions
+    actual = entry(x)
+    # Independent native inverse trig for the angle API and barrel arc.
+    monkeypatch.setattr(calo, "_asin", torch.asin)
+    eta, phi, reached = entry.eta_phi(x)
+    expected = x.clone()
+    expected[..., 2] = torch.where(reached, eta, x[..., 2])
+    expected[..., 3] = torch.where(reached, phi.sin(), x[..., 3])
+    expected[..., 4] = torch.where(reached, phi.cos(), x[..., 4])
+    torch.testing.assert_close(actual, expected, atol=3e-6, rtol=3e-6)
+    torch.testing.assert_close(actual[~reached], x[~reached], atol=0, rtol=0)

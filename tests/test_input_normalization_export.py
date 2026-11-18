@@ -155,6 +155,41 @@ def test_float_output_wrapper_forwards_sources():
         torch.testing.assert_close(a, b)
 
 
+def test_feature_bag_export_routes_unseen_sources(tmp_path):
+    """Feature gather tables must use the runtime source, not the export example."""
+    torch.set_num_threads(1)
+    config = MLPFConfig.model_validate(
+        {
+            "dataset": "cld",
+            "data_dir": "/tmp",
+            "conv_type": "attention",
+            "model": {
+                "type": "attention",
+                "input_encoding": "split",
+                "input_normalization": True,
+                "feature_bag": True,
+                "attention": {"num_convs": 1, "num_heads": 2, "head_dim": 8, "attention_type": "math"},
+            },
+            "test_dataset": {f"{name}_edm_qq_pf": {"version": version, "splits": ["1"]} for name, version in VERSIONS.items()},
+        }
+    )
+    model = MLPF(config).eval()
+    x, mask = make_batch([7, 3], 9)
+    path = tmp_path / "feature_bag.onnx"
+    export_mlpf(model, x, mask, path, source_id=torch.full((2,), SOURCE_IDS["cld"], dtype=torch.int64))
+    session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    assert [value.name for value in session.get_inputs()] == ["Xfeat_normed", "mask", "source_id"]
+    for lengths, size, names in [([5], 5, ["clic"]), ([11, 6, 3, 1], 15, list(VERSIONS))]:
+        x, mask = make_batch(lengths, size)
+        source = torch.tensor([SOURCE_IDS[name] for name in names], dtype=torch.int64)
+        actual = session.run(None, {"Xfeat_normed": x.numpy(), "mask": mask.numpy(), "source_id": source.numpy()})
+        with torch.no_grad():
+            expected = model(x, mask, source_id=source)
+        valid = mask.bool().numpy()
+        for value, reference in zip(actual, expected, strict=True):
+            np.testing.assert_allclose(value[valid], reference.numpy()[valid], atol=3e-3, rtol=3e-3)
+
+
 def test_normalized_export_keeps_known_raw_correction_baselines(tmp_path):
     model = make_model()
 

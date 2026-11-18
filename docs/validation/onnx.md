@@ -40,7 +40,9 @@ outputs = session.run(None, {
 })
 ```
 
-The ONNX `input_normalization` metadata maps source IDs to dataset names and statistics versions. Deployment callers must provide exactly one supported ID per event. The graph cannot enforce that contract. `cms-validate-onnx.py` derives the source from `--dataset`, and `--save-inputs` includes it for replay with `validate-onnx-runtime.py`. `export-checkpoint-onnx.py` also supports normalized track/cluster checkpoints and includes source IDs in its reference bundles.
+The ONNX `input_normalization` metadata maps source IDs to dataset names and statistics versions. Deployment callers must provide exactly one supported ID per event. The graph cannot enforce that contract. `cms-validate-onnx.py` derives the source from `--dataset`, and `--save-inputs` includes it for replay with `validate-onnx-runtime.py`. `export-checkpoint-onnx.py` also supports normalized track/cluster checkpoints and includes source IDs in its reference bundles. It reads the `--datasets` samples from the TFDS roots stored in the checkpoint configuration. To use other roots, pass `--data-dir /path` for all samples or, for joint-detector checkpoints, `--data-dir cld=/path/to/cld clic=/path/to/clic`.
+
+In models with `model.feature_bag`, the graph also uses `source_id` to map each event's columns to the shared feature slots. Callers pass the same raw, padded features as for a model without the feature bag.
 
 ## Choose an attention representation
 
@@ -143,6 +145,10 @@ Dynamic graphs may require CPU shape operations. Static specialization is availa
 ## HEPTv2 and checkpoint compatibility
 
 HEPTv2 defaults to deterministic hashing (`model.heptv2.deterministic_hashing: true`). It quantizes eta/phi and projection coefficients, uses int64 arithmetic, and resolves equal sort keys by input order. Export uses exact integer inverse permutations and separate materialized output heads. Pad input lengths to a multiple of the model's block size.
+
+The `track_hash_at_calo` and `cluster_hash_at_centroid` options are part of the exported graph, and callers pass the usual raw features. The graph contains no `Asin`, `Acos` or `Atan` nodes, which ORT CUDA runs on CPU. Instead, track and cluster directions are computed as (sin phi, cos phi) vectors, and the barrel arc length uses a polynomial asin accurate to 2 FP32 ULP. PyTorch training and inference use the same code, so eager and ONNX results agree.
+
+Checkpoints trained with these options before #577 used `asin` and `atan2` directly. The current arithmetic can shift a quantized hash coordinate by one step, and a direction along -x now gets phi = +pi instead of a value near -pi. Both can change bucket assignments, so compare such checkpoints against a new PyTorch reference before deployment.
 
 Deterministic coordinates and bucket assignments can change predictions from checkpoints trained with floating-point hashing. Setting the option to `false` selects floating-point hashing but does not guarantee historical tie ordering or agreement across runtimes. Likewise, older attention checkpoints trained with unmasked padding require validation under the current masking semantics.
 

@@ -290,9 +290,11 @@ PYTHON_BIN=/tmp/heptv2-native-venv/bin/python bash ngt/run-heptv2-onnx.sh \
   migraphx /path/to/bundle results/heptv2-w7900
 ```
 
-Wheel libraries must precede system `/opt/rocm` libraries. The runner preserves
-existing disabled passes and adds `eliminate_data_type` before starting Python,
-preventing lossy narrowing of hash arithmetic. It limits compiler parallelism
+Wheel libraries must precede system `/opt/rocm` libraries. Before starting
+Python, the runner adds `eliminate_data_type` and `fuse_horizontal` to any
+passes already disabled (see
+[calorimeter-coordinate and feature-bag graphs](#calorimeter-coordinate-and-feature-bag-graphs)).
+It limits compiler parallelism
 to four workers and retains O3, adding the targeted LLVM flag
 `-mllvm -enable-gvn-memdep=false` to avoid very slow GVN memory-dependence
 analysis on large integer sorts. These are correctness runs; optimized
@@ -350,6 +352,43 @@ uses PyTorch allocator statistics to estimate ONNX Runtime memory.
 `scripts/summarize-model-evidence.py PACKAGE_ROOT --plots` produces the matrix
 status, CSV and scaling plots; it requires all expected cells before declaring
 the package complete. The initial package uses seeded, untrained weights.
+
+## Calorimeter-coordinate and feature-bag graphs
+
+HEPTv2 models with `track_hash_at_calo` or `cluster_hash_at_centroid`, and
+normalized models with `feature_bag`, export to a single graph that runs
+entirely on the GPU. CUDA needs no extra settings. MIGraphX needs both
+`eliminate_data_type` and `fuse_horizontal` disabled: the first keeps hash
+arithmetic in int64, and the second avoids a MIGraphX 2.18 compile error
+(`concat: Types do not match`) in graphs with input normalization.
+`run-heptv2-onnx.sh`, `run-model-evidence.sh`, `qualify-cms-physics.py` and
+`compare-attention-fusion.py` disable both passes and keep any passes already
+listed in `MIGRAPHX_DISABLE_PASSES`.
+
+The following static FP32 graphs (decomposed attention) match the eager
+PyTorch reference on CPU, L40S (ORT CUDA 1.29.0) and W7900 (the native ORT
+1.23.2 / MIGraphX 2.18 / ROCm SDK 10.1 environment above), with CPU fallback
+disabled on the GPUs:
+
+| Model | Cases |
+| --- | --- |
+| Normalized attention, shared backbone | 3 |
+| Normalized attention, split backbone | 3 |
+| Normalized attention with feature bag | 3 |
+| HEPTv2 | 3 |
+| HEPTv2 with track and cluster calorimeter coordinates | 6 |
+
+The shapes are B=2/N=16, B=1/N=24 and B=3/N=32, with unequal valid lengths,
+right padding and tied HEPT coordinates. Normalized models mix CLD, CLIC, IDEA
+and ColliderML events in one batch. The extra calorimeter cases cover displaced
+(d0) tracks, straight tracks, tracks nearly tangent to the barrel, multi-turn
+endcap entries and tracks that reach no calorimeter surface. Maximum absolute
+output errors were 1.2e-6 (CPU), 9.5e-7 (L40S) and 1.4e-6 (W7900).
+
+The models are small, seeded and untrained. These checks do not cover trained
+checkpoints, dynamic shapes on GPU, fused attention, reduced precision or
+throughput. Graphs, references, placement profiles and reports from these runs
+are kept locally under `onnx_validation/portable-calo-2026-11-17/` (not in Git).
 
 ## Save results and release the GPU
 

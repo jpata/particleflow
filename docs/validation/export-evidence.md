@@ -18,7 +18,7 @@ The acceptance tolerance in these studies is `atol=1e-3, rtol=3e-3`. Evidence is
 
 The GPU evidence uses NVIDIA L40S with ORT CUDA 1.29 and AMD W7900 with native ORT MIGraphX 1.23.2, MIGraphX 2.18, and ROCm SDK libraries. This AMD stack differs from the packaged `envs/ort-amd` plugin environment. Follow [the GPU tooling guide](../../ngt/README.md) for exact library paths and worker setup; preserve outputs from temporary workers before they expire.
 
-HEPTv2 needs integer-preserving hashing and sorting. The qualification launcher `ngt/run-heptv2-onnx.sh` disables `eliminate_data_type` and retains `MIGRAPHX_GPU_OPTIMIZE=3` with `MIGRAPHX_GPU_HIP_FLAGS="-mllvm -enable-gvn-memdep=false"`. These settings avoid unsupported integer lowering and excessive compiler time; they do not establish optimized throughput. Older MIGraphX 2.15 lowering to FP32 is unsuitable. Load the qualified libraries ahead of system ROCm and retain the actual loaded-library paths.
+HEPTv2 needs integer-preserving hashing and sorting. The qualification launcher `ngt/run-heptv2-onnx.sh` disables `eliminate_data_type` and `fuse_horizontal` and retains `MIGRAPHX_GPU_OPTIMIZE=3` with `MIGRAPHX_GPU_HIP_FLAGS="-mllvm -enable-gvn-memdep=false"`. These settings avoid unsupported integer lowering, mixed-type gather fusion failures, and excessive compiler time; they do not establish optimized throughput. Older MIGraphX 2.15 lowering to FP32 is unsuitable. Load the qualified libraries ahead of system ROCm and retain the actual loaded-library paths.
 
 Use static specialization when full GPU placement is required. Dynamic exports can involve CPU shape operations. The provider helper rejects whole-session fallback; strict qualification additionally rejects profiled CPU compute nodes.
 

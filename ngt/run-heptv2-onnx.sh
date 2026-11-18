@@ -7,12 +7,14 @@ if [[ $# != 3 || ! "$1" =~ ^(cuda|migraphx)$ ]]; then
 fi
 repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 if [[ $1 == migraphx ]]; then
-    # MIGraphX otherwise narrows the exact integer hash arithmetic. Set this
-    # before loading its libraries; the compiler caches environment settings.
-    case ",${MIGRAPHX_DISABLE_PASSES:-}," in
-        *,eliminate_data_type,*) ;;
-        *) export MIGRAPHX_DISABLE_PASSES="${MIGRAPHX_DISABLE_PASSES:+${MIGRAPHX_DISABLE_PASSES},}eliminate_data_type" ;;
-    esac
+    # Keep exact hash integers and avoid mixed-type normalization gather fusion.
+    # Set before loading libraries: the compiler caches environment settings.
+    for pass in eliminate_data_type fuse_horizontal; do
+        case ",${MIGRAPHX_DISABLE_PASSES:-}," in
+            *,$pass,*) ;;
+            *) export MIGRAPHX_DISABLE_PASSES="${MIGRAPHX_DISABLE_PASSES:+${MIGRAPHX_DISABLE_PASSES},}$pass" ;;
+        esac
+    done
     export MIGRAPHX_GPU_COMPILE_PARALLEL=${MIGRAPHX_GPU_COMPILE_PARALLEL:-4}
     # LLVM's GVN memory-dependence analysis is very slow on full int64 sort
     # kernels above 4096 elements. Keep O3 and disable that specific analysis.

@@ -97,9 +97,10 @@ def test_columnar_serialization_preserves_variable_event_lengths(tmp_path):
 def test_heptv2_runtime_retains_qualified_integer_and_compiler_settings():
     module = load_script("qualify-cms-physics")
     settings = module.migraphx_environment("heptv2", "fp32", "on")
-    assert settings["MIGRAPHX_DISABLE_PASSES"] == "eliminate_data_type"
+    assert settings["MIGRAPHX_DISABLE_PASSES"] == "eliminate_data_type,fuse_horizontal"
     assert settings["MIGRAPHX_GPU_HIP_FLAGS"] == "-mllvm -enable-gvn-memdep=false"
     assert settings["MIGRAPHX_MLIR_USE_SPECIFIC_OPS"] == "!attention"
+    assert module.migraphx_environment("attention", "fp32", "on")["MIGRAPHX_DISABLE_PASSES"] == "fuse_horizontal"
     assert module.migraphx_environment("attention", "decomposed-fp16", "on")["MIGRAPHX_MLIR_USE_SPECIFIC_OPS"] == "attention"
     assert module.migraphx_environment("attention", "decomposed-fp16", "off")["MIGRAPHX_MLIR_USE_SPECIFIC_OPS"] == "!attention"
 
