@@ -99,10 +99,10 @@ against your allocation before submission.
 The [published v3.2.0 evidence and limitations](benchmark-portability.md#historical-evidence-and-remaining-limitations)
 record the original GH200/H100/MI250X campaign. H100 used TFDS 3.2.1 while
 GH200/LUMI used 3.2.2; source trees, attention backends and loader settings also
-differed. The frozen `cld_h100_backbone_benchmark_321` and
-`cld_gh200_backbone_benchmark` recipes describe those runs. New runs default to
-`cld_backbone_benchmark`.
+differed. The `cld_h100_backbone_benchmark_321` and `cld_gh200_backbone_benchmark`
+scenarios that described those runs were removed with the attention hit recipes (see the
+git history). New runs default to the HEPTv2-only `cld_hits_heptv2_benchmark`.
 
 Local shell tests use stubs for Slurm, modules and containers. They verify argument
 forwarding and visibility preservation, not remote runtime availability. Qualify
-both backbones on each site using the final source commit before a full sweep.
+the HEPTv2 hit model on each site using the final source commit before a full sweep.

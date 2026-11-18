@@ -20,8 +20,9 @@ Backend and loader differences must stay explicit. Forcing NVIDIA and AMD to use
 identical kernels would defeat portability. Conversely, letting a profile change
 BF16 to FP32 or the warmup interval would silently change the experiment. The
 sweep rejects conflicting precision, compilation and recorder overrides. The
-canonical recipe is `configs/training/scenarios/cld_backbone_benchmark.yaml`.
-The GH200-named and H100-3.2.1 scenarios remain frozen historical recipes.
+canonical recipe is `configs/training/scenarios/cld_hits_heptv2_benchmark.yaml`
+(HEPTv2 set hit model). The earlier attention/HEPTv2 benchmark scenarios were removed
+with the attention hit recipes; their definitions remain in the git history.
 
 ## Run on an existing or new platform
 
@@ -92,7 +93,7 @@ batch 8, inspect completion and telemetry coverage, then run the full grid.
 
 ## Qualification
 
-After the [site environment setup](hpc-batch-sweep.md), qualify both backbones at
+After the [site environment setup](hpc-batch-sweep.md), qualify the HEPTv2 hit model at
 batch 8 before using the full grid. Run the submitter in the prepared environment;
 for GH200 that requires an ARM allocation. Select the profile and adapter together:
 

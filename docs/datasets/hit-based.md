@@ -26,8 +26,8 @@ The production and representation comparison below applies to **CLD and CLIC**. 
 |---|---|---|
 | Input elements | Reconstructed tracks and calorimeter clusters | Tracks, clusters, tracker hits and calorimeter hits (selected with `full_elements`) |
 | TFDS task | `pixi run tfds` | `pixi run tfds_full` ([general dataset](full.md)) |
-| CLD model | `pyg-cld-v1` | `pyg-cld-hits-v1` |
-| CLIC model | `pyg-clic-v1` | `pyg-clic-hits-v1` |
+| CLD model | `pyg-cld-v1` | `pyg-cld-hits-heptv2-set-v1` |
+| CLIC model | `pyg-clic-v1` | `pyg-clic-hits-heptv2-set-v1` |
 | Baseline candidates | Stored in `ycand` | `ycand` is a zero-filled placeholder |
 | Operational status | Supported default | Research workflow |
 

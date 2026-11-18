@@ -18,10 +18,10 @@ nvidia-smi topo -m
 DATA_DIR=$(pixi run python3 scripts/get_param.py particleflow_spec.yaml productions.cld.workspace_dir)/tfds/
 uv run python3 mlpf/pipeline.py \
     --spec-file particleflow_spec.yaml \
-    --model-name pyg-cld-hits-v1 \
+    --model-name pyg-cld-hits-heptv2-set-v1 \
     --production cld \
     --data-dir $DATA_DIR \
     train \
     --gpus 1 \
     --num_workers 4 \
-    --prefetch_factor 2 --model.type hept --gpu_batch_multiplier 2
+    --prefetch_factor 2 --gpu_batch_multiplier 2 --model.heptv2.activation_checkpointing true

@@ -172,8 +172,8 @@ def test_training_scenario_rejects_empty_variants():
         type(scenario).model_validate(payload)
 
 
-SCENARIO = ROOT / "configs/training/scenarios/cld_hits_output_comparison.yaml"
-CLIC_CLD_SCENARIO = ROOT / "configs/training/scenarios/clic_cld_pf_set_hits_comparison.yaml"
+SCENARIO = ROOT / "configs/training/scenarios/cld_pf_heptv2_hit_grouping_50k.yaml"
+MULTI_PRODUCTION_SCENARIO = ROOT / "configs/training/scenarios/pf_fm_experts.yaml"
 PLATFORMS = ROOT / "configs/training/platforms"
 
 
@@ -262,11 +262,11 @@ def test_global_batch_size_cli_takes_one_value_or_one_per_group():
 
 
 def test_platform_data_dir_mapping_requires_the_variant_production():
-    scenario = load_training_scenario(CLIC_CLD_SCENARIO)
+    scenario = load_training_scenario(MULTI_PRODUCTION_SCENARIO)
     platform = load_platform_profile(PLATFORMS / "local.yaml")
     platform.data_dir = {"cld": platform.data_dir["cld"]}
 
-    with pytest.raises(ValueError, match="no data_dir for production 'clic'"):
+    with pytest.raises(ValueError, match="no data_dir for production '(clic|colliderml|idea)'"):
         resolve_scenario_jobs(
             scenario,
             platform,
@@ -281,7 +281,9 @@ def test_platform_data_dir_mapping_requires_the_variant_production():
         spec_file=ROOT / "particleflow_spec.yaml",
         global_batch_size=8,
     )
-    assert {job.data_dir for job in jobs} == {"/tmp/shared_tfds"}
+    # one shared root serves every production (granularity-scan productions use subdirectories)
+    assert all(job.data_dir.startswith("/tmp/shared_tfds") for job in jobs)
+    assert "/tmp/shared_tfds" in {job.data_dir for job in jobs}
 
 
 def test_cli_dry_run_routes_selected_variant_to_its_production_data(tmp_path, capsys):
@@ -404,7 +406,7 @@ def test_scenario_and_platform_reject_misplaced_settings():
 
     with pytest.raises(ValueError, match="derived keys"):
         ScenarioVariant(
-            model_name="pyg-cld-hits-v1",
+            model_name="pyg-cld-hits-heptv2-set-v1",
             overrides={"seed": 17},
         )
 

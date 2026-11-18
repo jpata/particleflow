@@ -984,69 +984,14 @@ models:
         version: "3.3.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
-  pyg-cld-hits-v1: &pyg_cld_hits_v1
+  # Recommended CLD hit model: grouped HEPTv2 with tracker-neighborhood features. Every hit
+  # recipe uses HEPTv2 and the set output on the general *_full datasets; full_elements selects
+  # the element kinds (default: tracker and calorimeter hits).
+  pyg-cld-hits-heptv2-set-v1: &pyg_cld_hits_heptv2_set_v1
     <<: *defaults
     dataset: cld_hits
     gpu_batch_multiplier: 1
     pad_to_multiple_elements: 128
-
-    hyperparameters:
-      batch_size: 1
-      lr: 0.0001
-
-    architecture: &pyg_cld_hits_architecture
-      type: "attention"
-      input_encoding: "split"
-      output_mode: "elementwise"
-      binary_classification_focal_gamma: 2.0
-      attention:
-        num_convs: 3
-        head_dim: 16
-        num_heads: 16
-        use_jagged_attention: true
-
-    # Dataset Selection
-    train_datasets:
-      physical:
-        batch_size: 1
-        samples:
-          - name: "cld_edm_ttbar_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "cld_edm_ww_fullhad_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "cld_edm_qq_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-    validation_datasets:
-      physical:
-        batch_size: 1
-        samples:
-          - name: "cld_edm_ttbar_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "cld_edm_ww_fullhad_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "cld_edm_qq_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-    test_datasets:
-      - name: "cld_edm_ttbar_hits"
-        version: "3.2.2"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-      - name: "cld_edm_ww_fullhad_hits"
-        version: "3.2.2"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-      - name: "cld_edm_qq_hits"
-        version: "3.2.2"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-  pyg-cld-hits-set-v1:
-    <<: *pyg_cld_hits_v1
     # General datasets (tracks, clusters and hits); the hit model reads full_elements (default: hits)
     train_datasets: &cld_full_datasets_train
       physical:
@@ -1086,79 +1031,6 @@ models:
       - name: "cld_edm_qq_full"
         version: "1.0.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-    gpu_batch_multiplier: 1
-    pad_to_multiple_elements: 128
-
-    hyperparameters:
-      batch_size: 1
-      lr: 0.0001
-
-    architecture:
-      <<: *pyg_cld_hits_architecture
-      output_mode: "set"
-      set_decoder:
-        num_slots: 256
-        num_layers: 2
-        num_heads: 8
-        ffn_multiplier: 4.0
-        dropout: 0.0
-
-
-  # pyg-cld-hits-set-v1 on the archived *_hits 3.2.2 data (inherited from pyg-cld-hits-v1).
-  # Only for comparisons with the elementwise recipe, which cannot read the *_full datasets.
-  pyg-cld-hits-set-legacy-v1:
-    <<: *pyg_cld_hits_v1
-    gpu_batch_multiplier: 1
-    pad_to_multiple_elements: 128
-    hyperparameters:
-      batch_size: 1
-      lr: 0.0001
-    architecture:
-      <<: *pyg_cld_hits_architecture
-      output_mode: "set"
-      set_decoder:
-        num_slots: 256
-        num_layers: 2
-        num_heads: 8
-        ffn_multiplier: 4.0
-        dropout: 0.0
-  pyg-cld-hits-heptv2-sector-set-v1:
-    <<: *pyg_cld_hits_v1
-    train_datasets: *cld_full_datasets_train
-    validation_datasets: *cld_full_datasets_valid
-    test_datasets: *cld_full_datasets_test
-    gpu_batch_multiplier: 1
-    pad_to_multiple_elements: 128
-
-    architecture:
-      type: "heptv2"
-      input_encoding: "split"
-      output_mode: "set"
-      heptv2:
-        num_convs: 3
-        embedding_dim: 256
-        width: 256
-        num_heads: 16
-        dropout_ff: 0.0
-        block_size: 128
-      set_decoder:
-        num_slots: 256
-        num_layers: 2
-        num_heads: 8
-        query_init: "input-conditioned"
-        local_attention_radius: 0.4
-        proposal_mode: "grid-diverse"
-        use_aggregate_anchors: true
-        attention_mode: "sectorized"
-        num_sectors: 32
-        sector_neighbors: 1
-
-  # Recommended CLD hit model: grouped HEPTv2 with tracker-neighborhood features.
-  pyg-cld-hits-heptv2-set-v1: &pyg_cld_hits_heptv2_set_v1
-    <<: *pyg_cld_hits_v1
-    train_datasets: *cld_full_datasets_train
-    validation_datasets: *cld_full_datasets_valid
-    test_datasets: *cld_full_datasets_test
     hyperparameters:
       batch_size: 1
       lr: 0.001
@@ -1217,6 +1089,34 @@ models:
       hit_feature_engineering:
         tracker_neighborhood: true
 
+  # HEPTv2 with phi-sectorized decoder attention (three backbone layers, two decoder layers).
+  pyg-cld-hits-heptv2-sector-set-v1:
+    <<: *pyg_cld_hits_heptv2_set_v1
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0001
+    architecture:
+      type: "heptv2"
+      input_encoding: "split"
+      output_mode: "set"
+      heptv2:
+        num_convs: 3
+        embedding_dim: 256
+        width: 256
+        num_heads: 16
+        dropout_ff: 0.0
+        block_size: 128
+      set_decoder:
+        num_slots: 256
+        num_layers: 2
+        num_heads: 8
+        query_init: "input-conditioned"
+        local_attention_radius: 0.4
+        proposal_mode: "grid-diverse"
+        use_aggregate_anchors: true
+        attention_mode: "sectorized"
+        num_sectors: 32
+        sector_neighbors: 1
 
   # CLIC hit inputs with the CLD HEPTv2 set recipe (input-conditioned queries, hit grouping).
   pyg-clic-hits-heptv2-set-v1:
@@ -1368,122 +1268,6 @@ models:
       - name: "clic_edm_qq_pf"
         version: "3.3.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-  pyg-clic-hits-v1: &pyg_clic_hits_v1
-    <<: *defaults
-    dataset: clic_hits
-    gpu_batch_multiplier: 16
-
-    hyperparameters:
-      batch_size: 1
-      lr: 0.0001
-
-    architecture: &pyg_clic_hits_architecture
-      type: "attention"
-      input_encoding: "split"
-      output_mode: "elementwise"
-      binary_classification_focal_gamma: 2.0
-      attention:
-        num_convs: 3
-        head_dim: 16
-        num_heads: 16
-
-    # Dataset Selection
-    train_datasets:
-      physical:
-        batch_size: 1
-        samples:
-          - name: "clic_edm_ttbar_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "clic_edm_ww_fullhad_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "clic_edm_qq_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-    validation_datasets:
-      physical:
-        batch_size: 1
-        samples:
-          - name: "clic_edm_ttbar_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "clic_edm_ww_fullhad_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "clic_edm_qq_hits"
-            version: "3.2.2"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-    test_datasets:
-      - name: "clic_edm_ttbar_hits"
-        version: "3.2.2"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-      - name: "clic_edm_ww_fullhad_hits"
-        version: "3.2.2"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-      - name: "clic_edm_qq_hits"
-        version: "3.2.2"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-  pyg-clic-hits-set-v1:
-    <<: *pyg_clic_hits_v1
-    # General datasets (tracks, clusters and hits); the hit model reads full_elements (default: hits)
-    train_datasets: &clic_full_datasets_train
-      physical:
-        batch_size: 1
-        samples:
-          - name: "clic_edm_ttbar_full"
-            version: "1.0.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "clic_edm_ww_fullhad_full"
-            version: "1.0.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "clic_edm_qq_full"
-            version: "1.0.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-    validation_datasets: &clic_full_datasets_valid
-      physical:
-        batch_size: 1
-        samples:
-          - name: "clic_edm_ttbar_full"
-            version: "1.0.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "clic_edm_ww_fullhad_full"
-            version: "1.0.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-          - name: "clic_edm_qq_full"
-            version: "1.0.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-    test_datasets: &clic_full_datasets_test
-      - name: "clic_edm_ttbar_full"
-        version: "1.0.0"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-      - name: "clic_edm_ww_fullhad_full"
-        version: "1.0.0"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-      - name: "clic_edm_qq_full"
-        version: "1.0.0"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-    gpu_batch_multiplier: 16
-
-    hyperparameters:
-      batch_size: 1
-      lr: 0.0001
-
-    architecture:
-      <<: *pyg_clic_hits_architecture
-      output_mode: "set"
-      set_decoder:
-        num_slots: 256
-        num_layers: 2
-        num_heads: 8
-        ffn_multiplier: 4.0
-        dropout: 0.0
 
   pyg-maia-v1:
     <<: *defaults
@@ -1756,55 +1540,18 @@ models:
         version: "1.5.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
-  # Elementwise hits model on the archived colliderml_ttbar_hits 1.3.0 TFDS (the hit view has
-  # been replaced by the general colliderml_*_full datasets, which support the set mode only).
-  pyg-colliderml-hits-v1: &pyg_colliderml_hits_v1
-    <<: *defaults
+  # ColliderML hit inputs with the CLD HEPTv2 set recipe. ttbar_pu0 has up to ~390 targets per
+  # event (p99 ~310), so the decoder has 512 slots; pu200 (~7.8k targets) is out of reach for
+  # set mode. ODD solenoid: 3 T (used by the optional fit readout).
+  pyg-colliderml-hits-heptv2-set-v1:
+    <<: *pyg_cld_hits_heptv2_set_v1
     dataset: colliderml_hits
-    gpu_batch_multiplier: 8
-
-    hyperparameters:
-      batch_size: 1
-      lr: 0.0001
-
-    architecture: &pyg_colliderml_hits_architecture
-      type: "attention"
-      input_encoding: "split"
-      attention:
-        attention_type: flash
-        num_convs: 3
-        head_dim: 16
-        num_heads: 16
-
-    # Dataset Selection
-    train_datasets:
-      physical:
-        batch_size: 1
-        samples:
-          - name: "colliderml_ttbar_hits"
-            version: "1.3.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-    validation_datasets:
-      physical:
-        batch_size: 1
-        samples:
-          - name: "colliderml_ttbar_hits"
-            version: "1.3.0"
-            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-    test_datasets:
-      - name: "colliderml_ttbar_hits"
-        version: "1.3.0"
-        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-
-  # Set-prediction variant of the hits model (cf. pyg-cld-hits-set-v1). Regresses absolute
-  # log(pt), log(E), so it needs no per-element energy anchor (release-1 tracker hits have none).
-  # ttbar_pu0 has up to ~390 targets per event (p99 ~310), above the 256-slot default; pu200
-  # (~7.8k targets per event) is out of reach for set mode.
-  pyg-colliderml-hits-set-v1:
-    <<: *pyg_colliderml_hits_v1
-    # General dataset (tracks, clusters and hits); the hit model reads full_elements (default: hits)
+    architecture:
+      <<: *pyg_cld_hits_heptv2_set_architecture
+      set_decoder:
+        <<: *pyg_cld_hits_heptv2_set_decoder
+        num_slots: 512
+        tracker_group_magnetic_field: 3.0
     train_datasets:
       physical:
         batch_size: 1
@@ -1823,15 +1570,3 @@ models:
       - name: "colliderml_ttbar_full"
         version: "1.0.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
-    gpu_batch_multiplier: 1
-    pad_to_multiple_elements: 128
-
-    architecture:
-      <<: *pyg_colliderml_hits_architecture
-      output_mode: "set"
-      set_decoder:
-        num_slots: 512
-        num_layers: 2
-        num_heads: 8
-        ffn_multiplier: 4.0
-        dropout: 0.0

@@ -93,7 +93,7 @@ def main():
 
     exp_name = exp_path.name
     parts = exp_name.split("_")
-    model_id = parts[0]  # e.g., pyg-cld-hits-v1
+    model_id = parts[0]  # e.g., pyg-cld-hits-heptv2-set-v1
     scenario = parts[1]  # e.g., cld
 
     if args.version:
@@ -110,7 +110,7 @@ def main():
         else:
             dtype = "clusters"
 
-        # Try to extract version from model_id (e.g., v1 from pyg-cld-hits-v1)
+        # Try to extract version from model_id (e.g., v1 from pyg-cld-hits-heptv2-set-v1)
         version_match = re.search(r"v\d+(\.\d+)*", model_id)
         version = version_match.group(0) if version_match else "v1"
 

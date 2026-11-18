@@ -17,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description="Restrict CLD/CLIC/IDEA models to locally available ttbar datasets.")
     parser.add_argument("input_spec", type=Path)
     parser.add_argument("output_spec", type=Path)
-    parser.add_argument("--hit-version", default="3.2.1")
+    parser.add_argument("--hit-version", default="1.0.0")
     parser.add_argument("--hit-splits", nargs="+", default=["1"])
     parser.add_argument("--pf-version", default="3.3.0")
     parser.add_argument("--pf-splits", nargs="+", default=[str(i) for i in range(1, 11)])
@@ -32,12 +32,11 @@ def main():
         spec = yaml.safe_load(f)
 
     local_datasets = {
-        "pyg-cld-hits-v1": ("cld_hits", "cld_edm_ttbar_hits", args.hit_version, args.hit_splits),
-        "pyg-cld-hits-set-v1": ("cld_hits", "cld_edm_ttbar_hits", args.hit_version, args.hit_splits),
-        "pyg-cld-hits-heptv2-sector-set-v1": ("cld_hits", "cld_edm_ttbar_hits", args.hit_version, args.hit_splits),
-        "pyg-cld-hits-heptv2-set-v1": ("cld_hits", "cld_edm_ttbar_hits", args.hit_version, args.hit_splits),
-        "pyg-clic-hits-v1": ("clic_hits", "clic_edm_ttbar_hits", args.hit_version, args.hit_splits),
-        "pyg-clic-hits-set-v1": ("clic_hits", "clic_edm_ttbar_hits", args.hit_version, args.hit_splits),
+        "pyg-cld-hits-heptv2-set-v1": ("cld_hits", "cld_edm_ttbar_full", args.hit_version, args.hit_splits),
+        "pyg-cld-hits-heptv2-sector-set-v1": ("cld_hits", "cld_edm_ttbar_full", args.hit_version, args.hit_splits),
+        "pyg-clic-hits-heptv2-set-v1": ("clic_hits", "clic_edm_ttbar_full", args.hit_version, args.hit_splits),
+        "pyg-idea-hits-heptv2-set-v1": ("idea_hits", "idea_edm_ttbar_full", args.hit_version, args.hit_splits),
+        "pyg-colliderml-hits-heptv2-set-v1": ("colliderml_hits", "colliderml_ttbar_full", args.hit_version, args.hit_splits),
         "pyg-cld-v1": ("cld", "cld_edm_ttbar_pf", args.pf_version, args.pf_splits),
         "pyg-clic-v1": ("clic", "clic_edm_ttbar_pf", args.pf_version, args.pf_splits),
         "pyg-idea-pipeline-v1": ("idea", "idea_edm_ttbar_pf", args.idea_version, args.idea_splits),

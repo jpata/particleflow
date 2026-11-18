@@ -7,8 +7,7 @@ single-device launchers, qualification and full-sweep commands.
 
 For the EmpireAI ARM64 GH200 test node and `ghtest` reservation, see the
 [setup and smoke-test instructions](../../scripts/empireai/README.md).
-`cld_gh200_backbone_benchmark` compares attention and HEPTv2 on the copied ttbar
-hits subset at batch 8 for 1,000 steps with matched decoder, features and seed.
+`cld_gh200_smoke` runs a short HEPTv2 hit-model smoke test there.
 
 Native and Ray training workers collect portable benchmark evidence when enabled
 with `--set benchmark.enabled=true`, under each experiment's `benchmark/` directory.
@@ -51,75 +50,21 @@ tuning live under `platforms/`. Run a scenario locally with:
 
 ```bash
 uv run python3 scripts/training/run_scenario.py \
-  --scenario configs/training/scenarios/cld_hits_output_comparison.yaml \
+  --scenario configs/training/scenarios/cld_pf_heptv2_hit_grouping_50k.yaml \
   --platform configs/training/platforms/local.yaml \
   --global-batch-size 8 \
   --dry-run
 ```
 
-## CLIC and CLD backbone benchmark
+## Hit-model recipes
 
-[`clic_cld_backbone_benchmark`](scenarios/clic_cld_backbone_benchmark.yaml) runs
-eight models per seed: CLIC/CLD × tracks-and-clusters/raw-hits × attention/HEPTv2.
-Variant names are `{cld,clic}_{pf,hits}_{attention,heptv2}`. The older
-`clic_cld_pf_set_hits_comparison` contains only attention models and retains its
-historical recipe.
-
-Track/cluster variants request **one GPU per job**; hit variants use the platform
-GPU count (eight on H100 and MI250X). With global batch 128, this gives 128 events
-on the single PF GPU and 16 events per GPU for eight-GPU hit jobs. Submission
-automatically creates separate arrays: indices `0,1,4,5` request one GPU, while
-`2,3,6,7` use the platform count. GPU counts, batch resolution, and worker allocation
-checks follow each variant. Other Slurm resources still come from the platform;
-in particular, LUMI's 480G host-memory request remains unchanged.
-
-All eight models train from scratch for 50,000 steps at global batch 128 with
-LAMB, LR 0.001 and cosine decay (6.4M event presentations each). Validation and
-checkpoints run every 1,000 steps, matching the completed readout study. Seed 12345 is
-the initial benchmark; repeat with `--seed` for training-seed uncertainty.
-Both backbones have six layers and embedding width 256, with 16 heads.
-HEPTv2 uses block size 128, deterministic hashing and activation checkpointing.
-This matches event exposure and embedding width, not parameter count or compute.
-
-The four hit models share the small-model recipe with the tracker momentum head
-from the completed readout campaign in
-[`20261021_cld_tracker_losses_readout`](../../notebooks/studies/20261021_cld_tracker_losses_readout/cld_tracker_losses_readout.ipynb): four global Flash
-decoder layers, 256 slots, grid-diverse aggregate proposals, supervised hard
-hit grouping, and geometry plus calorimeter/tracker-neighborhood features.
-The decoder and input features match `cld_pf_heptv2_default_50k` with
-`tracker_momentum_readout: true` for both backbones. In the matched 50k campaign,
-the head improved charged width from 12.78% to 12.40%, tails from 3.69% to 3.38%,
-and jet IQR from 0.10316 to 0.09815. Its +0.15 percentage-point F1 change has a
-paired 95% interval spanning zero; the tail reduction interval excludes zero.
-This is the best-supported current benchmark candidate, not a multi-seed proven
-replacement for the conservative default in the [evidence summary](../../docs/cld_hit_results.md).
-Sparse pooling, momentum/doublet inputs, fitted readouts, balanced CE, and auxiliary
-fit/overlap losses stay off. The loss campaign only has matched 32k results;
-combining balanced CE with the head is untested. The scaling study favors keeping
-width 256 and depths 6/4 for particle reconstruction, although large improves jets.
-CLIC and attention transfer of this recipe are new benchmark measurements, not previously
-validated wins. Track/cluster models retain elementwise output.
-
-The spec currently selects PF TFDS **3.3.0** and hits **3.2.2** for both detectors.
-These are fresh comparisons, not reproductions of archived CLD **3.2.1** results.
-Use common evaluation definitions and matched checkpoints, and compare momentum
-resolution/tails, efficiency, jets and event closure alongside particle F1.
-
-Preview all eight jobs without launching training:
-
-```bash
-uv run --no-sync python3 scripts/training/run_scenario.py \
-  --scenario configs/training/scenarios/clic_cld_backbone_benchmark.yaml \
-  --platform configs/training/platforms/flatiron_h100.yaml --dry-run
-```
-
-Submit with `scripts/flatiron/train_scenario.sh clic_cld_backbone_benchmark h100`.
-Use `--variant clic_hits_heptv2` to select a single model. The local and Flatiron
-profiles map data paths separately for CLIC and CLD. The existing LUMI profile
-has one CLD directory for all productions; before using it for the full benchmark,
-provide a platform with `data_dir: {cld: /path/to/cld, clic: /path/to/clic}` or a
-shared TFDS root containing both detectors. A dry run resolves configurations
-but does not verify data availability or GPU memory usage.
+All hit-input models use HEPTv2 with the set output on the general `*_full` datasets
+(`full_elements` selects tracker hits, calorimeter hits, tracks and clusters):
+`pyg-cld-hits-heptv2-set-v1` (recommended CLD model), `pyg-cld-hits-heptv2-sector-set-v1`,
+`pyg-clic-hits-heptv2-set-v1`, `pyg-idea-hits-heptv2-set-v1` and
+`pyg-colliderml-hits-heptv2-set-v1`. The attention and elementwise hit recipes and the
+scenarios that compared them were removed; their definitions remain in the git history and
+their results in the dated study archives.
 
 ## CMS backbone comparison
 
@@ -225,12 +170,12 @@ profile and short-run defaults:
 
 ```bash
 scripts/local/train_scenario.sh --list
-scripts/local/train_scenario.sh cld_hits_output_comparison --dry-run
-scripts/local/train_scenario.sh cld_hits_output_comparison --seed 2468
+scripts/local/train_scenario.sh cld_pf_heptv2_hit_grouping_50k --dry-run
+scripts/local/train_scenario.sh cld_pf_heptv2_hit_grouping_50k --seed 2468
 ```
 
 Additional arguments are forwarded to the generic scenario runner, such as
-`--variant set`, `--global-batch-size 4`, or `--set num_steps=100`.
+`--variant hit_heptv2_baseline`, `--global-batch-size 4`, or `--set num_steps=100`.
 
 With multiple variants or seeds, jobs are ordered by seed and then by variant. A
 Slurm array can select one job using `--task-index $SLURM_ARRAY_TASK_ID`.
@@ -251,8 +196,8 @@ picker:
 
 ```bash
 scripts/flatiron/train_scenario.sh --list
-scripts/flatiron/train_scenario.sh cld_hits_output_comparison h100 --dry-run
-scripts/flatiron/train_scenario.sh cld_hits_output_comparison h100
+scripts/flatiron/train_scenario.sh cld_pf_heptv2_hit_grouping_50k h100 --dry-run
+scripts/flatiron/train_scenario.sh cld_pf_heptv2_hit_grouping_50k h100
 ```
 
 The picker reads Slurm resources from the selected platform profile and derives
@@ -263,21 +208,12 @@ Tallinn and LUMI use the same interface with site-specific profiles and workers:
 
 ```bash
 scripts/tallinn/train_scenario.sh --list
-scripts/tallinn/train_scenario.sh cld_hits_output_comparison l40 --dry-run
-scripts/tallinn/train_scenario.sh cld_hits_output_comparison l40
+scripts/tallinn/train_scenario.sh cld_pf_heptv2_hit_grouping_50k l40 --dry-run
+scripts/tallinn/train_scenario.sh cld_pf_heptv2_hit_grouping_50k l40
 
 scripts/lumi/train_scenario.sh --list
-scripts/lumi/train_scenario.sh cld_hits_output_comparison mi250x --dry-run
-scripts/lumi/train_scenario.sh cld_hits_output_comparison mi250x
-```
-
-For the three CLD hit-set references (Flash backbone with global Flash decoder,
-HEPTv2 backbone with global Flash decoder, and HEPTv2 backbone with sectorized
-Flash decoder), preview and submit the comparison campaign:
-
-```bash
-scripts/lumi/train_scenario.sh cld_set_hits_heptv2_sector_comparison mi250x --dry-run
-scripts/lumi/train_scenario.sh cld_set_hits_heptv2_sector_comparison mi250x
+scripts/lumi/train_scenario.sh cld_pf_heptv2_hit_grouping_50k mi250x --dry-run
+scripts/lumi/train_scenario.sh cld_pf_heptv2_hit_grouping_50k mi250x
 ```
 
 The Tallinn worker runs the repository's `uv` environment directly. LUMI uses
@@ -520,9 +456,9 @@ options. Experiments are stored under `<scenario>/<variant>_seed...`.
 
 ## Portable benchmark sweeps
 
-Use `scenarios/cld_backbone_benchmark.yaml` for new GPU comparisons and
+Use `scenarios/cld_hits_heptv2_benchmark.yaml` (HEPTv2 set hit model) for new GPU comparisons and
 `python -m scripts.training.submit_batch_sweep --platform <profile.yaml> --dry-run`
 to preview allocation resources from a profile. Add `--python-wrapper` for a site
-environment adapter. The historical GH200 and H100-3.2.1 scenarios retain their
-original definitions. See [benchmark portability](../../docs/training/benchmark-portability.md)
+environment adapter. The earlier attention/HEPTv2 benchmark scenarios (GH200,
+H100 with TFDS 3.2.1) were removed together with the attention hit recipes. See [benchmark portability](../../docs/training/benchmark-portability.md)
 for qualification, data provenance and the compact evidence release workflow.

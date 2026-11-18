@@ -1,6 +1,6 @@
 # CLD hits
 
-CLD hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4hep production at 365 GeV. The schema version is **3.2.2**, and the standard hit recipe is `pyg-cld-hits-v1`. Hit reconstruction is a research workflow.
+CLD hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4hep production at 365 GeV. Hits are part of the [general datasets](full.md) `cld_edm_<process>_full` (version **1.0.0**); the hit recipes are `pyg-cld-hits-heptv2-set-v1` (recommended) and `pyg-cld-hits-heptv2-sector-set-v1`. The archived `cld_edm_<process>_hits` (**3.2.2**) TFDS below remain readable. Hit reconstruction is a research workflow.
 
 ## Physics samples
 
@@ -13,7 +13,7 @@ CLD hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4h
 
 Recipes configure partitions 1--10. The [verified Hub selection](catalog.md#published-availability) provides configuration 1 for `ttbar`, `WW`, and `qq`; check other selections separately.
 
-For CLD particle-set studies, the recommended research preset is `pyg-cld-hits-heptv2-set-v1`; see the [evidence and recommendation](../cld_hit_results.md).
+See the [evidence and recommendation](../cld_hit_results.md) for the HEPTv2 set model.
 
 ## Event view
 

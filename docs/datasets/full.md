@@ -91,17 +91,20 @@ Training selection:
 
 ## Training
 
-The set recipes (`pyg-cld-hits-set-v1`, `pyg-cld-hits-heptv2-set-v1`,
-`pyg-cld-hits-heptv2-sector-set-v1`, `pyg-clic-hits-set-v1`,
-`pyg-colliderml-hits-set-v1`, and the HEPTv2 set recipes `pyg-clic-hits-heptv2-set-v1`
-(4 T field for the optional fit readout) and `pyg-idea-hits-heptv2-set-v1` (new
-`idea_hits` model family)) read the full datasets. The attention set recipes use learned
-queries and start slowly: on 300 CLIC training events they had not yet predicted any
-particles after 300 steps, while the HEPTv2 recipe with input-conditioned queries
-reached validation F1 0.26 (hits), 0.45 (tracks + calorimeter hits) and 0.49
-(tracks + clusters) after 500 steps. The full datasets support only the set output mode, so elementwise
-recipes keep reading previously built `*_hits` 3.2.2 datasets. Their comparison
-scenario uses `pyg-cld-hits-set-legacy-v1`, the same set model on that data.
+Every hit recipe uses HEPTv2 with the set output on the full datasets:
+
+| Recipe | Model family | Notes |
+|---|---|---|
+| `pyg-cld-hits-heptv2-set-v1` | `cld_hits` | Recommended CLD model; base of the other recipes |
+| `pyg-cld-hits-heptv2-sector-set-v1` | `cld_hits` | Phi-sectorized decoder attention |
+| `pyg-clic-hits-heptv2-set-v1` | `clic_hits` | 4 T field for the optional fit readout |
+| `pyg-idea-hits-heptv2-set-v1` | `idea_hits` | Drift-chamber events need activation checkpointing on small GPUs |
+| `pyg-colliderml-hits-heptv2-set-v1` | `colliderml_hits` | 512 slots, 3 T field |
+
+On 300 CLIC training events, the CLIC recipe reached validation F1 0.26 (hits),
+0.45 (tracks + calorimeter hits) and 0.49 (tracks + clusters) after 500 steps. The
+attention and elementwise hit recipes were removed; previously built `*_hits` TFDS
+remain readable by the loader in set mode.
 
 | Option | Default | Meaning |
 |---|---|---|

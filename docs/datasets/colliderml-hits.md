@@ -1,12 +1,12 @@
 # ColliderML hits
 
-ColliderML raw tracker and calorimeter hits are part of the [general datasets](full.md) `colliderml_ttbar_full` and `colliderml_ttbar_pu200_full` (version **1.0.0**), together with tracks, clusters and per-element truth labels. They replace the former `colliderml_ttbar_hits` builders; previously built 1.3.0 hit datasets remain readable for the elementwise recipe. Pileup membership is carried in the target particle's `ispu` feature.
+ColliderML raw tracker and calorimeter hits are part of the [general datasets](full.md) `colliderml_ttbar_full` and `colliderml_ttbar_pu200_full` (version **1.0.0**), together with tracks, clusters and per-element truth labels. They replace the former `colliderml_ttbar_hits` builders. Pileup membership is carried in the target particle's `ispu` feature.
 
 ## Physics samples
 
 | Physics sample | Pileup | TFDS dataset | Model recipe |
 |---|---|---|---|
-| Top-quark pairs | None | `colliderml_ttbar_full` | `pyg-colliderml-hits-set-v1` (`pyg-colliderml-hits-v1` reads the archived `colliderml_ttbar_hits` 1.3.0) |
+| Top-quark pairs | None | `colliderml_ttbar_full` | `pyg-colliderml-hits-heptv2-set-v1` |
 | Top-quark pairs | Approximately 200 interactions | `colliderml_ttbar_pu200_full` | Builder exists; no named training recipe |
 
 The TFDS mappings configure partitions 1--10. These samples are not included in the [verified public selection](catalog.md#published-availability); check publication availability before downloading. A custom pileup-200 training recipe requires its own validation.
