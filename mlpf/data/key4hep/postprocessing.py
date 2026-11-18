@@ -70,8 +70,6 @@ class EventRecord:
     X_hit_calo: np.ndarray
     ytarget_track: np.ndarray
     ytarget_cluster: np.ndarray
-    ytarget_hit_tracker: np.ndarray
-    ytarget_hit_calo: np.ndarray
     ycand_track: np.ndarray
     ycand_cluster: np.ndarray
     genmet: float

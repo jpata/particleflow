@@ -99,12 +99,13 @@ Every hit recipe uses HEPTv2 with the set output on the full datasets:
 | `pyg-cld-hits-heptv2-sector-set-v1` | `cld_hits` | Phi-sectorized decoder attention |
 | `pyg-clic-hits-heptv2-set-v1` | `clic_hits` | 4 T field for the optional fit readout |
 | `pyg-idea-hits-heptv2-set-v1` | `idea_hits` | Drift-chamber events need activation checkpointing on small GPUs |
+| `pyg-maia-hits-heptv2-set-v1` | `maia_hits` | 512 slots, 5 T field; needs activation checkpointing |
 | `pyg-colliderml-hits-heptv2-set-v1` | `colliderml_hits` | 512 slots, 3 T field |
 
 On 300 CLIC training events, the CLIC recipe reached validation F1 0.26 (hits),
 0.45 (tracks + calorimeter hits) and 0.49 (tracks + clusters) after 500 steps. The
-attention and elementwise hit recipes were removed; previously built `*_hits` TFDS
-remain readable by the loader in set mode.
+attention and elementwise hit recipes and the `*_hits` TFDS were removed; set mode
+requires a `*_full` dataset.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -163,7 +164,7 @@ The builder validates:
 ## Scope
 
 - **Covered:** CLD (all mapped samples, including the granularity scans), CLIC (ttbar, WW, qq), MAIA (ttbar builder), IDEA (ttbar, WW, qq) and ColliderML (ttbar without pileup and with pileup 200).
-- **Validated on converted events:** CLD, CLIC, IDEA and ColliderML (no pileup). The strict Parquet validator runs the TFDS contract on every event (`full_view_labels` gate).
+- **Validated on converted events:** CLD, CLIC, MAIA, IDEA and ColliderML (no pileup). The strict Parquet validator runs the TFDS contract on every event (`full_view_labels` gate).
 
 **CLIC.**
 - Uses the shared key4hep path and the CLD collection names.
@@ -171,6 +172,13 @@ The builder validates:
 - The strict validator passes all gates on ttbar. On qq, two track/cluster-view gates (Pandora baseline energy and target-truth closure) fail identically on `main`.
 
 ## Detector specifics
+
+**MAIA.**
+- Uses the shared key4hep path at 5 T. The files carry no CellIDEncoding metadata, so tracker `side` and `layer` are zero.
+- ttbar events have about 10⁵ calorimeter hits (up to 1.4 × 10⁵) and up to about 400 targets, so the recipe uses 512 slots and activation checkpointing.
+- Tracks are sparse (some events have none).
+- On converted ttbar events, fits to primary tracker hits give a 0.35% relative-pT half-width (1.2% with inclusive `particle_number`).
+- The strict validator fails the calorimeter hit energy, track target direction and Pandora baseline energy gates, which also fail on `main`. The tracker hit momentum gate, which fails on `main`, passes with primary-origin hits.
 
 **IDEA.**
 - Tracker hits come from the vertex detector (`VTXB/VTXD`), the silicon wrapper (`SiWrB/SiWrD`) and the drift chamber (`DCH_DigiCollection`), each linked digi → SimTrackerHit → MCParticle.

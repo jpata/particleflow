@@ -223,8 +223,9 @@ def test_tfds_roundtrip_and_loader(tmp_path):
     assert adapted["ytarget_set"].shape == (2, len(Y))
     assert adapted["input_type_id"] == INPUT_TYPE_IDS["hits"]
     assert not any(key.startswith("X_") for key in adapted)
-    with pytest.raises(ValueError, match="set output mode"):
-        TFDSDataSource(source, sort=False, build_target_set=False)[0]
+    # analysis readers without a target set still get the materialized inputs and labels
+    plain = TFDSDataSource(source, sort=False, build_target_set=False)[0]
+    assert plain["X"].shape == (8, 15) and plain["ylabel"].shape == (8, len(LABEL_FEATURES))
     mixed = TFDSDataSource(source, sort=False, build_target_set=True, full_elements=["track", "hit_calo"])[0]
     assert mixed["input_type_id"] == INPUT_TYPE_IDS["full"]
 
@@ -373,3 +374,12 @@ def test_inward_hits_by_time_and_calorimeter_entry():
     vertex = np.array([[0.0, 0, 0], [1300, 0, 0], [1400, 0, 0], [1300, 0, 0]])
     target_index = np.array([0, -1, -1, 1])
     assert calorimeter_entry_rows(np.array([2, 1, 3, -1]), parent_row, vertex, target_index).tolist() == [0, 0, 3, -1]
+
+
+def test_full_datasets_require_set_output_mode():
+    from mlpf.conf import MLPFConfig
+
+    config = full_model_config(["hit_tracker", "hit_calo"]).model_dump(mode="json")
+    config["model"]["output_mode"] = "elementwise"
+    with pytest.raises(ValueError, match="support only model.output_mode='set'"):
+        MLPFConfig.model_validate(config)

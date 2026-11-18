@@ -9,7 +9,7 @@ Start with the input representation. Each detector page lists its physics sample
 | Input representation | Detector or dataset family | Typical use |
 |---|---|---|
 | [Tracks and clusters](track-cluster.md) | [CMS](cms.md), [CLD](cld.md), [CLICdet](clic.md), [ColliderML](colliderml.md), [MAIA](maia.md), [IDEA](idea.md) | Reconstructed tracks and calorimeter clusters; the default starting point for CMS, CLD, and CLIC. |
-| [Hits](hit-based.md) | [CLD](cld-hits.md), [CLICdet](clic-hits.md), [ColliderML](colliderml-hits.md) | Tracker and calorimeter measurements for dedicated hit-model research. |
+| [General: tracks, clusters and hits](full.md) | [CLD](cld-hits.md), [CLICdet](clic-hits.md), [ColliderML](colliderml-hits.md), [IDEA](full.md#detector-specifics), [MAIA](full.md#detector-specifics) | Raw tracker and calorimeter hits with tracks, clusters and truth labels for hit-model research. |
 
 The catalog includes maintained recipes and explicitly identified partial workflows. A builder's existence does not imply a trained model, physics validation, or public download. Detector pages identify those boundaries. Dataset schema, Python package, and model artifact versions are independent.
 
@@ -46,8 +46,8 @@ The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/
 | Tracks and clusters | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_pf` | 3.3.0 | 1 |
 | Tracks and clusters | ColliderML | `colliderml_ttbar_nopu_pf`, `colliderml_ttbar_pu200_pf` | 1.2.0 | 1 |
 | Tracks and clusters | IDEA | `idea_edm_{ttbar,ww_fullhad,qq}_pf` | 0.2.1 | 1 |
-| Hits | CLD | `cld_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
-| Hits | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
+
+The previously published `*_hits` 3.2.2 datasets use the old hit layout, which the current code no longer reads; the general `*_full` datasets are not yet published.
 
 Treat the [live Hub tree](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) as the source of truth for data availability. The `tfds_mapping`, `tfds_full_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects.
 

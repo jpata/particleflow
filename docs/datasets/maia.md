@@ -25,4 +25,4 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 
 ## Production and validation
 
-Review `productions.maia` in `particleflow_spec.yaml` before following [dataset generation](generate.md). The builder is under `mlpf/heptfds/maia_pf_edm4hep/`. The [detector-comparison runbook](../validation/detector-comparison.md) records source assumptions, validation failures, and local smoke coverage. Passing a short training run does not resolve the detector-data limitations.
+Review `productions.maia` in `particleflow_spec.yaml` before following [dataset generation](generate.md). The builder is under `mlpf/heptfds/maia_pf_edm4hep/`. The [general dataset](full.md) `maia_edm_ttbar_full` (builder `mlpf/heptfds/maia_full/`) adds the raw tracker and calorimeter hits with truth labels for the `pyg-maia-hits-heptv2-set-v1` recipe. The [detector-comparison runbook](../validation/detector-comparison.md) records source assumptions, validation failures, and local smoke coverage. Passing a short training run does not resolve the detector-data limitations.

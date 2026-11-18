@@ -1,6 +1,5 @@
 # Shared CLD hit-model throughput recipe (HEPTv2 set model). Site-specific runtime choices
-# belong in platform profiles. Reads the archived cld_edm_ttbar_hits 3.2.2 TFDS that the
-# benchmark sites already hold; the general cld_edm_ttbar_full datasets work as well.
+# belong in platform profiles. Reads the general cld_edm_ttbar_full 1.0.0 dataset, config 1.
 name: cld_hits_heptv2_benchmark
 spec_file: particleflow_spec.yaml
 production_name: cld
@@ -90,8 +89,8 @@ common_overrides:
   model.backbone.mode: shared
   model.backbone.num_convs: 6
   train_dataset.cld_hits.physical.samples: &id001
-    cld_edm_ttbar_hits:
-      version: 3.2.2
+    cld_edm_ttbar_full:
+      version: "1.0.0"
       splits:
       - '1'
   valid_dataset.cld_hits.physical.samples: *id001

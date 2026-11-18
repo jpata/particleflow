@@ -1,6 +1,6 @@
 # Evaluate and validate CLD or CLIC
 
-The Key4HEP path reads an EDM4hep ROOT file, reconstructs particles with a compatible MLPF checkpoint, writes a Parquet summary, and produces particle- and jet-level plots. It supports `cld`, `clic`, `cld_hits`, and `clic_hits`.
+The Key4HEP path reads an EDM4hep ROOT file, reconstructs particles with a compatible MLPF checkpoint, writes a Parquet summary, and produces particle- and jet-level plots. It supports the track/cluster models `cld` and `clic`. Hit-input models (HEPTv2 set models on the [general datasets](../datasets/full.md)) are evaluated through the training pipeline's test step.
 
 This page begins with one published CLD model and goes directly to inference. The later workflow scales the same evaluator to several files.
 
@@ -60,10 +60,8 @@ Keep `checkpoint-*.pth` and `model_kwargs.pkl` from the same experiment. Change 
 |---|---|
 | CLD tracks and clusters | `cld` |
 | CLIC tracks and clusters | `clic` |
-| CLD hits | `cld_hits` |
-| CLIC hits | `clic_hits` |
 
-Pair hit checkpoints with hit inputs and track-and-cluster checkpoints with track-and-cluster inputs, including within the same detector.
+Use track-and-cluster checkpoints with these modes.
 
 ## Run held-out TFDS evaluation
 

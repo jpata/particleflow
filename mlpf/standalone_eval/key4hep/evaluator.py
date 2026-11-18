@@ -27,7 +27,6 @@ from mlpf.data.key4hep.postprocessing import (
     sanitize,
     track_feature_order,
     cluster_feature_order,
-    hit_feature_order,
 )
 
 
@@ -37,7 +36,7 @@ def parse_args():
     parser.add_argument("--checkpoint", type=str, required=True, help="Model checkpoint")
     parser.add_argument("--config", type=str, help="Model config (YAML or model_kwargs.pkl)")
     parser.add_argument("--outpath", type=str, default="eval_results.parquet", help="Output Parquet file")
-    parser.add_argument("--detector", type=str, default="clic", choices=["clic", "cld", "clic_hits", "cld_hits"], help="Detector type")
+    parser.add_argument("--detector", type=str, default="clic", choices=["clic", "cld"], help="Detector type (track/cluster models)")
     parser.add_argument("--num-events", type=int, default=-1, help="Number of events to process")
     parser.add_argument("--device", type=str, default="cpu", help="Device to run on (cpu or cuda)")
     parser.add_argument("--dtype", type=str, default="float32", choices=["float32", "float16", "bfloat16"], help="Data type for inference")
@@ -221,25 +220,22 @@ def main():
         )
 
         # Prepare input features X
-        if "hits" in args.detector:
-            hit_features, _, _ = get_hit_matrix_and_genadj(hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id)
-            X = get_feature_matrix(hit_features, hit_feature_order)
-        else:
-            # track/cluster based
-            track_features = track_to_features(prop_data, iev)
-            X_track = get_feature_matrix(track_features, track_feature_order)
+        # Track/cluster inputs. Hit-input models (HEPTv2 set models on the general *_full datasets)
+        # are validated through the training pipeline; this evaluator handles elementwise outputs.
+        track_features = track_to_features(prop_data, iev)
+        X_track = get_feature_matrix(track_features, track_feature_order)
 
-            # Need hit features for clusters
-            hit_features, _, hit_idx_local_to_global = get_hit_matrix_and_genadj(hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id)
-            hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
-            cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
-            X_cluster = get_feature_matrix(cluster_features, cluster_feature_order)
+        # Need hit features for clusters
+        hit_features, _, hit_idx_local_to_global = get_hit_matrix_and_genadj(hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id)
+        hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
+        cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev)
+        X_cluster = get_feature_matrix(cluster_features, cluster_feature_order)
 
-            # Pad and concatenate
-            max_len = max(X_track.shape[1], X_cluster.shape[1])
-            X_track = np.pad(X_track, ((0, 0), (0, max_len - X_track.shape[1])))
-            X_cluster = np.pad(X_cluster, ((0, 0), (0, max_len - X_cluster.shape[1])))
-            X = np.concatenate([X_track, X_cluster], axis=0)
+        # Pad and concatenate
+        max_len = max(X_track.shape[1], X_cluster.shape[1])
+        X_track = np.pad(X_track, ((0, 0), (0, max_len - X_track.shape[1])))
+        X_cluster = np.pad(X_cluster, ((0, 0), (0, max_len - X_cluster.shape[1])))
+        X = np.concatenate([X_track, X_cluster], axis=0)
 
         sanitize(X)
         X_torch = torch.tensor(X, dtype=torch.float32).unsqueeze(0).to(device)

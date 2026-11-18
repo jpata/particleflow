@@ -1237,7 +1237,7 @@ class MLPF(nn.Module):
 
         self.config = config.model
         self.output_mode = OutputMode(self.config.output_mode)
-        self.is_hit_dataset = config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.IDEA_HITS)
+        self.is_hit_dataset = config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.IDEA_HITS, Dataset.MAIA_HITS)
         # General *_full datasets: element type codes follow config.full_elements. Hit
         # feature engineering sees only hit rows, with the legacy tracker=1, calo=2 codes.
         full_elements = tuple(config.full_elements) if config.uses_full_datasets() else ("hit_tracker", "hit_calo")
@@ -1774,16 +1774,6 @@ class MLPF(nn.Module):
     def _engineer_input_features(self, X_features, mask):
         if self.is_hit_dataset and not self.hit_only_elements:
             return self._engineer_mixed_input_features(X_features, mask)
-        if self.is_hit_dataset:
-            # Temporary compatibility fix for hit TFDS 3.2.0, where postprocessing
-            # incorrectly stored elemtype=2 for tracker hits. Remove this rewrite
-            # once training has moved to corrected 3.2.1 datasets.
-            X_features = X_features.clone()
-            X_features[..., 0] = torch.where(
-                X_features[..., 10] == 3,
-                X_features.new_tensor(1),
-                X_features.new_tensor(2),
-            )
         if self.uses_hit_feature_engineering:
             return self.feature_engineering(X_features, mask)
         return X_features

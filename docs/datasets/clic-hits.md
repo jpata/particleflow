@@ -1,16 +1,16 @@
 # CLICdet hits
 
-CLICdet hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4hep production at 380 GeV. Hits are part of the [general datasets](full.md) `clic_edm_<process>_full` (version **1.0.0**); the hit recipe is `pyg-clic-hits-heptv2-set-v1`. The archived `clic_edm_<process>_hits` (**3.2.2**) TFDS below remain readable. Hit reconstruction is a research workflow.
+CLICdet hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4hep production at 380 GeV. Hits are part of the [general datasets](full.md) `clic_edm_<process>_full` (version **1.0.0**), together with tracks, clusters and per-element truth labels. The hit recipe is `pyg-clic-hits-heptv2-set-v1`. Hit reconstruction is a research workflow.
 
 ## Physics samples
 
 | Physics sample | TFDS dataset | Training selection |
 |---|---|---|
-| Top-quark pairs | `clic_edm_ttbar_hits` | Included in default recipe |
-| Fully hadronic WW | `clic_edm_ww_fullhad_hits` | Included in default recipe |
-| Inclusive quark pairs | `clic_edm_qq_hits` | Included in default recipe |
+| Top-quark pairs | `clic_edm_ttbar_full` | Included in default recipe |
+| Fully hadronic WW | `clic_edm_ww_fullhad_full` | Included in default recipe |
+| Inclusive quark pairs | `clic_edm_qq_full` | Included in default recipe |
 
-Recipes configure partitions 1--10. The [verified Hub selection](catalog.md#published-availability) provides configuration 1 for `ttbar`, `WW`, and `qq`; check other selections separately.
+Recipes configure partitions 1--10. The general datasets are not yet part of the [verified Hub selection](catalog.md#published-availability).
 
 ## Event view
 

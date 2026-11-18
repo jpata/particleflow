@@ -121,7 +121,7 @@ def main():
     parser.add_argument("--scenario", default="configs/training/scenarios/cld_pf_heptv2_batch512_50k.yaml")
     parser.add_argument("--platform", default="configs/training/platforms/local.yaml")
     parser.add_argument("--data-dir", default="/mnt/work/mlpf/tensorflow_datasets/cld")
-    parser.add_argument("--dataset", default="cld_edm_ttbar_hits/1:3.2.1")
+    parser.add_argument("--dataset", default="cld_edm_ttbar_full/1:1.0.0")
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--steps", type=int, default=5)
     parser.add_argument("--warmup-steps", type=int, default=2)

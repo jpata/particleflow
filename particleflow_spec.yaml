@@ -1164,6 +1164,36 @@ models:
         version: "1.0.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
+  # MAIA hit inputs (muon collider, 5 T). ttbar events reach ~400 targets (512 slots) and ~1.4e5 calorimeter hits: use
+  # activation checkpointing. The files lack CellIDEncoding, so tracker system/layer are zero.
+  pyg-maia-hits-heptv2-set-v1:
+    <<: *pyg_cld_hits_heptv2_set_v1
+    dataset: maia_hits
+    architecture:
+      <<: *pyg_cld_hits_heptv2_set_architecture
+      set_decoder:
+        <<: *pyg_cld_hits_heptv2_set_decoder
+        num_slots: 512
+        tracker_group_magnetic_field: 5.0
+    train_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "maia_edm_ttbar_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+    validation_datasets:
+      physical:
+        batch_size: 1
+        samples:
+          - name: "maia_edm_ttbar_full"
+            version: "1.0.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+    test_datasets:
+      - name: "maia_edm_ttbar_full"
+        version: "1.0.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
   # IDEA hit inputs: tracker hits (vertex, silicon wrapper and drift-chamber wire hits) and
   # separate dual-readout Cherenkov/scintillation calorimeter channels, with the CLD HEPTv2
   # set recipe. Drift-chamber events reach ~4e4 hits: use activation checkpointing on small GPUs.

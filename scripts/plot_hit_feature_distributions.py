@@ -17,6 +17,7 @@ import numpy as np
 import tensorflow_datasets as tfds
 import torch
 
+from mlpf.model.full_view import materialize_full_example
 from mlpf.conf import EDM4HEP
 from mlpf.model.mlpf import HitFeatureEngineering
 
@@ -27,7 +28,7 @@ COLORS = {"tracker": "#0072B2", "calorimeter": "#D55E00"}
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, required=True, help="TFDS data root")
-    parser.add_argument("--dataset", default="cld_edm_ttbar_hits/10:3.2.1")
+    parser.add_argument("--dataset", default="cld_edm_ttbar_full/10:1.0.0")
     parser.add_argument("--split", default="test")
     parser.add_argument("--num-events", type=int, default=40)
     parser.add_argument("--max-tracker-per-event", type=int, default=2000)
@@ -75,7 +76,8 @@ def collect_distributions(args):
 
     with torch.no_grad():
         for event_index in event_indices:
-            raw = np.asarray(source[int(event_index)]["X"], dtype=np.float32)
+            # general datasets: tracker hits (type 1) then calorimeter hits (type 2)
+            raw = np.asarray(materialize_full_example(source[int(event_index)], ["hit_tracker", "hit_calo"])["X"], dtype=np.float32)
             if raw.ndim != 2 or raw.shape[1] != len(raw_names):
                 raise ValueError(f"Event {event_index} has unexpected X shape {raw.shape}")
             if not np.isfinite(raw).all():

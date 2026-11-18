@@ -48,15 +48,17 @@ uv run python - <<'PY'
 import tensorflow_datasets as tfds
 
 builder = tfds.builder(
-    "cld_edm_ttbar_hits/1:3.2.2",
+    "cld_edm_ttbar_full/1:1.0.0",
     data_dir="/path/to/cld-workspace/tfds",
 )
 event = builder.as_data_source(split="train")[0]
-print(builder.info.full_name, event["X"].shape, event["ytarget"].shape)
+for kind in ("track", "cluster", "hit_tracker", "hit_calo"):
+    print(kind, event[f"X_{kind}"].shape, event[f"ylabel_{kind}"].shape)
+print("targets", event["ytarget_particles"].shape)
 PY
 ```
 
-Success requires the same number of input and target rows. The hit-geometry and hit-representation gates in the Parquet validation report establish the corresponding detector relationships.
+Success requires the same number of input and label rows for every element kind. The hit-geometry and hit-representation gates in the Parquet validation report establish the corresponding detector relationships.
 
 ## Resource expectations
 

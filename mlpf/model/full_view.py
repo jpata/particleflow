@@ -79,7 +79,7 @@ def materialize_full_example(example, elements: Sequence[str] = DEFAULT_ELEMENTS
         change = neutralize & (particles[:, 0] == charged)
         particles[change, 0] = neutral
         particles[change, CHARGE] = 0
-    ytarget_set = particles[present[rows]]
+    ytarget_set = particles[present[rows]].copy()
     if len(ytarget_set):
         # Set outputs train pt and energy in absolute log space.
         ytarget_set[:, 2] = np.log(np.clip(ytarget_set[:, 2], 1e-8, None))

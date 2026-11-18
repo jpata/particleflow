@@ -102,7 +102,7 @@ def main():
     model.to(dtype)
 
     print("Loading dataset...")
-    ds = PFDataset("data/tfds/tensorflow_datasets/cld", "cld_edm_ttbar_hits/1:3.1.0", "test", num_samples=1).ds
+    ds = PFDataset("data/tfds/tensorflow_datasets/cld", "cld_edm_ttbar_full/1:1.0.0", "test", num_samples=1).ds
     loader = DataLoader(ds, batch_size=1, collate_fn=Collater(["X", "ytarget"], ["genmet"]))
 
     batch = next(iter(loader))

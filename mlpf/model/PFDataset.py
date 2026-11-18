@@ -11,7 +11,7 @@ import torch
 import torch.utils.data
 
 from mlpf.logger import _logger
-from mlpf.conf import INPUT_TYPE_IDS, DatasetSamplerMode, MLPFConfig, OutputMode, Y_FEATURES, dataset_input_type_id, dataset_source_id
+from mlpf.conf import INPUT_TYPE_IDS, DatasetSamplerMode, MLPFConfig, OutputMode, dataset_input_type_id, dataset_source_id
 from mlpf.model.full_view import DEFAULT_ELEMENTS as DEFAULT_FULL_ELEMENTS
 from mlpf.model.full_view import HIT_KINDS, is_full_example, materialize_full_example
 
@@ -84,8 +84,8 @@ class TFDSDataSource:
         ret["input_type_id"] = np.int64(dataset_input_type_id(ds_name))
 
         if is_full_example(ret):
-            if not self.build_target_set:
-                raise ValueError(f"{ds_name}: full datasets currently support only the set output mode")
+            # Training on full datasets uses the set output mode (MLPFConfig rejects other modes);
+            # analysis readers without a target set still get X, ytarget and ylabel.
             raw_keys = [key for key in ret if key.startswith(("X_", "ylabel_"))] + ["ytarget_particles", "target_instances"]
             ret.update(materialize_full_example(ret, self.full_elements))
             for key in raw_keys:
@@ -170,27 +170,8 @@ class TFDSDataSource:
             ret["X"][:, 1][msk_ho] = np.sqrt(e**2 - (np.tanh(eta) * e) ** 2)
 
         if self.build_target_set and "ytarget_set" not in ret:
-            # Existing hit datasets store one full target row on an exclusive
-            # representative hit for every particle. Other related hits contain
-            # only particle_number, so nonzero class rows form the compact set.
-            target_rows = ret["ytarget"][:, 0] != 0
-            ytarget_set = ret["ytarget"][target_rows].copy()
-
-            particle_number_idx = Y_FEATURES.index("particle_number")
-            if ytarget_set.shape[1] > particle_number_idx and len(ytarget_set) > 0:
-                particle_numbers = ytarget_set[:, particle_number_idx]
-                # Some old datasets predate particle_number. If it is present,
-                # require the representative rows to be one-per-particle.
-                if np.any(particle_numbers != 0):
-                    if np.any(particle_numbers == 0) or len(np.unique(particle_numbers)) != len(particle_numbers):
-                        raise ValueError("Full ytarget rows must have unique, nonzero particle_number values in set mode")
-
-            # Set outputs have no input-object anchor. Train pt and energy in
-            # absolute log space instead of using the legacy log(target/input).
-            if len(ytarget_set) > 0:
-                ytarget_set[:, 2] = np.log(np.clip(ytarget_set[:, 2], 1e-8, None))
-                ytarget_set[:, 6] = np.log(np.clip(ytarget_set[:, 6], 1e-8, None))
-            ret["ytarget_set"] = ytarget_set
+            # Set-mode targets come from the target table of the general datasets.
+            raise ValueError(f"{ds_name}: the set output mode requires a general *_full dataset (tracks, clusters and hits)")
 
         # transform pt -> log(pt / elem pt), same for energy
         # where target does not exist, set to 0

@@ -38,14 +38,15 @@ LitePT/spconv, data-production tools and Ray HPO are not installed.
 
 ## Prepare data and run the smoke recipe
 
-The smoke recipe needs the complete `cld_edm_ttbar_hits/1/3.2.2` train/test copy,
-about 30 GiB. From the login node with source Lustre access:
+The smoke recipe needs the complete `cld_edm_ttbar_full/1/1.0.0` train/test copy of the
+[general dataset](../../docs/datasets/full.md). From the login node with source Lustre access
+(replace the source path with the production that holds the general datasets):
 
 ```bash
-mkdir -p data/empireai-smoke/tfds/cld_edm_ttbar_hits
+mkdir -p data/empireai-smoke/tfds/cld_edm_ttbar_full
 rsync -a --stats \
-  /mnt/lustre/cuny/jpata/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds/cld_edm_ttbar_hits/1 \
-  data/empireai-smoke/tfds/cld_edm_ttbar_hits/
+  /path/to/cld/production/tfds/cld_edm_ttbar_full/1 \
+  data/empireai-smoke/tfds/cld_edm_ttbar_full/
 ```
 
 This repository-local copy is for qualification and counts against home quota.

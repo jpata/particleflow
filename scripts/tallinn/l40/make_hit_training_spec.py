@@ -8,7 +8,7 @@ import yaml
 
 SPLITS = [str(i) for i in range(1, 11)]
 VERSION = "3.2.0"
-HIT_TEST_SAMPLES = ["cld_edm_ttbar_hits", "clic_edm_ttbar_hits"]
+HIT_TEST_SAMPLES = ["cld_edm_ttbar_full", "clic_edm_ttbar_full"]
 
 
 def sample(name):

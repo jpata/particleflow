@@ -44,7 +44,7 @@ Calorimeter labels are hard particle ownership, not fractional energy ownership.
 
 ## Event splits and fitting
 
-The default dataset is `cld_edm_ttbar_hits/1:3.2.1`, TFDS `test` split. This split
+The default dataset is now `cld_edm_ttbar_full/1:1.0.0` (hits selected from the [general dataset](datasets/full.md)); the results below used the former `cld_edm_ttbar_hits/1:3.2.1`, TFDS `test` split. That split
 was not used for backbone gradient updates, but may have been used for its
 validation/model selection. Results are a representation diagnostic, not an
 independent final physics benchmark.

@@ -260,7 +260,7 @@ def main():
     )
     p.add_argument("--step", type=int, default=50000)
     p.add_argument("--data-dir", type=Path, default=Path("/mnt/work/mlpf/tensorflow_datasets/cld"))
-    p.add_argument("--dataset", default="cld_edm_ttbar_hits/1:3.2.1")
+    p.add_argument("--dataset", default="cld_edm_ttbar_full/1:1.0.0")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--device", default="cuda")
     p.add_argument("--train-events", type=int, default=64)

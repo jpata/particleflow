@@ -26,6 +26,7 @@ class Dataset(Enum):
     CLIC_HITS = "clic_hits"
     CLD_HITS = "cld_hits"
     IDEA_HITS = "idea_hits"
+    MAIA_HITS = "maia_hits"
     COLLIDERML = "colliderml"
     COLLIDERML_HITS = "colliderml_hits"
 
@@ -99,8 +100,6 @@ def dataset_input_type_id(dataset_name: str) -> int:
     # General datasets: the loader reports "hits" instead when only hit kinds are selected.
     if dataset_name.endswith("_full") or "_full:" in dataset_name or "_full/" in dataset_name:
         return INPUT_TYPE_IDS["full"]
-    if "_hits" in dataset_name:
-        return INPUT_TYPE_IDS["hits"]
     return INPUT_TYPE_IDS["pf"]
 
 
@@ -110,7 +109,7 @@ def dataset_for_sample(sample_name: str, default: "Dataset") -> "Dataset":
     if source == "unknown":
         return default
     # Full datasets are read by the raw-hit model family (default element selection: hits).
-    if dataset_input_type_id(sample_name) in (INPUT_TYPE_IDS["hits"], INPUT_TYPE_IDS["full"]):
+    if dataset_input_type_id(sample_name) == INPUT_TYPE_IDS["full"]:
         source = f"{source}_hits"
     try:
         return Dataset(source)
@@ -760,19 +759,20 @@ JET_CONFIG = {
     ),
 }
 
-# IDEA hit inputs (general idea_edm_*_full datasets): hit-input layout of cld_hits, physics
-# conventions (classes, jets) of the IDEA track/cluster model.
-for _table, _source in (
-    (ELEM_TYPES, Dataset.CLD_HITS),
-    (ELEM_TYPES_NONZERO, Dataset.CLD_HITS),
-    (X_FEATURES, Dataset.CLD_HITS),
-    (CLASS_LABELS, Dataset.IDEA),
-    (CLASS_NAMES_LATEX, Dataset.IDEA),
-    (CLASS_NAMES, Dataset.IDEA),
-    (CLASS_NAMES_CAPITALIZED, Dataset.IDEA),
-    (JET_CONFIG, Dataset.IDEA),
-):
-    _table[Dataset.IDEA_HITS.value] = _table[_source.value]
+# IDEA and MAIA hit inputs (general *_full datasets): hit-input layout of cld_hits, physics
+# conventions (classes, jets) of the detector's track/cluster model.
+for _hits, _detector in ((Dataset.IDEA_HITS, Dataset.IDEA), (Dataset.MAIA_HITS, Dataset.MAIA)):
+    for _table, _source in (
+        (ELEM_TYPES, Dataset.CLD_HITS),
+        (ELEM_TYPES_NONZERO, Dataset.CLD_HITS),
+        (X_FEATURES, Dataset.CLD_HITS),
+        (CLASS_LABELS, _detector),
+        (CLASS_NAMES_LATEX, _detector),
+        (CLASS_NAMES, _detector),
+        (CLASS_NAMES_CAPITALIZED, _detector),
+        (JET_CONFIG, _detector),
+    ):
+        _table[_hits.value] = _table[_source.value]
 
 
 Y_FEATURES = ParticleFeatures.get_names()
@@ -1499,16 +1499,7 @@ class MLPFConfig(BaseModel):
             if sub_config is not None and hasattr(sub_config, "num_convs"):
                 self.model.backbone.num_convs = sub_config.num_convs
         if self.uses_full_datasets():
-            # General *_full datasets: the selected element kinds define the input layout
-            # (element type = position in full_elements + 1, width = widest selected kind).
-            unknown = set(self.full_elements) - set(FULL_ELEMENT_WIDTHS)
-            if not self.full_elements or unknown or len(set(self.full_elements)) != len(self.full_elements):
-                raise ValueError(f"full_elements must be distinct kinds from {sorted(FULL_ELEMENT_WIDTHS)}, got {self.full_elements}")
-            widths = FULL_ELEMENT_WIDTHS_BY_SOURCE.get(self.dataset.value.split("_")[0], FULL_ELEMENT_WIDTHS)
-            if self.input_dim is None:
-                self.input_dim = max(widths[kind] for kind in self.full_elements)
-            if self.elemtypes_nonzero is None:
-                self.elemtypes_nonzero = list(range(1, len(self.full_elements) + 1))
+            self._populate_full_defaults()
         if self.dataset.value in X_FEATURES:
             if self.input_dim is None:
                 self.input_dim = len(X_FEATURES[self.dataset.value])
@@ -1517,7 +1508,7 @@ class MLPFConfig(BaseModel):
             if self.elemtypes_nonzero is None:
                 self.elemtypes_nonzero = ELEM_TYPES_NONZERO[self.dataset.value]
         if self.model.output_mode == OutputMode.SET:
-            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.COLLIDERML_HITS, Dataset.IDEA_HITS):
+            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.COLLIDERML_HITS, Dataset.IDEA_HITS, Dataset.MAIA_HITS):
                 raise ValueError("model.output_mode='set' is currently supported only for the CLD/CLIC/ColliderML hit datasets")
             if self.model.set_decoder is None:
                 self.model.set_decoder = SetDecoderConfig()
@@ -1546,6 +1537,21 @@ class MLPFConfig(BaseModel):
             if missing:
                 raise ValueError(f"data_dir has directories for {sorted(self.data_dir)}, but not for the samples {missing}")
         return self
+
+    def _populate_full_defaults(self):
+        """Input layout of the general *_full datasets, which support only the set output."""
+        if self.model.output_mode != OutputMode.SET:
+            raise ValueError("the general *_full datasets support only model.output_mode='set'")
+        # General *_full datasets: the selected element kinds define the input layout
+        # (element type = position in full_elements + 1, width = widest selected kind).
+        unknown = set(self.full_elements) - set(FULL_ELEMENT_WIDTHS)
+        if not self.full_elements or unknown or len(set(self.full_elements)) != len(self.full_elements):
+            raise ValueError(f"full_elements must be distinct kinds from {sorted(FULL_ELEMENT_WIDTHS)}, got {self.full_elements}")
+        widths = FULL_ELEMENT_WIDTHS_BY_SOURCE.get(self.dataset.value.split("_")[0], FULL_ELEMENT_WIDTHS)
+        if self.input_dim is None:
+            self.input_dim = max(widths[kind] for kind in self.full_elements)
+        if self.elemtypes_nonzero is None:
+            self.elemtypes_nonzero = list(range(1, len(self.full_elements) + 1))
 
     def data_dir_for(self, sample_name):
         """TFDS directory of a sample: data_dir, or its detector's entry when data_dir is {source: directory}."""

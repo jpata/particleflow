@@ -159,8 +159,9 @@ def test_feature_bag_requires_input_normalization():
 def test_feature_bag_rejects_unsupported_samples():
     with pytest.raises(ValueError, match="feature_bag supports|input_normalization supports"):
         make_config(["cld", "cms_pf_ttbar"])
-    with pytest.raises(ValueError, match="feature_bag supports|input_normalization supports"):
-        make_config(["clic_edm_ttbar_hits"])
+    # a general dataset is rejected before the feature-bag check: it supports only the set output
+    with pytest.raises(ValueError, match="feature_bag supports|input_normalization supports|support only model.output_mode='set'"):
+        make_config(["clic_edm_ttbar_full"])
 
 
 def test_feature_bag_reads_the_normalized_columns_of_a_batch_mixing_detectors():

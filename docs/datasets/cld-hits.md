@@ -1,17 +1,17 @@
 # CLD hits
 
-CLD hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4hep production at 365 GeV. Hits are part of the [general datasets](full.md) `cld_edm_<process>_full` (version **1.0.0**); the hit recipes are `pyg-cld-hits-heptv2-set-v1` (recommended) and `pyg-cld-hits-heptv2-sector-set-v1`. The archived `cld_edm_<process>_hits` (**3.2.2**) TFDS below remain readable. Hit reconstruction is a research workflow.
+CLD hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4hep production at 365 GeV. Hits are part of the [general datasets](full.md) `cld_edm_<process>_full` (version **1.0.0**), together with tracks, clusters and per-element truth labels. The hit recipes are `pyg-cld-hits-heptv2-set-v1` (recommended) and `pyg-cld-hits-heptv2-sector-set-v1`. Hit reconstruction is a research workflow.
 
 ## Physics samples
 
 | Physics sample | TFDS dataset | Training selection |
 |---|---|---|
-| Top-quark pairs | `cld_edm_ttbar_hits` | Included in default recipe |
-| Fully hadronic WW | `cld_edm_ww_fullhad_hits` | Included in default recipe |
-| Inclusive quark pairs | `cld_edm_qq_hits` | Included in default recipe |
-| ZZ | `cld_edm_zz_hits` | Additional builder; outside default recipe |
+| Top-quark pairs | `cld_edm_ttbar_full` | Included in default recipe |
+| Fully hadronic WW | `cld_edm_ww_fullhad_full` | Included in default recipe |
+| Inclusive quark pairs | `cld_edm_qq_full` | Included in default recipe |
+| ZZ and the 91/240/365 GeV tau samples | `cld_edm_<process>_full` | Additional builders; outside default recipe |
 
-Recipes configure partitions 1--10. The [verified Hub selection](catalog.md#published-availability) provides configuration 1 for `ttbar`, `WW`, and `qq`; check other selections separately.
+Recipes configure partitions 1--10. The general datasets are not yet part of the [verified Hub selection](catalog.md#published-availability).
 
 See the [evidence and recommendation](../cld_hit_results.md) for the HEPTv2 set model.
 

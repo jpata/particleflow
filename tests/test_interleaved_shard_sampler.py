@@ -225,12 +225,12 @@ def test_tfds_datasource_adds_source_and_input_type_metadata_and_pads_features()
     }
     example["ytarget"][:, 2] = 1.0
     example["ytarget"][:, 6] = 1.0
-    ds = TFDSDataSource(DummyTFDS("clic_edm_ttbar_hits", example), sort=False, feature_dim=6)
+    ds = TFDSDataSource(DummyTFDS("clic_edm_ttbar_pf", example), sort=False, feature_dim=6)
 
     event = ds[0]
 
     assert event["source_id"] == SOURCE_IDS["clic"]
-    assert event["input_type_id"] == INPUT_TYPE_IDS["hits"]
+    assert event["input_type_id"] == INPUT_TYPE_IDS["pf"]
     assert event["X"].shape == (3, 6)
     assert np.all(event["X"][:, :4] == 1.0)
     assert np.all(event["X"][:, 4:] == 0.0)
@@ -241,8 +241,8 @@ def test_tfds_datasource_adds_source_and_input_type_metadata_and_pads_features()
     [
         ("cms_pf_ttbar", SOURCE_IDS["cms"], INPUT_TYPE_IDS["pf"]),
         ("clic_edm_ttbar_pf", SOURCE_IDS["clic"], INPUT_TYPE_IDS["pf"]),
-        ("clic_edm_ttbar_hits", SOURCE_IDS["clic"], INPUT_TYPE_IDS["hits"]),
-        ("cld_edm_ttbar_hits", SOURCE_IDS["cld"], INPUT_TYPE_IDS["hits"]),
+        ("clic_edm_ttbar_full", SOURCE_IDS["clic"], INPUT_TYPE_IDS["full"]),
+        ("cld_edm_ttbar_full", SOURCE_IDS["cld"], INPUT_TYPE_IDS["full"]),
         ("idea_edm_qq_pf", SOURCE_IDS["idea"], INPUT_TYPE_IDS["pf"]),
         ("unknown_sample", SOURCE_IDS["unknown"], INPUT_TYPE_IDS["pf"]),
     ],

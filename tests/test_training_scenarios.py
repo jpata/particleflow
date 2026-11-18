@@ -614,7 +614,7 @@ def test_worker_validates_selected_variant_gpu_allocation(monkeypatch):
     [
         ("cld_edm_ttbar_pf", "cld"),
         ("clic_edm_qq_pf", "clic"),
-        ("clic_edm_qq_hits", "clic_hits"),
+        ("clic_edm_qq_full", "clic_hits"),
         ("colliderml_ttbar_nopu_pf", "colliderml"),
         ("cms_pf_ttbar", "cms"),
         ("unrecognized_sample", "cld"),

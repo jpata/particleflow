@@ -41,7 +41,7 @@ def main():
     for point in selected:
         tfds = args.local_root / point / "tfds"
         sample = "z_tautau" if point.startswith("ecal_") else "ttbar"
-        expected = {f"cld_edm_{sample}_pf": "3.3.0", f"cld_edm_{sample}_hits": "3.2.2"}
+        expected = {f"cld_edm_{sample}_pf": "3.3.0", f"cld_edm_{sample}_full": "1.0.0"}
         if not tfds.is_dir():
             parser.error(f"missing TFDS root: {tfds}")
         actual = {p.name for p in tfds.iterdir() if p.is_dir() and p.name.startswith("cld_edm_")}
