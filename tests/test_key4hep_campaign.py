@@ -219,7 +219,7 @@ def test_smoke_graph_runs_ten_generation_jobs_per_sample(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("PF_SITE", raising=False)
     produce_key4hep_snakemake.main(["--smoke"])
-    jobs = tmp_path / (spec["campaigns"]["key4hep_50k"]["jobs_dir"] + "_smoke")
+    jobs = tmp_path / (spec["campaigns"]["key4hep_50k"]["jobs_dir"] + "_smoke_10ev")
     for detector in DETECTORS:
         graph = (jobs / detector / "Snakefile").read_text()
         assert "rule post_task" not in graph
@@ -228,8 +228,9 @@ def test_smoke_graph_runs_ten_generation_jobs_per_sample(tmp_path, monkeypatch):
             first, _ = settings["seed_range"]
             assert f"gen_{sample}_{{seed}}.done', seed=range({first}, {first + 10}, 1)" in graph
             script = (jobs / detector / "gen" / f"gen_{sample}.sh").read_text()
-            assert "/50k/smoke/gen/" in script
-            assert "t.GetEntries()==100" in script
+            assert "/50k/smoke_10ev/gen/" in script
+            assert "export NEV=10 &&" in script
+            assert "t.GetEntries()==10," in script
 
     run = subprocess.run(
         [sys.executable, "-m", "snakemake", "-s", str(jobs / "Snakefile"), "--cores", "1", "--dry-run", "--quiet", "rules"],

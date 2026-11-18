@@ -97,12 +97,32 @@ validation after generation.
 Run this on Tallinn after the same runtime and profile setup.
 
 ```bash
-pixi run gen_key4hep_smoke --jobs 20 --dry-run
-pixi run gen_key4hep_smoke --jobs 20
+pixi run gen_key4hep_smoke --dry-run
+pixi run gen_key4hep_smoke
 ```
 
-The smoke workflow uses the first ten seeds per detector and sample and keeps
-the production setting of 100 events per job. It runs 200 simulation and
+The smoke workflow uses the first ten seeds per detector and sample and runs
+10 events per job. The Tallinn task defaults to 40 concurrent jobs across all
+detectors. Pass `--jobs N` to override it. It runs 200 simulation and
 reconstruction jobs with the same ROOT event-count checks as production.
-Outputs go under each campaign workspace's `smoke/gen/` directory and
-completion markers go under `snakemake_jobs/key4hep_v1.4.0_50k_smoke/`.
+Outputs go under each campaign workspace's `smoke_10ev/gen/` directory and
+completion markers go under `snakemake_jobs/key4hep_v1.4.0_50k_smoke_10ev/`.
+
+
+Each attempt writes stage logs directly to
+`/local/joosep/mlpf/<detector>/v1.4.0/50k/smoke_10ev/logs/<process>/<seed>/<job-id>-<restart>/`.
+Look for `generation.log`, `simulation.log`, and `reconstruction.log`.
+A missing stage log means that stage did not start. Slurm output identifies
+the log directory and also contains wrapper and output validation errors.
+Large intermediate files stay on node-local scratch.
+
+To test the patched ILD mass refitter on a fresh checkout, build the overlay
+inside the stable Key4hep image after building the shared runtime:
+
+```bash
+apptainer exec --bind /cvmfs,"$PWD",/tmp \
+  --env LD_PRELOAD=/usr/lib64/libffi.so.8 --env BUILD_JOBS=16 \
+  mlpf/data/key4hep/gen/idea/idea-dev.sif \
+  bash mlpf/data/key4hep/gen/build_marlintrkprocessors.sh
+ILD_USE_PATCHED_REFITTER=1 pixi run gen_key4hep_smoke --rerun-incomplete
+```
