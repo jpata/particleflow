@@ -1,5 +1,6 @@
 import json
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -271,8 +272,14 @@ def test_lumi_worker_preserves_single_gpu_binding(tmp_path, monkeypatch, task_gp
     assert f"TEST_VISIBLE={expected_visible}" in result.stdout
 
 
-def test_lumi_component_scripts_pin_runs_and_resources(tmp_path):
+def test_lumi_component_scripts_pin_runs_and_resources(tmp_path, monkeypatch):
     from mlpf.training_submission import write_component_scripts
+
+    # The CI runtime has Bash but no Git.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "bash").symlink_to(shutil.which("bash"))
+    monkeypatch.setenv("PATH", str(bin_dir))
 
     scenario_path = resolve_scenario_path("cms_backbone_comparison", ROOT)
     profile_data = yaml.safe_load(resolve_platform_profile_path("mi250x", ROOT, "lumi").read_text())
@@ -296,6 +303,7 @@ def test_lumi_component_scripts_pin_runs_and_resources(tmp_path):
         launch = shlex.split(content.splitlines()[-1])
         manifest_path = Path(launch[launch.index("--run-manifest") + 1])
         manifest = json.loads(manifest_path.read_text())
+        assert manifest["git_revision"] is None
         assert manifest["job"]["seed"] == 2468
         assert manifest["command"][manifest["command"].index("--experiment-dir") + 1] == str(manifest_path.parent)
         assert Path(manifest["command"][manifest["command"].index("--spec-file") + 1]).is_file()

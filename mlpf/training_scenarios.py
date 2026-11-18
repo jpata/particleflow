@@ -494,12 +494,10 @@ def _pipeline_command(job, scenario, platform, spec_file, experiment_dir):
 
 
 def _git_revision():
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(["git", "rev-parse", "HEAD"], check=False, capture_output=True, text=True)
+    except FileNotFoundError:
+        return None
     return result.stdout.strip() if result.returncode == 0 else None
 
 
