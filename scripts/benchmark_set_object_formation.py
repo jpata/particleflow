@@ -15,7 +15,6 @@ from mlpf.model.set_losses import SetMatcherWeights, set_mlpf_loss
 from mlpf.model.utils import unpack_predictions, unpack_target
 from mlpf.training_scenarios import load_platform_profile, load_training_scenario, resolve_scenario_job
 
-
 SCENARIO_PATH = Path("configs/training/scenarios/cld_set_hits_object_formation_comparison.yaml")
 PLATFORM_PATH = Path("configs/training/platforms/lumi_mi250x.yaml")
 VARIANTS = ("baseline_topk_absolute", "grid_diverse_aggregate_anchors")

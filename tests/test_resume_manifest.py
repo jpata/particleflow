@@ -31,10 +31,12 @@ def test_resume_selects_numeric_latest_at_each_launch(tmp_path):
     with patch.object(runner.subprocess, "run") as launch:
         runner.resume_manifest(manifest)
         assert launch.call_args.kwargs["env"]["OMP_NUM_THREADS"] == "4"
-        assert launch.call_args.args[0][-1].endswith("checkpoint-9.pth")
+        command = launch.call_args.args[0]
+        assert command[command.index("--load") + 1].endswith("checkpoint-9.pth")
         (tmp_path / "checkpoints/checkpoint-20.pth").touch()
         runner.resume_manifest(manifest)
-        assert launch.call_args.args[0][-1].endswith("checkpoint-20.pth")
+        command = launch.call_args.args[0]
+        assert command[command.index("--load") + 1].endswith("checkpoint-20.pth")
         (tmp_path / "checkpoints/checkpoint-100.pth").touch()
         runner.resume_manifest(manifest)
         assert launch.call_count == 2
@@ -49,6 +51,30 @@ def test_resume_lock_and_failure_propagation(tmp_path):
     with patch.object(runner.subprocess, "run", side_effect=runner.subprocess.CalledProcessError(1, "train")):
         with pytest.raises(runner.subprocess.CalledProcessError):
             runner.resume_manifest(manifest)
+
+
+def test_resume_disables_finetuning_flags_only_after_first_checkpoint(tmp_path):
+    manifest = make_run(tmp_path)
+    data = json.loads(manifest.read_text())
+    initial_command = data["command"]
+    initial_command.extend(["--load_weights_only", "true", "--reset_task_loss_weights", "true"])
+    manifest.write_text(json.dumps(data))
+
+    with patch.object(runner.subprocess, "run") as launch:
+        runner.resume_manifest(manifest)
+        assert launch.call_args.args[0] == initial_command
+
+        checkpoint = tmp_path / "checkpoints/checkpoint-5.pth"
+        checkpoint.touch()
+        runner.resume_manifest(manifest)
+        assert launch.call_args.args[0][-6:] == [
+            "--load",
+            str(checkpoint),
+            "--load_weights_only",
+            "false",
+            "--reset_task_loss_weights",
+            "false",
+        ]
 
 
 def test_resume_starts_without_checkpoint_and_expands_job_environment(tmp_path, monkeypatch):

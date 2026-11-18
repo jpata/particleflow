@@ -395,9 +395,7 @@ done
             else:
                 post_input = f'expand("{jobs_dir}/post/post_{sample_key}_{{seed}}.done", seed=range({seed_start}, {seed_end}, {CHUNK_SIZE}))'
 
-            step_data["post"][
-                "rules"
-            ] += f"""
+            step_data["post"]["rules"] += f"""
 rule post_{sample_key}_all:
     input:
         {post_input}
@@ -409,9 +407,7 @@ rule post_{sample_key}_all:
 
     # Generic rules for per-chunk tasks
     if "gen" in req_steps:
-        step_data["gen"][
-            "rules"
-        ] += f"""
+        step_data["gen"]["rules"] += f"""
 rule gen:
     input:
         {", ".join(step_data["gen"]["targets"])}
@@ -433,9 +429,7 @@ rule gen_task:
 
     if "val" in req_steps and prod_type == "cms":
         val_rule_input = f'\n    input:\n        "{jobs_dir}/gen/gen_{{sample}}_{{seed}}.done"' if "gen" in req_steps else ""
-        step_data["val"][
-            "rules"
-        ] += f"""
+        step_data["val"]["rules"] += f"""
 rule val:
     input:
         {", ".join(step_data["val"]["targets"])}
@@ -458,9 +452,7 @@ rule val_task:{val_rule_input}
 
     if "post" in req_steps:
         post_rule_input = f'\n    input:\n        "{jobs_dir}/gen/gen_{{sample}}_{{seed}}.done"' if "gen" in req_steps else ""
-        step_data["post"][
-            "rules"
-        ] += f"""
+        step_data["post"]["rules"] += f"""
 rule post:
     input:
         {", ".join(step_data["post"]["targets"])}
@@ -511,9 +503,7 @@ done
 """
                 write_bash_script(val_data_proto_path, val_data_proto_content, project_root=project_root, tmpdir=tmpdir)
 
-        step_data["val_data"][
-            "rules"
-        ] += f"""
+        step_data["val_data"]["rules"] += f"""
 rule val_data:
     input:
         {", ".join(step_data["val_data"]["targets"])}
@@ -614,9 +604,7 @@ cp -r $job_scratch_dir/* {tfds_root_dir}/
             if "post" in req_steps:
                 tfds_rule_input = f'\n    input:\n        "{jobs_dir}/post/post_{{sample}}_all.done"'
 
-            step_data[step_name][
-                "rules"
-            ] += f"""
+            step_data[step_name]["rules"] += f"""
 rule {step_name}_task:{tfds_rule_input}
     output:
         "{jobs_dir}/{step_name}/{step_name}_{{sample}}_{step_name}_{{config}}.done"
@@ -629,9 +617,7 @@ rule {step_name}_task:{tfds_rule_input}
 """
 
     if tfds_sentinels and "tfds" in req_steps:
-        step_data["tfds"][
-            "rules"
-        ] += f"""
+        step_data["tfds"]["rules"] += f"""
 rule tfds:
     input:
         {", ".join(tfds_sentinels)}
@@ -642,9 +628,7 @@ rule tfds:
 """
 
     if tfds_hit_sentinels and "tfds_hit" in req_steps:
-        step_data["tfds_hit"][
-            "rules"
-        ] += f"""
+        step_data["tfds_hit"]["rules"] += f"""
 rule tfds_hit:
     input:
         {", ".join(tfds_hit_sentinels)}
@@ -708,9 +692,7 @@ nvidia-smi
             rule_model_name = mname.replace("-", "_")
 
             step_data["train"]["targets"].append(f'"{train_sentinel}"')
-            step_data["train"][
-                "rules"
-            ] += f"""
+            step_data["train"]["rules"] += f"""
 rule train_{rule_model_name}:{train_rule_input}
     output:
         "{train_sentinel}"

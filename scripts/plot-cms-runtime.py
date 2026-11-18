@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
 import numpy as np
 
-
 ENGINES = [
     ("native", "PyTorch BF16 native fused", "#555555"),
     ("on", "ONNX BF16 fusion on", "#2171b5"),

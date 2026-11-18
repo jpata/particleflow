@@ -7,7 +7,6 @@ from torch import Tensor, nn
 
 from mlpf.logger import _logger
 
-
 REGRESSION_FEATURES = ("pt", "eta", "sin_phi", "cos_phi", "energy")
 LOSS_TASKS = (
     "Classification_binary",

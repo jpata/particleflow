@@ -34,7 +34,6 @@ from mlpf.jet_utils import match_jets
 
 from mlpf.standalone.dsl import parse_dsl
 
-
 DSL_DESCRIPTION = """\
 Model DSL:
   The --dsl option describes the model as input|backbone|output.

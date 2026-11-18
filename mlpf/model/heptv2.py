@@ -34,7 +34,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-
 try:
     from torch.nn.attention.flex_attention import flex_attention as _raw_flex_attention
 

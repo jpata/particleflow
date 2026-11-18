@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Assemble shared-scale event displays into a detector comparison gallery."""
+
 import argparse
 from pathlib import Path
 

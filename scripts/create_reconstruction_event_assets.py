@@ -4,6 +4,7 @@
 Reuses the repository's transverse camera, track helices and particle palette.
 Scene archives allow rerendering without reopening the original detector files.
 """
+
 from __future__ import annotations
 
 import argparse

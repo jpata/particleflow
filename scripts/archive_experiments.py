@@ -41,7 +41,6 @@ import subprocess
 import sys
 import tempfile
 
-
 CHECKPOINT = re.compile(r"checkpoint-(\d+)\.pth\Z")
 PERIODIC = re.compile(r"(preds|plots)_step_(\d+)\Z")
 

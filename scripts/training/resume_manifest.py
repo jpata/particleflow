@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Launch a saved scenario component from its latest checkpoint (Python 3.6+)."""
+
 import fcntl
 import json
 import os
@@ -30,6 +31,12 @@ def resume_manifest(manifest_path):
             print("Run already complete at step {}".format(step), flush=True)
             return
         if checkpoint is not None:
+            # A checkpoint from this run restores training state and calibration.
+            for flag in ("--load_weights_only", "--reset_task_loss_weights"):
+                if flag in command:
+                    command[command.index(flag) + 1] = "false"
+                else:
+                    command.extend([flag, "false"])
             if "--load" in command:
                 command[command.index("--load") + 1] = str(checkpoint)
             else:

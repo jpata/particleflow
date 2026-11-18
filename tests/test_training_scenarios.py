@@ -23,7 +23,6 @@ from mlpf.training_scenarios import (
     validate_variant_invariants,
 )
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -505,13 +504,17 @@ def test_continuation_chooses_most_advanced_compatible_checkpoint(tmp_path):
         global_batch_size=8,
     )[0]
 
-    for suffix, step in [("older", 10000), ("newer", 5000), ("best", 15000)]:
+    for suffix, step in [("older", 10000), ("newer", 5000), ("best", 15000), ("different_limit", 20000)]:
         run_dir = tmp_path / scenario.name / f"{job.variant_name}_seed{job.seed}_{suffix}"
         (run_dir / "checkpoints").mkdir(parents=True)
         manifest = {
             "job": job.model_dump(mode="json", exclude={"resolved_config"}),
             "resolved_config": job.resolved_config.model_dump(mode="json"),
         }
+        if suffix == "best":
+            del manifest["resolved_config"]["validation_particle_metrics_max_events"]
+        if suffix == "different_limit":
+            manifest["resolved_config"]["validation_particle_metrics_max_events"] = 0
         (run_dir / "scenario-manifest.json").write_text(json.dumps(manifest))
         (run_dir / "checkpoints" / f"checkpoint-{step}.pth").touch()
 

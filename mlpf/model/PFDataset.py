@@ -13,7 +13,6 @@ import torch.utils.data
 from mlpf.logger import _logger
 from mlpf.conf import DatasetSamplerMode, MLPFConfig, OutputMode, Y_FEATURES, dataset_input_type_id, dataset_source_id
 
-
 # https://github.com/pytorch/pytorch/issues/11201#issuecomment-895047235
 # file_system strategy can be better when hitting file descriptor limits
 SHARING_STRATEGY = os.environ.get("MLPF_SHARING_STRATEGY", "file_system")

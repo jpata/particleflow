@@ -12,7 +12,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 STEP_FILE_RE = re.compile(r"step_(\d+)\.json$")
 JET_METRIC_SUFFIX = "/jet_ratio/jet_ratio_target_to_pred_pt/"
 

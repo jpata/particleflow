@@ -15,7 +15,6 @@ import platform
 import sys
 import time
 
-
 spec = importlib.util.spec_from_file_location("cms_qualification", Path(__file__).with_name("qualify-cms-physics.py"))
 q = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(q)

@@ -13,7 +13,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
 
-
 # Color, marker and dash all encode implementation, consistently across figures.
 STYLES = {
     "pt_math": ("PyTorch math", "#0072B2", "o", "-"),

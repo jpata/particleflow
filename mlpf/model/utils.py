@@ -1,5 +1,8 @@
 import json
+import os
 import pickle as pkl
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import torch
 import torch.utils.data
@@ -152,14 +155,19 @@ def save_checkpoint(checkpoint_path, model, optimizer=None, extra_state=None):
     if extra_state is None:
         extra_state = {}
     extra_state["rng_state"] = torch.get_rng_state()
-    torch.save(
-        {
-            "model_state_dict": get_model_state_dict(model),
-            "optimizer_state_dict": optimizer.state_dict() if optimizer else None,
-            "extra_state": extra_state,
-        },
-        checkpoint_path,
-    )
+    checkpoint_path = Path(checkpoint_path)
+    # Publish the checkpoint only once serialization has finished.
+    with TemporaryDirectory(dir=checkpoint_path.parent, prefix=".checkpoint-") as temporary_dir:
+        temporary_path = Path(temporary_dir) / checkpoint_path.name
+        torch.save(
+            {
+                "model_state_dict": get_model_state_dict(model),
+                "optimizer_state_dict": optimizer.state_dict() if optimizer else None,
+                "extra_state": extra_state,
+            },
+            temporary_path,
+        )
+        os.replace(temporary_path, checkpoint_path)
 
 
 def load_lr_schedule(lr_schedule, checkpoint):

@@ -15,7 +15,6 @@ from mlpf.conf import OutputMode
 from mlpf.model.utils import unpack_target
 from mlpf.model.reconstruction_diagnostics import accumulate_momentum_metrics, empty_momentum_metrics
 
-
 MATCH_DR = 0.1
 MATCH_LOG_PT = math.log(2.0)
 MATCH_REL_PT = 0.5

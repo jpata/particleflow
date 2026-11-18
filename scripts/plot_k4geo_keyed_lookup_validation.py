@@ -16,7 +16,6 @@ import numpy as np
 import uproot
 from uproot.source.file import MemmapSource
 
-
 CASE = "idea_qq"
 VARIANTS = {"pre_fix": "pre-fix (linear scan)", "main": "current (keyed lookup)"}
 COLORS = {"pre_fix": "#dc2626", "main": "#059669"}

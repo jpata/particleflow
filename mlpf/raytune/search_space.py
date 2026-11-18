@@ -1,7 +1,6 @@
 from ray.tune import choice  # grid_search, choice, loguniform, quniform
 from mlpf.utils import set_nested_dict
 
-
 raytune_num_samples = 10  # Number of random samples to draw from search space. Set to 1 for grid search.
 samp = choice
 

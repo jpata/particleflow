@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import uproot
 
-
 PARTICLE_STYLES = {
     11: ("electron", "#17becf", r"$e$"),
     13: ("muon", "#9467bd", r"$\mu$"),

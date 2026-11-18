@@ -4,7 +4,6 @@ from pathlib import Path
 
 import yaml
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 GUN_SAMPLES = {"gun_e_10gev", "gun_mu_10gev", "gun_pi_10gev"}
 

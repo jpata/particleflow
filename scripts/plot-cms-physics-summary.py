@@ -13,7 +13,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 OBSERVABLES = [
     ("particle_pt", "Particle pT", "Particle pT [GeV]", "Particles / event / GeV"),
     ("jet_pt", "Jet pT", "Jet pT [GeV]", "Jets / event / GeV"),

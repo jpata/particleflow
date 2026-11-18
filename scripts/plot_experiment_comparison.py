@@ -12,7 +12,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 STEP_RE = re.compile(r"step_(\d+)\.json$")
 LOSS_COMPONENTS = (
     "Classification_binary",

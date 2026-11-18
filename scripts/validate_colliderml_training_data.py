@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check real PF event splits, tensors, track slots and persisted TFDS fidelity."""
+
 import argparse
 import json
 from pathlib import Path

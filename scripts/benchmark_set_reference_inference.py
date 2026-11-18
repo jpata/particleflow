@@ -16,7 +16,6 @@ import torch
 from mlpf.model.mlpf import MLPF
 from mlpf.training_scenarios import load_platform_profile, load_training_scenario, resolve_scenario_job
 
-
 SCENARIO = Path("configs/training/scenarios/cld_set_hits_heptv2_sector_comparison.yaml")
 PLATFORM = Path("configs/training/platforms/lumi_mi250x.yaml")
 CASES = (

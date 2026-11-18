@@ -526,12 +526,17 @@ def find_scenario_continuation(job, platform):
         except (OSError, json.JSONDecodeError):
             continue
         saved_job = manifest.get("job", {})
+        saved_config = manifest.get("resolved_config")
+        if isinstance(saved_config, dict):
+            # Older manifests predate this validation-only setting.
+            field = "validation_particle_metrics_max_events"
+            saved_config.setdefault(field, MLPFConfig.model_fields[field].default)
         if (
             saved_job.get("scenario_name") != job.scenario_name
             or saved_job.get("platform_name") != job.platform_name
             or saved_job.get("variant_name") != job.variant_name
             or saved_job.get("seed") != job.seed
-            or manifest.get("resolved_config") != desired_config
+            or saved_config != desired_config
         ):
             continue
 

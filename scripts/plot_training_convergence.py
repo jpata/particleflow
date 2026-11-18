@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Plot sampled training-batch losses against held-out full-split validation."""
+
 import argparse
 import json
 from pathlib import Path
@@ -10,7 +11,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
-
 
 LOSSES = (
     "Total",

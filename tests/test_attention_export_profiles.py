@@ -24,7 +24,6 @@ from mlpf.model.onnx_attention import export_attention, export_mlpf  # noqa: E40
 from mlpf.model.onnx_graph import _lower_nonfinite, _remove_dead_nodes  # noqa: E402
 from tests.test_attention24_export import make_batch, make_model  # noqa: E402
 
-
 OUTPUTS = ["bid", "id", "momentum", "pu"]
 
 

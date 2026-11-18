@@ -13,6 +13,7 @@ small clusters/particle => we need merging or a different seed rule.
 Usage:
     python scripts/colliderml/diagnose_clusterer.py --num-events 5
 """
+
 import argparse
 from pathlib import Path
 
