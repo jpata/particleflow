@@ -117,19 +117,19 @@ variants:
     gpus: 1
     overrides:
       <<: [*pf, *heptv2]
-  # PU0 events have up to ~390 target particles (p99 ~310), above the 256 slots of the CLD/CLIC recipe.
-  colliderml_hits_attention:
-    model_name: pyg-colliderml-hits-set-v1
-    production_name: colliderml
-    overrides:
-      <<: *hits
-      model.set_decoder.num_slots: 512
-  colliderml_hits_heptv2:
-    model_name: pyg-colliderml-hits-set-v1
-    production_name: colliderml
-    overrides:
-      <<: [*hits, *heptv2]
-      model.set_decoder.num_slots: 512
+#  # PU0 events have up to ~390 target particles (p99 ~310), above the 256 slots of the CLD/CLIC recipe.
+#  colliderml_hits_attention:
+#    model_name: pyg-colliderml-hits-set-v1
+#    production_name: colliderml
+#    overrides:
+#      <<: *hits
+#      model.set_decoder.num_slots: 512
+#  colliderml_hits_heptv2:
+#    model_name: pyg-colliderml-hits-set-v1
+#    production_name: colliderml
+#    overrides:
+#      <<: [*hits, *heptv2]
+#      model.set_decoder.num_slots: 512
   # CMS keeps its v3.2.0 model and optimizer (cms_backbone_comparison at 6b80b98):
   # width 512, three layers, LR 0.0004, TFDS 2.8.0. Batches follow the 320k CMS run
   # (cms_backbone_comparison at e2c8e65c, the v2.6.0pre1 layout): 96 PU and 768 no-PU
