@@ -247,6 +247,9 @@ def main(argv=None, *, spec=None):  # noqa: C901
         gen_cmd = f"bash {gen_script} {process_name} $seed {pu_type}"
         if copy_step2:
             gen_cmd += " True"
+        if prod_type == "key4hep":
+            # Keep the runner's exit status while dropping framework DEBUG records.
+            gen_cmd = f"(set -o pipefail; {gen_cmd} 2>&1 | " r"sed -u -E '/^[^[:space:]]+[[:space:]]+(DEBUG|VERBOSE)[[:space:]]/d')"
         if args.ignore_failures:
             gen_cmd += " || echo 'WARNING: Generation failed'"
 
@@ -272,20 +275,34 @@ def main(argv=None, *, spec=None):  # noqa: C901
                 exports += f' && export CLD_PYTHIA_CARD="{resolve_path(pythia_card, spec)}"'
 
         validate_events = prod_config.get("validate_events", False)
+        root_check_setup = (
+            'source /cvmfs/sw.hsf.org/key4hep/setup.sh -r "${KEY4HEP_RELEASE:-${KEY4HEP_VERSION:-2026-04-08}}" && ' if prod_type == "key4hep" else ""
+        )
         gen_event_check = (
-            f"python3 -c 'import ROOT,sys; f=ROOT.TFile.Open(sys.argv[1]); "
+            f"({root_check_setup}python3 -c 'import ROOT,sys; f=ROOT.TFile.Open(sys.argv[1]); "
             f'assert f and not f.IsZombie(), sys.argv[1]; t=f.Get("events"); '
-            f'assert t and t.GetEntries()=={events_per_job}, sys.argv[1]\' "{root_file_proto}"'
+            f'assert t and t.GetEntries()=={events_per_job}, sys.argv[1]\' "{root_file_proto}")'
             if validate_events
             else ""
         )
+        validate_key4hep = validate_events and prod_type == "key4hep"
+        stage_log_setup = ""
+        if prod_config.get("save_stage_logs", False):
+            log_root = shlex.quote(os.path.join(workspace_dir, "logs", process_name))
+            stage_log_setup = (
+                f'export LOGDIR={log_root}/"$seed/${{SLURM_JOB_ID:-manual-$$}}-${{SLURM_RESTART_COUNT:-0}}"\n'
+                '    mkdir -p -- "$LOGDIR"\n'
+                '    printf "Stage logs: %s\\n" "$LOGDIR"'
+            )
         gen_proto_content = f"""
 start_seed=$1
 for (( i=0; i<{CHUNK_SIZE}; i++ )); do
     seed=$((start_seed + i))
+    {exports if validate_key4hep else ""}
+    {stage_log_setup}
     if [ ! -f {root_file_proto} ]; then
         echo "Generating {root_file_proto}"
-        {exports}
+        {"" if validate_key4hep else exports}
         {gen_cmd}
     else
         echo "Skipping {root_file_proto}, already exists"

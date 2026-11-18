@@ -1,6 +1,7 @@
 """Generate one namespaced dataset DAG for a multi-detector Key4hep campaign."""
 
 import argparse
+import os
 from pathlib import Path
 
 from mlpf.snakemake import produce_snakemake
@@ -20,7 +21,7 @@ def main(argv=None):
         raise ValueError("Select distinct productions from this campaign")
     jobs = Path(campaign["jobs_dir"])
     if args.smoke:
-        jobs = jobs.with_name(jobs.name + "_smoke")
+        jobs = jobs.with_name(jobs.name + "_smoke_10ev")
     stages = {stage: [] for stage in ("gen", "post", "tfds", "tfds_hit")}
     modules = []
     for detector in detectors:
@@ -37,12 +38,16 @@ def main(argv=None):
         if production.get("tfds_hit_mapping"):
             steps.append("tfds_hit")
         if args.smoke:
-            production["workspace_dir"] += "/smoke"
+            production["workspace_dir"] += "/smoke_10ev"
+            production["save_stage_logs"] = True
+            if detector == "ild" and os.environ.get("ILD_USE_PATCHED_REFITTER") == "1":
+                production.setdefault("gen_environment", {})["ILD_USE_PATCHED_REFITTER"] = "1"
             for settings in production["samples"].values():
                 begin, end = settings["seed_range"]
                 if end - begin < 10:
                     raise ValueError(f"{detector}: smoke test requires ten seeds per sample")
                 settings["seed_range"] = [begin, begin + 10]
+                settings["events_per_job"] = 10
             steps = ["gen"]
         produce_snakemake.main(["--production", detector, "--jobs-root", str(jobs), "--steps", *steps], spec=spec)
         for step in steps:
