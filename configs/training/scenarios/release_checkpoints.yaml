@@ -1,0 +1,259 @@
+# Per-release reference checkpoints. Train every release from its tag with this
+# scenario unchanged, so checkpoints from different releases differ only in code.
+# Changing anything here starts a new comparison series; record it in the release notes.
+#
+# Derived from the v3.2.0 checkpoints: clic_cld_backbone_benchmark (CLD, CLIC)
+# and cms_backbone_comparison at its v3.2.0 recipe (CMS), both at 6b80b98.
+# Relative to v3.2.0: 100k OneCycle steps (CLD/CLIC were 50k, CMS 100k, all
+# cosine decay), input normalization for track/cluster models, ColliderML PU0
+# added, and the CMS PU/no-PU batches of the 320k CMS run (96/768 instead of a
+# uniform 64). Optimizer, peak learning rates and validation are unchanged.
+name: release_checkpoints
+spec_file: particleflow_spec.yaml
+production_name: cld
+
+variants:
+  cld_pf_attention:
+    model_name: pyg-cld-v1
+    gpus: 1
+    overrides: &pf
+      model.input_normalization: true
+  cld_pf_heptv2:
+    model_name: pyg-cld-v1
+    gpus: 1
+    overrides:
+      model.input_normalization: true
+      <<: &heptv2
+        model.type: heptv2
+        model.attention: null
+        model.heptv2.embedding_dim: 256
+        model.heptv2.width: 256
+        model.heptv2.num_convs: 6
+        model.heptv2.num_heads: 16
+        model.heptv2.dropout_ff: 0.0
+        model.heptv2.block_size: 128
+        model.heptv2.deterministic_hashing: true
+        model.heptv2.activation_checkpointing: true
+  cld_hits_attention:
+    model_name: pyg-cld-hits-set-v1
+    overrides: &hits
+      model.set_decoder.num_slots: 256
+      model.set_decoder.num_layers: 4
+      model.set_decoder.num_heads: 8
+      model.set_decoder.attention_mode: global-flash
+      model.set_decoder.query_init: input-conditioned
+      model.set_decoder.local_attention_radius: 0.4
+      model.set_decoder.tracker_query_fraction: 0.6
+      model.set_decoder.proposal_mode: grid-diverse
+      model.set_decoder.proposal_grid_size: 0.1
+      model.set_decoder.use_aggregate_anchors: true
+      model.set_decoder.aggregate_grid_size: 0.1
+      model.set_decoder.presence_threshold: 0.5
+      model.set_decoder.no_object_weight: 1.0
+      model.set_decoder.cardinality_loss_weight: 0.05
+      model.set_decoder.auxiliary_loss_weight: 0.25
+      model.set_decoder.matcher.presence: 1.0
+      model.set_decoder.matcher.pid: 1.0
+      model.set_decoder.matcher.geometry: 2.0
+      model.set_decoder.matcher.pt: 1.0
+      model.set_decoder.matcher.energy: 0.0
+      model.set_decoder.matcher.dr_scale: 0.1
+      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+      model.set_decoder.hit_grouping: true
+      model.set_decoder.hit_grouping_dim: 32
+      model.set_decoder.hit_grouping_chunk_size: 1024
+      model.set_decoder.hit_grouping_loss_weight: 0.1
+      model.set_decoder.hit_grouping_background_weight: 0.1
+      model.set_decoder.hit_grouping_detector_balanced: false
+      model.set_decoder.hit_grouping_sparse: false
+      model.set_decoder.hit_grouping_tracker_particle_balanced: false
+      model.set_decoder.tracker_momentum_readout: true
+      model.set_decoder.tracker_group_readout: false
+      model.set_decoder.tracker_fit_correction: false
+      model.set_decoder.tracker_overlap_loss_weight: 0.0
+      model.set_decoder.tracker_geometry_loss_weight: 0.0
+      model.set_decoder.tracker_curvature_loss_weight: 0.0
+      model.set_decoder.event_consistency_loss_weight: 0.0
+      model.hit_feature_engineering.enabled: true
+      model.hit_feature_engineering.geometry: true
+      model.hit_feature_engineering.calorimeter_neighborhood: true
+      model.hit_feature_engineering.tracker_neighborhood: true
+      model.hit_feature_engineering.tracker_momentum: false
+      model.hit_feature_engineering.tracker_doublets: false
+  cld_hits_heptv2:
+    model_name: pyg-cld-hits-set-v1
+    overrides:
+      <<: [*hits, *heptv2]
+  clic_pf_attention:
+    model_name: pyg-clic-v1
+    production_name: clic
+    gpus: 1
+    overrides: *pf
+  clic_pf_heptv2:
+    model_name: pyg-clic-v1
+    production_name: clic
+    gpus: 1
+    overrides:
+      <<: [*pf, *heptv2]
+  clic_hits_attention:
+    model_name: pyg-clic-hits-set-v1
+    production_name: clic
+    overrides: *hits
+  clic_hits_heptv2:
+    model_name: pyg-clic-hits-set-v1
+    production_name: clic
+    overrides:
+      <<: [*hits, *heptv2]
+  # ColliderML PU0 is new in v3.3.0; there is no v3.2.0 checkpoint to compare with.
+  colliderml_pf_attention:
+    model_name: pyg-colliderml-v1
+    production_name: colliderml
+    gpus: 1
+    overrides: *pf
+  colliderml_pf_heptv2:
+    model_name: pyg-colliderml-v1
+    production_name: colliderml
+    gpus: 1
+    overrides:
+      <<: [*pf, *heptv2]
+  # PU0 events have up to ~390 target particles (p99 ~310), above the 256 slots of the CLD/CLIC recipe.
+  colliderml_hits_attention:
+    model_name: pyg-colliderml-hits-set-v1
+    production_name: colliderml
+    overrides:
+      <<: *hits
+      model.set_decoder.num_slots: 512
+  colliderml_hits_heptv2:
+    model_name: pyg-colliderml-hits-set-v1
+    production_name: colliderml
+    overrides:
+      <<: [*hits, *heptv2]
+      model.set_decoder.num_slots: 512
+  # CMS keeps its v3.2.0 model and optimizer (cms_backbone_comparison at 6b80b98):
+  # width 512, three layers, LR 0.0004, TFDS 2.8.0. Batches follow the 320k CMS run
+  # (cms_backbone_comparison at e2c8e65c, the v2.6.0pre1 layout): 96 PU and 768 no-PU
+  # events per step, a 1:8 dataset batch ratio. Each step draws one group.
+  cms_attention:
+    model_name: pyg-cms-v1
+    production_name: cms_run3
+    global_batch_size: &cms_batch
+      physical_pu: 96
+      physical_nopu: 768
+    overrides:
+      model.input_normalization: true
+      <<: &cms
+        model.output_mode: elementwise
+        model.backbone.num_convs: 3
+        model.attention.num_convs: 3
+        model.attention.num_heads: 16
+        model.attention.head_dim: 32
+        model.attention.use_jagged_attention: false
+        lr: 0.0004
+        val_freq: 10000
+        tensorboard_step_freq: 1000
+        checkpoint_freq: 10000
+        validation_linear_probe: false
+        pad_to_multiple_elements: 100
+        # Keep the 1:8 PU/no-PU event-batch ratio; leave train-group weights unset so
+        # each group is sampled in proportion to its batches per epoch.
+        train_dataset.cms.physical_pu.batch_size: 1
+        train_dataset.cms.physical_nopu.batch_size: 8
+        valid_dataset.cms.physical_pu.batch_size: 1
+        valid_dataset.cms.physical_nopu.batch_size: 8
+        # Pin every sample explicitly: pyg-cms-v1 otherwise selects version 3.2.0.
+        train_dataset.cms.physical_pu.samples.cms_pf_ttbar.version: "2.8.0"
+        train_dataset.cms.physical_pu.samples.cms_pf_qcd.version: "2.8.0"
+        train_dataset.cms.physical_pu.samples.cms_pf_ztt.version: "2.8.0"
+        train_dataset.cms.physical_nopu.samples.cms_pf_ttbar_nopu.version: "2.8.0"
+        train_dataset.cms.physical_nopu.samples.cms_pf_qcd_nopu.version: "2.8.0"
+        train_dataset.cms.physical_nopu.samples.cms_pf_ztt_nopu.version: "2.8.0"
+        valid_dataset.cms.physical_pu.samples.cms_pf_ttbar.version: "2.8.0"
+        valid_dataset.cms.physical_pu.samples.cms_pf_qcd.version: "2.8.0"
+        valid_dataset.cms.physical_pu.samples.cms_pf_ztt.version: "2.8.0"
+        valid_dataset.cms.physical_nopu.samples.cms_pf_ttbar_nopu.version: "2.8.0"
+        valid_dataset.cms.physical_nopu.samples.cms_pf_qcd_nopu.version: "2.8.0"
+        valid_dataset.cms.physical_nopu.samples.cms_pf_ztt_nopu.version: "2.8.0"
+        test_dataset.cms_pf_ttbar.version: "2.8.0"
+        test_dataset.cms_pf_qcd.version: "2.8.0"
+        test_dataset.cms_pf_ztt.version: "2.8.0"
+  cms_heptv2:
+    model_name: pyg-cms-v1
+    production_name: cms_run3
+    global_batch_size: *cms_batch
+    overrides:
+      <<: [*pf, *cms]
+      model.type: heptv2
+      model.attention: null
+      model.heptv2.embedding_dim: 512
+      model.heptv2.width: 512
+      model.heptv2.num_convs: 3
+      model.heptv2.num_heads: 16
+      model.heptv2.dropout_ff: 0.0
+      model.heptv2.block_size: 100
+      model.heptv2.n_hashes: 3
+      model.heptv2.deterministic_hashing: true
+
+seeds: [12345]
+
+training:
+  # CLD, CLIC and ColliderML: 128 events per step (one GPU for track/cluster,
+  # the platform count for hits). CMS sets its own batch above.
+  global_batch_size: 128
+  parameters:
+    optimizer: lamb
+    lr: 0.001  # OneCycle peak
+    lr_schedule: onecycle
+    lr_schedule_config.onecycle.pct_start: 0.3
+    num_steps: 100000
+    # Fixed budget: no early stopping, and keep every periodic checkpoint.
+    patience: 100000
+    val_freq: 1000
+    # Hit jobs span several 48 h LUMI allocations; resume with --continue loses at most 1,000 steps.
+    checkpoint_freq: 1000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    validation_linear_probe: true
+    validation_linear_probe_max_events: 16
+    pad_to_multiple_elements: 128
+    make_plots: true
+    load: null
+    # Telemetry is sampled in each worker's background thread; no CUDA/HIP
+    # event timing inside the training step.
+    benchmark.enabled: true
+    benchmark.sample_interval_seconds: 1.0
+    benchmark.warmup_steps: 100
+    benchmark.gpu_timing_interval: 0
+
+common_overrides:
+  model.trainable: all
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.attention.num_convs: 6
+  model.attention.num_heads: 16
+  model.attention.head_dim: 16
+  model.attention.use_jagged_attention: true
+
+# The variants are separate per-detector references, not a controlled comparison.
+allowed_variant_differences:
+  - conv_type
+  - data_dir
+  - dataset
+  - elemtypes_nonzero
+  - enabled_test_datasets
+  - hyperparameters
+  - input_dim
+  - num_classes
+  - lr
+  - val_freq
+  - tensorboard_step_freq
+  - checkpoint_freq
+  - validation_linear_probe
+  - pad_to_multiple_elements
+  - model
+  - train_dataset
+  - valid_dataset
+  - test_dataset

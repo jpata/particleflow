@@ -1,6 +1,6 @@
 # Limitations and development priorities
 
-Use [Current capabilities](capabilities.md) for implemented workflows. This page collects remaining validation and research work for the v3.2.0 codebase; it is not a release history or a delivery schedule. Track active proposals in the [issue tracker](https://github.com/jpata/particleflow/issues).
+Use [Current capabilities](capabilities.md) for implemented workflows. This page collects remaining validation and research work for the v3.3.0 codebase; it is not a release history or a delivery schedule. Track active proposals in the [issue tracker](https://github.com/jpata/particleflow/issues).
 
 ## Data and detector coverage
 
