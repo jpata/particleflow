@@ -40,9 +40,9 @@ outputs = session.run(None, {
 })
 ```
 
-The ONNX `input_normalization` metadata maps source IDs to dataset names and statistics versions. Deployment callers must provide exactly one supported ID per event. The graph cannot enforce that contract. `cms-validate-onnx.py` derives the source from `--dataset`, and `--save-inputs` includes it for replay with `validate-onnx-runtime.py`. `export-checkpoint-onnx.py` also supports normalized track/cluster checkpoints and includes source IDs in its reference bundles. For joint-detector checkpoints, pass the desired samples with `--datasets`; it reads each sample from the saved data-directory mapping by default, and `--data-dir cld=/path/to/cld clic=/path/to/clic` overrides those roots.
+The ONNX `input_normalization` metadata maps source IDs to dataset names and statistics versions. Deployment callers must provide exactly one supported ID per event. The graph cannot enforce that contract. `cms-validate-onnx.py` derives the source from `--dataset`, and `--save-inputs` includes it for replay with `validate-onnx-runtime.py`. `export-checkpoint-onnx.py` also supports normalized track/cluster checkpoints and includes source IDs in its reference bundles. It reads the `--datasets` samples from the TFDS roots stored in the checkpoint configuration. To use other roots, pass `--data-dir /path` for all samples or, for joint-detector checkpoints, `--data-dir cld=/path/to/cld clic=/path/to/clic`.
 
-Models with `model.feature_bag` use the same `source_id` input to select each event's feature-column mapping. The feature bag is embedded in the graph, so inference callers still supply raw features in the saved model's padded feature layout.
+In models with `model.feature_bag`, the graph also uses `source_id` to map each event's columns to the shared feature slots. Callers pass the same raw, padded features as for a model without the feature bag.
 
 ## Choose an attention representation
 
@@ -146,7 +146,9 @@ Dynamic graphs may require CPU shape operations. Static specialization is availa
 
 HEPTv2 defaults to deterministic hashing (`model.heptv2.deterministic_hashing: true`). It quantizes eta/phi and projection coefficients, uses int64 arithmetic, and resolves equal sort keys by input order. Export uses exact integer inverse permutations and separate materialized output heads. Pad input lengths to a multiple of the model's block size.
 
-The optional `track_hash_at_calo` and `cluster_hash_at_centroid` coordinate transforms are also embedded in HEPTv2 exports. Their eta calculations use ONNX-compatible arithmetic. The model path rotates and normalizes transverse direction vectors directly, without angle round trips, and computes the barrel arc with a range-reduced FP32 polynomial for asin. Eager inference and ONNX export use the same arithmetic; the diagnostic angle-returning API is separate. The raw input feature contract and regression baselines are unchanged. Validate a checkpoint with these options against its own PyTorch reference before deployment.
+The `track_hash_at_calo` and `cluster_hash_at_centroid` options are part of the exported graph, and callers pass the usual raw features. The graph contains no `Asin`, `Acos` or `Atan` nodes, which ORT CUDA runs on CPU. Instead, track and cluster directions are computed as (sin phi, cos phi) vectors, and the barrel arc length uses a polynomial asin accurate to 2 FP32 ULP. PyTorch training and inference use the same code, so eager and ONNX results agree.
+
+Checkpoints trained with these options before #577 used `asin` and `atan2` directly. The current arithmetic can shift a quantized hash coordinate by one step, and a direction along -x now gets phi = +pi instead of a value near -pi. Both can change bucket assignments, so compare such checkpoints against a new PyTorch reference before deployment.
 
 Deterministic coordinates and bucket assignments can change predictions from checkpoints trained with floating-point hashing. Setting the option to `false` selects floating-point hashing but does not guarantee historical tie ordering or agreement across runtimes. Likewise, older attention checkpoints trained with unmasked padding require validation under the current masking semantics.
 
