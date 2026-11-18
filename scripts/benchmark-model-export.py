@@ -78,7 +78,7 @@ def main():
     case = next(c for c in manifest["cases"] if c["file"] == a.case)
     assert qualification.digest(a.bundle / a.case) == case["sha256"]
     data = np.load(a.bundle / a.case)
-    feeds = {n: data[n] for n in ["Xfeat_normed", "mask"]}
+    feeds = {n: data[n] for n in ("Xfeat_normed", "mask", "source_id") if n in data}
     valid = feeds["mask"].astype(bool)
     path = a.outdir / "static.onnx"
     qualification.specialize_model(a.bundle / "model.onnx", path, feeds)

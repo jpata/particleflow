@@ -39,6 +39,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import gc
 from contextlib import nullcontext
+from datetime import timedelta
 import tqdm
 import yaml
 import json
@@ -97,7 +98,7 @@ from mlpf.model.set_losses import SetMatcherWeights, hungarian_match, set_mlpf_l
 from mlpf.model.reconstruction_diagnostics import compute_hit_grouping_metrics
 from mlpf.model.validation_metrics import compute_set_slot_metrics, compute_validation_particle_metrics, validation_particle_collections
 from mlpf.utils import create_comet_experiment
-from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS
+from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS, dataset_for_sample
 from mlpf.jet_utils import get_jet_config
 
 from mlpf.model.benchmarking import active_benchmark, benchmark_phase, record_benchmark, record_phase
@@ -557,7 +558,7 @@ def _current_step_memory_summary(diagnostics):
 
 def model_step(batch, model, loss_fn, regression_weights):
     _logger.debug(f"model_step X={batch.X.shape}")
-    ypred_raw = model(batch.X, batch.mask)
+    ypred_raw = model(batch.X, batch.mask, source_id=batch.source_id)
     ypred = unpack_predictions(ypred_raw)
     model_module = model.module if hasattr(model, "module") else model
     if model_module.output_mode == OutputMode.SET:
@@ -673,7 +674,7 @@ def train_step(
     phase_start = time.perf_counter()
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
         _logger.debug(f"model_step X={batch.X.shape}")
-        ypred_raw = model(batch.X, batch.mask)
+        ypred_raw = model(batch.X, batch.mask, source_id=batch.source_id)
     phase_start = _record_phase_time_if_enabled(diagnostics.get("time", {}), "forward", phase_start, device_type, log_this_step)
     if log_this_step:
         _collect_step_memory(rank, "after_forward", diagnostics)
@@ -1009,7 +1010,7 @@ def evaluate(
                     )
 
                 model_module = model.module if hasattr(model, "module") else model
-                ypred_particles = model_module.predict_particles(batch.X, batch.mask)
+                ypred_particles = model_module.predict_particles(batch.X, batch.mask, source_id=batch.source_id)
                 metric_collections = validation_particle_collections(
                     batch,
                     ypred_particles,
@@ -1287,14 +1288,30 @@ def _run_validation_cycle(
         metrics = {f"step_valid_loss_{name}": value for name, value in losses_valid_combined.items()}
         comet_experiment.log_metrics({**metrics, **_comet_group_metrics(losses_valid_group, "valid")}, step=step)
 
+    # evaluate() reduces losses across ranks, so every worker must update its
+    # stopping state to leave the training loop at the same validation cycle.
+    improved = losses_valid["Total"] < best_val_loss
+    if improved:
+        best_val_loss = losses_valid["Total"]
+        stale_steps = 0
+    else:
+        stale_steps += 1
+
     # All subsequent actions are only done on the main process
     if (rank == 0) or (rank == "cpu"):
-        # Save the best model checkpoint if validation loss improves
-        if losses_valid["Total"] < best_val_loss:
-            best_val_loss = losses_valid["Total"]
-            stale_steps = 0
-        else:
-            stale_steps += 1
+        if improved:
+            # Keep this outside checkpoint-*.pth periodic retention.
+            save_checkpoint(
+                Path(checkpoint_dir) / "best.pth",
+                model,
+                optimizer,
+                {
+                    "step": step,
+                    "lr_schedule_state_dict": lr_schedule.state_dict() if lr_schedule is not None else None,
+                    "train_loader_state_dict": train_loader.state_dict(),
+                    "valid_loader_state_dict": valid_loader.state_dict(),
+                },
+            )
 
         # Log validation losses to TensorBoard
         _log_validation_results_to_tensorboard(tensorboard_writer_valid, losses_valid_combined, step)
@@ -1353,7 +1370,7 @@ def _run_validation_cycle(
         log_memory("make_plots_start", rank, tensorboard_writer_valid, step)
         for sample in config.enabled_test_datasets:
             with benchmark_phase("plotting", sample=sample):
-                plot_metrics = make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
+                plot_metrics = make_plots(outdir, sample, dataset_for_sample(sample, config.dataset), testdir_name, config.ntest)
             plot_metrics_sample[sample] = plot_metrics
             # Log key jet metrics to TensorBoard and CometML
             for k in JET_VALIDATION_METRICS:
@@ -1636,10 +1653,10 @@ def train_all_steps(
                 losses_train_group=losses_train_group,
             )
 
-        # Check for early stopping
-        if stale_steps > patience:
-            _logger.info(f"Stopping early due to stale steps: {stale_steps} > {patience}")
-            break
+            # Patience counts consecutive validation cycles without improvement.
+            if stale_steps > 0 and stale_steps >= patience:
+                _logger.info(f"Stopping early after {stale_steps} validation cycles without loss improvement (patience={patience})")
+                break
 
     # End of training loop
     _logger.info(f"Training completed. Total time on device {rank}: {(time.time() - t0_initial)/60:.3f}min")
@@ -1669,7 +1686,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
 
     for split_config in split_configs_to_use:
         ds = PFDataset(
-            config.data_dir,
+            config.data_dir_for(sample),
             f"{sample}/{split_config}:{version}",
             "test",
             num_samples=ntest,
@@ -1690,8 +1707,16 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
         sampler = torch.utils.data.SequentialSampler(ds)
 
     vals_for_test = ["X", "ytarget", "ytarget_pt_orig", "ytarget_e_orig", "ycand", "genjets", "targetjets"]
+    per_event_vals_for_test = ["genmet", "source_id"]
     if config.model.output_mode == OutputMode.SET:
         vals_for_test.append("ytarget_set")
+
+    # gen reference including pileup, where the dataset has one (ColliderML TFDS >= 1.4.0)
+    # (with num_samples, PFDataset wraps its TFDSDataSource in a Subset)
+    sources = [d.dataset if isinstance(d, torch.utils.data.Subset) else d for d in dataset]
+    if all("genjets_withpu" in source.ds.dataset_info.features.keys() for source in sources):
+        vals_for_test.append("genjets_withpu")
+        per_event_vals_for_test.append("genmet_withpu")
 
     # pythia branch was introduced for cms in version 2.8.0
     if sample.startswith("cms_") and version and Version(version) >= Version("2.8.0"):
@@ -1714,7 +1739,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     test_loader = torch.utils.data.DataLoader(
         ds,
         batch_size=batch_size,
-        collate_fn=Collater(vals_for_test, ["genmet"]),
+        collate_fn=Collater(vals_for_test, per_event_vals_for_test),
         sampler=sampler,
         num_workers=config.num_workers,
         generator=test_loader_generator,
@@ -1728,7 +1753,7 @@ def run_test(rank, world_size, config: MLPFConfig, outdir, model, sample, testdi
     _logger.info(f"Running predictions on {sample}")
     torch.cuda.empty_cache()
 
-    jetdef, jet_ptcut, jet_match_dr = get_jet_config(config.dataset)
+    jetdef, jet_ptcut, jet_match_dr = get_jet_config(dataset_for_sample(sample, config.dataset))
 
     device_type = "cuda" if isinstance(rank, int) else "cpu"
     with torch.autocast(device_type=device_type, dtype=dtype, enabled=device_type == "cuda"):
@@ -1753,6 +1778,9 @@ def restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config: MLPFCo
 
     Returns the step to start training from: the one after the checkpoint's, or 1 (as for a fresh run) if weights_only.
     """
+    reset_task_weights = getattr(config, "reset_task_loss_weights", False)
+    if reset_task_weights and not weights_only:
+        raise ValueError("reset_task_loss_weights requires load_weights_only; a full resume must retain its calibration")
     model_module = model.module if hasattr(model, "module") else model
     model_state_dict = model_module.state_dict()
     checkpoint_state_dict = checkpoint["model_state_dict"]
@@ -1789,6 +1817,10 @@ def restore_checkpoint(checkpoint, model, optimizer, lr_schedule, config: MLPFCo
 
     if weights_only:
         load_model_weights(checkpoint, model, strict)
+        if reset_task_weights:
+            device = model_module.task_loss_weighter.weights.device
+            model_module.task_loss_weighter = make_task_loss_weighter(config.task_loss_weights.model_dump()).to(device)
+            _logger.info("Reset task loss weights for calibration on the fine-tuning data", color="bold")
         _logger.info("Loaded only the model weights, starting training from step 1", color="bold")
         return 1
 
@@ -1845,6 +1877,7 @@ def run(
             "nccl",
             rank=int(rank),
             world_size=world_size,
+            timeout=timedelta(minutes=30),
             device_id=torch.device(rank),  # (nccl should be faster than gloo)
         )
 
@@ -1981,7 +2014,7 @@ def run(
 
         if (rank == 0) or (rank == "cpu"):
             for sample in config.enabled_test_datasets:
-                make_plots(outdir, sample, config.dataset, testdir_name, config.ntest)
+                make_plots(outdir, sample, dataset_for_sample(sample, config.dataset), testdir_name, config.ntest)
 
     if world_size > 1:
         dist.barrier()

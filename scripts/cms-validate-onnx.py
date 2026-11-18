@@ -36,7 +36,7 @@ print("onnxruntime", rt.__path__)
 from mlpf.model.mlpf import MLPF  # noqa: E402
 from mlpf.model.onnx_attention import export_mlpf, validate_padding_mask  # noqa: E402
 from mlpf.model.onnx_runtime import create_session, finish_profile  # noqa: E402
-from mlpf.conf import MLPFConfig, ModelType, AttentionType  # noqa: E402
+from mlpf.conf import MLPFConfig, ModelType, AttentionType, dataset_source_id  # noqa: E402
 from mlpf.model.utils import unpack_predictions  # noqa: E402
 from mlpf.plotting.plot_utils import ELEM_NAMES_CMS, CLASS_NAMES_CMS, CLASS_NAMES_CLIC  # noqa: E402
 
@@ -249,6 +249,12 @@ def main():
             model_kwargs = MLPFConfig.model_validate(model_kwargs_raw.model_dump())
 
     print(model_kwargs)
+    source_value = dataset_source_id(args.dataset.split("/")[0])
+
+    def source_kwargs(batch_size, device="cpu"):
+        return (
+            {"source_id": torch.full((batch_size,), source_value, dtype=torch.int64, device=device)} if model_kwargs.model.input_normalization else {}
+        )
 
     # Load model weights
     print(f"Loading model weights from {args.checkpoint}...")
@@ -373,6 +379,7 @@ def main():
             paths[cfg],
             attention_format="attention24" if standard_attention else "decomposed",
             attention_dtype=torch.float16 if cfg in ("ONNX_ATTN_FLASH_FP32_FP16", "ONNX_ATTN_MATH_FP32_FP16") else None,
+            **source_kwargs(2),
         )
         del model_export
 
@@ -503,22 +510,24 @@ def main():
         mask_f_warmup = mask_warmup.float().cpu().numpy()
         X_warmup_np_fp16 = X_warmup_np.astype(np.float16)
         mask_f_warmup_fp16 = mask_f_warmup.astype(np.float16)
+        warmup_sources = source_kwargs(args.batch_size, args.device)
+        warmup_source_feeds = {key: value.cpu().numpy() for key, value in warmup_sources.items()}
 
         for _ in range(2):
             if model is not None:
                 with torch.no_grad():
                     if cfg == "PT_ATTN_MATH_FP32":
                         with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
-                            _ = model(X_warmup, mask_warmup)
+                            _ = model(X_warmup, mask_warmup, **warmup_sources)
                     elif cfg == "PT_ATTN_MATH_FP16":
                         with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
                             with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
-                                _ = model(X_warmup, mask_warmup)
+                                _ = model(X_warmup, mask_warmup, **warmup_sources)
                     elif cfg == "PT_ATTN_FLASH_FP16":
                         with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
-                            _ = model(X_warmup, mask_warmup)
+                            _ = model(X_warmup, mask_warmup, **warmup_sources)
                     else:
-                        _ = model(X_warmup, mask_warmup)
+                        _ = model(X_warmup, mask_warmup, **warmup_sources)
             elif sess is not None:
                 if cfg in [
                     "ONNX_ATTN_MATH_FP32",
@@ -529,9 +538,9 @@ def main():
                     "ONNX_ATTN_FLASH_FP32_FP16",
                     "ONNX_ATTN_MATH_FP32_FP16",
                 ]:
-                    _ = sess.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup})
+                    _ = sess.run(None, {"Xfeat_normed": X_warmup_np, "mask": mask_f_warmup, **warmup_source_feeds})
                 elif cfg in ["ONNX_ATTN_MATH_FP16", "ONNX_ATTN_FLASH_FP16"]:
-                    _ = sess.run(None, {"Xfeat_normed": X_warmup_np_fp16, "mask": mask_f_warmup_fp16})
+                    _ = sess.run(None, {"Xfeat_normed": X_warmup_np_fp16, "mask": mask_f_warmup_fp16, **warmup_source_feeds})
         print(f"Warmup for {cfg} complete. Starting validation.")
 
         # 3. Run validation for this configuration
@@ -564,8 +573,10 @@ def main():
             # Pre-convert to numpy for ONNX
             X_features_np = X_features_padded.cpu().float().numpy()
             mask_f_np = mask_f.cpu().numpy()
+            batch_sources = source_kwargs(len(event_indices), args.device)
+            batch_source_feeds = {key: value.cpu().numpy() for key, value in batch_sources.items()}
             if args.save_inputs and cfg == baseline:
-                np.savez(os.path.join(args.outdir, f"inputs_{i:06d}.npz"), Xfeat_normed=X_features_np, mask=mask_f_np)
+                np.savez(os.path.join(args.outdir, f"inputs_{i:06d}.npz"), Xfeat_normed=X_features_np, mask=mask_f_np, **batch_source_feeds)
 
             try:
                 if args.device == "cuda":
@@ -576,37 +587,37 @@ def main():
                 if cfg == "PT_ATTN_MATH_FP32":
                     with torch.no_grad():
                         with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
-                            pred = model(X_features_padded, mask)
+                            pred = model(X_features_padded, mask, **batch_sources)
                 elif cfg == "PT_ATTN_MATH_FP16":
                     with torch.no_grad():
                         with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
                             with torch.nn.attention.sdpa_kernel(torch.nn.attention.SDPBackend.MATH):
-                                pred = model(X_features_padded, mask)
+                                pred = model(X_features_padded, mask, **batch_sources)
                 elif cfg == "PT_ATTN_FLASH_FP16":
                     with torch.no_grad():
                         with torch.autocast(device_type=args.device, dtype=torch.float16, enabled=(args.device == "cuda")):
-                            pred = model(X_features_padded, mask)
+                            pred = model(X_features_padded, mask, **batch_sources)
                 elif cfg in ["PT_HEPT_FP32", "PT_HEPTV2_FP32", "PT_LITEPT_FP32", "PT_GNNLSH_FP32"]:
                     with torch.no_grad():
-                        pred = model(X_features_padded, mask)
+                        pred = model(X_features_padded, mask, **batch_sources)
                 elif cfg in ["ONNX_ATTN_MATH_FP32", "ONNX_HEPT_FP32", "ONNX_HEPTV2_FP32", "ONNX_GNNLSH_FP32"]:
-                    pred = sess.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
+                    pred = sess.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np, **batch_source_feeds})
                     pred = tuple(torch.tensor(p) for p in pred)
                 elif cfg == "ONNX_ATTN_OP_FP32":
-                    pred = sess.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
+                    pred = sess.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np, **batch_source_feeds})
                     pred = tuple(torch.tensor(p).float() for p in pred)
                 elif cfg == "ONNX_ATTN_MATH_FP16":
                     X_features_np_fp16 = X_features_np.astype(np.float16)
                     mask_f_np_fp16 = mask_f_np.astype(np.float16)
-                    pred = sess.run(None, {"Xfeat_normed": X_features_np_fp16, "mask": mask_f_np_fp16})
+                    pred = sess.run(None, {"Xfeat_normed": X_features_np_fp16, "mask": mask_f_np_fp16, **batch_source_feeds})
                     pred = tuple(torch.tensor(p).float() for p in pred)
                 elif cfg in ("ONNX_ATTN_FLASH_FP32_FP16", "ONNX_ATTN_MATH_FP32_FP16"):
-                    pred = sess.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np})
+                    pred = sess.run(None, {"Xfeat_normed": X_features_np, "mask": mask_f_np, **batch_source_feeds})
                     pred = tuple(torch.tensor(p).float() for p in pred)
                 elif cfg == "ONNX_ATTN_FLASH_FP16":
                     X_features_np_fp16 = X_features_np.astype(np.float16)
                     mask_f_np_fp16 = mask_f_np.astype(np.float16)
-                    pred = sess.run(None, {"Xfeat_normed": X_features_np_fp16, "mask": mask_f_np_fp16})
+                    pred = sess.run(None, {"Xfeat_normed": X_features_np_fp16, "mask": mask_f_np_fp16, **batch_source_feeds})
                     pred = tuple(torch.tensor(p).float() for p in pred)
 
                 if args.device == "cuda":

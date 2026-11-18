@@ -121,3 +121,48 @@ def test_idea_parquet_discovery_selects_requested_process(tmp_path):
     ttbar_file.touch()
 
     assert find_idea_parquets(tmp_path, "p8_ee_ttbar_ecm365") == [ttbar_file]
+
+
+def _point_on_helix(d0, phi0, z0, omega, tan_lambda, arc):
+    """Position and direction after a transverse arc from the origin-referenced perigee (EDM4hep/LCIO convention)."""
+    x = -d0 * np.sin(phi0) + (np.sin(phi0) - np.sin(phi0 - omega * arc)) / omega
+    y = d0 * np.cos(phi0) + (np.cos(phi0 - omega * arc) - np.cos(phi0)) / omega
+    return x, y, z0 + arc * tan_lambda, phi0 - omega * arc
+
+
+def test_perigee_at_origin_recovers_the_helix_parameters():
+    from mlpf.data.key4hep.postprocessing import perigee_at_origin
+
+    rng = np.random.default_rng(0)
+    n = 1000
+    d0 = rng.uniform(-500, 500, n)
+    phi0 = rng.uniform(-np.pi, np.pi, n)
+    z0 = rng.uniform(-1000, 1000, n)
+    omega = rng.choice([-1, 1], n) * rng.uniform(1e-4, 1e-2, n)
+    tan_lambda = rng.uniform(-3, 3, n)
+    # a perigee is the circle's closest point to the beam axis only if omega * d0 < 1
+    d0 = np.where(omega * d0 < 1, d0, -d0)
+    assert np.all(omega * d0 < 1)
+    # anywhere within half a turn of the perigee, before or after it
+    arc = rng.uniform(-0.99, 0.99, n) * np.pi / np.abs(omega)
+    x, y, z, phi = _point_on_helix(d0, phi0, z0, omega, tan_lambda, arc)
+
+    d0_out, phi0_out, z0_out = perigee_at_origin(x, y, z, phi, omega, tan_lambda)
+
+    np.testing.assert_allclose(d0_out, d0, atol=1e-6)
+    np.testing.assert_allclose(np.angle(np.exp(1j * (phi0_out - phi0))), 0, atol=1e-9)
+    np.testing.assert_allclose(z0_out, z0, atol=1e-6)
+
+
+def test_perigee_at_origin_keeps_tracks_from_the_origin_and_straight_tracks():
+    from mlpf.data.key4hep.postprocessing import perigee_at_origin
+
+    phi, omega, tan_lambda = np.array([0.3, -2.0]), np.array([1e-3, -5e-4]), np.array([0.5, -1.0])
+    d0, phi0, z0 = perigee_at_origin(np.zeros(2), np.zeros(2), np.array([5.0, -3.0]), phi, omega, tan_lambda)
+    np.testing.assert_allclose(d0, 0, atol=1e-12)
+    np.testing.assert_allclose(phi0, phi)
+    np.testing.assert_allclose(z0, [5.0, -3.0])
+
+    # straight (omega = 0): the perigee is the foot of the perpendicular from the origin
+    d0, phi0, z0 = perigee_at_origin(np.array([100.0]), np.array([50.0]), np.array([20.0]), np.array([0.0]), np.array([0.0]), np.array([0.5]))
+    np.testing.assert_allclose([d0[0], phi0[0], z0[0]], [50.0, 0.0, 20.0 - 100.0 * 0.5])

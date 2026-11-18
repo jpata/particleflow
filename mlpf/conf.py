@@ -3,8 +3,11 @@
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional, Dict, Any, Tuple, Literal
 from dataclasses import dataclass, fields
+import math
 import os
 from enum import Enum
+from pathlib import Path
+import yaml
 from mlpf.utils import (
     resolve_path,
     load_spec,
@@ -97,6 +100,34 @@ def dataset_input_type_id(dataset_name: str) -> int:
     if "_hits" in dataset_name:
         return INPUT_TYPE_IDS["hits"]
     return INPUT_TYPE_IDS["pf"]
+
+
+def dataset_for_sample(sample_name: str, default: "Dataset") -> "Dataset":
+    """Return the Dataset a TFDS sample belongs to, e.g. colliderml_ttbar_nopu_pf -> COLLIDERML."""
+    source = SOURCE_LABELS.get(dataset_source_id(sample_name), "unknown")
+    if source == "unknown":
+        return default
+    if dataset_input_type_id(sample_name) == INPUT_TYPE_IDS["hits"]:
+        source = f"{source}_hits"
+    try:
+        return Dataset(source)
+    except ValueError:
+        return default
+
+
+def parse_data_dir(values):
+    """--data-dir values: one PATH, or one SOURCE=PATH per detector (cld=/a clic=/b)."""
+    if values is None or isinstance(values, (str, dict)):
+        return values
+    if len(values) == 1 and "=" not in values[0]:
+        return values[0]
+    data_dirs = {}
+    for value in values:
+        source, separator, path = value.partition("=")
+        if not separator or not source or not path:
+            raise ValueError(f"--data-dir takes one PATH or one SOURCE=PATH per detector, got {values}")
+        data_dirs[source] = path
+    return data_dirs
 
 
 class RegressionMode(Enum):
@@ -630,6 +661,9 @@ X_FEATURES = {
     Dataset.COLLIDERML_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
+# Datasets whose elements are tracks (1) and clusters (2), the sources model.feature_bag supports.
+TRACK_CLUSTER_SOURCES = tuple(source for source in SOURCE_IDS if source in X_FEATURES and ELEM_TYPES_NONZERO.get(source) == [1, 2])
+
 
 @dataclass(frozen=True, slots=True)
 class JetConfig:
@@ -715,6 +749,76 @@ JET_CONFIG = {
 
 
 Y_FEATURES = ParticleFeatures.get_names()
+
+# Input normalization statistics (mlpf/model/input_normalization.py). Positive quantities with
+# fat-tailed distributions spanning orders of magnitude, by their X_FEATURES names, are standardized
+# after log1p(x / scale): the log takes over above the scale. Energies and momenta (GeV) reach down
+# to 10 MeV in ColliderML and IDEA clusters; energy_other and energy_muon are mostly 0, else below 10 MeV.
+LOG1P_SCALES = {
+    "pt": 0.01,
+    "e": 0.01,  # CMS energy
+    "et": 0.01,
+    "p": 0.01,
+    "energy": 0.01,
+    "energy_ecal": 0.01,  # Also IDEA name for Cherenkov energy
+    "energy_hcal": 0.01,  # Also IDEA name for scintillation energy
+    "energy_other": 1e-4,
+    "energy_muon": 1e-4,
+    "chi2": 1.0,
+    "radiusOfInnermostHit": 1.0,
+    "num_hits": 1.0,
+    "pterror": 0.01,  # CMS transverse momentum uncertainty
+    "num_muon_hits": 1.0,
+    "sigma_x": 1.0,
+    "sigma_y": 1.0,
+    "sigma_z": 1.0,
+}
+# Bounds of the raw values, applied before log1p: a few CLD/CLIC tracks have failed fits with
+# negative chi2 or tanLambda, omega, D0 and Z0 orders of magnitude beyond any physical track.
+CLIP_BOUNDS = {
+    "chi2": (0.0, math.inf),
+    "tanLambda": (-20.0, 20.0),
+    "omega": (-0.1, 0.1),
+    "D0": (-2000.0, 2000.0),
+    "Z0": (-2000.0, 2000.0),
+}
+ELEMENT_TYPES = {1: "track", 2: "cluster"}
+STATS_DIR = Path(__file__).parent / "model" / "input_normalization_stats"
+
+
+def column_names(dataset, elemtype):
+    """Name of each input column of one element type; X_FEATURES writes "<track> | <cluster>" where they differ."""
+    return [name.split(" | ")[elemtype - 1] if " | " in name else name for name in X_FEATURES[dataset]]
+
+
+def column_transform(name):
+    """Transform of an input column before standardization, as recorded in its statistics."""
+    return {"log1p_scale": LOG1P_SCALES.get(name), "clip": list(CLIP_BOUNDS[name]) if name in CLIP_BOUNDS else None}
+
+
+def stats_path(dataset, version):
+    return STATS_DIR / f"{dataset}_{version}.yaml"
+
+
+def load_stats(dataset, version):
+    """Statistics of a dataset version, checked against the current column names and transforms."""
+    path = stats_path(dataset, version)
+    if not path.exists():
+        raise ValueError(f"No input normalization statistics {path}: run scripts/compute_input_normalization_stats.py")
+    stats = yaml.safe_load(path.read_text())
+    for elemtype, name in ELEMENT_TYPES.items():
+        names = column_names(dataset, elemtype)
+        for column in stats[name]:
+            if not math.isfinite(column["mean"]) or not math.isfinite(column["std"]):
+                raise ValueError(f"{path} has a {name} column {column['column']} mean or std that is not finite: {column}")
+            recorded = {"name": column["name"], "log1p_scale": column.get("log1p_scale"), "clip": column.get("clip")}
+            expected = {"name": names[column["column"]], **column_transform(names[column["column"]])}
+            if recorded != expected:
+                raise ValueError(
+                    f"{path} has {name} column {column['column']} as {recorded}, not {expected}: "
+                    "recompute it with scripts/compute_input_normalization_stats.py"
+                )
+    return stats
 
 
 class GNNLSHConfig(BaseModel):
@@ -827,6 +931,16 @@ class HEPTv2Config(BaseModel):
     deterministic_hashing: bool = True
     num_w_per_dist: int = 10
     mlp_ratio: float = 4.0
+    # Hash tracks at their calorimeter entry point instead of their vertex direction, where their
+    # clusters' positions are (mlpf/model/calo_entry.py). Helix-extrapolated for
+    # colliderml/clic/cld/idea/maia, read from eta_ecal/phi_ecal for cms. The radius/endcap |z|
+    # default to the detector's calorimeter geometry (calo_entry.py; required for maia).
+    track_hash_at_calo: bool = False
+    track_hash_calo_radius_mm: Optional[float] = Field(default=None, gt=0.0)
+    track_hash_calo_endcap_z_mm: Optional[float] = Field(default=None, gt=0.0)
+    # Hash clusters at the direction of their centroid position instead of their eta/phi features,
+    # which are Pandora's shower-axis direction on the key4hep PF datasets (clic/cld/idea/maia only).
+    cluster_hash_at_centroid: bool = False
 
 
 class BackboneConfig(BaseModel):
@@ -980,6 +1094,8 @@ class ModelArchitectureConfig(BaseModel):
     backbone: Optional[BackboneConfig] = None
     hit_feature_engineering: HitFeatureEngineeringConfig = Field(default_factory=HitFeatureEngineeringConfig)
     set_decoder: Optional[SetDecoderConfig] = None
+    input_normalization: bool = False
+    feature_bag: bool = False
 
     # Nested configs
     gnnlsh: Optional[GNNLSHConfig] = None
@@ -1070,6 +1186,10 @@ _PIPELINE_DATASETS = {
 }
 
 
+def _tfds_dir(spec, production_config):
+    return os.path.join(resolve_path(production_config["workspace_dir"], spec), "tfds")
+
+
 def _build_base_config(spec, model_config, production_config):
     config = {}
     for key, value in spec["models"].get("defaults", {}).items():
@@ -1082,7 +1202,12 @@ def _build_base_config(spec, model_config, production_config):
     config["model"] = model_config["architecture"]
     config["conv_type"] = config["model"]["type"]
     config["dataset"] = Dataset(model_config.get("dataset", production_config.get("type")))
-    config["data_dir"] = os.path.join(resolve_path(production_config["workspace_dir"], spec), "tfds")
+    # A production of several detectors reads each detector's samples from that detector's production.
+    source_productions = production_config.get("source_productions")
+    if source_productions:
+        config["data_dir"] = {source: _tfds_dir(spec, spec["productions"][name]) for source, name in source_productions.items()}
+    else:
+        config["data_dir"] = _tfds_dir(spec, production_config)
 
     dataset_name = config["dataset"].value
     config["input_dim"] = len(X_FEATURES[dataset_name])
@@ -1244,7 +1369,7 @@ class MLPFConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dataset: Dataset
-    data_dir: str
+    data_dir: str | Dict[str, str]  # One TFDS directory, or {source: directory} for trainings on several detectors (data_dir_for).
     model: ModelArchitectureConfig
     conv_type: ModelType
 
@@ -1267,7 +1392,7 @@ class MLPFConfig(BaseModel):
     # Training parameters
     seed: int = Field(default=12345, ge=0)
     num_steps: int = 100000
-    patience: int = 10000
+    patience: int = Field(default=10000, ge=0, description="Consecutive validation cycles without loss improvement before early stopping")
     checkpoint_freq: int = 10000
     val_freq: int = 10000
     num_workers: int = 8
@@ -1300,6 +1425,7 @@ class MLPFConfig(BaseModel):
     load: Optional[str] = None  # path to model and optimizer checkpoint to load
     relaxed_load: bool = False  # if enabled, skip layer mismatch and optimizer in loading
     load_weights_only: bool = False  # load only the model weights from --load; optimizer, LR schedule, RNG, sampler and step start fresh
+    reset_task_loss_weights: bool = False  # with weights-only loading, recalibrate task weights on the fine-tuning data
     sampler_from_scratch: bool = False  # start the sampler from scratch (without resuming the sampler state)
 
     # Logging
@@ -1349,7 +1475,53 @@ class MLPFConfig(BaseModel):
                 self.model.set_decoder = SetDecoderConfig()
             if self.model.backbone.mode != BackboneMode.SHARED:
                 raise ValueError("model.output_mode='set' currently requires model.backbone.mode='shared'")
+        if self.model.feature_bag:
+            if self.model.input_encoding != InputEncoding.SPLIT:
+                raise ValueError("model.feature_bag requires model.input_encoding='split': the element type is not a feature")
+            if not self.model.input_normalization:
+                raise ValueError("model.feature_bag requires model.input_normalization")
+            unsupported = sorted(
+                name
+                for name, _ in self._samples()
+                if dataset_input_type_id(name) != INPUT_TYPE_IDS["pf"] or SOURCE_LABELS.get(dataset_source_id(name)) not in TRACK_CLUSTER_SOURCES
+            )
+            if unsupported:
+                raise ValueError(f"model.feature_bag supports track/cluster samples of {list(TRACK_CLUSTER_SOURCES)}, not {unsupported}")
+        if self.model.input_normalization:
+            hits = sorted(name for name, _ in self._samples() if dataset_input_type_id(name) != INPUT_TYPE_IDS["pf"])
+            if hits:
+                raise ValueError(f"model.input_normalization supports track/cluster samples, not {hits}")
+            for dataset, version in self.dataset_versions().items():
+                load_stats(dataset, version)
+        if isinstance(self.data_dir, dict):
+            missing = sorted(name for name, _ in self._samples() if SOURCE_LABELS[dataset_source_id(name)] not in self.data_dir)
+            if missing:
+                raise ValueError(f"data_dir has directories for {sorted(self.data_dir)}, but not for the samples {missing}")
         return self
+
+    def data_dir_for(self, sample_name):
+        """TFDS directory of a sample: data_dir, or its detector's entry when data_dir is {source: directory}."""
+        if isinstance(self.data_dir, str):
+            return self.data_dir
+        return self.data_dir[SOURCE_LABELS[dataset_source_id(sample_name)]]
+
+    def _samples(self):
+        """{(name, version)} of the train, validation and test samples."""
+        samples = {(name, entry.version) for name, entry in self.test_dataset.items()}
+        for groups in (self.train_dataset or {}, self.valid_dataset or {}):
+            for by_type in groups.values():
+                for physical in by_type.values():
+                    samples.update((name, sample.version) for name, sample in physical.samples.items())
+        return samples
+
+    def dataset_versions(self):
+        """{dataset: version} of the samples, e.g. {"cld": "3.2.1"}; the samples of a dataset share one version."""
+        versions = {}
+        for name, version in self._samples():
+            dataset = SOURCE_LABELS[dataset_source_id(name)]
+            if version is not None and versions.setdefault(dataset, version) != version:
+                raise ValueError(f"{dataset} samples have versions {versions[dataset]} and {version}")
+        return versions
 
     @model_validator(mode="after")
     def validate_dataset_weights(self) -> "MLPFConfig":
@@ -1401,6 +1573,7 @@ class MLPFConfig(BaseModel):
         production_config = spec["productions"][production_name]
         config_dict, dataset_name = _build_base_config(spec, model_config, production_config)
         _apply_namespace_overrides(config_dict, args, MLPFConfig.model_fields)
+        config_dict["data_dir"] = parse_data_dir(config_dict["data_dir"])
         _apply_extra_arg_overrides(config_dict, extra_args)
         _normalize_data_config(config_dict)
         _build_dataset_configs(config_dict, model_config, dataset_name)

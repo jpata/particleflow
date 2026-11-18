@@ -18,6 +18,9 @@ except ImportError:
 
 from mlpf.model.hept import HEPTLayer, trunc_normal_
 from mlpf.model.heptv2 import HEPTv2Layer
+from mlpf.model.input_normalization import InputNormalization
+from mlpf.model.feature_bag import FeatureBag
+from mlpf.model.calo_entry import ClusterCentroid, MultiSourceTrackCaloEntry, TrackCaloEntry
 from mlpf.model.tracker_features import TrackerDoubletFeatures
 from mlpf.model.set_decoder import ParticleSetDecoder
 
@@ -1249,6 +1252,10 @@ class MLPF(nn.Module):
             else nn.Identity()
         )
         self.input_dim = self.raw_input_dim + (self.feature_engineering.num_output_features if self.uses_hit_feature_engineering else 0)
+        self.input_normalization = InputNormalization(self.raw_input_dim, config.dataset_versions()) if config.model.input_normalization else None
+        self.feature_bag = FeatureBag(self.raw_input_dim) if config.model.feature_bag else None
+        if self.feature_bag is not None:
+            self.input_dim = self.feature_bag.num_features
         self.num_classes = config.num_classes
         self.elemtypes_nonzero = config.elemtypes_nonzero
 
@@ -1374,6 +1381,21 @@ class MLPF(nn.Module):
             width = sub_config.width
             num_heads = sub_config.num_heads
             self.use_pre_layernorm = False
+
+        # heptv2.track_hash_at_calo: the backbone sees X_features with the tracks' (eta, sin_phi,
+        # cos_phi) moved to their calorimeter entry point; the encoder and heads keep the raw ones.
+        self.track_calo_entry = None
+        if self.conv_type == ModelType.HEPTV2 and sub_config.track_hash_at_calo:
+            sources = config.dataset_versions()
+            entry_type = MultiSourceTrackCaloEntry if len(sources) > 1 else TrackCaloEntry
+            entry_source = sources if len(sources) > 1 else next(iter(sources), config.dataset.value)
+            self.track_calo_entry = entry_type(
+                entry_source, radius_mm=sub_config.track_hash_calo_radius_mm, endcap_z_mm=sub_config.track_hash_calo_endcap_z_mm
+            )
+        # heptv2.cluster_hash_at_centroid: likewise for the clusters, moved to their centroid direction.
+        self.cluster_centroid = None
+        if self.conv_type == ModelType.HEPTV2 and sub_config.cluster_hash_at_centroid:
+            self.cluster_centroid = ClusterCentroid(config.dataset.value)
 
         if self.use_detector_backbone and self.conv_type != ModelType.ATTENTION:
             raise ValueError("Detector-specific tracker/calo/common layers are only supported by the attention model")
@@ -1695,7 +1717,19 @@ class MLPF(nn.Module):
         if self.conv_type == ModelType.HEPTV2:
             heptv2_conf = self.config.heptv2.model_dump()
             heptv2_conf.pop("activation_checkpointing")
-            for key in ["num_convs", "conv_type", "embedding_dim", "width", "activation", "dropout_ff", "num_heads"]:
+            for key in [
+                "num_convs",
+                "conv_type",
+                "embedding_dim",
+                "width",
+                "activation",
+                "dropout_ff",
+                "num_heads",
+                "track_hash_at_calo",
+                "track_hash_calo_radius_mm",
+                "track_hash_calo_endcap_z_mm",
+                "cluster_hash_at_centroid",
+            ]:
                 if key in heptv2_conf:
                     heptv2_conf.pop(key)
             return HEPTv2Layer(
@@ -1708,14 +1742,16 @@ class MLPF(nn.Module):
             )
         raise ValueError(f"Unsupported conv type {self.conv_type}")
 
-    def _encode_inputs(self, X_features, mask=None, encoder=None):
+    def _encode_inputs(self, X_features, mask=None, encoder=None, source_id=None):
         encoder = self.nn0 if encoder is None else encoder
+        X_features = X_features if self.input_normalization is None else self.input_normalization(X_features, source_id)
+        inputs = X_features if self.feature_bag is None else self.feature_bag(X_features, source_id)
         if self.input_encoding == InputEncoding.JOINT:
-            encoded = encoder(X_features)
+            encoded = encoder(inputs)
         if self.input_encoding == InputEncoding.SPLIT:
             B, S, _ = X_features.shape
             num_types = len(self.elemtypes_nonzero)
-            all_embeddings = encoder(X_features).view(B, S, num_types, -1)
+            all_embeddings = encoder(inputs).view(B, S, num_types, -1)
             elemtype_mask = torch.cat([X_features[..., 0:1] == elemtype for elemtype in self.elemtypes_nonzero], axis=-1)
             encoded = torch.sum(all_embeddings * elemtype_mask.unsqueeze(-1).to(all_embeddings.dtype), axis=2)
         elif self.input_encoding not in [InputEncoding.JOINT, InputEncoding.SPLIT]:
@@ -1743,12 +1779,16 @@ class MLPF(nn.Module):
             return self.feature_engineering(X_features, mask)
         return X_features
 
-    def _run_backbone(self, x, mask, initial_embedding, X_features, backbone=None):
+    def _run_backbone(self, x, mask, initial_embedding, X_features, backbone=None, source_id=None):
         backbone = self.backbone if backbone is None else backbone
         embeddings = []
         if len(backbone) == 0:
             embeddings.append(x)
             return embeddings
+        if self.track_calo_entry is not None:
+            X_features = self.track_calo_entry(X_features, source_id)
+        if self.cluster_centroid is not None:
+            X_features = self.cluster_centroid(X_features)
 
         for conv in backbone:
             if self.conv_type == ModelType.HEPTV2 and self.config.heptv2.activation_checkpointing and self.training and torch.is_grad_enabled():
@@ -1822,38 +1862,38 @@ class MLPF(nn.Module):
             representations.extend(jagged_to_dense(embedding, valid_mask) for embedding in common_embeddings)
         return representations
 
-    def encode_backbone(self, X_features, mask):
+    def encode_backbone(self, X_features, mask, source_id=None):
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_detector_backbone:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             embeddings = self._run_detector_backbone_layers(x, mask, X_features)
             return embeddings[-1]
         if self.use_split_backbone:
-            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
+            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id, source_id=source_id)
             x = self._prepare_backbone_input(x, mask)
-            embeddings = self._run_backbone(x, mask, x, X_features, backbone=self._backbone_id)
+            embeddings = self._run_backbone(x, mask, x, X_features, backbone=self._backbone_id, source_id=source_id)
         else:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             x = self._prepare_backbone_input(x, mask)
-            embeddings = self._run_backbone(x, mask, x, X_features)
+            embeddings = self._run_backbone(x, mask, x, X_features, source_id=source_id)
         return self._restore_backbone_output(self._collect_representation(embeddings), mask)
 
-    def encode_backbone_layers(self, X_features, mask):
+    def encode_backbone_layers(self, X_features, mask, source_id=None):
         """Return the input encoding and each successive backbone representation."""
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_detector_backbone:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             return [x, *self._run_detector_backbone_layers(x, mask, X_features)]
         if self.use_split_backbone:
-            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
+            x = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id, source_id=source_id)
             backbone = self._backbone_id
         else:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             backbone = self.backbone
         x = self._prepare_backbone_input(x, mask)
         representations = [x]
         if len(backbone) > 0:
-            representations.extend(self._run_backbone(x, mask, x, X_features, backbone=backbone))
+            representations.extend(self._run_backbone(x, mask, x, X_features, backbone=backbone, source_id=source_id))
         return [self._restore_backbone_output(representation, mask) for representation in representations]
 
     @property
@@ -1881,27 +1921,27 @@ class MLPF(nn.Module):
         return self.regression_norm
 
     # @torch.compile
-    def forward(self, X_features, mask):
+    def forward(self, X_features, mask, source_id=None):
         if self.output_mode == OutputMode.SET:
-            return self.set_decoder(self.encode_backbone(X_features, mask), mask, X_features)
+            return self.set_decoder(self.encode_backbone(X_features, mask, source_id=source_id), mask, X_features)
 
         X_features = self._engineer_input_features(X_features, mask)
         if self.use_split_backbone:
-            x_id = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id)
-            x_reg = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_reg)
+            x_id = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_id, source_id=source_id)
+            x_reg = self._encode_inputs(X_features, mask=mask, encoder=self._nn0_reg, source_id=source_id)
             x_id = self._prepare_backbone_input(x_id, mask)
             x_reg = self._prepare_backbone_input(x_reg, mask)
-            embeddings_id = self._run_backbone(x_id, mask, x_id, X_features, backbone=self._backbone_id)
-            embeddings_reg = self._run_backbone(x_reg, mask, x_reg, X_features, backbone=self._backbone_reg)
+            embeddings_id = self._run_backbone(x_id, mask, x_id, X_features, backbone=self._backbone_id, source_id=source_id)
+            embeddings_reg = self._run_backbone(x_reg, mask, x_reg, X_features, backbone=self._backbone_reg, source_id=source_id)
             final_embedding_cls = self._restore_backbone_output(self._collect_representation(embeddings_id), mask)
             final_embedding_reg = self._restore_backbone_output(self._collect_representation(embeddings_reg), mask)
         else:
-            x = self._encode_inputs(X_features, mask=mask)
+            x = self._encode_inputs(X_features, mask=mask, source_id=source_id)
             if self.use_detector_backbone:
                 final_embedding = self._run_detector_backbone_layers(x, mask, X_features)[-1]
             else:
                 x = self._prepare_backbone_input(x, mask)
-                backbone_embeddings = self._run_backbone(x, mask, x, X_features)
+                backbone_embeddings = self._run_backbone(x, mask, x, X_features, source_id=source_id)
                 final_embedding = self._restore_backbone_output(self._collect_representation(backbone_embeddings), mask)
 
             if self.task_queries:
@@ -1942,10 +1982,10 @@ class MLPF(nn.Module):
 
         return preds_binary_particle, preds_pid, preds_momentum, preds_pu
 
-    def predict_particles(self, X_features, mask):
+    def predict_particles(self, X_features, mask, source_id=None):
         from mlpf.model.utils import unpack_predictions
 
-        ypred_raw = self.forward(X_features, mask)
+        ypred_raw = self.forward(X_features, mask, source_id=source_id)
         ypred_raw = [y.to(torch.float32) for y in ypred_raw]
 
         if self.output_mode == OutputMode.SET:

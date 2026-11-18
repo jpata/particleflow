@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from mlpf.conf import parse_data_dir
 from mlpf.training_scenarios import (
     PlatformProfile,
     ScenarioVariant,
@@ -14,6 +15,7 @@ from mlpf.training_scenarios import (
     TrainingScenario,
     _experiment_path,
     _global_batch_size_arg,
+    _pipeline_command,
     find_scenario_continuation,
     load_platform_profile,
     load_training_scenario,
@@ -23,6 +25,143 @@ from mlpf.training_scenarios import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize(
+    "root,subdir",
+    [(None, "relative"), ("scan", "/absolute"), ("scan", "../escape"), ("scan", "valid/../../escape")],
+)
+def test_variant_data_subdirectory_requires_a_root_and_stays_within_it(root, subdir):
+    with pytest.raises(ValueError, match="data_subdir requires data_root.*within that root"):
+        ScenarioVariant(model_name="fixture_model", data_root=root, data_subdir=subdir)
+
+
+@pytest.mark.parametrize("subdir", [None, "geometry/tfds"])
+@pytest.mark.parametrize("explicit_dir", [False, True])
+def test_variant_data_directory_precedence_and_cli_roundtrip(training_files, tmp_path, subdir, explicit_dir):
+    from mlpf.conf import MLPFConfig
+    from mlpf.pipeline import get_parser
+    from mlpf.training_scenarios import resolve_scenario_job
+
+    scenario_path, platform_path = training_files
+    scenario = load_training_scenario(scenario_path)
+    platform = load_platform_profile(platform_path)
+    platform.data_dir = {"fixture": str(tmp_path / "default"), "scan": str(tmp_path / "scan root")}
+    scenario.variants["first"].data_root = "scan"
+    scenario.variants["first"].data_subdir = subdir
+    original = deepcopy(platform.model_dump())
+    override = str(tmp_path / "explicit data with spaces")
+    expected = override if explicit_dir else str(Path(platform.data_dir["scan"]) / (subdir or ""))
+
+    job = resolve_scenario_job(scenario, platform, "first", scenario.seeds[0], extra_overrides={"data_dir": override} if explicit_dir else {})
+    command = _pipeline_command(job, scenario, platform, scenario.spec_file, tmp_path / "experiment")
+    command = shlex.split(shlex.join(command))
+    args, extra_args = get_parser().parse_known_args(command[command.index("mlpf/pipeline.py") + 1 :])
+    reparsed = MLPFConfig.from_spec(scenario.spec_file, job.model_name, job.production_name, args=args, extra_args=extra_args)
+
+    assert job.data_dir == job.resolved_config.data_dir == reparsed.data_dir == expected
+    assert command.count("--data-dir") == 1
+    assert "--data_dir" not in command
+    assert "data_dir" not in job.settings
+    assert platform.model_dump() == original
+
+
+def test_variant_data_root_must_exist_on_platform(training_files):
+    from mlpf.training_scenarios import resolve_scenario_job
+
+    scenario_path, platform_path = training_files
+    scenario = load_training_scenario(scenario_path)
+    platform = load_platform_profile(platform_path)
+    platform.data_dir = {"fixture": "/data/default"}
+    scenario.variants["first"].data_root = "missing"
+    with pytest.raises(ValueError, match="no data_dir for production 'missing'"):
+        resolve_scenario_job(scenario, platform, "first", scenario.seeds[0])
+
+
+@pytest.mark.parametrize("replace_samples", [False, True], ids=["leaf-overrides", "sample-map-replacement"])
+def test_dataset_overrides_survive_resolution_and_command_roundtrip(training_files, tmp_path, replace_samples):
+    from mlpf.conf import MLPFConfig
+    from mlpf.pipeline import get_parser
+    from mlpf.training_scenarios import resolve_scenario_job
+
+    scenario_path, platform_path = training_files
+    scenario = load_training_scenario(scenario_path)
+    platform = load_platform_profile(platform_path)
+    sample = "cld_custom_pf" if replace_samples else "fixture_sample"
+    selection = {sample: {"version": "2.0.0", "splits": ["split with spaces", "another"]}}
+    overrides = {}
+    for section in ("train_dataset.cld.physical.samples", "valid_dataset.cld.physical.samples", "test_dataset"):
+        if replace_samples:
+            overrides[section] = selection
+        else:
+            overrides[f"{section}.{sample}.version"] = selection[sample]["version"]
+            overrides[f"{section}.{sample}.splits"] = selection[sample]["splits"]
+    scenario.variants["first"].overrides.update(overrides)
+    # A new model-spec default must not replace an explicit scenario selection.
+    spec_path = Path(scenario.spec_file)
+    spec = yaml.safe_load(spec_path.read_text())
+    model = spec["models"]["fixture_model"]
+    for section in ("train_datasets", "validation_datasets"):
+        model[section]["physical"]["samples"][0]["version"] = "3.0.0"
+    model["test_datasets"][0]["version"] = "3.0.0"
+    spec_path.write_text(yaml.safe_dump(spec))
+
+    job = resolve_scenario_job(scenario, platform, "first", scenario.seeds[0])
+    command = _pipeline_command(job, scenario, platform, spec_path, tmp_path / "experiment")
+    command = shlex.split(shlex.join(command))
+    args, extra_args = get_parser().parse_known_args(command[command.index("mlpf/pipeline.py") + 1 :])
+    args.train = args.test = True
+    reparsed = MLPFConfig.from_spec(str(spec_path), job.model_name, job.production_name, args=args, extra_args=extra_args)
+
+    for config in (job.resolved_config, reparsed):
+        for groups in (config.train_dataset, config.valid_dataset):
+            assert {name: entry.model_dump(include={"version", "splits"}) for name, entry in groups["cld"]["physical"].samples.items()} == selection
+        assert {name: entry.model_dump(include={"version", "splits"}) for name, entry in config.test_dataset.items()} == selection
+
+
+@pytest.mark.parametrize(
+    "weights_only,reset_weights,has_checkpoint",
+    [(True, True, True), (True, False, True), (False, False, True), (True, True, False)],
+)
+def test_continuation_resumes_training_state_without_restarting_finetuning(
+    training_files, tmp_path, monkeypatch, capsys, weights_only, reset_weights, has_checkpoint
+):
+    import mlpf.training_scenarios as runner
+    from unittest.mock import Mock
+
+    scenario_path, platform_path = training_files
+    scenario = load_training_scenario(scenario_path)
+    platform = load_platform_profile(platform_path)
+    source = str(tmp_path / "source checkpoint.pth")
+    scenario.training.parameters.update(load=source, load_weights_only=weights_only, reset_task_loss_weights=reset_weights)
+    job = runner.resolve_scenario_job(scenario, platform, "first", scenario.seeds[0])
+    experiment = tmp_path / scenario.name / "prior-run"
+    platform.experiments_dir = str(tmp_path)
+    (experiment / "checkpoints").mkdir(parents=True)
+    checkpoint = experiment / "checkpoints/checkpoint-5.pth"
+    if has_checkpoint:
+        checkpoint.touch()
+    manifest_path = experiment / "scenario-manifest.json"
+    manifest_path.write_text(
+        json.dumps({"job": job.model_dump(mode="json", exclude={"resolved_config"}), "resolved_config": job.resolved_config.model_dump(mode="json")})
+    )
+    run = Mock()
+    monkeypatch.setattr(runner.subprocess, "run", run)
+    monkeypatch.setattr(runner, "_git_revision", lambda: "fixture-revision")
+
+    runner.run_scenario_job(job, scenario, platform, scenario.spec_file, continue_run=True)
+
+    command = shlex.split(capsys.readouterr().out.strip())
+    assert command[command.index("--load") + 1] == (str(checkpoint) if has_checkpoint else source)
+    for flag, initial in (("load_weights_only", weights_only), ("reset_task_loss_weights", reset_weights)):
+        assert command[command.index("--" + flag) + 1] == str(False if has_checkpoint else initial).lower()
+    assert command[command.index("--experiment-dir") + 1] == str(experiment)
+    run.assert_called_once()
+    assert run.call_args.args[0] == command
+    assert run.call_args.kwargs["check"] is True
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["continuations"][-1]["command"] == command
+    assert manifest["resolved_config"]["load"] == source
 
 
 def test_training_scenario_rejects_empty_variants():
@@ -466,3 +605,96 @@ def test_worker_validates_selected_variant_gpu_allocation(monkeypatch):
     with pytest.raises(ValueError, match="Slurm allocated 1"):
         runner.main(args)
     assert len(executed) == 1
+
+
+@pytest.mark.parametrize(
+    ("sample", "expected"),
+    [
+        ("cld_edm_ttbar_pf", "cld"),
+        ("clic_edm_qq_pf", "clic"),
+        ("clic_edm_qq_hits", "clic_hits"),
+        ("colliderml_ttbar_nopu_pf", "colliderml"),
+        ("cms_pf_ttbar", "cms"),
+        ("unrecognized_sample", "cld"),
+    ],
+)
+def test_dataset_for_sample_follows_the_sample_detector(sample, expected):
+    from mlpf.conf import Dataset, dataset_for_sample
+
+    assert dataset_for_sample(sample, Dataset.CLD).value == expected
+
+
+def test_feature_bag_scenario_differs_only_in_the_feature_bag():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_clic_colliderml_feature_bag.yaml")
+    platform = load_platform_profile(PLATFORMS / "flatiron_h100.yaml")
+
+    jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+
+    assert [job.variant_name for job in jobs] == ["feature_bag", "no_feature_bag"]
+    assert [job.resolved_config.model.feature_bag for job in jobs] == [True, False]
+    for job in jobs:
+        config = job.resolved_config
+        assert config.model.input_normalization
+        # Each detector's samples come from that detector's platform data_dir.
+        assert config.data_dir == {name: platform.data_dir[name] for name in ("cld", "clic", "colliderml")}
+        assert config.data_dir_for("colliderml_ttbar_nopu_pf") == platform.data_dir["colliderml"]
+        assert config.dataset_versions() == {"cld": "3.3.0", "clic": "3.3.0", "colliderml": "1.5.0"}
+        # Each detector gets the same share of the training steps.
+        assert {name: group.weight for name, group in config.train_dataset["cld"].items()} == {"cld": 1.0, "clic": 1.0, "colliderml": 1.0}
+    reference, candidate = (job.resolved_config.model_dump(mode="json") for job in jobs)
+    candidate["model"]["feature_bag"] = True
+    assert candidate == reference
+
+
+def test_joint_production_passes_one_data_dir_per_detector_to_the_pipeline(tmp_path):
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_clic_colliderml_feature_bag.yaml")
+    platform = PlatformProfile(
+        name="test", gpus=1, data_dir={"cld": "/d/cld", "clic": "/d/clic", "colliderml": "/d/cml"}, experiments_dir=str(tmp_path)
+    )
+    job = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")[0]
+
+    command = _pipeline_command(job, scenario, platform, ROOT / "particleflow_spec.yaml", tmp_path)
+    data_dir_args = [command[i + 1] for i, arg in enumerate(command) if arg == "--data-dir"]
+    assert data_dir_args == ["cld=/d/cld", "clic=/d/clic", "colliderml=/d/cml"]
+    # The pipeline reads them back into the same mapping.
+    assert parse_data_dir(data_dir_args) == job.resolved_config.data_dir == {"cld": "/d/cld", "clic": "/d/clic", "colliderml": "/d/cml"}
+
+
+def test_joint_production_needs_every_detector_on_the_platform(tmp_path):
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/cld_clic_colliderml_feature_bag.yaml")
+    platform = PlatformProfile(name="test", gpus=1, data_dir={"cld": "/d/cld", "clic": "/d/clic"}, experiments_dir=str(tmp_path))
+    with pytest.raises(ValueError, match="no data_dir for production 'colliderml'"):
+        resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        (None, None),
+        (["/data/tfds"], "/data/tfds"),
+        (["cld=/a", "colliderml=/b"], {"cld": "/a", "colliderml": "/b"}),
+    ],
+)
+def test_parse_data_dir(values, expected):
+    assert parse_data_dir(values) == expected
+
+
+def test_parse_data_dir_rejects_a_path_mixed_with_per_detector_entries():
+    with pytest.raises(ValueError, match="SOURCE=PATH"):
+        parse_data_dir(["/data/tfds", "cld=/a"])
+
+
+def test_config_rejects_a_data_dir_map_without_a_sample_detector():
+    from mlpf.conf import MLPFConfig
+
+    config = {
+        "dataset": "cld",
+        "data_dir": {"cld": "/a"},
+        "model": {"type": "attention"},
+        "conv_type": "attention",
+        "test_dataset": {"cld_edm_ttbar_pf": {"version": "3.3.0"}, "colliderml_ttbar_nopu_pf": {"version": "1.5.0"}},
+    }
+    with pytest.raises(ValueError, match="not for the samples \\['colliderml_ttbar_nopu_pf'\\]"):
+        MLPFConfig.model_validate(config)
+    config["data_dir"]["colliderml"] = "/b"
+    assert MLPFConfig.model_validate(config).data_dir_for("colliderml_ttbar_nopu_pf") == "/b"

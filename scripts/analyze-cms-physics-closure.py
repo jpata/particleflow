@@ -73,7 +73,9 @@ def decode(raw, features):
     from mlpf.conf import OutputMode
     from mlpf.model.mlpf import MLPF
 
-    proxy = SimpleNamespace(output_mode=OutputMode.ELEMENTWISE, forward=lambda x, mask: tuple(torch.from_numpy(raw[k].copy())[None] for k in HEADS))
+    proxy = SimpleNamespace(
+        output_mode=OutputMode.ELEMENTWISE, forward=lambda x, mask, source_id=None: tuple(torch.from_numpy(raw[k].copy())[None] for k in HEADS)
+    )
     x = torch.from_numpy(features.copy())[None]
     with torch.inference_mode():
         particles = MLPF.predict_particles(proxy, x, torch.ones(x.shape[:2], dtype=torch.bool))

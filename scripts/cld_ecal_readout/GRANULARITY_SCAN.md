@@ -89,6 +89,11 @@ The original ROOT-generation helper and controller are retained in
 simulation setup. Dataset conversion keeps PF and hit outputs separate and
 uses point-specific scratch directories to avoid collisions across scan jobs.
 
+The completed TFDS roots can be copied to Grid WebDAV with
+[`upload_granularity_scan.py`](../../docs/datasets/webdav.md#upload-a-campaign).
+The remote path keeps each scan point as a separate TFDS data root under
+`mlpf/tfds/cld/granularity_scan_2025-05-29/<scan-point>/`.
+
 ## Evaluation
 
 For ECAL, use τ decays with truth π⁰→γγ. Plot resolved two-photon efficiency

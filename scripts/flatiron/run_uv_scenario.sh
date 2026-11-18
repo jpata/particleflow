@@ -42,7 +42,7 @@ cd "$REPO_ROOT"
 
 module --force purge
 module load modules/2.4-20250724
-module load slurm gcc cmake cuda/12.8.0 cudnn/9.2.0.82-12 nccl openmpi apptainer
+module load slurm gcc cmake cuda/12.8.0 nccl openmpi apptainer
 
 nvidia-smi
 export PYTHONPATH="$REPO_ROOT"

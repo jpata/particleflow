@@ -33,10 +33,12 @@ def configure_migraphx(options, provider_options):
 
 
 def load_inputs(path, session):
-    dtypes = {"tensor(float)": np.float32, "tensor(float16)": np.float16, "tensor(bool)": np.bool_}
+    dtypes = {"tensor(float)": np.float32, "tensor(float16)": np.float16, "tensor(bool)": np.bool_, "tensor(int64)": np.int64}
     with np.load(path, allow_pickle=False) as data:
         if not np.all((data["mask"] == 0) | (data["mask"] == 1)):
             raise ValueError(f"{path}: expected a binary mask")
+        if "source_id" in data and data["source_id"].dtype != np.int64:
+            raise ValueError(f"{path}: expected source_id with int64 dtype")
         feeds = {i.name: data[i.name].astype(dtypes[i.type]) for i in session.get_inputs()}
     features, mask = feeds["Xfeat_normed"], feeds["mask"]
     if features.ndim != 3 or mask.shape != features.shape[:2]:
@@ -46,6 +48,11 @@ def load_inputs(path, session):
         raise ValueError(f"{path}: expected nonempty events with binary right padding")
     if not np.isfinite(features).all():
         raise ValueError(f"{path}: non-finite features")
+    if "source_id" in feeds:
+        metadata = session.get_modelmeta().custom_metadata_map
+        allowed = [int(source) for source in json.loads(metadata["input_normalization"])]
+        if feeds["source_id"].shape != features.shape[:1] or not np.isin(feeds["source_id"], allowed).all():
+            raise ValueError(f"{path}: expected source_id[B] selecting configured normalization statistics")
     return feeds, valid
 
 

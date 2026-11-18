@@ -265,6 +265,9 @@ class PFBatch:
         self.ycand = kwargs.get("ycand", None)
         self.genmet = kwargs.get("genmet", None)
         self.genjets = kwargs.get("genjets", None)
+        # gen reference including pileup (ColliderML TFDS >= 1.4.0, where genmet/genjets are the hard scatter only)
+        self.genmet_withpu = kwargs.get("genmet_withpu", None)
+        self.genjets_withpu = kwargs.get("genjets_withpu", None)
         self.targetjets = kwargs.get("targetjets", None)
         self.source_id = kwargs.get("source_id", None)
         self.input_type_id = kwargs.get("input_type_id", None)
@@ -795,7 +798,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
 
                 for split_config in split_configs_to_use:
                     ds = PFDataset(
-                        config.data_dir,
+                        config.data_dir_for(sample_name),
                         f"{sample_name}/{split_config}:{version}",
                         split,
                         num_samples=nevents,

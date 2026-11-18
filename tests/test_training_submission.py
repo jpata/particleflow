@@ -81,6 +81,34 @@ def test_slurm_optional_resources_are_omitted_when_unset():
     assert not set(args).intersection({"--constraint", "--account", "--qos", "--reservation", "--mem", "--mem-per-gpu", "--no-requeue"})
 
 
+@pytest.mark.parametrize(
+    "cpus_per_gpu,cpus_per_task,gpus,expected",
+    [(None, 7, 3, 7), (5, 7, 3, 15), (5, 7, 1, 5)],
+)
+def test_slurm_cpu_request_uses_per_gpu_setting_when_present(cpus_per_gpu, cpus_per_task, gpus, expected):
+    args = slurm_resource_args(SlurmProfile(cpus_per_gpu=cpus_per_gpu, cpus_per_task=cpus_per_task), gpus)
+    assert args.count("--cpus-per-task") == 1
+    assert args[args.index("--cpus-per-task") + 1] == str(expected)
+
+
+@pytest.mark.parametrize("cpus_per_gpu", [0, -1])
+def test_slurm_rejects_nonpositive_cpus_per_gpu(cpus_per_gpu):
+    with pytest.raises(ValueError, match="cpus_per_gpu"):
+        SlurmProfile(cpus_per_gpu=cpus_per_gpu)
+
+
+def test_submission_scales_cpu_request_with_effective_gpu_count(submission_files):
+    scenario_path, profile_path = submission_files
+    profile_data = yaml.safe_load(profile_path.read_text())
+    profile_data["slurm"].update(cpus_per_gpu=5, cpus_per_task=7)
+    profile_path.write_text(yaml.safe_dump(profile_data))
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT)
+    assert len(submissions) == 2
+    for (command, jobs), gpus, cpus in zip(submissions, (1, 4), (5, 20)):
+        assert command[command.index("--cpus-per-task") + 1] == str(cpus)
+        assert all(job.resolved_config.gpus == gpus for job in jobs)
+
+
 def test_picker_discovers_files_for_selected_site(tmp_path):
     scenarios = tmp_path / "configs/training/scenarios"
     profiles = tmp_path / "configs/training/platforms"
@@ -123,6 +151,17 @@ def test_submission_groups_tasks_by_gpu_count(submission_files, gpu_request):
             assert pipeline[pipeline.index("--gpus") + 1] == str(count)
     with pytest.raises(ValueError, match="multiple GPU resource groups"):
         build_slurm_submission(scenario_path, profile_path, ROOT)
+
+
+def test_variant_selection_keeps_original_array_indices(submission_files):
+    scenario_path, profile_path = submission_files
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT, variants=["second"])
+    assert len(submissions) == 1
+    command, jobs = submissions[0]
+    assert [job.variant_name for job in jobs] == ["second", "second"]
+    assert command[command.index("--array") + 1] == "1,3"
+    with pytest.raises(ValueError, match="Unknown variants"):
+        build_slurm_submissions(scenario_path, profile_path, ROOT, variants=["no_such_variant"])
 
 
 def test_seed_override_replaces_all_scenario_seeds(submission_files):

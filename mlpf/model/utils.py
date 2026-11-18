@@ -1,7 +1,6 @@
 import json
 import pickle as pkl
 
-import pandas as pd
 import torch
 import torch.utils.data
 from torch.optim.lr_scheduler import OneCycleLR, CosineAnnealingLR, ConstantLR
@@ -205,6 +204,8 @@ def get_lr_schedule(config: MLPFConfig, opt, num_steps, last_batch=-1):
 
 
 def count_parameters(model):
+    import pandas as pd
+
     column_names = ["Modules", "Trainable parameters", "Non-trainable parameters"]
     table = pd.DataFrame(columns=column_names)
     trainable_params = 0

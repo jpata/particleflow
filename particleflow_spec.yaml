@@ -660,6 +660,13 @@ productions:
         version: "1.0.0"
         config_ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
+  # Training-only: each detector's samples are read from the tfds directory of its own production.
+  cld_clic_colliderml:
+    type: "key4hep"
+    model: "pyg-cldcliccolliderml-v1"
+    comment: "Joint CLD+CLIC+ColliderML pu0 tracks/clusters"
+    source_productions: {cld: cld, clic: clic, colliderml: colliderml}
+
   # IDEA full simulation and the reconstruction currently provided by FCC-config.
   # This initial ML path deliberately uses truth-seeded proxy tracks and an
   # oracle ycand reference to validate the software pipeline, not physics.
@@ -723,15 +730,15 @@ productions:
     tfds_mapping:
       ttbar:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/ttbar"
-        version: "0.2.1"
+        version: "0.3.0"
         config_ids: [1]
       ww_fullhad:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/ww_fullhad"
-        version: "0.2.1"
+        version: "0.3.0"
         config_ids: [1]
       qq:
         builder_path: "mlpf/heptfds/idea_pf_edm4hep/qq"
-        version: "0.2.1"
+        version: "0.3.0"
         config_ids: [1]
 
     tfds_track_calo_mapping:
@@ -828,19 +835,21 @@ models:
         num_heads: 16
         dropout_ff: 0.0
         block_size: 100
+        # hash tracks at their calorimeter entry (the dual-readout calorimeter front face)
+        track_hash_at_calo: true
 
     train_datasets:
       physical:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.2.0"
+            version: "0.3.0"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.2.0"
+            version: "0.3.0"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.2.0"
+            version: "0.3.0"
             splits: ["1"]
 
     validation_datasets:
@@ -848,24 +857,24 @@ models:
         batch_size: 1
         samples:
           - name: "idea_edm_qq_pf"
-            version: "0.2.0"
+            version: "0.3.0"
             splits: ["1"]
           - name: "idea_edm_ttbar_pf"
-            version: "0.2.0"
+            version: "0.3.0"
             splits: ["1"]
           - name: "idea_edm_ww_fullhad_pf"
-            version: "0.2.0"
+            version: "0.3.0"
             splits: ["1"]
 
     test_datasets:
       - name: "idea_edm_qq_pf"
-        version: "0.2.0"
+        version: "0.3.0"
         splits: ["1"]
       - name: "idea_edm_ttbar_pf"
-        version: "0.2.0"
+        version: "0.3.0"
         splits: ["1"]
       - name: "idea_edm_ww_fullhad_pf"
-        version: "0.2.0"
+        version: "0.3.0"
         splits: ["1"]
 
   pyg-cms-v1:
@@ -945,6 +954,9 @@ models:
     # Architecture Definition
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -963,6 +975,10 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry and clusters at their centroid
+      heptv2:
+        track_hash_at_calo: true
+        cluster_hash_at_centroid: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -1190,6 +1206,10 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry and clusters at their centroid
+      heptv2:
+        track_hash_at_calo: true
+        cluster_hash_at_centroid: true
       input_encoding: "split"
       attention:
         num_convs: 3
@@ -1357,6 +1377,9 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         attention_type: flash
@@ -1386,6 +1409,115 @@ models:
         version: "1.5.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
+  # Joint CLD+CLIC+ColliderML pu0 model: one group per detector, a third of the steps each.
+  # TODO: Test config, hyperparameters such as learning rate should be tuned
+  pyg-cldcliccolliderml-v1:
+    <<: *defaults
+    dataset: cld
+    gpu_batch_multiplier: 1024
+
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0005
+
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+      attention:
+        num_convs: 3
+        head_dim: 16
+        num_heads: 16
+
+    train_datasets:
+      cld:
+        batch_size: 1
+        weight: 1.0
+        samples:
+          - name: "cld_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      clic:
+        batch_size: 1
+        weight: 1.0
+        samples:
+          - name: "clic_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      colliderml:
+        batch_size: 1
+        weight: 1.0
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.5.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    validation_datasets:
+      cld:
+        batch_size: 1
+        samples:
+          - name: "cld_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "cld_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      clic:
+        batch_size: 1
+        samples:
+          - name: "clic_edm_ttbar_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_ww_fullhad_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - name: "clic_edm_qq_pf"
+            version: "3.3.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      colliderml:
+        batch_size: 1
+        samples:
+          - name: "colliderml_ttbar_nopu_pf"
+            version: "1.5.0"
+            splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+    test_datasets:
+      - name: "cld_edm_ttbar_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_ww_fullhad_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "cld_edm_qq_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_ttbar_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_ww_fullhad_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "clic_edm_qq_pf"
+        version: "3.3.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+      - name: "colliderml_ttbar_nopu_pf"
+        version: "1.5.0"
+        splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
   # Same recipe as pyg-colliderml-v1 but on the ~200-pileup dataset (ispu flag carried per
   # target/gen particle)
   pyg-colliderml-pu200-v1:
@@ -1399,6 +1531,9 @@ models:
 
     architecture:
       type: "attention"
+      # used when model.type is heptv2: hash tracks at their calorimeter entry
+      heptv2:
+        track_hash_at_calo: true
       input_encoding: "split"
       attention:
         attention_type: flash

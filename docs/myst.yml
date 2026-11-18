@@ -75,7 +75,8 @@ project:
         - file: development/documentation.md
 
 site:
-  template: book-theme
+  # Pin the theme to the version supported by Jupyter Book 2.1.6 in CI.
+  template: https://github.com/jupyter-book/myst-theme/releases/download/myst-to-react%401.4.1/book-theme.zip
   title: MLPF documentation
   options:
     folders: true
