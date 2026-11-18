@@ -1,7 +1,6 @@
 """Generate one namespaced dataset DAG for a multi-detector Key4hep campaign."""
 
 import argparse
-import os
 from pathlib import Path
 
 from mlpf.snakemake import produce_snakemake
@@ -40,8 +39,6 @@ def main(argv=None):
         if args.smoke:
             production["workspace_dir"] += "/smoke_10ev"
             production["save_stage_logs"] = True
-            if detector == "ild" and os.environ.get("ILD_USE_PATCHED_REFITTER") == "1":
-                production.setdefault("gen_environment", {})["ILD_USE_PATCHED_REFITTER"] = "1"
             for settings in production["samples"].values():
                 begin, end = settings["seed_range"]
                 if end - begin < 10:
