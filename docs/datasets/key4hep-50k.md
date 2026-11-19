@@ -59,13 +59,14 @@ limit. The configured runtime limit is 48 hours.
 
 | Detector | Generation and reconstruction RAM | CPUs | Postprocessing RAM |
 |---|---:|---:|---:|
-| CLD | 4,500 MiB | 1 | 1,000 MiB |
-| CLIC | 4,500 MiB | 1 | 1,000 MiB |
-| IDEA | 48,000 MiB | 4 | 1,000 MiB |
-| ILD | 5,000 MiB | 1 | 1,200 MiB |
+| CLD | 2,800 MiB | 1 | 1,000 MiB |
+| CLIC | 2,800 MiB | 1 | 1,000 MiB |
+| IDEA | 28,400 MiB | 1 | 1,000 MiB |
+| ILD | 2,900 MiB | 1 | 1,200 MiB |
 
-These Slurm requests round to about twice the peak RSS observed in the
-10-event smoke jobs and local postprocessing probes.
+Generation and reconstruction requests add 20% to the higher of the peaks
+measured in the 10-event smoke and early production jobs, then round up to
+the next 100 MiB.
 
 Rerun the same command to resume. Failed jobs block their datasets; partial
 production is disabled. Every ROOT shard must contain 10 events; events that

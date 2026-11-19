@@ -70,7 +70,7 @@ sample** in 5,000 jobs of 10 events, with seeds 300000–305000 (ttbar),
 400000–405000 (WW), 500000–505000 (qq), 600000–605000 (Z→qq) and
 700000–705000 (Z→tautau), end exclusive. The workspace is
 `/local/joosep/mlpf/ild/v1.4.0/50k` with `gen/`, `post/` and `tfds/`.
-ILD jobs request 5,000 MiB for generation and reconstruction, 1,200 MiB for
+ILD jobs request 2,900 MiB for generation and reconstruction, 1,200 MiB for
 postprocessing and 8,000 MiB for TFDS, with a 48-hour limit. Each dataset has
 **45,000 train / 5,000 test** events split by independent ROOT jobs.
 

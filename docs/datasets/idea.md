@@ -53,8 +53,8 @@ are the only vertex smearing. See the
 
 The [joint v1.4.0 campaign](key4hep-50k.md) generates **10,000 events per
 sample** in 1,000 jobs of 10 events under `/local/joosep/mlpf/idea/v1.4.0/50k`.
-IDEA jobs request 48,000 MiB and 4 CPUs for generation and reconstruction;
-the 10-event jobs peak near 23 GiB. TFDS 0.5.0 uses 8,000 training and 2,000
+IDEA jobs request 28,400 MiB and 1 CPU for generation and reconstruction. The
+10-event smoke jobs peaked near 23 GiB. TFDS 0.5.0 uses 8,000 training and 2,000
 test events per sample with a deterministic event split. Old `.done` markers
 under `snakemake_jobs/idea/` do not establish completion of this campaign.
 
