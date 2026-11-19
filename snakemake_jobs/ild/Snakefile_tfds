@@ -1,0 +1,47 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        expand('snakemake_jobs/ild/tfds/tfds_ttbar_tfds_{config}.done', config=[1]),
+        expand('snakemake_jobs/ild/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1]),
+        expand('snakemake_jobs/ild/tfds/tfds_qq_tfds_{config}.done', config=[1]),
+        expand('snakemake_jobs/ild/tfds/tfds_z_qq_tfds_{config}.done', config=[1]),
+        expand('snakemake_jobs/ild/tfds/tfds_z_tautau_tfds_{config}.done', config=[1])
+
+rule tfds_task:
+    input:
+        "snakemake_jobs/ild/post/post_{sample}_all.done"
+    params:
+        workspace='/local/joosep/mlpf/ild/v1.4.0/50k', versions={'ttbar': '0.2.0', 'ww_fullhad': '0.2.0', 'qq': '0.2.0', 'z_qq': '0.2.0', 'z_tautau': '0.2.0'}
+    output:
+        "snakemake_jobs/ild/tfds/tfds_{sample}_tfds_{config}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=8000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/ild/tfds/tfds_{wildcards.sample}.sh {wildcards.config} && touch {output}"
+
+rule tfds:
+    input:
+        expand('snakemake_jobs/ild/tfds/tfds_ttbar_tfds_{config}.done', config=[1]), expand('snakemake_jobs/ild/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1]), expand('snakemake_jobs/ild/tfds/tfds_qq_tfds_{config}.done', config=[1]), expand('snakemake_jobs/ild/tfds/tfds_z_qq_tfds_{config}.done', config=[1]), expand('snakemake_jobs/ild/tfds/tfds_z_tautau_tfds_{config}.done', config=[1])
+    output:
+        "snakemake_jobs/ild/tfds/all.done"
+    shell:
+        "touch {output}"

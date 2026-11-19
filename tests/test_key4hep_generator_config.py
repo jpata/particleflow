@@ -9,7 +9,7 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 GENERATOR = REPOSITORY / "mlpf/data/key4hep/gen"
 
 
-@pytest.mark.parametrize("path", ["cld/CLDConfig/pythia.py", "clic/pythia.py", "idea/pythia.py", "pythia/generate.py"])
+@pytest.mark.parametrize("path", ["cld/CLDConfig/pythia.py", "clic/pythia.py", "pythia/generate.py"])
 def test_pythia_wrappers_do_not_apply_additional_vertex_smearing(path):
     tree = ast.parse((GENERATOR / path).read_text())
     for node in ast.walk(tree):

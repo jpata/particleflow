@@ -91,7 +91,7 @@ def audit(root_path, parquet_path):
             digest.update(block)
     if "metadata_input_sha256" not in data.fields or not bool(ak.all(data["metadata_input_sha256"] == digest.hexdigest())):
         errors.append("Parquet source ROOT checksum is missing or mismatched")
-    manifest = Path(str(root_path) + ".software.txt")
+    manifest = Path(root_path).with_suffix(".software.txt")
     expected_events = None
     if manifest.exists():
         entries = dict(line.split("=", 1) for line in manifest.read_text().splitlines() if "=" in line)
