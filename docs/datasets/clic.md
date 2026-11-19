@@ -1,6 +1,6 @@
 # CLICdet tracks and clusters
 
-CLICdet track/cluster datasets use Key4HEP/EDM4hep production at 380 GeV. The schema version is **3.3.0**, and the standard model recipe is `pyg-clic-v1`.
+CLICdet track/cluster datasets use Key4HEP/EDM4hep production at 380 GeV. The schema version is **3.4.0**, and the standard model recipe is `pyg-clic-v1`.
 
 ## Physics samples
 

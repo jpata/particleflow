@@ -1,6 +1,6 @@
 # CLICdet hits
 
-CLICdet hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4hep production at 380 GeV. The schema version is **3.2.2**, and the standard hit recipe is `pyg-clic-hits-v1`. Hit reconstruction is a research workflow.
+CLICdet hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4hep production at 380 GeV. The schema version is **3.3.0**, and the standard hit recipe is `pyg-clic-hits-v1`. Hit reconstruction is a research workflow.
 
 ## Physics samples
 
