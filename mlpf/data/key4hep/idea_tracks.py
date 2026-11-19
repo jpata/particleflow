@@ -9,6 +9,9 @@ from collections import defaultdict
 import awkward as ak
 import numpy as np
 
+# pT [GeV] = TRACK_PT_PER_TESLA_MM * B [T] / |omega| [1/mm]; the rounded constant shared by every key4hep detector.
+TRACK_PT_PER_TESLA_MM = 3e-4
+
 TRACK_SOURCE = "ggtf_genfit"
 PROXY_TRACK_SOURCE = "truth_seeded"
 TRACK_COLLECTION = "FittedTracks"
@@ -93,7 +96,7 @@ def fitted_track_selection(prop_data, event, b_field):
         if omega == 0 or t("trackerHits_end")[index] <= t("trackerHits_begin")[index]:
             continue
         with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
-            momentum = 0.000299792458 * abs(b_field / omega) * np.hypot(1.0, tanlambda)
+            momentum = TRACK_PT_PER_TESLA_MM * abs(b_field / omega) * np.hypot(1.0, tanlambda)
         if not np.isfinite(momentum) or momentum <= 0 or momentum > np.finfo(np.float32).max:
             continue
         selected.append(index)
