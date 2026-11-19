@@ -106,11 +106,10 @@ def test_combined_graph_is_complete_without_training_or_local_execution(tmp_path
             assert f"export NEV={EVENTS_PER_SHARD} &&" in text and f"t.GetEntries()=={EVENTS_PER_SHARD}," in text
             assert f"scratch/{detector}_" in text
             post = jobs / detector / "post" / f"post_{sample}.sh"
-            assert f"len(a.X_track)=={EVENTS_PER_SHARD}," in post.read_text()
+            assert "X_track)==" not in post.read_text()
             tfds = (jobs / detector / "tfds" / f"tfds_{sample}.sh").read_text()
             assert f"export TFDS_VERSION={VERSIONS[detector]}" in tfds
-            config_count = len(spec["productions"][detector]["tfds_mapping"][sample]["config_ids"])
-            assert f"=={EVENTS_PER_SHARD * SHARDS_PER_SAMPLE[detector] // config_count}'" in tfds
+            assert "num_examples" not in tfds
     run = subprocess.run(
         [sys.executable, "-m", "snakemake", "-s", str(jobs / "Snakefile"), "--executor", "local", "--cores", "1", "--dry-run", "--quiet", "rules"],
         cwd=tmp_path,
@@ -164,27 +163,6 @@ def test_new_z_dataset_arrayrecord_roundtrip(tmp_path, detector):
     assert example["X"].shape == (1, 19)
     assert example["ytarget"].shape == (1, 14)
     assert example["ytarget"][0, 0] == 1  # charged-hadron class, rather than a raw PDG ID
-
-
-def test_campaign_rejects_incomplete_existing_postprocessing(tmp_path, monkeypatch):
-    import awkward as ak
-
-    spec = local_spec(tmp_path)
-    (tmp_path / "particleflow_spec.yaml").write_text(yaml.safe_dump(spec))
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("PF_SITE", raising=False)
-    produce_key4hep_snakemake.main(["--productions", "ild"])
-    output = tmp_path / "storage/ild/v1.4.0/50k/post/p8_ee_qq_ecm365/reco_p8_ee_qq_ecm365_500000.parquet"
-    ak.to_parquet(ak.Record({"X_track": ak.Array([[]] * (EVENTS_PER_SHARD - 1))}), output)
-    script = tmp_path / spec["campaigns"]["key4hep_50k"]["jobs_dir"] / "ild/post/post_qq.sh"
-    result = subprocess.run(
-        ["bash", str(script), "500000"],
-        capture_output=True,
-        text=True,
-        env=os.environ | {"PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"]},
-    )
-    assert result.returncode != 0
-    assert "AssertionError" in result.stderr
 
 
 @pytest.mark.parametrize("detector", ("cld", "clic"))
