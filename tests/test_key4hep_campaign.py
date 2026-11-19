@@ -17,6 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 DETECTORS = ("cld", "clic", "idea", "ild")
 SAMPLES = {"ttbar", "qq", "ww_fullhad", "z_qq", "z_tautau"}
 VERSIONS = {"cld": "3.4.0", "clic": "3.4.0", "idea": "0.5.0", "ild": "0.2.0"}
+EVENTS_PER_SHARD = 10
+SHARDS_PER_SAMPLE = {"cld": 5000, "clic": 5000, "idea": 1000, "ild": 5000}
+GEN_MEMORY_MB = {"cld": 4500, "clic": 4500, "idea": 48000, "ild": 5000}
+POST_MEMORY_MB = {"cld": 1000, "clic": 1000, "idea": 1000, "ild": 1200}
 
 
 def local_spec(tmp_path):
@@ -44,7 +48,8 @@ def test_campaign_event_budget_and_builder_versions(tmp_path, monkeypatch):
         for sample, settings in production["samples"].items():
             first, last = settings["seed_range"]
             count = (last - first) * settings["events_per_job"]
-            assert count == 50000 and last - first == 500
+            assert settings["events_per_job"] == EVENTS_PER_SHARD
+            assert last - first == SHARDS_PER_SAMPLE[detector]
             total += count
         for kind in ("tfds_mapping", "tfds_hit_mapping"):
             for sample, settings in production.get(kind, {}).items():
@@ -58,7 +63,7 @@ def test_campaign_event_budget_and_builder_versions(tmp_path, monkeypatch):
                 builder = classes[0](config="1", data_dir=tmp_path / "tfds")
                 assert str(builder.version) == settings["version"]
                 assert settings["version"] == ("3.3.0" if kind == "tfds_hit_mapping" else VERSIONS[detector])
-    assert total == 1000000
+    assert total == 800000
 
 
 @pytest.mark.parametrize("detector", DETECTORS)
@@ -90,17 +95,22 @@ def test_combined_graph_is_complete_without_training_or_local_execution(tmp_path
     for detector in DETECTORS:
         graph = (jobs / detector / "Snakefile").read_text()
         assert "rule train_" not in graph and "glob_wildcards" not in graph
+        gen_rule = graph.split("rule gen_task:", 1)[1].split("\nrule ", 1)[0]
+        post_rule = graph.split("rule post_task:", 1)[1].split("\nrule ", 1)[0]
+        assert f"mem_mb={GEN_MEMORY_MB[detector]}," in gen_rule
+        assert f"mem_mb={POST_MEMORY_MB[detector]}," in post_rule
         for sample in SAMPLES:
             gen = jobs / detector / "gen" / f"gen_{sample}.sh"
             subprocess.run(["bash", "-n", str(gen)], check=True)
             text = gen.read_text()
-            assert "export NEV=100" in text and "t.GetEntries()==100" in text
+            assert f"export NEV={EVENTS_PER_SHARD} &&" in text and f"t.GetEntries()=={EVENTS_PER_SHARD}," in text
             assert f"scratch/{detector}_" in text
             post = jobs / detector / "post" / f"post_{sample}.sh"
-            assert "len(a.X_track)==100" in post.read_text()
+            assert f"len(a.X_track)=={EVENTS_PER_SHARD}," in post.read_text()
             tfds = (jobs / detector / "tfds" / f"tfds_{sample}.sh").read_text()
             assert f"export TFDS_VERSION={VERSIONS[detector]}" in tfds
-            assert f"=={5000 if detector in ('cld', 'clic') else 50000}" in tfds
+            config_count = len(spec["productions"][detector]["tfds_mapping"][sample]["config_ids"])
+            assert f"=={EVENTS_PER_SHARD * SHARDS_PER_SAMPLE[detector] // config_count}'" in tfds
     run = subprocess.run(
         [sys.executable, "-m", "snakemake", "-s", str(jobs / "Snakefile"), "--executor", "local", "--cores", "1", "--dry-run", "--quiet", "rules"],
         cwd=tmp_path,
@@ -111,7 +121,9 @@ def test_combined_graph_is_complete_without_training_or_local_execution(tmp_path
     output = run.stdout + run.stderr
     assert run.returncode == 0, output[-6000:]
     for detector in DETECTORS:
-        for stage, count in (("gen_task", 2500), ("post_task", 2500), ("tfds_task", 50 if detector in ("cld", "clic") else 5)):
+        shard_count = len(SAMPLES) * SHARDS_PER_SAMPLE[detector]
+        tfds_count = 50 if detector in ("cld", "clic") else 5
+        for stage, count in (("gen_task", shard_count), ("post_task", shard_count), ("tfds_task", tfds_count)):
             assert re.search(rf"^\s*{detector}_{stage}\s+{count}\s*$", output, re.MULTILINE), output[-6000:]
     assert not re.search(r"train_\S+\s+\d", output)
 
@@ -163,7 +175,7 @@ def test_campaign_rejects_incomplete_existing_postprocessing(tmp_path, monkeypat
     monkeypatch.delenv("PF_SITE", raising=False)
     produce_key4hep_snakemake.main(["--productions", "ild"])
     output = tmp_path / "storage/ild/v1.4.0/50k/post/p8_ee_qq_ecm365/reco_p8_ee_qq_ecm365_500000.parquet"
-    ak.to_parquet(ak.Record({"X_track": ak.Array([[]] * 99)}), output)
+    ak.to_parquet(ak.Record({"X_track": ak.Array([[]] * (EVENTS_PER_SHARD - 1))}), output)
     script = tmp_path / spec["campaigns"]["key4hep_50k"]["jobs_dir"] / "ild/post/post_qq.sh"
     result = subprocess.run(
         ["bash", str(script), "500000"],

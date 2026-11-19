@@ -1,18 +1,22 @@
-# Joint Key4hep v1.4.0 50k-event campaign
+# Joint Key4hep v1.4.0 campaign
 
 The `key4hep_50k` campaign in `particleflow_spec.yaml` builds all five samples
-for CLD, CLIC, IDEA and ILD in one Snakemake DAG. Each sample has **500 jobs ×
-100 events = 50,000 events**, for **250,000 events per detector and 1,000,000
-events total**. The same seeds can be used across detectors because scratch
-paths, outputs and workflow rules are namespaced by detector.
+for CLD, CLIC, IDEA and ILD in one Snakemake DAG. Each generation job produces **10
+events**, matching the smoke run. CLD, CLIC and ILD each use **5,000 jobs and
+50,000 events per sample**. IDEA uses **1,000 jobs and 10,000 events per
+sample**, bringing the campaign to **800,000 events**. The same seeds can be
+used across detectors because scratch paths, outputs and rules are namespaced
+by detector.
 
-| Samples | CLD / IDEA / ILD | CLIC | Seeds (end exclusive) |
-|---|---|---|---|
-| ttbar | 365 GeV | 380 GeV | 300000–300500 |
-| WW fullhad | 365 GeV | 380 GeV | 400000–400500 |
-| qq | 365 GeV | 380 GeV | 500000–500500 |
-| Z→qq | 91 GeV | 91 GeV | 600000–600500 |
-| Z→tautau | 91 GeV | 91 GeV | 700000–700500 |
+| Sample | CLD / IDEA / ILD | CLIC | CLD / CLIC / ILD seeds | IDEA seeds |
+|---|---|---|---|---|
+| ttbar | 365 GeV | 380 GeV | 300000–305000 | 300000–301000 |
+| WW fullhad | 365 GeV | 380 GeV | 400000–405000 | 400000–401000 |
+| qq | 365 GeV | 380 GeV | 500000–505000 | 500000–501000 |
+| Z→qq | 91 GeV | 91 GeV | 600000–605000 | 600000–601000 |
+| Z→tautau | 91 GeV | 91 GeV | 700000–705000 | 700000–701000 |
+
+Seed range ends are exclusive.
 
 FCC-ee samples use the shared cards, including both CLIC Z samples. ILD passes
 the matching 91 or 365 GeV energy into reconstruction. CLIC retains its
@@ -51,11 +55,20 @@ Apptainer. Every dataset depends on all required generation/reconstruction and
 postprocessing jobs; successful shards can progress while other samples run.
 It builds track/cluster datasets for all 20 detector/sample combinations and
 hit datasets for the ten CLD/CLIC combinations. `--jobs` sets the global job
-limit. IDEA requests 64 GB and four CPUs per generation job; ILD requests
-16 GB, CLD/CLIC 8 GB. The configured runtime limit is 48 hours.
+limit. The configured runtime limit is 48 hours.
+
+| Detector | Generation and reconstruction RAM | CPUs | Postprocessing RAM |
+|---|---:|---:|---:|
+| CLD | 4,500 MiB | 1 | 1,000 MiB |
+| CLIC | 4,500 MiB | 1 | 1,000 MiB |
+| IDEA | 48,000 MiB | 4 | 1,000 MiB |
+| ILD | 5,000 MiB | 1 | 1,200 MiB |
+
+These Slurm requests round to about twice the peak RSS observed in the
+10-event smoke jobs and local postprocessing probes.
 
 Rerun the same command to resume. Failed jobs block their datasets; partial
-production is disabled. ROOT and Parquet shards must each contain 100 events.
+production is disabled. ROOT and Parquet shards must each contain 10 events.
 Before publishing TFDS, each builder configuration's actual example count is
 checked. TFDS configurations copy into their shared output root using merge-safe
 directory creation, allowing independent configurations to finish concurrently.
@@ -78,7 +91,7 @@ when resuming; old production completion markers are not required.
 |---|---|---|---|
 | CLD/CLIC tracks and clusters | 3.4.0 | 1–10 | 4,500 / 500 per configuration |
 | CLD/CLIC hits | 3.3.0 | 1–10 | 4,500 / 500 per configuration |
-| IDEA tracks and clusters | 0.5.0 | 1 | 40,000 / 10,000 |
+| IDEA tracks and clusters | 0.5.0 | 1 | 8,000 / 2,000 |
 | ILD tracks and clusters | 0.2.0 | 1 | 45,000 / 5,000 |
 
 All datasets use ArrayRecord. CLD/CLIC/ILD split independent input files;

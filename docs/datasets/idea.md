@@ -31,7 +31,7 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 ## Builder and recipe compatibility
 
 The builders, production mapping, and `pyg-idea-pipeline-v1` training, validation,
-and test selections use **0.5.0** for the v1.4.0 50k campaign. These versions select `FittedTracks` at the IP,
+and test selections use **0.5.0** for the v1.4.0 campaign. These versions select `FittedTracks` at the IP,
 rejects invalid fits, and derives training truth links from tracker-hit
 associations. Tracks retain their measured kinematics; truth is used only for
 labels. At least 75% of the distinct measurements must vote for one direct,
@@ -72,8 +72,9 @@ Collision generation now uses the energy-dependent FCC-ee 2025 beam-spot
 widths in the shared Pythia cards, with no additional GenAlg spatial or timing
 smear. The historical full-simulation qualification results below predate this
 correction and need repeating for the corrected campaign. See the [generator instructions](../../mlpf/data/key4hep/gen/idea/README.md).
-The new five-sample, 50k-event campaign uses TFDS **0.5.0** and the
-[joint Tallinn workflow](key4hep-50k.md).
+The [joint Tallinn workflow](key4hep-50k.md) generates 10,000 events per IDEA
+sample across 1,000 jobs of 10 events. TFDS **0.5.0** uses 8,000 training and
+2,000 test events per sample.
 Archive the previous campaign's completion markers under `snakemake_jobs/idea/`
 before generating workflows for the new workspace; old `.done` files do not
 establish completion of the corrected campaign.
@@ -136,8 +137,8 @@ validation thresholds and data remain unchanged.
 One parallel reconstruction worker exited with code 137. Its complete 25-event
 simulation was reconstructed again in isolation with the same settings,
 successfully retaining all events. The isolated reconstruction peaked at
-**28.59 GiB RSS**. The recipe now requests **64,000 MB** for generation and
-reconstruction; avoid concurrent GGTF jobs on a 64 GB host.
+**28.59 GiB RSS**. The 10-event smoke jobs peaked at **23.08 GiB RSS**.
+The production recipe requests **48,000 MiB** for generation and reconstruction.
 
 The earlier three-event 0.4.0 TFDS smoke dataset built and read both splits
 successfully. This validates integration, not tracking efficiency or PF

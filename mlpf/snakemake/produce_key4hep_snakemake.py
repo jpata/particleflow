@@ -23,14 +23,16 @@ def main(argv=None):
         jobs = jobs.with_name(jobs.name + "_smoke_10ev")
     stages = {stage: [] for stage in ("gen", "post", "tfds", "tfds_hit")}
     modules = []
+    event_count_overrides = campaign.get("expected_events_per_sample_overrides", {})
     for detector in detectors:
         production = spec["productions"][detector]
         if production.get("allow_partial", True) or not production.get("validate_events", False):
             raise ValueError(f"{detector}: campaign requires complete, event-validated datasets")
+        expected_events = event_count_overrides.get(detector, campaign["expected_events_per_sample"])
         for sample, settings in production["samples"].items():
             begin, end = settings["seed_range"]
-            if (end - begin) * settings["events_per_job"] != campaign["expected_events_per_sample"]:
-                raise ValueError(f"{detector}/{sample}: wrong event count for campaign")
+            if (end - begin) * settings["events_per_job"] != expected_events:
+                raise ValueError(f"{detector}/{sample}: campaign requires {expected_events} events")
             if sample not in production["tfds_mapping"]:
                 raise ValueError(f"{detector}/{sample}: missing track/cluster TFDS mapping")
         steps = ["gen", "post", "tfds"]
