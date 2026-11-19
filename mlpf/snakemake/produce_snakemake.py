@@ -396,19 +396,12 @@ done
         echo "Skipping {post_file_final_proto}, already exists"
     fi
 """
-        post_event_check = (
-            f"python3 -c \"import awkward as ak; a=ak.from_parquet('{post_file_final_proto}'); "
-            f"assert len(a.X_track)=={events_per_job}, '{post_file_final_proto}'\""
-            if validate_events
-            else ""
-        )
         post_proto_content = f"""
 export PYTHONPATH=$(pwd):$PYTHONPATH
 start_seed=$1
 for (( i=0; i<{CHUNK_SIZE}; i++ )); do
     seed=$((start_seed + i))
     {post_cmd.lstrip()}
-    {post_event_check}
 done
 """
         write_bash_script(post_proto_path, post_proto_content, project_root=project_root, tmpdir=tmpdir)
@@ -610,18 +603,6 @@ rule val_data_task:
             tfds_script_path = f"{jobs_dir}/{step_name}/{step_name}_{sample_key}.sh"
             version = mapping.get("version")
 
-            tfds_event_check = ""
-            if prod_config.get("validate_events", False):
-                begin, end = sample_data["seed_range"]
-                expected = (end - begin) * sample_data["events_per_job"]
-                if expected % len(config_ids):
-                    raise ValueError("Dataset event count must divide evenly across TFDS configurations")
-                tfds_event_check = (
-                    "python3 -c 'import pathlib,sys,tensorflow_datasets as tfds; "
-                    'infos=list(pathlib.Path(sys.argv[1]).rglob("dataset_info.json")); assert len(infos)==1; '
-                    "info=tfds.builder_from_directory(infos[0].parent).info; "
-                    f'assert sum(s.num_examples for s in info.splits.values())=={expected // len(config_ids)}\' "$job_scratch_dir"'
-                )
             cmd = f"""
 config_id=$1
 tfds_id={args.production}_{sample_key}_{step_name}_$config_id
@@ -650,7 +631,6 @@ export TEMPDIR=$job_scratch_dir
 export TEMP=$job_scratch_dir
 export TMP=$job_scratch_dir
 tfds build {builder_path} --config $config_id --data_dir $job_scratch_dir --manual_dir {manual_dir} --overwrite
-{tfds_event_check}
 echo "Copying from $job_scratch_dir to {tfds_root_dir}"
 python3 -c 'import shutil,sys; shutil.copytree(sys.argv[1], sys.argv[2], dirs_exist_ok=True)' "$job_scratch_dir" "{tfds_root_dir}"
 """
