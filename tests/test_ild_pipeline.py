@@ -99,7 +99,7 @@ def test_target_jet_constituents_close_with_leading_unlabelled_inputs():
     clusters = np.zeros((2, 14), dtype=np.float32)
     tracks[1, [0, 2, 5, 6]] = [211, 20, 1, 20]
     clusters[1, [0, 2, 5, 6]] = [22, 15, -1, 15]
-    jets = _assign_target_jets(tracks, clusters, "ild")
+    jets = _assign_target_jets(tracks, clusters)
     target = np.concatenate([tracks, clusters])
     assert len(jets) == 2
     assert np.all(target[target[:, 0] == 0, 12] == -1)
