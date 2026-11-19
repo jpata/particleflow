@@ -68,10 +68,11 @@ These Slurm requests round to about twice the peak RSS observed in the
 10-event smoke jobs and local postprocessing probes.
 
 Rerun the same command to resume. Failed jobs block their datasets; partial
-production is disabled. ROOT and Parquet shards must each contain 10 events.
-Before publishing TFDS, each builder configuration's actual example count is
-checked. TFDS configurations copy into their shared output root using merge-safe
-directory creation, allowing independent configurations to finish concurrently.
+production is disabled. Every ROOT shard must contain 10 events; events that
+postprocessing cannot convert (for example without any visible particle) are
+dropped and reported rather than failing the shard. TFDS configurations copy
+into their shared output root using merge-safe directory creation, allowing
+independent configurations to finish concurrently.
 
 To generate the graph alone, use `pixi run snakefile_key4hep`. The root graph
 also exposes `gen`, `post`, `tfds`, and `tfds_hit` targets. For a subset of
@@ -127,7 +128,7 @@ Each attempt writes stage logs directly to
 Look for `generation.log`, `simulation.log`, and `reconstruction.log`.
 A missing stage log means that stage did not start. Slurm output identifies
 the log directory and also contains wrapper and output validation errors.
-Large intermediate files stay on node-local scratch.
+Every runner removes its node-local scratch directory when the job exits.
 
-The standard Key4hep build installs the patched ILD mass refitter. ILD
-uses it automatically for both smoke and production runs.
+The standard Key4hep build installs the patched ILD mass refitter and
+downloads the IDEA tracking model once; jobs use both automatically.
