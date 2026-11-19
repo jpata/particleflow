@@ -2031,20 +2031,13 @@ def _read_track_truth_links(tree, detector_cfg, collectionIDs, validate_ild=Fals
     return sitrack_links
 
 
-def _assign_target_jets(ytarget_track, ytarget_cluster, detector):
+def _assign_target_jets(ytarget_track, ytarget_cluster):
     # cluster target particles to jets, save per-particle jet index
     ytarget = np.concatenate([ytarget_track, ytarget_cluster], axis=0)
     ytarget_constituents = -1 * np.ones(len(ytarget), dtype=np.int64)
     valid = ytarget[:, 0] != 0
-    # save mapping of index after masking -> index before masking as numpy array
-    # inspired from:
-    # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
-    cumsum = np.cumsum(valid) - 1
-    _, index_mapping = np.unique(cumsum, return_index=True)
-    if detector == "ild":
-        # A leading non-representative produces an extra -1 group in
-        # cumsum. Constituent indices enumerate only the selected rows.
-        index_mapping = np.flatnonzero(valid)
+    # jet constituent indices enumerate the selected rows; map them back to rows before masking
+    index_mapping = np.flatnonzero(valid)
     ytarget = ytarget[valid]
     ytarget_p4 = ytarget[:, 2:7]
     ytarget_p4 = vector.awk(
@@ -2453,7 +2446,7 @@ def process_one_file(
         sanitize(ycand_track)
         sanitize(ycand_cluster)
 
-        target_jets = _assign_target_jets(ytarget_track, ytarget_cluster, detector)
+        target_jets = _assign_target_jets(ytarget_track, ytarget_cluster)
 
         this_ev: EventRecord = {
             # if we want to train on clusters

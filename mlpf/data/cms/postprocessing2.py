@@ -943,11 +943,8 @@ def process(args):
         # cluster target particles to jets, save per-particle jet index
         ytarget_constituents = -1 * np.ones(len(ytarget), dtype=np.int64)
         valid = ytarget["pid"] != 0
-        # save mapping of index after masking -> index before masking as numpy array
-        # inspired from:
-        # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
-        cumsum = np.cumsum(valid) - 1
-        _, index_mapping = np.unique(cumsum, return_index=True)
+        # jet constituent indices enumerate the selected rows; map them back to rows before masking
+        index_mapping = np.flatnonzero(np.asarray(valid))
         ytarget_p4 = vector.awk(
             awkward.zip(
                 {
