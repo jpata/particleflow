@@ -84,6 +84,7 @@ campaigns:
     productions: [cld, clic, idea, ild]
     jobs_dir: "snakemake_jobs/key4hep_v1.4.0_50k"
     expected_events_per_sample: 50000
+    expected_events_per_sample_overrides: {idea: 10000}
 
 productions:
   maia:
@@ -378,8 +379,8 @@ productions:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
 
     memory:
-      gen: 8000
-      post: 8000
+      gen: 4500
+      post: 1000
       tfds: 16000
 
     slurm_partition: "main"
@@ -389,32 +390,32 @@ productions:
     allow_partial: false
 
     samples:
-      # 500 jobs x 100 events per sample; seed-range ends are exclusive.
+      # 5000 jobs x 10 events per sample. Seed-range ends are exclusive.
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [300000, 300500]
-        events_per_job: 100
+        seed_range: [300000, 305000]
+        events_per_job: 10
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [400000, 400500]
-        events_per_job: 100
+        seed_range: [400000, 405000]
+        events_per_job: 10
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [500000, 500500]
-        events_per_job: 100
+        seed_range: [500000, 505000]
+        events_per_job: 10
       z_qq:
         process_name: "p8_ee_Z_qq_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [600000, 600500]
-        events_per_job: 100
+        seed_range: [600000, 605000]
+        events_per_job: 10
       z_tautau:
         process_name: "p8_ee_Z_tautau_ecm91"
         gen_script: "mlpf/data/key4hep/gen/cld/run_sim.sh"
-        seed_range: [700000, 700500]
-        events_per_job: 100
+        seed_range: [700000, 705000]
+        events_per_job: 10
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
@@ -476,8 +477,8 @@ productions:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
 
     memory:
-      gen: 8000
-      post: 8000
+      gen: 4500
+      post: 1000
       tfds: 16000
 
     slurm_partition: "main"
@@ -487,32 +488,32 @@ productions:
     allow_partial: false
 
     samples:
-      # 500 jobs x 100 events per sample; seed-range ends are exclusive.
+      # 5000 jobs x 10 events per sample. Seed-range ends are exclusive.
       ttbar:
         process_name: "p8_ee_ttbar_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [300000, 300500]
-        events_per_job: 100
+        seed_range: [300000, 305000]
+        events_per_job: 10
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [400000, 400500]
-        events_per_job: 100
+        seed_range: [400000, 405000]
+        events_per_job: 10
       qq:
         process_name: "p8_ee_qq_ecm380"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [500000, 500500]
-        events_per_job: 100
+        seed_range: [500000, 505000]
+        events_per_job: 10
       z_qq:
         process_name: "p8_ee_Z_qq_ecm91"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [600000, 600500]
-        events_per_job: 100
+        seed_range: [600000, 605000]
+        events_per_job: 10
       z_tautau:
         process_name: "p8_ee_Z_tautau_ecm91"
         gen_script: "mlpf/data/key4hep/gen/clic/run_sim.sh"
-        seed_range: [700000, 700500]
-        events_per_job: 100
+        seed_range: [700000, 705000]
+        events_per_job: 10
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
@@ -627,36 +628,36 @@ productions:
     gen_environment:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
       KEY4HEP_RELEASE: "2026-04-08"
-    memory: {gen: 16000, post: 8000, tfds: 8000}
+    memory: {gen: 5000, post: 1200, tfds: 8000}
     slurm_partition: "main"
     slurm_runtime: "48h"
     samples:
-      # 500 jobs x 100 events per sample; seed-range ends are exclusive.
+      # 5000 jobs x 10 events per sample. Seed-range ends are exclusive.
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [300000, 300500]
-        events_per_job: 100
+        seed_range: [300000, 305000]
+        events_per_job: 10
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [400000, 400500]
-        events_per_job: 100
+        seed_range: [400000, 405000]
+        events_per_job: 10
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [500000, 500500]
-        events_per_job: 100
+        seed_range: [500000, 505000]
+        events_per_job: 10
       z_qq:
         process_name: "p8_ee_Z_qq_ecm91"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [600000, 600500]
-        events_per_job: 100
+        seed_range: [600000, 605000]
+        events_per_job: 10
       z_tautau:
         process_name: "p8_ee_Z_tautau_ecm91"
         gen_script: "mlpf/data/key4hep/gen/ild/run_sim.sh"
-        seed_range: [700000, 700500]
-        events_per_job: 100
+        seed_range: [700000, 705000]
+        events_per_job: 10
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
@@ -699,10 +700,9 @@ productions:
     threads: {gen: 4}
 
     memory:
-      # GGTF ttbar inference exceeded 28 GiB RSS in the 100-event validation.
-      # Reserve headroom for larger events and avoid concurrent peaks on 64 GB hosts.
-      gen: 64000
-      post: 4000
+      # About twice the 23.1 GiB peak RSS observed in the 10-event smoke run.
+      gen: 48000
+      post: 1000
       tfds: 8000
 
     slurm_partition: "main"
@@ -712,32 +712,32 @@ productions:
     allow_partial: false
 
     samples:
-      # 500 jobs x 100 events per sample; seed-range ends are exclusive.
+      # 1000 jobs x 10 events per sample. Seed-range ends are exclusive.
       ttbar:
         process_name: "p8_ee_ttbar_ecm365"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [300000, 300500]
-        events_per_job: 100
+        seed_range: [300000, 301000]
+        events_per_job: 10
       ww_fullhad:
         process_name: "p8_ee_WW_fullhad_ecm365"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [400000, 400500]
-        events_per_job: 100
+        seed_range: [400000, 401000]
+        events_per_job: 10
       qq:
         process_name: "p8_ee_qq_ecm365"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [500000, 500500]
-        events_per_job: 100
+        seed_range: [500000, 501000]
+        events_per_job: 10
       z_qq:
         process_name: "p8_ee_Z_qq_ecm91"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [600000, 600500]
-        events_per_job: 100
+        seed_range: [600000, 601000]
+        events_per_job: 10
       z_tautau:
         process_name: "p8_ee_Z_tautau_ecm91"
         gen_script: "mlpf/data/key4hep/gen/idea/run_sim.sh"
-        seed_range: [700000, 700500]
-        events_per_job: 100
+        seed_range: [700000, 701000]
+        events_per_job: 10
 
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"

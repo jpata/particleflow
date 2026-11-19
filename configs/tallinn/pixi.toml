@@ -86,7 +86,7 @@ datasets = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE 
 datasets_ild = { cmd = "PROD=ild pixi run datasets", description = "Build the complete 50k-event ILD FCC-ee datasets" }
 
 # One DAG and one global SLURM concurrency limit across all four detectors.
-snakefile_key4hep = { cmd = "PYTHONPATH=. python3 mlpf/snakemake/produce_key4hep_snakemake.py", depends-on = ["setup"], description = "Generate the complete v1.4.0 four-detector 50k campaign graph" }
+snakefile_key4hep = { cmd = "PYTHONPATH=. python3 mlpf/snakemake/produce_key4hep_snakemake.py", depends-on = ["setup"], description = "Generate the v1.4.0 four-detector campaign graph with 10-event jobs" }
 datasets_key4hep = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/key4hep_v1.4.0_50k/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} all \"$@\"' --", depends-on = ["snakefile_key4hep"], description = "Run all four detectors, five samples each, through PF/hit TFDS on Tallinn SLURM" }
 snakefile_key4hep_smoke = { cmd = "PYTHONPATH=. python3 mlpf/snakemake/produce_key4hep_snakemake.py --smoke", depends-on = ["setup"], description = "Generate the four-detector smoke graph" }
 gen_key4hep_smoke = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/key4hep_v1.4.0_50k_smoke_10ev/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} --jobs 40 all \"$@\"' --", depends-on = ["snakefile_key4hep_smoke"], description = "Run ten simulation and reconstruction jobs per detector and sample on Tallinn SLURM" }

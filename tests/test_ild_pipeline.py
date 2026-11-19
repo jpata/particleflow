@@ -262,8 +262,23 @@ def test_snakemake_routes_ild_generation_postprocessing_and_builders(tmp_path, m
     import re
 
     (jobs / "gen/gen_qq_500000.done").touch()
+    target = (jobs / "tfds/tfds_qq_tfds_1.done").relative_to(tmp_path)
     run = subprocess.run(
-        [sys.executable, "-m", "snakemake", "-s", str(jobs / "Snakefile"), "--cores", "1", "--executor", "local", "--dry-run", "tfds"],
+        [
+            sys.executable,
+            "-m",
+            "snakemake",
+            "-s",
+            str(jobs / "Snakefile"),
+            "--cores",
+            "1",
+            "--executor",
+            "local",
+            "--dry-run",
+            str(target),
+            "--quiet",
+            "rules",
+        ],
         cwd=tmp_path,
         env=os.environ | {"XDG_CACHE_HOME": str(tmp_path / "cache")},
         capture_output=True,
@@ -271,5 +286,5 @@ def test_snakemake_routes_ild_generation_postprocessing_and_builders(tmp_path, m
         check=True,
     )
     output = run.stdout + run.stderr
-    for rule, count in (("gen_task", 2499), ("post_task", 2500), ("tfds_task", 5)):
+    for rule, count in (("gen_task", 4999), ("post_task", 5000), ("tfds_task", 1)):
         assert re.search(rf"^\s*{rule}\s+{count}\s*$", output, re.MULTILINE), output[-5000:]
