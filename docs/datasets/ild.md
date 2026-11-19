@@ -1,95 +1,78 @@
 # ILD at FCC-ee
 
-The `ild` production uses **ILD_FCCee_v02**, a 2 T field, full Geant4 simulation,
-Clupatra pattern recognition and DDKalTest refits (`MarlinTrkTracks`), followed
-by Pandora calorimeter clustering and particle flow. TFDS version **0.2.0**
-is an experimental qualification dataset. Passing conversion or building TFDS
-does not establish reconstruction performance.
+The `ild` production uses **ILD_FCCee_v02** with a 2 T field, full Geant4
+simulation, Clupatra pattern recognition with DDKalTest refits
+(`MarlinTrkTracks`), and Pandora calorimeter clustering and particle flow.
+TFDS version **0.2.0** is an experimental qualification dataset: a successful
+conversion or TFDS build does not establish reconstruction performance.
+
+## Physics samples
+
+| Physics sample | Process name | TFDS dataset | Energy |
+|---|---|---|---|
+| Top-quark pairs | `p8_ee_ttbar_ecm365` | `ild_edm_ttbar_pf` | 365 GeV |
+| Fully hadronic WW | `p8_ee_WW_fullhad_ecm365` | `ild_edm_ww_fullhad_pf` | 365 GeV |
+| Inclusive quark pairs | `p8_ee_qq_ecm365` | `ild_edm_qq_pf` | 365 GeV |
+| Z→qq | `p8_ee_Z_qq_ecm91` | `ild_edm_z_qq_pf` | 91 GeV |
+| Z→tautau | `p8_ee_Z_tautau_ecm91` | `ild_edm_z_tautau_pf` | 91 GeV |
+
+All datasets use configuration **1**, ArrayRecord, and the `pyg-ild-v1` recipe
+in `particleflow_spec.yaml`. Particle guns (`gun_e_*`, `gun_mu_*`, `gun_pi_*`,
+`gun_gamma_*`, `gun_kaon0L_*`) are available through the runner for
+calibration checks but are not part of the campaign.
 
 ## Software and generation
 
-The generator is under `mlpf/data/key4hep/gen/ild`. Its ILDConfig submodule pins
-`fc1c9f58f9912b4d1fb10da5defbaca2133d60a0`. It reuses the pinned k4geo and
-k4RecTracker installations and development container from the IDEA recipe.
-All CLD, CLIC, ILD and IDEA productions now use stable **Key4hep 2026-04-08**
-(GCC 14.2), with locally compiled **k4FWCore v1.6** and **MarlinReco v1.38.1**.
-The latter fixes an upstream TOF crash on ILD tracks without subtracks.
-The tracker fork supports stable EDM4hep's explicit TrackState lookup.
-See the [shared build instructions](../../mlpf/data/key4hep/gen/README.md).
-
-Initialize submodules and build all shared components in the development image:
+The generator lives in `mlpf/data/key4hep/gen/ild` (key4hep-sim v1.4.0). Its
+ILDConfig submodule pins `fc1c9f58f9912b4d1fb10da5defbaca2133d60a0`, and it
+reuses the k4geo and k4RecTracker builds and the development container of the
+IDEA recipe. All CLD, CLIC, ILD and IDEA productions use stable
+**Key4hep 2026-04-08** with locally built k4FWCore v1.6 and MarlinReco
+v1.38.1. Follow the [build instructions](../../mlpf/data/key4hep/gen/README.md)
+once per execution host:
 
 ```bash
 git submodule update --init --recursive
-apptainer exec --bind /cvmfs,"$PWD",/tmp \
-  --env LD_PRELOAD=/usr/lib64/libffi.so.8 \
-  mlpf/data/key4hep/gen/idea/idea-dev.sif \
-  bash mlpf/data/key4hep/gen/build_all.sh
+apptainer exec --bind /cvmfs,"$PWD",/tmp --env LD_PRELOAD=/usr/lib64/libffi.so.8 \
+  mlpf/data/key4hep/gen/idea/idea-dev.sif bash mlpf/data/key4hep/gen/build_all.sh
+bash scripts/check_ild_runtime.sh
 ```
 
-For example, generate ten 10 GeV muons:
+To generate ten 10 GeV muons by hand:
 
 ```bash
-apptainer exec --bind /cvmfs,"$PWD",/tmp \
-  --env LD_PRELOAD=/usr/lib64/libffi.so.8 \
+apptainer exec --bind /cvmfs,"$PWD",/tmp --env LD_PRELOAD=/usr/lib64/libffi.so.8 \
   mlpf/data/key4hep/gen/idea/idea-dev.sif \
-  env NEV=10 OUTDIR="$PWD/reports/ild/gen" WORKDIR="$PWD/reports/ild/mu-work" \
+  env NEV=10 OUTDIR="$PWD/local_test_data/ild/gen" WORKDIR="$PWD/local_test_data/ild/mu-work" \
   bash mlpf/data/key4hep/gen/ild/run_sim.sh gun_mu_10gev 600000
 ```
 
-Use a fresh `WORKDIR` for every job. The runner retains simulation, generation
-cards, logs, an immutable recipe snapshot and reconstruction output. It copies
-the final ROOT file to `OUTDIR/PROCESS/root/reco_PROCESS_SEED.root` only after
-successful reconstruction, together with a `.software.txt` manifest recording
-source commits, source diffs, stack checksum, compact XML/field-map/CAD checksums
-and command arguments. There is no automatic scratch deletion.
+Use a fresh `WORKDIR` per job. The runner publishes
+`OUTDIR/PROCESS/root/reco_PROCESS_SEED.root` atomically together with
+`reco_PROCESS_SEED.software.txt`, which records source commits, the stack
+checksum, geometry checksums and the exact commands. A work directory under
+`/scratch/local/$USER` is removed on exit; any other work directory keeps the
+logs and intermediate files. Collision samples use the ILDConfig crossing-angle
+boost; guns use none. `GUN_ENERGY`, `GUN_PARTICLE`, `GUN_THETA_MIN` and
+`GUN_THETA_MAX` (DD4hep units such as `45*degree`) adjust gun samples.
+`--gun.energy` is the momentum magnitude, so a massive particle's total energy
+is slightly above the nominal setting.
 
-The geometry staging step copies pinned compact XML and field maps and supplies
-the six installed beam-pipe STL files. It changes CAD references to relative
-paths because the tested GeoSvc reader incorrectly prepends the XML directory
-to expanded absolute filenames. It changes no material, dimension or field.
-The staged geometry is shared by simulation and reconstruction. A job uses a
-private steering directory so concurrent reconstructions cannot overwrite
-upstream diagnostics. Simulation retains the upstream TPC sensitive action.
+The reconstruction keeps the native simulation hits and digitization
+relations in the output so that target attribution can be audited against the
+original identities. Upstream drops dQ/dx and tracker cell-ID encodings, so the
+dEdx features are zero and there is no ILD hit-dataset builder.
 
-Supported guns are `gun_e_*`, `gun_mu_*`, `gun_pi_*`, `gun_gamma_*` and
-`gun_kaon0L_*`; `GUN_ENERGY` and `GUN_PARTICLE` can override their defaults. Optional
-`GUN_THETA_MIN` and `GUN_THETA_MAX` accept DD4hep units such as `45*degree`
-and `135*degree` for an acceptance-restricted control sample.
-`--gun.energy` is the DD4hep gun momentum magnitude, so a massive particle's
-total energy is slightly above its nominal gun setting. Physics cards are
-`p8_ee_qq_ecm365`, `p8_ee_ttbar_ecm365` and `p8_ee_WW_fullhad_ecm365`.
-The steering selects the FCC-ee model explicitly, without perfect tracking or
-perfect PFA. The default final track collection refits Clupatra's silicon-hit
-pickup; optional separate silicon/TPC track merging is not enabled.
+## Tallinn campaign
 
-The production, TFDS mappings and `pyg-ild-v1` recipe are in
-`particleflow_spec.yaml`. Guns remain available through the runner for manual
-calibration checks; the batch campaign below contains only collision samples.
-
-## Tallinn 50k-event campaign
-
-The release campaign requests **50,000 events for each of ttbar, qq, WW
-fullhad, Z→qq and Z→tautau**, using 5,000 independent jobs of 10 events per
-sample. ttbar/qq/WW run at 365 GeV; the Z samples run at 91 GeV with their own
-shared FCC-ee cards and matching reconstruction energy. Pythia alone applies
-the energy-dependent FCC-ee 2025 beam spot.
-
-| Sample | Seeds (end exclusive) | Events |
-|---|---|---:|
-| ttbar | 300000–305000 | 50,000 |
-| WW fullhad | 400000–405000 | 50,000 |
-| qq | 500000–505000 | 50,000 |
-| Z→qq | 600000–605000 | 50,000 |
-| Z→tautau | 700000–705000 | 50,000 |
-
-The workspace is `/local/joosep/mlpf/ild/v1.4.0/50k`, containing `gen/`, `post/`
-and `tfds/`. Each dataset uses TFDS **0.2.0**, configuration `1`, ArrayRecord,
-and independent ROOT jobs for its **45,000 train / 5,000 test** events.
-The full 800,000-event CLD/CLIC/IDEA/ILD workflow, including all prerequisites,
-is described in the [joint campaign runbook](key4hep-50k.md).
-
-On Tallinn, after building the shared native runtime:
+The [joint v1.4.0 campaign](key4hep-50k.md) generates **50,000 events per
+sample** in 5,000 jobs of 10 events, with seeds 300000–305000 (ttbar),
+400000–405000 (WW), 500000–505000 (qq), 600000–605000 (Z→qq) and
+700000–705000 (Z→tautau), end exclusive. The workspace is
+`/local/joosep/mlpf/ild/v1.4.0/50k` with `gen/`, `post/` and `tfds/`.
+ILD jobs request 5,000 MiB for generation and reconstruction, 1,200 MiB for
+postprocessing and 8,000 MiB for TFDS, with a 48-hour limit. Each dataset has
+**45,000 train / 5,000 test** events split by independent ROOT jobs.
 
 ```bash
 ln -sfn configs/tallinn/pixi.toml pixi.toml
@@ -99,255 +82,87 @@ pixi run datasets_key4hep --jobs 20 --dry-run
 pixi run datasets_key4hep --jobs 20
 ```
 
-This targets dataset generation rather than training, with one global SLURM
-job limit across all detectors. Fresh campaign completion markers and exact
-event-count checks prevent old or partial outputs from completing this run.
-ILD jobs request 5,000 MiB for generation and reconstruction, 1,200 MiB for
-postprocessing and 8,000 MiB for TFDS. The runtime limit is 48 hours. Size
-scratch and storage for the retained
-simulation intermediates as well as published ROOT, Parquet and TFDS data.
+## Inputs and targets
 
-The earlier three-sample 10k workflow was tested separately with a 600-event
-fixture. Its records and logs remain in `reports/ild-snakemake-10k-20261117/`.
-Those tests and the stable-runtime smoke tests do not constitute physics
-qualification of the new 50k campaign or its 91 GeV samples.
-
-## Inputs, target policy and baseline
-
-Postprocess ROOT with:
+Postprocess a ROOT file with:
 
 ```bash
-mkdir -p reports/ild/post/p8_ee_qq_ecm365
 PYTHONPATH=. python -m mlpf.data.key4hep.postprocessing \
   --detector ild --input /path/to/reco_p8_ee_qq_ecm365_500000.root \
-  --outpath reports/ild/post/p8_ee_qq_ecm365
+  --outpath /path/to/post/p8_ee_qq_ecm365
 ```
 
-Track features come from the unique fitted state at the interaction point;
-the first-hit radius comes from `AtFirstHit`. Invalid states or fit quality
-fail conversion. Fully invisible events also fail explicitly; they are not
-silently removed. A full-angle gun can produce such events outside detector
-acceptance, so use an explicit angular acceptance for calibration samples. No truth momentum replaces fitted inputs. The common feature
-width is 19 and the target width is 14. New EDM4hep cluster `iPhi` and legacy
-`phi` are both supported.
+Track features come from the unique fitted state at the interaction point and
+the first-hit radius from `AtFirstHit`; tracks with invalid states or fit
+quality fail conversion rather than being silently dropped. The common feature
+width is 19 and the target width is 14.
 
 The target policy is **`ild-direct-hit-majority-v1`**:
 
-- Each distinct attached tracker measurement supplies at most one vote through
-  digitization-to-simulation and simulation-to-MC identities. Duplicate links
-  cannot inflate purity. A measurement shared by several distinct MC particles
-  splits its vote; an unlinked measurement remains in the denominator.
-- A track can label only its direct charged status-1 majority owner, at **75%**
+- Each distinct attached tracker measurement votes once, through the
+  digitization-to-simulation and simulation-to-MC identities. A measurement
+  shared by several particles splits its vote; an unlinked measurement stays
+  in the denominator.
+- A track labels only its direct charged status-1 majority owner at **75%**
   purity or higher. Secondary, conversion and low-purity tracks remain inputs
-  without a primary track label. Tracker ancestry never substitutes a parent's
-  production momentum for a measured secondary track.
-- Calorimeter links use each particle's share of a reconstructed hit's truth
-  weight, multiplied by the calibrated hit energy. Descendant deposits are
-  propagated to status-1 ancestors. The common visibility rule requires a
-  deposit above 10% of particle energy, or above 0.5 GeV for charged particles,
-  or a qualifying track. The existing propagated-parent surrogate policy is
-  applied to both targets and generator reference jets/MET.
-- Visible particles compete for one exclusive track or cluster in descending
-  truth energy. An unmatched particle merges its full four-vector into the
-  representative of its largest-deposit cluster, if that cluster has a host;
-  otherwise it is dropped and its lost energy is accounted explicitly. This
-  retains the common Key4hep calorimeter assignment and merge convention.
-- A cluster representative has neutral charge and the corresponding neutral
-  class, including when its original source was charged. Track representatives
-  have charged classes. Nonrepresentative inputs keep only their inclusive
-  particle-number association. Generator jets/MET are a separate pre-visibility
-  reference, not the sum of target rows.
+  without a label, and never inherit a parent's momentum.
+- Calorimeter links use each particle's share of a hit's truth weight times
+  the calibrated hit energy; descendant deposits propagate to status-1
+  ancestors. The common visibility rule applies (deposit above 10% of the
+  particle energy, or above 0.5 GeV for charged particles, or a qualifying
+  track).
+- Visible particles claim one exclusive track or cluster in descending truth
+  energy. An unmatched particle merges into the representative of its
+  largest-deposit cluster if that cluster has one; otherwise it is dropped and
+  the lost energy is recorded in `metadata_premerge_energy`.
+- Cluster representatives are neutral with the matching neutral class, even
+  when the source particle was charged; track representatives keep charged
+  classes. Generator jets and MET are a separate pre-visibility reference.
 
-Native `MarlinTrkTracksMCTruthLink` weights are retained for audit but are not
-used for training labels: the ten-event qq check found values above one.
-`metadata_premerge_energy`, particle counts and target energy preserve the
-visibility/merge boundary for qualification.
-
-`ycand` is **real Pandora output**, not an oracle. Multi-track PFOs receive one
-representative: charged PFOs prefer their highest-momentum track; neutrals prefer
-their highest-energy cluster, with the other input type as fallback. The complete
-PFO momentum is stored once. Native ROOT retains every original association.
-The audit checks baseline count and energy against the native PFO collection.
-
-Upstream drops EDM4hep dQ/dx and tracker collection-encoding metadata. dEdx fields
-therefore contain missing-value zeros. Tracker surface identifiers are unknown;
-there is no ILD hit-dataset builder or hit-training mapping in this recipe.
+Native `MarlinTrkTracksMCTruthLink` weights are retained for audit only, since
+they can exceed one. `ycand` is **real Pandora output**: multi-track PFOs get
+one representative (charged PFOs their highest-momentum track, neutrals their
+highest-energy cluster), and the full PFO momentum is stored once.
 
 ## Qualification and TFDS
 
-Run the independent native audit and the existing validation gates:
-
 ```bash
 PYTHONPATH=. python -m scripts.studies.qualify_ild \
-  /path/to/reco.root /path/to/reco.parquet --output reports/ild/native_audit.json
+  /path/to/reco.root /path/to/reco.parquet --output native_audit.json
 PYTHONPATH=. python tests/validate_parquet.py \
-  --detector ild --input reports/ild/post/p8_ee_qq_ecm365 \
-  --plots-dir reports/ild/validation
+  --detector ild --input /path/to/post/p8_ee_qq_ecm365 --plots-dir validation
 ```
 
-The native audit checks event preservation, collection/index identities, fitted
-IP momenta, direct-primary tracking, angular acceptance, PFO count/energy
-preservation, target majority provenance, unique representatives, merge energy
-loss and target-jet constituent four-vector closure. Native truth-weight
-warnings are reported separately from structural errors. Review both the JSON
-and the unchanged validator thresholds. A structurally valid file may still
-fail reconstruction quality gates.
+The native audit checks event preservation, collection identities, fitted IP
+momenta, direct-primary tracking, angular acceptance, PFO count and energy
+preservation, target provenance, unique representatives, merge energy loss
+and target-jet four-vector closure. The validator applies the common direction
+and energy gates. Known limitations of the current reconstruction are a
+forward tracking coverage limit above |cosθ| ≈ 0.95, direction outliers for
+low-pT tracks, and charged-source clusters whose production direction differs
+from the transported shower direction; the validator's cluster gate therefore
+reports neutral- and charged-source clusters separately.
 
-Builders are `ild_edm_qq_pf`, `ild_edm_ttbar_pf` and `ild_edm_ww_fullhad_pf`,
-configuration **1**, version **0.2.0**. They require compatible ILD provenance,
-finite arrays and at least two independent generation jobs per process. Sorted
-files are divided into disjoint train/test sets; events from the same ROOT job
-cannot cross the split. Duplicate source ROOT checksums are rejected even if
-Parquet filenames differ. Conversion that silently discards events is rejected.
+The builders under `mlpf/heptfds/ild_pf_edm4hep/` require compatible ILD
+provenance, finite arrays and at least two generation jobs per process. Files
+are split into disjoint train and test sets by ROOT job, and duplicate source
+checksums are rejected.
 
 ```bash
 tfds build mlpf/heptfds/ild_pf_edm4hep/qq.py --config 1 \
-  --manual_dir reports/ild/post --data_dir reports/ild/tfds
+  --manual_dir /path/to/post --data_dir /path/to/tfds
 ```
 
-## Qualification results, 17 November 2026
+## Comparing CLD and ILD
 
-These full-simulation results predate the PR #527 beam-spot correction. They
-use the old card widths and additional GenAlg smearing; repeat the physics
-checks with the corrected production before qualifying that campaign.
-
-**Execution and structural integration pass; physics qualification fails.**
-The artifacts are under `reports/ild-fccee-qualification-20261117/` in the
-qualification workspace. They include ROOT and Parquet files, manifests,
-native audits, validator reports and plots, and the TFDS smoke dataset.
-
-The positive campaign converted **186 events** without skips: 110 qq events
-at 365 GeV in independent 100- and 10-event jobs, three ttbar events, three
-fully hadronic WW events, ten each of 10 GeV electrons, muons, charged pions,
-photons and neutral kaons, and twenty 100 GeV muons restricted to
-45–135 degrees. A separate fresh one-event runner test also passed. Native
-audits found no broken references, invalid fitted-track records, baseline
-double counting or target-jet four-vector closure errors in the positive
-campaign. This tests pipeline execution, not detector resolution or efficiency
-at production statistics.
-
-The unchanged validator reports the following for the **100-event qq job**:
-
-| Check | Result |
-|---|---|
-| Overall | 23 PASS, 3 FAIL, 4 WARN, no skipped checks |
-| Assigned track direction, ΔR < 0.1 | **92.65%**, below the 95% gate; 1,484 representatives |
-| Assigned cluster position, ΔR < 0.3 | **80.52%**, above the 80% gate; 2,664 representatives |
-| Pandora/target total-energy disagreement | Median **3.21%**, p90 **39.52%**; p90 exceeds the 15% gate |
-| Muon deposit check | Fails on ten low-energy qq muons; see the separate MIP control below |
-
-Track alignment is 95.65% above 1 GeV truth pT and 98.33% above 5 GeV; the
-all-track gate remains failed. Native direct-primary matching also has charge
-mistakes and large momentum tails. No truth correction, removal of direction
-outliers, or relaxed threshold was used. The native match counts for charged
-status-1 particles above 1 GeV pT are 718/746 at |cosθ| < 0.8, 296/357 at
-0.8–0.95, and 0/192 above 0.95. These counts use generator particles without
-a hit requirement, and identify a forward-coverage limitation of the selected
-final track collection rather than a complete tracking-efficiency measurement.
-
-The target direction audit uses the retained charge in hit representatives to
-distinguish original sources, rather than the forced-zero cluster target
-charge. Neutral-source clusters align at **91.98%**, while charged-source
-clusters align at **39.41%**. Charged transport and merged showers therefore
-need separate interpretation from neutral calorimeter directions; the
-aggregate gate has not been changed.
-
-Native track-truth weights exceed one in 38 events, reaching **1.7143**.
-Training labels use the independent distinct-measurement vote described above.
-The 100-event file also contains **72 multi-track PFOs**; their complete count
-and energy survive the one-representative baseline conversion.
-
-The median retained/premerge target energy is **99.79%**. Loss is not uniformly
-small: event 9 drops 163.59 GeV, including a **163.35 GeV forward photon** at
-|cosθ| = 0.99639. Its linked hits include 146.89 GeV in `LCAL`; none of its
-linked shower hits belong to `PandoraClusters`. This exposes the difference
-between full-detector hit visibility and representability by the chosen PF
-inputs. It is not repaired by relabelling another input. The complete
-generator reference is retained separately, and losses remain explicit.
-
-The twenty central 100 GeV muons pass the MIP-deposit check: **17/20** have
-deposit/energy below 10% while depositing above 0.5 GeV. Median Pandora energy
-response is 0.9915. The generic validator's total-energy reference is designed
-for balanced collision events and fails for this one-particle gun because it
-adds generator jet energy and generator missing transverse momentum; that
-failure is not used as a gun-calibration criterion.
-
-A separate twenty-event full-angle 100 GeV muon probe is retained under
-`acceptance_probe/`. Event 10 has no detector hits, tracks, clusters or PFOs
-at |cosθ| = 0.99851. Postprocessing fails explicitly on that event. It does
-not silently turn a twenty-event job into a smaller dataset. Handling or
-selecting fully invisible events must be decided before a large campaign.
-
-TFDS built **100 train / 10 test** qq events from independent ROOT jobs. All
-ten test examples read back with finite matrices; the MLPF loader assigned
-source ID 7 and a two-event CPU attention forward pass produced finite outputs.
-This is an untrained integration test. The focused and regression suites pass
-**135 tests**, with one unavailable historical IDEA fixture skipped and seven
-subtests passed. First-party lint and complexity checks and generator shell
-syntax checks pass.
-
-Keep version 0.1.0 experimental. The remaining work is reconstruction and
-acceptance/target-definition qualification, not a TFDS or serialization fix.
-
-## Comparing CLD and ILD distributions
-
-Convert both detectors' ROOT files with the current postprocessor, placing
-Parquet shards in `POST/{cld,ild}/{ttbar,qq,ww_fullhad}/`. Then run:
+Convert both detectors with the current postprocessor into
+`POST/{cld,ild}/{ttbar,qq,ww_fullhad}/`, then run:
 
 ```bash
 bash scripts/run_cld_ild_comparison.sh POST OUTPUT 200
 ```
 
-This reuses `scripts/compare_detector_features.py` to generate a six-sample
-comparison and one report per process. Reports include track and cluster
-features on shared bins, target/truth jet spectra normalized per event,
-one-to-one angular matching efficiency and purity, and matched jet pT and
-energy responses. JSON summaries retain counts, ranges, quantiles and
-structural checks. Feature histograms are normalized per object.
-
-Use the generator spectra to assess sample differences. Equal generator-card
-and seed labels across software versions do not establish identical events;
-check generator identities before interpreting detector differences as an
-event-paired measurement. CLD's existing track associations and ILD's direct
-hit-majority target policy also differ, so this compares both reconstruction
-and the resulting dataset definitions.
-
-The comparison below predates the PR #527 beam-spot correction.
-It used two 100-event ROOT shards per process
-and detector, **1,200 reconstructed events** in total. All twelve conversions
-completed. Stable-particle PDG lists differ in every corresponding event,
-confirming that shared seed names do not give paired generator events.
-
-Each entry below is **CLD / ILD**; multiplicities are means per event:
-
-| Process | Tracks | Labelled tracks | Clusters | Truth jets matched to target jets |
-|---|---:|---:|---:|---:|
-| ttbar | 52.53 / 71.16 | 46.92 / 41.35 | 95.19 / 101.07 | 97.93% / 98.61% |
-| qq | 25.25 / 29.98 | 21.44 / 14.66 | 47.11 / 47.86 | 91.06% / 95.80% |
-| WW full-hadronic | 40.03 / 50.73 | 34.58 / 26.60 | 75.55 / 79.03 | 97.62% / 97.47% |
-
-Matching uses one-to-one ΔR < 0.1 with no response cut. Both detectors use
-ee_genkt jets with R=0.4, p=-1 and pT > 5 GeV. Median matched target/truth pT
-and energy responses are essentially one for all six samples. Targets carry
-retained truth four-vectors, so this is a target-construction/retention check,
-not a detector energy-resolution measurement.
-
-ILD has more low-pT and unlabelled tracks and broader D0/Z0 tails. Tracks below
-1 GeV pT comprise 57–64% of ILD inputs versus 42–47% for CLD. The fraction of
-track inputs at |cosθ| > 0.95 is 0.4–0.7% for ILD versus 4.7–17.9% for CLD;
-these are input distributions, not tracking efficiencies. Cluster spectra are
-closer: ILD's mean multiplicities are 2–6% higher and median energies modestly
-lower in these samples. Reconstruction and label-policy effects both enter.
-
-All samples pass finite-value, matrix-alignment, phi-normalization, track
-kinematics, target-class and target-jet-index checks. ET = E/cosh(eta) fails
-for **three clusters per detector**: CLD has two in qq and one in WW; ILD has
-one per process. One inspected ILD cluster has nonzero energy and position but
-native iTheta=0, producing ET=eta=0 in the current converter. These rows remain
-in the comparison and are recorded individually in its audit report.
-
-Local artifacts are under `reports/cld-ild-comparison-20261117/`: `index.html`
-links the combined and per-process plots; `input_audit.json` records target
-coverage and the inconsistent cluster rows; `generator_comparison.json`
-records the generator checks. The report does not supersede the failed
-reconstruction/target-direction gates above.
+This drives `scripts/compare_detector_features.py` to compare track and
+cluster features, target and generator jet spectra, matching efficiency and
+purity, and jet response. Check the generator spectra first: equal cards and
+seeds across software versions do not guarantee identical events.
