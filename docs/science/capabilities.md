@@ -13,20 +13,21 @@ performance or coverage of every configuration combination.
 | Detector | Collision setting | Inputs | Data version in model recipe | Status |
 |---|---|---|---|---|
 | CMS Run 3 | Proton-proton, with and without pileup | Tracks and calorimeter clusters | 3.2.0 | **Supported** |
-| CLD | Electron-positron | Tracks and calorimeter clusters | 3.3.0 | **Supported** |
-| CLICdet | Electron-positron | Tracks and calorimeter clusters | 3.3.0 | **Supported** |
-| CLD | Electron-positron | Tracker and calorimeter hits | 3.2.2 | **Research workflow** |
-| CLICdet | Electron-positron | Tracker and calorimeter hits | 3.2.2 | **Research workflow** |
+| CLD | Electron-positron | Tracks and calorimeter clusters | 3.4.0 | **Supported** |
+| CLICdet | Electron-positron | Tracks and calorimeter clusters | 3.4.0 | **Supported** |
+| CLD | Electron-positron | Tracker and calorimeter hits | 3.3.0 | **Research workflow** |
+| CLICdet | Electron-positron | Tracker and calorimeter hits | 3.3.0 | **Research workflow** |
 | ColliderML Release 1 | Proton-proton ttbar, no pileup or pileup ~200 | Tracks and spatial calorimeter clusters | 1.2.0 | **Research workflow** |
 | ColliderML Release 1 | Proton-proton ttbar, no pileup | Tracker and calorimeter hits | 1.0.0 | **Research workflow** |
 | MAIA | Muon-collider detector study | Tracks and calorimeter clusters | 1.1.0 | **Partial**; conversion, TFDS, and local CPU training |
-| IDEA | Electron-positron detector concept | Quality-selected GGTF/GenFit tracks and calorimeter clusters | 0.4.0 | **Partial**; pipeline validation with an oracle reference |
+| IDEA | Electron-positron detector concept | Quality-selected GGTF/GenFit tracks and calorimeter clusters | 0.5.0 | **Partial**; pipeline validation with an oracle reference |
+| ILD at FCC-ee | Electron-positron | Fitted tracks and Pandora clusters | 0.2.0 | **Experimental**; full-simulation qualification path |
 
 Versions come from `particleflow_spec.yaml`; they are not a statement of public
 download availability. As verified on 28 October 2026, the Hub provides
 configuration-1 CLD and CLIC track/cluster 3.3.0 and hit 3.2.2 data for the
 standard `ttbar`, `WW`, and `qq` recipes, plus ColliderML track/cluster 1.2.0.
-IDEA builders, production, and model recipes use 0.4.0 with fitted-track provenance;
+IDEA builders, production, and model recipes use 0.5.0 with fitted-track provenance;
 published 0.2.1 files use proxy tracks and cannot substitute for it. See the
 [catalog](../datasets/catalog.md) for the verified Hub snapshot and publication
 boundaries; confirm availability of the required version before downloading.
@@ -111,6 +112,6 @@ their original code, dataset, checkpoint, and metric definitions.
 
 - Hit-level events require substantially more memory and tuning than track/cluster inputs.
 - A reproducible checkpoint includes its saved model configuration and a compatible dataset schema.
-- Current Key4HEP track/cluster data include muon-system cluster features; older 3.2.1 data must not be treated as current 3.3.0 input by relabeling directories.
+- Current Key4HEP track/cluster data include muon-system cluster features; older 3.2.1 or 3.3.0 data must not be treated as current 3.4.0 input by relabeling directories.
 - Site-specific production and accelerator paths require their own environment checks.
 - Published physics claims remain tied to the artifacts and setup in the corresponding [publication](publications.md).

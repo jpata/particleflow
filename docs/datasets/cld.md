@@ -1,6 +1,6 @@
 # CLD tracks and clusters
 
-CLD track/cluster datasets use Key4HEP/EDM4hep production at 365 GeV. The schema version is **3.3.0**, and the standard model recipe is `pyg-cld-v1`.
+CLD track/cluster datasets use Key4HEP/EDM4hep production at 365 GeV. The schema version is **3.4.0**, and the standard model recipe is `pyg-cld-v1`.
 
 ## Physics samples
 
