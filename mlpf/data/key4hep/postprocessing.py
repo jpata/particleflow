@@ -44,6 +44,7 @@ import vector
 from scipy.sparse import coo_matrix
 
 from mlpf.data.key4hep.idea_tracks import (
+    TRACK_PT_PER_TESLA_MM,
     TRACK_SOURCE,
     PROXY_TRACK_SOURCE,
     TRACK_COLLECTION,
@@ -233,8 +234,7 @@ def deltar(eta1: float, phi1: float, eta2: float, phi2: float) -> float:
 
 
 def track_pt(omega: np.ndarray, b_field: float) -> np.ndarray:
-    a = 3 * 10**-4
-    return a * np.abs(b_field / omega)
+    return TRACK_PT_PER_TESLA_MM * np.abs(b_field / omega)
 
 
 _warned_missing_cellid_encoding = set()
@@ -1373,7 +1373,7 @@ def idea_track_to_features(prop_data: Any, iev: int, b_field: float, coll: str =
     ret["dEdx"] = np.zeros(n_tracks, dtype=np.float32)
     ret["dEdxError"] = np.zeros(n_tracks, dtype=np.float32)
 
-    ret["pt"] = (0.000299792458 * np.abs(b_field / ret["omega"])) if coll == TRACK_COLLECTION else track_pt(ret["omega"], b_field)
+    ret["pt"] = track_pt(ret["omega"], b_field)
     ret["p"] = ret["pt"] * np.hypot(1.0, ret["tanLambda"])
     ret["eta"] = np.arcsinh(ret["tanLambda"])
     ret["sin_phi"] = np.sin(ret["phi"])
