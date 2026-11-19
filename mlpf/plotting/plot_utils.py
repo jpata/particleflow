@@ -85,6 +85,7 @@ CLASS_LABELS = {
     "clic": CLASS_LABELS_CLIC,
     "cld": CLASS_LABELS_CLIC,
     "idea": CLASS_LABELS_CLIC,
+    "ild": CLASS_LABELS_CLIC,
     "maia": CLASS_LABELS_CLIC,
     "colliderml": CLASS_LABELS_CLIC,
     "colliderml_hits": CLASS_LABELS_CLIC,
@@ -183,6 +184,7 @@ GENJET_BINS_PT_DATASET = {
     "clic": [10, 20, 40, 60, 80, 100, 200],
     "cld": [10, 20, 40, 60, 80, 100, 200],
     "idea": [10, 20, 40, 60, 80, 100, 200],
+    "ild": [10, 20, 40, 60, 80, 100, 200],
     "maia": [10, 20, 40, 60, 80, 100, 200, 400, 800, 1600],
     "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
     "colliderml": [10, 20, 40, 60, 80, 100, 200, 400, 800],
@@ -387,6 +389,10 @@ def colliderml_label(ax):
     return experiment_label(ax, experiment="ColliderML-ODD", tag1="Sim.", tag2="pp (14 TeV)", x1=0.35)
 
 
+def ild_label(ax):
+    return experiment_label(ax, experiment="Key4HEP-ILD", tag1="Sim.", tag2="ee (365 GeV)", x1=0.35)
+
+
 def maia_label(ax):
     return experiment_label(ax, experiment="MAIA", tag1="Sim.", tag2="Muon collider", x1=0.35)
 
@@ -396,6 +402,7 @@ EXPERIMENT_LABELS = {
     "clic": clic_label,
     "cld": cld_label,
     "idea": idea_label,
+    "ild": ild_label,
     "maia": maia_label,
     "clic_hits": clic_label,
     "cld_hits": cld_label,
