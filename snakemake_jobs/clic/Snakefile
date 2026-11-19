@@ -57,7 +57,7 @@ rule gen_task:
     output:
         "snakemake_jobs/clic/gen/gen_{sample}_{seed}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=4500, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=2800, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/home/joosep/particleflow/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     shell:
