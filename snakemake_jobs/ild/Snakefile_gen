@@ -1,0 +1,46 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        expand('snakemake_jobs/ild/gen/gen_ttbar_{seed}.done', seed=range(300000, 305000, 1)),
+        expand('snakemake_jobs/ild/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 405000, 1)),
+        expand('snakemake_jobs/ild/gen/gen_qq_{seed}.done', seed=range(500000, 505000, 1)),
+        expand('snakemake_jobs/ild/gen/gen_z_qq_{seed}.done', seed=range(600000, 605000, 1)),
+        expand('snakemake_jobs/ild/gen/gen_z_tautau_{seed}.done', seed=range(700000, 705000, 1))
+
+rule gen:
+    input:
+        expand('snakemake_jobs/ild/gen/gen_ttbar_{seed}.done', seed=range(300000, 305000, 1)), expand('snakemake_jobs/ild/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 405000, 1)), expand('snakemake_jobs/ild/gen/gen_qq_{seed}.done', seed=range(500000, 505000, 1)), expand('snakemake_jobs/ild/gen/gen_z_qq_{seed}.done', seed=range(600000, 605000, 1)), expand('snakemake_jobs/ild/gen/gen_z_tautau_{seed}.done', seed=range(700000, 705000, 1))
+    output:
+        "snakemake_jobs/ild/gen/all.done"
+    shell:
+        "touch {output}"
+
+rule gen_task:
+    threads: 1
+    params:
+        workspace='/local/joosep/mlpf/ild/v1.4.0/50k'
+    output:
+        "snakemake_jobs/ild/gen/gen_{sample}_{seed}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=5000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/home/joosep/particleflow/mlpf/data/key4hep/gen/idea/idea-dev.sif"
+    shell:
+        "snakemake_jobs/ild/gen/gen_{wildcards.sample}.sh {wildcards.seed} && touch {output}"

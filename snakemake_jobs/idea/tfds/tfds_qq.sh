@@ -6,10 +6,10 @@ export NUMEXPR_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export VECLIB_MAXIMUM_THREADS=1
-export TMPDIR=/scratch/local/joosep/tmp
-export TEMPDIR=/scratch/local/joosep/tmp
-export TEMP=/scratch/local/joosep/tmp
-export TMP=/scratch/local/joosep/tmp
+export TMPDIR="/scratch/local/joosep/tmp/job_${SLURM_JOB_ID:-manual-$$}"
+export TEMPDIR=$TMPDIR
+export TEMP=$TMPDIR
+export TMP=$TMPDIR
 mkdir -p $TMPDIR
 cd /home/joosep/particleflow
 
@@ -20,11 +20,11 @@ job_scratch_dir=/scratch/local/joosep/tfds_tmp/${tfds_id}_${SLURM_JOB_ID:-manual
 export PYTHONPATH=$(pwd):$PYTHONPATH
 export KERAS_BACKEND=torch
 hostname
-export TFDS_VERSION=0.4.0
+export TFDS_VERSION=0.5.0
 env
 
 echo "Building TFDS for mlpf/heptfds/idea_pf_edm4hep/qq config $config_id"
-echo "Manual dir: /local/joosep/mlpf/idea/IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117/post"
+echo "Manual dir: /local/joosep/mlpf/idea/v1.4.0/50k/post"
 echo "Scratch dir: $job_scratch_dir"
 
 mkdir -p $job_scratch_dir
@@ -39,6 +39,6 @@ export TMPDIR=$job_scratch_dir
 export TEMPDIR=$job_scratch_dir
 export TEMP=$job_scratch_dir
 export TMP=$job_scratch_dir
-tfds build mlpf/heptfds/idea_pf_edm4hep/qq --config $config_id --data_dir $job_scratch_dir --manual_dir /local/joosep/mlpf/idea/IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117/post --overwrite
-echo "Copying from $job_scratch_dir to /local/joosep/mlpf/idea/IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117/tfds"
-cp -r $job_scratch_dir/* /local/joosep/mlpf/idea/IDEA_o1_v03_upstream_20261116_fitted_trackingfix_20261117/tfds/
+tfds build mlpf/heptfds/idea_pf_edm4hep/qq --config $config_id --data_dir $job_scratch_dir --manual_dir /local/joosep/mlpf/idea/v1.4.0/50k/post --overwrite
+echo "Copying from $job_scratch_dir to /local/joosep/mlpf/idea/v1.4.0/50k/tfds"
+python3 -c 'import shutil,sys; shutil.copytree(sys.argv[1], sys.argv[2], dirs_exist_ok=True)' "$job_scratch_dir" "/local/joosep/mlpf/idea/v1.4.0/50k/tfds"
