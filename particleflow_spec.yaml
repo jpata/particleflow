@@ -379,7 +379,7 @@ productions:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
 
     memory:
-      gen: 4500
+      gen: 2800
       post: 1000
       tfds: 16000
 
@@ -477,7 +477,7 @@ productions:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
 
     memory:
-      gen: 4500
+      gen: 2800
       post: 1000
       tfds: 16000
 
@@ -628,7 +628,7 @@ productions:
     gen_environment:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
       KEY4HEP_RELEASE: "2026-04-08"
-    memory: {gen: 5000, post: 1200, tfds: 8000}
+    memory: {gen: 2900, post: 1200, tfds: 8000}
     slurm_partition: "main"
     slurm_runtime: "48h"
     samples:
@@ -697,11 +697,11 @@ productions:
     environment:
       progress_interval: 60
 
-    threads: {gen: 4}
+    threads: {gen: 1}
 
     memory:
-      # About twice the 23.1 GiB peak RSS observed in the 10-event smoke run.
-      gen: 48000
+      # The 10-event smoke peak plus 20% headroom, rounded up to 100 MiB.
+      gen: 28400
       post: 1000
       tfds: 8000
 
