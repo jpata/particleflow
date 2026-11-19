@@ -70,23 +70,23 @@ calibration checks; the batch campaign below contains only collision samples.
 ## Tallinn 50k-event campaign
 
 The release campaign requests **50,000 events for each of ttbar, qq, WW
-fullhad, Z→qq and Z→tautau**, using 500 independent jobs of 100 events per
+fullhad, Z→qq and Z→tautau**, using 5,000 independent jobs of 10 events per
 sample. ttbar/qq/WW run at 365 GeV; the Z samples run at 91 GeV with their own
 shared FCC-ee cards and matching reconstruction energy. Pythia alone applies
 the energy-dependent FCC-ee 2025 beam spot.
 
 | Sample | Seeds (end exclusive) | Events |
 |---|---|---:|
-| ttbar | 300000–300500 | 50,000 |
-| WW fullhad | 400000–400500 | 50,000 |
-| qq | 500000–500500 | 50,000 |
-| Z→qq | 600000–600500 | 50,000 |
-| Z→tautau | 700000–700500 | 50,000 |
+| ttbar | 300000–305000 | 50,000 |
+| WW fullhad | 400000–405000 | 50,000 |
+| qq | 500000–505000 | 50,000 |
+| Z→qq | 600000–605000 | 50,000 |
+| Z→tautau | 700000–705000 | 50,000 |
 
 The workspace is `/local/joosep/mlpf/ild/v1.4.0/50k`, containing `gen/`, `post/`
 and `tfds/`. Each dataset uses TFDS **0.2.0**, configuration `1`, ArrayRecord,
 and independent ROOT jobs for its **45,000 train / 5,000 test** events.
-The full million-event CLD/CLIC/IDEA/ILD workflow, including all prerequisites,
+The full 800,000-event CLD/CLIC/IDEA/ILD workflow, including all prerequisites,
 is described in the [joint campaign runbook](key4hep-50k.md).
 
 On Tallinn, after building the shared native runtime:
@@ -102,8 +102,9 @@ pixi run datasets_key4hep --jobs 20
 This targets dataset generation rather than training, with one global SLURM
 job limit across all detectors. Fresh campaign completion markers and exact
 event-count checks prevent old or partial outputs from completing this run.
-ILD jobs request 16 GB for generation/reconstruction, 8 GB for postprocessing
-and TFDS, and a 48-hour runtime limit. Size scratch/storage for the retained
+ILD jobs request 5,000 MiB for generation and reconstruction, 1,200 MiB for
+postprocessing and 8,000 MiB for TFDS. The runtime limit is 48 hours. Size
+scratch and storage for the retained
 simulation intermediates as well as published ROOT, Parquet and TFDS data.
 
 The earlier three-sample 10k workflow was tested separately with a 600-event
