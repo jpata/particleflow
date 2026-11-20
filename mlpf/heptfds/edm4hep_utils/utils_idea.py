@@ -1,10 +1,8 @@
-"""Dataset utilities for the initial IDEA track/cluster MLPF pipeline.
+"""IDEA fitted-track/cluster tensors with explicit input and oracle provenance.
 
-The current IDEA samples use truth-seeded ``TracksFromGenParticles`` as an
-explicitly temporary proxy.  They do not contain baseline PFO collections, so
-the loader can synthesize an oracle ``ycand`` by copying the target.  That
-candidate is useful only for exercising serialization and evaluation code; it
-is never a physics baseline.
+The default representation uses GGTF/GenFit measurements. Legacy proxy data can
+only be read with an explicit expected_track_source="truth_seeded" override.
+There is still no independent PFO baseline: ycand is a target oracle.
 """
 
 from collections import defaultdict
@@ -23,7 +21,16 @@ from mlpf.heptfds.edm4hep_utils.utils_pf import (
     labels,
 )
 
-TRACK_SOURCE = "truth_seeded"
+from mlpf.data.key4hep.idea_tracks import (
+    TRACK_SOURCE,
+    PROXY_TRACK_SOURCE as PROXY_TRACK_SOURCE,
+    TRACK_COLLECTION as TRACK_COLLECTION,
+    TRACK_QUALITY_POLICY as TRACK_QUALITY_POLICY,
+    TRACK_TRUTH_POLICY as TRACK_TRUTH_POLICY,
+    TRACK_TRUTH_MIN_PURITY as TRACK_TRUTH_MIN_PURITY,
+    validate_track_provenance,
+)
+
 CANDIDATE_SOURCE = "target_oracle"
 SPLIT_SEED = 12345
 
@@ -44,8 +51,8 @@ def make_oracle_candidates(ytarget: np.ndarray) -> np.ndarray:
 def repair_jet_indices(ytarget: np.ndarray, num_target_jets: int) -> tuple[np.ndarray, int]:
     """Set invalid representative jet indices to the schema value ``-1``."""
     ret = np.array(ytarget, dtype=np.float32, copy=True)
-    if not len(ret):
-        return ret, 0
+    if ret.size == 0:
+        return np.empty((0, N_Y_FEATURES), dtype=np.float32), 0
     representative = ret[:, 0] > 0
     jet_idx = ret[:, Y_FEATURES.index("jet_idx")]
     invalid = representative & ((jet_idx < -1) | (jet_idx >= num_target_jets))
@@ -64,7 +71,7 @@ def _map_pid_to_class_index(values: np.ndarray) -> np.ndarray:
     return mapped
 
 
-def prepare_data_idea(filename: str | Path, event_indices=None):
+def prepare_data_idea(filename: str | Path, event_indices=None, expected_track_source=TRACK_SOURCE):
     """Load IDEA parquet events into the common MLPF tensor contract.
 
     Missing ``ycand_*`` fields are deliberately replaced with an oracle copy
@@ -73,6 +80,7 @@ def prepare_data_idea(filename: str | Path, event_indices=None):
     in the TFDS metadata.
     """
     data = ak.from_parquet(filename)
+    validate_track_provenance(data, expected_track_source)
     num_events = len(data["X_track"])
     indices = range(num_events) if event_indices is None else event_indices
     has_candidates = all(field in data.fields for field in ("ycand_track", "ycand_cluster"))
@@ -162,12 +170,12 @@ def split_event_references(files, train_fraction: float = 0.8, seed: int = SPLIT
     return {"train": references[:boundary], "test": references[boundary:]}
 
 
-def generate_examples(references):
+def generate_examples(references, expected_track_source=TRACK_SOURCE):
     """Yield TFDS examples while reading each parquet file only once."""
     by_file = defaultdict(list)
     for filename, event_index in references:
         by_file[filename].append(event_index)
     for filename, event_indices in by_file.items():
-        for example in prepare_data_idea(filename, event_indices=event_indices):
+        for example in prepare_data_idea(filename, event_indices=event_indices, expected_track_source=expected_track_source):
             event_index = example.pop("event_index")
             yield f"{filename}_{event_index}", example

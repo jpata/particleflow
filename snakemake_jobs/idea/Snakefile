@@ -1,0 +1,154 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        expand('snakemake_jobs/idea/gen/gen_ttbar_{seed}.done', seed=range(300000, 301000, 1)),
+        expand('snakemake_jobs/idea/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 401000, 1)),
+        expand('snakemake_jobs/idea/gen/gen_qq_{seed}.done', seed=range(500000, 501000, 1)),
+        expand('snakemake_jobs/idea/gen/gen_z_qq_{seed}.done', seed=range(600000, 601000, 1)),
+        expand('snakemake_jobs/idea/gen/gen_z_tautau_{seed}.done', seed=range(700000, 701000, 1)),
+        "snakemake_jobs/idea/post/post_ttbar_all.done",
+        "snakemake_jobs/idea/post/post_ww_fullhad_all.done",
+        "snakemake_jobs/idea/post/post_qq_all.done",
+        "snakemake_jobs/idea/post/post_z_qq_all.done",
+        "snakemake_jobs/idea/post/post_z_tautau_all.done",
+        expand('snakemake_jobs/idea/tfds/tfds_ttbar_tfds_{config}.done', config=[1]),
+        expand('snakemake_jobs/idea/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1]),
+        expand('snakemake_jobs/idea/tfds/tfds_qq_tfds_{config}.done', config=[1]),
+        expand('snakemake_jobs/idea/tfds/tfds_z_qq_tfds_{config}.done', config=[1]),
+        expand('snakemake_jobs/idea/tfds/tfds_z_tautau_tfds_{config}.done', config=[1]),
+        "snakemake_jobs/idea/train/train_pyg-idea-pipeline-v1_idea.done"
+
+rule gen:
+    input:
+        expand('snakemake_jobs/idea/gen/gen_ttbar_{seed}.done', seed=range(300000, 301000, 1)), expand('snakemake_jobs/idea/gen/gen_ww_fullhad_{seed}.done', seed=range(400000, 401000, 1)), expand('snakemake_jobs/idea/gen/gen_qq_{seed}.done', seed=range(500000, 501000, 1)), expand('snakemake_jobs/idea/gen/gen_z_qq_{seed}.done', seed=range(600000, 601000, 1)), expand('snakemake_jobs/idea/gen/gen_z_tautau_{seed}.done', seed=range(700000, 701000, 1))
+    output:
+        "snakemake_jobs/idea/gen/all.done"
+    shell:
+        "touch {output}"
+
+rule gen_task:
+    threads: 1
+    params:
+        workspace='/local/joosep/mlpf/idea/v1.4.0/50k'
+    output:
+        "snakemake_jobs/idea/gen/gen_{sample}_{seed}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=28400, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/home/joosep/particleflow/mlpf/data/key4hep/gen/idea/idea-dev.sif"
+    shell:
+        "snakemake_jobs/idea/gen/gen_{wildcards.sample}.sh {wildcards.seed} && touch {output}"
+
+rule post_ttbar_all:
+    input:
+        expand("snakemake_jobs/idea/post/post_ttbar_{seed}.done", seed=range(300000, 301000, 1))
+    output:
+        "snakemake_jobs/idea/post/post_ttbar_all.done"
+    shell:
+        "touch {output}"
+
+rule post_ww_fullhad_all:
+    input:
+        expand("snakemake_jobs/idea/post/post_ww_fullhad_{seed}.done", seed=range(400000, 401000, 1))
+    output:
+        "snakemake_jobs/idea/post/post_ww_fullhad_all.done"
+    shell:
+        "touch {output}"
+
+rule post_qq_all:
+    input:
+        expand("snakemake_jobs/idea/post/post_qq_{seed}.done", seed=range(500000, 501000, 1))
+    output:
+        "snakemake_jobs/idea/post/post_qq_all.done"
+    shell:
+        "touch {output}"
+
+rule post_z_qq_all:
+    input:
+        expand("snakemake_jobs/idea/post/post_z_qq_{seed}.done", seed=range(600000, 601000, 1))
+    output:
+        "snakemake_jobs/idea/post/post_z_qq_all.done"
+    shell:
+        "touch {output}"
+
+rule post_z_tautau_all:
+    input:
+        expand("snakemake_jobs/idea/post/post_z_tautau_{seed}.done", seed=range(700000, 701000, 1))
+    output:
+        "snakemake_jobs/idea/post/post_z_tautau_all.done"
+    shell:
+        "touch {output}"
+
+rule post:
+    input:
+        "snakemake_jobs/idea/post/post_ttbar_all.done", "snakemake_jobs/idea/post/post_ww_fullhad_all.done", "snakemake_jobs/idea/post/post_qq_all.done", "snakemake_jobs/idea/post/post_z_qq_all.done", "snakemake_jobs/idea/post/post_z_tautau_all.done"
+    output:
+        "snakemake_jobs/idea/post/all.done"
+    shell:
+        "touch {output}"
+
+rule post_task:
+    input:
+        "snakemake_jobs/idea/gen/gen_{sample}_{seed}.done"
+    params:
+        workspace='/local/joosep/mlpf/idea/v1.4.0/50k'
+    output:
+        "snakemake_jobs/idea/post/post_{sample}_{seed}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=1000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/idea/post/post_{wildcards.sample}.sh {wildcards.seed} && touch {output}"
+
+rule tfds_task:
+    input:
+        "snakemake_jobs/idea/post/post_{sample}_all.done"
+    params:
+        workspace='/local/joosep/mlpf/idea/v1.4.0/50k', versions={'ttbar': '0.5.0', 'ww_fullhad': '0.5.0', 'qq': '0.5.0', 'z_qq': '0.5.0', 'z_tautau': '0.5.0'}
+    output:
+        "snakemake_jobs/idea/tfds/tfds_{sample}_tfds_{config}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=8000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/idea/tfds/tfds_{wildcards.sample}.sh {wildcards.config} && touch {output}"
+
+rule tfds:
+    input:
+        expand('snakemake_jobs/idea/tfds/tfds_ttbar_tfds_{config}.done', config=[1]), expand('snakemake_jobs/idea/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1]), expand('snakemake_jobs/idea/tfds/tfds_qq_tfds_{config}.done', config=[1]), expand('snakemake_jobs/idea/tfds/tfds_z_qq_tfds_{config}.done', config=[1]), expand('snakemake_jobs/idea/tfds/tfds_z_tautau_tfds_{config}.done', config=[1])
+    output:
+        "snakemake_jobs/idea/tfds/all.done"
+    shell:
+        "touch {output}"
+
+rule train_pyg_idea_pipeline_v1:
+    input:
+        "snakemake_jobs/idea/tfds/all.done"
+    output:
+        "snakemake_jobs/idea/train/train_pyg-idea-pipeline-v1_idea.done"
+    threads: 16
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=40000, slurm_partition="gpu", runtime=10080, slurm_account="hepusers", gres="gpu:l40:1", cpus_per_task=16, threads=16
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/idea/train/train_pyg-idea-pipeline-v1_idea.sh && touch {output}"

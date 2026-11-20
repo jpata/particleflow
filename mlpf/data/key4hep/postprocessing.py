@@ -1,4 +1,7 @@
 import os
+import hashlib
+from pathlib import Path
+
 
 from mlpf.conf import EDM4HEP, ParticleFeatures as GenFeatures
 
@@ -39,6 +42,23 @@ import tqdm
 import uproot
 import vector
 from scipy.sparse import coo_matrix
+
+from mlpf.data.key4hep.idea_tracks import (
+    TRACK_PT_PER_TESLA_MM,
+    TRACK_SOURCE,
+    PROXY_TRACK_SOURCE,
+    TRACK_COLLECTION,
+    TRACK_QUALITY_POLICY,
+    TRACK_TRUTH_POLICY,
+    TRACK_TRUTH_MIN_PURITY,
+    TRACK_HIT_COLLECTIONS,
+    TRACK_HIT_LINKS,
+    fitted_track_selection,
+    fitted_track_truth,
+    preferred_track_representatives,
+    validate_track_provenance,
+)
+from mlpf.data.key4hep.ild import PROVENANCE as ILD_PROVENANCE, pfo_representatives, track_truth as ild_track_truth
 
 # Type aliases for clarity
 
@@ -214,8 +234,7 @@ def deltar(eta1: float, phi1: float, eta2: float, phi2: float) -> float:
 
 
 def track_pt(omega: np.ndarray, b_field: float) -> np.ndarray:
-    a = 3 * 10**-4
-    return a * np.abs(b_field / omega)
+    return TRACK_PT_PER_TESLA_MM * np.abs(b_field / omega)
 
 
 _warned_missing_cellid_encoding = set()
@@ -259,7 +278,7 @@ def hits_to_features(
         feat_arr[sdcoll][:] = 0
     elif coll.lower().startswith("hcal"):
         feat_arr[sdcoll][:] = 1
-    elif "Tracker" in coll or "VXD" in coll or "Tracker" in coll or "VXD" in coll or coll.startswith("ITracker") or coll.startswith("OTracker"):
+    elif "Tracker" in coll or "VXD" in coll or coll == "SETSpacePoints":
         feat_arr[sdcoll][:] = 3
     else:
         feat_arr[sdcoll][:] = 2
@@ -275,6 +294,9 @@ def hits_to_features(
     # guessing an encoding. Collections without a side field (for example
     # LumiCal) use the neutral value zero.
     cellids = np.asarray(feat_arr["cellID"], dtype=np.uint64)
+    # Older Marlin conversions can persist an empty string for absent metadata.
+    if not require_cellid_encoding and cellid_encoding is not None and not cellid_encoding.strip():
+        cellid_encoding = None
     cellid_fields = parse_cellid_encoding(cellid_encoding) if cellid_encoding is not None else {}
     if np.any(feat_arr[sdcoll] == 3) and not {"system", "side", "layer"}.issubset(cellid_fields):
         if require_cellid_encoding:
@@ -318,6 +340,7 @@ def get_hit_matrix_and_genadj(
     mcp_id: int,
     cellid_encodings: Optional[Dict[str, str]] = None,
     require_cellid_encoding: bool = True,
+    tracker_relations=None,
 ) -> Tuple[awkward.Record, SparseMatrixCOO, Dict[Tuple[int, int], int]]:
     feats = [
         "type",
@@ -339,6 +362,9 @@ def get_hit_matrix_and_genadj(
     genparticle_to_hit_matrix_coo1 = []
     genparticle_to_hit_matrix_w = []
 
+    relations = (
+        tracker_relations if tracker_relations is not None else {col: (rel, tracker_hit_sim[col]) for col, rel in tracker_hit_relations.items()}
+    )
     for col in sorted(hit_data.keys()):
         icol = collectionIDs[col]
         encoding = cellid_encodings.get(col) if cellid_encodings is not None else None
@@ -350,9 +376,8 @@ def get_hit_matrix_and_genadj(
         hit_features = awkward.Record({**{k: hit_features[k] for k in hit_features.fields}, "collectionID": np.full(n_hits, icol, dtype=np.int64)})
         hit_feature_matrix.append(hit_features)
 
-        if col in tracker_hit_relations:
-            rel_name = tracker_hit_relations[col]
-            sim_name = tracker_hit_sim[col]
+        if col in relations:
+            rel_name, sim_name = relations[col]
 
             # Reco -> Sim mapping
             rel_from = tracker_links[f"_{rel_name}_from/_{rel_name}_from.index"][iev]
@@ -439,7 +464,6 @@ def hit_cluster_adj(
     iev: int,
     collectionIDs_reverse: Dict[int, str],
 ) -> SparseMatrixCOO:
-
     coll_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.collectionID"][iev]
     idx_arr = prop_data["_PandoraClusters_hits/_PandoraClusters_hits.index"][iev]
     hits_begin = prop_data["PandoraClusters"]["PandoraClusters.hits_begin"][iev]
@@ -455,7 +479,6 @@ def hit_cluster_adj(
 
     # loop over all clusters
     for icluster in range(len(hits_begin)):
-
         # get the slice in the hit array corresponding to this cluster
         hbeg = hits_begin[icluster]
         hend = hits_end[icluster]
@@ -481,7 +504,6 @@ def hit_cluster_adj(
 
 
 def gen_to_features(prop_data: awkward.Record, iev: int) -> GenFeatures:
-
     gen_arr = prop_data[mc_coll][iev]
 
     gen_arr = {k.replace(mc_coll + ".", ""): gen_arr[k] for k in gen_arr.fields}
@@ -530,7 +552,6 @@ def gen_to_features(prop_data: awkward.Record, iev: int) -> GenFeatures:
 
 
 def genparticle_track_adj(sitrack_links: Any, iev: int) -> SparseMatrixCOO:
-
     trk_to_gen_trkidx = sitrack_links["_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index"][iev]
     trk_to_gen_genidx = sitrack_links["_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index"][iev]
     trk_to_gen_w = sitrack_links["SiTracksMCTruthLink.weight"][iev]
@@ -563,7 +584,10 @@ def cluster_to_features(
         "phi",
         "energy",
     ]
-    ret = {feat: cluster_arr[f"PandoraClusters.{feat}"] for feat in feats}
+    ret = {
+        feat: cluster_arr[f"PandoraClusters.{('iPhi' if feat == 'phi' and 'PandoraClusters.phi' not in cluster_arr.fields else feat)}"]
+        for feat in feats
+    }
 
     hit_idx = np.array(hit_to_cluster[0])
     cluster_idx = np.array(hit_to_cluster[1])
@@ -647,23 +671,35 @@ def cluster_to_features(
     return awkward.Record(ret)
 
 
-def track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Record:
+def track_to_features(
+    prop_data: Any,
+    iev: int,
+    b_field: float,
+    track_coll: str = track_coll,
+    track_has_dqdx: bool = True,
+) -> awkward.Record:
     track_arr = prop_data[track_coll][iev]
     # the following are needed since they are no longer defined under SiTracks_Refitted
-    track_arr_dQdx = prop_data[f"{track_coll}_dQdx"][iev]
     track_arr_trackStates = prop_data[f"_{track_coll}_trackStates"][iev]
 
     feats_from_track = ["type", "chi2", "ndf"]
     ret = {feat: track_arr[f"{track_coll}.{feat}"] for feat in feats_from_track}
 
-    ret["dEdx"] = track_arr_dQdx[f"{track_coll}_dQdx.dQdx.value"]
-    ret["dEdxError"] = track_arr_dQdx[f"{track_coll}_dQdx.dQdx.error"]
+    if track_has_dqdx:
+        track_arr_dQdx = prop_data[f"{track_coll}_dQdx"][iev]
+        ret["dEdx"] = track_arr_dQdx[f"{track_coll}_dQdx.dQdx.value"]
+        ret["dEdxError"] = track_arr_dQdx[f"{track_coll}_dQdx.dQdx.error"]
+    else:
+        # Upstream ILD explicitly drops RecDqdx collections from its EDM4hep
+        # output. Zero marks missing measurements, without a truth estimator.
+        ret["dEdx"] = np.zeros(len(ret["type"]), dtype=np.float32)
+        ret["dEdxError"] = np.zeros(len(ret["type"]), dtype=np.float32)
 
     # build the radiusOfInnermostHit variable
     num_tracks = len(ret["dEdx"])
     innermost_radius = []
+    ip_indices = []
     for itrack in range(num_tracks):
-
         # select the track states corresponding to itrack
         # pick the state AtFirstHit
         # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
@@ -674,7 +710,17 @@ def track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Recor
         refY = track_arr_trackStates[f"_{track_coll}_trackStates.referencePoint.y"][ibegin:iend]
         location = track_arr_trackStates[f"_{track_coll}_trackStates.location"][ibegin:iend]
 
-        istate = np.argmax(location == 2)  # 2 refers to AtFirstHit
+        if track_coll == "MarlinTrkTracks":
+            ip = np.flatnonzero(location == 1)
+            first_hit = np.flatnonzero(location == 2)
+            if len(ip) != 1 or len(first_hit) != 1:
+                raise ValueError(f"ILD track {itrack} needs exactly one IP and AtFirstHit state")
+            if not np.isfinite(ret["chi2"][itrack]) or ret["chi2"][itrack] < 0 or ret["ndf"][itrack] <= 0:
+                raise ValueError(f"ILD track {itrack} has invalid fit quality")
+            ip_indices.append(int(ibegin + ip[0]))
+            istate = first_hit[0]
+        else:
+            istate = np.argmax(location == 2)  # 2 refers to AtFirstHit
 
         innermost_radius.append(math.sqrt(refX[istate] ** 2 + refY[istate] ** 2))
 
@@ -684,9 +730,15 @@ def track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Recor
 
     # get the index of the first track state
     trackstate_idx = prop_data[track_coll][f"{track_coll}.trackStates_begin"][iev]
+    if track_coll == "MarlinTrkTracks":
+        trackstate_idx = np.asarray(ip_indices, dtype=np.int64)
     # get the properties of the track at the first track state (at the origin)
     for k in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
         ret[k] = awkward.to_numpy(prop_data[f"_{track_coll}_trackStates"][f"_{track_coll}_trackStates.{k}"][iev][trackstate_idx])
+
+    if track_coll == "MarlinTrkTracks":
+        if any(not np.all(np.isfinite(ret[k])) for k in ("tanLambda", "D0", "phi", "omega", "Z0", "time")) or np.any(ret["omega"] == 0):
+            raise ValueError("ILD track has nonfinite or zero-curvature IP parameters")
 
     ret["pt"] = awkward.to_numpy(track_pt(ret["omega"], b_field))
     ret["px"] = awkward.to_numpy(np.cos(ret["phi"])) * ret["pt"]
@@ -982,18 +1034,35 @@ def get_genparticles_and_adjacencies(
     cellid_encodings: Optional[Dict[str, str]] = None,
     require_cellid_encoding: bool = True,
     muon_collection_ids: Tuple[int, ...] = (),
+    track_collection: str = track_coll,
+    tracker_relations=None,
+    track_has_dqdx: bool = True,
+    direct_track_truth: bool = False,
 ) -> EventData:
     gen_features = gen_to_features(prop_data, iev)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_hit_matrix_and_genadj(
-        hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id, cellid_encodings, require_cellid_encoding
+        hit_data,
+        calohit_links,
+        tracker_links,
+        iev,
+        collectionIDs,
+        mcp_id,
+        cellid_encodings,
+        require_cellid_encoding,
+        tracker_relations,
     )
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev, muon_collection_ids)
-    track_features = track_to_features(prop_data, iev, b_field)
+    track_features = track_to_features(prop_data, iev, b_field, track_collection, track_has_dqdx)
     genparticle_to_trk = genparticle_track_adj(sitrack_links, iev)
+    if direct_track_truth:
+        genparticle_to_trk = ild_track_truth(prop_data, tracker_links, iev, collectionIDs, tracker_relations, gen_features)
 
     # collect hits of st=1 direct daughters to the st=1 particles
-    genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
+    propagated_hit, propagated_track = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
+    genparticle_to_hit = propagated_hit
+    if not direct_track_truth:
+        genparticle_to_trk = propagated_track
 
     # long-lived parents that decayed outside the detector and stand in for st=1 daughters the
     # simulation never propagated (see find_surrogate_ancestors)
@@ -1151,7 +1220,6 @@ def get_recoptcl_to_obj(
         trks_begin = reco_arr["tracks_begin"][irp]
         trks_end = reco_arr["tracks_end"][irp]
         for itrk in range(trks_begin, trks_end):
-
             # get the index of the track in the track collection
             itrk_real = idx_rp_to_track[itrk]
             assert itrk_real not in track_to_rp
@@ -1160,12 +1228,10 @@ def get_recoptcl_to_obj(
 
         # only look for clusters if tracks were not found
         if not assigned:
-
             # find and loop over clusters associated to the reco particle
             cls_begin = reco_arr["clusters_begin"][irp]
             cls_end = reco_arr["clusters_end"][irp]
             for icls in range(cls_begin, cls_end):
-
                 # get the index of the cluster in the cluster collection
                 icls_real = idx_rp_to_cluster[icls]
                 assert icls_real not in cluster_to_rp
@@ -1174,7 +1240,6 @@ def get_recoptcl_to_obj(
 
 
 def get_reco_properties(prop_data: Any, iev: int) -> awkward.Record:
-
     reco_arr = prop_data["PandoraPFOs"][iev]
     reco_arr = {k.replace("PandoraPFOs.", ""): reco_arr[k] for k in reco_arr.fields}
 
@@ -1264,57 +1329,52 @@ def perigee_at_origin(
     return d0, phi0, ref_z - arc * tan_lambda
 
 
-def idea_track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Record:
-    """Build the track features of one IDEA event, in the same convention as CLIC/CLD tracks.
-
-    The IDEA samples have no reconstructed tracks; their tracks (TracksFromGenParticles) are built from the
-    generator particles. Two features would differ from CLIC/CLD if read as stored, so they are fixed here:
-
-    - Helix parameters. The first track state (AtIP) gives phi at the particle's production vertex, while
-      D0 and Z0 (for ~98% of tracks) refer to the origin. For particles produced away from the origin
-      (secondaries) the three do not describe one helix. phi, D0 and Z0 are recomputed from the production
-      vertex as the perigee relative to the origin (perigee_at_origin), as CLIC/CLD store them. Prompt
-      tracks change only slightly: phi moves by the small turn between the vertex and the perigee, and for
-      a few low-pt loopers Z0 moves by whole turns of the helix.
-    - radiusOfInnermostHit. Read from the AtIP state, it would be the production-vertex radius; it is taken
-      from the first-hit state (AtFirstHit) instead, as for CLIC/CLD.
-    """
-    coll = "TracksFromGenParticles"
+def idea_track_to_features(prop_data: Any, iev: int, b_field: float, coll: str = TRACK_COLLECTION, selection=None) -> awkward.Record:
+    """Read fitted IP parameters, or origin-referenced legacy proxy parameters."""
     states_coll = f"_{coll}_trackStates"
     tracks = prop_data[coll][iev]
     states = prop_data[states_coll][iev]
-    n_tracks = len(tracks[f"{coll}.type"])
-    state_idx = awkward.to_numpy(tracks[f"{coll}.trackStates_begin"])
-    state_end = awkward.to_numpy(tracks[f"{coll}.trackStates_end"])
+    if selection is None:
+        if coll == TRACK_COLLECTION:
+            selection = fitted_track_selection(prop_data, iev, b_field)
+        else:
+            selection = (np.arange(len(tracks[f"{coll}.type"])), awkward.to_numpy(tracks[f"{coll}.trackStates_begin"]))
+    track_idx, state_idx = selection
+    n_tracks = len(track_idx)
 
-    ret = {name: awkward.to_numpy(tracks[f"{coll}.{name}"]) for name in ["type", "chi2", "ndf"]}
+    ret = {name: awkward.to_numpy(tracks[f"{coll}.{name}"])[track_idx] for name in ["type", "chi2", "ndf"]}
     for name in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
-        ret[name] = awkward.to_numpy(states[f"{states_coll}.{name}"])[state_idx]
+        ret[name] = np.asarray(awkward.to_numpy(states[f"{states_coll}.{name}"])[state_idx], dtype=np.float64)
 
-    refx, refy, refz = (awkward.to_numpy(states[f"{states_coll}.referencePoint.{c}"]) for c in "xyz")
-    inputs = (refx[state_idx], refy[state_idx], refz[state_idx], ret["phi"], ret["omega"], ret["tanLambda"])
-    # tracks with a non-finite input (e.g. omega = inf for a zero-pt particle) keep their stored values
-    finite = np.logical_and.reduce([np.isfinite(a) for a in inputs])
-    d0, phi0, z0 = perigee_at_origin(*(a[finite] for a in inputs))
-    for name, value in (("D0", d0), ("phi", phi0), ("Z0", z0)):
-        ret[name] = ret[name].astype(np.float32)
-        ret[name][finite] = value
+    refx = awkward.to_numpy(states[f"{states_coll}.referencePoint.x"])[state_idx]
+    refy = awkward.to_numpy(states[f"{states_coll}.referencePoint.y"])[state_idx]
+    ret["radiusOfInnermostHit"] = np.hypot(refx, refy)
+    if coll != TRACK_COLLECTION:
+        # Proxy AtIP phi is at production; fitted AtIP parameters already describe the perigee.
+        state_end = awkward.to_numpy(tracks[f"{coll}.trackStates_end"])[track_idx]
+        refx, refy, refz = (awkward.to_numpy(states[f"{states_coll}.referencePoint.{c}"]) for c in "xyz")
+        inputs = (refx[state_idx], refy[state_idx], refz[state_idx], ret["phi"], ret["omega"], ret["tanLambda"])
+        # tracks with a non-finite input (e.g. omega = inf for a zero-pt particle) keep their stored values
+        finite = np.logical_and.reduce([np.isfinite(a) for a in inputs])
+        d0, phi0, z0 = perigee_at_origin(*(a[finite] for a in inputs))
+        for name, value in (("D0", d0), ("phi", phi0), ("Z0", z0)):
+            ret[name] = ret[name].astype(np.float32)
+            ret[name][finite] = value
 
-    # AtFirstHit (location 2); a track without one keeps its AtIP reference point (production vertex)
-    location = awkward.to_numpy(states[f"{states_coll}.location"])
-    first_hit = state_idx.copy()
-    for itrack, (begin, end) in enumerate(zip(state_idx, state_end)):
-        at_first_hit = np.flatnonzero(location[begin:end] == 2)
-        if len(at_first_hit):
-            first_hit[itrack] = begin + at_first_hit[0]
-    ret["radiusOfInnermostHit"] = np.hypot(refx[first_hit], refy[first_hit])
-    # TracksFromGenParticles has no particle-identification estimator. Keep the
-    # established feature layout and use explicit missing-value placeholders.
+        # AtFirstHit (location 2); a track without one keeps its AtIP reference point (production vertex)
+        location = awkward.to_numpy(states[f"{states_coll}.location"])
+        first_hit = state_idx.copy()
+        for itrack, (begin, end) in enumerate(zip(state_idx, state_end)):
+            at_first_hit = np.flatnonzero(location[begin:end] == 2)
+            if len(at_first_hit):
+                first_hit[itrack] = begin + at_first_hit[0]
+        ret["radiusOfInnermostHit"] = np.hypot(refx[first_hit], refy[first_hit])
+    # Neither collection provides a measured PID estimator in this chain.
     ret["dEdx"] = np.zeros(n_tracks, dtype=np.float32)
     ret["dEdxError"] = np.zeros(n_tracks, dtype=np.float32)
 
     ret["pt"] = track_pt(ret["omega"], b_field)
-    ret["p"] = ret["pt"] * np.sqrt(1.0 + ret["tanLambda"] ** 2)
+    ret["p"] = ret["pt"] * np.hypot(1.0, ret["tanLambda"])
     ret["eta"] = np.arcsinh(ret["tanLambda"])
     ret["sin_phi"] = np.sin(ret["phi"])
     ret["cos_phi"] = np.cos(ret["phi"])
@@ -1446,8 +1506,12 @@ def _idea_relation(prop_data: Any, name: str, iev: int) -> SparseMatrixCOO:
     return gp.astype(np.int32), obj.astype(np.int32), weight.astype(np.float32)
 
 
-def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: int = -1) -> None:
-    """Initial IDEA track/cluster post-processing without hits or PFOs."""
+def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: int = -1, track_source: str = "fitted") -> None:
+    """IDEA fitted-track/cluster postprocessing; legacy proxies require an explicit option."""
+    if track_source not in {"fitted", "truth_seeded"}:
+        raise ValueError(f"Unknown IDEA track source: {track_source}")
+    fitted = track_source == "fitted"
+    track_collection = TRACK_COLLECTION if fitted else "TracksFromGenParticles"
     started = time.monotonic()
     print(f"idea_postprocessing: opening input={fn}", flush=True)
     # The default multithreaded local-file source can spend minutes waiting in
@@ -1460,12 +1524,17 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
     prefix = "events___CollectionTypeInfo/events___CollectionTypeInfo."
     names = metadata[prefix + "name"].array()[0]
     ids = metadata[prefix + "collectionID"].array()[0]
-    cell_collection_id = dict(zip(names, ids))["TopoClusterAllCells"]
+    collection_ids = dict(zip(names, ids))
+    cell_collection_id = collection_ids["TopoClusterAllCells"]
+    if track_collection not in collection_ids:
+        raise ValueError(
+            f"IDEA input has no {track_collection}. Regenerate reconstruction with GGTF/GenFit, or explicitly use --idea-track-source truth_seeded for legacy files."
+        )
     stop = tree.num_entries if num_events == -1 else min(tree.num_entries, first_event + num_events)
     if first_event < 0 or first_event >= tree.num_entries or stop <= first_event:
         raise ValueError(f"Invalid IDEA event range [{first_event}, {stop}) for input with {tree.num_entries} events")
     print(
-        f"idea_postprocessing: selected events [{first_event}, {stop}) " f"({stop - first_event}/{tree.num_entries})",
+        f"idea_postprocessing: selected events [{first_event}, {stop}) ({stop - first_event}/{tree.num_entries})",
         flush=True,
     )
     branches = [
@@ -1481,22 +1550,31 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         f"{mc_coll}.daughters_begin",
         f"{mc_coll}.daughters_end",
         f"_{mc_coll}_daughters/_{mc_coll}_daughters.index",
-        "TracksFromGenParticles",
-        "_TracksFromGenParticles_trackStates",
         "TopoClusterAll",
         "TopoClusterAllCells",
         "_TopoClusterAll_hits/_TopoClusterAll_hits.index",
         "_TopoClusterAll_hits/_TopoClusterAll_hits.collectionID",
         "_TopoClusterAll_shapeParameters",
-        "TracksFromGenParticlesAssociation.weight",
-        "_TracksFromGenParticlesAssociation_from/_TracksFromGenParticlesAssociation_from.index",
-        "_TracksFromGenParticlesAssociation_to/_TracksFromGenParticlesAssociation_to.index",
         "ClusterMCParticleLinks.weight",
         "_ClusterMCParticleLinks_from/_ClusterMCParticleLinks_from.index",
         "_ClusterMCParticleLinks_to/_ClusterMCParticleLinks_to.index",
     ]
+    branches += [track_collection, f"_{track_collection}_trackStates"]
+    if fitted:
+        branches += [f"_{track_collection}_trackerHits/_{track_collection}_trackerHits.{field}" for field in ["index", "collectionID"]]
+        for links, simulation in TRACK_HIT_LINKS.items():
+            branches.append(links + ".weight")
+            branches += [f"_{links}_{direction}/_{links}_{direction}.{field}" for direction in ["from", "to"] for field in ["index", "collectionID"]]
+            branches += [f"_{simulation}_particle/_{simulation}_particle.{field}" for field in ["index", "collectionID"]]
+        branches += [f"{collection}.position.{axis}" for collection in TRACK_HIT_COLLECTIONS for axis in "xyz"]
+    else:
+        branches += [
+            "TracksFromGenParticlesAssociation.weight",
+            "_TracksFromGenParticlesAssociation_from/_TracksFromGenParticlesAssociation_from.index",
+            "_TracksFromGenParticlesAssociation_to/_TracksFromGenParticlesAssociation_to.index",
+        ]
     load_started = time.monotonic()
-    print(f"idea_postprocessing: loading {len(branches)} ROOT branch groups", flush=True)
+    print(f"idea_postprocessing: source={track_collection}; loading {len(branches)} ROOT branch groups", flush=True)
     # Apply the event selection while uproot reads the ROOT file. Previously
     # --first-event/--num-events only limited the later Python loop, so even a
     # one-event diagnostic unnecessarily materialized the complete file.
@@ -1541,25 +1619,28 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         event_started = time.monotonic()
         print(f"idea_postprocessing: event {iev} started", flush=True)
         gen = gen_to_features(prop_data, local_iev)
-        tracks = idea_track_to_features(prop_data, local_iev, b_field)
+        if fitted:
+            selection = fitted_track_selection(prop_data, local_iev, b_field)
+            tracks = idea_track_to_features(prop_data, local_iev, b_field, selection=selection)
+            gp_to_track, radii, hit_counts = fitted_track_truth(prop_data, local_iev, collection_ids, selection[0])
+            tracks = awkward.Record({name: radii if name == "radiusOfInnermostHit" else tracks[name] for name in tracks.fields})
+            preferred_tracks = preferred_track_representatives(gp_to_track, tracks, hit_counts)
+            raw_track_count = len(prop_data[track_collection][local_iev][f"{track_collection}.type"])
+        else:
+            tracks = idea_track_to_features(prop_data, local_iev, b_field, coll=track_collection)
+            gp_to_track = _idea_relation(prop_data, "TracksFromGenParticlesAssociation", local_iev)
+            raw_track_count = len(tracks["type"])
+            preferred_tracks = None
         clusters = idea_cluster_to_features(prop_data, local_iev, cell_collection_id)
-        gp_to_track = _idea_relation(prop_data, "TracksFromGenParticlesAssociation", local_iev)
         gp_to_cluster = _idea_relation(prop_data, "ClusterMCParticleLinks", local_iev)
-        # Propagate reconstructed-object links from generator descendants to
-        # their status-1 ancestor, matching the existing target convention.
-        #
-        # FIXME(IDEA target semantics): this is physically appropriate for
-        # calorimeter shower fragments, but not for choosing a representative
-        # track.  A charged secondary from an interaction or decay can have a
-        # different charge and unrelated momentum, yet the argmax/first-object
-        # logic below can label it with the ancestor's charge and four-momentum.
-        # Keep descendant tracks as supporting elements owned by the ancestor
-        # (shared particle_number), but select particle representatives only
-        # from direct status-1 track links, falling back to a cluster or object
-        # query when no direct track exists.  This requires separate ownership
-        # and representative relations plus a loss that uses supporting-element
-        # membership instead of treating every non-representative as noise.
-        gp_to_cluster, gp_to_track = add_daughters_to_status1(gen, gp_to_cluster, gp_to_track)
+        # Shower descendants can belong to a primary calorimeter target. A fitted
+        # secondary track must not acquire an ancestor's charge or four-momentum.
+        if fitted:
+            empty_relation = (np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64), np.empty(0))
+            gp_to_cluster, _ = add_daughters_to_status1(gen, gp_to_cluster, empty_relation)
+        else:
+            # Preserve historical proxy target semantics only in explicit legacy mode.
+            gp_to_cluster, gp_to_track = add_daughters_to_status1(gen, gp_to_cluster, gp_to_track)
 
         n_gp, n_track, n_cluster = (
             len(gen["PDG"]),
@@ -1630,7 +1711,7 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
             new_gp = old_to_new[int(old_gp)]
             pn = gen_matrix[new_gp, particle_feature_order.index("particle_number")]
             ytrack[it, particle_feature_order.index("particle_number")] = pn
-            if old_gp not in used:
+            if old_gp not in used and (preferred_tracks is None or preferred_tracks.get(int(old_gp)) == it):
                 ytrack[it] = gen_matrix[new_gp]
                 ytrack[it, 0] = map_neutral_to_charged(map_pdgid_to_candid(ytrack[it, 0], ytrack[it, 1]))
                 used.add(int(old_gp))
@@ -1681,6 +1762,16 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
             {
                 "X_track": xtrack,
                 "X_cluster": xcluster,
+                "metadata_track_source": TRACK_SOURCE if fitted else PROXY_TRACK_SOURCE,
+                "metadata_track_collection": track_collection,
+                "metadata_track_quality_policy": TRACK_QUALITY_POLICY if fitted else "legacy_proxy",
+                "metadata_track_truth_policy": TRACK_TRUTH_POLICY if fitted else "legacy_proxy",
+                "metadata_track_truth_min_purity": TRACK_TRUTH_MIN_PURITY if fitted else 0.0,
+                "metadata_tracks_raw": raw_track_count,
+                "metadata_tracks_rejected_quality": raw_track_count - n_track,
+                "metadata_tracks_truth_matched": len(gp_to_track[0]),
+                "metadata_candidate_source": "target_oracle",
+                "metadata_suitable_for_physics": False,
                 "X_hit_tracker": empty_x_hit,
                 "X_hit_calo": empty_x_hit,
                 "ytarget_track": ytrack,
@@ -1706,44 +1797,82 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
             ofn,
         )
         print(
-            f"idea_postprocessing: parquet write completed in {time.monotonic() - write_started:.1f}s; " f"total={time.monotonic() - started:.1f}s",
+            f"idea_postprocessing: parquet write completed in {time.monotonic() - write_started:.1f}s; total={time.monotonic() - started:.1f}s",
             flush=True,
         )
 
 
-def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
+def _validate_cached_idea_tracks(filename: str, track_source: str) -> None:
+    if track_source not in {"fitted", "truth_seeded"}:
+        raise ValueError(f"Unknown IDEA track source: {track_source}")
+    expected = TRACK_SOURCE if track_source == "fitted" else PROXY_TRACK_SOURCE
+    cached = awkward.from_parquet(filename)
+    try:
+        validate_track_provenance(cached, expected)
+    except ValueError as error:
+        raise ValueError("Cached IDEA parquet has incompatible track provenance. Choose a new output directory or regenerate it.") from error
 
-    # output exists, do not recreate
-    if os.path.isfile(ofn) and num_events == -1 and first_event == 0:
-        print("{} exists".format(ofn))
-        return
 
-    if detector == "idea":
-        process_one_file_idea(fn, ofn, first_event, num_events)
-        return
+def _file_digest(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
-    print("loading {}".format(fn))
-    fi = uproot.open(fn)
-    arrs = fi["events"]
 
-    # map collection ID name to numerical key
-    collectionIDs = {
-        k: v
-        for k, v in zip(
-            fi.get("podio_metadata").arrays("events___CollectionTypeInfo/events___CollectionTypeInfo.name")[
-                "events___CollectionTypeInfo/events___CollectionTypeInfo.name"
-            ][0],
-            fi.get("podio_metadata").arrays("events___CollectionTypeInfo/events___CollectionTypeInfo.collectionID")[
-                "events___CollectionTypeInfo/events___CollectionTypeInfo.collectionID"
-            ][0],
-        )
+def _ild_file_provenance(filename):
+    code_files = [
+        Path(__file__),
+        Path(__file__).with_name("ild.py"),
+        Path(__file__).parents[1] / "target_building.py",
+        Path(__file__).parents[2] / "conf.py",
+    ]
+    return {
+        **ILD_PROVENANCE,
+        "metadata_input_file": Path(filename).name,
+        "metadata_input_sha256": _file_digest(filename),
+        "metadata_postprocessor_sha256": hashlib.sha256("".join(_file_digest(path) for path in code_files).encode()).hexdigest(),
     }
-    collectionIDs_reverse = {v: k for (k, v) in collectionIDs.items()}
-    cellid_encodings = get_cellid_encodings(fi)
-    if detector == "maia" and not cellid_encodings:
-        print("MAIA has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero); use track/cluster inputs only.")
 
-    prop_data = arrs.arrays(
+
+def _validate_cached_ild_tracks(filename, source):
+    expected_fields = _ild_file_provenance(source)
+    try:
+        cached = awkward.from_parquet(filename, columns=list(expected_fields))
+        for field, expected in expected_fields.items():
+            values = awkward.to_list(cached[field])
+            if not isinstance(values, list) or not values or any(value != expected for value in values):
+                raise ValueError(f"Incompatible {field}")
+    except (ValueError, KeyError) as error:
+        raise ValueError(f"Cached ILD parquet {filename} has incompatible provenance; regenerate it") from error
+
+
+def _tracker_link_branches(relations, include_collection_ids=False):
+    branches = []
+    for relation, sim in relations.values():
+        for side in ("from", "to"):
+            branches.append(f"_{relation}_{side}/_{relation}_{side}.index")
+            if include_collection_ids:
+                branches.append(f"_{relation}_{side}/_{relation}_{side}.collectionID")
+        branches.extend([f"_{sim}_particle/_{sim}_particle.{field}" for field in ("index", "collectionID")])
+    return list(dict.fromkeys(branches))
+
+
+def _validate_ild_collection_ids(tree, links, collection_ids, track_collection):
+    for side, expected in (("from", track_collection), ("to", mc_coll)):
+        actual = awkward.flatten(links[f"_SiTracksMCTruthLink_{side}/_SiTracksMCTruthLink_{side}.collectionID"])
+        if not bool(awkward.all(actual == collection_ids[expected])):
+            raise ValueError(f"ILD track truth links have unexpected {side} collection IDs")
+    for kind, expected in (("tracks", track_collection), ("clusters", "PandoraClusters")):
+        actual = tree[f"_PandoraPFOs_{kind}/_PandoraPFOs_{kind}.collectionID"].array()
+        if not bool(awkward.all(awkward.flatten(actual) == collection_ids[expected])):
+            raise ValueError(f"PandoraPFOs reference unexpected {kind} collections")
+
+
+def _read_pf_properties(tree, detector_cfg, include_track_refs=False):
+    track_coll = detector_cfg.track_collection
+    return tree.arrays(
         [
             mc_coll,
             f"{mc_coll}.PDG",
@@ -1763,9 +1892,115 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             "_PandoraClusters_hits/_PandoraClusters_hits.index",
             "_PandoraClusters_hits/_PandoraClusters_hits.collectionID",
             "PandoraPFOs",
-            f"{track_coll}_dQdx",
+        ]
+        + ([f"{track_coll}_dQdx"] if detector_cfg.track_has_dqdx else [])
+        + ([f"_{track_coll}_trackerHits/_{track_coll}_trackerHits.{field}" for field in ("index", "collectionID")] if include_track_refs else [])
+    )
+
+
+def _read_track_truth_links(tree, detector_cfg, collectionIDs, validate_ild=False):
+    track_coll = detector_cfg.track_collection
+    truth_collection = detector_cfg.track_truth_collection
+    sitrack_links = tree.arrays(
+        [
+            f"{truth_collection}.weight",
+            f"_{truth_collection}_to/_{truth_collection}_to.collectionID",
+            f"_{truth_collection}_to/_{truth_collection}_to.index",
+            f"_{truth_collection}_from/_{truth_collection}_from.collectionID",
+            f"_{truth_collection}_from/_{truth_collection}_from.index",
         ]
     )
+    sitrack_links = awkward.Record({k.replace(truth_collection, "SiTracksMCTruthLink"): sitrack_links[k] for k in sitrack_links.fields})
+    if validate_ild:
+        _validate_ild_collection_ids(tree, sitrack_links, collectionIDs, track_coll)
+
+    return sitrack_links
+
+
+def _assign_target_jets(ytarget_track, ytarget_cluster):
+    # cluster target particles to jets, save per-particle jet index
+    ytarget = np.concatenate([ytarget_track, ytarget_cluster], axis=0)
+    ytarget_constituents = -1 * np.ones(len(ytarget), dtype=np.int64)
+    valid = ytarget[:, 0] != 0
+    # jet constituent indices enumerate the selected rows; map them back to rows before masking
+    index_mapping = np.flatnonzero(valid)
+    ytarget = ytarget[valid]
+    ytarget_p4 = ytarget[:, 2:7]
+    ytarget_p4 = vector.awk(
+        awkward.zip(
+            {
+                "pt": ytarget_p4[:, 0],
+                "eta": ytarget_p4[:, 1],
+                "phi": np.arctan2(ytarget_p4[:, 2], ytarget_p4[:, 3]),
+                "energy": ytarget_p4[:, 4],
+            }
+        )
+    )
+    target_jets, target_jets_indices = compute_jets(ytarget_p4, with_indices=True)
+    sorted_jet_idx = awkward.argsort(target_jets.pt, axis=-1, ascending=False).to_list()
+    target_jets_indices = target_jets_indices.to_list()
+    for jet_idx in sorted_jet_idx:
+        jet_constituents = [index_mapping[idx] for idx in target_jets_indices[jet_idx]]  # map back to constituent index *before* masking
+        ytarget_constituents[jet_constituents] = jet_idx
+    ytarget_track_constituents = ytarget_constituents[: len(ytarget_track)]
+    ytarget_cluster_constituents = ytarget_constituents[len(ytarget_track) :]
+    ytarget_track[:, particle_feature_order.index("jet_idx")] = ytarget_track_constituents
+    ytarget_cluster[:, particle_feature_order.index("jet_idx")] = ytarget_cluster_constituents
+
+    return target_jets
+
+
+def process_one_file(
+    fn: str,
+    ofn: str,
+    detector: str,
+    first_event: int = 0,
+    num_events: int = -1,
+    idea_track_source: str = "fitted",
+) -> None:
+    # output exists, do not recreate
+    if os.path.isfile(ofn) and num_events == -1 and first_event == 0:
+        if detector == "idea":
+            _validate_cached_idea_tracks(ofn, idea_track_source)
+        elif detector == "ild":
+            _validate_cached_ild_tracks(ofn, fn)
+        print("{} exists".format(ofn))
+        return
+
+    if detector == "idea":
+        process_one_file_idea(fn, ofn, first_event, num_events, track_source=idea_track_source)
+        return
+
+    detector_cfg = EDM4HEP.DETECTORS[detector]
+    track_coll = detector_cfg.track_collection
+    relations = detector_cfg.tracker_relations or {col: (rel, tracker_hit_sim[col]) for col, rel in tracker_hit_relations.items()}
+    ild_provenance = _ild_file_provenance(fn) if detector == "ild" else {}
+
+    print("loading {}".format(fn))
+    fi = uproot.open(
+        fn,
+        **({"handler": uproot.source.file.MemmapSource} if os.path.isfile(fn) else {}),
+    )
+    arrs = fi["events"]
+
+    # map collection ID name to numerical key
+    collectionIDs = {
+        k: v
+        for k, v in zip(
+            fi.get("podio_metadata").arrays("events___CollectionTypeInfo/events___CollectionTypeInfo.name")[
+                "events___CollectionTypeInfo/events___CollectionTypeInfo.name"
+            ][0],
+            fi.get("podio_metadata").arrays("events___CollectionTypeInfo/events___CollectionTypeInfo.collectionID")[
+                "events___CollectionTypeInfo/events___CollectionTypeInfo.collectionID"
+            ][0],
+        )
+    }
+    collectionIDs_reverse = {v: k for (k, v) in collectionIDs.items()}
+    cellid_encodings = get_cellid_encodings(fi)
+    if detector == "maia" and not cellid_encodings:
+        print("MAIA has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero); use track/cluster inputs only.")
+
+    prop_data = _read_pf_properties(arrs, detector_cfg, detector == "ild")
     calohit_links = arrs.arrays(
         [
             "CalohitMCTruthLink.weight",
@@ -1796,32 +2031,9 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         calohit_links[_from_colid_key] = awkward.Array(
             [[_digi_to_rec_colid.get(int(x), int(x)) for x in ev] for ev in calohit_links[_from_colid_key]]
         )
-    sitrack_links = arrs.arrays(
-        [
-            "SiTracksMCTruthLink.weight",
-            "_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.collectionID",
-            "_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index",
-            "_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.collectionID",
-            "_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index",
-        ]
-    )
+    sitrack_links = _read_track_truth_links(arrs, detector_cfg, collectionIDs, detector == "ild")
 
-    tracker_link_branches = []
-    for rel_name in tracker_hit_relations.values():
-        tracker_link_branches.extend(
-            [
-                f"_{rel_name}_from/_{rel_name}_from.index",
-                f"_{rel_name}_to/_{rel_name}_to.index",
-            ]
-        )
-    for sim_name in tracker_hit_sim.values():
-        tracker_link_branches.extend(
-            [
-                f"_{sim_name}_particle/_{sim_name}_particle.index",
-                f"_{sim_name}_particle/_{sim_name}_particle.collectionID",
-            ]
-        )
-    tracker_links = arrs.arrays(tracker_link_branches)
+    tracker_links = arrs.arrays(_tracker_link_branches(relations, detector == "ild"))
     mcp_id = collectionIDs[mc_coll]
 
     # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
@@ -1829,10 +2041,6 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
-    try:
-        detector_cfg = EDM4HEP.DETECTORS[detector]
-    except KeyError:
-        raise ValueError(f"Unknown detector type: {detector}. Available detectors: {list(EDM4HEP.DETECTORS.keys())}")
     b_field = detector_cfg.b_field
     hit_collections = detector_cfg.hit_collections
     # a muon collection that is not read would leave the cluster muon features silently zero
@@ -1896,7 +2104,6 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         num_events = arrs.num_entries - first_event
 
     for iev in tqdm.tqdm(range(first_event, first_event + num_events), total=num_events):
-
         # get the reco particles
         reco_arr = get_reco_properties(prop_data, iev)
 
@@ -1938,12 +2145,20 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
                 cellid_encodings,
                 detector_cfg.require_cellid_encoding,
                 muon_collection_ids,
+                track_coll,
+                relations,
+                detector_cfg.track_has_dqdx,
+                detector == "ild",
             )
         except ValueError as e:
+            if detector == "ild":
+                raise
             print(f"Skipping event {iev} because it has no visible particles: {e}")
             continue
 
         # find the reconstructable genparticles and associate them to the best track/cluster
+        premerge_energy = float(awkward.sum(gpdata.gen_features["energy"]))
+        premerge_particles = len(gpdata.gen_features["energy"])
         (
             gpdata_cleaned,
             gp_to_obj,
@@ -1963,7 +2178,12 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
 
         # for each reco particle, find the tracks and clusters associated with it
         # construct track/cluster -> recoparticle maps
-        track_to_rp, cluster_to_rp = get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track[iev], idx_rp_to_cluster[iev])
+        if detector == "ild":
+            track_to_rp, cluster_to_rp = pfo_representatives(
+                reco_arr, idx_rp_to_track[iev], idx_rp_to_cluster[iev], gpdata_cleaned.track_features["p"], gpdata_cleaned.cluster_features["energy"]
+            )
+        else:
+            track_to_rp, cluster_to_rp = get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track[iev], idx_rp_to_cluster[iev])
 
         # get the track/cluster/hit -> genparticle map (exclusive)
         track_to_gp_exclusive_map = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
@@ -2107,37 +2327,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         sanitize(ycand_track)
         sanitize(ycand_cluster)
 
-        # cluster target particles to jets, save per-particle jet index
-        ytarget = np.concatenate([ytarget_track, ytarget_cluster], axis=0)
-        ytarget_constituents = -1 * np.ones(len(ytarget), dtype=np.int64)
-        valid = ytarget[:, 0] != 0
-        # save mapping of index after masking -> index before masking as numpy array
-        # inspired from:
-        # https://stackoverflow.com/questions/432112/1044443#comment54747416_1044443
-        cumsum = np.cumsum(valid) - 1
-        _, index_mapping = np.unique(cumsum, return_index=True)
-        ytarget = ytarget[valid]
-        ytarget_p4 = ytarget[:, 2:7]
-        ytarget_p4 = vector.awk(
-            awkward.zip(
-                {
-                    "pt": ytarget_p4[:, 0],
-                    "eta": ytarget_p4[:, 1],
-                    "phi": np.arctan2(ytarget_p4[:, 2], ytarget_p4[:, 3]),
-                    "energy": ytarget_p4[:, 4],
-                }
-            )
-        )
-        target_jets, target_jets_indices = compute_jets(ytarget_p4, with_indices=True)
-        sorted_jet_idx = awkward.argsort(target_jets.pt, axis=-1, ascending=False).to_list()
-        target_jets_indices = target_jets_indices.to_list()
-        for jet_idx in sorted_jet_idx:
-            jet_constituents = [index_mapping[idx] for idx in target_jets_indices[jet_idx]]  # map back to constituent index *before* masking
-            ytarget_constituents[jet_constituents] = jet_idx
-        ytarget_track_constituents = ytarget_constituents[: len(ytarget_track)]
-        ytarget_cluster_constituents = ytarget_constituents[len(ytarget_track) :]
-        ytarget_track[:, particle_feature_order.index("jet_idx")] = ytarget_track_constituents
-        ytarget_cluster[:, particle_feature_order.index("jet_idx")] = ytarget_cluster_constituents
+        target_jets = _assign_target_jets(ytarget_track, ytarget_cluster)
 
         this_ev: EventRecord = {
             # if we want to train on clusters
@@ -2159,6 +2349,16 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         }
         ret.append(this_ev)
 
+        if detector == "ild":
+            this_ev.update(
+                **ild_provenance,
+                metadata_event_index=iev,
+                metadata_premerge_energy=premerge_energy,
+                metadata_premerge_particles=premerge_particles,
+                metadata_retained_particles=n_gps,
+                metadata_target_energy=float(np.sum(ytarget_track[:, 6]) + np.sum(ytarget_cluster[:, 6])),
+            )
+
     if len(ret) == 0:
         return
 
@@ -2179,6 +2379,12 @@ def parse_args() -> Any:
         choices=list(EDM4HEP.DETECTORS.keys()),
         help=f"detector scenario from mlpf/conf.py ({', '.join(EDM4HEP.DETECTORS.keys())})",
     )
+    parser.add_argument(
+        "--idea-track-source",
+        choices=["fitted", "truth_seeded"],
+        default="fitted",
+        help="IDEA track inputs; proxy tracks require explicit legacy mode",
+    )
     parser.add_argument("--first-event", type=int, default=0, help="first event to process")
     parser.add_argument("--num-events", type=int, default=-1, help="number of events to process")
 
@@ -2187,18 +2393,17 @@ def parse_args() -> Any:
 
 
 def process(args: Any) -> None:
-
     if os.path.isdir(args.input) is True:
         print("Will process all files in " + args.input)
 
         flist = glob.glob(args.input + "/*.root")
         for infile in flist:
             outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-            process_one_file(infile, outfile, args.detector, args.first_event, args.num_events)
+            process_one_file(infile, outfile, args.detector, args.first_event, args.num_events, getattr(args, "idea_track_source", "fitted"))
     else:
         infile = args.input
         outfile = os.path.join(args.outpath, os.path.basename(infile).split(".")[0] + ".parquet")
-        process_one_file(infile, outfile, args.detector, args.first_event, args.num_events)
+        process_one_file(infile, outfile, args.detector, args.first_event, args.num_events, getattr(args, "idea_track_source", "fitted"))
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ def test_jet_comparison_wraps_phi_without_response_cut():
     np.testing.assert_array_equal(values["gen_matched"], [True, False])
     np.testing.assert_array_equal(values["target_matched"], [True])
     np.testing.assert_allclose(values["pt_ratio"], [3.0])
+    np.testing.assert_allclose(values["energy_ratio"], [35.0 / 12.0])
     np.testing.assert_array_equal(values["matched_gen_pt"], [10.0])
 
 

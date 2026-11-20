@@ -20,11 +20,15 @@ rule all:
     input:
         expand('snakemake_jobs/clic/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
         expand('snakemake_jobs/clic/tfds_hit/tfds_hit_ww_fullhad_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_z_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_z_tautau_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
 rule tfds_hit_task:
     input:
         "snakemake_jobs/clic/post/post_{sample}_all.done"
+    params:
+        workspace='/local/joosep/mlpf/clic/v1.4.0/50k', versions={'ttbar': '3.3.0', 'ww_fullhad': '3.3.0', 'qq': '3.3.0', 'z_qq': '3.3.0', 'z_tautau': '3.3.0'}
     output:
         "snakemake_jobs/clic/tfds_hit/tfds_hit_{sample}_tfds_hit_{config}.done"
     resources:
@@ -36,7 +40,7 @@ rule tfds_hit_task:
 
 rule tfds_hit:
     input:
-        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_hit/tfds_hit_ww_fullhad_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_hit/tfds_hit_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_hit/tfds_hit_ww_fullhad_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_hit/tfds_hit_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_hit/tfds_hit_z_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_hit/tfds_hit_z_tautau_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     output:
         "snakemake_jobs/clic/tfds_hit/all.done"
     shell:

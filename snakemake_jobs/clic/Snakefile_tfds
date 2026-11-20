@@ -20,11 +20,15 @@ rule all:
     input:
         expand('snakemake_jobs/clic/tfds/tfds_ttbar_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
         expand('snakemake_jobs/clic/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        expand('snakemake_jobs/clic/tfds/tfds_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        expand('snakemake_jobs/clic/tfds/tfds_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds/tfds_z_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds/tfds_z_tautau_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
 rule tfds_task:
     input:
         "snakemake_jobs/clic/post/post_{sample}_all.done"
+    params:
+        workspace='/local/joosep/mlpf/clic/v1.4.0/50k', versions={'ttbar': '3.4.0', 'ww_fullhad': '3.4.0', 'qq': '3.4.0', 'z_qq': '3.4.0', 'z_tautau': '3.4.0'}
     output:
         "snakemake_jobs/clic/tfds/tfds_{sample}_tfds_{config}.done"
     resources:
@@ -36,7 +40,7 @@ rule tfds_task:
 
 rule tfds:
     input:
-        expand('snakemake_jobs/clic/tfds/tfds_ttbar_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds/tfds_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        expand('snakemake_jobs/clic/tfds/tfds_ttbar_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds/tfds_ww_fullhad_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds/tfds_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds/tfds_z_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds/tfds_z_tautau_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     output:
         "snakemake_jobs/clic/tfds/all.done"
     shell:

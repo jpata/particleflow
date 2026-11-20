@@ -8,7 +8,7 @@ Start with the input representation. Each detector page lists its physics sample
 
 | Input representation | Detector or dataset family | Typical use |
 |---|---|---|
-| [Tracks and clusters](track-cluster.md) | [CMS](cms.md), [CLD](cld.md), [CLICdet](clic.md), [ColliderML](colliderml.md), [MAIA](maia.md), [IDEA](idea.md) | Reconstructed tracks and calorimeter clusters; the default starting point for CMS, CLD, and CLIC. |
+| [Tracks and clusters](track-cluster.md) | [CMS](cms.md), [CLD](cld.md), [CLICdet](clic.md), [ColliderML](colliderml.md), [MAIA](maia.md), [IDEA](idea.md), [ILD@FCC-ee](ild.md) | Reconstructed tracks and calorimeter clusters; the default starting point for CMS, CLD, and CLIC. |
 | [Hits](hit-based.md) | [CLD](cld-hits.md), [CLICdet](clic-hits.md), [ColliderML](colliderml-hits.md) | Tracker and calorimeter measurements for dedicated hit-model research. |
 
 The catalog includes maintained recipes and explicitly identified partial workflows. A builder's existence does not imply a trained model, physics validation, or public download. Detector pages identify those boundaries. Dataset schema, Python package, and model artifact versions are independent.
@@ -20,7 +20,7 @@ input representations and reference particles.
 
 ## Configuration partitions and event splits
 
-CMS, CLD, CLIC, MAIA, and ColliderML recipes use configuration partitions `1` through `10`; IDEA uses configuration `1`. A configuration partition contains its own `train` and `test` event splits: the number identifies the partition, while `train` or `test` identifies the event split. The standard ten-partition model recipes combine all ten partitions. Configuration `1` provides a one-partition subset for a small experiment; the configured training corpus spans all ten.
+CMS, CLD, CLIC, MAIA, and ColliderML recipes use configuration partitions `1` through `10`; IDEA and ILD@FCC-ee use configuration `1`. A configuration partition contains its own `train` and `test` event splits: the number identifies the partition, while `train` or `test` identifies the event split. The standard ten-partition model recipes combine all ten partitions. Configuration `1` provides a one-partition subset for a small experiment; the configured training corpus spans all ten.
 
 The on-disk layout is:
 
@@ -38,7 +38,7 @@ Pass the detector-level directory containing the dataset-name directories as `--
 
 ## Published availability
 
-The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) includes metadata, feature definitions, and all declared split shards for these current-recipe selections:
+The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) includes metadata, feature definitions, and all declared split shards for these selections:
 
 | Representation | Detector | Published datasets | Version | Configuration |
 |---|---|---|---|---|
@@ -48,6 +48,11 @@ The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/
 | Tracks and clusters | IDEA | `idea_edm_{ttbar,ww_fullhad,qq}_pf` | 0.2.1 | 1 |
 | Hits | CLD | `cld_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
 | Hits | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
+
+The current recipes use CLD/CLIC track/cluster **3.4.0**, CLD/CLIC hit **3.3.0**,
+IDEA **0.5.0** (measured GGTF/GenFit tracks) and ILD **0.2.0**, produced by the
+[v1.4.0 campaign](key4hep-50k.md); the published entries above describe the
+previous campaigns.
 
 Treat the [live Hub tree](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) as the source of truth for data availability. The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects.
 

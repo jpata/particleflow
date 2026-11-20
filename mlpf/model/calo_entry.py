@@ -42,6 +42,9 @@ ECAL_GEOMETRY_MM = {
     Dataset.COLLIDERML.value: ((1250.0, 1500.0), (3200.0, 3450.0)),
     Dataset.CLIC.value: ((1500.0, 1702.0), (2307.0, 2509.0)),
     Dataset.CLD.value: ((2150.0, 2352.0), (2307.0, 2509.0)),
+    # ILD = k4geo ILD_FCCee_v02: Ecal_inner_radius = TPC_outer_radius (1769.8) + Ecal_Tpc_gap (35),
+    # Ecal_barrel_thickness 223.2, EcalEndcap_min_z = TPC_Ecal_Hcal_barrel_halfZ (2350) + 61.8, endcap as deep as the barrel.
+    Dataset.ILD.value: ((1804.8, 2028.0), (2411.8, 2635.0)),
 }
 # (barrel radius, endcap |z|) [mm] tracks are extrapolated to: the middle of the ECAL, where the cluster centroids sit
 # (shower depth). The front face puts tracks further from their clusters: on CLIC ttbar 8% less cluster energy has a
@@ -54,14 +57,14 @@ CALO_ENTRY_GEOMETRY_MM = {dataset: (sum(radii) / 2, sum(z) / 2) for dataset, (ra
 CALO_ENTRY_GEOMETRY_MM[Dataset.IDEA.value] = (2500.0, 2500.0)
 
 # PF datasets whose tracks carry the helix parameters, by name in X_FEATURES.
-HELIX_DATASETS = (Dataset.COLLIDERML.value, Dataset.CLIC.value, Dataset.CLD.value, Dataset.IDEA.value, Dataset.MAIA.value)
+HELIX_DATASETS = (Dataset.COLLIDERML.value, Dataset.CLIC.value, Dataset.CLD.value, Dataset.IDEA.value, Dataset.ILD.value, Dataset.MAIA.value)
 HELIX_COLUMNS = ("z0", "tanlambda", "omega", "d0")
 # Datasets whose tracks carry their calorimeter entry (eta, phi) as features.
 PRECOMPUTED_COLUMNS = {Dataset.CMS.value: ("eta_ecal", "phi_ecal")}
 
 CLUSTER_ELEMTYPE = 2
 # key4hep PF datasets: cluster eta/phi are Pandora's shower-axis direction, the centroid is in position.x/y/z.
-CENTROID_DATASETS = (Dataset.CLIC.value, Dataset.CLD.value, Dataset.IDEA.value, Dataset.MAIA.value)
+CENTROID_DATASETS = (Dataset.CLIC.value, Dataset.CLD.value, Dataset.IDEA.value, Dataset.ILD.value, Dataset.MAIA.value)
 CENTROID_COLUMNS = ("position.x", "position.y", "position.z")
 
 

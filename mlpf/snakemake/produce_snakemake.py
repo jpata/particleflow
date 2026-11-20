@@ -1,6 +1,7 @@
 import os
 import stat
 import argparse
+import shlex
 from mlpf.utils import load_spec, resolve_path
 
 # Configuration
@@ -24,10 +25,10 @@ def write_bash_script(path, content, project_root=None, tmpdir=None):
         f.write("export OPENBLAS_NUM_THREADS=1\n")
         f.write("export VECLIB_MAXIMUM_THREADS=1\n")
         if tmpdir:
-            f.write(f"export TMPDIR={tmpdir}\n")
-            f.write(f"export TEMPDIR={tmpdir}\n")
-            f.write(f"export TEMP={tmpdir}\n")
-            f.write(f"export TMP={tmpdir}\n")
+            f.write(f'export TMPDIR="{tmpdir}/job_${{SLURM_JOB_ID:-manual-$$}}"\n')
+            f.write("export TEMPDIR=$TMPDIR\n")
+            f.write("export TEMP=$TMPDIR\n")
+            f.write("export TMP=$TMPDIR\n")
             f.write("mkdir -p $TMPDIR\n")
         if project_root:
             f.write(f"cd {project_root}\n")
@@ -77,14 +78,17 @@ def get_resource_str(executor, mem, partition, runtime, threads=1, gpus=0, gpu_t
     return ", ".join([f"{k}={v}" for k, v in res.items()])
 
 
-def main():  # noqa: C901
+def main(argv=None, *, spec=None):  # noqa: C901
     parser = argparse.ArgumentParser()
     parser.add_argument("--production", type=str, default="cms_2025_main", help="Production name from spec file")
     parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
     parser.add_argument("--allow-partial", action="store_true", help="Allow partial production by only post-processing successful gen jobs")
-    args = parser.parse_args()
+    parser.add_argument("--jobs-root", default=LOCAL_JOBS_DIR, help="Root for generated scripts and completion markers")
+    parser.add_argument("--steps", nargs="+", choices=["gen", "post", "tfds", "tfds_hit", "train"], help="Stages to include")
+    args = parser.parse_args(argv)
 
-    spec = load_spec(SPEC_FILE)
+    if spec is None:
+        spec = load_spec(SPEC_FILE)
 
     if "cms" in args.production:
         req_steps = ["gen", "post", "tfds", "train"]
@@ -100,11 +104,15 @@ def main():  # noqa: C901
         raise ValueError(f"Production {args.production} not found in {SPEC_FILE}")
 
     prod_config = spec["productions"][args.production]
+    allow_partial = args.allow_partial and prod_config.get("allow_partial", True)
     prod_type = prod_config.get("type", "cms")
     if prod_config.get("generation_only", False):
         req_steps = ["gen"]
     elif prod_config.get("dataset_only", False):
         req_steps = ["post", "tfds", "tfds_hit"]
+
+    if args.steps is not None:
+        req_steps = args.steps
 
     # Determine models to train
     models_to_train = []
@@ -138,6 +146,7 @@ def main():  # noqa: C901
     mem_post = memory_config.get("post", 2000)
     mem_tfds = memory_config.get("tfds", 4000)
     mem_train = memory_config.get("train", 8000)
+    gen_threads = prod_config.get("threads", {}).get("gen", 1)
 
     # Resolve workspace dir and TFDS dir
     workspace_dir = resolve_path(prod_config["workspace_dir"], spec)
@@ -150,8 +159,8 @@ def main():  # noqa: C901
     os.makedirs(tmpdir, exist_ok=True)
 
     # Apptainer/Singularity configuration
-    main_container_img = spec["project"].get("container")
-    gen_container_img = prod_config.get("gen_container", main_container_img)
+    main_container_img = resolve_path(spec["project"].get("container", ""), spec)
+    gen_container_img = resolve_path(prod_config.get("gen_container", main_container_img), spec)
 
     bind_mounts = spec["project"].get("bind_mounts", [])
     bind_args = "--writable-tmpfs"
@@ -172,7 +181,7 @@ def main():  # noqa: C901
     tfds_hit_mappings = prod_config.get("tfds_hit_mapping", {})
 
     # Update jobs dir to include production name to avoid conflicts
-    jobs_dir = f"{LOCAL_JOBS_DIR}/{args.production}"
+    jobs_dir = f"{args.jobs_root}/{args.production}"
 
     ensure_dir(f"{jobs_dir}/gen")
     ensure_dir(f"{jobs_dir}/post")
@@ -238,6 +247,9 @@ def main():  # noqa: C901
         gen_cmd = f"bash {gen_script} {process_name} $seed {pu_type}"
         if copy_step2:
             gen_cmd += " True"
+        if prod_type == "key4hep":
+            # Keep the runner's exit status while dropping framework DEBUG records.
+            gen_cmd = f"(set -o pipefail; {gen_cmd} 2>&1 | " r"sed -u -E '/^[^[:space:]]+[[:space:]]+(DEBUG|VERBOSE)[[:space:]]/d')"
         if args.ignore_failures:
             gen_cmd += " || echo 'WARNING: Generation failed'"
 
@@ -245,10 +257,12 @@ def main():  # noqa: C901
             f"export OUTDIR={gen_base_dir}/"
             + f" && export CONFIG_DIR={config_dir}"
             + (f" && export CMSSWDIR={cmssw_dir}" if cmssw_dir else "")
-            + f' && export WORKDIR="{scratch_root}/{process_name}_${{seed}}_${{SLURM_JOB_ID:-manual-$$}}"'
+            + f' && export WORKDIR="{scratch_root}/{args.production}_{process_name}_${{seed}}_${{SLURM_JOB_ID:-manual-$$}}"'
             + f" && export NEV={events_per_job}"
             + (f" && export PROGRESS_INTERVAL={progress_interval}" if progress_interval is not None else "")
         )
+        for name, value in prod_config.get("gen_environment", {}).items():
+            exports += f" && export {name}={shlex.quote(resolve_path(str(value), spec))}"
         if prod_type == "key4hep":
             compact_file = prod_config.get("compact_file")
             if compact_file:
@@ -260,17 +274,40 @@ def main():  # noqa: C901
             if pythia_card:
                 exports += f' && export CLD_PYTHIA_CARD="{resolve_path(pythia_card, spec)}"'
 
+        validate_events = prod_config.get("validate_events", False)
+        root_check_setup = (
+            'source /cvmfs/sw.hsf.org/key4hep/setup.sh -r "${KEY4HEP_RELEASE:-${KEY4HEP_VERSION:-2026-04-08}}" && ' if prod_type == "key4hep" else ""
+        )
+        gen_event_check = (
+            f"({root_check_setup}python3 -c 'import ROOT,sys; f=ROOT.TFile.Open(sys.argv[1]); "
+            f'assert f and not f.IsZombie(), sys.argv[1]; t=f.Get("events"); '
+            f'assert t and t.GetEntries()=={events_per_job}, sys.argv[1]\' "{root_file_proto}")'
+            if validate_events
+            else ""
+        )
+        validate_key4hep = validate_events and prod_type == "key4hep"
+        stage_log_setup = ""
+        if prod_config.get("save_stage_logs", False):
+            log_root = shlex.quote(os.path.join(workspace_dir, "logs", process_name))
+            stage_log_setup = (
+                f'export LOGDIR={log_root}/"$seed/${{SLURM_JOB_ID:-manual-$$}}-${{SLURM_RESTART_COUNT:-0}}"\n'
+                '    mkdir -p -- "$LOGDIR"\n'
+                '    printf "Stage logs: %s\\n" "$LOGDIR"'
+            )
         gen_proto_content = f"""
 start_seed=$1
 for (( i=0; i<{CHUNK_SIZE}; i++ )); do
     seed=$((start_seed + i))
+    {exports if validate_key4hep else ""}
+    {stage_log_setup}
     if [ ! -f {root_file_proto} ]; then
         echo "Generating {root_file_proto}"
-        {exports}
+        {"" if validate_key4hep else exports}
         {gen_cmd}
     else
         echo "Skipping {root_file_proto}, already exists"
     fi
+    {gen_event_check}
 done
 """
         write_bash_script(gen_proto_path, gen_proto_content, project_root=project_root, tmpdir=tmpdir)
@@ -384,7 +421,7 @@ done
         if "post" in req_steps and (sample_key in tfds_mappings or sample_key in tfds_hit_mappings):
             step_data["post"]["targets"].append(f'"{jobs_dir}/post/post_{sample_key}_all.done"')
 
-            if args.allow_partial:
+            if allow_partial:
                 # Dynamically determine which chunks to post-process based on existing gen sentinels
                 post_input = (
                     f'lambda wildcards: expand("{jobs_dir}/post/post_{sample_key}_{{seed}}.done", '
@@ -417,10 +454,13 @@ rule gen:
         "touch {{output}}"
 
 rule gen_task:
+    threads: {gen_threads}
+    params:
+        workspace={workspace_dir!r}
     output:
         "{jobs_dir}/gen/gen_{{sample}}_{{seed}}.done"
     resources:
-        {get_resource_str(executor, mem_gen, cpu_partition, cpu_runtime, slurm_account=slurm_account, tmpdir=tmpdir)}
+        {get_resource_str(executor, mem_gen, cpu_partition, cpu_runtime, threads=gen_threads, slurm_account=slurm_account, tmpdir=tmpdir)}
     container:
         "{gen_container_img}"
     shell:
@@ -462,6 +502,8 @@ rule post:
         "touch {{output}}"
 
 rule post_task:{post_rule_input}
+    params:
+        workspace={workspace_dir!r}
     output:
         "{jobs_dir}/post/post_{{sample}}_{{seed}}.done"
     resources:
@@ -590,7 +632,7 @@ export TEMP=$job_scratch_dir
 export TMP=$job_scratch_dir
 tfds build {builder_path} --config $config_id --data_dir $job_scratch_dir --manual_dir {manual_dir} --overwrite
 echo "Copying from $job_scratch_dir to {tfds_root_dir}"
-cp -r $job_scratch_dir/* {tfds_root_dir}/
+python3 -c 'import shutil,sys; shutil.copytree(sys.argv[1], sys.argv[2], dirs_exist_ok=True)' "$job_scratch_dir" "{tfds_root_dir}"
 """
             write_bash_script(tfds_script_path, cmd, project_root=project_root, tmpdir=tmpdir)
 
@@ -604,8 +646,11 @@ cp -r $job_scratch_dir/* {tfds_root_dir}/
             if "post" in req_steps:
                 tfds_rule_input = f'\n    input:\n        "{jobs_dir}/post/post_{{sample}}_all.done"'
 
+            tfds_versions = {key: value.get("version") for key, value in tfds_mappings.items()}
             step_data[step_name]["rules"] += f"""
 rule {step_name}_task:{tfds_rule_input}
+    params:
+        workspace={workspace_dir!r}, versions={tfds_versions!r}
     output:
         "{jobs_dir}/{step_name}/{step_name}_{{sample}}_{step_name}_{{config}}.done"
     resources:
@@ -737,6 +782,15 @@ rule train_{rule_model_name}:{train_rule_input}
     for step, data in step_data.items():
         if data["targets"] or data["rules"]:
             write_snakefile(f"{jobs_dir}/Snakefile_{step}", data["targets"], data["rules"], tmpdir=tmpdir)
+
+    # The combined graph allows any stage target to build its prerequisites.
+    # The stage-specific Snakefiles remain available for explicitly staged runs.
+    write_snakefile(
+        f"{jobs_dir}/Snakefile",
+        [target for data in step_data.values() for target in data["targets"]],
+        "".join(data["rules"] for data in step_data.values()),
+        tmpdir=tmpdir,
+    )
 
     print(f"Generated Snakemake workflow in {jobs_dir}")
 

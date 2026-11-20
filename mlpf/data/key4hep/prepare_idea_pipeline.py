@@ -9,14 +9,18 @@ import awkward as ak
 from mlpf.heptfds.edm4hep_utils.utils_idea import (
     CANDIDATE_SOURCE,
     TRACK_SOURCE,
+    PROXY_TRACK_SOURCE,
+    validate_track_provenance,
     repair_jet_indices,
 )
 
 
-def prepare_pipeline_file(input_path: str | Path, output_path: str | Path) -> dict[str, int]:
+def prepare_pipeline_file(input_path: str | Path, output_path: str | Path, legacy_proxy: bool = False) -> dict[str, int]:
     input_path = Path(input_path)
     output_path = Path(output_path)
     data = ak.from_parquet(input_path)
+    source = PROXY_TRACK_SOURCE if legacy_proxy else TRACK_SOURCE
+    validate_track_provenance(data, source)
     fields = {field: data[field] for field in data.fields if field not in {"ycand_track", "ycand_cluster"}}
     target_tracks = []
     target_clusters = []
@@ -38,7 +42,7 @@ def prepare_pipeline_file(input_path: str | Path, output_path: str | Path) -> di
     fields["ycand_track"] = ak.Array(target_tracks)
     fields["ycand_cluster"] = ak.Array(target_clusters)
     num_events = len(target_tracks)
-    fields["metadata_track_source"] = ak.Array([TRACK_SOURCE] * num_events)
+    fields["metadata_track_source"] = ak.Array([source] * num_events)
     fields["metadata_candidate_source"] = ak.Array([CANDIDATE_SOURCE] * num_events)
     fields["metadata_suitable_for_physics"] = ak.Array([False] * num_events)
 
@@ -51,8 +55,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", help="Input IDEA parquet")
     parser.add_argument("output", help="Output pipeline-validation parquet")
+    parser.add_argument("--legacy-proxy", action="store_true", help="Explicitly prepare known legacy truth-seeded data; never label it fitted")
     args = parser.parse_args()
-    summary = prepare_pipeline_file(args.input, args.output)
+    summary = prepare_pipeline_file(args.input, args.output, legacy_proxy=args.legacy_proxy)
     print(f"wrote {summary['events']} events to {args.output}; repaired jet_idx={summary['repaired_jet_indices']}")
 
 

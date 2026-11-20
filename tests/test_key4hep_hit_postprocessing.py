@@ -87,12 +87,18 @@ def test_tracker_without_cellid_encoding_raises_by_default():
         hits_to_features(make_hit_data("IBTrackerHits"), 0, "IBTrackerHits", HIT_FEATURES, None)
 
 
-def test_tracker_without_cellid_encoding_falls_back_to_zero_when_not_required():
-    features = hits_to_features(make_hit_data("IBTrackerHits"), 0, "IBTrackerHits", HIT_FEATURES, None, require_cellid_encoding=False)
+@pytest.mark.parametrize("encoding", [None, "", " "])
+def test_tracker_without_cellid_encoding_falls_back_to_zero_when_not_required(encoding):
+    features = hits_to_features(make_hit_data("IBTrackerHits"), 0, "IBTrackerHits", HIT_FEATURES, encoding, require_cellid_encoding=False)
 
     np.testing.assert_array_equal(features["subdetector"], [3, 3])
     for field in ("system", "side", "layer"):
         np.testing.assert_array_equal(features[field], [0, 0])
+
+
+def test_empty_cellid_encoding_remains_invalid_when_required():
+    with pytest.raises(ValueError, match="CellIDEncoding"):
+        hits_to_features(make_hit_data("IBTrackerHits"), 0, "IBTrackerHits", HIT_FEATURES, "")
 
 
 def test_only_lcio_converted_detectors_skip_the_cellid_encoding_requirement():

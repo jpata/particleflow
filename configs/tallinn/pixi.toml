@@ -52,7 +52,6 @@ echo "Initial ulimit -n: $(ulimit -Sn) (soft), $(ulimit -Hn) (hard)"
 ulimit -n $(ulimit -Hn)
 echo "Final ulimit -n: $(ulimit -Sn) (soft), $(ulimit -Hn) (hard)"
 
-env
 sleep $((RANDOM % 60))
 
 # Run the job
@@ -68,7 +67,7 @@ jobs: unlimited
 restart-times: 0
 max-jobs-per-timespan: 5/1s
 max-status-checks-per-second: 2
-verbose: true
+verbose: false
 use-conda: false
 default-resources:
   - slurm_account="hepusers"' > .profiles/tallinn/config.v8+.yaml
@@ -80,7 +79,17 @@ all = { cmd = "bash -c 'snakemake --workflow-profile $PROFILE --snakefile snakem
 
 gen = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_gen --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} gen \"$@\"' --", depends-on = ["snakefile"], description = "Generate samples" }
 
+gen_ild = { cmd = "PROD=ild pixi run gen", description = "Generate ILD_FCCee_v02 qualification samples" }
 gen_idea = { cmd = "PROD=idea pixi run gen", description = "Generate IDEA_o1_v03 samples" }
+
+datasets = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} tfds \"$@\"' --", depends-on = ["snakefile"], description = "Generate, reconstruct, postprocess and build track/cluster datasets" }
+datasets_ild = { cmd = "PROD=ild pixi run datasets", description = "Build the complete 50k-event ILD FCC-ee datasets" }
+
+# One DAG and one global SLURM concurrency limit across all four detectors.
+snakefile_key4hep = { cmd = "PYTHONPATH=. python3 mlpf/snakemake/produce_key4hep_snakemake.py", depends-on = ["setup"], description = "Generate the v1.4.0 four-detector campaign graph with 10-event jobs" }
+datasets_key4hep = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/key4hep_v1.4.0_50k/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} all \"$@\"' --", depends-on = ["snakefile_key4hep"], description = "Run all four detectors, five samples each, through PF/hit TFDS on Tallinn SLURM" }
+snakefile_key4hep_smoke = { cmd = "PYTHONPATH=. python3 mlpf/snakemake/produce_key4hep_snakemake.py --smoke", depends-on = ["setup"], description = "Generate the four-detector smoke graph" }
+gen_key4hep_smoke = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/key4hep_v1.4.0_50k_smoke_10ev/Snakefile --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} --jobs 40 all \"$@\"' --", depends-on = ["snakefile_key4hep_smoke"], description = "Run ten simulation and reconstruction jobs per detector and sample on Tallinn SLURM" }
 
 post = { cmd = "bash -c 'snakemake --keep-going --workflow-profile $PROFILE --snakefile snakemake_jobs/${PROD:-cms_run3}/Snakefile_post --use-apptainer --apptainer-args \"$APPTAINER_ARGS\" --cores ${CORES:-1} ${BATCH:+--batch all=$BATCH} post \"$@\"' --", depends-on = ["snakefile"], description = "Post-process samples" }
 

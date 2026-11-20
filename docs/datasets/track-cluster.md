@@ -1,6 +1,6 @@
 # Tracks and clusters
 
-These datasets use reconstructed tracks and calorimeter clusters as input elements. They contain fewer elements per event than [hit datasets](hit-based.md) and provide the default training path for CMS, CLD, and CLIC. ColliderML, MAIA, and IDEA have different reconstruction and validation boundaries, listed below.
+These datasets use reconstructed tracks and calorimeter clusters as input elements. They contain fewer elements per event than [hit datasets](hit-based.md) and provide the default training path for CMS, CLD, and CLIC. ColliderML, MAIA, IDEA, and ILD@FCC-ee have different reconstruction and validation boundaries, listed below.
 
 ![Tracks and calorimeter clusters from CLD ttbar event 0.](https://huggingface.co/jpata/particleflow/resolve/main/images/event_displays/cld/event_0_tracks_clusters.png)
 
@@ -17,6 +17,7 @@ The detector pages use matching input and particle views; the
 | [CLICdet, 380 GeV](clic.md) | Top pairs, fully hadronic WW, inclusive qq | Supported Key4HEP track/cluster path |
 | [ColliderML Release 1](colliderml.md) | Top pairs without pileup and with approximately 200 pileup interactions | Research workflow with spatial calorimeter clustering |
 | [MAIA](maia.md) | Top pairs | Partial workflow with data-validation limitations |
+| [ILD@FCC-ee](ild.md) | Inclusive qq, top pairs, fully hadronic WW | Experimental full-simulation and fitted-track qualification path |
 | [IDEA](idea.md) | Top pairs, fully hadronic WW, inclusive qq | Pipeline validation with truth-seeded proxy tracks |
 
 Open the detector page for exact names, schema versions, recipes, and sample-specific limits. Public availability and configuration partitions are recorded in the [catalog](catalog.md).
