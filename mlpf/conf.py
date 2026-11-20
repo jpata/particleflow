@@ -215,6 +215,10 @@ class EDM4HEP:
         def get_names(cls):
             return [f.name for f in fields(cls)]
 
+    # Track columns a detector can append after TrackFeatures (Detector.track_ecal_entry): the
+    # (eta, phi) of the track state at the calorimeter seen from the origin, named as on CMS.
+    ECAL_ENTRY_TRACK_FEATURES = ("eta_ecal", "phi_ecal")
+
     @dataclass
     class ClusterFeatures:
         elemtype: Any
@@ -259,6 +263,21 @@ class EDM4HEP:
         # collection rather than by subdetector, because subdetector 2 also holds other
         # systems (LumiCal on CLIC).
         muon_collections: Tuple[str, ...] = ()
+        # Reco -> SimCalorimeterHit relations to follow for hit collections that CalohitMCTruthLink
+        # does not cover; the sim hits' CaloHitContributions name the MCParticles and their energies.
+        hit_truth_relations: Tuple[str, ...] = ()
+        # Append the track state at the calorimeter as ECAL_ENTRY_TRACK_FEATURES. In a strong field a
+        # track enters the calorimeter, where its clusters are, far from its vertex direction.
+        track_ecal_entry: bool = False
+        # Cluster eta/phi from the centre of gravity instead of Pandora's iTheta/phi, which is the
+        # inertia axis of the hits: a shower direction, not where the cluster is.
+        cluster_angles_from_position: bool = False
+        # Target-to-track/cluster assignment rule of assign_genparticles_to_obj_and_merge.
+        target_assignment: str = "greedy"
+
+        def track_feature_names(self) -> List[str]:
+            extra = list(EDM4HEP.ECAL_ENTRY_TRACK_FEATURES) if self.track_ecal_entry else []
+            return EDM4HEP.TrackFeatures.get_names() + extra
 
     # Registry of supported key4hep detector scenarios. Add new detectors here;
     # mlpf/data/key4hep/postprocessing.py and tests/validate_parquet.py pick up
@@ -331,6 +350,15 @@ class EDM4HEP:
             # CellIDEncoding is available for any collection.
             require_cellid_encoding=False,
             muon_collections=("MUON",),
+            # MAIA's CalohitMCTruthLink covers the calorimeters only, so without this the muon-system
+            # hits have no truth contributor at all.
+            hit_truth_relations=("RelationMuonHit",),
+            # At 5 T a 5 GeV track reaches the ECAL 0.3 rad in phi from its vertex direction.
+            track_ecal_entry=True,
+            cluster_angles_from_position=True,
+            # Majority-owned tracks, then a bipartite cluster matching, as on ColliderML. MAIA's
+            # SiTracksMCTruthLink weights are hit fractions, which this rule needs.
+            target_assignment="majority_energy",
         ),
         # OpenDataDetector as released by ColliderML release 1; not EDM4hep geometry, but the
         # registry is the single place the B-field comes from for downstream tools, so the
@@ -345,8 +373,8 @@ class EDM4HEP:
     }
 
 
-def get_edm4hep_x_features():
-    track_names = EDM4HEP.TrackFeatures.get_names()
+def get_edm4hep_x_features(track_names=None):
+    track_names = EDM4HEP.TrackFeatures.get_names() if track_names is None else track_names
     cluster_names = EDM4HEP.ClusterFeatures.get_names()
     max_len = max(len(track_names), len(cluster_names))
     features = []
@@ -631,7 +659,7 @@ X_FEATURES = {
     Dataset.CLIC.value: get_edm4hep_x_features(),
     Dataset.CLD.value: get_edm4hep_x_features(),
     Dataset.IDEA.value: get_edm4hep_x_features(),
-    Dataset.MAIA.value: get_edm4hep_x_features(),
+    Dataset.MAIA.value: get_edm4hep_x_features(EDM4HEP.DETECTORS["maia"].track_feature_names()),
     Dataset.CLIC_HITS.value: EDM4HEP.HitFeatures.get_names(),
     Dataset.CLD_HITS.value: EDM4HEP.HitFeatures.get_names(),
     Dataset.COLLIDERML.value: [
@@ -1177,7 +1205,7 @@ _PIPELINE_DATASETS = {
     "cld": _PipelineDatasetOverride("physical", "cld_edm_ttbar_pf", "3.3.0", gpu_batch_multiplier=8),
     "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.3.0"),
     "colliderml": _PipelineDatasetOverride("physical", "colliderml_ttbar_nopu_pf", "1.5.0", gpu_batch_multiplier=8),
-    "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.1.0", gpu_batch_multiplier=1),
+    "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.2.0", gpu_batch_multiplier=1),
     "colliderml_hits": _PipelineDatasetOverride("physical", "colliderml_ttbar_hits", "1.3.0", gpu_batch_multiplier=8),
     "cld_hits": _PipelineDatasetOverride("physical", "cld_edm_ttbar_hits", "3.2.2"),
 }

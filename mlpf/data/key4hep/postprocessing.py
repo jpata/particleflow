@@ -8,6 +8,7 @@ from mlpf.data.target_building import (  # noqa: F401  (re-exported for existing
     map_pdgid_to_candid,
     map_charged_to_neutral,
     map_neutral_to_charged,
+    represented_pid,
     sanitize,
     weighted_avg_and_std,
     filter_adj,
@@ -76,6 +77,11 @@ class EventRecord:
     genmet: float
     genjet: np.ndarray
     targetjet: np.ndarray
+    # per ytarget row: the target's class changed charge to fit its element (see represented_pid)
+    ytarget_track_charge_flip: np.ndarray
+    ytarget_cluster_charge_flip: np.ndarray
+    ytarget_hit_tracker_charge_flip: np.ndarray
+    ytarget_hit_calo_charge_flip: np.ndarray
 
     def keys(self):
         return self.__dataclass_fields__.keys()
@@ -433,6 +439,77 @@ def get_hit_matrix_and_genadj(
     )
 
 
+CALOHIT_LINK_FIELDS = (
+    "CalohitMCTruthLink.weight",
+    "_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.collectionID",
+    "_CalohitMCTruthLink_to/_CalohitMCTruthLink_to.index",
+    "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID",
+    "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index",
+)
+
+
+def append_relation_truth_links(calohit_links: awkward.Array, arrs: Any, relation: str, collectionIDs: Dict[str, int], mcp_id: int) -> awkward.Array:
+    """Add CalohitMCTruthLink-style hit -> MCParticle links for hits whose only route to truth is a
+    reco -> SimCalorimeterHit relation, following each sim hit to its CaloHitContributions.
+
+    Each MCParticle is linked with the energy it contributed to the sim hit. get_hit_matrix_and_genadj
+    turns the weights into per-hit shares, so a hit must not get links from both sources: the two
+    weight conventions differ.
+    """
+    names = {v: k for k, v in collectionIDs.items()}
+
+    def flat_ids(arr):
+        return {names[int(c)] for c in np.unique(awkward.to_numpy(awkward.flatten(arr)))}
+
+    rel_keys = [f"_{relation}_{end}/_{relation}_{end}.{field}" for end in ("from", "to") for field in ("collectionID", "index")]
+    rel = arrs.arrays(rel_keys)
+    sim_names = flat_ids(rel[rel_keys[2]])
+    sim = {
+        n: arrs.arrays(
+            [
+                f"{n}.contributions_begin",
+                f"{n}.contributions_end",
+                f"_{n}_contributions/_{n}_contributions.collectionID",
+                f"_{n}_contributions/_{n}_contributions.index",
+            ]
+        )
+        for n in sim_names
+    }
+    contrib_names = set().union(*(flat_ids(sim[n][f"_{n}_contributions/_{n}_contributions.collectionID"]) for n in sim_names))
+    contrib = {
+        n: arrs.arrays([f"{n}.energy", f"_{n}_particle/_{n}_particle.collectionID", f"_{n}_particle/_{n}_particle.index"]) for n in contrib_names
+    }
+
+    already_linked = flat_ids(calohit_links["_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"])
+    overlap = flat_ids(rel[rel_keys[0]]) & already_linked
+    if overlap:
+        raise ValueError(f"{relation} would add truth links to {sorted(overlap)}, which CalohitMCTruthLink already links")
+
+    links = {k: [] for k in CALOHIT_LINK_FIELDS}
+    counts = []
+    for iev in range(len(rel)):
+        ev_sim = {n: [awkward.to_numpy(sim[n][k][iev]) for k in sim[n].fields] for n in sim_names}
+        ev_contrib = {n: [awkward.to_numpy(contrib[n][k][iev]) for k in contrib[n].fields] for n in contrib_names}
+        n_links = 0
+        for hit_cid, hit_idx, sim_cid, sim_idx in zip(*(awkward.to_numpy(rel[k][iev]) for k in rel_keys)):
+            begin, end, contrib_cid, contrib_idx = ev_sim[names[int(sim_cid)]]
+            for k in range(begin[sim_idx], end[sim_idx]):
+                energy, particle_cid, particle_idx = ev_contrib[names[int(contrib_cid[k])]]
+                ic = contrib_idx[k]
+                if particle_cid[ic] != mcp_id:
+                    continue
+                for key, value in zip(CALOHIT_LINK_FIELDS, (energy[ic], particle_cid[ic], particle_idx[ic], hit_cid, hit_idx)):
+                    links[key].append(value)
+                n_links += 1
+        counts.append(n_links)
+
+    merged = {}
+    for k in CALOHIT_LINK_FIELDS:
+        dtype = awkward.to_numpy(awkward.flatten(calohit_links[k])).dtype
+        merged[k] = awkward.concatenate([calohit_links[k], awkward.unflatten(np.asarray(links[k], dtype=dtype), counts)], axis=1)
+    return awkward.Array(merged)
+
+
 def hit_cluster_adj(
     prop_data: awkward.Record,
     hit_idx_local_to_global: Dict[Tuple[int, int], int],
@@ -552,6 +629,7 @@ def cluster_to_features(
     hit_to_cluster: SparseMatrixCOO,
     iev: int,
     muon_collection_ids: Tuple[int, ...] = (),
+    angles_from_position: bool = False,
 ) -> awkward.Record:
     cluster_arr = prop_data["PandoraClusters"][iev]
     feats = [
@@ -629,25 +707,35 @@ def cluster_to_features(
     ret["num_muon_hits"] = np.array(cl_num_muon_hits)
     ret["energy_muon"] = np.array(cl_energy_muon)
 
-    tt = awkward.to_numpy(np.tan(ret["iTheta"] / 2.0))
-    eta = awkward.to_numpy(-np.log(tt, where=tt > 0))
+    # iTheta/phi are the inertia axis of the hits (DDMarlinPandora ClusterShapes), a shower
+    # direction rather than where the cluster sits; iTheta stays a feature either way
+    if angles_from_position:
+        x, y, z = (awkward.to_numpy(ret[f"position.{axis}"]) for axis in "xyz")
+        theta = np.arctan2(np.hypot(x, y), z)
+        phi = np.arctan2(y, x)
+    else:
+        theta = awkward.to_numpy(ret["iTheta"])
+        phi = awkward.to_numpy(ret["phi"])
+
+    tt = np.tan(theta / 2.0)
+    eta = -np.log(tt, where=tt > 0)
     eta[tt <= 0] = 0.0
     ret["eta"] = eta
 
-    costheta = np.cos(ret["iTheta"])
+    costheta = np.cos(theta)
     ez = ret["energy"] * costheta
     ret["et"] = np.sqrt(ret["energy"] ** 2 - ez**2)
 
     # cluster is always type 2
     ret["elemtype"] = 2 * np.ones(n_cl, dtype=np.float32)
 
-    ret["sin_phi"] = np.sin(ret["phi"])
-    ret["cos_phi"] = np.cos(ret["phi"])
+    ret["sin_phi"] = np.sin(phi)
+    ret["cos_phi"] = np.cos(phi)
 
     return awkward.Record(ret)
 
 
-def track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Record:
+def track_to_features(prop_data: Any, iev: int, b_field: float, ecal_entry: bool = False) -> awkward.Record:
     track_arr = prop_data[track_coll][iev]
     # the following are needed since they are no longer defined under SiTracks_Refitted
     track_arr_dQdx = prop_data[f"{track_coll}_dQdx"][iev]
@@ -662,6 +750,9 @@ def track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Recor
     # build the radiusOfInnermostHit variable
     num_tracks = len(ret["dEdx"])
     innermost_radius = []
+    # (eta, phi) of the state AtCalorimeter seen from the origin; 0 for tracks without one, as on CMS
+    eta_ecal = np.zeros(num_tracks)
+    phi_ecal = np.zeros(num_tracks)
     for itrack in range(num_tracks):
 
         # select the track states corresponding to itrack
@@ -678,7 +769,25 @@ def track_to_features(prop_data: Any, iev: int, b_field: float) -> awkward.Recor
 
         innermost_radius.append(math.sqrt(refX[istate] ** 2 + refY[istate] ** 2))
 
+        icalo = np.flatnonzero(awkward.to_numpy(location) == 4) if ecal_entry else []  # 4 refers to AtCalorimeter
+        if len(icalo) > 0:
+            istate_calo = ibegin + icalo[0]
+
+            def state(name):
+                return track_arr_trackStates[f"_{track_coll}_trackStates.{name}"][istate_calo]
+
+            # the helix point closest to the reference point, see the EDM4hep TrackState definition
+            phi, d0 = state("phi"), state("D0")
+            x = state("referencePoint.x") - d0 * math.sin(phi)
+            y = state("referencePoint.y") + d0 * math.cos(phi)
+            z = state("referencePoint.z") + state("Z0")
+            eta_ecal[itrack] = math.asinh(z / max(math.hypot(x, y), 1e-6))
+            phi_ecal[itrack] = math.atan2(y, x)
+
     ret["radiusOfInnermostHit"] = np.array(innermost_radius)
+    if ecal_entry:
+        ret["eta_ecal"] = eta_ecal
+        ret["phi_ecal"] = phi_ecal
 
     n_tr = len(ret["type"])
 
@@ -982,14 +1091,16 @@ def get_genparticles_and_adjacencies(
     cellid_encodings: Optional[Dict[str, str]] = None,
     require_cellid_encoding: bool = True,
     muon_collection_ids: Tuple[int, ...] = (),
+    track_ecal_entry: bool = False,
+    cluster_angles_from_position: bool = False,
 ) -> EventData:
     gen_features = gen_to_features(prop_data, iev)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_hit_matrix_and_genadj(
         hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id, cellid_encodings, require_cellid_encoding
     )
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
-    cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev, muon_collection_ids)
-    track_features = track_to_features(prop_data, iev, b_field)
+    cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev, muon_collection_ids, cluster_angles_from_position)
+    track_features = track_to_features(prop_data, iev, b_field, track_ecal_entry)
     genparticle_to_trk = genparticle_track_adj(sitrack_links, iev)
 
     # collect hits of st=1 direct daughters to the st=1 particles
@@ -1840,6 +1951,8 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     if unread_muon_collections:
         raise ValueError(f"Muon collections {unread_muon_collections} are not among the hit collections read for {detector}")
     muon_collection_ids = tuple(collectionIDs[c] for c in detector_cfg.muon_collections)
+    for relation in detector_cfg.hit_truth_relations:
+        calohit_links = append_relation_truth_links(calohit_links, arrs, relation, collectionIDs, mcp_id)
 
     hit_data = {}
     for k in hit_collections:
@@ -1938,6 +2051,8 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
                 cellid_encodings,
                 detector_cfg.require_cellid_encoding,
                 muon_collection_ids,
+                detector_cfg.track_ecal_entry,
+                detector_cfg.cluster_angles_from_position,
             )
         except ValueError as e:
             print(f"Skipping event {iev} because it has no visible particles: {e}")
@@ -1951,7 +2066,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             track_to_gp_inclusive,
             cluster_to_gp_inclusive,
             hit_to_gp_inclusive,
-        ) = assign_genparticles_to_obj_and_merge(gpdata)
+        ) = assign_genparticles_to_obj_and_merge(gpdata, assignment=detector_cfg.target_assignment)
 
         n_tracks = len(gpdata_cleaned.track_features["type"])
         n_clusters = len(gpdata_cleaned.cluster_features["type"])
@@ -2016,19 +2131,12 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         # respecting the forcing logic (tracks=charged, clusters=neutral) so that
         # hits, tracks, and clusters all agree on the same identity for a given particle.
         gps_canonical = get_feature_matrix(gpdata_cleaned.gen_features, particle_feature_order)
+        gp_charge_flip = np.zeros(n_gps, dtype=bool)
         for igp in range(n_gps):
-            p = gps_canonical[igp, 0]  # PDG
-            c = gps_canonical[igp, 1]  # Charge
-
             # Determine the "forced" PID based on where this particle is represented
-            if gp_to_obj[igp, 0] != -1:  # Represented by a track
-                pid_forced = map_neutral_to_charged(map_pdgid_to_candid(p, c))
-            elif gp_to_obj[igp, 1] != -1:  # Represented by a cluster
-                pid_forced = map_charged_to_neutral(map_pdgid_to_candid(p, c))
-            else:  # Hit-only or merged (should not happen for cleaned GPs but for safety)
-                pid_forced = map_pdgid_to_candid(p, c)
-
-            gps_canonical[igp, 0] = pid_forced
+            gps_canonical[igp, 0], gp_charge_flip[igp] = represented_pid(
+                gps_canonical[igp, 0], gps_canonical[igp, 1], gp_to_obj[igp, 0] != -1, gp_to_obj[igp, 1] != -1
+            )
 
         PN_IDX = particle_feature_order.index("particle_number")
 
@@ -2079,7 +2187,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         assert np.all(gps_cluster[:, 1] == 0)
         assert np.all(rps_cluster[:, 1] == 0)
 
-        X_track = get_feature_matrix(gpdata_cleaned.track_features, track_feature_order)
+        X_track = get_feature_matrix(gpdata_cleaned.track_features, detector_cfg.track_feature_names())
         X_cluster = get_feature_matrix(gpdata_cleaned.cluster_features, cluster_feature_order)
         X_hit = get_feature_matrix(gpdata_cleaned.hit_features, hit_feature_order)
 
@@ -2093,6 +2201,14 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
         ytarget_cluster = gps_cluster
         ytarget_hit_tracker = gps_hit[mask_tracker]
         ytarget_hit_calo = gps_hit[mask_calo]
+
+        # rows whose target changed charge to fit its element; rows without a target are False
+        def charge_flip(element_to_gp):
+            flip = np.zeros(len(element_to_gp), dtype=bool)
+            flip[element_to_gp != -1] = gp_charge_flip[element_to_gp[element_to_gp != -1]]
+            return flip
+
+        hit_charge_flip = charge_flip(hit_to_gp_exclusive)
         ycand_track = rps_track
         ycand_cluster = rps_cluster
 
@@ -2156,6 +2272,10 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             "genmet": float(met_st1[iev]),
             "genjet": get_feature_matrix(genjets_st1[iev], ["pt", "eta", "phi", "energy"]),
             "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
+            "ytarget_track_charge_flip": charge_flip(track_to_gp_exclusive),
+            "ytarget_cluster_charge_flip": charge_flip(cluster_to_gp_exclusive),
+            "ytarget_hit_tracker_charge_flip": hit_charge_flip[mask_tracker],
+            "ytarget_hit_calo_charge_flip": hit_charge_flip[mask_calo],
         }
         ret.append(this_ev)
 

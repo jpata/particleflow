@@ -5,23 +5,27 @@ from pathlib import Path
 import numpy as np
 import tensorflow_datasets as tfds
 
+from mlpf.conf import EDM4HEP
 from mlpf.heptfds.edm4hep_utils.utils_pf import (
     NUM_SPLITS,
     N_X_FEATURES,
     N_Y_FEATURES,
-    X_FEATURES_TRK,
     X_FEATURES_CL,
     Y_FEATURES,
     generate_examples,
     split_sample,
 )
 
+# MAIA tracks carry their calorimeter entry (eta_ecal, phi_ecal) after the shared track columns
+X_FEATURES_TRK = EDM4HEP.DETECTORS["maia"].track_feature_names()
+
 
 class MaiaEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.1.0")
+    VERSION = tfds.core.Version("1.2.0")
     RELEASE_NOTES = {
         "1.0.0": "MAIA ttbar track/cluster dataset with shared target building.",
         "1.1.0": "Add num_muon_hits and energy_muon cluster features (#511); input width 17 -> 19, regenerate",
+        "1.2.0": "Track eta_ecal/phi_ecal, cluster eta/phi from the centroid, majority-energy target assignment (#546); regenerate",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
     Download https://uaf-3.t2.ucsd.edu/~atuna/muoncollider/data/mlpf/ttbar/v04/ttbar_reco_10000.slcio.edm4hep.root
