@@ -700,9 +700,10 @@ productions:
     threads: {gen: 1}
 
     memory:
-      # The 10-event smoke peak plus 20% headroom, rounded up to 100 MiB.
-      gen: 28400
-      post: 1000
+      # IDEA ttbar shards exceeded the 28,400 MiB production request.
+      gen: 36000
+      # Failed shards peaked at 2,189 MiB in recovery probes. Add 20% and round up.
+      post: 2700
       tfds: 8000
 
     slurm_partition: "main"

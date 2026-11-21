@@ -19,8 +19,8 @@ SAMPLES = {"ttbar", "qq", "ww_fullhad", "z_qq", "z_tautau"}
 VERSIONS = {"cld": "3.4.0", "clic": "3.4.0", "idea": "0.5.0", "ild": "0.2.0"}
 EVENTS_PER_SHARD = 10
 SHARDS_PER_SAMPLE = {"cld": 5000, "clic": 5000, "idea": 1000, "ild": 5000}
-GEN_MEMORY_MB = {"cld": 2800, "clic": 2800, "idea": 28400, "ild": 2900}
-POST_MEMORY_MB = {"cld": 1000, "clic": 1000, "idea": 1000, "ild": 1200}
+GEN_MEMORY_MB = {"cld": 2800, "clic": 2800, "idea": 36000, "ild": 2900}
+POST_MEMORY_MB = {"cld": 1000, "clic": 1000, "idea": 2700, "ild": 1200}
 
 
 def local_spec(tmp_path):
