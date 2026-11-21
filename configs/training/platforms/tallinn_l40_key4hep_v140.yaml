@@ -1,0 +1,24 @@
+name: tallinn_l40_key4hep_v140
+gpus: 1
+data_dir:
+  cld: /local/joosep/mlpf/cld/v1.4.0/50k/tfds
+  clic: /local/joosep/mlpf/clic/v1.4.0/50k/tfds
+  ild: /local/joosep/mlpf/ild/v1.4.0/50k/tfds
+  idea: /local/joosep/mlpf/idea/v1.4.0/50k/tfds
+experiments_dir: /home/${USER}/particleflow/experiments
+environment:
+  PF_SITE: tallinn
+runtime_overrides:
+  dtype: bfloat16
+  num_workers: 4
+  prefetch_factor: 2
+  model.attention.use_flash_attn_varlen: false
+slurm:
+  partition: gpu
+  time: "24:00:00"
+  nodes: 1
+  tasks_per_node: 1
+  cpus_per_task: 8
+  gpu_request: gres
+  gpu_type: l40
+  memory_per_gpu: 80G
