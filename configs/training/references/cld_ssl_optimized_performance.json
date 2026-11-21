@@ -1,0 +1,55 @@
+{
+  "batch_size": 768,
+  "steps": 200,
+  "steady_state_steps": [
+    10,
+    199
+  ],
+  "median_training_seconds": 0.2696397420950234,
+  "mean_training_seconds": 0.26675554308550137,
+  "mean_gpu_utilization_percent": 84.34,
+  "gpu_sampling_steps": [
+    108,
+    192
+  ],
+  "gpu_sampling_count": 100,
+  "mean_vram_mib": 7154.0,
+  "median_cpu_wall_seconds": {
+    "data_wait": 0.000264008529484272,
+    "transfer": 0.00011948123574256897,
+    "teacher": 0.04014039598405361,
+    "view_sampling": 0.0290153743699193,
+    "student": 0.0717760706320405,
+    "loss": 0.0014268811792135239,
+    "statistics": 0.0005572997033596039,
+    "forward": 0.14114798046648502,
+    "backward": 0.10309744440019131,
+    "optimizer": 0.0071167051792144775,
+    "ema": 0.0014594364911317825
+  },
+  "median_cuda_stream_seconds": {
+    "data_wait": 0.00023503999412059784,
+    "transfer": 0.0021813440322875975,
+    "teacher": 0.05397094345092773,
+    "view_sampling": 0.0034854079484939577,
+    "student": 0.08488499069213867,
+    "loss": 0.005962944030761719,
+    "statistics": 0.005066783905029297,
+    "forward": 0.15256739807128905,
+    "backward": 0.109506591796875,
+    "optimizer": 0.0011307519674301147,
+    "ema": 0.0014803520441055299
+  },
+  "baseline_observation": {
+    "gpu_mean_percent": 17.67,
+    "approximate_seconds_per_step": 5.0,
+    "source": "Prior live-job inspection; not a paired kernel microbenchmark"
+  },
+  "gpu": "NVIDIA GeForce RTX 5060 Ti 16 GB",
+  "dtype": "bfloat16",
+  "num_workers": 4,
+  "prefetch_factor": 2,
+  "probe_enabled": false,
+  "snapshots_enabled": false,
+  "source": "experiments/cld_ssl_optimized_timing_v1"
+}
