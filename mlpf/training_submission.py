@@ -168,7 +168,7 @@ def build_slurm_submissions(
         groups.setdefault(jobs[index].resolved_config.gpus, []).append(index)
     submissions = []
     for gpus, indices in groups.items():
-        slurm = profile.slurm
+        slurm = profile.slurm.for_gpus(gpus, profile.gpus)
         logs_dir = repo_root / "logs_slurm"
         worker = Path(worker) if worker is not None else _worker_for_site(repo_root, "flatiron")
         command = ["sbatch", *slurm_resource_args(slurm, gpus)]

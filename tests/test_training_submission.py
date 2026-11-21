@@ -111,6 +111,54 @@ def test_submission_scales_cpu_request_with_effective_gpu_count(submission_files
         assert all(job.resolved_config.gpus == gpus for job in jobs)
 
 
+def test_partial_node_settings_apply_only_below_the_platform_gpu_count(submission_files):
+    scenario_path, profile_path = submission_files
+    profile_data = yaml.safe_load(profile_path.read_text())
+    profile_data["slurm"].update(
+        partition="full",
+        memory="480G",
+        cpus_per_task=32,
+        partial_node={"partition": "shared", "cpus_per_gpu": 7, "memory": None, "memory_per_gpu": "60G"},
+    )
+    profile_path.write_text(yaml.safe_dump(profile_data))
+    submissions = build_slurm_submissions(scenario_path, profile_path, ROOT)
+
+    def option(command, flag):
+        return command[command.index(flag) + 1] if flag in command else None
+
+    (single, single_jobs), (full, full_jobs) = submissions
+    assert {job.resolved_config.gpus for job in single_jobs} == {1} and {job.resolved_config.gpus for job in full_jobs} == {4}
+    assert [option(single, flag) for flag in ("--partition", "--cpus-per-task", "--mem", "--mem-per-gpu")] == ["shared", "7", None, "60G"]
+    assert [option(full, flag) for flag in ("--partition", "--cpus-per-task", "--mem", "--mem-per-gpu")] == ["full", "32", "480G", None]
+
+
+@pytest.mark.parametrize(
+    "partial_node,error",
+    [
+        ({"memory_per_gpu": "60G"}, "only one of memory and memory_per_gpu"),
+        ({"partial_node": {}}, "cannot be nested"),
+        ({"no_such_field": 1}, "no_such_field"),
+    ],
+)
+def test_partial_node_settings_are_validated_with_the_profile(partial_node, error):
+    with pytest.raises(ValueError, match=error):
+        SlurmProfile(memory="480G", partial_node=partial_node)
+
+
+def test_lumi_release_checkpoints_share_nodes_only_for_single_gpu_jobs():
+    submissions = build_slurm_submissions(
+        ROOT / "configs/training/scenarios/release_checkpoints.yaml", ROOT / "configs/training/platforms/lumi_mi250x.yaml", ROOT
+    )
+    partitions = {}
+    for command, jobs in submissions:
+        for job in jobs:
+            partitions[job.variant_name] = (command[command.index("--partition") + 1], command[command.index("--gpus-per-task") + 1])
+    assert {name for name, request in partitions.items() if request == ("small-g", "1")} == {
+        f"{detector}_pf_{backbone}" for detector in ("cld", "clic", "colliderml") for backbone in ("attention", "heptv2")
+    }
+    assert {request for name, request in partitions.items() if "_pf_" not in name} == {("standard-g", "8")}
+
+
 def test_picker_discovers_files_for_selected_site(tmp_path):
     scenarios = tmp_path / "configs/training/scenarios"
     profiles = tmp_path / "configs/training/platforms"

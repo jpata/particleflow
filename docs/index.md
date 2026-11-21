@@ -2,7 +2,7 @@
 
 MLPF reconstructs the particles produced in a collision from detector measurements. It uses a neural network to combine information from tracking detectors and calorimeters and produces a list of particle candidates for the full event. The project supports studies with the CMS detector and with the CLD and CLIC future-detector concepts.
 
-This documentation describes the codebase prepared for **v3.2.0**: supported workflows, configuration, and validation limits. Dataset schemas and model artifacts have independent versions. Published physics results remain tied to their original code, data, detector setup, and checkpoints.
+This documentation describes the codebase prepared for **v3.3.0**: supported workflows, configuration, and validation limits. Dataset schemas and model artifacts have independent versions. Published physics results remain tied to their original code, data, detector setup, and checkpoints.
 
 ## Where should I start?
 

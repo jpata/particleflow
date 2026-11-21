@@ -6,6 +6,7 @@ data_dir:
   cld: /scratch/project_465001293/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
   clic: /scratch/project_465001293/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds
   cms_run3: /scratch/project_465001293/joosep/mlpf/cms/2.8.0/
+  colliderml: /scratch/project_465001293/joosep/mlpf/colliderml/
 experiments_dir: /scratch/project_465001293/${USER}/particleflow/experiments
 environment:
   MIOPEN_USER_DB_PATH: /tmp/${USER}-${SLURM_JOB_ID}-miopen-cache
@@ -38,3 +39,11 @@ slurm:
   # Leave operating-system headroom on the 512 GB LUMI-G node.
   memory: 480G
   no_requeue: true
+  # Jobs on fewer than eight GCDs (single-GPU track/cluster models) share a
+  # small-g node instead of holding a whole standard-g node. A LUMI-G node has
+  # 7 usable cores and about 60 GB of host memory per GCD.
+  partial_node:
+    partition: small-g
+    cpus_per_gpu: 7
+    memory: null
+    memory_per_gpu: 60G
