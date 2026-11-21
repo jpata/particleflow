@@ -110,7 +110,9 @@ variants:
     model_name: pyg-colliderml-v1
     production_name: colliderml
     gpus: 1
-    overrides: *pf
+    overrides:
+      <<: *pf
+      lr: 0.0005  # Lower OneCycle peak after the v3.3.0 attention loss regression.
   colliderml_pf_heptv2:
     model_name: pyg-colliderml-v1
     production_name: colliderml
