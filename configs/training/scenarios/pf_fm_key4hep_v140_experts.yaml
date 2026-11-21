@@ -55,10 +55,10 @@ variants:
 
 seeds: [12345]
 training:
-  global_batch_size: 16
+  global_batch_size: 32
   parameters:
     optimizer: lamb
-    lr: 0.0005
+    lr: 0.001
     lr_schedule: onecycle
     lr_schedule_config.onecycle.pct_start: 0.3
     num_steps: 500000
@@ -80,15 +80,15 @@ common_overrides:
   model.type: attention
   model.heptv2: null
   model.attention:
-    num_convs: 6
+    num_convs: 4
     num_heads: 16
-    head_dim: 16
+    head_dim: 32
     attention_type: flash
     dropout_ff: 0.0
   model.input_encoding: split
   model.input_normalization: true
   model.backbone.mode: shared
-  model.backbone.num_convs: 6
+  model.backbone.num_convs: 4
 allowed_variant_differences:
   - data_dir
   - dataset

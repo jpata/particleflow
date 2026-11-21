@@ -34,6 +34,21 @@ def local_spec(tmp_path):
     return spec
 
 
+@pytest.mark.parametrize("detector", DETECTORS)
+def test_campaign_sample_labels_render(detector):
+    import matplotlib.pyplot as plt
+
+    from mlpf.plotting.plot_utils import sample_label
+
+    fig, ax = plt.subplots()
+    try:
+        for index, sample in enumerate(sorted(SAMPLES), start=1):
+            sample_label(ax, f"{detector}_edm_{sample}_pf", y=1 - index / (len(SAMPLES) + 1))
+        fig.canvas.draw()
+    finally:
+        plt.close(fig)
+
+
 def test_campaign_event_budget_and_builder_versions(tmp_path, monkeypatch):
     import tensorflow_datasets as tfds
 
