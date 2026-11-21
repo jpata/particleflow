@@ -1,0 +1,112 @@
+# Written by scripts/compute_input_normalization_stats.py: mean and std of each column after its transform.
+samples: [clic_edm_ttbar_pf/1/3.4.0, clic_edm_ttbar_pf/10/3.4.0, clic_edm_ttbar_pf/2/3.4.0, clic_edm_ttbar_pf/3/3.4.0, clic_edm_ttbar_pf/4/3.4.0, clic_edm_ttbar_pf/5/3.4.0,
+  clic_edm_ttbar_pf/6/3.4.0, clic_edm_ttbar_pf/7/3.4.0, clic_edm_ttbar_pf/8/3.4.0, clic_edm_ttbar_pf/9/3.4.0, clic_edm_ww_fullhad_pf/1/3.4.0, clic_edm_ww_fullhad_pf/10/3.4.0,
+  clic_edm_ww_fullhad_pf/2/3.4.0, clic_edm_ww_fullhad_pf/3/3.4.0, clic_edm_ww_fullhad_pf/4/3.4.0, clic_edm_ww_fullhad_pf/5/3.4.0, clic_edm_ww_fullhad_pf/6/3.4.0,
+  clic_edm_ww_fullhad_pf/7/3.4.0, clic_edm_ww_fullhad_pf/8/3.4.0, clic_edm_ww_fullhad_pf/9/3.4.0, clic_edm_qq_pf/1/3.4.0, clic_edm_qq_pf/10/3.4.0, clic_edm_qq_pf/2/3.4.0,
+  clic_edm_qq_pf/3/3.4.0, clic_edm_qq_pf/4/3.4.0, clic_edm_qq_pf/5/3.4.0, clic_edm_qq_pf/6/3.4.0, clic_edm_qq_pf/7/3.4.0, clic_edm_qq_pf/8/3.4.0, clic_edm_qq_pf/9/3.4.0,
+  clic_edm_z_qq_pf/1/3.4.0, clic_edm_z_qq_pf/10/3.4.0, clic_edm_z_qq_pf/2/3.4.0, clic_edm_z_qq_pf/3/3.4.0, clic_edm_z_qq_pf/4/3.4.0, clic_edm_z_qq_pf/5/3.4.0,
+  clic_edm_z_qq_pf/6/3.4.0, clic_edm_z_qq_pf/7/3.4.0, clic_edm_z_qq_pf/8/3.4.0, clic_edm_z_qq_pf/9/3.4.0, clic_edm_z_tautau_pf/1/3.4.0, clic_edm_z_tautau_pf/10/3.4.0,
+  clic_edm_z_tautau_pf/2/3.4.0, clic_edm_z_tautau_pf/3/3.4.0, clic_edm_z_tautau_pf/4/3.4.0, clic_edm_z_tautau_pf/5/3.4.0, clic_edm_z_tautau_pf/6/3.4.0,
+  clic_edm_z_tautau_pf/7/3.4.0, clic_edm_z_tautau_pf/8/3.4.0, clic_edm_z_tautau_pf/9/3.4.0]
+events: 224783
+track:
+- {column: 1, name: pt, log1p_scale: 0.01, clip: null, mean: 4.904450159214384, std: 1.3188850004545454, min: 0.0001720182626741007, max: 262275.46875,
+  clipped: 0, nonfinite: 0}
+- {column: 2, name: eta, log1p_scale: null, clip: null, mean: -0.0004960433746300655, std: 1.0792642686153804, min: -4.632602214813232, max: 4.858388423919678,
+  clipped: 0, nonfinite: 0}
+- {column: 3, name: sin_phi, log1p_scale: null, clip: null, mean: -0.00036324239321032146, std: 0.706624241103714, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 4, name: cos_phi, log1p_scale: null, clip: null, mean: 0.009295327410005102, std: 0.7075278414815742, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 5, name: p, log1p_scale: 0.01, clip: null, mean: 5.326504767353797, std: 1.3186158457457633, min: 0.0052020554430782795, max: 845676.3125, clipped: 0,
+  nonfinite: 0}
+- column: 6
+  name: chi2
+  log1p_scale: 1.0
+  clip: [0.0, .inf]
+  mean: 2.8487990427758594
+  std: 0.8587873219373197
+  min: -350.4507141113281
+  max: 223080608.0
+  clipped: 5
+  nonfinite: 0
+- {column: 7, name: ndf, log1p_scale: null, clip: null, mean: 16.258614927491358, std: 7.356731877268939, min: 1.0, max: 51.0, clipped: 0, nonfinite: 0}
+- {column: 8, name: dEdx, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 9, name: dEdxError, log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 10, name: radiusOfInnermostHit, log1p_scale: 1.0, clip: null, mean: 3.627575596041694, std: 0.45346837683659874, min: 31.16499900817871, max: 1257.5615234375,
+  clipped: 0, nonfinite: 0}
+- column: 11
+  name: tanLambda
+  log1p_scale: null
+  clip: [-20.0, 20.0]
+  mean: -0.00156751803651802
+  std: 1.8566794601545344
+  min: -51.3917236328125
+  max: 64.3926010131836
+  clipped: 151
+  nonfinite: 0
+- column: 12
+  name: D0
+  log1p_scale: null
+  clip: [-2000.0, 2000.0]
+  mean: -0.0034280319622146537
+  std: 3.4792179490875887
+  min: -818.5274658203125
+  max: 1072.9073486328125
+  clipped: 0
+  nonfinite: 0
+- column: 13
+  name: omega
+  log1p_scale: null
+  clip: [-0.1, 0.1]
+  mean: 1.1740869247688986e-05
+  std: 0.0039464601595286955
+  min: -6.976004123687744
+  max: 0.2731085419654846
+  clipped: 34
+  nonfinite: 0
+- column: 14
+  name: Z0
+  log1p_scale: null
+  clip: [-2000.0, 2000.0]
+  mean: 0.05643120552086881
+  std: 33.57994305266817
+  min: -8592.830078125
+  max: 7597.52783203125
+  clipped: 469
+  nonfinite: 0
+- {column: 15, name: time, log1p_scale: null, clip: null, mean: -1.0, std: 0.0, min: -1.0, max: -1.0, clipped: 0, nonfinite: 0}
+- {column: 16, name: 'Null', log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 17, name: 'Null', log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+- {column: 18, name: 'Null', log1p_scale: null, clip: null, mean: 0.0, std: 0.0, min: 0.0, max: 0.0, clipped: 0, nonfinite: 0}
+cluster:
+- {column: 1, name: et, log1p_scale: 0.01, clip: null, mean: 4.64695019167203, std: 1.3619443242568092, min: 0.0, max: 207.6652069091797, clipped: 0, nonfinite: 0}
+- {column: 2, name: eta, log1p_scale: null, clip: null, mean: -0.002432021782257975, std: 1.0725842851998, min: -8.31794548034668, max: 8.664340019226074,
+  clipped: 0, nonfinite: 0}
+- {column: 3, name: sin_phi, log1p_scale: null, clip: null, mean: -0.0001259521240638388, std: 0.7069566096123626, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 4, name: cos_phi, log1p_scale: null, clip: null, mean: 0.006796988294385934, std: 0.7072242479403109, min: -1.0, max: 1.0, clipped: 0, nonfinite: 0}
+- {column: 5, name: energy, log1p_scale: 0.01, clip: null, mean: 5.054639606062211, std: 1.346659236263712, min: 0.0020037880167365074, max: 216.42660522460938,
+  clipped: 0, nonfinite: 0}
+- {column: 6, name: position.x, log1p_scale: null, clip: null, mean: 13.469899976481416, std: 1022.4248565497684, min: -3323.23681640625, max: 3323.061279296875,
+  clipped: 0, nonfinite: 0}
+- {column: 7, name: position.y, log1p_scale: null, clip: null, mean: 0.05942644674633954, std: 1021.4243285814874, min: -3315.304931640625, max: 5005.76806640625,
+  clipped: 0, nonfinite: 0}
+- {column: 8, name: position.z, log1p_scale: null, clip: null, mean: -6.5888073138214125, std: 1797.215069123405, min: -4121.50830078125, max: 4119.36865234375,
+  clipped: 0, nonfinite: 0}
+- {column: 9, name: iTheta, log1p_scale: null, clip: null, mean: 1.5726197046748216, std: 0.782876052326098, min: 0.0, max: 3.1415927410125732, clipped: 0,
+  nonfinite: 0}
+- {column: 10, name: energy_ecal, log1p_scale: 0.01, clip: null, mean: 4.493799809558785, std: 1.3506467151070458, min: 0.0, max: 198.31640625, clipped: 0,
+  nonfinite: 0}
+- {column: 11, name: energy_hcal, log1p_scale: 0.01, clip: null, mean: 1.623184380369218, std: 2.4661236185123596, min: 0.0, max: 221.93316650390625, clipped: 0,
+  nonfinite: 0}
+- {column: 12, name: energy_other, log1p_scale: 0.0001, clip: null, mean: 0.010780894276649763, std: 0.15876254917644825, min: 0.0, max: 0.09281215816736221,
+  clipped: 0, nonfinite: 0}
+- {column: 13, name: num_hits, log1p_scale: 1.0, clip: null, mean: 3.9684216825054204, std: 1.0339711255940285, min: 1.0, max: 4389.0, clipped: 0, nonfinite: 0}
+- {column: 14, name: sigma_x, log1p_scale: 1.0, clip: null, mean: 3.424901952504172, std: 0.8981175609712131, min: 0.0, max: 912.896728515625, clipped: 0,
+  nonfinite: 0}
+- {column: 15, name: sigma_y, log1p_scale: 1.0, clip: null, mean: 3.424641959257286, std: 0.8981935155143352, min: 0.0, max: 1185.8751220703125, clipped: 0,
+  nonfinite: 0}
+- {column: 16, name: sigma_z, log1p_scale: 1.0, clip: null, mean: 3.578905203973529, std: 0.9399337116106568, min: 0.0, max: 1050.2266845703125, clipped: 0,
+  nonfinite: 0}
+- {column: 17, name: num_muon_hits, log1p_scale: 1.0, clip: null, mean: 0.009864190488384404, std: 0.14143331768188705, min: 0.0, max: 74.0, clipped: 0,
+  nonfinite: 0}
+- {column: 18, name: energy_muon, log1p_scale: 0.0001, clip: null, mean: 0.010780894276649763, std: 0.15876254917644825, min: 0.0, max: 0.09281215816736221,
+  clipped: 0, nonfinite: 0}
