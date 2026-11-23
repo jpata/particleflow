@@ -21,14 +21,15 @@ from mlpf.heptfds.edm4hep_utils.utils_pf import (
     labels,
 )
 
-from mlpf.data.key4hep.idea_tracks import (
-    TRACK_SOURCE,
-    PROXY_TRACK_SOURCE as PROXY_TRACK_SOURCE,
-    TRACK_COLLECTION as TRACK_COLLECTION,
-    TRACK_QUALITY_POLICY as TRACK_QUALITY_POLICY,
-    TRACK_TRUTH_POLICY as TRACK_TRUTH_POLICY,
-    TRACK_TRUTH_MIN_PURITY as TRACK_TRUTH_MIN_PURITY,
-    validate_track_provenance,
+from mlpf.data.key4hep.idea_tracks import TRACK_SOURCE, validate_track_provenance
+
+# Keep these imports available to the IDEA dataset builders and pipeline.
+from mlpf.data.key4hep.idea_tracks import (  # noqa: F401
+    PROXY_TRACK_SOURCE,
+    TRACK_COLLECTION,
+    TRACK_QUALITY_POLICY,
+    TRACK_TRUTH_POLICY,
+    TRACK_TRUTH_MIN_PURITY,
 )
 
 CANDIDATE_SOURCE = "target_oracle"

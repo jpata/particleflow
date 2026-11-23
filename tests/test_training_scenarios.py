@@ -753,7 +753,7 @@ def test_feature_bag_scenario_differs_only_in_the_feature_bag():
         # Each detector's samples come from that detector's platform data_dir.
         assert config.data_dir == {name: platform.data_dir[name] for name in ("cld", "clic", "colliderml")}
         assert config.data_dir_for("colliderml_ttbar_nopu_pf") == platform.data_dir["colliderml"]
-        assert config.dataset_versions() == {"cld": "3.3.0", "clic": "3.3.0", "colliderml": "1.5.0"}
+        assert config.dataset_versions() == {"cld": "3.4.0", "clic": "3.4.0", "colliderml": "1.5.0"}
         # Each detector gets the same share of the training steps.
         assert {name: group.weight for name, group in config.train_dataset["cld"].items()} == {"cld": 1.0, "clic": 1.0, "colliderml": 1.0}
     reference, candidate = (job.resolved_config.model_dump(mode="json") for job in jobs)
