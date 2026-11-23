@@ -57,6 +57,28 @@ def local_progress(root, expected):
     return files, bytes_received
 
 
+def download_at_rate(command, destination, bytes_per_second):
+    """Pace reads from Davix stdout so the pipe limits the incoming transfer."""
+    with tempfile.TemporaryFile(mode="w+t") as errors, destination.open("wb") as output:
+        with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors) as process:
+            try:
+                while True:
+                    start = time.monotonic()
+                    block = process.stdout.read(1024 * 1024)
+                    if not block:
+                        break
+                    output.write(block)
+                    delay = len(block) / bytes_per_second - (time.monotonic() - start)
+                    if delay > 0:
+                        time.sleep(delay)
+            except BaseException:
+                process.kill()
+                raise
+            if process.wait():
+                errors.seek(0)
+                raise RuntimeError(f"davix-get failed: {errors.read()[-4000:].strip()}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--remote-url", required=True, help="WebDAV directory that is the TFDS data root")
@@ -66,6 +88,7 @@ def main():
     parser.add_argument("--proxy", type=Path, default=Path(os.environ.get("X509_USER_PROXY", str(Path.home() / "x509-cms-2048"))))
     parser.add_argument("--capath", default="/etc/grid-security/certificates")
     parser.add_argument("--jobs", type=int, default=8, help="Davix parallel listing and download threads")
+    parser.add_argument("--limit-rate", type=int, help="aggregate download rate in bytes per second across all workers")
     parser.add_argument("--status-file", type=Path, help="write atomic JSON progress here; default: ~/.local/state/mlpf-tfds-webdav/")
     parser.add_argument("--resume", action="store_true", help="download only missing or wrong-size files into an existing data root")
     parser.add_argument("--dry-run", action="store_true")
@@ -75,6 +98,8 @@ def main():
         parser.error("--remote-url must be a davs:// directory URL without query or fragment")
     if args.jobs < 1:
         parser.error("--jobs must be positive")
+    if args.limit_rate is not None and args.limit_rate < args.jobs:
+        parser.error("--limit-rate must be at least --jobs bytes per second")
     if any(name in {"", ".", ".."} or "/" in name or "\\" in name for name in args.dataset):
         parser.error("--dataset must be one directory name")
     args.remote_url = args.remote_url.rstrip("/") + "/"
@@ -90,12 +115,15 @@ def main():
     auth = ["-P", "grid", "-E", "/tmp/x509", "--key", "/tmp/x509", "--capath", args.capath]
     listing_command = [*common, "davix-ls", *auth, "-l", "-r", str(args.jobs), "--retry", "5", args.remote_url]
     download_command = [*common, "davix-get", *auth, "-r", str(args.jobs), "--retry", "5", args.remote_url, "/tfds"]
+    use_manifest = args.resume or bool(args.dataset) or args.limit_rate is not None
     if args.dry_run:
         print(shlex.join(listing_command))
         if args.dataset:
             print(f"Selected datasets: {', '.join(dict.fromkeys(args.dataset))}")
-        if args.resume or args.dataset:
+        if use_manifest:
             print("Inventory the selected files, then run parallel davix-get for missing or wrong-size files")
+            if args.limit_rate is not None:
+                print(f"Aggregate download rate: {args.limit_rate:,} bytes/s")
         else:
             print(shlex.join(download_command))
         return
@@ -124,7 +152,7 @@ def main():
     )
     atexit.register(lambda: reporter.update(force=True, phase="failed") if reporter.status["phase"] != "complete" else None)
     reporter.update(force=True, phase="transferring")
-    if args.resume or args.dataset:
+    if use_manifest:
         missing = []
         existing_files = 0
         existing_bytes = 0
@@ -146,9 +174,13 @@ def main():
             source = args.remote_url + quote(relative.as_posix(), safe="/")
             target = "/tfds/" + relative.as_posix() + f".part.{os.getpid()}"
             try:
-                result = subprocess.run([*common, "davix-get", *auth, "--retry", "5", source, target], capture_output=True, text=True, check=False)
-                if result.returncode:
-                    raise RuntimeError(f"davix-get failed: {result.stderr.strip()}")
+                command = [*common, "davix-get", *auth, "--retry", "5", source]
+                if args.limit_rate is None:
+                    result = subprocess.run([*command, target], capture_output=True, text=True, check=False)
+                    if result.returncode:
+                        raise RuntimeError(f"davix-get failed: {result.stderr.strip()}")
+                else:
+                    download_at_rate(command, temporary, args.limit_rate / args.jobs)
                 if temporary.stat().st_size != size:
                     raise RuntimeError(f"size mismatch: {temporary.stat().st_size} != {size}")
                 temporary.replace(destination)
@@ -196,8 +228,8 @@ def main():
         phase="complete",
         completed_files=files,
         completed_bytes=bytes_received,
-        transferred_files=reporter.status["transferred_files"] if args.resume or args.dataset else files,
-        transferred_bytes=reporter.status["transferred_bytes"] if args.resume or args.dataset else bytes_received,
+        transferred_files=reporter.status["transferred_files"] if use_manifest else files,
+        transferred_bytes=reporter.status["transferred_bytes"] if use_manifest else bytes_received,
     )
     print(f"Verified sizes of all {files:,} downloaded files.", flush=True)
 

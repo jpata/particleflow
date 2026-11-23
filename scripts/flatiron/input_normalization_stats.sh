@@ -12,8 +12,8 @@
 #
 # Commands of the committed mlpf/model/input_normalization_stats/<dataset>_<version>.yaml
 #   sbatch scripts/flatiron/input_normalization_stats.sh colliderml 1.5.0 /mnt/ceph/users/ewulff/tensorflow_datasets/colliderml --samples ttbar_nopu
-#   sbatch scripts/flatiron/input_normalization_stats.sh cld 3.3.0 /mnt/ceph/users/jpata/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds --samples edm_qq edm_ttbar edm_ww_fullhad
-#   sbatch scripts/flatiron/input_normalization_stats.sh clic 3.3.0 /mnt/ceph/users/jpata/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds
+#   sbatch scripts/flatiron/input_normalization_stats.sh cld 3.3.0 /mnt/ceph/users/jpata/mlpf/cld/tfds --samples edm_qq edm_ttbar edm_ww_fullhad
+#   sbatch scripts/flatiron/input_normalization_stats.sh clic 3.3.0 /mnt/ceph/users/jpata/mlpf/clic/tfds
 #   sbatch scripts/flatiron/input_normalization_stats.sh idea 0.1.0 /mnt/ceph/users/rmorel/DEPR_particle_physics/idea/tensorflow_datasets/idea
 
 set -euo pipefail
