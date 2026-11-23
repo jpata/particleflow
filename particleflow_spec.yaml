@@ -827,7 +827,7 @@ models:
 
   # Engineering-only IDEA recipe. The dataset metadata records that tracks
   # come from GGTF/GenFit and the baseline candidate is a target oracle.
-  pyg-ild-v1:
+  pyg-ild-v1: &pyg_ild_v1
     <<: *defaults
     dataset: ild
     gpu_batch_multiplier: 8
@@ -849,7 +849,7 @@ models:
     test_datasets:
       - {name: "ild_edm_qq_pf", version: "0.2.0", splits: ["1"]}
 
-  pyg-idea-pipeline-v1:
+  pyg-idea-pipeline-v1: &pyg_idea_pipeline_v1
     <<: *defaults
     dataset: idea
     gpu_batch_multiplier: 16
@@ -998,7 +998,7 @@ models:
         num_heads: 16
 
   # Example: CLD Model
-  pyg-cld-v1:
+  pyg-cld-v1: &pyg_cld_v1
     <<: *defaults
     dataset: cld
     gpu_batch_multiplier: 1024
@@ -1229,7 +1229,7 @@ models:
         tracker_neighborhood: true
 
   # CLIC Model
-  pyg-clic-v1:
+  pyg-clic-v1: &pyg_clic_v1
     <<: *defaults
     dataset: clic
     gpu_batch_multiplier: 1024
@@ -1399,6 +1399,66 @@ models:
       - name: "maia_edm_ttbar_pf"
         version: "1.2.0"
         splits: ["10"]
+
+  # Key4hep v1.4.0 track/cluster selections shared by experts and fine-tunes.
+  # The train and validation loaders use the train and test splits respectively.
+  pyg-cld-key4hep-v140:
+    <<: *pyg_cld_v1
+    train_datasets: &key4hep_v140_cld_groups
+      physical:
+        batch_size: 1
+        samples: &key4hep_v140_cld_samples
+          - name: cld_edm_ttbar_pf
+            version: &key4hep_v140_cld_clic_version "3.4.0"
+            splits: &key4hep_v140_ten_configs ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+          - {name: cld_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+          - {name: cld_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+          - {name: cld_edm_z_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+          - {name: cld_edm_z_tautau_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+    validation_datasets: *key4hep_v140_cld_groups
+    test_datasets: *key4hep_v140_cld_samples
+
+  pyg-clic-key4hep-v140:
+    <<: *pyg_clic_v1
+    train_datasets: &key4hep_v140_clic_groups
+      physical:
+        batch_size: 1
+        samples: &key4hep_v140_clic_samples
+          - {name: clic_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+          - {name: clic_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+          - {name: clic_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+          - {name: clic_edm_z_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+          - {name: clic_edm_z_tautau_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+    validation_datasets: *key4hep_v140_clic_groups
+    test_datasets: *key4hep_v140_clic_samples
+
+  pyg-ild-key4hep-v140:
+    <<: *pyg_ild_v1
+    train_datasets: &key4hep_v140_ild_groups
+      physical:
+        batch_size: 1
+        samples: &key4hep_v140_ild_samples
+          - {name: ild_edm_ttbar_pf, version: &key4hep_v140_ild_version "0.2.0", splits: &key4hep_v140_one_config ["1"]}
+          - {name: ild_edm_ww_fullhad_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+          - {name: ild_edm_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+          - {name: ild_edm_z_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+          - {name: ild_edm_z_tautau_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+    validation_datasets: *key4hep_v140_ild_groups
+    test_datasets: *key4hep_v140_ild_samples
+
+  pyg-idea-key4hep-v140:
+    <<: *pyg_idea_pipeline_v1
+    train_datasets: &key4hep_v140_idea_groups
+      physical:
+        batch_size: 1
+        samples: &key4hep_v140_idea_samples
+          - {name: idea_edm_ttbar_pf, version: &key4hep_v140_idea_version "0.5.0", splits: *key4hep_v140_one_config}
+          - {name: idea_edm_ww_fullhad_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+          - {name: idea_edm_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+          - {name: idea_edm_z_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+          - {name: idea_edm_z_tautau_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+    validation_datasets: *key4hep_v140_idea_groups
+    test_datasets: *key4hep_v140_idea_samples
 
   pyg-colliderml-v1: &pyg_colliderml_v1
     <<: *defaults

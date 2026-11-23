@@ -75,7 +75,12 @@ the weights. For a new fine-tuning dataset, add `--reset_task_loss_weights true`
 to start its configured task-loss calibration from scratch. This requires
 `--load_weights_only true`; a full resume retains its existing calibration.
 
-The `pf_fm_finetuning` [scenario](scenarios.md) applies this recipe to fine-tune a joint attention checkpoint on IDEA or on CLD granularity variants.
+The reusable `configs/training/scenarios/pf_fm_finetuning.yaml` scenario
+fine-tunes a checkpoint from the ColliderML-only `pf_fm_joint` scenario,
+once each on the Key4hep v1.4.0 CLD, CLIC, ILD and IDEA track/cluster datasets.
+Set `training.parameters.load` to the source checkpoint. See the
+[scenario setup](../../configs/training/README.md#joint-attention-fine-tuning)
+for the launch command and dataset requirements.
 
 For a full resume that only restarts data iteration, use `--sampler_from_scratch true` instead. That option retains the checkpoint step, optimizer, and scheduler. A full resume also retains the saved learning-rate schedule; a changed configured learning rate is ignored with a warning. Simply extending `--num_steps` does not create a fresh schedule.
 
@@ -112,4 +117,42 @@ The log should state the loaded checkpoint and the restored starting step. Confi
 - new validation history and checkpoints appear in the selected experiment directory; and
 - validation loss is finite before interpreting longer-term trends.
 
-Runs started from a [training scenario](scenarios.md) resume with `--continue`; see that page for scenario restarts on Slurm.
+
+## Resubmitting a LUMI scenario component
+
+Submit a scenario as usual:
+
+```bash
+bash scripts/lumi/train_scenario.sh cms_backbone_comparison mi250x
+```
+
+The wrapper creates and submits a separate Slurm Bash script for every variant
+and seed. It prints their paths under
+`logs_slurm/submissions/<scenario>_<timestamp>/`, for example
+`attention_seed12345.sh` and `heptv2_seed12345.sh`. Each script contains its own
+resource requests and points to one fixed experiment directory. To restart only
+one failed component:
+
+```bash
+sbatch logs_slurm/submissions/<scenario>_<timestamp>/heptv2_seed12345.sh
+```
+
+On every launch, the component reads its saved `scenario-manifest.json`, selects
+the checkpoint with the highest numeric step, and resumes with the original
+training command. Without a checkpoint it starts from scratch in the same run
+directory. A component whose checkpoint has reached `num_steps` exits without
+training. An exclusive run lock prevents simultaneous training in that directory;
+a duplicate submission fails rather than writing competing checkpoints.
+
+The generated scripts preserve the resolved container and overlay paths from the
+submission environment, and new runs use a saved copy of the particleflow spec.
+Keep the submission directory and experiment directory for future restarts.
+Changes to scenario YAML do not affect resubmission of these scripts. The source
+code and overlay environment are still taken from the working checkout and saved
+overlay path; they are not copied or versioned by this workflow.
+
+`--continue` still selects compatible unfinished existing runs and generates
+component scripts for those runs. `--dry-run` and `--list` do not create scripts
+or submit jobs. The submission wrapper runs configuration resolution inside the
+LUMI container; the host only executes Bash and `sbatch` (system Python 3.6 is
+not used for configuration resolution).

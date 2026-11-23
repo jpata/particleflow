@@ -3,6 +3,7 @@ import shlex
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -267,7 +268,7 @@ def test_container_submission_script_preserves_arguments_and_dry_run(tmp_path, m
     monkeypatch.setattr(submission, "available_choices", lambda *args: ([], []))
     monkeypatch.setattr(submission, "resolve_scenario_path", lambda *args: scenario_path)
     monkeypatch.setattr(submission, "resolve_platform_profile_path", lambda *args: profile_path)
-    monkeypatch.setattr(submission, "build_slurm_submissions", lambda *args, **kwargs: [(command, [object()])] * num_groups)
+    monkeypatch.setattr(submission, "build_slurm_submissions", lambda *args, **kwargs: [(command, [SimpleNamespace(settings={})])] * num_groups)
     monkeypatch.setattr(Path, "mkdir", lambda *args, **kwargs: None)
 
     # Preparing a container submission must never invoke sbatch itself.

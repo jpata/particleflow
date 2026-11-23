@@ -576,6 +576,14 @@ def find_scenario_continuation(job, platform):
     return ScenarioContinuation(experiment_dir=experiment_dir, checkpoint=checkpoint, step=step)
 
 
+def require_scenario_checkpoint(job):
+    if job.settings.get("load_weights_only") and not job.settings.get("load"):
+        raise ValueError(
+            f"{job.scenario_name}/{job.variant_name} requires a source checkpoint. "
+            "Set training.parameters.load in the scenario or pass --set load=PATH to the direct runner."
+        )
+
+
 def run_scenario_job(job, scenario, platform, spec_file, *, dry_run=False, continue_run=False):
     continuation = find_scenario_continuation(job, platform) if continue_run else None
     if continue_run and continuation is None:
@@ -591,6 +599,8 @@ def run_scenario_job(job, scenario, platform, spec_file, *, dry_run=False, conti
             job.settings["load_weights_only"] = False
         if job.settings.get("reset_task_loss_weights"):
             job.settings["reset_task_loss_weights"] = False
+    if not dry_run:
+        require_scenario_checkpoint(job)
     command = _pipeline_command(job, scenario, platform, spec_file, experiment_dir)
     print(shlex.join(command), flush=True)
     if dry_run:

@@ -577,6 +577,63 @@ def test_shipped_scenarios_resolve(scenario_path):
     assert [(job.seed, job.variant_name) for job in jobs] == [(seed, variant) for seed in scenario.seeds for variant in scenario.variants]
 
 
+def test_pf_fm_campaign_uses_matching_detector_data_and_colliderml_pretraining():
+    scenarios = ROOT / "configs/training/scenarios"
+    profile = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
+
+    def resolve(name, **kwargs):
+        scenario = load_training_scenario(scenarios / f"{name}.yaml")
+        return resolve_scenario_jobs(scenario, profile, spec_file=ROOT / scenario.spec_file, **kwargs)
+
+    experts = resolve("pf_fm_experts")
+    checkpoint = "/experiments/colliderml/checkpoints/checkpoint-500000.pth"
+    finetunes = resolve("pf_fm_finetuning", extra_overrides={"load": checkpoint})
+    (joint,) = resolve("pf_fm_joint")
+    versions = {"cld": ("3.4.0", 10), "clic": ("3.4.0", 10), "ild": ("0.2.0", 1), "idea": ("0.5.0", 1)}
+    assert [job.variant_name for job in experts] == [job.variant_name for job in finetunes] == list(versions)
+    for job in (*experts, joint, *finetunes):
+        assert job.resolved_config.gpus == 1
+        assert job.per_gpu_batch_size == 32
+
+    def assert_samples(config, detector, expected):
+        assert set(config.train_dataset) == set(config.valid_dataset) == {detector}
+        selections = (
+            config.train_dataset[detector]["physical"].samples,
+            config.valid_dataset[detector]["physical"].samples,
+            config.test_dataset,
+        )
+        for samples in selections:
+            assert {name: (entry.version, entry.splits) for name, entry in samples.items()} == expected
+
+    ten_configs = [str(i) for i in range(1, 11)]
+    assert_samples(joint.resolved_config, "colliderml", {"colliderml_ttbar_nopu_pf": ("1.5.0", ten_configs)})
+    for expert, finetune in zip(experts, finetunes, strict=True):
+        detector = expert.variant_name
+        version, count = versions[detector]
+        samples = ("ttbar", "ww_fullhad", "qq", "z_qq", "z_tautau")
+        expected = {f"{detector}_edm_{sample}_pf": (version, ten_configs[:count]) for sample in samples}
+        assert_samples(expert.resolved_config, detector, expected)
+        assert_samples(finetune.resolved_config, detector, expected)
+        assert expert.resolved_config.load is None
+        assert finetune.resolved_config.load == checkpoint
+        assert finetune.resolved_config.load_weights_only
+        assert finetune.resolved_config.reset_task_loss_weights
+        assert finetune.resolved_config.model == joint.resolved_config.model
+
+
+def test_finetuning_scenario_requires_source_checkpoint_before_starting(tmp_path):
+    from mlpf.training_scenarios import run_scenario_job
+
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_finetuning.yaml")
+    platform = PlatformProfile(name="test", gpus=1, data_dir="/tmp/data", experiments_dir=str(tmp_path))
+    spec_file = ROOT / scenario.spec_file
+    job = resolve_scenario_jobs(scenario, platform, spec_file=spec_file)[0]
+    run_scenario_job(job, scenario, platform, spec_file, dry_run=True)
+    with pytest.raises(ValueError, match="requires a source checkpoint"):
+        run_scenario_job(job, scenario, platform, spec_file)
+    assert list(tmp_path.iterdir()) == []
+
+
 @pytest.mark.parametrize("gpus", [1, 2, 4, 8])
 @pytest.mark.parametrize("global_batch_size", [32, 96])
 def test_global_batch_is_distributed_across_gpus(gpus, global_batch_size):

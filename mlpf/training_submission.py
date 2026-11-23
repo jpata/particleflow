@@ -16,6 +16,7 @@ from mlpf.training_scenarios import (
     find_scenario_continuation,
     load_platform_profile,
     load_training_scenario,
+    require_scenario_checkpoint,
     resolve_scenario_jobs,
 )
 
@@ -346,6 +347,10 @@ def main(argv=None, *, site="flatiron"):
         continue_run=args.continue_run,
         variants=args.variants,
     )
+    if not args.dry_run and not args.continue_run:
+        for _, jobs in submissions:
+            for job in jobs:
+                require_scenario_checkpoint(job)
     for command, jobs in submissions:
         print(
             f"Submitting {len(jobs)} jobs for {args.scenario} on {args.accelerator}:\n" + shlex.join(command),

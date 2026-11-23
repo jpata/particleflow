@@ -1,141 +1,540 @@
-# Training scenarios
+# Reusable training scenarios
 
-A scenario (`scenarios/<name>.yaml`) defines a reproducible training campaign: variants, seeds, global batch size, and shared training settings. A platform profile (`platforms/<profile>.yaml`) supplies GPUs, data roots, loader settings, and Slurm resources. The user guide is [Training scenarios](../../docs/training/scenarios.md); this file is the reference for the runner and the individual scenarios. Study design and results live in [`docs/studies/`](../../docs/studies/index.md).
+To repeat the single-device GH200 batch sweep on **LUMI MI250X or Flatiron H100**,
+follow the [cross-platform reproduction runbook](../../docs/training/hpc-batch-sweep.md).
+It includes branch checkout, data verification, site environment setup,
+single-device launchers, qualification and full-sweep commands.
 
-## Running
+For the EmpireAI ARM64 GH200 test node and `ghtest` reservation, see the
+[setup and smoke-test instructions](../../scripts/empireai/README.md).
+`cld_gh200_backbone_benchmark` compares attention and HEPTv2 on the copied ttbar
+hits subset at batch 8 for 1,000 steps with matched decoder, features and seed.
 
-Preview locally with the generic runner:
+Native and Ray training workers collect portable benchmark evidence when enabled
+with `--set benchmark.enabled=true`, under each experiment's `benchmark/` directory.
+Recording is disabled by default; batch sweeps and the PF attention expert/joint
+scenarios enable it explicitly. Use `python -m mlpf.benchmark_report
+experiments/<scenario>` to export per-worker metrics and allocation work totals to
+JSON/CSV. Configuration lives under `benchmark` (`enabled`, `sample_interval_seconds`,
+`warmup_steps`, `gpu_timing_interval`); the scenario runner accepts these through
+`--set`, and platform profiles can set them as runtime overrides. See the
+[artifact and metric definitions](../../scripts/empireai/README.md#utilization-evidence-for-an-allocation-request).
+
+The recommended CLD hit-model default is `pyg-cld-hits-heptv2-set-v1` in
+`particleflow_spec.yaml`. Use `cld_pf_heptv2_default_50k` for its training recipe:
+
+```bash
+scripts/lumi/train_scenario.sh cld_pf_heptv2_default_50k mi250x --dry-run
+scripts/local/train_scenario.sh cld_pf_heptv2_default_50k --dry-run
+```
+
+This promotes the 50k `hit_heptv2_grouped_tracker_features` result: six HEPTv2
+layers, four global Flash decoder layers, 256 slots, supervised hit grouping,
+and tracker-neighborhood features. Circle-fit readout, bounded fit correction,
+detector-balanced grouping loss and event-consistency loss are disabled.
+The recipe uses learning rate 0.001, global batch 64 and seed 12345; the local
+launcher applies its usual short-run overrides and global batch 1.
+
+On the study's 1,536 test events, charged pT residual half-width improved from
+16.53% to 14.89% and charged matching efficiency from 77.34% to 78.40% versus
+the previous grouped reference. This is the single-seed result evaluated on
+2026-10-13. Historical sector and comparison presets remain unchanged.
+
+For the latest archived outcomes, incomplete-run limits and historical dataset/metric
+differences, see [the evidence summary](../../docs/cld_hit_results.md). The
+[three-seed width-only study](../../docs/tracker_width_scaling.md) and
+[grouping-loss factorial](../../docs/tracker_grouping_loss_experiments.md) are
+separate from the older joint width/depth campaign below.
+
+Scientific comparisons live under `scenarios/`; machine-dependent paths and runtime
+tuning live under `platforms/`. Run a scenario locally with:
 
 ```bash
 uv run python3 scripts/training/run_scenario.py \
-  --scenario configs/training/scenarios/release_checkpoints.yaml \
+  --scenario configs/training/scenarios/cld_hits_output_comparison.yaml \
   --platform configs/training/platforms/local.yaml \
-  --variant cld_pf_attention --dry-run
+  --global-batch-size 8 \
+  --dry-run
 ```
 
-Site pickers discover the same scenarios and submit Slurm arrays. The second argument is an accelerator profile (`--list` shows them):
+## CLIC and CLD backbone benchmark
+
+[`clic_cld_backbone_benchmark`](scenarios/clic_cld_backbone_benchmark.yaml) runs
+eight models per seed: CLIC/CLD × tracks-and-clusters/raw-hits × attention/HEPTv2.
+Variant names are `{cld,clic}_{pf,hits}_{attention,heptv2}`. The older
+`clic_cld_pf_set_hits_comparison` contains only attention models and retains its
+historical recipe.
+
+Track/cluster variants request **one GPU per job**; hit variants use the platform
+GPU count (eight on H100 and MI250X). With global batch 128, this gives 128 events
+on the single PF GPU and 16 events per GPU for eight-GPU hit jobs. Submission
+automatically creates separate arrays: indices `0,1,4,5` request one GPU, while
+`2,3,6,7` use the platform count. GPU counts, batch resolution, and worker allocation
+checks follow each variant. Other Slurm resources still come from the platform;
+in particular, LUMI's 480G host-memory request remains unchanged.
+
+All eight models train from scratch for 50,000 steps at global batch 128 with
+LAMB, LR 0.001 and cosine decay (6.4M event presentations each). Validation and
+checkpoints run every 1,000 steps, matching the completed readout study. Seed 12345 is
+the initial benchmark; repeat with `--seed` for training-seed uncertainty.
+Both backbones have six layers and embedding width 256, with 16 heads.
+HEPTv2 uses block size 128, deterministic hashing and activation checkpointing.
+This matches event exposure and embedding width, not parameter count or compute.
+
+The four hit models share the small-model recipe with the tracker momentum head
+from the completed readout campaign in
+[`20261021_cld_tracker_losses_readout`](../../notebooks/studies/20261021_cld_tracker_losses_readout/cld_tracker_losses_readout.ipynb): four global Flash
+decoder layers, 256 slots, grid-diverse aggregate proposals, supervised hard
+hit grouping, and geometry plus calorimeter/tracker-neighborhood features.
+The decoder and input features match `cld_pf_heptv2_default_50k` with
+`tracker_momentum_readout: true` for both backbones. In the matched 50k campaign,
+the head improved charged width from 12.78% to 12.40%, tails from 3.69% to 3.38%,
+and jet IQR from 0.10316 to 0.09815. Its +0.15 percentage-point F1 change has a
+paired 95% interval spanning zero; the tail reduction interval excludes zero.
+This is the best-supported current benchmark candidate, not a multi-seed proven
+replacement for the conservative default in the [evidence summary](../../docs/cld_hit_results.md).
+Sparse pooling, momentum/doublet inputs, fitted readouts, balanced CE, and auxiliary
+fit/overlap losses stay off. The loss campaign only has matched 32k results;
+combining balanced CE with the head is untested. The scaling study favors keeping
+width 256 and depths 6/4 for particle reconstruction, although large improves jets.
+CLIC and attention transfer of this recipe are new benchmark measurements, not previously
+validated wins. Track/cluster models retain elementwise output.
+
+The spec currently selects PF TFDS **3.3.0** and hits **3.2.2** for both detectors.
+These are fresh comparisons, not reproductions of archived CLD **3.2.1** results.
+Use common evaluation definitions and matched checkpoints, and compare momentum
+resolution/tails, efficiency, jets and event closure alongside particle F1.
+
+Preview all eight jobs without launching training:
 
 ```bash
-scripts/flatiron/train_scenario.sh SCENARIO h100 --dry-run   # a100, h100, h100_single, h200
-scripts/lumi/train_scenario.sh SCENARIO mi250x               # mi250x, mi250x_single
-scripts/tallinn/train_scenario.sh SCENARIO l40
-scripts/empireai/train_scenario.sh SCENARIO gh200
-scripts/local/train_scenario.sh SCENARIO                     # no Slurm, short-run overrides, global batch 1
+uv run --no-sync python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/clic_cld_backbone_benchmark.yaml \
+  --platform configs/training/platforms/flatiron_h100.yaml --dry-run
 ```
 
-Common options: `--variant NAME` (repeatable; array indices stay those of the full scenario), `--seed N` (replaces the seed list; `SEED` in the shell launchers), `--continue` (resubmit runs whose latest checkpoint is below `num_steps`), and, for the direct runner, `--global-batch-size`, `--data-dir`, and `--set KEY=VALUE`.
+Submit with `scripts/flatiron/train_scenario.sh clic_cld_backbone_benchmark h100`.
+Use `--variant clic_hits_heptv2` to select a single model. The local and Flatiron
+profiles map data paths separately for CLIC and CLD. The existing LUMI profile
+has one CLD directory for all productions; before using it for the full benchmark,
+provide a platform with `data_dir: {cld: /path/to/cld, clic: /path/to/clic}` or a
+shared TFDS root containing both detectors. A dry run resolves configurations
+but does not verify data availability or GPU memory usage.
 
-## How the runner resolves a scenario
+## CMS backbone comparison
 
-- **Batch size.** The scenario declares a global batch per step; a variant can override it with `global_batch_size`, and `--global-batch-size` overrides both (one value, or `GROUP=N,...` per train group). The runner derives `gpu_batch_multiplier` from the GPU count and the dataset batch size and rejects non-integral combinations.
-- **Controlled comparisons.** Every variant is resolved through `MLPFConfig`; variants may differ only in the fields listed under `allowed_variant_differences`.
-- **Jobs.** Jobs are ordered by seed, then variant; `--task-index $SLURM_ARRAY_TASK_ID` selects one. Variants with different GPU counts are submitted as separate arrays.
-- **Outputs.** Runs go to `<experiments_dir>/<scenario>/<variant>_seed<seed>_<timestamp>/` with a `scenario-manifest.json` holding the scenario, platform, seed, final configuration, command, and git revision. `--continue` and the LUMI per-component scripts resume from it.
-- **Resources.** Flatiron profiles request `slurm.cpus_per_gpu: 24`, scaled by each job's GPU count. Profiles with `slurm.partial_node` (LUMI) send jobs using fewer GPUs than a node to a shared partition (`small-g`, 7 cores and 60 GB per GCD).
-- **Data roots.** `data_dir` in a profile is a path or a map from production name to path; `--data-dir` overrides it. Variants can append a `data_subdir` (used for the CLD granularity scans).
-- **LUMI environment.** Submitter and worker run inside the LAIF container (`IMG`) with the overlay `LUMI_VENV` created by `bash scripts/lumi/setup_env.sh`; even `--list` and `--dry-run` need it. For a configuration-only preview, use `run_scenario.py --dry-run`.
-- **Benchmark telemetry.** Off unless `benchmark.enabled=true` (`--set` or a profile runtime override); written to each experiment's `benchmark/` directory. `python -m mlpf.benchmark_report experiments/<scenario>` exports JSON/CSV. See [benchmark portability](../../docs/training/benchmark-portability.md#recorder-artifacts-and-metric-scope).
+`cms_backbone_comparison` trains CMS on TFDS version **2.8.0**, selecting either
+`--variant attention` or `--variant heptv2`. It retains the PU/no-PU ttbar, QCD
+and Z→ττ training/validation samples and the PU test samples. Both variants use
+three backbone layers, embedding width 512, 16 heads, zero dropout, the same seed
+and global event batches of **96 (PU) / 768 (no-PU)**.
+HEPTv2 uses deterministic hashing and block size 100. The schedule is **320,000
+steps** at learning rate 0.0004 with cosine decay to 0.00004. Dataset versions are
+pinned in the scenario. Validation uses 5,000 events per sample (30,000 total);
+the PU test subsets stay at 512 per process for comparison with the published runs.
 
-## Maintained scenarios
+This corrects the training exposure of the published
+[v3.2.0 runs](https://huggingface.co/jpata/particleflow/tree/main/cms/v3.2.0):
+uniform batches of 64 and 100k updates gave only 0.43 passes over each group,
+with 9.1% of updates on PU. The
+[v2.6.0pre1 reference](https://huggingface.co/jpata/particleflow/tree/main/cms/v2.6.0pre1/pyg-cms_20250722_101813_274478)
+used global batches 96/768 and reached TensorBoard step 316,400 over ten epochs.
+Restoring those batches and using 320k updates gives approximately ten passes
+and 44% PU updates with the recorded dataset counts. Keep group weights unset
+so sampling remains proportional to each group's batches per epoch.
 
-### `release_checkpoints`
+Both v3.2.0 models improved validation loss through 100k updates. Its published
+[paired PU comparison](https://huggingface.co/jpata/particleflow/blob/main/cms/v3.2.0/comparison_metrics/comparison.json)
+shows better PID accuracy and narrower jet-response IQR, but worse particle F1
+and MET error than the reference. More training is a supported next experiment,
+not evidence that the reference has already been exceeded. Retain v3.2.0's
+shared width-512 backbones and calibrated task weights for this experiment;
+the old width-256 dual backbone and objective differ, so historical aggregate
+losses are not directly comparable. Keep LR 0.0004 initially; test the historical
+0.002 with `lr-find` before adopting it for these larger models.
 
-Reference checkpoints published with each release under `{cld,clic,colliderml}/{clusters,hits}/vX.Y.Z/` and `cms/vX.Y.Z/` on the [model hub](https://huggingface.co/jpata/particleflow). Train each release from its tag with this file unchanged; a change starts a new comparison series and belongs in the release notes.
+Start fresh runs: resuming a 100k checkpoint restores the old cosine scheduler
+and calibrated weights, and is not equivalent to training with this schedule.
+Use the same held-out inputs and precision for final reference comparisons,
+including particle F1/purity, momentum errors, MET, jet response and angular
+recall; narrower response alone can hide a loss of matched jets. The larger
+batches require GPU memory and throughput checks for both backbones. Checkpoints
+remain every 10k updates; use `--continue` across allocation boundaries.
 
-| Variants | Model | Data | Global batch | GPUs |
-|---|---|---|---:|---|
-| `{cld,clic}_pf_{attention,heptv2}` | `pyg-{cld,clic}-v1` | PF 3.3.0 | 128 | 1 |
-| `{cld,clic}_hits_{attention,heptv2}` | `pyg-{cld,clic}-hits-set-v1` | hits 3.2.2 | 128 | platform |
-| `colliderml_pf_{attention,heptv2}` | `pyg-colliderml-v1` | PU0 PF 1.5.0 | 128 | 1 |
-| `colliderml_hits_{attention,heptv2}` | `pyg-colliderml-hits-set-v1` | PU0 hits 1.3.0 | 128 | platform |
-| `cms_{attention,heptv2}` | `pyg-cms-v1` | PU and no-PU 2.8.0 | 96 PU / 768 no-PU | platform |
+The default CMS attention model also uses width 512 (16 heads × 32 channels).
+The comparison disables task queries for both backbones and pins TFDS 2.8.0;
+the default model specification still selects TFDS 3.2.0.
 
-100,000 steps, OneCycle (30% warm-up), no early stopping. CLD, CLIC and ColliderML follow the backbone benchmark below (LAMB, peak LR 0.001, six layers of width 256, validation on 512 events every 1,000 steps); ColliderML hit models use 512 slots. CMS keeps the `cms_backbone_comparison` model (three layers of width 512, LR 0.0004, validation every 10,000 steps) with the [96/768 batches](../../docs/studies/cms_training_exposure.md). Track/cluster models use input normalization. Checkpoints are written every 1,000 steps (CMS 10,000) and all are kept; hit models need several 48-hour allocations, so resubmit them with `--continue`.
-
-```bash
-scripts/lumi/train_scenario.sh release_checkpoints mi250x --dry-run
-```
-
-### `clic_cld_backbone_benchmark`
-
-CLIC/CLD × tracks-and-clusters/hits × attention/HEPTv2 (`{cld,clic}_{pf,hits}_{attention,heptv2}`), from scratch, 50k steps at global batch 128, LAMB, LR 0.001, cosine decay. Both backbones have six layers of width 256 with 16 heads; HEPTv2 uses block size 128 and activation checkpointing. This matches event exposure and width, not parameter count. Track/cluster jobs use one GPU, hit jobs the platform count. The hit recipe is described in [CLD hit-model campaigns](../../docs/studies/cld_hit_campaigns.md#hit-recipe-in-the-backbone-benchmark). The older `clic_cld_pf_set_hits_comparison` keeps its historical attention-only recipe.
-
-```bash
-scripts/flatiron/train_scenario.sh clic_cld_backbone_benchmark h100 --dry-run
-```
-
-The LUMI profile maps one CLD directory for all productions; give it a `data_dir` map with CLD and CLIC roots before running the full benchmark.
-
-### `cms_backbone_comparison` and `cms_input_normalization`
-
-`cms_backbone_comparison` trains CMS attention or HEPTv2 (`--variant attention|heptv2`) on TFDS 2.8.0: three layers of width 512, 16 heads, global batches 96 (PU) / 768 (no-PU), 320,000 steps at LR 0.0004 with cosine decay, validation on 5,000 events per sample, task queries disabled. [CMS training exposure](../../docs/studies/cms_training_exposure.md) explains these choices. `cms_input_normalization` compares `norm` and `no_norm` with the HEPTv2 recipe at global batch 64 and 100k steps, using `mlpf/model/input_normalization_stats/cms_2.8.0.yaml`.
+Supply the CMS TFDS directory explicitly when the platform profile only maps
+CLD/CLIC data paths:
 
 ```bash
 uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/cms_backbone_comparison.yaml \
   --platform configs/training/platforms/local.yaml \
-  --data-dir /path/to/cms/tfds --variant attention --dry-run
+  --data-dir /path/to/cms/tfds \
+  --variant attention \
+  --dry-run
 ```
 
-### `colliderml_input_normalization` and `cld_clic_colliderml_feature_bag`
+Use `--variant heptv2` for HEPTv2; omit `--variant` to run both. Remove
+`--dry-run` to start training.
 
-`colliderml_input_normalization` trains the ColliderML PU0 track/cluster model with and without input normalization. `cld_clic_colliderml_feature_bag` trains the joint `pyg-cldcliccolliderml-v1` model (production `cld_clic_colliderml`, input-normalized) with and without the feature bag, for 2,000 steps at global batch 1,024.
+## CMS input normalization
 
-### `pf_fm_experts`, `pf_fm_joint`, `pf_fm_finetuning`
+`cms_input_normalization` compares `--variant norm` and `--variant no_norm`
+using the HEPTv2 recipe from `cms_backbone_comparison`, including the CMS 2.8.0
+sample pins, global batch of 64 and 100,000-step schedule. The variants differ
+only in `model.input_normalization`. The normalized run uses the committed
+full-training-split statistics in `mlpf/model/input_normalization_stats/cms_2.8.0.yaml`.
 
-| Scenario | Training data | Initialization |
-|---|---|---|
-| `pf_fm_experts` | Separate CLD, CLIC, IDEA 0.3.0 and ColliderML PU0 experts, plus CLD granularity variants | Fresh weights |
-| `pf_fm_joint` | CLD, CLIC and ColliderML PU0 with `pyg-cldcliccolliderml-v1` | Fresh weights |
-| `pf_fm_finetuning` | IDEA 0.3.0 and CLD granularity variants | A joint attention checkpoint |
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/cms_input_normalization.yaml \
+  --platform configs/training/platforms/local.yaml \
+  --data-dir /path/to/cms/tfds \
+  --dry-run
+```
 
-All use six shared attention layers of width 256, native Flash attention, input normalization, LAMB with peak LR 0.0005, OneCycle with 30% warm-up, up to 500,000 updates at global batch 16, and benchmark telemetry. Joint training, fine-tuning, and CLD scan experts enable the feature bag; nominal experts use native inputs. The Flatiron profiles `h100_single`, `a100`, and `h100` use 1, 4, and 8 GPUs at the same global batch.
+Omit `--variant` to run both variants. Remove `--dry-run` to start training.
+
+## HEPTv2 model-size scaling (50k)
+
+`scenarios/cld_pf_heptv2_model_scaling_50k.yaml` scales width and depth together
+while retaining the previous baseline's 154 input channels: geometry, tracker
+neighborhoods and calorimeter neighborhoods. The new tracker momentum and doublet
+features are explicitly disabled.
+
+| Variant | Embedding / encoder width | Backbone layers | Decoder layers | Total parameters | Trainable parameters |
+|---|---:|---:|---:|---:|---:|
+| `hit_heptv2_small` | 256 | 6 | 4 | 12,732,407 | 12,709,139 |
+| `hit_heptv2_medium` | 384 | 9 | 6 | 42,114,141 | 42,063,111 |
+| `hit_heptv2_large` | 512 | 12 | 8 | 98,898,211 | 98,808,667 |
+
+Parameter counts are from instantiated MLPF models, excluding any training-time
+loss weighter. Total counts include frozen HEPTv2 parameters; study scaling plots
+use trainable counts. Decoder embedding width follows the backbone embedding width;
+HEPTv2's internal MLP width follows its unchanged `mlp_ratio=4`. Head counts stay
+at 16 for the backbone and 8 for the decoder, and all variants retain 256 slots,
+the same proposal scheme, supervised hit grouping and objective. The small model
+matches the baseline architecture, with backbone activation checkpointing enabled
+for all three sizes. This is a joint width/depth comparison, not an ablation that
+separately identifies the contribution of each.
+
+All runs use global batch **128** (16 per GPU on eight-GPU LUMI), seed 12345,
+50,000 steps, LAMB, LR 0.001 and cosine decay. Validation and checkpoint intervals
+are both **1,000 steps**. Validation/test sample sizes remain 512, with four
+diagnostic batches and validation linear probes enabled. The batch increase from
+the previous default's 64 gives 6.4M event presentations over the full schedule.
+
+Preview the three resolved commands without submitting training:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/cld_pf_heptv2_model_scaling_50k.yaml \
+  --platform configs/training/platforms/lumi_mi250x.yaml --dry-run
+```
+
+Submit with `scripts/lumi/train_scenario.sh cld_pf_heptv2_model_scaling_50k mi250x`.
+The local launcher uses global batch 1 and its usual short-run overrides,
+including validation/checkpoint intervals of 200 unless overridden. To retain
+the scenario's requested intervals locally, set `VAL_FREQ=1000 CHECKPOINT_FREQ=1000`.
+All three models passed a finite CPU forward check on 128 synthetic hits. The
+21 October archive includes matched 42k particle and resource measurements;
+small remains the practical reference, while large improves jets but worsens
+inclusive charged momentum. See [the evidence summary](../../docs/cld_hit_results.md).
+
+The scenario declares a global batch size. The runner derives
+`gpu_batch_multiplier` from the number of GPUs and the dataset batch size, and rejects
+non-integral combinations. It also resolves every variant through `MLPFConfig` and
+checks that variants differ only in the fields listed by
+`allowed_variant_differences`.
+
+The local picker discovers the same scenario files and applies the local platform
+profile and short-run defaults:
+
+```bash
+scripts/local/train_scenario.sh --list
+scripts/local/train_scenario.sh cld_hits_output_comparison --dry-run
+scripts/local/train_scenario.sh cld_hits_output_comparison --seed 2468
+```
+
+Additional arguments are forwarded to the generic scenario runner, such as
+`--variant set`, `--global-batch-size 4`, or `--set num_steps=100`.
+
+With multiple variants or seeds, jobs are ordered by seed and then by variant. A
+Slurm array can select one job using `--task-index $SLURM_ARRAY_TASK_ID`.
+`--seed N` replaces the scenario seed list, including when a task index is used.
+The site shell launchers expose this as the `SEED` environment variable. Without an
+override, seeds come from the scenario file and are recorded in both the resolved
+configuration and run manifest.
+
+The Flatiron profiles request a fixed 24 CPUs per GPU
+(`slurm.cpus_per_gpu: 24`): one GPU requests 24 CPUs, four GPUs request 96,
+and eight GPUs request 192. The request scales with the job's effective GPU
+count, including scenario variant overrides, independently of dataloader workers
+or dataset groups. When set, `cpus_per_gpu` takes precedence over the fixed
+`cpus_per_task` setting. Non-Flatiron profiles retain their explicit CPU requests.
+
+List the available scenarios and accelerators, then submit using the Flatiron
+picker:
+
+```bash
+scripts/flatiron/train_scenario.sh --list
+scripts/flatiron/train_scenario.sh cld_hits_output_comparison h100 --dry-run
+scripts/flatiron/train_scenario.sh cld_hits_output_comparison h100
+```
+
+The picker reads Slurm resources from the selected platform profile and derives
+the array size from the scenario's variants and seeds. Use `--seed N` to submit
+one comparison pair with an explicit seed.
+
+Tallinn and LUMI use the same interface with site-specific profiles and workers:
+
+```bash
+scripts/tallinn/train_scenario.sh --list
+scripts/tallinn/train_scenario.sh cld_hits_output_comparison l40 --dry-run
+scripts/tallinn/train_scenario.sh cld_hits_output_comparison l40
+
+scripts/lumi/train_scenario.sh --list
+scripts/lumi/train_scenario.sh cld_hits_output_comparison mi250x --dry-run
+scripts/lumi/train_scenario.sh cld_hits_output_comparison mi250x
+```
+
+For the three CLD hit-set references (Flash backbone with global Flash decoder,
+HEPTv2 backbone with global Flash decoder, and HEPTv2 backbone with sectorized
+Flash decoder), preview and submit the comparison campaign:
+
+```bash
+scripts/lumi/train_scenario.sh cld_set_hits_heptv2_sector_comparison mi250x --dry-run
+scripts/lumi/train_scenario.sh cld_set_hits_heptv2_sector_comparison mi250x
+```
+
+The Tallinn worker runs the repository's `uv` environment directly. LUMI uses
+Local-LAIF and an overlay created with `bash scripts/lumi/setup_env.sh`. Both
+submitter and worker activate `LUMI_VENV` (default `particleflow-laif-env` in the
+repository) inside the LAIF container (`IMG` overrides its path). The submitter
+resolves configurations in the container, then invokes host `sbatch`;
+`PYTHON_EXECUTABLE` overrides its container-side interpreter. Even LUMI
+`--list`/`--dry-run` requires that environment. For a portable configuration-only
+preview, use `scripts/training/run_scenario.py --dry-run` with a platform file.
+
+Use repeated `--set KEY=VALUE` options only for explicit one-off overrides. Every
+resolved run writes `scenario-manifest.json` containing the scenario, platform,
+seed, final configuration, command, and git revision. Runs are grouped as
+`<experiments_dir>/<scenario_name>/<variant>_seed<seed>_<timestamp>/`.
+
+## Grouped HEPTv2 tracking follow-up (50k)
+
+`scenarios/cld_pf_heptv2_grouped_tracking_50k.yaml` defines five runs, all with
+seed 12345, global batch 64, learning rate 0.001, 50,000 steps, and reconstruction
+diagnostics on four validation batches per rank. Every variant changes one
+mechanism from the completed grouped HEPTv2 model:
+
+| Variant suffix | Change from `hit_heptv2_grouped_baseline` |
+|---|---|
+| `tracker_features` | Enable existing tracker-neighborhood features |
+| `balanced` | Average tracker and calorimeter grouping losses with equal detector weight |
+| `tracker_readout` | Add predicted-group geometric summaries and reliable circle-fit momentum anchors |
+| `event_consistency` | Add visible event momentum/energy consistency, weight 0.1 |
+
+Detector balancing preserves the background weight of 0.1 within each detector,
+normalizes over the local training batch, and averages only detector populations
+present in that batch. It does not rebalance individual particles.
+
+The tracker readout uses predicted groups only. It fits transverse circles with
+three Huber-reweighted least-squares iterations, in double precision, and passes
+nine summaries to a zero-initialized learned slot projection: hit and surface
+counts, radial and longitudinal spans, transverse spatial scale, fitted log-pT,
+relative fit residual, conditioning, and a validity flag. A valid fit requires
+at least four hits, three distinct (system, side, layer) surfaces, 100 mm radial
+span, a Gram-matrix eigenvalue ratio above 1e-7, a radial RMS residual below 2%
+of that span, and fitted pT in (0.1, 10,000) GeV. The conversion assumes unit
+charge magnitude and the CLD 2 T solenoid, set explicitly by
+`tracker_group_magnetic_field`. It is a geometric prior rather than a full
+material-aware track fit.
+
+Reliable fits supply log-pT and a massless energy estimate from the initial
+slot eta to the decoder's learned residual scale head. Existing calorimeter
+seed anchors are retained. Unreliable groups keep their learned scales; their
+geometric summaries can still inform the decoder. Validation reports
+`metrics/set_slot/tracker_fit_fraction` (over all slots) and
+`tracker_fits_per_event` on diagnostic batches. These count valid fits after
+excluding slots with calorimeter anchors, but before the charged-PID gate; they
+are not counts of final predictions using fitted momentum.
+
+Event consistency uses the final slots' soft presence probabilities to sum
+visible px, py, pz and energy. Momentum residuals are normalized by the target
+scalar momentum sum; energy residuals by target total energy, both floored at
+1 GeV. Smooth-L1 momentum and energy terms are added with the configured weight,
+outside automatic task weighting. The target visible momentum need not vanish.
+This is a weak auxiliary objective; compare jet widths, vector closure, class
+momentum errors, efficiencies, and count bias rather than total training loss.
+
+Resolve all production jobs without launching training:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/cld_pf_heptv2_grouped_tracking_50k.yaml \
+  --platform configs/training/platforms/lumi_mi250x.yaml --dry-run
+```
+
+Submit on LUMI using the same scenario through `scripts/lumi/train_scenario.sh`.
+For local smoke runs, `scripts/local/train_scenario.sh
+cld_pf_heptv2_grouped_tracking_50k` uses global batch 1 by default to accommodate
+local GPU memory; it is not the production batch-64 comparison.
+
+The grouped tracking scenario also enables `validation_linear_probe` with a
+16-event cap per rank. It fits fresh raw/embedding calorimeter continuation
+rankers on diagnostic events and evaluates on disjoint events. TensorBoard,
+history JSON and `VALIDATION_PROBE` log lines report accuracy, coverage and
+support. See `docs/calo_continuation_probe.md`. Local batch-one runs need at least
+eight diagnostic batches for sufficient fit/evaluation events.
+
+The `cld_pf_heptv2_fit_correction_50k` scenario compares ordinary grouped
+regression, legacy tracker anchors and a bounded learned correction to fitted
+charged-particle pT. See [charged fit correction](../../docs/charged_fit_correction.md)
+for fit gates, fallback behavior and limitations. It does not start training
+automatically.
+
+The same diagnostics also report tracker and calorimeter instance ARI for raw
+features and embeddings. Their default per-rank split is 8 fitting, 4 threshold
+calibration and 4 evaluation events; TensorBoard tags end in `/raw/ari` and
+`/embedding/ari`. Calibration and final evaluation are disjoint.
+
+The tracker-fit loss ablation is `cld_pf_heptv2_fit_loss_50k`: baseline,
+truth-circle compatibility loss, differentiable curvature loss, and both losses.
+All retain the learned inference readout. See
+[the experiment design](../../docs/tracker_fit_loss_experiments.md) for objectives,
+local commands and acceptance criteria.
+
+## Small-model tracker readout and sparse association
+
+`cld_pf_heptv2_tracker_readout_50k` compares the unchanged small scaling baseline,
+a tracker-specific momentum residual, sparse top-4 differentiable hit-to-slot
+pooling, and both additions. It retains batch 128, 50k steps, and validation and
+checkpoint intervals of 1,000. See [implementation and comparison details](../../docs/tracker_momentum_readout.md).
+
+```bash
+scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_readout_50k mi250x --dry-run
+```
+
+## PF foundation-model training
+
+| Scenario | Train, validation and test datasets | Initialization |
+| --- | --- | --- |
+| [`pf_fm_experts`](scenarios/pf_fm_experts.yaml) | One model per Key4hep v1.4.0 detector (CLD, CLIC, ILD, IDEA) | Fresh weights |
+| [`pf_fm_joint`](scenarios/pf_fm_joint.yaml) | ColliderML Release 1 ttbar without pileup, TFDS version 1.5.0, configurations 1–10 | Fresh weights |
+| [`pf_fm_finetuning`](scenarios/pf_fm_finetuning.yaml) | One model per Key4hep v1.4.0 detector, with the same data as its expert | Checkpoint from `pf_fm_joint` |
+
+Each [Key4hep v1.4.0 detector](../../docs/datasets/key4hep-50k.md) uses five
+track/cluster samples (ttbar, fully hadronic WW, qq, Z→qq and Z→tautau).
+CLD and CLIC use TFDS 3.4.0, configurations 1–10. ILD uses 0.2.0 and IDEA
+uses 0.5.0, both with configuration 1. The scenarios use the committed
+normalization tables for these versions and for
+[ColliderML 1.5.0](../../docs/datasets/colliderml.md).
+
+All three scenarios use four shared attention layers of width 512 (16 heads
+× 32 channels), native Flash attention and input normalization. Training uses
+LAMB and OneCycle with a peak learning rate of 0.001 and 30% warmup. The maximum
+budget is 500,000 updates at a global batch of 32 events. Experts use native
+detector inputs. Pretraining and fine-tuning use the same feature bag to
+align the detector inputs for strict weight loading.
 
 | Scenario | Validation interval | Early stopping |
-|---|---:|---|
-| Experts | 10,000 | 3 validations without improvement |
-| Joint | 10,000 | none |
-| Fine-tuning | 1,000 | 30 validations without improvement |
+| --- | ---: | --- |
+| Experts | 10,000 updates | 3 consecutive validation cycles without lower total loss |
+| Joint | 10,000 updates | Full update budget |
+| Fine-tuning | 1,000 updates | 30 consecutive validation cycles without lower total loss |
 
-Checkpoints are written every 2,000 updates, and the lowest-loss one is kept as `checkpoints/best.pth`. Fine-tuning loads weights only and recalibrates the task-loss weights; set `load` in the scenario, or pass `--set load=/path/to/joint/checkpoint.pth` to the direct runner.
+Validation records particle matching, PID, kinematic and event-level metrics
+under `metrics/particle/*`. Test inference writes predictions, plots and
+jet-response metrics. The runner saves periodic checkpoints every 2,000
+updates and retains the lowest-loss checkpoint as `checkpoints/best.pth`.
 
-CLD granularity variants are `cld_ecal_{1p5mm,2mm,2p5mm,3mm,4mm,5p1mm}` (`cld_edm_z_tautau_pf`) and `cld_hcal_{10mm,12mm,15mm,20mm,25mm,30mm}` (`cld_edm_ttbar_pf`), all at 3.3.0 with configurations 1–10 and the nominal `cld_3.3.0` normalization statistics. Set the platform's `data_dir.cld_granularity` to the scan root; each variant appends its `data_subdir` (e.g. `ecal_3mm/tfds`).
+The Flatiron `h100_single` profile requests one H100, 24 CPUs, 128 GiB of host
+memory and a 48-hour limit for each run. The global batch of 32 events runs
+on that GPU. Preview the expert and joint submissions with this profile.
+
+```bash
+scripts/flatiron/train_scenario.sh pf_fm_experts h100_single --dry-run
+scripts/flatiron/train_scenario.sh pf_fm_joint h100_single --dry-run
+```
+
+## Joint attention fine-tuning
+
+Set `training.parameters.load` in `pf_fm_finetuning.yaml` or a copy to the
+completed ColliderML-only checkpoint. The direct runner also accepts
+`--set load=PATH`.
 
 ```bash
 uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/pf_fm_finetuning.yaml \
   --platform configs/training/platforms/flatiron_h100_single.yaml \
-  --variant cld_ecal_3mm --set load=/path/to/joint/checkpoint.pth --dry-run
+  --set load=/path/to/colliderml/checkpoint-500000.pth --dry-run
 ```
 
-Input normalization needs statistics for every selected dataset version; compute missing ones as described in [Train a model](../../docs/training/train.md#input-normalization).
-
-### `cld_pf_heptv2_default_50k`
-
-Training recipe for the recommended CLD hit model `pyg-cld-hits-heptv2-set-v1`: LR 0.001, global batch 64, seed 12345, 50k steps. See [CLD hit-model campaigns](../../docs/studies/cld_hit_campaigns.md).
+Omit `--variant` to preview all four fine-tunes, or use a detector name to
+preview one. For Slurm, preview the submission with `load` set in the scenario
+and the same single-H100 profile.
 
 ```bash
-scripts/lumi/train_scenario.sh cld_pf_heptv2_default_50k mi250x --dry-run
+scripts/flatiron/train_scenario.sh /path/to/pf_fm_finetuning.yaml h100_single --dry-run
 ```
 
-### Portable benchmarks
+Fine-tuning trains all parameters. `load_weights_only: true` starts a fresh
+optimizer, schedule, RNG stream, sampler and step counter.
+`reset_task_loss_weights: true` recalibrates task-loss weights on each
+detector. Use `--continue` to resume a fine-tune's own training state.
+Compare raw loss components or physics metrics when runs use independently
+calibrated task-loss weights. See [resume and fine-tuning](../../docs/training/resume-and-fine-tune.md).
 
-`cld_backbone_benchmark` is the fixed recipe for GPU comparisons. Preview a sweep with `python -m scripts.training.submit_batch_sweep --platform <profile.yaml> --dry-run` (add `--python-wrapper` for a site environment adapter). See [benchmark portability](../../docs/training/benchmark-portability.md) and the [site setup](../../docs/training/hpc-batch-sweep.md). `cld_gh200_backbone_benchmark`, `cld_gh200_smoke`, and `cld_h100_backbone_benchmark_321` reproduce the historical v3.2.0 runs; for the EmpireAI GH200 node see [`scripts/empireai/README.md`](../../scripts/empireai/README.md).
+## CLD granularity experts and fine-tuning
 
-## Study scenarios
+The legacy expert and fine-tuning scenarios provide 12 matched pairs using CLD
+track/cluster datasets at version 3.3.0:
 
-These scenarios define completed or historical studies. They stay unchanged so that results can be reproduced; design and outcomes are in the linked notes. Each file's header comment states what it compares.
+| Variant names | Scan subdirectories | Sample |
+| --- | --- | --- |
+| `cld_ecal_{1p5mm,2mm,2p5mm,3mm,4mm,5p1mm}` | `ecal_<size>/tfds` | `cld_edm_z_tautau_pf` |
+| `cld_hcal_{10mm,12mm,15mm,20mm,25mm,30mm}` | `hcal_<size>/tfds` | `cld_edm_ttbar_pf` |
 
-| Scenario | Study |
-|---|---|
-| `cld_pf_heptv2_model_scaling_50k`, `cld_pf_heptv2_grouped_tracking_50k` | [CLD hit-model campaigns](../../docs/studies/cld_hit_campaigns.md) |
-| `cld_pf_heptv2_tracker_readout_50k` | [Tracker momentum readout](../../docs/studies/tracker_momentum_readout.md) |
-| `cld_pf_heptv2_tracker_momentum_50k` | [Tracker momentum features](../../docs/studies/tracker_momentum_features.md) |
-| `cld_pf_heptv2_fit_loss_50k` | [Tracker-fit supervision](../../docs/studies/tracker_fit_loss_experiments.md) |
-| `cld_pf_heptv2_fit_correction_50k` | [Charged fit correction](../../docs/studies/charged_fit_correction.md) |
-| `cld_pf_heptv2_tracker_grouping_losses_50k` | [Tracker grouping losses](../../docs/studies/tracker_grouping_loss_experiments.md) |
-| `cld_pf_heptv2_tracker_width_scaling_50k` | [Tracker width scaling](../../docs/studies/tracker_width_scaling.md) |
-| `cld_pf_heptv2_batch512_50k`, `cld_pf_track_cluster_batch6144_{10k,50k}` | [HEPTv2 activation checkpointing](../../docs/studies/heptv2_checkpointing.md) and its large-batch track/cluster counterparts |
-| `cld_pf_heptv2_hit_grouping_50k`, `cld_pf_heptv2_momentum_50k_comparison`, `cld_pf_hit_models_200k_comparison`, `cld_pf_hits_comparison` | Earlier hit-grouping and momentum comparisons; see [CLD hit-model evidence](../../docs/studies/cld_hit_results.md) |
-| `cld_set_hits_{heptv2_sector,improvement,object_formation,query_matching}_comparison`, `cld_hits_{backbone,output}_comparison` | Earlier set-decoder and backbone comparisons |
-| `clic_cld_pf_set_hits_comparison` | Original CLD/CLIC track/cluster vs hit-set comparison |
+Each variant uses TFDS configurations 1–10 for its selected sample in training,
+validation and testing. Expert and fine-tuning pairs share the architecture,
+feature bag, optimizer, global batch and sample selection. Experts start from
+fresh weights. Fine-tunes load the joint checkpoint and reset training state
+and task-loss calibration. Experts validate every 10,000 steps with patience 3.
+Fine-tunes validate every 1,000 steps with patience 30. All scan variants use
+`cld_3.3.0.yaml` as shared reference statistics. See the
+[previous three-detector campaign](scenarios/legacy/pf_fm_joint.yaml) for the
+joint model configuration.
+
+Set the platform's `data_dir.cld_granularity` to the scan root. The runner
+appends each variant's `data_subdir`, such as `ecal_3mm/tfds`, and passes the
+resolved directory to training. Use `--variant` to select a geometry:
+
+```bash
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/legacy/pf_fm_experts.yaml \
+  --platform configs/training/platforms/flatiron_h100_single.yaml \
+  --variant cld_ecal_3mm --dry-run
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/legacy/pf_fm_finetuning.yaml \
+  --platform configs/training/platforms/flatiron_h100_single.yaml \
+  --variant cld_ecal_3mm --set load=/path/to/legacy/joint/checkpoint.pth --dry-run
+```
+
+The direct runner's `--set data_dir=/path/to/variation/tfds` overrides the variant
+root. `--data-dir` sets the platform default; a variant-specific root takes
+precedence over that default. For site submission, configure the platform root
+and scenario checkpoint, and select geometries with repeatable `--variant`
+options. Experiments are stored under `<scenario>/<variant>_seed...`.
+
+## Portable benchmark sweeps
+
+Use `scenarios/cld_backbone_benchmark.yaml` for new GPU comparisons and
+`python -m scripts.training.submit_batch_sweep --platform <profile.yaml> --dry-run`
+to preview allocation resources from a profile. Add `--python-wrapper` for a site
+environment adapter. The historical GH200 and H100-3.2.1 scenarios retain their
+original definitions. See [benchmark portability](../../docs/training/benchmark-portability.md)
+for qualification, data provenance and the compact evidence release workflow.
