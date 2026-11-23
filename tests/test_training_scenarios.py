@@ -513,6 +513,7 @@ def test_continuation_chooses_most_advanced_compatible_checkpoint(tmp_path):
         }
         if suffix == "best":
             del manifest["resolved_config"]["validation_particle_metrics_max_events"]
+            manifest["resolved_config"]["prefetch_factor"] = job.resolved_config.prefetch_factor + 1
         if suffix == "different_limit":
             manifest["resolved_config"]["validation_particle_metrics_max_events"] = 0
         (run_dir / "scenario-manifest.json").write_text(json.dumps(manifest))

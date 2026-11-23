@@ -536,7 +536,8 @@ def _checkpoint_step(path):
 def find_scenario_continuation(job, platform):
     """Find the most advanced compatible run for one scenario job."""
     scenario_dir = Path(platform.experiments_dir) / job.scenario_name
-    desired_config = job.resolved_config.model_dump(mode="json")
+    # The sampler resumes from consumed batches, independently of the prefetch queue depth.
+    desired_config = job.resolved_config.model_dump(mode="json", exclude={"prefetch_factor"})
     candidates = []
     for manifest_path in scenario_dir.glob("*/scenario-manifest.json"):
         try:
@@ -550,6 +551,7 @@ def find_scenario_continuation(job, platform):
             # Older manifests predate this validation-only setting.
             field = "validation_particle_metrics_max_events"
             saved_config.setdefault(field, MLPFConfig.model_fields[field].default)
+            saved_config.pop("prefetch_factor", None)
         if (
             saved_job.get("scenario_name") != job.scenario_name
             or saved_job.get("platform_name") != job.platform_name
