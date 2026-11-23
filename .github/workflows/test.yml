@@ -14,13 +14,13 @@ jobs:
       image: pytorch/pytorch:2.9.1-cuda13.0-cudnn9-runtime
 
     steps:
+      - name: Install system dependencies
+        run: apt-get update && apt-get install -y git wget gcc g++ build-essential curl
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Install system dependencies
-        run: apt-get update && apt-get install -y wget gcc g++ build-essential curl
 
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "$HOME/.local/bin" >> $GITHUB_PATH
