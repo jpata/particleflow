@@ -6,7 +6,9 @@ MAIA provides a track/cluster workflow for a muon-collider detector study. Conve
 
 | Physics sample | TFDS dataset | Schema version | Model recipe |
 |---|---|---|---|
-| Top-quark pairs | `maia_edm_ttbar_pf` | 1.2.0 | `pyg-maia-v1` |
+| Top-quark pairs | `maia_edm_ttbar_pf` | 1.3.0 | `pyg-maia-v1` |
+
+Version 1.3.0 is converted from the MuColl v3.2 reconstruction (`--detector maia`); earlier versions came from MuColl v2.9, which `--detector maia_v29` still reads.
 
 The recipe configures partitions 1--10. Public availability must be checked independently; MAIA is not part of the [verified Hub selection](catalog.md#published-availability).
 

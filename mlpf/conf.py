@@ -2,7 +2,7 @@
 # Dataset-specific overrides are in particleflow_spec.yaml
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Optional, Dict, Any, Tuple, Literal
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 import math
 import os
 from enum import Enum
@@ -169,6 +169,46 @@ class KernelType(Enum):
     ATTENTION = "attention"
 
 
+# Tracker hit collection -> (its reco -> sim hit relation, its SimTrackerHit collection).
+# Marlin-based key4hep productions (CLIC, CLD):
+KEY4HEP_TRACKER_HITS = {
+    "ITrackerHits": ("InnerTrackerBarrelHitsRelations", "InnerTrackerBarrelCollection"),
+    "ITrackerEndcapHits": ("InnerTrackerEndcapHitsRelations", "InnerTrackerEndcapCollection"),
+    "OTrackerHits": ("OuterTrackerBarrelHitsRelations", "OuterTrackerBarrelCollection"),
+    "OTrackerEndcapHits": ("OuterTrackerEndcapHitsRelations", "OuterTrackerEndcapCollection"),
+    "VXDEndcapTrackerHits": ("VXDEndcapTrackerHitRelations", "VertexEndcapCollection"),
+    "VXDTrackerHits": ("VXDTrackerHitRelations", "VertexBarrelCollection"),
+}
+# MAIA with MuColl v3.2 (MAIAConfig, Common/tracker_collections.py):
+MAIA_TRACKER_HITS = {
+    f"{prefix}Hits": (f"{prefix}HitsRelations", sim)
+    for prefix, sim in (
+        ("VXDBarrel", "VertexBarrelCollection"),
+        ("VXDEndcap", "VertexEndcapCollection"),
+        ("ITBarrel", "InnerTrackerBarrelCollection"),
+        ("ITEndcap", "InnerTrackerEndcapCollection"),
+        ("OTBarrel", "OuterTrackerBarrelCollection"),
+        ("OTEndcap", "OuterTrackerEndcapCollection"),
+    )
+}
+# MAIA with MuColl v2.9 (Marlin, converted from LCIO):
+MAIA_V29_TRACKER_HITS = {
+    f"{prefix}TrackerHits": (f"{prefix}TrackerHitsRelations", sim)
+    for prefix, sim in (
+        ("IB", "InnerTrackerBarrelCollection"),
+        ("IE", "InnerTrackerEndcapCollection"),
+        ("OB", "OuterTrackerBarrelCollection"),
+        ("OE", "OuterTrackerEndcapCollection"),
+        ("VB", "VertexBarrelCollection"),
+        ("VE", "VertexEndcapCollection"),
+    )
+}
+# MAIA's CalohitMCTruthLink links the digitised calorimeter hits, while the clusters reference the
+# reconstructed ones, which are the same cells in the same order.
+MAIA_CALO_LINK_COLLECTIONS = {f"{calo}CollectionDigi": f"{calo}CollectionRec" for calo in ("EcalBarrel", "EcalEndcap", "HcalBarrel", "HcalEndcap")}
+MAIA_CALO_HITS = [f"{calo}CollectionRec" for calo in ("EcalBarrel", "EcalEndcap", "HcalBarrel", "HcalEndcap")]
+
+
 class EDM4HEP:
     @dataclass
     class HitFeatures:
@@ -274,6 +314,18 @@ class EDM4HEP:
         cluster_angles_from_position: bool = False
         # Target-to-track/cluster assignment rule of assign_genparticles_to_obj_and_merge.
         target_assignment: str = "greedy"
+        # Collection names; the defaults are those of the Marlin-based CLIC and CLD productions.
+        mc_collection: str = "MCParticles"
+        track_collection: str = "SiTracks_Refitted"
+        # A subset of track_collection holding the tracks to use, the ones Pandora used; "" for all.
+        track_subset: str = ""
+        # Track -> MCParticle links, weighted by the fraction of the track's hits.
+        track_truth_link: str = "SiTracksMCTruthLink"
+        # dEdx comes from a <track_collection>_dQdx collection; without one it is 0.
+        track_dqdx: bool = True
+        tracker_hits: Dict[str, Tuple[str, str]] = field(default_factory=lambda: dict(KEY4HEP_TRACKER_HITS))
+        # Collections CalohitMCTruthLink links from -> the index-aligned collections the clusters reference.
+        calohit_link_collections: Dict[str, str] = field(default_factory=dict)
 
         def track_feature_names(self) -> List[str]:
             extra = list(EDM4HEP.ECAL_ENTRY_TRACK_FEATURES) if self.track_ecal_entry else []
@@ -330,35 +382,46 @@ class EDM4HEP:
             ],
             muon_collections=("MUON",),
         ),
+        # MuColl v3.2: Gaudi reconstruction (MAIAConfig digi_reco_steer.py) writing EDM4hep directly
         "maia": Detector(
             name="maia",
             b_field=5.0,
-            hit_collections=[
-                "EcalBarrelCollectionRec",
-                "EcalEndcapCollectionRec",
-                "HcalBarrelCollectionRec",
-                "HcalEndcapCollectionRec",
-                "MUON",
-                "IBTrackerHits",
-                "IETrackerHits",
-                "OBTrackerHits",
-                "OETrackerHits",
-                "VBTrackerHits",
-                "VETrackerHits",
-            ],
-            # MAIA samples are converted from LCIO with an empty podio metadata tree, so no
-            # CellIDEncoding is available for any collection.
-            require_cellid_encoding=False,
-            muon_collections=("MUON",),
-            # MAIA's CalohitMCTruthLink covers the calorimeters only, so without this the muon-system
-            # hits have no truth contributor at all.
-            hit_truth_relations=("RelationMuonHit",),
+            hit_collections=MAIA_CALO_HITS + ["MuonBarrelHits", "MuonEndcapHits"] + list(MAIA_TRACKER_HITS),
+            muon_collections=("MuonBarrelHits", "MuonEndcapHits"),
+            # CalohitMCTruthLink covers the calorimeters only, so without this the muon-system hits have
+            # no truth contributor at all.
+            hit_truth_relations=("MuonBarrelHitsRelations", "MuonEndcapHitsRelations"),
             # At 5 T a 5 GeV track reaches the ECAL 0.3 rad in phi from its vertex direction.
             track_ecal_entry=True,
             cluster_angles_from_position=True,
-            # Majority-owned tracks, then a bipartite cluster matching, as on ColliderML. MAIA's
-            # SiTracksMCTruthLink weights are hit fractions, which this rule needs.
+            # Majority-owned tracks, then a bipartite cluster matching, as on ColliderML. The track
+            # truth-link weights are hit fractions, which this rule needs.
             target_assignment="majority_energy",
+            # AllTracks holds every CKF track; SiTracks, the deduplicated and filtered tracks that
+            # Pandora uses and SiTrackRelations links, is a subset of it. There is no refit and no dQdx.
+            track_collection="AllTracks",
+            track_subset="SiTracks",
+            track_truth_link="SiTrackRelations",
+            track_dqdx=False,
+            tracker_hits=dict(MAIA_TRACKER_HITS),
+            calohit_link_collections=dict(MAIA_CALO_LINK_COLLECTIONS),
+        ),
+        # MuColl v2.9: Marlin reconstruction converted from LCIO, as in the datasets up to
+        # maia_edm_ttbar_pf 1.2.0
+        "maia_v29": Detector(
+            name="maia_v29",
+            b_field=5.0,
+            hit_collections=MAIA_CALO_HITS + ["MUON"] + list(MAIA_V29_TRACKER_HITS),
+            # converted from LCIO with an empty podio metadata tree: no CellIDEncoding for any collection
+            require_cellid_encoding=False,
+            muon_collections=("MUON",),
+            hit_truth_relations=("RelationMuonHit",),
+            track_ecal_entry=True,
+            cluster_angles_from_position=True,
+            target_assignment="majority_energy",
+            mc_collection="MCParticle",
+            tracker_hits=dict(MAIA_V29_TRACKER_HITS),
+            calohit_link_collections=dict(MAIA_CALO_LINK_COLLECTIONS),
         ),
         # OpenDataDetector as released by ColliderML release 1; not EDM4hep geometry, but the
         # registry is the single place the B-field comes from for downstream tools, so the
@@ -1205,7 +1268,7 @@ _PIPELINE_DATASETS = {
     "cld": _PipelineDatasetOverride("physical", "cld_edm_ttbar_pf", "3.3.0", gpu_batch_multiplier=8),
     "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.3.0"),
     "colliderml": _PipelineDatasetOverride("physical", "colliderml_ttbar_nopu_pf", "1.5.0", gpu_batch_multiplier=8),
-    "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.2.0", gpu_batch_multiplier=1),
+    "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.3.0", gpu_batch_multiplier=1),
     "colliderml_hits": _PipelineDatasetOverride("physical", "colliderml_ttbar_hits", "1.3.0", gpu_batch_multiplier=8),
     "cld_hits": _PipelineDatasetOverride("physical", "cld_edm_ttbar_hits", "3.2.2"),
 }

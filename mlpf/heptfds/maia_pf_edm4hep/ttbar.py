@@ -21,15 +21,18 @@ X_FEATURES_TRK = EDM4HEP.DETECTORS["maia"].track_feature_names()
 
 
 class MaiaEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version("1.2.0")
+    VERSION = tfds.core.Version("1.3.0")
     RELEASE_NOTES = {
         "1.0.0": "MAIA ttbar track/cluster dataset with shared target building.",
         "1.1.0": "Add num_muon_hits and energy_muon cluster features (#511); input width 17 -> 19, regenerate",
         "1.2.0": "Track eta_ecal/phi_ecal, cluster eta/phi from the centroid, majority-energy target assignment (#546); regenerate",
+        "1.3.0": "MuColl v3.2 reconstruction (MAIAConfig): SiTracks selected from AllTracks, dEdx 0 (no dQdx), tracker hit system/side/layer "
+        "from the sim CellIDEncoding, muon hits from MuonBarrelHits/MuonEndcapHits; regenerate",
     }
     MANUAL_DOWNLOAD_INSTRUCTIONS = """
-    Download https://uaf-3.t2.ucsd.edu/~atuna/muoncollider/data/mlpf/ttbar/v04/ttbar_reco_10000.slcio.edm4hep.root
-    and convert with mlpf.data.key4hep.postprocessing --detector maia.
+    Download https://uaf-3.t2.ucsd.edu/~atuna/muoncollider/data/mlpf/57b1d7f2/ttbar_reco_100000.edm4hep.root
+    (MuColl v3.2) and convert with mlpf.data.key4hep.postprocessing --detector maia. MuColl v2.9 files,
+    such as .../ttbar/v04/ttbar_reco_10000.slcio.edm4hep.root (up to 1.2.0), convert with --detector maia_v29.
     Supply converted parquet files directly in manual_dir. Config 10 supports
     two files with disjoint events (one train and one test file).
     """
