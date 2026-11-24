@@ -132,6 +132,31 @@ variants:
 #    overrides:
 #      <<: [*hits, *heptv2]
 #      model.set_decoder.num_slots: 512
+  # IDEA pipeline validation uses truth-seeded proxy tracks and the TFDS 0.3.0 recipe.
+  idea_pf_attention:
+    model_name: pyg-idea-pipeline-v1
+    production_name: idea
+    gpus: 1
+    global_batch_size: 16
+    overrides:
+      <<: &idea
+        model.input_normalization: true
+        model.backbone.num_convs: 3
+        lr: 0.0005
+        pad_to_multiple_elements: 100
+      model.type: attention
+      model.attention.num_convs: 3
+      model.heptv2: null
+  idea_pf_heptv2:
+    model_name: pyg-idea-pipeline-v1
+    production_name: idea
+    gpus: 1
+    global_batch_size: 16
+    overrides:
+      <<: *idea
+      model.attention: null
+      model.heptv2.deterministic_hashing: true
+      model.heptv2.activation_checkpointing: true
   # CMS keeps its v3.2.0 model and optimizer (cms_backbone_comparison at 6b80b98):
   # width 512, three layers, LR 0.0004, TFDS 2.8.0. Batches follow the 320k CMS run
   # (cms_backbone_comparison at e2c8e65c, the v2.6.0pre1 layout): 96 PU and 768 no-PU

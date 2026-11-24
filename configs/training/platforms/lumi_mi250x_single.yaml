@@ -4,6 +4,7 @@ gpus: 1
 python_command: [python3]
 data_dir:
   cld: ${MLPF_CLD_DATA_DIR}
+  idea: /scratch/project_465001293/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9
 experiments_dir: /scratch/project_465001293/${USER}/particleflow/experiments
 environment:
   OMP_NUM_THREADS: "1"

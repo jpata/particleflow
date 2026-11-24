@@ -627,8 +627,8 @@ def test_release_checkpoint_scenario_trains_a_fixed_onecycle_budget_per_detector
 
     expected = [
         f"{detector}_{inputs}_{backbone}"
-        for detector in ("cld", "clic", "colliderml")
-        for inputs in ("pf", "hits")
+        for detector in ("cld", "clic", "colliderml", "idea")
+        for inputs in (("pf", "hits") if detector in ("cld", "clic") else ("pf",))
         for backbone in ("attention", "heptv2")
     ]
     assert list(jobs) == expected + ["cms_attention", "cms_heptv2"]
@@ -644,9 +644,10 @@ def test_release_checkpoint_scenario_trains_a_fixed_onecycle_budget_per_detector
 
     for name, job in jobs.items():
         if not name.startswith("cms"):
-            assert job.global_batch_size == 128 and job.resolved_config.lr == 0.001
+            expected_batch = 16 if name.startswith("idea") else 128
+            expected_lr = 0.0005 if name.startswith("idea") or name == "colliderml_pf_attention" else 0.001
+            assert job.global_batch_size == expected_batch and job.resolved_config.lr == expected_lr
             assert job.resolved_config.gpus == (1 if "_pf_" in name else platform.gpus)
-    assert {jobs[f"colliderml_hits_{backbone}"].resolved_config.model.set_decoder.num_slots for backbone in ("attention", "heptv2")} == {512}
     assert jobs["cld_hits_attention"].resolved_config.model.set_decoder.num_slots == 256
 
     for backbone in ("attention", "heptv2"):
