@@ -548,9 +548,9 @@ def find_scenario_continuation(job, platform):
         saved_job = manifest.get("job", {})
         saved_config = manifest.get("resolved_config")
         if isinstance(saved_config, dict):
-            # Older manifests predate this validation-only setting.
-            field = "validation_particle_metrics_max_events"
-            saved_config.setdefault(field, MLPFConfig.model_fields[field].default)
+            # Older manifests retain the original defaults for these settings.
+            for field in ("validation_particle_metrics_max_events", "train_fraction"):
+                saved_config.setdefault(field, MLPFConfig.model_fields[field].default)
             saved_config.pop("prefetch_factor", None)
         if (
             saved_job.get("scenario_name") != job.scenario_name

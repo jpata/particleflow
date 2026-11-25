@@ -3,8 +3,20 @@ name: pf_fm_joint
 spec_file: particleflow_spec.yaml
 production_name: colliderml
 variants:
-  joint:
+  joint: &joint_model
     model_name: pyg-colliderml-v1
+  data_25pct:
+    <<: *joint_model
+    overrides:
+      train_fraction: 0.25
+  data_50pct:
+    <<: *joint_model
+    overrides:
+      train_fraction: 0.5
+  data_75pct:
+    <<: *joint_model
+    overrides:
+      train_fraction: 0.75
 
 seeds: [12345]
 training:
@@ -14,7 +26,7 @@ training:
     lr: 0.001
     lr_schedule: onecycle
     lr_schedule_config.onecycle.pct_start: 0.3
-    num_steps: 500000
+    num_steps: 100000
     tensorboard_step_freq: 1000
     benchmark.enabled: true
     benchmark.sample_interval_seconds: 1.0
@@ -43,3 +55,5 @@ common_overrides:
   model.input_normalization: true
   model.backbone.mode: shared
   model.backbone.num_convs: 4
+allowed_variant_differences:
+  - train_fraction

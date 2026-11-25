@@ -76,9 +76,9 @@ to start its configured task-loss calibration from scratch. This requires
 `--load_weights_only true`; a full resume retains its existing calibration.
 
 The reusable `configs/training/scenarios/pf_fm_finetuning.yaml` scenario
-fine-tunes a checkpoint from the ColliderML-only `pf_fm_joint` scenario,
-once each on the Key4hep v1.4.0 CLD, CLIC, ILD and IDEA track/cluster datasets.
-Set `training.parameters.load` to the source checkpoint. See the
+fine-tunes for 30,000 updates on each of the Key4hep v1.4.0 CLD, CLIC, ILD and
+IDEA track/cluster datasets. It starts from `checkpoint-100000.pth` from the
+completed ColliderML `data_25pct` variant of `pf_fm_joint`. See the
 [scenario setup](../../configs/training/README.md#joint-attention-fine-tuning)
 for the launch command and dataset requirements.
 

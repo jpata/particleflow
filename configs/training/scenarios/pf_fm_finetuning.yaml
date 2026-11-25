@@ -24,7 +24,7 @@ training:
     lr: 0.001
     lr_schedule: onecycle
     lr_schedule_config.onecycle.pct_start: 0.3
-    num_steps: 500000
+    num_steps: 30000
     tensorboard_step_freq: 1000
     benchmark.enabled: true
     benchmark.sample_interval_seconds: 1.0
@@ -39,8 +39,8 @@ training:
     pad_to_multiple_elements: 128
     validation_particle_metrics: true
     make_plots: true
-    # Set this to the completed pf_fm_joint checkpoint before starting.
-    load: null
+    # Initialize from the completed ColliderML 25% joint variant.
+    load: experiments/pf_fm_joint/data_25pct_seed12345_20261123_114353_941601/checkpoints/checkpoint-100000.pth
     load_weights_only: true
     reset_task_loss_weights: true
 common_overrides:

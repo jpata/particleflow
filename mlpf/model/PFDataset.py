@@ -778,6 +778,7 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
         dataset_config = getattr(config, f"{split}_dataset")
         if dataset_config is None:
             continue
+        subset_rng = np.random.default_rng(config.seed) if split == "train" and config.train_fraction < 1.0 else None
 
         for type_ in dataset_config[config.dataset.value]:
             dataset = []
@@ -807,6 +808,12 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
                         max_open_readers=config.max_open_readers,
                         build_target_set=config.model.output_mode == OutputMode.SET,
                     ).ds
+
+                    if subset_rng is not None:
+                        # Take a prefix of the same seeded permutation for every fraction.
+                        size = max(1, math.floor(len(ds) * config.train_fraction))
+                        indices = np.sort(subset_rng.permutation(len(ds))[:size]).tolist()
+                        ds = torch.utils.data.Subset(ds, indices)
 
                     if (rank == 0) or (rank == "cpu"):
                         _logger.info(f"{split}_dataset: {sample_name}, {len(ds)}", color="blue")

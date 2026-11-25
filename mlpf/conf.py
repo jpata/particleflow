@@ -1598,6 +1598,7 @@ class MLPFConfig(BaseModel):
 
     # Sample limits
     ntrain: Optional[int] = None  # number of training events
+    train_fraction: float = Field(default=1.0, gt=0.0, le=1.0, description="Fraction of each training configuration to keep after sample limits")
     nvalid: Optional[int] = None  # number of validation events, ran at periodic intervals during training
     ntest: Optional[int] = None  # number of testing events, ran at the end of the training
     data_config: Optional[List[str]] = None  # used to limit the data loading to the specified configurations (e.g. config split 1 only)

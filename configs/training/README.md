@@ -424,8 +424,8 @@ scripts/lumi/train_scenario.sh cld_pf_heptv2_tracker_readout_50k mi250x --dry-ru
 | Scenario | Train, validation and test datasets | Initialization |
 | --- | --- | --- |
 | [`pf_fm_experts`](scenarios/pf_fm_experts.yaml) | One model per Key4hep v1.4.0 detector (CLD, CLIC, ILD, IDEA) | Fresh weights |
-| [`pf_fm_joint`](scenarios/pf_fm_joint.yaml) | ColliderML Release 1 ttbar without pileup, TFDS version 1.5.0, configurations 1–10 | Fresh weights |
-| [`pf_fm_finetuning`](scenarios/pf_fm_finetuning.yaml) | One model per Key4hep v1.4.0 detector, with the same data as its expert | Checkpoint from `pf_fm_joint` |
+| [`pf_fm_joint`](scenarios/pf_fm_joint.yaml) | ColliderML Release 1 ttbar without pileup, TFDS 1.5.0, configurations 1–10, with four training-data fractions | Fresh weights |
+| [`pf_fm_finetuning`](scenarios/pf_fm_finetuning.yaml) | One model per Key4hep v1.4.0 detector, with the same data as its expert | Checkpoint from the 25% `pf_fm_joint` variant |
 
 Each [Key4hep v1.4.0 detector](../../docs/datasets/key4hep-50k.md) uses five
 track/cluster samples (ttbar, fully hadronic WW, qq, Z→qq and Z→tautau).
@@ -436,16 +436,20 @@ normalization tables for these versions and for
 
 All three scenarios use four shared attention layers of width 512 (16 heads
 × 32 channels), native Flash attention and input normalization. Training uses
-LAMB and OneCycle with a peak learning rate of 0.001 and 30% warmup. The maximum
-budget is 500,000 updates at a global batch of 32 events. Experts use native
-detector inputs. Pretraining and fine-tuning use the same feature bag to
-align the detector inputs for strict weight loading.
+LAMB and OneCycle with a peak learning rate of 0.001, 30% warmup, and a global
+batch of 32 events. Each schedule spans its scenario's full update budget.
+Experts use native detector inputs. Pretraining and fine-tuning use the same
+feature bag to align the detector inputs for strict weight loading.
 
-| Scenario | Validation interval | Early stopping |
-| --- | ---: | --- |
-| Experts | 10,000 updates | 3 consecutive validation cycles without lower total loss |
-| Joint | 10,000 updates | Full update budget |
-| Fine-tuning | 1,000 updates | 30 consecutive validation cycles without lower total loss |
+| Scenario | Update budget | Warmup | Validation interval |
+| --- | ---: | ---: | ---: |
+| Experts | 100,000 | 30,000 | 10,000 |
+| Joint | 100,000 | 30,000 | 10,000 |
+| Fine-tuning | 30,000 | 9,000 | 1,000 |
+
+Patience covers the full schedule in each scenario. Start new expert and
+joint runs to use the 100,000-update schedules. Resuming an older run restores
+the learning-rate schedule saved in its checkpoint.
 
 Validation records particle matching, PID, kinematic and event-level metrics
 under `metrics/particle/*`. Test inference writes predictions, plots and
@@ -461,25 +465,33 @@ scripts/flatiron/train_scenario.sh pf_fm_experts h100_single --dry-run
 scripts/flatiron/train_scenario.sh pf_fm_joint h100_single --dry-run
 ```
 
+The joint scenario runs `data_25pct`, `data_50pct`, `data_75pct`, and
+`joint` (100%). Each variant gets 100,000 updates and uses the same validation
+and test events. Each smaller subset takes its fraction from every TFDS
+configuration, rounded down to whole events with at least one event per
+nonempty configuration. A seeded permutation keeps the subsets nested.
+Smaller subsets cycle through their data more times over the same step budget.
+Pass `--variant joint` to run the 100% variant alone.
+
 ## Joint attention fine-tuning
 
-Set `training.parameters.load` in `pf_fm_finetuning.yaml` or a copy to the
-completed ColliderML-only checkpoint. The direct runner also accepts
-`--set load=PATH`.
+`pf_fm_finetuning.yaml` loads `checkpoint-100000.pth` from the completed
+ColliderML `data_25pct` variant. To use another checkpoint, set
+`training.parameters.load` in the scenario or pass `--set load=PATH` to the
+direct runner.
 
 ```bash
 uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/pf_fm_finetuning.yaml \
   --platform configs/training/platforms/flatiron_h100_single.yaml \
-  --set load=/path/to/colliderml/checkpoint-500000.pth --dry-run
+  --dry-run
 ```
 
 Omit `--variant` to preview all four fine-tunes, or use a detector name to
-preview one. For Slurm, preview the submission with `load` set in the scenario
-and the same single-H100 profile.
+preview one. For Slurm, preview the submission with the same single-H100 profile.
 
 ```bash
-scripts/flatiron/train_scenario.sh /path/to/pf_fm_finetuning.yaml h100_single --dry-run
+scripts/flatiron/train_scenario.sh pf_fm_finetuning h100_single --dry-run
 ```
 
 Fine-tuning trains all parameters. `load_weights_only: true` starts a fresh
