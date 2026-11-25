@@ -1,6 +1,6 @@
 # Current capabilities
 
-This page summarizes the codebase prepared for **v3.2.0**. Use it to choose a maintained workflow and understand its validation limits. Checkpoint performance belongs to the corresponding validation results.
+This page summarizes the codebase prepared for **v3.3.0**. Use it to choose a maintained workflow and understand its validation limits. Checkpoint performance belongs to the corresponding validation results.
 
 **Supported** denotes a maintained configuration, documented user path, and
 software checks. **Research workflow** denotes experimental paths whose scientific

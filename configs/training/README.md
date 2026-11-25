@@ -57,6 +57,65 @@ uv run python3 scripts/training/run_scenario.py \
   --dry-run
 ```
 
+## Release checkpoints
+
+[`release_checkpoints`](scenarios/release_checkpoints.yaml) trains the reference
+checkpoints published with each release under
+`{cld,clic,colliderml}/{clusters,hits}/vX.Y.Z/` and `cms/vX.Y.Z/` on the
+[model hub](https://huggingface.co/jpata/particleflow). Train each release from
+its tag with the scenario unchanged, so checkpoints of different releases
+differ only in code. A change to the scenario starts a new comparison series and
+belongs in the release notes.
+
+| Variants | Model | Data | Global batch | GPUs |
+|---|---|---|---:|---|
+| `{cld,clic}_pf_{attention,heptv2}` | `pyg-{cld,clic}-v1` | PF TFDS 3.3.0 | 128 | 1 |
+| `{cld,clic}_hits_{attention,heptv2}` | `pyg-{cld,clic}-hits-set-v1` | hits TFDS 3.2.2 | 128 | platform |
+| `colliderml_pf_{attention,heptv2}` | `pyg-colliderml-v1` | PU0 PF TFDS 1.5.0 | 128 | 1 |
+| `colliderml_hits_{attention,heptv2}` | `pyg-colliderml-hits-set-v1` | PU0 hits TFDS 1.3.0 | 128 | platform |
+| `cms_{attention,heptv2}` | `pyg-cms-v1` | PU and no-PU TFDS 2.8.0 | 96 PU / 768 no-PU | platform |
+
+Every model trains for a fixed 100,000 steps with a OneCycle schedule (30%
+warm-up), without early stopping. CLD, CLIC and ColliderML use the
+[backbone benchmark](#clic-and-cld-backbone-benchmark) recipe: LAMB with peak
+LR 0.001, six layers of width 256, validation on 512 events every 1,000 steps.
+ColliderML hit models use 512 decoder slots, because PU0 events have up to
+about 390 target particles. CMS keeps the v3.2.0 model and optimizer of `cms_backbone_comparison`
+(three layers of width 512, LR 0.0004, validation on 512 events per sample every
+10,000 steps). Its batches follow the 320k CMS run: each step draws 96 PU or 768
+no-PU events, in proportion to each group's batches per epoch (v3.2.0 used a
+uniform 64).
+Track/cluster models use input normalization; hit models do not support it.
+Each worker records benchmark telemetry from a background sampling thread
+(`benchmark.gpu_timing_interval: 0`, so no timing events inside the training step).
+
+Relative to the v3.2.0 checkpoints (CLD/CLIC 50k steps, CMS 100k, cosine decay),
+the schedule, the CLD/CLIC step count, the CMS batches and input normalization
+changed, and ColliderML is new. A v3.2.0 → v3.3.0 difference therefore mixes code and recipe
+changes; from v3.3.0 on, releases share this recipe. Re-evaluate older
+checkpoints with the current evaluation code on the same test events before
+comparing physics metrics.
+
+On LUMI, `lumi_mi250x` maps all four detectors. Preview all 14 jobs, and
+smoke-test the ColliderML hit models, which have not been trained with this
+decoder and feature recipe:
+
+```bash
+scripts/lumi/train_scenario.sh release_checkpoints mi250x --dry-run
+uv run --no-sync python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/release_checkpoints.yaml \
+  --platform configs/training/platforms/lumi_mi250x.yaml \
+  --variant colliderml_hits_heptv2 --set num_steps=200 --set val_freq=100 \
+  --experiments-dir /tmp/release_smoke
+```
+
+The submitter creates one array of six single-GPU track/cluster jobs and one of
+eight full-node jobs. On LUMI, the profile's `slurm.partial_node` settings send
+the single-GPU array to the shared `small-g` partition with 7 cores and 60 GB per
+GCD; full-node jobs stay on `standard-g`. Checkpoints are written every 1,000 steps (CMS every
+10,000) and all are kept. Hit models need more than one 48-hour allocation;
+resubmit unfinished jobs with `--continue`.
+
 ## CLIC and CLD backbone benchmark
 
 [`clic_cld_backbone_benchmark`](scenarios/clic_cld_backbone_benchmark.yaml) runs
@@ -244,7 +303,8 @@ All three models passed a finite CPU forward check on 128 synthetic hits. The
 small remains the practical reference, while large improves jets but worsens
 inclusive charged momentum. See [the evidence summary](../../docs/cld_hit_results.md).
 
-The scenario declares a global batch size. The runner derives
+The scenario declares a global batch size; a variant may replace it with its own
+`global_batch_size`, and `--global-batch-size` overrides both. The runner derives
 `gpu_batch_multiplier` from the number of GPUs and the dataset batch size, and rejects
 non-integral combinations. It also resolves every variant through `MLPFConfig` and
 checks that variants differ only in the fields listed by

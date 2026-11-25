@@ -46,6 +46,9 @@ class ScenarioVariant(BaseModel):
     # Logical platform data root plus an optional dataset-variation subdirectory.
     data_root: str | None = None
     data_subdir: str | None = None
+    # Replaces training.global_batch_size for this variant, e.g. when one scenario spans detectors
+    # with different event sizes. A --global-batch-size given to the runner still takes precedence.
+    global_batch_size: PositiveInt | dict[str, PositiveInt] | None = None
     overrides: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -121,6 +124,9 @@ class SlurmProfile(BaseModel):
     memory: str | None = None
     memory_per_gpu: str | None = None
     no_requeue: bool = False
+    # Settings that replace the ones above for jobs using fewer GPUs than the platform's
+    # count, e.g. a shared-node partition with per-GPU CPUs and memory.
+    partial_node: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def validate_resources(self):
@@ -128,7 +134,17 @@ class SlurmProfile(BaseModel):
             raise ValueError("gpu_type is only valid with gpu_request='gres'")
         if self.memory is not None and self.memory_per_gpu is not None:
             raise ValueError("Set only one of memory and memory_per_gpu")
+        if self.partial_node is not None:
+            if "partial_node" in self.partial_node:
+                raise ValueError("partial_node cannot be nested")
+            self.for_gpus(1, 2)
         return self
+
+    def for_gpus(self, gpus, node_gpus):
+        """The Slurm settings for a job using gpus of a platform with node_gpus GPUs."""
+        if self.partial_node is None or gpus >= node_gpus:
+            return self
+        return SlurmProfile.model_validate({**self.model_dump(exclude={"partial_node"}), **self.partial_node})
 
 
 class PlatformProfile(BaseModel):
@@ -353,7 +369,12 @@ def resolve_scenario_job(
             extra_args=_settings_as_extra_args(settings),
         )
 
-    target_global_batch = global_batch_size if global_batch_size is not None else scenario.training.global_batch_size
+    if global_batch_size is not None:
+        target_global_batch = global_batch_size
+    elif variant.global_batch_size is not None:
+        target_global_batch = variant.global_batch_size
+    else:
+        target_global_batch = scenario.training.global_batch_size
     group_batch_sizes = _train_group_batch_sizes(config)
     multiplier = _gpu_batch_multiplier(target_global_batch, group_batch_sizes, platform.gpus)
     settings["gpu_batch_multiplier"] = multiplier

@@ -597,6 +597,75 @@ def test_global_batch_is_distributed_across_gpus(gpus, global_batch_size):
         assert group.batch_size * job.gpu_batch_multiplier == job.per_gpu_batch_size
 
 
+def test_variant_global_batch_replaces_the_scenario_batch_and_yields_to_the_cli():
+    scenario = TrainingScenario(
+        name="batch-test",
+        production_name="cld",
+        variants={
+            "default": ScenarioVariant(model_name="pyg-cld-v1"),
+            "own": ScenarioVariant(model_name="pyg-cld-v1", global_batch_size=64),
+        },
+        seeds=[17],
+        training=ScenarioTraining(global_batch_size=128),
+    )
+    platform = PlatformProfile(name="test", gpus=8, data_dir="/tmp/data", experiments_dir="/tmp/experiments")
+
+    def resolve(**kwargs):
+        return {
+            job.variant_name: (job.global_batch_size, job.per_gpu_batch_size)
+            for job in resolve_scenario_jobs(scenario, platform, spec_file=ROOT / scenario.spec_file, **kwargs)
+        }
+
+    assert resolve() == {"default": (128, 16), "own": (64, 8)}
+    assert resolve(global_batch_size=32) == {"default": (32, 4), "own": (32, 4)}
+
+
+def test_release_checkpoint_scenario_trains_a_fixed_onecycle_budget_per_detector():
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/release_checkpoints.yaml")
+    platform = load_platform_profile(PLATFORMS / "lumi_mi250x.yaml")
+    jobs = {job.variant_name: job for job in resolve_scenario_jobs(scenario, platform, spec_file=ROOT / "particleflow_spec.yaml")}
+
+    expected = [
+        f"{detector}_{inputs}_{backbone}"
+        for detector in ("cld", "clic", "colliderml", "idea")
+        for inputs in (("pf", "hits") if detector in ("cld", "clic") else ("pf",))
+        for backbone in ("attention", "heptv2")
+    ]
+    assert list(jobs) == expected + ["cms_attention", "cms_heptv2"]
+    for name, job in jobs.items():
+        config = job.resolved_config
+        backbone = name.rsplit("_", 1)[1]
+        assert config.model.type.value == backbone
+        assert config.num_steps == 100000 and config.lr_schedule.value == "onecycle" and config.patience >= config.num_steps // config.val_freq
+        # Telemetry from the background sampler only, without timing events inside the step.
+        assert config.benchmark.enabled and config.benchmark.gpu_timing_interval == 0
+        # Input normalization applies to every track/cluster model; hit models do not support it.
+        assert config.model.input_normalization == ("_hits_" not in name)
+
+    for name, job in jobs.items():
+        if not name.startswith("cms"):
+            expected_batch = 16 if name.startswith("idea") else 128
+            expected_lr = 0.0005 if name.startswith("idea") or name == "colliderml_pf_attention" else 0.001
+            assert job.global_batch_size == expected_batch and job.resolved_config.lr == expected_lr
+            assert job.resolved_config.gpus == (1 if "_pf_" in name else platform.gpus)
+    assert jobs["cld_hits_attention"].resolved_config.model.set_decoder.num_slots == 256
+
+    for backbone in ("attention", "heptv2"):
+        cms = jobs[f"cms_{backbone}"]
+        config = cms.resolved_config
+        assert cms.global_batch_size == {"physical_pu": 96, "physical_nopu": 768} and cms.per_gpu_batch_size == {
+            "physical_pu": 12,
+            "physical_nopu": 96,
+        }
+        assert config.lr == 0.0004 and config.model.backbone.num_convs == 3
+        width = config.model.heptv2.width if backbone == "heptv2" else config.model.attention.num_heads * config.model.attention.head_dim
+        assert width == 512
+        versions = {sample.version for group in config.train_dataset["cms"].values() for sample in group.samples.values()}
+        versions |= {sample.version for group in config.valid_dataset["cms"].values() for sample in group.samples.values()}
+        versions |= {sample.version for sample in config.test_dataset.values()}
+        assert versions == {"2.8.0"}
+
+
 def test_override_precedence():
     scenario = TrainingScenario(
         name="override-test",
