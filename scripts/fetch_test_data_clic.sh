@@ -4,8 +4,8 @@ set -e
 # This script downloads a small amount of ROOT data and runs postprocessing
 # to generate the .parquet files needed by the validation scripts.
 # Based on scripts/local_test_clic.sh.
-# ROOT files are hosted on HuggingFace:
-# https://huggingface.co/datasets/jpata/particleflow/tree/main/root/clic/ttbar
+# Pin the Hugging Face revision that contains both files required by the TFDS train and test splits.
+fixture_url="https://huggingface.co/datasets/jpata/particleflow/resolve/04a1da49a663e3704e2af4a3d1d0e26ad9369c30/root/clic/ttbar"
 
 export PYTHONPATH=$(pwd)
 
@@ -13,8 +13,8 @@ export PYTHONPATH=$(pwd)
 echo "Setting up CLIC test data..."
 mkdir -p local_test_data/clic/p8_ee_ttbar_ecm380/root
 pushd local_test_data/clic/p8_ee_ttbar_ecm380/root > /dev/null
-wget -q --no-check-certificate -nc https://huggingface.co/datasets/jpata/particleflow/resolve/main/root/clic/ttbar/reco_p8_ee_ttbar_ecm380_300000.root
-wget -q --no-check-certificate -nc https://huggingface.co/datasets/jpata/particleflow/resolve/main/root/clic/ttbar/reco_p8_ee_ttbar_ecm380_300001.root
+wget -nv -nc "$fixture_url/reco_p8_ee_ttbar_ecm380_300000.root"
+wget -nv -nc "$fixture_url/reco_p8_ee_ttbar_ecm380_300001.root"
 popd > /dev/null
 
 for file in local_test_data/clic/p8_ee_ttbar_ecm380/root/*.root; do

@@ -154,7 +154,7 @@ def test_lumi_release_checkpoints_share_nodes_only_for_single_gpu_jobs():
         for job in jobs:
             partitions[job.variant_name] = (command[command.index("--partition") + 1], command[command.index("--gpus-per-task") + 1])
     assert {name for name, request in partitions.items() if request == ("small-g", "1")} == {
-        f"{detector}_pf_{backbone}" for detector in ("cld", "clic", "colliderml") for backbone in ("attention", "heptv2")
+        f"{detector}_pf_{backbone}" for detector in ("cld", "clic", "colliderml", "idea") for backbone in ("attention", "heptv2")
     }
     assert {request for name, request in partitions.items() if "_pf_" not in name} == {("standard-g", "8")}
 
