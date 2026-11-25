@@ -1,4 +1,4 @@
-"""Additive reconstruction diagnostics; see docs/reconstruction_diagnostics.md.
+"""Additive reconstruction diagnostics; see docs/studies/reconstruction_diagnostics.md.
 
 Keys do not depend on batch contents, including empty classes on DDP ranks.
 """

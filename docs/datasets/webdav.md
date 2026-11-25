@@ -1,214 +1,159 @@
-# Transfer TFDS datasets with Grid WebDAV
+# Transfer datasets with Grid WebDAV
 
-Use the repository's transfer scripts to upload locally prepared TensorFlow
-Datasets (TFDS) to a Grid WebDAV endpoint or download them to another system.
-The scripts preserve the TFDS directory layout, so the local data can be used
-with MLPF's `--data-dir` option after download.
+Large TFDS datasets that are not on the Hugging Face Hub, such as the full ten-partition productions, CMS data, and the CLD granularity scans, are kept on the Tallinn Grid storage element. This page shows how to download them to a training site and how to upload a new production.
+
+The transfer scripts run [Davix](https://davix.web.cern.ch/) in an Apptainer container, copy files in parallel, verify them, and keep the TFDS directory layout. A downloaded root can be passed directly to MLPF as `--data-dir`.
+
+| Script | Use it to |
+|---|---|
+| `scripts/tfds_webdav_tree.py` | Download a whole TFDS data root, or selected datasets from it |
+| `scripts/tfds_webdav.py` | Download (or upload) exactly one dataset configuration and version |
+| `scripts/tfds_webdav_upload.py` | Upload one or more datasets, with checksum verification |
+| `scripts/upload_granularity_scan.py` | Upload all twelve CLD granularity-scan roots |
+| `scripts/tfds_webdav_status.py` | Show the progress of a running or finished transfer |
+
+## Quick start
+
+With a valid Grid proxy and the Davix image in the repository root, download the CLD ttbar and qq track/cluster datasets:
+
+```bash
+python3 scripts/tfds_webdav_tree.py \
+  --remote-url davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tfds/cld/v1.2.5_key4hep_2025-05-29/ \
+  --local-root /data/tfds/cld \
+  --dataset cld_edm_ttbar_pf --dataset cld_edm_qq_pf \
+  --dry-run
+```
+
+Check the listed files and total size, then remove `--dry-run`. Train with `--data-dir /data/tfds/cld`.
 
 ## Prerequisites
 
-Run the examples from the repository root. You need Python 3, Apptainer, a
-Davix container image, and a valid X.509 proxy with access to the endpoint.
-Uploads also require write permission on the remote destination. Choose local
-storage with enough free space for the datasets you download.
+You need Python 3, Apptainer, the Davix container image, and an X.509 proxy with read access to the endpoint (write access for uploads). The scripts use only the Python standard library, so the MLPF environment is not required.
 
-Create the X.509 proxy on a system with `voms-proxy-init` and your Grid
-certificate configured:
+**Proxy.** Create it where your Grid certificate and `voms-proxy-init` are set up:
 
 ```bash
 voms-proxy-init -rfc -voms cms -bits 2048 -out "$HOME/x509-cms-2048"
 export X509_USER_PROXY="$HOME/x509-cms-2048"
 ```
 
-Renew the proxy with the same command if it expires. The scripts use
-`$X509_USER_PROXY`, falling back to `~/x509-cms-2048`; use `--proxy /path/to/proxy`
-to override it. They mount the proxy read-only at `/tmp/x509` inside Apptainer.
+The scripts read `$X509_USER_PROXY`, falling back to `~/x509-cms-2048`; `--proxy PATH` overrides both. Rerun the command when the proxy expires.
 
-The Davix image is available at <https://jpata.web.cern.ch/jpata/davix.sif>.
-The examples assume it is saved as `./davix.sif`; pass `--image /path/to/davix.sif`
-if it is elsewhere. The image must contain the Grid CA certificates at
-`/etc/grid-security/certificates`, or use `--capath` to specify their location
-inside the container.
+**Davix image.** Download <https://jpata.web.cern.ch/jpata/davix.sif> to the repository root, or pass `--image PATH`. The image must contain the Grid CA certificates at `/etc/grid-security/certificates`; use `--capath` if they are elsewhere inside the container.
 
-## Local and remote directory layout
+## Remote layout
 
-A local TFDS data root directly contains dataset-name directories:
-
-```text
-/path/to/tfds/
-└── cld_edm_ttbar_pf/
-    └── 1/
-        └── 3.3.0/
-            ├── dataset_info.json
-            ├── features.json
-            └── ... dataset shards ...
-```
-
-Always pass `/path/to/tfds` as `--local-root`, rather than the dataset,
-configuration, or version directory. A root can contain multiple datasets,
-configurations, and versions.
-
-The default remote root is:
-
-```text
-davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tfds
-```
-
-Uploads place files below it using this layout:
+The default remote root is `davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tfds`. Below it, datasets are organized as:
 
 ```text
 <remote-root>/<detector>/[<campaign>/][<variant>/]<dataset>/<configuration>/<version>/
 ```
 
-The campaign and variant directories are optional. Use a campaign to group a
-production, and a variant to separate independent data roots such as detector
-scan points. Keep the campaign name consistent across related datasets. The
-remote TFDS data root is the directory immediately above the dataset names:
-this is the detector directory when neither campaign nor variant is used.
+- **campaign** groups one production, e.g. `v1.2.5_key4hep_2025-05-29` (optional);
+- **variant** separates independent data roots within a campaign, such as the granularity-scan point `ecal_1p5mm` (optional).
 
-The examples below use detector `cld`, campaign `v1.2.5_key4hep_2025-05-29`,
-and dataset `cld_edm_ttbar_pf/1:3.3.0`. Substitute the detector, campaign,
-dataset, configuration, and version for your transfer.
-
-## Upload local datasets to WebDAV
-
-Preview an upload with `scripts/tfds_webdav_upload.py`:
-
-```bash
-python3 scripts/tfds_webdav_upload.py \
-  --local-root /path/to/source/tfds \
-  --detector cld --campaign v1.2.5_key4hep_2025-05-29 \
-  --dataset cld_edm_ttbar_pf --config 1 --version 3.3.0 \
-  --image ./davix.sif --jobs 8 --dry-run
-```
-
-The preview reports the selected files, bytes, and destination without
-transferring data. Remove `--dry-run` to upload. This example copies files from
-`/path/to/source/tfds/cld_edm_ttbar_pf/1/3.3.0/` to:
+The **TFDS data root** is the directory directly above the dataset names: `<detector>/<campaign>/` for a campaign, `<detector>/<campaign>/<variant>/` for a variant, or `<detector>/` when neither is used. A local data root has the same shape:
 
 ```text
-davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tfds/cld/v1.2.5_key4hep_2025-05-29/cld_edm_ttbar_pf/1/3.3.0/
+/data/tfds/cld/                 <- --local-root and MLPF --data-dir
+└── cld_edm_ttbar_pf/
+    └── 1/
+        └── 3.3.0/
+            ├── dataset_info.json
+            ├── features.json
+            └── ...shards
 ```
 
-Repeat `--dataset` to upload several datasets and `--config` to select several
-configurations. Omit `--config` to select every local configuration containing
-the requested version and `dataset_info.json`. Run the command separately for
-each version.
+Always pass the data root, never a dataset or version directory, and use a separate local root for each variant.
 
-Omit `--campaign` to upload directly below the detector directory. Add
-`--variant ecal_1p5mm` to put a variant directory before the dataset names;
-`--local-root` must point to that variant's local TFDS data root. Use
-`--remote-root davs://host:port/path` to upload to another endpoint or base
-directory whose parent already exists.
+## Download
 
-The uploader copies files in parallel, retries failures, and verifies remote
-sizes and checksums. By default, `--verify-mode sha256-readback` streams every
-remote file back and compares its SHA-256 digest with the local source. Allow
-for a full download in addition to the upload traffic.
+### A whole root or selected datasets
 
-For large transfers, `--verify-mode md5-server` compares local MD5 digests and
-sizes with the endpoint's `Want-Digest: md5` response without downloading the
-files again. This requires endpoint support and a host installation of `curl`
-with TLS trust for the endpoint.
-
-To retry an interrupted or failed upload, rerun the same command. Existing
-files with matching sizes are checksum-verified; missing files and files with
-size or checksum mismatches are uploaded again. Both verification modes end
-with a remote directory size check.
-
-## Download datasets from WebDAV
-
-### Download a data root or selected datasets
-
-Use `scripts/tfds_webdav_tree.py` to download a remote TFDS data root:
+`tfds_webdav_tree.py` copies everything below `--remote-url`, which must be a TFDS data root. Repeat `--dataset` to restrict it to some datasets (all their configurations and versions):
 
 ```bash
 python3 scripts/tfds_webdav_tree.py \
-  --remote-url davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tfds/cld/v1.2.5_key4hep_2025-05-29/ \
-  --local-root /path/to/downloaded/tfds \
-  --image ./davix.sif --jobs 8 --dry-run
+  --remote-url davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tfds/cld/granularity_scan_2025-05-29/ecal_1p5mm/ \
+  --local-root /data/tfds/cld_ecal_1p5mm \
+  --jobs 8
 ```
 
-Remove `--dry-run` to download all datasets, configurations, and versions under
-that URL. The destination must be absent or empty for the initial download.
-The resulting local root directly contains directories such as
-`cld_edm_ttbar_pf/1/3.3.0/`.
+The destination must be empty. To continue an interrupted download, or to add datasets to an existing root, rerun with `--resume`: files whose size matches the remote listing are skipped, and missing or wrong-size files are downloaded again from the start. The same command works for older roots outside this layout, such as `/store/user/jpata/mlpf/tensorflow_datasets/2.8.0/`.
 
-To download only selected dataset directories, repeat `--dataset`:
+### One configuration and version
 
-```bash
-python3 scripts/tfds_webdav_tree.py \
-  --remote-url davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tfds/cld/v1.2.5_key4hep_2025-05-29/ \
-  --local-root /path/to/downloaded/tfds \
-  --dataset cld_edm_ttbar_pf --dataset cld_edm_qq_pf \
-  --image ./davix.sif --jobs 8
-```
-
-This selects all configurations and versions within those datasets. Add
-`--resume` to retry an interrupted transfer or add datasets to an existing
-local root. The script skips files whose sizes match the remote listing and
-downloads missing or wrong-size files again; it does not resume partial files
-at a byte offset.
-
-Set `--remote-url` to the TFDS data root you need. For uploads without a
-campaign, use the detector URL ending in `/tfds/cld/`. For a variant, use the
-URL ending in the campaign and variant, such as
-`/tfds/cld/granularity_scan_2025-05-29/ecal_1p5mm/`, and choose a separate
-local root for that variant. The same command also supports other endpoints
-and legacy roots such as `/store/user/jpata/mlpf/tensorflow_datasets/2.8.0/`.
-
-### Download one configuration and version
-
-For a dataset within a campaign, use `scripts/tfds_webdav.py download`:
+`tfds_webdav.py` copies exactly one `<dataset>/<configuration>/<version>` from a campaign:
 
 ```bash
 python3 scripts/tfds_webdav.py download cld v1.2.5_key4hep_2025-05-29 \
   cld_edm_ttbar_pf 1 3.3.0 \
-  --local-root /path/to/downloaded/tfds \
-  --image ./davix.sif --dry-run
+  --local-root /data/tfds/cld --dry-run
 ```
 
-Remove `--dry-run` to download. The positional arguments are direction,
-detector, campaign, dataset, configuration, and version. Add `--variant` for a
-variant within a campaign, or `--remote-root` to change the endpoint's base
-directory. This command requires a campaign argument; use the tree downloader
-for roots without a campaign.
+The positional arguments are direction, detector, campaign, dataset, configuration, and version. Add `--variant` for a variant. Other datasets and versions may already exist in the local root, but the target version directory must be empty or absent; to recover an interrupted download, use the tree downloader with `--resume`.
 
-The command uses eight Davix threads and refuses a nonempty destination
-version directory. Other datasets or versions can already exist in the local
-root. To recover an interrupted download into that version directory, use the
-tree downloader with `--resume`.
+### Check the result
 
-### Verify and use downloaded data
+Downloads compare file sizes with the remote listing; they do not recompute checksums. The bytes on the server were checksum-verified at upload. Then open the data with TFDS as in [Download a dataset](download.md#verify-metadata-and-one-event), using your local root as `data_dir`.
 
-Both download commands check downloaded file sizes against the remote listing.
-These are size checks, not checksum checks; the tree downloader's `--resume`
-option also identifies existing files by size. Upload checksum verification
-confirms the remote bytes at upload time. Perform a separate checksum check
-if you need end-to-end confirmation after download.
+## Upload
 
-Follow the [TFDS metadata and one-event checks](download.md#verify-metadata-and-one-event)
-using your downloaded dataset names, versions, and local root. Pass
-`/path/to/downloaded/tfds` as `--data-dir` when using these examples with MLPF.
-
-## Monitor transfers
-
-Transfers report file and byte progress. Interactive terminals also show a
-progress bar, rate, ETA, and error count. Each transfer writes JSON status under
-`~/.local/state/mlpf-tfds-webdav/` (or
-`$XDG_STATE_HOME/mlpf-tfds-webdav/`) and prints its status file path at startup.
-Use `--status-file /path/to/job.json` to choose a predictable location.
-
-Read the latest transfer's status or watch it from another terminal:
+Upload one production, here CLD ttbar configuration 1, version 3.3.0:
 
 ```bash
-python3 scripts/tfds_webdav_status.py
-python3 scripts/tfds_webdav_status.py --watch
+python3 scripts/tfds_webdav_upload.py \
+  --local-root /path/to/workspace/tfds \
+  --detector cld --campaign v1.2.5_key4hep_2025-05-29 \
+  --dataset cld_edm_ttbar_pf --config 1 --version 3.3.0 \
+  --dry-run
+```
+
+The dry run prints the files, total size, and destination. Without `--dry-run`, files are copied to `<remote-root>/cld/v1.2.5_key4hep_2025-05-29/cld_edm_ttbar_pf/1/3.3.0/`.
+
+- Repeat `--dataset` and `--config` to select several; omit `--config` to take every local configuration that has this version.
+- One command handles one version; run it again for another version.
+- `--variant NAME` adds a variant directory; `--local-root` must then be that variant's local root. For all twelve CLD granularity-scan points, use `scripts/upload_granularity_scan.py` (`--point` selects a subset).
+- Omit `--campaign` to upload directly below the detector directory.
+- `--remote-root` selects another endpoint or base directory; its parent must exist.
+
+Use a consistent campaign name for all datasets of one production.
+
+### Verification
+
+Every uploaded file is verified before the command succeeds, followed by a check of the total remote directory size:
+
+| `--verify-mode` | Check | Cost |
+|---|---|---|
+| `sha256-readback` (default) | Streams each file back and compares its SHA-256 with the local file | Downloads everything once more |
+| `md5-server` | Compares local MD5 and size with the server's `Want-Digest: md5` response | No extra transfer; needs endpoint support and host `curl` that trusts the endpoint |
+
+Use `md5-server` for large productions. Failed copies are retried (`--attempts`, default 5). To resume an interrupted upload, rerun the same command: existing files with the right size are verified, and missing or mismatching files are uploaded again.
+
+## Monitor a transfer
+
+Every transfer prints file and byte progress; interactive terminals also show a progress bar, rate, and ETA. Each job writes a JSON status file under `~/.local/state/mlpf-tfds-webdav/` (or `$XDG_STATE_HOME/mlpf-tfds-webdav/`) and prints its path at startup; `--status-file PATH` chooses the location.
+
+From another terminal:
+
+```bash
+python3 scripts/tfds_webdav_status.py            # latest job
+python3 scripts/tfds_webdav_status.py --watch    # refresh until done
 python3 scripts/tfds_webdav_status.py /path/to/job.json --json
 ```
 
-Status remains available after the process exits. The phases are `preparing`,
-`transferring`, `verifying`, `complete`, and `failed`. A `complete` phase means
-all selected files passed that command's verification. The JSON distinguishes
-completed files and bytes from newly transferred files and bytes, which is
-useful for resumed jobs. It contains no proxy credentials.
+The phase is one of `preparing`, `transferring`, `verifying`, `complete`, or `failed`; `complete` means every selected file passed verification. The status separates files already present from newly transferred ones, which is useful after a resume. It contains no proxy credentials.
+
+## Troubleshooting
+
+Authentication or permission errors
+: Check that the proxy exists, has not expired (`voms-proxy-info`), and is the one the script reports. Uploads also need write permission at the destination.
+
+TLS or certificate errors
+: The container cannot find the Grid CA certificates. Use an image that contains them or pass `--capath`. For `md5-server`, the host `curl` must also trust the endpoint.
+
+`Dataset ... not found` in TFDS after download
+: `--data-dir` must be the local data root that directly contains the dataset-name directories, and the version in your recipe must exist there.
+
+Download refuses to start
+: The tree downloader needs an empty destination unless `--resume` is given; `tfds_webdav.py` refuses a non-empty version directory.

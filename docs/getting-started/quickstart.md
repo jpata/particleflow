@@ -27,7 +27,7 @@ Runtime depends on the machine and dependency/download caches. To run the unit s
 PYTHONPATH="$PWD" KERAS_BACKEND=torch uv run python3 -m pytest tests
 ```
 
-The CI detector matrix also runs `bash scripts/local_test_colliderml.sh`, which creates an offline synthetic fixture, converts it, builds TFDS, and trains on CPU. Its validator runs in report mode, so inspect its findings separately from the script exit status. For real ColliderML data and the local MAIA smoke test, see the [detector-comparison runbook](../validation/detector-comparison.md).
+The CI detector matrix also runs `bash scripts/local_test_colliderml.sh`, which creates an offline synthetic fixture, converts it, builds TFDS, and trains on CPU. The script continues when the Parquet validator fails, so read `plots/validation_report.json` rather than relying on the exit status. For real ColliderML data and the local MAIA smoke test, see the [detector-comparison runbook](../validation/detector-comparison.md).
 
 ## What success looks like
 

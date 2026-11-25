@@ -28,4 +28,4 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 
 ## Production and related inputs
 
-Use [shared Key4HEP production](key4hep.md) with `PROD=cld` and build this representation with `pixi run tfds`. For tracker and calorimeter measurements, use the separate [CLD hit datasets](cld-hits.md).
+Use [shared Key4HEP production](key4hep.md) with `PROD=cld` and build this representation with `pixi run tfds`. Calorimeter granularity scans (six ECAL and six HCAL cell sizes, `cld_edm_z_tautau_pf` and `cld_edm_ttbar_pf` at 3.3.0) have their own `cld_ecal_pitch_*` and `cld_hcal_pitch_*` productions; see the [scan runbook](https://github.com/jpata/particleflow/blob/main/scripts/cld_ecal_readout/GRANULARITY_SCAN.md). For tracker and calorimeter measurements, use the separate [CLD hit datasets](cld-hits.md).

@@ -40,6 +40,7 @@ project:
             - file: datasets/clic-hits.md
             - file: datasets/colliderml-hits.md
         - file: datasets/download.md
+        - file: datasets/webdav.md
         - file: datasets/generate.md
           children:
             - file: datasets/key4hep.md
@@ -48,7 +49,11 @@ project:
         - file: training/train.md
         - file: training/data-mixing.md
         - file: training/resume-and-fine-tune.md
+        - file: training/scenarios.md
         - file: training/distributed-training-and-hpo.md
+        - file: training/benchmark-portability.md
+          children:
+            - file: training/hpc-batch-sweep.md
     - title: Validation
       children:
         - file: validation/overview.md
@@ -67,8 +72,25 @@ project:
         - file: science/capabilities.md
         - file: science/publications.md
         - file: science/reproducibility.md
-        - file: cld_hit_results.md
         - file: science/roadmap.md
+    - title: Research notes
+      children:
+        - file: studies/index.md
+          children:
+            - file: studies/cld_hit_results.md
+            - file: studies/cld_hit_campaigns.md
+            - file: studies/cms_training_exposure.md
+            - file: studies/tracker_momentum_features.md
+            - file: studies/tracker_momentum_readout.md
+            - file: studies/charged_fit_correction.md
+            - file: studies/heptv2_checkpointing.md
+            - file: studies/reconstruction_diagnostics.md
+            - file: studies/tracker_grouping_loss_experiments.md
+            - file: studies/tracker_fit_loss_experiments.md
+            - file: studies/tracker_width_scaling.md
+            - file: studies/frozen_tracker_readout.md
+            - file: studies/hit_instance_probe.md
+            - file: studies/calo_continuation_probe.md
     - title: Development
       children:
         - file: map.md

@@ -1,6 +1,6 @@
 # Machine-learned particle flow
 
-MLPF reconstructs the particles produced in a collision from detector measurements. It uses a neural network to combine information from tracking detectors and calorimeters and produces a list of particle candidates for the full event. The project supports studies with the CMS detector and with the CLD and CLIC future-detector concepts.
+MLPF reconstructs the particles produced in a collision from detector measurements. It uses a neural network to combine information from tracking detectors and calorimeters and produces a list of particle candidates for the full event. The main workflows cover the CMS detector and the CLD and CLIC future-collider detector concepts. Research workflows add the open ColliderML proton-proton dataset, the IDEA and MAIA detector concepts, and lower-level hit inputs.
 
 This documentation describes the codebase prepared for **v3.3.0**: supported workflows, configuration, and validation limits. Dataset schemas and model artifacts have independent versions. Published physics results remain tied to their original code, data, detector setup, and checkpoints.
 
@@ -15,6 +15,7 @@ This documentation describes the codebase prepared for **v3.3.0**: supported wor
 | Produce a dataset from simulation | [Dataset generation](datasets/generate.md) |
 | Train or continue a model | [Train a model](training/train.md) |
 | Balance training samples and monitor their losses | [Dataset mixing](training/data-mixing.md) |
+| Run a reproducible training campaign on a cluster | [Training scenarios](training/scenarios.md) |
 | Evaluate a published CLD or CLIC model | [Key4HEP evaluation](validation/key4hep.md) |
 | Choose the right validation check | [Validation overview](validation/overview.md) |
 | Export and compare an ONNX model | [ONNX validation](validation/onnx.md) |
@@ -22,6 +23,7 @@ This documentation describes the codebase prepared for **v3.3.0**: supported wor
 | Read the scientific results | [Publications](science/publications.md) |
 | Understand remaining limits and priorities | [Development priorities](science/roadmap.md) |
 | Find a code component | [Repository map](map.md) |
+| Read the detailed hit-model studies | [Research notes](studies/index.md) |
 
 ## The workflow at a glance
 
@@ -47,7 +49,7 @@ particle predictions
 particle, jet, missing-momentum, and deployment validation
 ```
 
-The full workflow is available for CMS, CLD, and CLIC. Published datasets and model checkpoints from the [MLPF Hugging Face repositories](https://huggingface.co/jpata) provide the shortest starting path.
+The full workflow is available for CMS, CLD, and CLIC. Published datasets and model checkpoints from the [MLPF Hugging Face repositories](https://huggingface.co/jpata) provide the shortest starting path. Each release publishes reference checkpoints trained with the same recipe, for example under `cld/clusters/v3.3.0/` or `cms/v3.3.0/` in the model repository.
 
 For a first hands-on use, download the published CLD dataset and follow the [short training path](training/train.md). For an existing checkpoint, start with the [standalone Key4HEP evaluator](validation/key4hep.md).
 

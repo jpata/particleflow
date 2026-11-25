@@ -37,4 +37,6 @@ The [generation guide](../datasets/generate.md) explains the shared stages. The 
 - Choose **CLD** for electron-positron studies with the CLD detector concept and Key4HEP/EDM4hep data.
 - Choose **CLIC** for electron-positron studies with CLICdet and Key4HEP/EDM4hep data.
 
-CLD and CLIC support both reconstructed track/cluster inputs and lower-level tracker/calorimeter hit inputs. The hit workflows have much larger events and are best treated as research workflows. See [Current capabilities](../science/capabilities.md).
+- Choose **ColliderML** for an open proton-proton dataset with up to 200 pileup interactions and no proprietary detector software.
+
+CLD and CLIC support both reconstructed track/cluster inputs and lower-level tracker/calorimeter hit inputs. The hit workflows have much larger events and are best treated as research workflows. IDEA and MAIA are partial workflows. See [Current capabilities](../science/capabilities.md).

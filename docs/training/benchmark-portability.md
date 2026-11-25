@@ -1,4 +1,4 @@
-# Portable CLD training benchmarks
+# Portable training benchmarks
 
 The benchmark separates the scientific recipe, the measurement protocol, and the
 site runtime. A new accelerator should need a platform YAML and, if necessary,
@@ -66,13 +66,12 @@ python -m scripts.training.batch_sweep \
   --batch-sizes 8 16 --dry-run
 ```
 
-All site workers now use the same defaults. `MLPF_BATCH_SWEEP_SCENARIO` and
+All site workers use the same defaults. `MLPF_BATCH_SWEEP_SCENARIO` and
 `MLPF_BATCH_SWEEP_OUTPUT` work on every site; explicit CLI arguments win. Without
 an output override, the driver uses the profile's experiment directory and a name
-containing the platform and Slurm job ID (timestamp outside Slurm). The old site
-`run_batch_sweep.sh` files remain compatibility entrypoints with historical
-SBATCH directives. Prefer the generic submitter so future resource changes need
-only a profile edit.
+containing the platform and Slurm job ID (timestamp outside Slurm). Use the generic
+submitter rather than the per-site `run_batch_sweep.sh` scripts, which keep the
+historical SBATCH directives.
 
 Real runs freeze the resolved specification along with case/profile YAML. They
 record scenario/spec hashes, Git revision and dirty status, dataset preflight
@@ -144,10 +143,10 @@ check physical boundaries before comparing GPUs. Missing samples are not zero
 utilization. GPU busy percentage does not establish SM/Tensor Core activity,
 achieved FLOPs, bandwidth or coherent-memory/interconnect performance.
 
-`step_valid_time` now measures the current validation call, while
+`step_valid_time` measures the current validation call, while
 `step_test_time`, `step_plot_time` and `step_validation_cycle_time` cover the other
-phases. Older GH200 histories used an incorrect cumulative `step_valid_time`;
-do not use that field from the historical runs to estimate validation overhead.
+phases. In the historical GH200 histories `step_valid_time` was cumulative; do not
+use it from those runs.
 
 ## Export results without a training environment
 
@@ -198,19 +197,6 @@ recovery; do not blindly overwrite the release or repoint an existing tag.
 
 ## Historical evidence and remaining limitations
 
-The [v3.2.0 evidence package](https://huggingface.co/jpata/particleflow/tree/5a1fbd8f7cf71c7446a5202f4223009902e2d048/benchmarks/v3.2.0/cld_gpu_batch_sweep)
-covers the 29–30 October 2026 runs at an immutable Hugging Face commit. It contains
-23 files (4.7 MB), including seven reproducible figures and a 19-slide presentation.
-Use the pinned commit link rather than assuming a Git tag exists. The folder
-version labels benchmark evidence, not the TFDS dataset version.
-H100 used TFDS 3.2.1, GH200/LUMI 3.2.2. The runs used different dirty Git bases,
-NVIDIA native versus ROCm external attention, and four versus two loader workers.
-MI250X means one GCD, not a whole two-GCD module. These facts cannot be repaired
-retroactively by unifying the launcher. The next comparison should use the strict
-preflight options and repeat the cases on a single committed revision.
+The [v3.2.0 evidence package](https://huggingface.co/jpata/particleflow/tree/5a1fbd8f7cf71c7446a5202f4223009902e2d048/benchmarks/v3.2.0/cld_gpu_batch_sweep) (pinned Hub commit) holds the October 2026 GH200, H100, and MI250X runs: figures, a presentation, and the compact exports. They are single runs and not a controlled comparison: H100 used TFDS 3.2.1 and GH200/LUMI 3.2.2, the source trees were different dirty revisions, and attention backends and loader workers differed. MI250X means one GCD. LUMI power was unavailable. The package makes no claim about convergence, confidence intervals, full-system energy, or billed cost.
 
-The package retains the original single-run findings and loss curves. It does
-not claim convergence, confidence intervals, portable full-system energy scope,
-or scheduler-billed cost. LUMI power is unavailable; GH200 Attention batch 32 has
-no usable phase-attributed busy/power interval. Missing cgroup readings likewise
-must not be interpreted as zero memory use or an absence of OOM events.
+A new comparison should use one clean commit, one verified dataset copy (`--data-manifest`, `--require-clean-git`), and repeated cases.

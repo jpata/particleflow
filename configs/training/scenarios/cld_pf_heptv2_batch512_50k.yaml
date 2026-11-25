@@ -2,7 +2,7 @@
 # Retain the historical scenario name for existing launch commands.
 # HEPTv2 keeps the current grouped tracker-feature model and set objective.
 # Checkpointing has a recomputation cost; validate memory on the target platform
-# with real hit occupancies before launching the full run (see docs/heptv2_checkpointing.md).
+# with real hit occupancies before launching the full run (see docs/studies/heptv2_checkpointing.md).
 name: cld_pf_heptv2_batch512_50k
 spec_file: particleflow_spec.yaml
 production_name: cld

@@ -56,7 +56,7 @@ Before running anything, review the selected entry under `productions` in `parti
 
 ## Generate and inspect the workflow
 
-Choose exactly one production name: `cms_run3`, `cld`, or `clic`.
+Choose exactly one production name from `productions` in `particleflow_spec.yaml`: `cms_run3`, `cld`, `clic`, `idea`, or one of the CLD granularity-scan productions (`cld_ecal_pitch_*`, `cld_hcal_pitch_*`). ColliderML is converted from the public release rather than simulated; see [ColliderML production](colliderml.md#production).
 
 ```bash
 PROD=cld pixi run snakefile

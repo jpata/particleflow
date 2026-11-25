@@ -13,7 +13,7 @@ CLD hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4h
 
 Recipes configure partitions 1--10. The [verified Hub selection](catalog.md#published-availability) provides configuration 1 for `ttbar`, `WW`, and `qq`; check other selections separately.
 
-For CLD particle-set studies, the recommended research preset is `pyg-cld-hits-heptv2-set-v1`; see the [evidence and recommendation](../cld_hit_results.md).
+For CLD particle-set studies, the recommended research preset is `pyg-cld-hits-heptv2-set-v1`; see the [evidence and recommendation](../studies/cld_hit_results.md).
 
 ## Event view
 

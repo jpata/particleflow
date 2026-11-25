@@ -20,7 +20,8 @@ Sentinel files and generated Snakemake job directories describe workflow complet
 ```text
 experiments/<run>/
 ├── checkpoints/
-│   └── checkpoint-<step>.pth
+│   ├── checkpoint-<step>.pth
+│   └── best.pth              (with early stopping)
 ├── history/
 │   └── step_<step>.json
 ├── model_kwargs.pkl
@@ -33,6 +34,9 @@ experiments/<run>/
 │   └── valid/
 ├── preds_step_<step>/
 │   └── <dataset>/
+├── plots_step_<step>/
+├── benchmark/                (with benchmark.enabled)
+├── scenario-manifest.json    (scenario runs)
 └── validation/
 ```
 
@@ -48,6 +52,7 @@ Some entries appear only when their corresponding training, test, plotting, logg
 | `history/*.json` | Training and validation loss and selected plot metrics | For audit |
 | logs and `runs/` TensorBoard data | Progress, diagnostics, resource and loss history | For audit |
 | prediction Parquet and plots | Held-out model and physics checks | With published validation |
+| `scenario-manifest.json` | Scenario, variant, seed, and command used to start and resume the run | For audit |
 
 Use the name `best` when the bundle records the selection metric, dataset, and step. Periodic checkpoint names encode the training step; validation records describe model quality.
 

@@ -120,6 +120,21 @@ uv run python3 mlpf/pipeline.py \
 
 Memory use depends on event size, attention implementation, precision, and per-rank batch size. Lower `--gpu_batch_multiplier` first if the process runs out of GPU memory. Assess physics quality with the held-out checks in the [validation overview](../validation/overview.md).
 
+## Other detectors
+
+The command shape is the same; the production, model recipe, data root, and dataset version must agree:
+
+| Detector | Production | Model recipe | Data version |
+|---|---|---|---|
+| CMS | `cms_run3` | `pyg-cms-v1` | 3.2.0 (scenarios use 2.8.0) |
+| CLD | `cld` | `pyg-cld-v1` | 3.3.0 |
+| CLIC | `clic` | `pyg-clic-v1` | 3.3.0 |
+| ColliderML | `colliderml` | `pyg-colliderml-v1`, `pyg-colliderml-pu200-v1` | 1.5.0 |
+| IDEA | `idea` | `pyg-idea-pipeline-v1` | 0.3.0 |
+| MAIA | `maia` | `pyg-maia-v1` | 1.2.0 |
+
+Hit inputs use the dedicated `*-hits-*` recipes and need substantially more memory. The [dataset catalog](../datasets/catalog.md) lists all recipes and which versions are published.
+
 ## Attention and padding
 
 Native Flash attention automatically packs valid elements into a jagged representation so padding does not enter attention. It requires a compatible GPU and a head dimension divisible by 8, between 8 and 256. Use `--model.attention.attention_type math` for CPU runs; dense math attention applies a key-padding mask. `model.attention.use_flash_attn_varlen` optionally selects the external FlashAttention variable-length kernel and requires the matching package.
@@ -128,38 +143,53 @@ Keep the configured padding multiple for HEPTv2 and other block-based models. HE
 
 For sample ordering, weighted groups, and per-group losses, see [Dataset mixing](data-mixing.md). The [ONNX guide](../validation/onnx.md) describes the separate export contract and runtime profiles.
 
-## Experimental CLD hit-set model
+## Input normalization
 
-The recommended global-attention preset is `pyg-cld-hits-heptv2-set-v1`, with supervised hard hit grouping and tracker-neighborhood features. Use the `cld_pf_heptv2_default_50k` scenario described in the [scenario guide](../../configs/training/README.md). The sectorized variant below is experimental and is not the recommended default.
+Track and cluster features span very different ranges: energies from MeV to TeV, track parameters with occasional failed-fit outliers. With `model.input_normalization: true`, the model clips a few track parameters to physical bounds, applies `log1p` to positive, heavy-tailed quantities such as energies and hit counts, and standardizes every column with the mean and standard deviation of the dataset's training split. The release checkpoints and the `pf_fm_*` scenarios use it for all track/cluster models. Hit datasets do not support it.
 
-The `pyg-cld-hits-heptv2-sector-set-v1` recipe uses a HEPTv2 hit backbone and an input-conditioned particle-set decoder. Decoder slots are assigned to periodic azimuthal sectors from their current reference direction. Each slot cross-attends only to hits in its sector and `sector_neighbors` sectors on either side; slot self-attention is also sector-local. This avoids dense slot-by-hit masks and global slot self-attention. A sector with no nearby hits uses its nearest hit so attention is always defined.
+```bash
+... train --model.input_normalization true
+```
 
-The recipe starts with 32 sectors, one neighboring sector on each side, and 256 slots. These settings can be overridden with `model.set_decoder.num_sectors`, `model.set_decoder.sector_neighbors`, and `model.set_decoder.num_slots`. In this mode, `local_attention_radius` limits the reference update per decoder layer; it is not an exact geometric cross-attention cutoff. The model requires hit counts padded to a multiple of the HEPTv2 block size (128 in this recipe).
+The statistics are committed per dataset version in `mlpf/model/input_normalization_stats/<dataset>_<version>.yaml` (CMS 2.8.0, CLD and CLIC 3.3.0, ColliderML 1.5.0, IDEA 0.1.0–0.3.0). Training fails with a clear error if the file for a selected version is missing. Compute it for a new version from the full training split:
 
-HEPTv2 GPU bucket attention requires compiled `torch.nn.attention.flex_attention` and never falls back to materializing attention scores. Bucket counts use a dynamic batch dimension so varying padded event lengths do not create a separate compiled kernel for every number of buckets. Failures retain the original exception and report the input shape, dtype, and PyTorch/ROCm versions; the explicit score calculation is used only on CPU.
+```bash
+uv run python3 scripts/compute_input_normalization_stats.py map cld 3.3.0 \
+  --data-dir /path/to/cld/tfds --work-dir results/input_normalization/cld_3.3.0
+uv run python3 scripts/compute_input_normalization_stats.py reduce cld 3.3.0 \
+  --work-dir results/input_normalization/cld_3.3.0
+```
 
-On an allocated GPU with the training environment activated, check fused attention and checkpoint replay before a campaign:
+`map` can be split over Slurm tasks (`--shard`, `--num-shards` default to the `srun` task index and count). The statistics become part of the checkpoint, so inference and [ONNX export](../validation/onnx.md#models-with-input-normalization) do not need the YAML files. Normalized models need each event's dataset `source_id`, which the training and `test` pipelines supply automatically.
+
+## Train on several detectors
+
+`pyg-cldcliccolliderml-v1` trains one track/cluster model on CLD, CLIC, and ColliderML PU0, with one dataset group per detector and equal step weights. Select it with `--production-name cld_clic_colliderml`, which takes each detector's data root from its own production. To point at other roots, repeat `--data-dir` per detector: `--data-dir cld=/data/cld --data-dir clic=/data/clic --data-dir colliderml=/data/colliderml`. Scenario platform profiles map these roots by production name.
+
+Each detector has its own feature layout. Two settings let one encoder handle all of them:
+
+- `model.input_normalization: true` (required) brings the columns of each detector to a comparable scale.
+- `model.feature_bag: true` maps each detector's columns into a shared vocabulary of named physical quantities, so that, for example, track pT always enters the encoder in the same slot. Quantities a detector does not provide are zero. It requires `model.input_encoding: split`.
+
+The `cld_clic_colliderml_feature_bag` scenario compares joint training with and without the feature bag; `pf_fm_joint` and `pf_fm_finetuning` train a joint model and fine-tune it on IDEA or on CLD granularity variants. These are research workflows; see the [scenario guide](scenarios.md).
+
+## CLD hit models
+
+The recommended CLD hit research preset is `pyg-cld-hits-heptv2-set-v1`: a HEPTv2 backbone, a particle-set decoder with global attention, supervised hit grouping, and tracker-neighborhood features. Train it with the `cld_pf_heptv2_default_50k` [scenario](scenarios.md). The [CLD hit-model evidence](../studies/cld_hit_results.md) records the ablations behind this choice.
+
+`pyg-cld-hits-heptv2-sector-set-v1` is an experimental variant in which decoder slots attend only to hits in nearby azimuthal sectors (`model.set_decoder.num_sectors`, default 32, and `sector_neighbors`, default 1). It avoids dense slot-by-hit attention but is not the recommended default.
+
+HEPTv2 on GPU requires compiled `torch.nn.attention.flex_attention`; the explicit score calculation is used only on CPU. Pad hit counts to a multiple of the HEPTv2 block size. On an allocated GPU, check fused attention and checkpoint replay before a campaign:
 
 ```bash
 python -m pytest -q tests/test_heptv2.py tests/test_heptv2_checkpointing.py
 ```
 
-These tests check fused outputs and gradients, including log-normalizers used to weight hashes, and checkpoint replay. GPU cases skip when no GPU is visible. They do not measure full training memory or distributed throughput. For a LUMI environment and RCCL check, submit `scripts/lumi/smoke_test.sh`; for training memory measurements, see [HEPTv2 checkpointing](../heptv2_checkpointing.md).
-
-## Train CMS or CLIC
-
-The command shape is the same, but the production, model recipe, data root, dataset version, and locally available samples must agree:
-
-| Detector | Production | Model recipe | Typical data root |
-|---|---|---|---|
-| CMS | `cms_run3` | `pyg-cms-v1` | the CMS production workspace `tfds/` directory |
-| CLD | `cld` | `pyg-cld-v1` | `.../tensorflow_datasets/cld` |
-| CLIC | `clic` | `pyg-clic-v1` | `.../tensorflow_datasets/clic` |
-
-Use the [dataset catalog](../datasets/catalog.md) to pair names and versions. Hit inputs require the dedicated `*-hits-v1` recipes and substantially more memory.
+GPU cases skip when no GPU is visible. For training memory, see [HEPTv2 activation checkpointing](../studies/heptv2_checkpointing.md); on LUMI, `scripts/lumi/smoke_test.sh` checks the environment and RCCL.
 
 ## Next steps
 
 - [Continue or fine-tune](resume-and-fine-tune.md) from a checkpoint.
 - Run the `test` command and detector-level plots described in [Key4HEP validation](../validation/key4hep.md).
 - Compare PyTorch and ONNX execution with [ONNX validation](../validation/onnx.md).
+- Run a reproducible multi-variant campaign with a [training scenario](scenarios.md).

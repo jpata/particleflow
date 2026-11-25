@@ -4,6 +4,10 @@ The Key4HEP path reads an EDM4hep ROOT file, reconstructs particles with a compa
 
 This page begins with one published CLD model and goes directly to inference. The later workflow scales the same evaluator to several files.
 
+:::{note}
+The standalone evaluator does not pass the per-event dataset `source_id`, so it cannot run checkpoints trained with [input normalization](../training/train.md#input-normalization), including the v3.3.0 release checkpoints. The example below uses the v3.1.0 checkpoint. Evaluate normalized checkpoints on TFDS with the [pipeline `test` command](#run-held-out-tfds-evaluation).
+:::
+
 ## Published-model example
 
 Complete the [main installation](../getting-started/installation.md), then run from the repository root.
@@ -65,6 +69,7 @@ Keep `checkpoint-*.pth` and `model_kwargs.pkl` from the same experiment. Change 
 
 Pair hit checkpoints with hit inputs and track-and-cluster checkpoints with track-and-cluster inputs, including within the same detector.
 
+(run-held-out-tfds-evaluation)=
 ## Run held-out TFDS evaluation
 
 Use the main pipeline's `test` command when the input is already TFDS. It writes predictions and the standard particle/jet plots into the chosen experiment directory:
@@ -86,7 +91,7 @@ uv run python3 mlpf/pipeline.py \
   --make-plots
 ```
 
-Use a held-out split and a sample size appropriate to the tails and categories being studied.
+Use a held-out split and a sample size appropriate to the tails and categories being studied. The same command works for any detector: change the model recipe, production, and data root. For datasets that store a generator reference including pileup (ColliderML 1.4.0 and later), jet matching and response are computed against both the hard-scatter and the with-pileup gen jets.
 
 ## Scale out with Snakemake
 

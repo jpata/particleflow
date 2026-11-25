@@ -1,6 +1,6 @@
 # Tracker width scaling
 
-Scenario: [`cld_pf_heptv2_tracker_width_scaling_50k.yaml`](../configs/training/scenarios/cld_pf_heptv2_tracker_width_scaling_50k.yaml).
+Scenario: [`cld_pf_heptv2_tracker_width_scaling_50k.yaml`](../../configs/training/scenarios/cld_pf_heptv2_tracker_width_scaling_50k.yaml).
 
 This study scales embedding dimension and backbone width together through 128,
 256, 384 and 512, with seeds 12345, 23456 and 34567 for each width (12 jobs).

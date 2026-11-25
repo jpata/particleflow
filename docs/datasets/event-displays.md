@@ -33,19 +33,19 @@ files directly. Generated assets stay under the ignored `local_test_data/` direc
 To regenerate from locally available detector data:
 
 ```bash
-PYTHONPATH=. MPLCONFIGDIR=/tmp/pf-mpl .venv/bin/python scripts/create_reconstruction_event_assets.py
+PYTHONPATH=. uv run python3 scripts/create_reconstruction_event_assets.py
 ```
 
 To reproduce the published events without the original detector files, download
 the extracted scenes and render them locally:
 
 ```bash
-hf download jpata/particleflow \
+uv run hf download jpata/particleflow \
   --include "images/event_displays/*/event_0_scene.json.gz" \
   --include "images/event_displays/manifest.json" \
   --local-dir local_test_data/event_assets
 
-PYTHONPATH=. MPLCONFIGDIR=/tmp/pf-mpl .venv/bin/python scripts/create_reconstruction_event_assets.py \
+PYTHONPATH=. uv run python3 scripts/create_reconstruction_event_assets.py \
   --from-scenes --output-dir local_test_data/event_assets/images/event_displays
 ```
 

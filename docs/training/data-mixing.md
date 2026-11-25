@@ -36,7 +36,7 @@ Weights control batch selection. They do not multiply loss terms or directly spe
 
 ## Run the two-group ColliderML recipe
 
-Download configuration 1 of both ColliderML 1.2.0 track/cluster datasets listed in the [catalog](../datasets/catalog.md), preserving their shared `colliderml` data root. With the [training environment](../getting-started/installation.md) and a compatible GPU, this bounded run sets a 3:1 step mix:
+The recipe expects configuration 1 of both ColliderML 1.5.0 track/cluster datasets under one `colliderml` data root. Version 1.5.0 is not yet on the Hub; [produce it](../datasets/colliderml.md#production) first. With a compatible GPU, this bounded run sets a 3:1 step mix:
 
 ```bash
 uv run python3 mlpf/pipeline.py \
