@@ -41,86 +41,25 @@ PYTHONPATH=. python -m pytest tests/test_attention_export_profiles.py \
 
 An offline MIGraphX compiler check is available with `MLPF_TEST_MIGRAPHX_DRIVER=/path/to/migraphx-driver` and `pytest tests/test_attention_export_profiles.py -k offline_compile`. It needs a compatible cross-compilation toolchain; its availability is not a claim of successful hardware execution. HEPTv2 GPU sort/output regressions use `MLPF_TEST_PROVIDER=cuda` or `migraphx` with `pytest tests/test_heptv2_export.py -k 'exported_sort or materializes'`.
 
-## Controlled-shape protocol
+## Measurement protocol
 
-Run each model on CUDA/L40S, MIGraphX/W7900, and CPUExecutionProvider on the
-L40S host (AMD EPYC 9534). Use FP32 decomposed attention, static specialization,
-and identical ONNX model weights, inputs, masks and PyTorch references on all
-three providers. This isolates a portable baseline. A separate seven-case
-Attention-24/FP16 sweep on L40S uses the same model weights, input arrays and
-FP32 references, with CUDA sdpa_kernel=1 requested. Public inputs/outputs remain
-FP32. Keep these measurements labeled separately from the 42-case FP32 matrix.
-An independent ORT-only Nsight trace at B=1,N=4000 confirms actual
-onnxruntime::flash::flash_fwd_kernel execution. A second seven-case optimized
-profile uses decomposed FP16 attention on W7900 with
-MIGRAPHX_MLIR_USE_SPECIFIC_OPS=attention. A matching ROCm SDK rocprofv3 trace
-verifies fused score/mask/softmax/value kernels at N=4000, and every shape's
-final compiled program must contain five fused attention code objects with
-no quadratic attention-score allocations. Both optimized profiles retain
-FP32 public inputs/outputs and the exact same FP32 PyTorch reference arrays.
+The retained studies follow these rules; keep them for new campaigns so results stay comparable.
 
-The historical controlled-sweep models used seed 42 and untrained weights. Both had three backbone
-layers and eight heads; attention head dimension is 16, while HEPTv2 uses
-embedding dimension 128, width 512, block size 100 and three hashes. Full
-configuration is retained in each bundle manifest. These are export correctness
-and implementation scaling measurements, not a trained-model physics comparison
-or a claim that the two architectures have equal capacity. Repeat with selected
-trained checkpoints before physics sign-off. In particular, deterministic HEPT
-hashing can change predictions from older trained models.
+**Configurations.** The portable baseline runs FP32 decomposed attention with static shapes on CUDA (L40S), MIGraphX (W7900), and CPU, with identical ONNX weights, inputs, and PyTorch references on all three. The optimized FP16 profiles (CUDA Attention-24 with Flash, AMD decomposed FP16 with MLIR attention fusion) keep FP32 public inputs and outputs and the same references, and are reported separately. A kernel trace (Nsight on NVIDIA, rocprofv3 on AMD) confirms that the fused kernels actually run.
 
-## Inputs and numerical evidence
+**Inputs.** Real CMS events give the correctness evidence. Shape scaling uses a fixed CMS feature pool repeated to B=1 with N=100–4,000 and B=2, 4 at N=1,000, with 10% right padding. Repeated features deliberately produce tied HEPT hash coordinates; they do not sample a physics distribution.
 
-Use a fixed CMS feature pool from the existing real-event reference bundle,
-repeat deterministically to the requested shapes, and right-pad 10% of each
-event with zeros. Record padded shape and valid lengths separately. The sequence
-sweep is B=1, N=100,500,1000,2000,4000; the batch sweep adds B=2,4 at N=1000.
-Repeated features deliberately exercise tied HEPT hash coordinates. These
-controlled inputs measure shape scaling; retain the previous three unmodified
-CMS events as independent correctness evidence. They do not sample a physics
-input distribution. Keep both real-event and controlled-sweep results.
+**Numerical checks.** For every output head, record max absolute error, MAE, RMSE, relative L2 error, finiteness, and exact zero padding against eager CPU PyTorch FP32 (`atol=1e-3, rtol=3e-3`). Publish the errors, not only pass/fail. Check model and reference SHA-256 hashes before running.
 
-For every output head, record max absolute error, MAE, RMSE, relative L2 error,
-finite-output checks and exact zero padding. Compare valid outputs to eager
-CPU PyTorch FP32 with atol=1e-3 and rtol=3e-3; publish actual errors rather than
-only pass/fail. References are generated independently for each architecture.
-Model/reference files are SHA256 checked before execution.
+**Timing.** One fresh process per shape, model, provider, and mode; 10 warm-up and 100 timed synchronous `session.run` calls with host inputs and outputs, so transfers and ORT overhead are included. Report session creation and first call separately, since AMD compilation can take minutes. CPU timing uses one ORT thread and is a reproducible baseline, not a tuned optimum.
 
-## Timing and memory
+**Placement.** A separate profiled process must show every compute node on the requested GPU provider; GPU fallback is disabled. A missing result is a failed measurement, never a zero latency.
 
-Use a fresh process per shape, model, provider and measurement mode. Run 10
-warmups and 100 timed synchronous session.run calls, retaining every sample
-and p50/p90/p95/p99. Inputs and outputs live on the host: these measurements
-include transfers, allocation and ORT overhead. They exclude preprocessing,
-reference calculation, model export and static specialization. Record session
-creation and first inference separately, because AMD compilation can take
-minutes and some compilation can occur lazily. Do not interpret a single
-100-sample p99 as a precise tail-latency estimate.
+**Memory.** Sample process RSS and device-wide VRAM every 10 ms (NVML on NVIDIA, `mem_info_vram_used` on AMD), and report the baseline, compilation peak, and warm-inference peak separately. Sampled peaks are lower bounds; avoid concurrent work on the device.
 
-Timing processes disable ORT profiling. A separate fresh process, with one
-first call and one additional call, retains the placement trace. GPU fallback
-is disabled in both modes. Require all profiled compute nodes on the requested
-GPU provider. CPU fallback means a deliberately selected CPU-only session,
-not hidden CPU partitions in a GPU measurement. Keep case exit codes and logs;
-a missing result is a failed/incomplete measurement, never a zero latency.
+**Provenance.** Record runtime versions, loaded libraries, driver and device identity, compiler flags, and source, model, and input hashes. CUDA and CPU run on the same host, AMD on its own; results compare complete software stacks.
 
-Sample process RSS and whole-device used VRAM every 10 ms. NVIDIA uses NVML;
-AMD reads mem_info_vram_used for the sole /dev/dri/card device allocated to the
-pod. Record pre-session baseline, compilation/first-call peak and warm inference
-peak separately, plus process lifetime RSS high-water mark. This captures ORT
-allocations, including MIGraphX, which PyTorch allocator statistics omit. VRAM
-is device-wide, so preserve device-idle evidence and avoid concurrent work.
-Sampling can miss short transient peaks: sampled VRAM maxima are lower bounds,
-and allocator reservation is included. Host RSS also includes the Python runtime,
-model and loaded reference arrays; show absolute values and baseline changes.
-Sampler overhead is included equally in timings and its 10 ms interval must
-remain in the metadata. CPU timing uses one ORT intra/inter-op thread and records
-CPU affinity. It is a reproducible fallback baseline, not a tuned CPU optimum.
-
-Run CUDA first and then CPU on the same host; AMD runs on its separate host.
-Record versions, CPU information, driver/device identity, compiler flags, source
-hashes, model hashes and input hashes. AMD uses the qualified native
-ORT 1.23.2 with MIGraphX 2.18/ROCm SDK libraries and the documented HEPT integer
-and compiler workarounds. This is a comparison of complete software stacks.
+The controlled sweeps used untrained models (seed 42, three layers, eight heads); they measure export correctness and scaling, not physics or relative model capacity.
 
 ## Reproduction and artifacts
 

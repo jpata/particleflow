@@ -19,8 +19,7 @@ mkdir -p logs_slurm
 
 Use `git switch --detach COMMIT` in each checkout to freeze that revision.
 Environments are architecture-specific; do not copy an ARM virtual environment
-to an x86 site. The former benchmark development branch and incremental Git
-bundle are no longer required.
+to an x86 site.
 
 Set `MLPF_CLD_DATA_DIR` to a compute-visible TFDS root containing
 `cld_edm_ttbar_hits/1/3.2.2/`. The reference copy has 90,000 train and 10,000 test

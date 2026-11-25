@@ -6,7 +6,7 @@ CMS provides track/cluster samples for three physics processes, each with and wi
 
 The `cms_run3` production recipe uses CMSSW 15.0.5 with `el8_amd64_gcc12` and a CMSSW RHEL 8 container. Its current TFDS recipe uses reconstructed tracks and calorimeter clusters as MLPF inputs.
 
-The configured model is `pyg-cms-v1`, and the configured TFDS schema version is 3.2.0. Compatibility requires the CMSSW collections and schema expected by this site-dependent production path.
+The configured model is `pyg-cms-v1`, and the production builds TFDS version 3.2.0 (13.6 TeV beamspot, `particle_number` in the targets). The CMS training scenarios, including the [release checkpoints](../training/scenarios.md), use the larger version **2.8.0**, which has 28 million training events and input-normalization statistics. Neither version is on the public Hub.
 
 ## Configured samples
 
@@ -59,4 +59,4 @@ Open one event from each dataset/configuration using the procedure in [Download 
 
 ## CMS target information
 
-The TFDS event contains detector elements (`X`), the reconstructable training target (`ytarget`), baseline PF candidates (`ycand`), generator/target jets, generator missing transverse momentum, and Pythia particles. The target features include pileup and generator/simulator status fields. Their definitions are implementation details of the current postprocessor and builder; pin the code commit together with dataset version 3.2.0 when publishing derived data.
+The TFDS event contains detector elements (`X`), the reconstructable training target (`ytarget`), baseline PF candidates (`ycand`), generator/target jets, generator missing transverse momentum, and Pythia particles. The target features include pileup and generator/simulator status fields. Their definitions are implementation details of the current postprocessor and builder; pin the code commit together with the dataset version when publishing derived data.

@@ -102,6 +102,10 @@ data/tfds/tensorflow_datasets/
 
 Pass one of those detector directories to MLPF as `--data-dir`. The event read confirms decoding only. The [current CLD training example](../training/train.md) requires version 3.3.0; do not rename an older dataset directory or change only its version string to satisfy that requirement.
 
+## Data not on the Hub
+
+The Hub publishes configuration 1. Full productions, CMS datasets, and other unpublished versions are on the Tallinn Grid storage; with a Grid certificate, download them as described in [Transfer datasets with Grid WebDAV](webdav.md).
+
 ## Common failures
 
 `Dataset ... not found`

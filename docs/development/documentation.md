@@ -82,6 +82,10 @@ Use these sources in order:
 
 Site-specific scripts are useful examples, but do not describe their paths or scheduler settings as universal defaults.
 
+## Where pages go
+
+User guides live in the section folders (`getting-started/`, `concepts/`, `datasets/`, `training/`, `validation/`, `reference/`, `science/`). Detailed write-ups of individual studies go in `studies/` and are linked from [Research notes](../studies/index.md). Add every new page to the `toc` in `docs/myst.yml`; pages outside the TOC are not built.
+
 ## Updating status pages
 
 Describe the present behavior in [Current capabilities](../science/capabilities.md) and remaining work in [Limitations and development priorities](../science/roadmap.md). Organize by user task or capability, not merge dates or PR numbers. Remove obsolete limitations when the code changes, and reconcile duplicated statements across installation, training, and validation guides.

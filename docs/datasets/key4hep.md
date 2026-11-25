@@ -1,6 +1,6 @@
 # Shared Key4HEP data production
 
-CLD and CLICdet share the Key4HEP/EDM4hep production and postprocessing path for both [tracks and clusters](track-cluster.md) and [hits](hit-based.md). This page records the common workflow; use [Generate a dataset](generate.md) for the full execution procedure.
+CLD and CLICdet share the Key4HEP/EDM4hep production and postprocessing path for both [tracks and clusters](track-cluster.md) and [hits](hit-based.md). This page records the common workflow; use [Generate a dataset](generate.md) for the full execution procedure. IDEA, MAIA, and the CLD granularity scans use the same postprocessor with detector-specific options; see their dataset pages.
 
 ## Requirements
 

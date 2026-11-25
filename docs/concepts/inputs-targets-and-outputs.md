@@ -17,6 +17,13 @@ Feature order and particle labels are defined in [`mlpf/conf.py`](https://github
 
 Postprocessing uses simulation relationships to associate particles with detector elements. Acceptance, available detector signals, merging, and detector-specific particle-type mappings determine the reconstructable target collection. Reference PF candidates are stored separately for comparison.
 
+Each detector element can carry at most one target particle. How particles are assigned to elements depends on the converter:
+
+- **CLD, CLIC, IDEA** use a greedy, energy-ordered assignment; **CMS** uses the association weights from CMSSW.
+- **ColliderML and MAIA** use `majority_energy`: a track goes to the particle that owns most of its hits, and the remaining particles share the clusters through a bipartite matching scored by energy. See [ColliderML target assignment](../datasets/colliderml.md#target-assignment).
+
+In ColliderML, a particle that gets no element of its own is merged into the target of the cluster where it deposits most energy; when a merge combines hard-scatter and pileup particles, the target's `ispu` becomes the pileup energy fraction, and training treats it as pileup at 0.5 or above. Key4HEP Parquet files also record, per row, whether the represented particle class flipped the particle's charge (`ytarget_*_charge_flip`).
+
 In the current Key4HEP hit representation, each retained particle has one representative hit carrying its full target row. Other associated hits carry its positive, event-local `particle_number`; zero denotes no assigned particle. For example:
 
 | Input | Target class and kinematics | `particle_number` |

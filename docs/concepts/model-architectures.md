@@ -14,6 +14,8 @@ input features and validity mask
 
 `input_encoding: joint` applies a common encoder to the input features. `split` selects an element-type-specific encoding, allowing tracks, clusters, or hit types to use different learned transformations. Optional hit features add geometry and local tracker/calorimeter summaries.
 
+Two optional steps act before the encoder on track/cluster inputs. Input normalization (`model.input_normalization`) clips, log-transforms, and standardizes each feature column with statistics of the dataset version. The feature bag (`model.feature_bag`) maps each detector's columns into a shared vocabulary of named quantities so that one encoder can be trained on several detectors. Both need the event's dataset `source_id`; see [Train a model](../training/train.md#input-normalization).
+
 The backbone controls information exchange:
 
 | `model.type` | Mechanism | Main computational considerations |
@@ -21,10 +23,10 @@ The backbone controls information exchange:
 | `attention` | Multi-head self-attention across valid elements | Global pairwise attention; Flash execution packs valid elements, while dense math attention uses a padding mask |
 | `gnnlsh` | Locality-sensitive hashing and message passing within bins, with configurable kernels and inter-bin attention | Bin size, hash counts, and inter-bin processing control work and connectivity |
 | `hept` | Hash-based point attention with geometric information | Hash partitions and local attention control neighborhood size |
-| `heptv2` | Geometry-aware hash buckets and local attention | Bucket size and hash settings control work; the native GPU path uses compiled FlexAttention |
+| `heptv2` | Geometry-aware hash buckets and local attention over (eta, phi); tracks can be hashed at their calorimeter entry so they share buckets with their clusters | Bucket size and hash settings control work; the native GPU path uses compiled FlexAttention |
 | `litept` | The LitePT point-model adapter | Requires the external LitePT code and its dependencies; see [installation](../getting-started/installation.md) |
 
-Attention is used by the standard CMS, CLD, and CLIC track/cluster recipes. Other backbones and hit models have research-workflow status. Use [capabilities](../science/capabilities.md), [ONNX validation](../validation/onnx.md), and [export evidence](../validation/export-evidence.md) for supported configurations and measured hardware behavior.
+Attention is used by the standard CMS, CLD, and CLIC track/cluster recipes. The release checkpoints are trained with both attention and HEPTv2. Other backbones and hit models have research-workflow status. Use [capabilities](../science/capabilities.md), [ONNX validation](../validation/onnx.md), and [export evidence](../validation/export-evidence.md) for supported configurations and measured hardware behavior.
 
 Several configuration choices act at different stages:
 
@@ -44,7 +46,7 @@ Several configuration choices act at different stages:
 
 Elementwise prediction learns which input positions represent particles. Set prediction starts from learned or input-conditioned queries. During training, Hungarian matching pairs slots with targets using configurable presence, PID, angular, and momentum costs. Unmatched slots receive no-object supervision. The matcher raises an error when an event has more targets than slots.
 
-Optional hit grouping learns an assignment from each hit to a matched particle slot or background, using `particle_number` supervision. Tracker momentum readouts can use these groups. The CLD preset `pyg-cld-hits-heptv2-set-v1` combines HEPTv2, input-conditioned queries, global decoder attention, and supervised hit grouping. Its evidence and optional readout experiments are described in the [CLD hit results](../cld_hit_results.md).
+Optional hit grouping learns an assignment from each hit to a matched particle slot or background, using `particle_number` supervision. Tracker momentum readouts can use these groups. The CLD preset `pyg-cld-hits-heptv2-set-v1` combines HEPTv2, input-conditioned queries, global decoder attention, and supervised hit grouping. Its evidence and optional readout experiments are described in the [CLD hit results](../studies/cld_hit_results.md).
 
 ## Learning objectives
 

@@ -1,6 +1,6 @@
 # Small-model tracker grouping loss ablation
 
-Scenario: [`cld_pf_heptv2_tracker_grouping_losses_50k.yaml`](../configs/training/scenarios/cld_pf_heptv2_tracker_grouping_losses_50k.yaml).
+Scenario: [`cld_pf_heptv2_tracker_grouping_losses_50k.yaml`](../../configs/training/scenarios/cld_pf_heptv2_tracker_grouping_losses_50k.yaml).
 
 This four-arm factorial tests whether more direct supervision of charged-particle
 hit groups improves momentum reconstruction. Every arm starts from scratch

@@ -148,7 +148,7 @@ HEPTv2 defaults to deterministic hashing (`model.heptv2.deterministic_hashing: t
 
 The `track_hash_at_calo` and `cluster_hash_at_centroid` options are part of the exported graph, and callers pass the usual raw features. The graph contains no `Asin`, `Acos` or `Atan` nodes, which ORT CUDA runs on CPU. Instead, track and cluster directions are computed as (sin phi, cos phi) vectors, and the barrel arc length uses a polynomial asin accurate to 2 FP32 ULP. PyTorch training and inference use the same code, so eager and ONNX results agree.
 
-Checkpoints trained with these options before #577 used `asin` and `atan2` directly. The current arithmetic can shift a quantized hash coordinate by one step, and a direction along -x now gets phi = +pi instead of a value near -pi. Both can change bucket assignments, so compare such checkpoints against a new PyTorch reference before deployment.
+Checkpoints trained with these options before v3.3.0 used `asin` and `atan2` directly. The current arithmetic can shift a quantized hash coordinate by one step, and a direction along -x now gets phi = +pi instead of a value near -pi. Both can change bucket assignments, so compare such checkpoints against a new PyTorch reference before deployment.
 
 Deterministic coordinates and bucket assignments can change predictions from checkpoints trained with floating-point hashing. Setting the option to `false` selects floating-point hashing but does not guarantee historical tie ordering or agreement across runtimes. Likewise, older attention checkpoints trained with unmasked padding require validation under the current masking semantics.
 

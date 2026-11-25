@@ -79,62 +79,19 @@ Treat every failed gate as a production error until its cause is understood. Rel
 
 The [generation guide](../datasets/generate.md) shows where these gates enter the Pixi/Snakemake workflow. Detector-specific interpretation belongs in the [CMS](../datasets/cms.md), [Key4HEP](../datasets/key4hep.md), and [hit-input](../datasets/hit-based.md) guides.
 
-## Assignment solver checks across detectors
+## Compare target assignment across detectors
 
-`scripts/studies/validate_detector_matching.py` compares the native assignment with `majority_energy`. The former overlap-score solver and its greedy baseline have been removed. It preserves each detector's visibility, ancestry and post-assignment policy. Run one job per detector; these jobs can run in parallel on CPU:
+`scripts/studies/validate_detector_matching.py` rebuilds the targets of a detector's ROOT file with both its native assignment and `majority_energy`, keeping each detector's visibility, ancestry, and merging policy. Run one job per detector:
 
 ```bash
-OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 \
 PYTHONPATH=. uv run python3 scripts/studies/validate_detector_matching.py \
   --detector cld \
   --input /path/to/reco_p8_ee_ttbar_ecm365_300000.root \
   --output experiments/cross_detector_matching/cld --events 50
 ```
 
-Use the matching `clic`, `idea`, or `cms` detector and ROOT path for the other jobs. CMS uses `pfntuple_100000.root` from `scripts/fetch_test_data_cms.sh`, the same input used by `scripts/local_test_cms.sh`. `scripts/studies/report_detector_matching.py --input experiments/cross_detector_matching` combines the four outputs and writes plots and paired event-bootstrap intervals.
-
-The validation used the first 50 ttbar events from the published CLD, CLIC and IDEA `300000` ROOT files and all 50 events in the CMS smoke-test file. The CLD/CLIC/IDEA SHA-256 hashes match the Hugging Face files. Native target momenta and target-bearing input rows match the saved native postprocessing output on every event for all four detectors. All energy-accounting checks pass.
-
-The following results and discussion are historical measurements of the removed overlap-score solver. They do not measure `majority_energy`; rerun the current scripts into a fresh output directory for that comparison.
-
-| Detector | Track delta-R > 0.1, native → solver | Target-to-truth jet recall, native → solver |
-|---|---:|---:|
-| CLD | 3.70% → 3.56% | 97.11% → 97.11% |
-| CLIC | 3.50% → 3.46% | 98.97% → 98.97% |
-| IDEA | 2.59% → 2.59% | 100% → 100% |
-| CMS | 9.65% → 9.64% | 28.74% → 30.84% |
-
-Jet definitions and truth references remain detector-specific: the native Key4HEP ee-genkt R=0.4, pT > 5 GeV reference for CLD/CLIC/IDEA, and the native CMS anti-kt R=0.4, pT > 3 GeV reference. Both use one-to-one delta-R < 0.1 matching. These are target-construction results, not model predictions, and absolute recall should not be compared across detector samples.
-
-Important interpretation details:
-
-- CLD/CLIC ownership uses calibrated hit energies, rather than corrected Pandora cluster energy. Their stored cluster directions differ substantially from centroid directions. Against centroids, the cluster delta-R > 0.3 fraction is 5.29% → 5.36% for CLD and 7.41% → 7.56% for CLIC. High-pT centroid-direction errors remain about 0.98% and 0.47%, respectively. Thus the much larger tail against the stored direction feature is not evidence that most cluster ownership assignments are wrong.
-- IDEA supplies truth-seeded tracks. Its current target pool and no-merge policy are preserved; every selected particle remains represented. The solver changes representative inputs but not the set of target four-vectors. Cluster delta-R > 0.3 changes from 2.22% to 2.02%.
-- The CMS ntuple supplies association weights, not per-hit truth. Track weights are divided by track energy to recover the recorded association fractions. Across the sample, 725 track columns sum above one and are excluded from solver eligibility, without renormalization. Calorimeter weights are recorded attributed energies. GSF-electron restrictions and CaloParticle splitting remain native.
-- CMS fallback can put unmatched particles onto unused inputs. The optional assignment callback in `prepare_normalized_table` preserves that policy and safely handles these inputs. It creates 604 track targets outside the solver's exclusive selection in this sample. Final CMS track-direction tails therefore do not directly test the exclusive majority rule. All selected CaloParticle energy remains accounted for.
-- CMS angular jet recall gains 2.10 percentage points over native (95% paired event-bootstrap interval 0.19–4.09), but only 0.55 points over same-score greedy matching (interval -0.43–1.46). Response-qualified recall changes from 16.79% to 17.34%, with an inconclusive interval. There is no convincing evidence here for a solver advantage over same-score greedy on CMS, nor for a jet-recall improvement on CLD, CLIC or IDEA.
-
-Detailed results, source checks, native-output parity checks, and intervals are in `experiments/cross_detector_matching/`. The production assignment defaults remain unchanged.
+Use `clic`, `idea`, or `cms` with the matching input (for CMS, `pfntuple_100000.root` from `scripts/fetch_test_data_cms.sh`). `scripts/studies/report_detector_matching.py --input experiments/cross_detector_matching` combines the outputs into plots and paired event-bootstrap intervals. Results describe target construction, not model predictions, and absolute jet recall is not comparable across detectors because their truth-jet definitions differ.
 
 ## Pass/fail discipline
 
 Keep the machine-readable report with the production campaign. Record the repository commit, detector mode, command, event/file selection, and any accepted exception. An intentional invariant change requires an updated focused unit test and a documented scientific reason for the schema or target-definition change.
-
-## Production assignment validation, 2026-11-03
-
-Historical results checked on 2026-11-03 with unchanged validator thresholds, before the cluster-direction check switched from stored angles to the direction from the origin to the cluster position. CLD, CLIC, IDEA and ColliderML use 20 ttbar events; MAIA uses its available 10 events. CMS uses all 50 events in the native pickle sample.
-
-ColliderML samples were freshly converted with the former overlap-score bipartite matching (before `majority_energy` became the default) and the existing CLUE pu0/pu200 presets. Other datasets use their native processed samples.
-
-| Dataset | Events | Track ΔR < 0.1 | Cluster ΔR < 0.3 | Failed checks |
-|---|---:|---:|---:|---:|
-| cld | 20 | 96.64% | 45.08% | 1 |
-| clic | 20 | 96.37% | 45.22% | 1 |
-| idea | 20 | 97.37% | 97.31% | 0 |
-| maia | 10 | 29.09% | 37.62% | 5 |
-| colliderml_pu0 | 20 | 99.74% | 62.55% | 5 |
-| colliderml_pu200 | 20 | 99.34% | 51.06% | 4 |
-
-Track and cluster direction checks require 95% and 80%, respectively.
-
-In this historical run, CLD and CLIC fail only the stored cluster-direction check; the centroid comparison above explains the distinction. IDEA passes. MAIA fails track and cluster direction, tracker momentum, calorimeter energy, and baseline particle energy checks. Both ColliderML samples fail tracker-hit momentum, calorimeter-hit energy, hit-to-cluster positions, and cluster-to-target direction checks. PU0 also fails target-to-truth total energy. Full observations are recorded under `experiments/matching_cleanup_validation/`, alongside plots, commands and source paths. The CMS native-format validator reports five inconsistent particle-label groups across 50 events; its pickle schema is not supported by `validate_parquet.py`.

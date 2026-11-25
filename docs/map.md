@@ -1,105 +1,70 @@
-# Code and Functionality Map: ParticleFlow
+# Repository map
 
-This document provides a high-level overview of the repository's structure and the functionality of its core components.
-To run the python code in the right environment, use `uv run python3 ...`.
+Where to find each part of the code. Run Python entry points from the repository root with `uv run python3 ...`.
 
-## 1. Configuration & Specification
-The project uses a hierarchical configuration system.
+## Configuration
 
-- **`particleflow_spec.yaml`**: The single source of truth for the entire project. It defines machine-specific paths (sites), data production scenarios, and model architectures.
-- **`mlpf/conf.py`**: Defines the Pydantic models for the configuration, ensuring type safety, path resolution, and model-type schemas including `attention`, `gnnlsh`, `litept`, `hept`, and `heptv2`.
-- **`mlpf/pipeline.py`**: Implements hierarchical configuration resolution: base defaults in `mlpf/conf.py` are overridden by scenario-specific values in `particleflow_spec.yaml`, which can further be overridden via command-line arguments (e.g., `--model.num_convs 6`).
-- **`configs/`**: Site-specific Pixi environment configurations (`local/`, `lxplus/`, `tallinn/`) and reusable training scenarios/platform profiles under `configs/training/`. The root `pixi.toml` is a symlink into this directory.
-- **`pixi.toml` / `pixi.lock` / `uv.lock` / `uv.singularity`**: Project environment, container definitions, and task management. Defines common tasks like `gen`, `post`, `train`, and `validation`.
-- **`envs/`**: Isolated virtual environment specifications (e.g., `ort-cpu`, `ort-gpu`) for specific runtimes like ONNX.
-- **`validation_cms.yaml` / `validation_key4hep.yaml`**: Specification files for validation scenarios.
+| Path | Contents |
+|---|---|
+| `particleflow_spec.yaml` | Sites, data productions (`productions`), and model recipes (`models`); the single source of truth for detectors, dataset versions, and architectures |
+| `mlpf/conf.py` | Typed configuration (Pydantic), feature and class definitions per dataset, input-normalization transforms, and recipe resolution (`MLPFConfig.from_spec`) |
+| `configs/training/scenarios/`, `configs/training/platforms/` | [Training scenarios](training/scenarios.md) and hardware profiles; see the [scenario README](https://github.com/jpata/particleflow/blob/main/configs/training/README.md) |
+| `configs/{local,lxplus,tallinn}/pixi.toml` | Pixi site profiles for production; the root `pixi.toml` is a symlink to one of them |
+| `envs/` | Separate ONNX Runtime environments (`ort-cpu`, `ort-gpu`, `ort-amd`) and the EmpireAI GH200 environment |
+| `validation_cms.yaml`, `validation_key4hep.yaml` | Detector-validation campaigns |
 
-## 2. Workflow Orchestration
-Complex data production and training pipelines are managed using Snakemake or site-specific shell scripts.
+## Data production
 
-- **`mlpf/snakemake/`**: Contains scripts to generate Snakemake workflows.
-  - **`produce_snakemake.py`**: Generates workflows for generation, postprocessing, TFDS creation, and training.
-  - **`produce_cms_validation_snakemake.py`**: Orchestrates validation workflows specifically for CMS.
-  - **`produce_validation_snakemake.py`**: Orchestrates validation workflows for Key4Hep detectors (CLD, CLIC).
-- **`mlpf/pipeline.py`**: The main CLI for training, testing, LR range tests (`lr-find`), and hyperparameter optimization. Supports standard and Ray-based execution.
-- **`scripts/training/run_scenario.py`**: Resolves a generic scientific training scenario against a hardware profile, validates comparison invariants and global batch size (one value, or one per train group), and launches reproducible seeded jobs.
-- **`scripts/training/compare_scenario.py`**: Tabulates and plots the (per-group) validation losses of the runs of one scenario.
-- **`scripts/empireai/` / `envs/empireai-gh200/`**: Isolated ARM64 GH200 environment, reserved Slurm launcher and CLD smoke-test workflow; see [`scripts/empireai/README.md`](../scripts/empireai/README.md).
-- **Cross-platform batch sweeps**: [`training/hpc-batch-sweep.md`](training/hpc-batch-sweep.md) covers environment setup for single-device LUMI MI250X and Flatiron H100 profiles; the [portable workflow](training/benchmark-portability.md) defines the shared recipe, qualification and evidence export.
+| Path | Contents |
+|---|---|
+| `mlpf/snakemake/` | Generates Snakemake workflows for simulation, postprocessing, TFDS, training, and validation |
+| `mlpf/data/cms/` | CMSSW generation jobs and `postprocessing2.py` (ROOT ntuple → pickle) |
+| `mlpf/data/key4hep/` | Key4HEP generation configurations (`gen/`) and `postprocessing.py` (EDM4hep → Parquet) for CLD, CLIC, IDEA, and MAIA |
+| `mlpf/data/colliderml/` | ColliderML reader, track features, truth, calorimeter clustering (`clue.py`, `radius_graph.py`), and `postprocessing.py` |
+| `mlpf/data/target_building.py` | Shared target allocator: assignment rules (greedy, `majority_energy`), merging, and energy accounting |
+| `mlpf/heptfds/` | TFDS builders: `<detector>_pf*` for tracks and clusters, `*_hits` for hits, shared helpers in `edm4hep_utils/` and `colliderml_utils/` |
+| `scripts/cld_ecal_readout/` | CLD calorimeter granularity scan geometries and conversion; see `GRANULARITY_SCAN.md` |
+| `scripts/flatiron/colliderml_*.sh` | ColliderML download, conversion, and TFDS chain on Slurm |
+| `scripts/tfds_webdav*.py`, `upload_hf.py` | [Grid WebDAV transfer](datasets/webdav.md) and Hugging Face publication |
+| `scripts/compute_input_normalization_stats.py` | Per-version input-normalization statistics, written to `mlpf/model/input_normalization_stats/` |
 
-## 3. Data Production & Preprocessing
-- **`mlpf/data/`**: Simulator-specific code for generating and preprocessing data. ColliderML: `colliderml/clustering.py` (`cluster_event` dispatcher + the properties every clusterer enforces; algorithms in `colliderml/radius_graph.py` (radius-graph bfs/union_find) and `colliderml/clue.py` (CLUE), shared helpers in `colliderml/cluster_common.py`), `colliderml/cluster_eval.py` (decodes/caches ColliderML events and their per-hit truth, scores clustering settings and the v20 Pandora clusters with `cluster_metrics.py`). Shared across detectors: `cluster_metrics.py` (truth-based clustering metrics, detector- and clusterer-agnostic).
-  - **`cms/`**: Scripts for CMSSW-based generation (`genjob_pu.sh`), postprocessing (`postprocessing2.py`), validation (`valjob.sh`, `valjob_data.sh`), and plotting (`plot_cms.py`).
-  - **`key4hep/`**: Scripts for Key4Hep-based generation (`gen/`) and postprocessing (`postprocessing.py`). CLD ECAL/HCAL scan definitions and conversion are in [the granularity runbook](../scripts/cld_ecal_readout/GRANULARITY_SCAN.md).
-- **`mlpf/heptfds/`**: TFDS (TensorFlow Datasets) builders for CMS, CLD, CLIC, IDEA, MAIA, and ColliderML datasets, including support for both cluster-based and raw hits-based data (`cld_pf_edm4hep_hits`, `clic_pf_edm4hep_hits`). Shared EDM4Hep utilities in `edm4hep_utils/`. ColliderML support: `colliderml_pf/ttbar.py` (clustered view; the other Release-1 samples subclass it as `colliderml_pf/<process>[_pu200].py`), `colliderml_hits/{ttbar,ttbar_pu200}.py` (hits view)
-  + shared conversion in `colliderml_utils/utils.py` reading the MLPF-format parquet written by `mlpf/data/colliderml/postprocessing.py`.
+## Model and training
 
-## 4. Machine Learning Core (`mlpf/model/`)
-- **`mlpf.py`**: Implementation of the MLPF model, featuring multi-head attention and configurable sub-networks. Supports fused attention, simplified math attention for ONNX export, and HEPT/HEPTv2/LitePT layers that consume detector coordinates.
-- **`gnnlsh.py`**: GNN layers with Locality-Sensitive Hashing (LSH) for scalable graph processing, including multi-hash binning, attention kernels, RMSNorm/SwiGLU blocks, and inter-bin attention.
-- **`hept.py`**: Implementation of the Hashing-based Efficient Particle Transformer (HEPT).
-- **`heptv2.py`**: HEPTv2 point encoder layer with hash-bucketed attention, learned positional encoding over eta/phi coordinates, Qwen-style RMSNorm/MLP blocks, and environment switches for attention/hash implementation variants.
-- **`calo_entry.py`**: Calorimeter-frame (eta, phi) for HEPTv2 bucketing and positional encoding: tracks at their calorimeter entry (`heptv2.track_hash_at_calo`; helix extrapolation from d0/z0/tanLambda/omega for ColliderML, CLIC, CLD, IDEA, MAIA, or the CMS `eta_ecal`/`phi_ecal` features) and key4hep PF clusters at their centroid direction instead of Pandora's shower axis (`heptv2.cluster_hash_at_centroid`); only the backbone sees the moved coordinates, encoder and heads keep the raw features.
-- **`feature_bag.py`**: Optional shared named-feature vocabulary for joint track/cluster training across detectors (`model.feature_bag`). It gathers each source's normalized columns into common slots before the split input encoder; `source_id` selects the mapping for each event. The source-dependent gather is part of the ONNX graph.
-- **HEPTv2 activation checkpointing**: Optional per-layer training recomputation in `MLPF._run_backbone` and a batch-384 comparison recipe (historical filename `batch512`). See [`heptv2_checkpointing.md`](heptv2_checkpointing.md) for local memory measurements and target-platform validation.
-- **CLD hit-model evidence**: Current recommendation, completed and partial ablations, and historical metric/dataset caveats: [`cld_hit_results.md`](cld_hit_results.md).
-- **Tracker momentum features**: Optional conformal curvature/quality, longitudinal moments and bounded cross-surface doublets for hit inputs. See [`tracker_momentum_features.md`](tracker_momentum_features.md) for definitions, ablations and measured cost.
-- **`litept.py`**: Integration for the LitePT (Lightweight Point Transformer) architecture.
-- **`PFDataset.py`**: Advanced data loading logic and multi-file handling. Training mixes one loader per train group with `WeightedMixIterator` (smooth weighted round-robin over the groups' optional `weight`s; each group cycles through its own epochs); validation interleaves its groups with `InterleavedIterator`.
-- **`training.py`**: Core training loop implementation, supporting DDP and Ray-based distributed training, TensorBoard loss logging (also per dataset group), and per-step data-load/model-forward timing.
-- **`losses.py`**: Specialized loss functions for particle classification and energy regression.
-- **`lr_finder.py`**: LR range test behind `pipeline.py lr-find`: exponential lr ramp after the task-weight calibration steps, smoothed loss, divergence stop, lr suggestions, `lr_find/lr_find.{json,png}` in the experiment dir.
-- **`inference.py`**: Utilities for running model inference and generating predictions.
-- **`plots.py`**: Confusion matrix logging and model performance plotting during training.
-- **`utils.py`**: Model-level utility functions including target unpacking, object-condensation clustering helpers, learning rate schedules, and metric computation.
-- **`tracker_momentum_readout.py`**: Optional tracker-only momentum residual and sparse differentiable hit-to-slot pooling; see [the small-model ablation](tracker_momentum_readout.md).
-- **Tracker grouping losses**: Particle-balanced tracker CE and soft tracker overlap supervision; see [the from-scratch small-model factorial](tracker_grouping_loss_experiments.md).
-- **Tracker width scaling**: Four fixed-depth widths and three seeds with tracker momentum readout and balanced CE; see [the scaling recipe](tracker_width_scaling.md).
-- **`scripts/studies/train_frozen_tracker_readout.py`**: Local head-only hard/soft/oracle momentum comparison with cached frozen-backbone summaries; see [the experiment and resume instructions](frozen_tracker_readout.md).
-- **`distributed_ray.py`**: Integration with Ray for distributed training and HPO.
+| Path | Contents |
+|---|---|
+| `mlpf/pipeline.py` | Command-line entry point: `train`, `test`, `lr-find`, `ray-train`, `ray-hpo` |
+| `mlpf/model/mlpf.py` | The MLPF model: input encoding, backbones, elementwise heads, prediction decoding |
+| `mlpf/model/{heptv2,hept,gnnlsh,litept}.py` | Alternative backbones; multi-head attention is in `mlpf.py` |
+| `mlpf/model/input_normalization.py`, `feature_bag.py` | Per-dataset feature standardization and the shared cross-detector feature vocabulary |
+| `mlpf/model/calo_entry.py` | Track extrapolation to the calorimeter and cluster centroid directions for HEPTv2 hashing |
+| `mlpf/model/set_decoder.py`, `set_losses.py` | Particle-set decoder, Hungarian matching, hit grouping |
+| `mlpf/model/tracker_*.py` | Optional tracker features, momentum readout, circle-fit readout, and fit losses for hit models |
+| `mlpf/model/PFDataset.py` | TFDS loading, padding, samplers, and weighted mixing of dataset groups |
+| `mlpf/model/training.py`, `losses.py` | Training loop (single GPU, DDP, Ray), checkpointing, losses |
+| `mlpf/model/inference.py`, `plots.py`, `validation_metrics.py` | Test-time prediction, particle and jet plots, validation metrics |
+| `mlpf/model/reconstruction_diagnostics.py`, `validation_probes.py`, `*_probe.py` | Optional diagnostics and frozen-embedding probes for hit-model studies |
+| `mlpf/model/benchmarking.py`, `mlpf/benchmark_report.py` | Opt-in benchmark telemetry and reports |
+| `mlpf/training_scenarios.py`, `training_submission.py` | Scenario resolution and Slurm submission |
+| `scripts/training/` | `run_scenario.py`, `compare_scenario.py`, and the portable batch-sweep tools |
+| `scripts/{flatiron,lumi,tallinn,empireai,local}/` | Site environments and `train_scenario.sh` wrappers |
+| `mlpf/raytune/` | Ray Tune search space |
+| `mlpf/standalone/` | A separate, minimal MLPF trainer for architecture-search experiments |
 
-## 5. Validation, Plotting & Monitoring
+## Evaluation and export
 
-- **Local ttbar detector comparison**: see [the detector-comparison runbook](validation/detector-comparison.md) for inputs, rerun commands, statistical definitions, cache behavior, and limitations.
-- **`mlpf/standalone_eval/key4hep/`**: Standalone tools for evaluating model checkpoints and generating performance plots on ROOT files for Key4Hep detectors. Note the ColliderML validator is the shared `tests/validate_parquet.py` (it knows how to handle the `colliderml` detector name).
-- **`scripts/studies/probe_calo_continuation.py`**: Cross-layer, distance-matched calorimeter continuation probes with equal particle weighting. See [`calo_continuation_probe.md`](calo_continuation_probe.md).
-- **`scripts/studies/probe_hit_instances.py`**: Frozen linear pair-affinity probes comparing raw hit features and HEPTv2 embeddings for separate tracker/calorimeter instance segmentation. See [`hit_instance_probe.md`](hit_instance_probe.md).
-- **`mlpf/model/reconstruction_diagnostics.py`**: Optional validation diagnostics for hit-grouping purity/completeness and momentum errors by class and eta. Enable with `validation_diagnostics_batches`; definitions and output paths are in [`reconstruction_diagnostics.md`](reconstruction_diagnostics.md).
-- **Charged fit correction**: An opt-in charged-pT branch in `set_decoder.py` combines `tracker_group_readout.py` circle fits with a bounded learned correction; configuration and limits are in [`charged_fit_correction.md`](charged_fit_correction.md).
-- **`mlpf/plotting/`**: Comprehensive suite of plotting tools.
-  - **`plot_validation.py` / `plot_met_validation.py`**: Standard validation plots for jets and MET.
-  - **`corrections.py`**: Derivation of jet energy corrections.
-  - **`cmssw_validation_data.py`**: Validation scripts for CMS data.
-  - **`cms_fwlite.py`**: CMS FWLite-based event analysis and plotting.
-- **`scripts/cms-validate-onnx.py`**: Exports PyTorch models to ONNX (supporting FP32, FP16, Fused Flash Attention, HEPT, HEPTv2, and GNNLSH) and validates inference with per-configuration PyTorch/ONNX sessions.
-- **`mlpf/model/onnx_attention.py`, `onnx_graph.py`, `onnx_runtime.py`**: Explicit Attention-24/decomposed export, padding and output rewrites, and provider selection/placement checks. See [ONNX validation](validation/onnx.md).
-- **`scripts/export-checkpoint-onnx.py`, `qualify-heptv2-onnx.py`, `benchmark-model-export.py`**: Trained CMS and seeded-model reference bundles, runtime qualification, and full-model measurements; see [Export qualification](validation/export-evidence.md).
-- **`scripts/plot-onnx-summary.py`**: Generates summary plots for ONNX validation results.
-- **`mlpf/model/monitoring.py`**: System resource monitoring and logging.
-- **`mlpf/model/benchmarking.py` / `mlpf/benchmark_report.py`**: Portable per-worker benchmark recording and JSON/CSV reports: actual work, latency, phase/checkpoint timing, NVIDIA/ROCm telemetry, host resources, energy coverage, provenance and rank-aware totals. Configuration is `MLPFConfig.benchmark`; artifact definitions are in the [benchmark metric reference](training/benchmark-portability.md#recorder-artifacts-and-metric-scope).
+| Path | Contents |
+|---|---|
+| `tests/validate_parquet.py` | [Dataset validation](validation/dataset-validation.md) for Key4HEP and ColliderML Parquet |
+| `mlpf/standalone_eval/key4hep/` | Standalone evaluator and plots on EDM4hep ROOT files |
+| `mlpf/plotting/` | CMS jet and MET validation, jet energy corrections |
+| `mlpf/jet_utils.py` | Jet clustering and one-to-one matching |
+| `mlpf/model/onnx_attention.py`, `onnx_graph.py`, `onnx_runtime.py` | [ONNX export](validation/onnx.md), graph rewrites, provider selection |
+| `scripts/cms-validate-onnx.py`, `validate-onnx-runtime.py` | PyTorch/ONNX comparison and runtime replay (all track/cluster detectors despite the name) |
+| `scripts/qualify-*.py`, `benchmark-*.py`, `*-cms-*.py` | [Export qualification](validation/export-evidence.md) and CMS physics/latency studies |
+| `scripts/compare_detector_features.py`, `run_detector_feature_comparison.sh` | [Local detector comparison](validation/detector-comparison.md) |
+| `scripts/create_reconstruction_event_assets.py` | [Event displays](datasets/event-displays.md) |
+| `scripts/studies/` | One-off study scripts: target-assignment comparisons, hit-model probes, frozen readouts |
 
-## 6. Utilities & Miscellaneous
-- **`mlpf/utils.py` / `mlpf/logger.py`**: Common utilities and centralized logging.
-- **`mlpf/customizations.py`**: Config customization helpers for fast CI/test pipelines.
-- **`mlpf/timing.py`**: Performance timing utilities.
-- **`mlpf/optimizers/`**: Custom optimizers like LAMB (`lamb.py`).
-- **`mlpf/standalone/`**: Standalone, hackable MLPF training and architecture search (`train.py`, `eval.py`, `dsl.py`, `puppi.py`, `plot_evolution.py`, `run_evolution.py`).
-- **`mlpf/raytune/`**: Ray Tune integration for hyperparameter search (`search_space.py`, `utils.py`).
-- **`mlpf/jet_utils.py`**: Jet clustering and matching logic.
-- **`scripts/`**: Miscellaneous utility scripts.
-  - **`tfds_webdav.py` / `tfds_webdav_tree.py` / `tfds_webdav_upload.py` / `tfds_webdav_status.py`**: Download one TFDS version or a whole data root, upload a campaign with parallel transfers and digest checks, or monitor a transfer in the CLI or JSON; see [the transfer guide](datasets/webdav.md).
-  - **`upload_granularity_scan.py`**: Upload and verify all CLD granularity scan TFDS roots under point-specific WebDAV directories.
-  - **`benchmark.py`**: Benchmarks the forward and backward pass timings and peak memory usage for various model architectures.
-  - **`tallinn/`, `lxplus/`, `flatiron/`, `lumi/`, `local/`**: Site-specific and local orchestration scripts for training and evaluation.
-  - **`legacy/`**: Older site-specific scripts retained for previous cluster workflows.
-  - **`upload_model_hf.py` / `upload_hf.py`**: Utilities for uploading experiment results and model checkpoints to HuggingFace Hub.
-  - **`visualize_hits.py`**: Tool for visualizing detector hits and model embeddings using UMAP and 3D plotting.
-  - **`local_test_cld.sh` / `local_test_cms.sh`**: Scripts for quick local verification of the pipeline.
-  - **`fetch_test_data_cld.sh` / `fetch_test_data_cms.sh`**: Scripts to download test data for CLD and CMS.
-- **`tests/`**: Unit tests and validation helpers for configuration, data loading, model forward passes, attention stability, HEPT/HEPTv2 layers, ONNX export, and Key4Hep assignment/ground-truth consistency.
+## Tests and smoke checks
 
-## 7. Local ttbar Detector Comparison Report
-
-The [detector-comparison runbook](validation/detector-comparison.md) contains the
-commands, local input inventory, cache behavior, statistical definitions, and
-limitations for the five-detector report and real ColliderML training check.
+`tests/` holds the unit suite (`pytest tests`). `scripts/local_test_{cms,cld,clic,colliderml,maia}.sh` run small end-to-end checks; see the [quickstart](getting-started/quickstart.md).
