@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 
+import argparse
 import os
 import re
-import yaml
-import argparse
+import sys
 from pathlib import Path
+
+import yaml
 from huggingface_hub import HfApi
+from huggingface_hub.utils import filter_repo_objects
 
 # Set timeout for large file uploads
 os.environ["HF_HUB_ETAG_TIMEOUT"] = "1000"
+
+MAIN_MODEL_REPO = "jpata/particleflow"
+MAIN_REPO_WORKING_CEILING = 16_000
+MAIN_REPO_FILE_LIMIT = 20_000
 
 
 def resolve_variables(value, data):
@@ -37,23 +44,30 @@ def resolve_variables(value, data):
     return value
 
 
-def get_dir_size(path, ignore_patterns=None):
-    """Calculate the total size of a directory in bytes."""
-    from fnmatch import fnmatch
+def folder_files(folder, ignore_patterns=None):
+    """Enumerate the relative paths selected by the Hub's folder upload."""
+    candidates = (
+        p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()
+    )
+    return list(filter_repo_objects(candidates, ignore_patterns=ignore_patterns))
 
-    total = 0
-    for p in Path(path).rglob("*"):
-        if p.is_file():
-            if ignore_patterns:
-                skip = False
-                for pattern in ignore_patterns:
-                    if fnmatch(p.name, pattern) or fnmatch(str(p.relative_to(path)), pattern):
-                        skip = True
-                        break
-                if skip:
-                    continue
-            total += p.stat().st_size
-    return total
+
+def preflight_file_count(api, repo_id, repo_type, destinations):
+    existing = set(api.list_repo_files(repo_id, repo_type=repo_type))
+    additions = len(destinations - existing)
+    projected = len(existing) + additions
+    print(
+        f"Hub file count is {len(existing):,}. This upload adds {additions:,}, for {projected:,} total."
+    )
+    if repo_id != MAIN_MODEL_REPO or repo_type != "model":
+        return
+    if additions and projected > MAIN_REPO_FILE_LIMIT:
+        raise SystemExit(f"Upload would exceed the {MAIN_REPO_FILE_LIMIT:,}-file limit for {repo_id}.")
+    if projected >= MAIN_REPO_WORKING_CEILING:
+        print(
+            f"Warning: projected count reaches the {MAIN_REPO_WORKING_CEILING:,}-file working ceiling for {repo_id}.",
+            file=sys.stderr,
+        )
 
 
 def format_size(num, suffix="B"):
@@ -68,7 +82,7 @@ def format_size(num, suffix="B"):
 def main():
     parser = argparse.ArgumentParser(description="Upload ParticleFlow model checkpoints to HuggingFace.")
     parser.add_argument("experiment_dir", help="Path to the experiment directory in 'experiments/'")
-    parser.add_argument("--repo", default="jpata/particleflow", help="HF repository ID")
+    parser.add_argument("--repo", default=MAIN_MODEL_REPO, help="HF repository ID")
     parser.add_argument("--name", help="Custom descriptive name for the experiment in the repo")
     parser.add_argument("--version", help="Custom version string (e.g., v1.0.0)")
     parser.add_argument("--step", type=int, help="Checkpoint step to upload as best_weights.pth (default: latest)")
@@ -154,8 +168,6 @@ def main():
 
     print(f"Using {best_checkpoint.name} as best_weights.pth")
 
-    api = HfApi() if not args.dry_run else None
-
     # Files and folders to upload
     files_to_upload = [
         ("hyperparameters.json", "hyperparameters.json"),
@@ -183,6 +195,29 @@ def main():
 
     if plots_dir.exists():
         dirs_to_upload.append((plots_dir.name, "plots_best_weights"))
+
+    destinations = {f"{remote_path}/checkpoints/best_weights.pth"}
+    destinations.update(
+        f"{remote_path}/{remote_file}"
+        for local_file, remote_file in files_to_upload
+        if (exp_path / local_file).exists()
+    )
+    folder_uploads = []
+    for local_dir, remote_dir, *patterns in dirs_to_upload:
+        folder = exp_path / local_dir
+        if not folder.is_dir():
+            continue
+        ignore = patterns[0] if patterns else None
+        relative_paths = folder_files(folder, ignore)
+        remote_folder = f"{remote_path}/{remote_dir}"
+        destinations.update(f"{remote_folder}/{relative}" for relative in relative_paths)
+        folder_uploads.append((folder, remote_folder, ignore, relative_paths))
+
+    api = HfApi() if not args.dry_run else None
+    if args.dry_run:
+        print(f"[DRY-RUN] Selected {len(destinations):,} files.")
+    else:
+        preflight_file_count(api, args.repo, args.repo_type, destinations)
 
     total_size = 0
 
@@ -216,28 +251,22 @@ def main():
             total_size += local_path.stat().st_size
 
     # Upload folders
-    for item in dirs_to_upload:
-        local_dir_name = item[0]
-        remote_dir_name = item[1]
-        ignore_patterns = item[2] if len(item) > 2 else None
-
-        local_dir_path = exp_path / local_dir_name
-        if local_dir_path.exists():
-            size = get_dir_size(local_dir_path, ignore_patterns=ignore_patterns)
-            total_size += size
-            if args.dry_run:
-                print(f"[DRY-RUN] Would upload folder {local_dir_path} ({format_size(size)}) to {remote_path}/{remote_dir_name}")
-                if ignore_patterns:
-                    print(f"  Ignoring: {ignore_patterns}")
-            else:
-                print(f"Uploading folder {local_dir_path} ({format_size(size)}) to {remote_path}/{remote_dir_name}...")
-                api.upload_folder(
-                    folder_path=str(local_dir_path),
-                    path_in_repo=f"{remote_path}/{remote_dir_name}",
-                    repo_id=args.repo,
-                    repo_type=args.repo_type,
-                    ignore_patterns=ignore_patterns,
-                )
+    for folder, remote_folder, ignore, relative_paths in folder_uploads:
+        size = sum((folder / relative).stat().st_size for relative in relative_paths)
+        total_size += size
+        if args.dry_run:
+            print(f"[DRY-RUN] Would upload folder {folder} ({format_size(size)}) to {remote_folder}")
+            if ignore:
+                print(f"  Ignoring: {ignore}")
+        else:
+            print(f"Uploading folder {folder} ({format_size(size)}) to {remote_folder}...")
+            api.upload_folder(
+                folder_path=str(folder),
+                path_in_repo=remote_folder,
+                repo_id=args.repo,
+                repo_type=args.repo_type,
+                ignore_patterns=ignore,
+            )
 
     print(f"Total size processed: {format_size(total_size)}")
 
