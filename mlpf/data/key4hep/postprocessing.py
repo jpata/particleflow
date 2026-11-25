@@ -1,6 +1,6 @@
 import os
 
-from mlpf.conf import EDM4HEP, ParticleFeatures as GenFeatures
+from mlpf.conf import EDM4HEP, KEY4HEP_TRACKER_HITS, ParticleFeatures as GenFeatures
 
 from mlpf.data.target_building import (  # noqa: F401  (re-exported for existing key4hep callers)
     SparseMatrixCOO,
@@ -117,23 +117,10 @@ use_surrogate_ancestors = True
 track_coll = "SiTracks_Refitted"
 mc_coll = "MCParticles"
 
-tracker_hit_relations = {
-    "ITrackerHits": "InnerTrackerBarrelHitsRelations",
-    "ITrackerEndcapHits": "InnerTrackerEndcapHitsRelations",
-    "OTrackerHits": "OuterTrackerBarrelHitsRelations",
-    "OTrackerEndcapHits": "OuterTrackerEndcapHitsRelations",
-    "VXDEndcapTrackerHits": "VXDEndcapTrackerHitRelations",
-    "VXDTrackerHits": "VXDTrackerHitRelations",
-}
-
-tracker_hit_sim = {
-    "ITrackerHits": "InnerTrackerBarrelCollection",
-    "ITrackerEndcapHits": "InnerTrackerEndcapCollection",
-    "OTrackerHits": "OuterTrackerBarrelCollection",
-    "OTrackerEndcapHits": "OuterTrackerEndcapCollection",
-    "VXDEndcapTrackerHits": "VertexEndcapCollection",
-    "VXDTrackerHits": "VertexBarrelCollection",
-}
+# CLIC/CLD names, for the tools that read them from here; process_one_file takes each
+# detector's names from its EDM4HEP.Detector
+tracker_hit_relations = {hits: relation for hits, (relation, _) in KEY4HEP_TRACKER_HITS.items()}
+tracker_hit_sim = {hits: sim for hits, (_, sim) in KEY4HEP_TRACKER_HITS.items()}
 
 # the feature matrices will be saved in this order
 particle_feature_order = GenFeatures.get_names()
@@ -234,6 +221,7 @@ def hits_to_features(
     feats: List[str],
     cellid_encoding: Optional[str] = None,
     require_cellid_encoding: bool = True,
+    is_tracker: Optional[bool] = None,
 ) -> awkward.Record:
     available_fields = hit_data.fields
     feat_arr = {}
@@ -265,7 +253,8 @@ def hits_to_features(
         feat_arr[sdcoll][:] = 0
     elif coll.lower().startswith("hcal"):
         feat_arr[sdcoll][:] = 1
-    elif "Tracker" in coll or "VXD" in coll or "Tracker" in coll or "VXD" in coll or coll.startswith("ITracker") or coll.startswith("OTracker"):
+    elif is_tracker if is_tracker is not None else ("Tracker" in coll or "VXD" in coll):
+        # by name when the caller does not say: MAIA's ITBarrelHits/OTBarrelHits match neither
         feat_arr[sdcoll][:] = 3
     else:
         feat_arr[sdcoll][:] = 2
@@ -324,7 +313,10 @@ def get_hit_matrix_and_genadj(
     mcp_id: int,
     cellid_encodings: Optional[Dict[str, str]] = None,
     require_cellid_encoding: bool = True,
+    tracker_hits: Optional[Dict[str, Tuple[str, str]]] = None,
 ) -> Tuple[awkward.Record, SparseMatrixCOO, Dict[Tuple[int, int], int]]:
+    # tracker hit collection -> (reco -> sim hit relation, SimTrackerHit collection)
+    tracker_hits = KEY4HEP_TRACKER_HITS if tracker_hits is None else tracker_hits
     feats = [
         "type",
         "cellID",
@@ -348,7 +340,11 @@ def get_hit_matrix_and_genadj(
     for col in sorted(hit_data.keys()):
         icol = collectionIDs[col]
         encoding = cellid_encodings.get(col) if cellid_encodings is not None else None
-        hit_features = hits_to_features(hit_data[col], iev, col, feats, encoding, require_cellid_encoding)
+        if encoding is None and cellid_encodings is not None and col in tracker_hits:
+            # digitised tracker hits keep the cellID of their sim hits; MAIA stores the encoding
+            # for the sim collections only
+            encoding = cellid_encodings.get(tracker_hits[col][1])
+        hit_features = hits_to_features(hit_data[col], iev, col, feats, encoding, require_cellid_encoding, col in tracker_hits)
         n_hits = len(hit_features["energy"])
         # keep the source collection of every hit, so later steps can select a detector system
         # by collection; subdetector alone cannot tell the muon system from LumiCal on CLIC.
@@ -356,9 +352,8 @@ def get_hit_matrix_and_genadj(
         hit_features = awkward.Record({**{k: hit_features[k] for k in hit_features.fields}, "collectionID": np.full(n_hits, icol, dtype=np.int64)})
         hit_feature_matrix.append(hit_features)
 
-        if col in tracker_hit_relations:
-            rel_name = tracker_hit_relations[col]
-            sim_name = tracker_hit_sim[col]
+        if col in tracker_hits:
+            rel_name, sim_name = tracker_hits[col]
 
             # Reco -> Sim mapping
             rel_from = tracker_links[f"_{rel_name}_from/_{rel_name}_from.index"][iev]
@@ -557,11 +552,12 @@ def hit_cluster_adj(
     )
 
 
-def gen_to_features(prop_data: awkward.Record, iev: int) -> GenFeatures:
+def gen_to_features(prop_data: awkward.Record, iev: int, mc_collection: Optional[str] = None) -> GenFeatures:
+    mc = mc_coll if mc_collection is None else mc_collection
 
-    gen_arr = prop_data[mc_coll][iev]
+    gen_arr = prop_data[mc][iev]
 
-    gen_arr = {k.replace(mc_coll + ".", ""): gen_arr[k] for k in gen_arr.fields}
+    gen_arr = {k.replace(mc + ".", ""): gen_arr[k] for k in gen_arr.fields}
 
     MCParticles_p4 = vector.awk(
         awkward.zip(
@@ -600,21 +596,30 @@ def gen_to_features(prop_data: awkward.Record, iev: int) -> GenFeatures:
         "jet_idx": np.zeros(len(gen_arr["PDG"]), dtype=np.int64),
         "daughters_begin": gen_arr["daughters_begin"],
         "daughters_end": gen_arr["daughters_end"],
-        "index": prop_data[f"_{mc_coll}_daughters/_{mc_coll}_daughters.index"][iev],
+        "index": prop_data[f"_{mc}_daughters/_{mc}_daughters.index"][iev],
     }
 
     return ret
 
 
-def genparticle_track_adj(sitrack_links: Any, iev: int) -> SparseMatrixCOO:
-
-    trk_to_gen_trkidx = sitrack_links["_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index"][iev]
-    trk_to_gen_genidx = sitrack_links["_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index"][iev]
-    trk_to_gen_w = sitrack_links["SiTracksMCTruthLink.weight"][iev]
+def genparticle_track_adj(
+    sitrack_links: Any, iev: int, link: str = "SiTracksMCTruthLink", track_position: Optional[np.ndarray] = None
+) -> SparseMatrixCOO:
+    """(genparticle, track, weight) of the track truth links. track_position maps the linked
+    collection's track indices to the tracks used (-1 for the others, whose links are dropped)."""
+    trk_to_gen_trkidx = sitrack_links[f"_{link}_from/_{link}_from.index"][iev]
+    trk_to_gen_genidx = sitrack_links[f"_{link}_to/_{link}_to.index"][iev]
+    trk_to_gen_w = sitrack_links[f"{link}.weight"][iev]
 
     genparticle_to_track_matrix_coo0 = awkward.to_numpy(trk_to_gen_genidx)
     genparticle_to_track_matrix_coo1 = awkward.to_numpy(trk_to_gen_trkidx)
     genparticle_to_track_matrix_w = awkward.to_numpy(trk_to_gen_w)
+    if track_position is not None:
+        genparticle_to_track_matrix_coo1 = track_position[genparticle_to_track_matrix_coo1]
+        used = genparticle_to_track_matrix_coo1 >= 0
+        genparticle_to_track_matrix_coo0 = genparticle_to_track_matrix_coo0[used]
+        genparticle_to_track_matrix_coo1 = genparticle_to_track_matrix_coo1[used]
+        genparticle_to_track_matrix_w = genparticle_to_track_matrix_w[used]
 
     return (
         genparticle_to_track_matrix_coo0,
@@ -638,10 +643,11 @@ def cluster_to_features(
         "position.y",
         "position.z",
         "iTheta",
-        "phi",
         "energy",
     ]
     ret = {feat: cluster_arr[f"PandoraClusters.{feat}"] for feat in feats}
+    # EDM4hep 1 renamed Cluster.phi to iPhi
+    ret["phi"] = cluster_arr["PandoraClusters.iPhi" if "PandoraClusters.iPhi" in cluster_arr.fields else "PandoraClusters.phi"]
 
     hit_idx = np.array(hit_to_cluster[0])
     cluster_idx = np.array(hit_to_cluster[1])
@@ -735,20 +741,35 @@ def cluster_to_features(
     return awkward.Record(ret)
 
 
-def track_to_features(prop_data: Any, iev: int, b_field: float, ecal_entry: bool = False) -> awkward.Record:
-    track_arr = prop_data[track_coll][iev]
-    # the following are needed since they are no longer defined under SiTracks_Refitted
-    track_arr_dQdx = prop_data[f"{track_coll}_dQdx"][iev]
-    track_arr_trackStates = prop_data[f"_{track_coll}_trackStates"][iev]
+def track_to_features(
+    prop_data: Any,
+    iev: int,
+    b_field: float,
+    ecal_entry: bool = False,
+    track_collection: Optional[str] = None,
+    dqdx: bool = True,
+    selection: Optional[np.ndarray] = None,
+) -> awkward.Record:
+    """Features of the tracks in track_collection, or of the ones at the indices in selection."""
+    trk = track_coll if track_collection is None else track_collection
+    track_arr = prop_data[trk][iev]
+    track_arr_trackStates = prop_data[f"_{trk}_trackStates"][iev]
 
     feats_from_track = ["type", "chi2", "ndf"]
-    ret = {feat: track_arr[f"{track_coll}.{feat}"] for feat in feats_from_track}
+    ret = {feat: track_arr[f"{trk}.{feat}"] for feat in feats_from_track}
+    num_tracks = len(ret["type"])
 
-    ret["dEdx"] = track_arr_dQdx[f"{track_coll}_dQdx.dQdx.value"]
-    ret["dEdxError"] = track_arr_dQdx[f"{track_coll}_dQdx.dQdx.error"]
+    if dqdx:
+        # the following are needed since they are no longer defined under SiTracks_Refitted
+        track_arr_dQdx = prop_data[f"{trk}_dQdx"][iev]
+        ret["dEdx"] = track_arr_dQdx[f"{trk}_dQdx.dQdx.value"]
+        ret["dEdxError"] = track_arr_dQdx[f"{trk}_dQdx.dQdx.error"]
+    else:
+        # no dQdx collection: keep the column, as zeros
+        ret["dEdx"] = np.zeros(num_tracks, dtype=np.float32)
+        ret["dEdxError"] = np.zeros(num_tracks, dtype=np.float32)
 
     # build the radiusOfInnermostHit variable
-    num_tracks = len(ret["dEdx"])
     innermost_radius = []
     # (eta, phi) of the state AtCalorimeter seen from the origin; 0 for tracks without one, as on CMS
     eta_ecal = np.zeros(num_tracks)
@@ -758,12 +779,12 @@ def track_to_features(prop_data: Any, iev: int, b_field: float, ecal_entry: bool
         # select the track states corresponding to itrack
         # pick the state AtFirstHit
         # https://github.com/key4hep/EDM4hep/blob/fe5a54046a91a7e648d0b588960db7841aebc670/edm4hep.yaml#L220
-        ibegin = track_arr[f"{track_coll}.trackStates_begin"][itrack]
-        iend = track_arr[f"{track_coll}.trackStates_end"][itrack]
+        ibegin = track_arr[f"{trk}.trackStates_begin"][itrack]
+        iend = track_arr[f"{trk}.trackStates_end"][itrack]
 
-        refX = track_arr_trackStates[f"_{track_coll}_trackStates.referencePoint.x"][ibegin:iend]
-        refY = track_arr_trackStates[f"_{track_coll}_trackStates.referencePoint.y"][ibegin:iend]
-        location = track_arr_trackStates[f"_{track_coll}_trackStates.location"][ibegin:iend]
+        refX = track_arr_trackStates[f"_{trk}_trackStates.referencePoint.x"][ibegin:iend]
+        refY = track_arr_trackStates[f"_{trk}_trackStates.referencePoint.y"][ibegin:iend]
+        location = track_arr_trackStates[f"_{trk}_trackStates.location"][ibegin:iend]
 
         istate = np.argmax(location == 2)  # 2 refers to AtFirstHit
 
@@ -774,7 +795,7 @@ def track_to_features(prop_data: Any, iev: int, b_field: float, ecal_entry: bool
             istate_calo = ibegin + icalo[0]
 
             def state(name):
-                return track_arr_trackStates[f"_{track_coll}_trackStates.{name}"][istate_calo]
+                return track_arr_trackStates[f"_{trk}_trackStates.{name}"][istate_calo]
 
             # the helix point closest to the reference point, see the EDM4hep TrackState definition
             phi, d0 = state("phi"), state("D0")
@@ -792,10 +813,10 @@ def track_to_features(prop_data: Any, iev: int, b_field: float, ecal_entry: bool
     n_tr = len(ret["type"])
 
     # get the index of the first track state
-    trackstate_idx = prop_data[track_coll][f"{track_coll}.trackStates_begin"][iev]
+    trackstate_idx = prop_data[trk][f"{trk}.trackStates_begin"][iev]
     # get the properties of the track at the first track state (at the origin)
     for k in ["tanLambda", "D0", "phi", "omega", "Z0", "time"]:
-        ret[k] = awkward.to_numpy(prop_data[f"_{track_coll}_trackStates"][f"_{track_coll}_trackStates.{k}"][iev][trackstate_idx])
+        ret[k] = awkward.to_numpy(prop_data[f"_{trk}_trackStates"][f"_{trk}_trackStates.{k}"][iev][trackstate_idx])
 
     ret["pt"] = awkward.to_numpy(track_pt(ret["omega"], b_field))
     ret["px"] = awkward.to_numpy(np.cos(ret["phi"])) * ret["pt"]
@@ -815,20 +836,40 @@ def track_to_features(prop_data: Any, iev: int, b_field: float, ecal_entry: bool
     # track is always type 1
     ret["elemtype"] = 1 * np.ones(n_tr, dtype=np.float32)
 
+    if selection is not None:
+        ret = {k: awkward.to_numpy(v)[selection] for k, v in ret.items()}
     return awkward.Record(ret)
 
 
 # loop over status 1 particles and collect the links of all their descendants
 # since we want to process status 1 particles even if they don't leave hits directly, but only through their daughters
+def first_parents(daughters_begin: np.ndarray, daughters_end: np.ndarray, daughters_index: np.ndarray, n_gp: int) -> np.ndarray:
+    """Each particle's first parent in the daughters relation (-1 if none): the parent that a walk
+    over the particles in order meets first, as parent_of.setdefault(daughter, parent) would keep."""
+    # podio stores begin/end as uint32, which numpy promotes to float when mixed with signed indices
+    daughters_begin = np.asarray(daughters_begin, dtype=np.int64)
+    lengths = np.asarray(daughters_end, dtype=np.int64) - daughters_begin
+    owner = np.repeat(np.arange(n_gp), lengths)
+    flat = np.repeat(daughters_begin, lengths) + np.arange(lengths.sum()) - np.repeat(np.cumsum(lengths) - lengths, lengths)
+    daughters, first = np.unique(daughters_index[flat], return_index=True)
+    parent = np.full(n_gp, -1, dtype=np.int64)
+    inside = daughters < n_gp
+    parent[daughters[inside]] = owner[first[inside]]
+    return parent
+
+
 def add_daughters_to_status1(
     gen_features: GenFeatures,
     genparticle_to_hit: SparseMatrixCOO,
     genparticle_to_trk: SparseMatrixCOO,
 ) -> Tuple[SparseMatrixCOO, SparseMatrixCOO]:
     mask_status1 = gen_features["generatorStatus"] == 1
-    dau_beg = gen_features["daughters_begin"]
-    dau_end = gen_features["daughters_end"]
-    dau_ind = gen_features["index"]
+    # numpy, not awkward: the walk below slices these once per descendant, which with every shower
+    # particle in the record (MAIA v3.2) is millions of times per event
+    dau_beg = np.asarray(awkward.to_numpy(gen_features["daughters_begin"]))
+    dau_end = np.asarray(awkward.to_numpy(gen_features["daughters_end"]))
+    dau_ind = None if gen_features["index"] is None else np.asarray(awkward.to_numpy(gen_features["index"]))
+    pdg_abs = np.abs(np.asarray(awkward.to_numpy(gen_features["PDG"])))
 
     # Pre-index for faster lookup
     hit_map = {}
@@ -851,7 +892,7 @@ def add_daughters_to_status1(
     genparticle_to_trk_additional_w = []
 
     for idx_st1 in np.where(mask_status1)[0]:
-        pdg = abs(gen_features["PDG"][idx_st1])
+        pdg = pdg_abs[idx_st1]
         # in case the particle was a neutrino, don't go further
         if pdg not in [12, 14, 16]:
             stack = []
@@ -948,17 +989,14 @@ def find_surrogate_ancestors_from_record(prop_data: awkward.Record, mc_coll: str
         st1 = (gs == 1) & (pdg != 12) & (pdg != 14) & (pdg != 16)
         propagated = (ss & PROPAGATED) != 0
 
-        parent_of: Dict[int, int] = {}
-        for ip in range(n_gp):
-            for d in di[db[ip] : de[ip]]:
-                parent_of.setdefault(int(d), ip)
+        parent = first_parents(db, de, di, n_gp)
 
         candidates = set()
         for idx in np.where(st1 & ~propagated)[0]:
             cur, depth, seen = int(idx), 0, set()
             while depth < max_depth:
-                nxt = parent_of.get(cur)
-                if nxt is None or nxt in seen:
+                nxt = int(parent[cur])
+                if nxt < 0 or nxt in seen:
                     break
                 cur, depth = nxt, depth + 1
                 seen.add(cur)
@@ -984,8 +1022,8 @@ def find_surrogate_ancestors_from_record(prop_data: awkward.Record, mc_coll: str
         for c in list(candidates):
             cur, depth = c, 0
             while depth < max_depth:
-                nxt = parent_of.get(cur)
-                if nxt is None:
+                nxt = int(parent[cur])
+                if nxt < 0:
                     break
                 cur, depth = nxt, depth + 1
                 candidates.discard(cur)
@@ -1010,19 +1048,16 @@ def find_surrogate_ancestors(gen_features: GenFeatures, genparticle_to_hit: Spar
     taking both the parent and the depositing daughter would double count. Nested candidates are
     reduced to the deepest one for the same reason.
     """
-    dau_beg = gen_features["daughters_begin"]
-    dau_end = gen_features["daughters_end"]
-    dau_ind = gen_features["index"]
     mask_status1 = np.asarray(awkward.to_numpy(gen_features["generatorStatus"])) == 1
     surrogate = np.zeros(len(mask_status1), dtype=bool)
-    if dau_ind is None:
+    if gen_features["index"] is None:
         return surrogate
+    dau_beg = np.asarray(awkward.to_numpy(gen_features["daughters_begin"]))
+    dau_end = np.asarray(awkward.to_numpy(gen_features["daughters_end"]))
+    dau_ind = np.asarray(awkward.to_numpy(gen_features["index"]))
 
     n_gp = len(dau_beg)
-    parent_of: Dict[int, int] = {}
-    for ip in range(n_gp):
-        for d in dau_ind[dau_beg[ip] : dau_end[ip]]:
-            parent_of.setdefault(int(d), ip)
+    parent = first_parents(dau_beg, dau_end, dau_ind, n_gp)
 
     has_hits = set(int(gp) for gp in genparticle_to_hit[0])
 
@@ -1034,8 +1069,8 @@ def find_surrogate_ancestors(gen_features: GenFeatures, genparticle_to_hit: Spar
             continue
         cur, depth, seen = idx_st1, 0, set()
         while depth < max_depth:
-            nxt = parent_of.get(cur)
-            if nxt is None or nxt in seen:
+            nxt = int(parent[cur])
+            if nxt < 0 or nxt in seen:
                 break
             cur, depth = nxt, depth + 1
             seen.add(cur)
@@ -1066,8 +1101,8 @@ def find_surrogate_ancestors(gen_features: GenFeatures, genparticle_to_hit: Spar
     for c in list(candidates):
         cur, depth = c, 0
         while depth < max_depth:
-            nxt = parent_of.get(cur)
-            if nxt is None:
+            nxt = int(parent[cur])
+            if nxt < 0:
                 break
             cur, depth = nxt, depth + 1
             candidates.discard(cur)
@@ -1075,6 +1110,19 @@ def find_surrogate_ancestors(gen_features: GenFeatures, genparticle_to_hit: Spar
     for c in candidates:
         surrogate[c] = True
     return surrogate
+
+
+def track_selection(prop_data: Any, iev: int, track_collection: str, track_subset: str = "") -> Tuple[np.ndarray, np.ndarray]:
+    """Indices into track_collection of the tracks to use (the subset's, or all), and the position of
+    each track_collection track among them (-1 if unused)."""
+    n_tracks = len(prop_data[track_collection][iev][f"{track_collection}.type"])
+    if track_subset:
+        selection = awkward.to_numpy(prop_data[f"{track_subset}_objIdx"][iev][f"{track_subset}_objIdx.index"]).astype(np.int64)
+    else:
+        selection = np.arange(n_tracks)
+    position = np.full(n_tracks, -1, dtype=np.int64)
+    position[selection] = np.arange(len(selection))
+    return selection, position
 
 
 def get_genparticles_and_adjacencies(
@@ -1093,15 +1141,19 @@ def get_genparticles_and_adjacencies(
     muon_collection_ids: Tuple[int, ...] = (),
     track_ecal_entry: bool = False,
     cluster_angles_from_position: bool = False,
+    collections: Optional[EDM4HEP.Detector] = None,
 ) -> EventData:
-    gen_features = gen_to_features(prop_data, iev)
+    # collection names (MC particles, tracks and their truth links, tracker hits); CLIC/CLD's by default
+    names = collections if collections is not None else EDM4HEP.Detector(name="default", b_field=b_field, hit_collections=[])
+    gen_features = gen_to_features(prop_data, iev, names.mc_collection)
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_hit_matrix_and_genadj(
-        hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id, cellid_encodings, require_cellid_encoding
+        hit_data, calohit_links, tracker_links, iev, collectionIDs, mcp_id, cellid_encodings, require_cellid_encoding, names.tracker_hits
     )
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev, muon_collection_ids, cluster_angles_from_position)
-    track_features = track_to_features(prop_data, iev, b_field, track_ecal_entry)
-    genparticle_to_trk = genparticle_track_adj(sitrack_links, iev)
+    selection, position = track_selection(prop_data, iev, names.track_collection, names.track_subset)
+    track_features = track_to_features(prop_data, iev, b_field, track_ecal_entry, names.track_collection, names.track_dqdx, selection)
+    genparticle_to_trk = genparticle_track_adj(sitrack_links, iev, names.track_truth_link, position)
 
     # collect hits of st=1 direct daughters to the st=1 particles
     genparticle_to_hit, genparticle_to_trk = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
@@ -1822,6 +1874,33 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         )
 
 
+def track_branches(detector_cfg: EDM4HEP.Detector) -> List[str]:
+    """Branches holding the tracks: the collection, its states, its dQdx and the subset selecting the used ones."""
+    branches = [detector_cfg.track_collection, f"_{detector_cfg.track_collection}_trackStates"]
+    if detector_cfg.track_dqdx:
+        branches.append(f"{detector_cfg.track_collection}_dQdx")
+    if detector_cfg.track_subset:
+        branches.append(f"{detector_cfg.track_subset}_objIdx")
+    return branches
+
+
+def remap_calohit_link_collections(calohit_links: awkward.Array, link_to_cluster: Dict[str, str], collectionIDs: Dict[str, int]) -> awkward.Array:
+    """Point CalohitMCTruthLink at the hit collections the clusters reference, when it links index-aligned
+    copies of them (MAIA: Digi instead of Rec, same index = same cell)."""
+    colids = {collectionIDs[a]: collectionIDs[b] for a, b in link_to_cluster.items()}
+    key = "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"
+    calohit_links[key] = awkward.Array([[colids.get(int(x), int(x)) for x in ev] for ev in calohit_links[key]])
+    return calohit_links
+
+
+def check_track_references(references: Dict[str, awkward.Array], track_coll: str, collectionIDs_reverse: Dict[int, str]) -> None:
+    """The truth links, the PFOs and the track subset must reference tracks by index into track_coll."""
+    for name, colids in references.items():
+        other = {collectionIDs_reverse.get(int(c), c) for c in np.unique(awkward.to_numpy(awkward.flatten(colids)))} - {track_coll}
+        if other:
+            raise ValueError(f"{name} references tracks in {sorted(other)}, expected {track_coll}")
+
+
 def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num_events: int = -1) -> None:
 
     # output exists, do not recreate
@@ -1832,6 +1911,15 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     if detector == "idea":
         process_one_file_idea(fn, ofn, first_event, num_events)
         return
+
+    try:
+        detector_cfg = EDM4HEP.DETECTORS[detector]
+    except KeyError:
+        raise ValueError(f"Unknown detector type: {detector}. Available detectors: {list(EDM4HEP.DETECTORS.keys())}")
+    # this detector's collection names
+    mc_coll = detector_cfg.mc_collection
+    track_coll = detector_cfg.track_collection
+    track_link = detector_cfg.track_truth_link
 
     print("loading {}".format(fn))
     fi = uproot.open(fn)
@@ -1851,8 +1939,8 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     }
     collectionIDs_reverse = {v: k for (k, v) in collectionIDs.items()}
     cellid_encodings = get_cellid_encodings(fi)
-    if detector == "maia" and not cellid_encodings:
-        print("MAIA has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero); use track/cluster inputs only.")
+    if not detector_cfg.require_cellid_encoding and not cellid_encodings:
+        print(f"{detector} has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero); use track/cluster inputs only.")
 
     prop_data = arrs.arrays(
         [
@@ -1868,14 +1956,12 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             f"{mc_coll}.daughters_begin",
             f"{mc_coll}.daughters_end",
             f"_{mc_coll}_daughters/_{mc_coll}_daughters.index",
-            track_coll,
-            f"_{track_coll}_trackStates",
             "PandoraClusters",
             "_PandoraClusters_hits/_PandoraClusters_hits.index",
             "_PandoraClusters_hits/_PandoraClusters_hits.collectionID",
             "PandoraPFOs",
-            f"{track_coll}_dQdx",
         ]
+        + track_branches(detector_cfg)
     )
     calohit_links = arrs.arrays(
         [
@@ -1886,48 +1972,32 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
             "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.index",
         ]
     )
-    if detector == "maia":
-        # CalohitMCTruthLink references Digi hits, but PandoraClusters references Rec hits.
-        # Since Digi and Rec hits have identical ordering (same index = same cell),
-        # remap the Digi collection IDs in the link to their Rec counterparts.
-        _digi_colls = [
-            "EcalBarrelCollectionDigi",
-            "EcalEndcapCollectionDigi",
-            "HcalBarrelCollectionDigi",
-            "HcalEndcapCollectionDigi",
-        ]
-        _rec_colls = [
-            "EcalBarrelCollectionRec",
-            "EcalEndcapCollectionRec",
-            "HcalBarrelCollectionRec",
-            "HcalEndcapCollectionRec",
-        ]
-        _digi_to_rec_colid = {collectionIDs[d]: collectionIDs[r] for d, r in zip(_digi_colls, _rec_colls)}
-        _from_colid_key = "_CalohitMCTruthLink_from/_CalohitMCTruthLink_from.collectionID"
-        calohit_links[_from_colid_key] = awkward.Array(
-            [[_digi_to_rec_colid.get(int(x), int(x)) for x in ev] for ev in calohit_links[_from_colid_key]]
-        )
+    if detector_cfg.calohit_link_collections:
+        calohit_links = remap_calohit_link_collections(calohit_links, detector_cfg.calohit_link_collections, collectionIDs)
     sitrack_links = arrs.arrays(
         [
-            "SiTracksMCTruthLink.weight",
-            "_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.collectionID",
-            "_SiTracksMCTruthLink_to/_SiTracksMCTruthLink_to.index",
-            "_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.collectionID",
-            "_SiTracksMCTruthLink_from/_SiTracksMCTruthLink_from.index",
+            f"{track_link}.weight",
+            f"_{track_link}_to/_{track_link}_to.collectionID",
+            f"_{track_link}_to/_{track_link}_to.index",
+            f"_{track_link}_from/_{track_link}_from.collectionID",
+            f"_{track_link}_from/_{track_link}_from.index",
         ]
     )
+    track_references = {
+        track_link: sitrack_links[f"_{track_link}_from/_{track_link}_from.collectionID"],
+        "PandoraPFOs": arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.collectionID"].array(),
+    }
+    if detector_cfg.track_subset:
+        subset = f"{detector_cfg.track_subset}_objIdx"
+        track_references[detector_cfg.track_subset] = prop_data[subset][f"{subset}.collectionID"]
+    check_track_references(track_references, track_coll, collectionIDs_reverse)
 
     tracker_link_branches = []
-    for rel_name in tracker_hit_relations.values():
+    for rel_name, sim_name in detector_cfg.tracker_hits.values():
         tracker_link_branches.extend(
             [
                 f"_{rel_name}_from/_{rel_name}_from.index",
                 f"_{rel_name}_to/_{rel_name}_to.index",
-            ]
-        )
-    for sim_name in tracker_hit_sim.values():
-        tracker_link_branches.extend(
-            [
                 f"_{sim_name}_particle/_{sim_name}_particle.index",
                 f"_{sim_name}_particle/_{sim_name}_particle.collectionID",
             ]
@@ -1940,10 +2010,6 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
     idx_rp_to_cluster = arrs["_PandoraPFOs_clusters/_PandoraPFOs_clusters.index"].array()
     idx_rp_to_track = arrs["_PandoraPFOs_tracks/_PandoraPFOs_tracks.index"].array()
 
-    try:
-        detector_cfg = EDM4HEP.DETECTORS[detector]
-    except KeyError:
-        raise ValueError(f"Unknown detector type: {detector}. Available detectors: {list(EDM4HEP.DETECTORS.keys())}")
     b_field = detector_cfg.b_field
     hit_collections = detector_cfg.hit_collections
     # a muon collection that is not read would leave the cluster muon features silently zero
@@ -2053,6 +2119,7 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
                 muon_collection_ids,
                 detector_cfg.track_ecal_entry,
                 detector_cfg.cluster_angles_from_position,
+                detector_cfg,
             )
         except ValueError as e:
             print(f"Skipping event {iev} because it has no visible particles: {e}")
@@ -2078,7 +2145,12 @@ def process_one_file(fn: str, ofn: str, detector: str, first_event: int = 0, num
 
         # for each reco particle, find the tracks and clusters associated with it
         # construct track/cluster -> recoparticle maps
-        track_to_rp, cluster_to_rp = get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track[iev], idx_rp_to_cluster[iev])
+        # PFO track references are indices into track_coll; the track inputs are the selected tracks
+        _, track_position = track_selection(prop_data, iev, track_coll, detector_cfg.track_subset)
+        rp_tracks = track_position[awkward.to_numpy(idx_rp_to_track[iev]).astype(np.int64)]
+        if np.any(rp_tracks < 0):
+            raise ValueError(f"event {iev}: PandoraPFOs use tracks outside {detector_cfg.track_subset}")
+        track_to_rp, cluster_to_rp = get_recoptcl_to_obj(n_rps, reco_arr, rp_tracks, idx_rp_to_cluster[iev])
 
         # get the track/cluster/hit -> genparticle map (exclusive)
         track_to_gp_exclusive_map = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
@@ -2323,23 +2395,4 @@ def process(args: Any) -> None:
 
 if __name__ == "__main__":
     args = parse_args()
-    if args.detector == "maia":
-        # override global collection names (find a better way to do this)
-        mc_coll = "MCParticle"
-        tracker_hit_relations = {
-            "IBTrackerHits": "IBTrackerHitsRelations",
-            "IETrackerHits": "IETrackerHitsRelations",
-            "OBTrackerHits": "OBTrackerHitsRelations",
-            "OETrackerHits": "OETrackerHitsRelations",
-            "VBTrackerHits": "VBTrackerHitsRelations",
-            "VETrackerHits": "VETrackerHitsRelations",
-        }
-        tracker_hit_sim = {
-            "IBTrackerHits": "InnerTrackerBarrelCollection",
-            "IETrackerHits": "InnerTrackerEndcapCollection",
-            "OBTrackerHits": "OuterTrackerBarrelCollection",
-            "OETrackerHits": "OuterTrackerEndcapCollection",
-            "VBTrackerHits": "VertexBarrelCollection",
-            "VETrackerHits": "VertexEndcapCollection",
-        }
     process(args)

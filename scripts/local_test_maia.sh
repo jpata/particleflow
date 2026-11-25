@@ -7,7 +7,10 @@ export PYTHONPATH="$PWD"
 export KERAS_BACKEND=torch
 SMOKE_DIR=local_test_data/maia_smoke
 NUM_EVENTS=${MAIA_NUM_EVENTS:-100}
-ROOT_FILE=${MAIA_ROOT_FILE:-$SMOKE_DIR/root/ttbar_reco_10000.slcio.edm4hep.root}
+# MuColl v3.2 sample (10 ttbar events, 950 MB). A MuColl v2.9 file needs MAIA_DETECTOR=maia_v29.
+ROOT_FILE=${MAIA_ROOT_FILE:-$SMOKE_DIR/root/ttbar_reco_100000.edm4hep.root}
+ROOT_URL=uaf-3.t2.ucsd.edu/~atuna/muoncollider/data/mlpf/57b1d7f2/ttbar_reco_100000.edm4hep.root
+DETECTOR=${MAIA_DETECTOR:-maia}
 ROOT_BASENAME=$(basename "$ROOT_FILE")
 # The converter keeps the portion of the basename before the first dot.
 PARQUET_FILE=$SMOKE_DIR/parquet/${ROOT_BASENAME%%.*}.parquet
@@ -16,13 +19,11 @@ mkdir -p "$SMOKE_DIR/root" "$SMOKE_DIR/parquet"
 
 # The public sample host uses a self-signed certificate. No credentials are sent.
 if [ ! -s "$ROOT_FILE" ]; then
-    curl --insecure --fail --location --retry 2 --retry-all-errors --continue-at - \
-        --speed-limit 100000 --speed-time 30 --max-time 300 \
-        --output "$ROOT_FILE.part" \
-        'https://uaf-3.t2.ucsd.edu/~atuna/muoncollider/data/mlpf/ttbar/v04/ttbar_reco_10000.slcio.edm4hep.root' || \
+    curl --insecure --fail --location --retry 5 --retry-all-errors --continue-at - \
+        --speed-limit 100000 --speed-time 30 --max-time 1800 \
+        --output "$ROOT_FILE.part" "https://$ROOT_URL" || \
     curl --fail --location --retry 5 --retry-all-errors --continue-at - \
-        --output "$ROOT_FILE.part" \
-        'http://uaf-3.t2.ucsd.edu/~atuna/muoncollider/data/mlpf/ttbar/v04/ttbar_reco_10000.slcio.edm4hep.root'
+        --output "$ROOT_FILE.part" "http://$ROOT_URL"
     mv -- "$ROOT_FILE.part" "$ROOT_FILE"
 fi
 
@@ -38,12 +39,12 @@ fi
 if [ "$PARQUET_EVENTS" != "$NUM_EVENTS" ] || [ "${MAIA_RECONVERT:-0}" = 1 ]; then
     uv run python3 -u -c 'import functools, runpy, uproot; uproot.open = functools.partial(uproot.open, handler=uproot.source.file.MultithreadedFileSource); runpy.run_module("mlpf.data.key4hep.postprocessing", run_name="__main__")' \
         --input "$ROOT_FILE" --outpath "$SMOKE_DIR/parquet" \
-        --detector maia --num-events "$NUM_EVENTS"
+        --detector "$DETECTOR" --num-events "$NUM_EVENTS"
 fi
 
 # Report physics failures; this smoke test checks conversion and training.
 uv run python3 tests/validate_parquet.py \
-    --input "$PARQUET_FILE" --detector maia --max-events "$NUM_EVENTS" \
+    --input "$PARQUET_FILE" --detector "$DETECTOR" --max-events "$NUM_EVENTS" \
     --plots-dir "$SMOKE_DIR/validation_plots" || echo "MAIA validation failed; see $SMOKE_DIR/validation_plots/validation_report.json"
 
 # One source file is split into two event-disjoint parquet shards before TFDS.
@@ -56,5 +57,6 @@ uv run python3 mlpf/pipeline.py \
     --production-name maia --data-dir "$TFDS_DATA_DIR" \
     --experiments-dir "$SMOKE_DIR/experiments" --prefix MLPF_maia_test_ --pipeline \
     train --num_steps 2 --checkpoint_freq 1 --gpus 0 --dtype float32 \
+    --model.attention.attention_type math \
     --gpu_batch_multiplier 1 --ntrain 10 --ntest 10 --nvalid 10 \
     --num_workers 1 --prefetch_factor 1
