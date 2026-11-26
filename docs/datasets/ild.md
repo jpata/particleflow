@@ -152,13 +152,14 @@ tfds build mlpf/heptfds/ild_pf_edm4hep/qq.py --config 1 \
 ## Comparing CLD and ILD
 
 Convert both detectors with the current postprocessor into
-`POST/{cld,ild}/{ttbar,qq,ww_fullhad}/`, then run:
+`POST/<detector>/<sample>/` (for example `POST/cld/ttbar/` and `POST/ild/ttbar/`),
+then run:
 
 ```bash
-bash scripts/run_cld_ild_comparison.sh POST OUTPUT 200
+bash scripts/run_detector_feature_comparison.sh --samples POST OUTPUT 200 "cld ild"
 ```
 
-This drives `scripts/compare_detector_features.py` to compare track and
+This writes one report over all samples and one per sample, comparing track and
 cluster features, target and generator jet spectra, matching efficiency and
 purity, and jet response. Check the generator spectra first: equal cards and
 seeds across software versions do not guarantee identical events.

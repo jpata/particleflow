@@ -19,7 +19,7 @@ Both check software and data consistency. Collision types, energies, reconstruct
 
 IDEA is converted with fitted GGTF/GenFit tracks, which requires ROOT files from the [Key4hep v1.4.0 production](../datasets/key4hep-50k.md). Older IDEA files contain only truth-seeded proxy tracks; convert them with `IDEA_TRACK_SOURCE=truth_seeded`. Each track source is converted into its own directory (`idea_fitted/` or `idea_truth_seeded/`), and the report states which source it shows.
 
-The report also reads stored TFDS for comparison. ColliderML and MAIA TFDS are built by the runner at their builders' current versions. CLIC, CLD, and IDEA use existing TFDS version directories set by `CLIC_TFDS`, `CLD_TFDS`, and `IDEA_TFDS`; the defaults are the current recipe versions, 3.4.0, 3.4.0, and 0.5.0, under `/mnt/work/mlpf/tensorflow_datasets/`. A TFDS directory that does not exist is skipped with a message. The ROOT and TFDS paths are site-local; set `KEY4HEP_ROOT_DIR` and the TFDS variables on another machine.
+The report also reads stored TFDS for comparison. ColliderML and MAIA TFDS are built by the runner at their builders' current versions. CLIC, CLD, IDEA and ILD use existing TFDS version directories set by `CLIC_TFDS`, `CLD_TFDS`, `IDEA_TFDS` and `ILD_TFDS`; the defaults are the current recipe versions, 3.4.0, 3.4.0, 0.5.0 and 0.2.0, under `/mnt/work/mlpf/tensorflow_datasets/`. A TFDS directory that does not exist is skipped with a message. The ROOT and TFDS paths are site-local; set `KEY4HEP_ROOT_DIR` and the TFDS variables on another machine.
 
 ### Run
 
@@ -33,8 +33,8 @@ bash scripts/run_detector_feature_comparison.sh
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `KEY4HEP_ROOT_DIR` | `/mnt/work/mlpf/root` | Root of the CLIC, CLD and IDEA ROOT files, also used for the event displays |
-| `CLIC_TFDS`, `CLD_TFDS`, `IDEA_TFDS` | 3.4.0, 3.4.0 and 0.5.0 `ttbar` configuration 1 under `/mnt/work/mlpf/tensorflow_datasets/` | Stored TFDS version directories |
+| `KEY4HEP_ROOT_DIR` | `/mnt/work/mlpf/root` | Root of the CLIC, CLD, IDEA and ILD ROOT files, also used for the event displays |
+| `CLIC_TFDS`, `CLD_TFDS`, `IDEA_TFDS`, `ILD_TFDS` | 3.4.0, 3.4.0, 0.5.0 and 0.2.0 `ttbar` configuration 1 under `/mnt/work/mlpf/tensorflow_datasets/` | Stored TFDS version directories |
 | `IDEA_TRACK_SOURCE` | `fitted` | `fitted` or `truth_seeded` |
 
 The runner downloads the ColliderML shard if missing, converts the Key4HEP ROOT files and the ColliderML shard, builds the small ColliderML TFDS, runs `scripts/local_test_maia.sh` if the MAIA TFDS is missing (which also trains two CPU steps), renders event displays, and runs `scripts/compare_detector_features.py`. Everything is written under `local_test_data/`:
@@ -51,7 +51,7 @@ The runner downloads the ColliderML shard if missing, converts the Key4HEP ROOT 
 
 ### Caching
 
-The ColliderML build is stored under `colliderml_builds/<fingerprint>/`, where the fingerprint hashes the converter, target-building, builder, and configuration sources. A code change therefore produces a new build instead of reusing stale features; old builds are kept. The CLIC, CLD and IDEA conversions are stored the same way, under `key4hep_builds/<fingerprint>/{clic,cld,idea_fitted,idea_truth_seeded}/`, with a fingerprint of the Key4HEP converter and configuration sources. The MAIA TFDS is reused if present at the builder's current version: after changing the MAIA converter, delete it.
+The ColliderML build is stored under `colliderml_builds/<fingerprint>/`, where the fingerprint hashes the converter, target-building, builder, and configuration sources. A code change therefore produces a new build instead of reusing stale features; old builds are kept. The CLIC, CLD, IDEA and ILD conversions are stored the same way, under `key4hep_builds/<fingerprint>/{clic,cld,ild,idea_fitted,idea_truth_seeded}/`, with a fingerprint of the Key4HEP converter and configuration sources. The MAIA TFDS is reused if present at the builder's current version: after changing the MAIA converter, delete it.
 
 ### What the report checks
 
@@ -65,10 +65,20 @@ The ColliderML build is stored under `colliderml_builds/<fingerprint>/`, where t
 
 `bash scripts/run_detector_event_displays.sh 0 1 2` renders only the gallery for the given event indices; `KEY4HEP_ROOT_DIR` selects the Key4HEP ROOT files and `COLLIDERML_DISPLAY_PARQUET` a ColliderML build (the full runner sets both). Views are transverse with a common ±6500 mm extent; hits are sampled up to 800 per collection, and charged truth guides are idealized helices in each detector's nominal field. Equal indices are independent collisions. For reusable published views, see [Detector event views](../datasets/event-displays.md). The same directory also holds decorative multi-detector artwork (`openlab_multi_event_dark*.png`), which is not a comparison.
 
+### Compare Key4hep detectors on several samples
+
+To compare Key4hep detectors across physics samples, convert them first with `mlpf.data.key4hep.postprocessing` into `POST/<detector>/<sample>/`, then run:
+
+```bash
+bash scripts/run_detector_feature_comparison.sh --samples POST OUTPUT [EVENTS] [DETECTORS]
+```
+
+`EVENTS` defaults to 200 and `DETECTORS` to `"cld ild"`. The runner uses each of `ttbar`, `ww_fullhad`, `qq`, `z_qq` and `z_tautau` that is converted for every listed detector, and writes `OUTPUT/all_samples/` and one `OUTPUT/<sample>/` report per sample. This mode does no conversion, TFDS reading or event displays. See [ILD@FCC-ee](../datasets/ild.md#comparing-cld-and-ild) for an example.
+
 ### Known limitations
 
 - IDEA has no reconstructed particle-flow reference: its candidates are target oracles. ColliderML has no PF reference either.
-- ILD@FCC-ee is not part of this report; use `scripts/run_cld_ild_comparison.sh` (see [ILD@FCC-ee](../datasets/ild.md#comparing-cld-and-ild)).
+- ILD@FCC-ee is included only when its ROOT file, `<KEY4HEP_ROOT_DIR>/ild/ttbar/reco_p8_ee_ttbar_ecm365_300000.root`, exists; otherwise it is skipped with a message. ILD has no event display.
 - MAIA has 10 events and missing CellIDEncoding metadata. Its Parquet validation fails `tracker_hit_momentum`, `calorimeter_hit_energy`, and `baseline_particle_energy`; the report embeds that validation, and the smoke script continues past it.
 
 ## Real ColliderML training check
