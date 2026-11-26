@@ -13,7 +13,7 @@
 
 Builders also exist for the other Release-1 samples, with the same schema: `dihiggs`, `ggf`, `zprime`, `hidden_valley`, `higgs_portal` (no pileup), `dihiggs_pu200`, `ggf_pu200`, `zee_pu200`, `zmumu_pu200`, and `pileup_only`. They are not in the production mapping or any training recipe.
 
-The Hub publishes the two ttbar samples only at version 1.4.0. The recipes expect 1.5.0, which must be produced locally (see [catalog](catalog.md#published-availability)).
+The Hub has the two ttbar samples only at version 1.4.0. The recipes expect 1.5.0, which must be produced locally (see the [catalog](catalog.md#published-availability)).
 
 ## Event view
 

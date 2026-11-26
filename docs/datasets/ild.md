@@ -3,8 +3,9 @@
 The `ild` production uses **ILD_FCCee_v02** with a 2 T field, full Geant4
 simulation, Clupatra pattern recognition with DDKalTest refits
 (`MarlinTrkTracks`), and Pandora calorimeter clustering and particle flow.
-TFDS version **0.2.0** is an experimental qualification dataset: a successful
-conversion or TFDS build does not establish reconstruction performance.
+The TFDS datasets (version **0.2.0**) are experimental: they are intended for
+qualifying the detector in MLPF, and the reconstruction has not yet been
+validated for physics.
 
 ## Physics samples
 
@@ -16,20 +17,20 @@ conversion or TFDS build does not establish reconstruction performance.
 | Z→qq | `p8_ee_Z_qq_ecm91` | `ild_edm_z_qq_pf` | 91 GeV |
 | Z→tautau | `p8_ee_Z_tautau_ecm91` | `ild_edm_z_tautau_pf` | 91 GeV |
 
-All datasets use configuration **1**, ArrayRecord, and the `pyg-ild-v1` recipe
-in `particleflow_spec.yaml`. Particle guns (`gun_e_*`, `gun_mu_*`, `gun_pi_*`,
-`gun_gamma_*`, `gun_kaon0L_*`) are available through the runner for
-calibration checks but are not part of the campaign.
+All datasets use configuration **1** and ArrayRecord format. The
+`pyg-ild-v1` recipe trains on qq; `pyg-ild-key4hep-v140` uses all five samples.
+The runner can also produce particle guns (`gun_e_*`, `gun_mu_*`, `gun_pi_*`,
+`gun_gamma_*`, `gun_kaon0L_*`) for calibration checks; they have no TFDS
+datasets.
 
 ## Software and generation
 
-The generator lives in `mlpf/data/key4hep/gen/ild` (key4hep-sim v1.4.0). Its
-ILDConfig submodule pins `fc1c9f58f9912b4d1fb10da5defbaca2133d60a0`, and it
-reuses the k4geo and k4RecTracker builds and the development container of the
-IDEA recipe. All CLD, CLIC, ILD and IDEA productions use stable
-**Key4hep 2026-04-08** with locally built k4FWCore v1.6 and MarlinReco
-v1.38.1. Follow the [build instructions](../../mlpf/data/key4hep/gen/README.md)
-once per execution host:
+The generator is in `mlpf/data/key4hep/gen/ild`. Its ILDConfig submodule is
+pinned to `fc1c9f58f9912b4d1fb10da5defbaca2133d60a0`, and it shares the k4geo
+and k4RecTracker builds and the development container with IDEA. Like the other
+Key4hep detectors, it runs on the stable **Key4hep 2026-04-08** release with
+locally built k4FWCore v1.6 and MarlinReco v1.38.1. Build the software once per
+host, following the [build instructions](../../mlpf/data/key4hep/gen/README.md):
 
 ```bash
 git submodule update --init --recursive
@@ -47,40 +48,30 @@ apptainer exec --bind /cvmfs,"$PWD",/tmp --env LD_PRELOAD=/usr/lib64/libffi.so.8
   bash mlpf/data/key4hep/gen/ild/run_sim.sh gun_mu_10gev 600000
 ```
 
-Use a fresh `WORKDIR` per job. The runner publishes
-`OUTDIR/PROCESS/root/reco_PROCESS_SEED.root` atomically together with
-`reco_PROCESS_SEED.software.txt`, which records source commits, the stack
-checksum, geometry checksums and the exact commands. A work directory under
-`/scratch/local/$USER` is removed on exit; any other work directory keeps the
-logs and intermediate files. Collision samples use the ILDConfig crossing-angle
-boost; guns use none. `GUN_ENERGY`, `GUN_PARTICLE`, `GUN_THETA_MIN` and
-`GUN_THETA_MAX` (DD4hep units such as `45*degree`) adjust gun samples.
-`--gun.energy` is the momentum magnitude, so a massive particle's total energy
-is slightly above the nominal setting.
+Use a new `WORKDIR` for each job. When the job succeeds, the runner writes
+`OUTDIR/PROCESS/root/reco_PROCESS_SEED.root` together with
+`reco_PROCESS_SEED.software.txt`, which records the source commits, software
+and geometry checksums, and the exact commands. Work directories under
+`/scratch/local/$USER` are removed when the job exits; elsewhere, the logs and
+intermediate files are kept.
 
-The reconstruction keeps the native simulation hits and digitization
-relations in the output so that target attribution can be audited against the
-original identities. Upstream drops dQ/dx and tracker cell-ID encodings, so the
-dEdx features are zero and there is no ILD hit-dataset builder.
+Collision samples apply the ILDConfig crossing-angle boost; particle guns do
+not. Set `GUN_ENERGY`, `GUN_PARTICLE`, `GUN_THETA_MIN` and `GUN_THETA_MAX` to
+configure a gun, with DD4hep units for angles (for example `45*degree`). The
+gun energy sets the momentum magnitude, so the total energy of a massive
+particle is slightly higher.
 
-## Tallinn campaign
+The output keeps the simulated hits and the digitization relations, so that
+target assignments can be traced back to the original particles. The upstream
+reconstruction does not store dQ/dx or the tracker cell-ID encoding; the dE/dx
+features are therefore zero, and there is no ILD hit dataset.
 
-The [joint v1.4.0 campaign](key4hep-50k.md) generates **50,000 events per
-sample** in 5,000 jobs of 10 events, with seeds 300000–305000 (ttbar),
-400000–405000 (WW), 500000–505000 (qq), 600000–605000 (Z→qq) and
-700000–705000 (Z→tautau), end exclusive. The workspace is
-`/local/joosep/mlpf/ild/v1.4.0/50k` with `gen/`, `post/` and `tfds/`.
-ILD jobs request 2,900 MiB for generation and reconstruction, 1,200 MiB for
-postprocessing and 8,000 MiB for TFDS, with a 48-hour limit. Each dataset has
-**45,000 train / 5,000 test** events split by independent ROOT jobs.
+## Production
 
-```bash
-ln -sfn configs/tallinn/pixi.toml pixi.toml
-pixi run init
-bash scripts/check_ild_runtime.sh
-pixi run datasets_key4hep --jobs 20 --dry-run
-pixi run datasets_key4hep --jobs 20
-```
+The datasets come from the [Key4hep v1.4.0 production](key4hep-50k.md):
+50,000 events per sample, split by ROOT file into 45,000 training and 5,000
+test events. All five datasets are [published](catalog.md#published-availability)
+on the Hub.
 
 ## Inputs and targets
 
@@ -92,10 +83,10 @@ PYTHONPATH=. python -m mlpf.data.key4hep.postprocessing \
   --outpath /path/to/post/p8_ee_qq_ecm365
 ```
 
-Track features come from the unique fitted state at the interaction point and
-the first-hit radius from `AtFirstHit`; tracks with invalid states or fit
-quality fail conversion rather than being silently dropped. The common feature
-width is 19 and the target width is 14.
+Track features come from the fitted state at the interaction point, and the
+innermost radius from the `AtFirstHit` state. A track with an invalid state or
+fit quality stops the conversion with an error instead of being dropped. As
+for the other Key4hep detectors, inputs have 19 features and targets have 14.
 
 The target policy is **`ild-direct-hit-majority-v1`**:
 
@@ -136,17 +127,22 @@ PYTHONPATH=. python tests/validate_parquet.py \
 The native audit checks event preservation, collection identities, fitted IP
 momenta, direct-primary tracking, angular acceptance, PFO count and energy
 preservation, target provenance, unique representatives, merge energy loss
-and target-jet four-vector closure. The validator applies the common direction
-and energy gates. Known limitations of the current reconstruction are a
-forward tracking coverage limit above |cosθ| ≈ 0.95, direction outliers for
-low-pT tracks, and charged-source clusters whose production direction differs
-from the transported shower direction; the validator's cluster gate therefore
-reports neutral- and charged-source clusters separately.
+and target-jet four-vector closure. The validator applies the same direction and energy checks as for the other
+detectors.
 
-The builders under `mlpf/heptfds/ild_pf_edm4hep/` require compatible ILD
-provenance, finite arrays and at least two generation jobs per process. Files
-are split into disjoint train and test sets by ROOT job, and duplicate source
-checksums are rejected.
+Known limitations of the reconstruction:
+
+- Tracking coverage ends at about |cosθ| ≈ 0.95.
+- Low-pT tracks have direction outliers.
+- For clusters from charged particles, the shower direction differs from the
+  particle's production direction, because the particle curves in the field.
+  The validator therefore reports clusters from neutral and charged particles
+  separately.
+
+The builders under `mlpf/heptfds/ild_pf_edm4hep/` require ILD provenance
+records, finite arrays and at least two generation jobs per process. Train and
+test sets use disjoint ROOT files, and files with duplicate checksums are
+rejected.
 
 ```bash
 tfds build mlpf/heptfds/ild_pf_edm4hep/qq.py --config 1 \

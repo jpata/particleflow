@@ -45,6 +45,7 @@ project:
         - file: datasets/generate.md
           children:
             - file: datasets/key4hep.md
+            - file: datasets/key4hep-50k.md
     - title: Training
       children:
         - file: training/train.md

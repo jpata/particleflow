@@ -31,30 +31,33 @@ The on-disk layout is:
 For example:
 
 ```text
-data/tfds/tensorflow_datasets/cld/cld_edm_ttbar_pf/1/3.3.0/
+data/tfds/tensorflow_datasets/cld/cld_edm_ttbar_pf/1/3.4.0/
 ```
 
 Pass the detector-level directory containing the dataset-name directories as `--data-dir`; for this example it is `data/tfds/tensorflow_datasets/cld`.
 
 ## Published availability
 
-The [Hub](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) publishes configuration 1 of each dataset. As checked on 25 November 2026, it has these versions:
+The [Hub](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) publishes configuration 1 of each dataset. As checked on 26 November 2026 ([revision `b024304b`](https://huggingface.co/datasets/jpata/particleflow/tree/b024304b5dd9e47e9d71d7e51ad77029e5002d8d/tensorflow_datasets)), these recipe versions are published:
 
-| Representation | Detector | Published datasets | Version |
-|---|---|---|---|
-| Tracks and clusters | CLD | `cld_edm_{ttbar,ww_fullhad,qq,zz}_pf` | 3.3.0 |
-| Tracks and clusters | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_pf` | 3.3.0 |
-| Tracks and clusters | IDEA | `idea_edm_{ttbar,ww_fullhad,qq}_pf` | 0.3.0 |
-| Hits | CLD | `cld_edm_{ttbar,ww_fullhad,qq,zz}_hits` | 3.2.2 |
-| Hits | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 |
+| Representation | Detector | Published datasets | Version | Events (train / test) |
+|---|---|---|---|---|
+| Tracks and clusters | CLD | `cld_edm_{ttbar,ww_fullhad,qq,z_qq,z_tautau}_pf` | 3.4.0 | about 4,500 / 500 per sample |
+| Tracks and clusters | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq,z_qq,z_tautau}_pf` | 3.4.0 | about 4,500 / 500 per sample |
+| Tracks and clusters | IDEA | `idea_edm_{ttbar,ww_fullhad,qq,z_qq,z_tautau}_pf` | 0.5.0 | about 8,000 / 2,000 per sample |
+| Tracks and clusters | ILD@FCC-ee | `ild_edm_{ttbar,ww_fullhad,qq,z_qq,z_tautau}_pf` | 0.2.0 | about 45,000 / 5,000 per sample |
 
-The current recipes use the [v1.4.0 campaign](key4hep-50k.md) versions instead: CLD/CLIC track/cluster **3.4.0**, CLD/CLIC hits **3.3.0**, IDEA **0.5.0** (measured GGTF/GenFit tracks) and ILD **0.2.0**. The Hub entries above describe the previous campaigns.
+These come from the [Key4hep v1.4.0 production](key4hep-50k.md). For CLD and CLICdet, the production has ten configurations; only configuration 1 is on the Hub. Some samples have slightly fewer events than nominal, because postprocessing drops events it cannot convert.
 
-Also not yet published at the recipe version:
+Not yet published at the recipe version:
 
-- ColliderML tracks and clusters: the Hub has 1.4.0; recipes expect 1.5.0, which drops out-of-acceptance truth particles. ColliderML hits are not published.
-- CMS and MAIA datasets are not on the Hub.
+| Selection | Recipe version | Newest on the Hub |
+|---|---|---|
+| CLD and CLICdet hits | 3.3.0 | 3.2.2, for `ttbar`, `WW`, `qq` and CLD `ZZ` |
+| ColliderML tracks and clusters | 1.5.0 | 1.4.0, for the no-pileup and pileup-200 ttbar samples; 1.5.0 drops out-of-acceptance truth particles |
+| ColliderML hits | 1.3.0 | Not published |
+| CMS, MAIA | | Not published |
 
-The Hub also holds older versions, and some v1.4.0-campaign datasets (for example CLD/CLIC 3.4.0 and ILD) may already be present; check the live tree. Use the version your recipe names; do not rename a dataset directory to a different version.
+The Hub also keeps older versions of every dataset, such as CLD and CLICdet 3.3.0 and IDEA 0.3.0, and CLD `ZZ` up to 3.3.0. The repository's `root/` and `parquet/` directories hold the reconstructed and postprocessed files of the v1.4.0 samples; `parquet/` also has the ColliderML ttbar samples. Use the version your recipe names, and do not rename a dataset directory to a different version.
 
 The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects. For scientific provenance and citations, use the [publication map](../science/publications.md).

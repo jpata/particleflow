@@ -6,8 +6,9 @@ Use [Current capabilities](capabilities.md) for implemented workflows. This page
 
 | Area | Current boundary | Follow-up work |
 |---|---|---|
-| Published data | The Hub provides configuration 1 for the current CLD, CLIC, and ColliderML selections; see the catalog for versions not yet published. | Publish the recipe versions and additional partitions for full-corpus training. |
-| IDEA | GGTF/GenFit inputs and oracle candidates; builders and recipes use 0.5.0. | Validate tracking quality, truth matching and reconstruction-level physics performance. |
+| Published data | The Hub provides configuration 1 of the CLD, CLIC, IDEA and ILD track/cluster recipe versions. CLD/CLIC hits 3.3.0 and ColliderML 1.5.0 are not yet published, and CMS and MAIA data not at all. | Publish the remaining recipe versions and the other CLD/CLIC configurations for full-corpus training. |
+| IDEA | Fitted GGTF/GenFit tracks with an oracle candidate reference. | Validate tracking quality, truth matching and reconstruction-level physics performance. |
+| ILD@FCC-ee | Experimental datasets with known forward-tracking and low-pT direction limitations. | Qualify the reconstruction for physics studies. |
 | MAIA | Conversion and local training exist, with failed validation gates and incomplete detector metadata. | Resolve data-quality and metadata limitations before expanding support. |
 | ColliderML | Clustered and hit workflows exist for ttbar; the other Release-1 samples and pileup-200 hits have builders but no training recipe. | Extend maintained recipes and detector-specific physics validation. |
 

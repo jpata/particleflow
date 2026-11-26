@@ -71,13 +71,13 @@ Attention-24 export traces at opset 20, converts standard operators to opset 24,
 
 ## Check a checkpoint on CPU
 
-Keep the checkpoint, its `model_kwargs.pkl`, and a compatible TFDS dataset together. Use the [CPU ONNX environment](../getting-started/installation.md). For a CLD attention checkpoint trained on the [downloaded 3.3.0 data](../datasets/download.md):
+Keep the checkpoint, its `model_kwargs.pkl`, and a compatible TFDS dataset together. Use the [CPU ONNX environment](../getting-started/installation.md). For a CLD attention checkpoint trained on the [downloaded 3.4.0 data](../datasets/download.md):
 
 ```bash
 uv run --project envs/ort-cpu python3 scripts/cms-validate-onnx.py \
   --checkpoint /path/to/experiment/checkpoints/checkpoint-2000.pth \
   --model-kwargs /path/to/experiment/model_kwargs.pkl \
-  --dataset cld_edm_ttbar_pf/1:3.3.0 \
+  --dataset cld_edm_ttbar_pf/1:3.4.0 \
   --data-dir data/tfds/tensorflow_datasets/cld \
   --num-events 10 --batch-size 2 \
   --device cpu --num-threads 1 \
@@ -111,7 +111,7 @@ ORT_ENABLE_ATTENTION_KERNEL_DEBUG_INFO=1 \
 uv run --project envs/ort-gpu python3 scripts/cms-validate-onnx.py \
   --checkpoint /path/to/experiment/checkpoints/checkpoint-2000.pth \
   --model-kwargs /path/to/experiment/model_kwargs.pkl \
-  --dataset cld_edm_ttbar_pf/1:3.3.0 \
+  --dataset cld_edm_ttbar_pf/1:3.4.0 \
   --data-dir data/tfds/tensorflow_datasets/cld \
   --num-events 12 --batch-size 4 --pad-bin-size 512 --device cuda \
   --configs PT_ATTN_MATH_FP32 PT_ATTN_FLASH_FP16 ONNX_ATTN_FLASH_FP16 \

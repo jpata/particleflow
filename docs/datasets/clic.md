@@ -9,8 +9,10 @@ CLICdet track/cluster datasets use Key4HEP/EDM4hep production at 380 GeV. The sc
 | Top-quark pairs | `clic_edm_ttbar_pf` | Included in default recipe |
 | Fully hadronic WW | `clic_edm_ww_fullhad_pf` | Included in default recipe |
 | Inclusive quark pairs | `clic_edm_qq_pf` | Included in default recipe |
+| Z→qq (91 GeV) | `clic_edm_z_qq_pf` | `pyg-clic-key4hep-v140` |
+| Z→tautau (91 GeV) | `clic_edm_z_tautau_pf` | `pyg-clic-key4hep-v140` |
 
-The recipes configure partitions 1--10; the [verified public selection](catalog.md#published-availability) provides configuration 1. Use `--data_config 1` for the download-based training path. The default recipe combines `ttbar`, `WW`, and `qq`; their ordering and relative exposure are described in [Dataset mixing](../training/data-mixing.md).
+The recipes configure partitions 1--10. The Hub provides configuration 1 of all five samples (see the [catalog](catalog.md#published-availability)); the datasets come from the [Key4hep v1.4.0 production](key4hep-50k.md). Use `--data_config 1` for the download-based training path. The default recipe combines `ttbar`, `WW`, and `qq`; their ordering and relative exposure are described in [Dataset mixing](../training/data-mixing.md).
 
 ## Event view
 

@@ -9,9 +9,11 @@ CLD hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4h
 | Top-quark pairs | `cld_edm_ttbar_hits` | Included in default recipe |
 | Fully hadronic WW | `cld_edm_ww_fullhad_hits` | Included in default recipe |
 | Inclusive quark pairs | `cld_edm_qq_hits` | Included in default recipe |
+| Z→qq (91 GeV) | `cld_edm_z_qq_hits` | Additional builder; outside default recipe |
+| Z→tautau (91 GeV) | `cld_edm_z_tautau_hits` | Additional builder; outside default recipe |
 | ZZ | `cld_edm_zz_hits` | Additional builder; outside default recipe |
 
-Recipes configure partitions 1--10. The [verified Hub selection](catalog.md#published-availability) provides configuration 1 for `ttbar`, `WW`, and `qq`; check other selections separately.
+Recipes configure partitions 1--10. Version 3.3.0 is not yet on the Hub, which has 3.2.2 for `ttbar`, `WW`, and `qq` (see the [catalog](catalog.md#published-availability)); produce 3.3.0 with the [Key4hep v1.4.0 production](key4hep-50k.md).
 
 For CLD particle-set studies, the recommended research preset is `pyg-cld-hits-heptv2-set-v1`; see the [evidence and recommendation](../studies/cld_hit_results.md).
 

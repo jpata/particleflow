@@ -20,10 +20,10 @@ performance or coverage of every configuration combination.
 | ColliderML Release 1 | Proton-proton ttbar, no pileup or ~200 | Tracks and CLUE calorimeter clusters | 1.5.0 | **Research workflow** |
 | ColliderML Release 1 | Proton-proton ttbar, no pileup | Tracker and calorimeter hits | 1.3.0 | **Research workflow** |
 | MAIA | Muon-collider detector study | Tracks and calorimeter clusters | 1.2.0 | **Partial**: conversion, TFDS, local CPU training; failed validation gates |
-| IDEA | Electron-positron detector concept | Quality-selected GGTF/GenFit tracks and calorimeter clusters | 0.5.0 | **Partial**: pipeline validation with an oracle reference |
-| ILD at FCC-ee | Electron-positron | Fitted tracks and Pandora clusters | 0.2.0 | **Experimental**: full-simulation qualification path |
+| IDEA | Electron-positron detector concept | Fitted GGTF/GenFit tracks and dual-readout calorimeter clusters | 0.5.0 | **Partial**: pipeline validation with an oracle reference |
+| ILD@FCC-ee | Electron-positron, 91 and 365 GeV | Fitted tracks and Pandora calorimeter clusters | 0.2.0 | **Experimental**: reconstruction not yet validated for physics |
 
-Versions come from `particleflow_spec.yaml`. The [catalog](../datasets/catalog.md#published-availability) lists which of them are published on the Hub. IDEA 0.5.0 uses fitted-track provenance; the published 0.2.1 files use proxy tracks and cannot substitute for it.
+Versions come from `particleflow_spec.yaml`. The [catalog](../datasets/catalog.md#published-availability) lists which of them are published on the Hub. The CLD, CLIC, IDEA and ILD versions come from the [Key4hep v1.4.0 production](../datasets/key4hep-50k.md); all four are published on the Hub. The older IDEA 0.3.0 data, also on the Hub, use truth-seeded proxy tracks and cannot replace 0.5.0.
 
 CLD calorimeter granularity scans (six ECAL and six HCAL cell sizes) have their own productions (`cld_ecal_pitch_*`, `cld_hcal_pitch_*`) built from shared geometry; see the [granularity scan runbook](https://github.com/jpata/particleflow/blob/main/scripts/cld_ecal_readout/GRANULARITY_SCAN.md). ColliderML has builders for the other Release-1 samples, and a pileup-200 hit builder, without training recipes.
 
@@ -90,7 +90,7 @@ their original code, dataset, checkpoint, and metric definitions.
 
 - Hit-level events require substantially more memory and tuning than track/cluster inputs.
 - A reproducible checkpoint includes its saved model configuration and a compatible dataset schema.
-- Dataset versions change features or targets; never relabel an older dataset directory to satisfy a recipe. For example, current Key4HEP track/cluster data include muon-system cluster features that 3.2.1 and 3.3.0 data lack.
+- Dataset versions change features or targets; never relabel an older dataset directory to satisfy a recipe. For example, IDEA 0.5.0 uses fitted tracks where 0.3.0 used truth-seeded ones.
 - The standalone Key4HEP evaluator does not yet pass dataset source IDs, so it cannot run checkpoints trained with input normalization (including the v3.3.0 release checkpoints). Use the pipeline `test` command for those.
 - Site-specific production and accelerator paths require their own environment checks.
 - Published physics claims remain tied to the artifacts and setup in the corresponding [publication](publications.md).
