@@ -1,6 +1,8 @@
 # PF foundation-model transfer study on the Key4hep v1.4.0 datasets with ColliderML pu0, at the mid size of
 # the third attention scaling study: 6 layers x 16 heads, head dim 32 (width 512), peak lr 3.5e-4 (LAMB,
 # OneCycle), 16 events per step, feature bag and input normalization on everywhere, no early stopping.
+# High-energy e+e- samples only: ttbar, WW -> hadrons and qq at 365 GeV (CLD, ILD, IDEA) or 380 GeV (CLIC);
+# the 91 GeV Z -> qq and Z -> tautau samples are excluded.
 #
 # Stage 1 (array 0-8, independent):
 #   experts      cld, clic, ild, idea, colliderml  -- colliderml is also the ColliderML-only pretraining
@@ -14,21 +16,49 @@ name: pf_fm_v140_mid
 spec_file: particleflow_spec.yaml
 production_name: cld
 variants:
-  # --- stage 1: experts ---
+  # --- stage 1: experts (the detector models' sample lists restricted to the high-energy samples) ---
   cld:
     model_name: pyg-cld-key4hep-v140
     production_name: cld
+    overrides: &cld_data
+      train_dataset.cld.physical.samples: &cld_samples
+        cld_edm_ttbar_pf: &ten_configs {version: "3.4.0", splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]}
+        cld_edm_ww_fullhad_pf: *ten_configs
+        cld_edm_qq_pf: *ten_configs
+      valid_dataset.cld.physical.samples: *cld_samples
+      test_dataset: *cld_samples
   clic:
     model_name: pyg-clic-key4hep-v140
     production_name: clic
+    overrides: &clic_data
+      train_dataset.clic.physical.samples: &clic_samples
+        clic_edm_ttbar_pf: *ten_configs
+        clic_edm_ww_fullhad_pf: *ten_configs
+        clic_edm_qq_pf: *ten_configs
+      valid_dataset.clic.physical.samples: *clic_samples
+      test_dataset: *clic_samples
   ild:
     model_name: pyg-ild-key4hep-v140
     production_name: ild
+    overrides: &ild_data
+      train_dataset.ild.physical.samples: &ild_samples
+        ild_edm_ttbar_pf: &ild_config {version: "0.2.0", splits: ["1"]}
+        ild_edm_ww_fullhad_pf: *ild_config
+        ild_edm_qq_pf: *ild_config
+      valid_dataset.ild.physical.samples: *ild_samples
+      test_dataset: *ild_samples
   idea:
     model_name: pyg-idea-key4hep-v140
     production_name: idea
     overrides:
-      num_steps: 100000  # IDEA: 100k steps (~40 epochs of its ~40k training events)
+      <<: &idea_data
+        train_dataset.idea.physical.samples: &idea_samples
+          idea_edm_ttbar_pf: &idea_config {version: "0.5.0", splits: ["1"]}
+          idea_edm_ww_fullhad_pf: *idea_config
+          idea_edm_qq_pf: *idea_config
+        valid_dataset.idea.physical.samples: *idea_samples
+        test_dataset: *idea_samples
+      num_steps: 100000  # IDEA: 100k steps (~65 epochs of its ~24k training events)
   colliderml:
     model_name: pyg-colliderml-v1
     production_name: colliderml
@@ -49,58 +79,53 @@ variants:
   ft_cml_cld:
     model_name: pyg-cld-key4hep-v140
     production_name: cld
-    overrides: &ft_cml
-      load: null  # TODO: <colliderml run>/checkpoints/checkpoint-<num_steps>.pth
-      load_weights_only: true
-      reset_task_loss_weights: true
-      model.trainable: all
+    overrides:
+      <<: [&ft_cml {load: null, load_weights_only: true, reset_task_loss_weights: true, model.trainable: all}, *cld_data]
+      load: null  # TODO: <colliderml run>/checkpoints/checkpoint-300000.pth (same path for all four ft_cml_*)
   ft_cml_clic:
     model_name: pyg-clic-key4hep-v140
     production_name: clic
-    overrides: *ft_cml
+    overrides:
+      <<: [*ft_cml, *clic_data]
+      load: null  # TODO: <colliderml run>/checkpoints/checkpoint-300000.pth
   ft_cml_ild:
     model_name: pyg-ild-key4hep-v140
     production_name: ild
-    overrides: *ft_cml
+    overrides:
+      <<: [*ft_cml, *ild_data]
+      load: null  # TODO: <colliderml run>/checkpoints/checkpoint-300000.pth
   ft_cml_idea:
     model_name: pyg-idea-key4hep-v140
     production_name: idea
     overrides:
-      <<: *ft_cml
+      <<: [*ft_cml, *idea_data]
+      load: null  # TODO: <colliderml run>/checkpoints/checkpoint-300000.pth
       num_steps: 100000
   # --- stage 2: fine-tunes on the detector each joint left out ---
   ft_loo_cld:
     model_name: pyg-cld-key4hep-v140
     production_name: cld
     overrides:
-      load: null  # TODO: <joint_nocld run>/checkpoints/checkpoint-<num_steps>.pth
-      load_weights_only: true
-      reset_task_loss_weights: true
-      model.trainable: all
+      <<: [*ft_cml, *cld_data]
+      load: null  # TODO: <joint_nocld run>/checkpoints/checkpoint-300000.pth
   ft_loo_clic:
     model_name: pyg-clic-key4hep-v140
     production_name: clic
     overrides:
-      load: null  # TODO: <joint_noclic run>/checkpoints/checkpoint-<num_steps>.pth
-      load_weights_only: true
-      reset_task_loss_weights: true
-      model.trainable: all
+      <<: [*ft_cml, *clic_data]
+      load: null  # TODO: <joint_noclic run>/checkpoints/checkpoint-300000.pth
   ft_loo_ild:
     model_name: pyg-ild-key4hep-v140
     production_name: ild
     overrides:
-      load: null  # TODO: <joint_noild run>/checkpoints/checkpoint-<num_steps>.pth
-      load_weights_only: true
-      reset_task_loss_weights: true
-      model.trainable: all
+      <<: [*ft_cml, *ild_data]
+      load: null  # TODO: <joint_noild run>/checkpoints/checkpoint-300000.pth
   ft_loo_idea:
     model_name: pyg-idea-key4hep-v140
     production_name: idea
     overrides:
-      load: null  # TODO: <joint_noidea run>/checkpoints/checkpoint-<num_steps>.pth
-      load_weights_only: true
-      reset_task_loss_weights: true
-      model.trainable: all
+      <<: [*ft_cml, *idea_data]
+      load: null  # TODO: <joint_noidea run>/checkpoints/checkpoint-300000.pth
       num_steps: 100000
 seeds: [12345]
 training:
