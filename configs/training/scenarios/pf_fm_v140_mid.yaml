@@ -8,7 +8,8 @@
 # Stage 1 (array 0-8, independent):
 #   experts      cld, clic, ild, idea, colliderml  -- colliderml is also the ColliderML-only pretraining
 #   joints       joint_no<det>: ColliderML + three of CLD/CLIC/ILD/IDEA (pyg-fm-v140-joint-no<det>)
-# Stage 2 (array 9-16, weights-only fine-tunes, full model trainable, task loss weights recalibrated):
+# Stage 2 (array 9-16): fine-tunes that start from the source checkpoint's weights, with a fresh optimizer, LR
+# schedule and step count; the full model is trainable and the task loss weights are recalibrated:
 #   ft_cml_<det> from the colliderml expert's final checkpoint
 #   ft_loo_<det> from joint_no<det>'s final checkpoint (the detector that joint never saw)
 # Stage-2 `load` paths are null until the stage-1 runs finish; the runner refuses to start them before
