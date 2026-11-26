@@ -8,6 +8,10 @@
 # cosine decay), input normalization for track/cluster models, ColliderML PU0
 # added, and the CMS PU/no-PU batches of the 320k CMS run (96/768 instead of a
 # uniform 64). Optimizer, peak learning rates and validation are unchanged.
+#
+# Hit models: HEPTv2 set recipes on the general *_full datasets (tracker and
+# calorimeter hits). The attention hit variants and the *_hits datasets were
+# removed, so hit checkpoints start a new series here.
 name: release_checkpoints
 spec_file: particleflow_spec.yaml
 production_name: cld
@@ -34,57 +38,56 @@ variants:
         model.heptv2.block_size: 128
         model.heptv2.deterministic_hashing: true
         model.heptv2.activation_checkpointing: true
-  cld_hits_attention:
-    model_name: pyg-cld-hits-set-v1
-    overrides: &hits
-      model.set_decoder.num_slots: 256
-      model.set_decoder.num_layers: 4
-      model.set_decoder.num_heads: 8
-      model.set_decoder.attention_mode: global-flash
-      model.set_decoder.query_init: input-conditioned
-      model.set_decoder.local_attention_radius: 0.4
-      model.set_decoder.tracker_query_fraction: 0.6
-      model.set_decoder.proposal_mode: grid-diverse
-      model.set_decoder.proposal_grid_size: 0.1
-      model.set_decoder.use_aggregate_anchors: true
-      model.set_decoder.aggregate_grid_size: 0.1
-      model.set_decoder.presence_threshold: 0.5
-      model.set_decoder.no_object_weight: 1.0
-      model.set_decoder.cardinality_loss_weight: 0.05
-      model.set_decoder.auxiliary_loss_weight: 0.25
-      model.set_decoder.matcher.presence: 1.0
-      model.set_decoder.matcher.pid: 1.0
-      model.set_decoder.matcher.geometry: 2.0
-      model.set_decoder.matcher.pt: 1.0
-      model.set_decoder.matcher.energy: 0.0
-      model.set_decoder.matcher.dr_scale: 0.1
-      model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
-      model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
-      model.set_decoder.hit_grouping: true
-      model.set_decoder.hit_grouping_dim: 32
-      model.set_decoder.hit_grouping_chunk_size: 1024
-      model.set_decoder.hit_grouping_loss_weight: 0.1
-      model.set_decoder.hit_grouping_background_weight: 0.1
-      model.set_decoder.hit_grouping_detector_balanced: false
-      model.set_decoder.hit_grouping_sparse: false
-      model.set_decoder.hit_grouping_tracker_particle_balanced: false
-      model.set_decoder.tracker_momentum_readout: true
-      model.set_decoder.tracker_group_readout: false
-      model.set_decoder.tracker_fit_correction: false
-      model.set_decoder.tracker_overlap_loss_weight: 0.0
-      model.set_decoder.tracker_geometry_loss_weight: 0.0
-      model.set_decoder.tracker_curvature_loss_weight: 0.0
-      model.set_decoder.event_consistency_loss_weight: 0.0
-      model.hit_feature_engineering.enabled: true
-      model.hit_feature_engineering.geometry: true
-      model.hit_feature_engineering.calorimeter_neighborhood: true
-      model.hit_feature_engineering.tracker_neighborhood: true
-      model.hit_feature_engineering.tracker_momentum: false
-      model.hit_feature_engineering.tracker_doublets: false
   cld_hits_heptv2:
-    model_name: pyg-cld-hits-set-v1
+    model_name: pyg-cld-hits-heptv2-set-v1
     overrides:
-      <<: [*hits, *heptv2]
+      <<:
+        - &hits
+          model.set_decoder.num_slots: 256
+          model.set_decoder.num_layers: 4
+          model.set_decoder.num_heads: 8
+          model.set_decoder.attention_mode: global-flash
+          model.set_decoder.query_init: input-conditioned
+          model.set_decoder.local_attention_radius: 0.4
+          model.set_decoder.tracker_query_fraction: 0.6
+          model.set_decoder.proposal_mode: grid-diverse
+          model.set_decoder.proposal_grid_size: 0.1
+          model.set_decoder.use_aggregate_anchors: true
+          model.set_decoder.aggregate_grid_size: 0.1
+          model.set_decoder.presence_threshold: 0.5
+          model.set_decoder.no_object_weight: 1.0
+          model.set_decoder.cardinality_loss_weight: 0.05
+          model.set_decoder.auxiliary_loss_weight: 0.25
+          model.set_decoder.matcher.presence: 1.0
+          model.set_decoder.matcher.pid: 1.0
+          model.set_decoder.matcher.geometry: 2.0
+          model.set_decoder.matcher.pt: 1.0
+          model.set_decoder.matcher.energy: 0.0
+          model.set_decoder.matcher.dr_scale: 0.1
+          model.set_decoder.matcher.log_pt_scale: 0.6931471805599453
+          model.set_decoder.matcher.log_energy_scale: 0.6931471805599453
+          model.set_decoder.hit_grouping: true
+          model.set_decoder.hit_grouping_dim: 32
+          model.set_decoder.hit_grouping_chunk_size: 1024
+          model.set_decoder.hit_grouping_loss_weight: 0.1
+          model.set_decoder.hit_grouping_background_weight: 0.1
+          model.set_decoder.hit_grouping_detector_balanced: false
+          model.set_decoder.hit_grouping_sparse: false
+          model.set_decoder.hit_grouping_tracker_particle_balanced: false
+          model.set_decoder.tracker_momentum_readout: true
+          model.set_decoder.tracker_group_readout: false
+          model.set_decoder.tracker_fit_correction: false
+          model.set_decoder.tracker_overlap_loss_weight: 0.0
+          model.set_decoder.tracker_geometry_loss_weight: 0.0
+          model.set_decoder.tracker_curvature_loss_weight: 0.0
+          model.set_decoder.event_consistency_loss_weight: 0.0
+          model.hit_feature_engineering.enabled: true
+          model.hit_feature_engineering.geometry: true
+          model.hit_feature_engineering.calorimeter_neighborhood: true
+          model.hit_feature_engineering.tracker_neighborhood: true
+          model.hit_feature_engineering.tracker_momentum: false
+          model.hit_feature_engineering.tracker_doublets: false
+        - *heptv2
   clic_pf_attention:
     model_name: pyg-clic-v1
     production_name: clic
@@ -96,12 +99,8 @@ variants:
     gpus: 1
     overrides:
       <<: [*pf, *heptv2]
-  clic_hits_attention:
-    model_name: pyg-clic-hits-set-v1
-    production_name: clic
-    overrides: *hits
   clic_hits_heptv2:
-    model_name: pyg-clic-hits-set-v1
+    model_name: pyg-clic-hits-heptv2-set-v1
     production_name: clic
     overrides:
       <<: [*hits, *heptv2]
@@ -120,14 +119,8 @@ variants:
     overrides:
       <<: [*pf, *heptv2]
 #  # PU0 events have up to ~390 target particles (p99 ~310), above the 256 slots of the CLD/CLIC recipe.
-#  colliderml_hits_attention:
-#    model_name: pyg-colliderml-hits-set-v1
-#    production_name: colliderml
-#    overrides:
-#      <<: *hits
-#      model.set_decoder.num_slots: 512
 #  colliderml_hits_heptv2:
-#    model_name: pyg-colliderml-hits-set-v1
+#    model_name: pyg-colliderml-hits-heptv2-set-v1
 #    production_name: colliderml
 #    overrides:
 #      <<: [*hits, *heptv2]

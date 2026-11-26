@@ -21,13 +21,21 @@ Use `git switch --detach COMMIT` in each checkout to freeze that revision.
 Environments are architecture-specific; do not copy an ARM virtual environment
 to an x86 site.
 
-Set `MLPF_CLD_DATA_DIR` to a compute-visible TFDS root containing
-`cld_edm_ttbar_hits/1/3.2.2/`. The reference copy has 90,000 train and 10,000 test
-events, 1,155 files and 31,326,294,015 bytes. Transfer the complete config `1`,
+Set `MLPF_CLD_DATA_DIR` to a compute-visible TFDS root containing the general
+dataset `cld_edm_ttbar_full/1/1.0.0/` (tracks, clusters and hits; see
+[general datasets](../datasets/full.md)). Transfer the complete config `1`,
 including train/test shards and metadata, using your site's normal data-transfer
-method. The versioned inventory is
-[`cld_ttbar_hits_config1_3.2.2.json`](../../configs/training/data/cld_ttbar_hits_config1_3.2.2.json).
-Matching a TFDS version label alone does not establish identical data.
+method. Write the inventory of the reference copy once, and check every site
+against it:
+
+```bash
+python scripts/training/check_batch_data.py /path/to/reference/tfds \
+  --manifest cld_ttbar_full_config1_1.0.0.json --write cld_edm_ttbar_full 1 1.0.0
+python scripts/training/check_batch_data.py "$MLPF_CLD_DATA_DIR" --manifest cld_ttbar_full_config1_1.0.0.json
+```
+
+Matching a TFDS version label alone does not establish identical data. The former
+`cld_edm_ttbar_hits` 3.2.2 inventory was removed with the old-style hit datasets.
 
 ## LUMI: one MI250X GCD
 
@@ -98,10 +106,10 @@ against your allocation before submission.
 The [published v3.2.0 evidence and limitations](benchmark-portability.md#historical-evidence-and-remaining-limitations)
 record the original GH200/H100/MI250X campaign. H100 used TFDS 3.2.1 while
 GH200/LUMI used 3.2.2; source trees, attention backends and loader settings also
-differed. The frozen `cld_h100_backbone_benchmark_321` and
-`cld_gh200_backbone_benchmark` recipes describe those runs. New runs default to
-`cld_backbone_benchmark`.
+differed. The `cld_h100_backbone_benchmark_321` and `cld_gh200_backbone_benchmark`
+scenarios that described those runs were removed with the attention hit recipes (see the
+git history). New runs default to the HEPTv2-only `cld_hits_heptv2_benchmark`.
 
 Local shell tests use stubs for Slurm, modules and containers. They verify argument
 forwarding and visibility preservation, not remote runtime availability. Qualify
-both backbones on each site using the final source commit before a full sweep.
+the HEPTv2 hit model on each site using the final source commit before a full sweep.

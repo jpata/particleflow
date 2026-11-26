@@ -80,7 +80,7 @@ rule post_task:
     output:
         "snakemake_jobs/idea/post/post_{sample}_{seed}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=1000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=2700, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:

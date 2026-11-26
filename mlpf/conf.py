@@ -26,6 +26,8 @@ class Dataset(Enum):
     MAIA = "maia"
     CLIC_HITS = "clic_hits"
     CLD_HITS = "cld_hits"
+    IDEA_HITS = "idea_hits"
+    MAIA_HITS = "maia_hits"
     COLLIDERML = "colliderml"
     COLLIDERML_HITS = "colliderml_hits"
 
@@ -84,6 +86,7 @@ INPUT_TYPE_IDS = {
     "unknown": 0,
     "hits": 1,
     "pf": 2,
+    "full": 4,
 }
 INPUT_TYPE_LABELS = {input_type_id: input_type_name for input_type_name, input_type_id in INPUT_TYPE_IDS.items()}
 
@@ -96,8 +99,9 @@ def dataset_source_id(dataset_name: str) -> int:
 
 
 def dataset_input_type_id(dataset_name: str) -> int:
-    if "_hits" in dataset_name:
-        return INPUT_TYPE_IDS["hits"]
+    # General datasets: the loader reports "hits" instead when only hit kinds are selected.
+    if dataset_name.endswith("_full") or "_full:" in dataset_name or "_full/" in dataset_name:
+        return INPUT_TYPE_IDS["full"]
     return INPUT_TYPE_IDS["pf"]
 
 
@@ -106,7 +110,8 @@ def dataset_for_sample(sample_name: str, default: "Dataset") -> "Dataset":
     source = SOURCE_LABELS.get(dataset_source_id(sample_name), "unknown")
     if source == "unknown":
         return default
-    if dataset_input_type_id(sample_name) == INPUT_TYPE_IDS["hits"]:
+    # Full datasets are read by the raw-hit model family (default element selection: hits).
+    if dataset_input_type_id(sample_name) == INPUT_TYPE_IDS["full"]:
         source = f"{source}_hits"
     try:
         return Dataset(source)
@@ -716,6 +721,17 @@ CLASS_NAMES_CAPITALIZED = {
     ],
 }
 
+# Feature widths of the element kinds of the general *_full datasets.
+FULL_ELEMENT_WIDTHS = {
+    "track": len(EDM4HEP.TrackFeatures.get_names()),
+    "cluster": len(EDM4HEP.ClusterFeatures.get_names()),
+    "hit_tracker": len(EDM4HEP.HitFeatures.get_names()),
+    "hit_calo": len(EDM4HEP.HitFeatures.get_names()),
+}
+# ColliderML writes tracks and clusters in a 17-column union layout.
+FULL_ELEMENT_WIDTHS_BY_SOURCE = {"colliderml": {**FULL_ELEMENT_WIDTHS, "track": 17, "cluster": 17}}
+
+
 X_FEATURES = {
     Dataset.CMS.value: [
         "typ_idx",
@@ -800,8 +816,7 @@ X_FEATURES = {
         "Null | sigma_y",
         "Null | sigma_z",
     ],
-    # ColliderML hits view mirrors the key4hep hits view (edm4hep_utils/utils_hits.py):
-    # hits in the 15-wide EDM4hep hit layout carry targets directly.
+    # ColliderML hit inputs use the 15-wide key4hep EDM4hep hit layout.
     Dataset.COLLIDERML_HITS.value: EDM4HEP.HitFeatures.get_names(),
 }
 
@@ -898,6 +913,21 @@ JET_CONFIG = {
         match_rel_pt=0.5,
     ),
 }
+
+# IDEA and MAIA hit inputs (general *_full datasets): hit-input layout of cld_hits, physics
+# conventions (classes, jets) of the detector's track/cluster model.
+for _hits, _detector in ((Dataset.IDEA_HITS, Dataset.IDEA), (Dataset.MAIA_HITS, Dataset.MAIA)):
+    for _table, _source in (
+        (ELEM_TYPES, Dataset.CLD_HITS),
+        (ELEM_TYPES_NONZERO, Dataset.CLD_HITS),
+        (X_FEATURES, Dataset.CLD_HITS),
+        (CLASS_LABELS, _detector),
+        (CLASS_NAMES_LATEX, _detector),
+        (CLASS_NAMES, _detector),
+        (CLASS_NAMES_CAPITALIZED, _detector),
+        (JET_CONFIG, _detector),
+    ):
+        _table[_hits.value] = _table[_source.value]
 
 
 Y_FEATURES = ParticleFeatures.get_names()
@@ -1181,6 +1211,13 @@ class SetDecoderConfig(BaseModel):
     hit_grouping_background_weight: float = Field(default=0.1, gt=0.0)
     hit_grouping_detector_balanced: bool = False
     hit_grouping_tracker_particle_balanced: bool = False
+    # Full datasets only: element origin codes (mlpf.data.full_targets.ORIGIN_NAMES) that count as
+    # members of their particle in the grouping loss. None keeps every labelled element (inclusive).
+    # [1] supervises only hits the particle produced itself on its outgoing trajectory.
+    hit_grouping_origins: Optional[List[int]] = None
+    # How elements of a particle with an excluded origin enter the grouping loss: "ignore" (zero
+    # weight) or "background" (supervised as unowned).
+    hit_grouping_excluded_as: Literal["ignore", "background"] = "ignore"
     tracker_overlap_loss_weight: float = Field(default=0.0, ge=0.0)
     hit_grouping_sparse: bool = False
     hit_grouping_topk: int = Field(default=4, gt=0)
@@ -1335,8 +1372,8 @@ _PIPELINE_DATASETS = {
     "clic": _PipelineDatasetOverride("physical", "clic_edm_ttbar_pf", "3.4.0"),
     "colliderml": _PipelineDatasetOverride("physical", "colliderml_ttbar_nopu_pf", "1.5.0", gpu_batch_multiplier=8),
     "maia": _PipelineDatasetOverride("physical", "maia_edm_ttbar_pf", "1.2.0", gpu_batch_multiplier=1),
-    "colliderml_hits": _PipelineDatasetOverride("physical", "colliderml_ttbar_hits", "1.3.0", gpu_batch_multiplier=8),
-    "cld_hits": _PipelineDatasetOverride("physical", "cld_edm_ttbar_hits", "3.3.0"),
+    "colliderml_hits": _PipelineDatasetOverride("physical", "colliderml_ttbar_full", "1.0.0"),
+    "cld_hits": _PipelineDatasetOverride("physical", "cld_edm_ttbar_full", "1.0.0"),
 }
 
 
@@ -1364,9 +1401,9 @@ def _build_base_config(spec, model_config, production_config):
         config["data_dir"] = _tfds_dir(spec, production_config)
 
     dataset_name = config["dataset"].value
-    config["input_dim"] = len(X_FEATURES[dataset_name])
+    # input_dim and elemtypes_nonzero are derived in MLPFConfig.populate_defaults, which also
+    # accounts for the element kinds selected from general *_full datasets.
     config["num_classes"] = len(CLASS_LABELS[dataset_name])
-    config["elemtypes_nonzero"] = ELEM_TYPES_NONZERO[dataset_name]
     return config, dataset_name
 
 
@@ -1562,6 +1599,9 @@ class MLPFConfig(BaseModel):
     task_loss_weights: TaskLossWeights = Field(default_factory=TaskLossWeights)
     lr_finder: LRFinderConfig = Field(default_factory=LRFinderConfig)
     pad_to_multiple_elements: Optional[int] = None  # pad the dataset to multiples of this value
+    # Element kinds read from general *_full datasets, in element-type order (type = position + 1).
+    # Kinds: track, cluster, hit_tracker, hit_calo. Only used for datasets whose name ends in _full.
+    full_elements: List[str] = Field(default_factory=lambda: ["hit_tracker", "hit_calo"])
     validation_diagnostics_batches: int = 0  # batches per rank for domain, momentum, and hit-grouping diagnostics; 0 disables extras
 
     validation_linear_probe: bool = False  # frozen hit-instance ARI and calo continuation probes on diagnostic batches
@@ -1617,6 +1657,8 @@ class MLPFConfig(BaseModel):
             sub_config = getattr(self.model, self.conv_type.value)
             if sub_config is not None and hasattr(sub_config, "num_convs"):
                 self.model.backbone.num_convs = sub_config.num_convs
+        if self.uses_full_datasets():
+            self._populate_full_defaults()
         if self.dataset.value in X_FEATURES:
             if self.input_dim is None:
                 self.input_dim = len(X_FEATURES[self.dataset.value])
@@ -1625,7 +1667,7 @@ class MLPFConfig(BaseModel):
             if self.elemtypes_nonzero is None:
                 self.elemtypes_nonzero = ELEM_TYPES_NONZERO[self.dataset.value]
         if self.model.output_mode == OutputMode.SET:
-            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.COLLIDERML_HITS):
+            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.COLLIDERML_HITS, Dataset.IDEA_HITS, Dataset.MAIA_HITS):
                 raise ValueError("model.output_mode='set' is currently supported only for the CLD/CLIC/ColliderML hit datasets")
             if self.model.set_decoder is None:
                 self.model.set_decoder = SetDecoderConfig()
@@ -1655,11 +1697,30 @@ class MLPFConfig(BaseModel):
                 raise ValueError(f"data_dir has directories for {sorted(self.data_dir)}, but not for the samples {missing}")
         return self
 
+    def _populate_full_defaults(self):
+        """Input layout of the general *_full datasets, which support only the set output."""
+        if self.model.output_mode != OutputMode.SET:
+            raise ValueError("the general *_full datasets support only model.output_mode='set'")
+        # General *_full datasets: the selected element kinds define the input layout
+        # (element type = position in full_elements + 1, width = widest selected kind).
+        unknown = set(self.full_elements) - set(FULL_ELEMENT_WIDTHS)
+        if not self.full_elements or unknown or len(set(self.full_elements)) != len(self.full_elements):
+            raise ValueError(f"full_elements must be distinct kinds from {sorted(FULL_ELEMENT_WIDTHS)}, got {self.full_elements}")
+        widths = FULL_ELEMENT_WIDTHS_BY_SOURCE.get(self.dataset.value.split("_")[0], FULL_ELEMENT_WIDTHS)
+        if self.input_dim is None:
+            self.input_dim = max(widths[kind] for kind in self.full_elements)
+        if self.elemtypes_nonzero is None:
+            self.elemtypes_nonzero = list(range(1, len(self.full_elements) + 1))
+
     def data_dir_for(self, sample_name):
         """TFDS directory of a sample: data_dir, or its detector's entry when data_dir is {source: directory}."""
         if isinstance(self.data_dir, str):
             return self.data_dir
         return self.data_dir[SOURCE_LABELS[dataset_source_id(sample_name)]]
+
+    def uses_full_datasets(self):
+        """True if any train/validation/test sample is a general *_full dataset."""
+        return any(name.endswith("_full") for name, _ in self._samples())
 
     def _samples(self):
         """{(name, version)} of the train, validation and test samples."""

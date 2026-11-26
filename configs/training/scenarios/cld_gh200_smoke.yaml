@@ -23,8 +23,8 @@ training:
     tensorboard_step_freq: 1
 common_overrides:
   train_dataset.cld_hits.physical.samples: &samples
-    cld_edm_ttbar_hits:
-      version: "3.2.2"
+    cld_edm_ttbar_full:
+      version: "1.0.0"
       splits: ["1"]
   valid_dataset.cld_hits.physical.samples: *samples
   test_dataset: *samples

@@ -59,24 +59,41 @@ X_HIT_ENERGY = 5
 X_HIT_POS_XY = slice(6, 8)
 X_ELEMTYPE = 0
 
-HIT_FIELDS = ["X_hit_tracker", "X_hit_calo", "ytarget_hit_tracker", "ytarget_hit_calo"]
+HIT_FIELDS = ["X_hit_tracker", "X_hit_calo"]
+# General ("full") view: per-element labels and the cluster-independent target table.
+FULL_FIELDS = [
+    "ylabel_track",
+    "ylabel_cluster",
+    "ylabel_hit_tracker",
+    "ylabel_hit_calo",
+    "target_particles",
+    "target_instances",
+    "target_energy_accounting",
+    "targetjet_full",
+]
 PF_FIELDS = ["X_track", "X_cluster", "ytarget_track", "ytarget_cluster"]
 YCAND_FIELDS = ["ycand_track", "ycand_cluster"]
-REQUIRED_FIELDS = HIT_FIELDS + ["genmet", "genjet", "targetjet"]
-ALL_FIELDS = HIT_FIELDS + PF_FIELDS + YCAND_FIELDS + ["genmet", "genjet", "targetjet"]
+REQUIRED_FIELDS = HIT_FIELDS + FULL_FIELDS + ["genmet", "genjet", "targetjet"]
+ALL_FIELDS = HIT_FIELDS + FULL_FIELDS + PF_FIELDS + YCAND_FIELDS + ["genmet", "genjet", "targetjet"]
 
 X_Y_PAIRS = [
     ("X_track", "ytarget_track"),
     ("X_cluster", "ytarget_cluster"),
-    ("X_hit_tracker", "ytarget_hit_tracker"),
-    ("X_hit_calo", "ytarget_hit_calo"),
+    ("X_track", "ylabel_track"),
+    ("X_cluster", "ylabel_cluster"),
+    ("X_hit_tracker", "ylabel_hit_tracker"),
+    ("X_hit_calo", "ylabel_hit_calo"),
 ]
+# Full target rows of the track/cluster view. Hit targets live in the full view (FULL_FIELDS).
 TARGET_FIELDS = [
     "ytarget_track",
     "ytarget_cluster",
-    "ytarget_hit_tracker",
-    "ytarget_hit_calo",
 ]
+# Columns of the full-view labels (mlpf.data.full_targets.LABEL_FEATURES)
+LABEL_PN = 0
+LABEL_ORIGIN = 2
+PRIMARY_ORIGINS = (1, 2, 3)
+X_HIT_TYPE = 11  # IDEA marks drift-chamber wire hits (position on the wire) with type 1
 
 # PID classes used by the candidate/classifier mapping (postprocessing.py)
 ALLOWED_PIDS = {0, 11, 13, 22, 130, 211}
@@ -457,6 +474,27 @@ class ParquetValidator:
             colors=["#d62728" if v else "#2ca02c" for v in nonfinite.values()],
         )
 
+        # full_view_labels: the TFDS contract of the general dataset
+        from mlpf.heptfds.full_utils.utils import OPTIONAL_EVENT_FIELDS, REQUIRED as FULL_REQUIRED, convert_event
+
+        fields = FULL_REQUIRED | set(OPTIONAL_EVENT_FIELDS.get(self.detector, ()))
+        failures = []
+        for i in range(self.nev_used):
+            try:
+                convert_event({name: self.data[name][i] for name in fields}, self.detector)
+            except (ValueError, KeyError) as error:
+                failures.append(f"event {i}: {error}")
+        gate = self.add_gate(
+            "full_view_labels",
+            "schema",
+            "General (full) view targets and labels",
+            "Every event passes the full-dataset TFDS validation: label alignment, particle and "
+            "instance references, origin codes, labelled targets and closed energy accounting.",
+            f"{len(failures)} of {self.nev_used} events fail" + (f"; first: {failures[0]}" if failures else ""),
+            "PASS" if not failures else "FAIL",
+        )
+        self.text_plot(gate, failures[:10] or ["all events pass"])
+
     def gate_hits(self):
         # particle_labels: target consistency across all categories (noise, reps, PID)
         noise_bad = rep_missing = pid_conflict = 0
@@ -608,6 +646,11 @@ class ParquetValidator:
             "E_hit_sum / E_truth",
         )
         gate.observed += inclusive_note
+        if self.detector == "idea" and gate.status == "FAIL":
+            # IDEA stores separate raw dual-readout Cherenkov and scintillation signals,
+            # not calibrated particle energy.
+            gate.status = "WARN"
+            gate.observed += " (informational for IDEA: raw dual-readout signals are not calibrated energy)"
         self.hist_plot(
             gate,
             ratios_e,
@@ -682,17 +725,17 @@ class ParquetValidator:
             x = self.ev(f, iev)
             if len(x) == 0:
                 continue
-            y = self.ev(f.replace("X_", "ytarget_"), iev)
+            y = self.ev(f.replace("X_", "ylabel_"), iev)
             mask = x[:, X_ELEMTYPE] != 0
             positions.append(x[mask, 6:9])
-            pns.append(y[mask, PN])
+            pns.append(y[mask, LABEL_PN])
         if "X_track" in self.data.fields:
             x = self.ev("X_track", iev)
-            y = self.ev("ytarget_track", iev)
+            y = self.ev("ylabel_track", iev)
             if len(x):
                 mask = x[:, X_ELEMTYPE] != 0
                 positions.append(self._track_display_positions(x, mask))
-                pns.append(y[mask, PN])
+                pns.append(y[mask, LABEL_PN])
         positions = np.concatenate(positions) if positions else np.empty((0, 3))
         pns = np.concatenate(pns) if pns else np.empty(0)
         return positions, pns
@@ -705,34 +748,36 @@ class ParquetValidator:
         # reshape only when the event is empty: the parquet readback drops the column width
         # for zero-row events, while non-empty tables keep their native width (the 15-wide
         # EDM4hep hit layout).
+        # Colors use the full-view particle numbers, shared by hits, tracks and clusters.
         def _hit_ev_pair(fx, fy):
             x, y = self.ev(fx, iev), self.ev(fy, iev)
             if x.size == 0:
                 return (
                     np.zeros((0, len(EDM4HEP.HitFeatures.get_names())), dtype=np.float32),
-                    np.zeros((0, 14), dtype=np.float32),
+                    np.zeros((0, LABEL_ORIGIN + 1), dtype=np.float32),
                 )
             return x, y
 
-        x, y = _hit_ev_pair("X_hit_tracker", "ytarget_hit_tracker")
+        x, y = _hit_ev_pair("X_hit_tracker", "ylabel_hit_tracker")
         mask = x[:, X_ELEMTYPE] != 0
-        pos_trk_h, pn_trk_h = x[mask, 6:9], y[mask, PN]
+        pos_trk_h, pn_trk_h = x[mask, 6:9], y[mask, LABEL_PN]
 
-        x, y = _hit_ev_pair("X_hit_calo", "ytarget_hit_calo")
+        x, y = _hit_ev_pair("X_hit_calo", "ylabel_hit_calo")
         mask = x[:, X_ELEMTYPE] != 0
-        pos_calo_h, pn_calo_h = x[mask, 6:9], y[mask, PN]
+        pos_calo_h, pn_calo_h = x[mask, 6:9], y[mask, LABEL_PN]
 
         if "X_track" in self.data.fields and "X_cluster" in self.data.fields:
             x = self.ev("X_track", iev)
-            y = self.ev("ytarget_track", iev)
-            mask = x[:, X_ELEMTYPE] != 0
-            pos_trk = self._track_display_positions(x, mask)
-            pn_trk = y[mask, PN]
+            y = self.ev("ylabel_track", iev)
+            mask = x[:, X_ELEMTYPE] != 0 if len(x) else np.zeros(0, dtype=bool)
+            pos_trk = self._track_display_positions(x, mask) if len(x) else np.empty((0, 3))
+            pn_trk = y[mask, LABEL_PN] if len(x) else np.empty(0)
 
             x = self.ev("X_cluster", iev)
-            y = self.ev("ytarget_cluster", iev)
-            mask = x[:, X_ELEMTYPE] != 0
-            pos_cl, pn_cl = x[mask, 6:9], y[mask, PN]
+            y = self.ev("ylabel_cluster", iev)
+            mask = x[:, X_ELEMTYPE] != 0 if len(x) else np.zeros(0, dtype=bool)
+            pos_cl = x[mask, 6:9] if len(x) else np.empty((0, 3))
+            pn_cl = y[mask, LABEL_PN] if len(x) else np.empty(0)
 
         all_pns = np.concatenate([pn_trk_h, pn_calo_h] + ([pn_trk, pn_cl] if pn_trk is not None else []))
         vmin, vmax = np.min(all_pns), np.max(all_pns)
@@ -856,11 +901,11 @@ class ParquetValidator:
         for i in range(self.nev_used):
             cluster_pos = self._cluster_rep_positions(i)
             x = self.ev("X_hit_calo", i)
-            y = self.ev("ytarget_hit_calo", i)
+            y = self.ev("ylabel_hit_calo", i)
             if len(x) == 0 or len(y) == 0:
                 continue
             mask = x[:, X_ELEMTYPE] != 0
-            pns = y[mask, PN].astype(int)
+            pns = y[mask, LABEL_PN].astype(int)
             pos = x[mask, 6:9]
             for p in np.unique(pns):
                 if p not in cluster_pos:
@@ -902,19 +947,18 @@ class ParquetValidator:
         self.finish_plot(fig, gate)
 
     def _cluster_rep_positions(self, iev):
-        """Map particle_number -> cluster position for cluster target rows."""
+        """Map full-view particle_number -> position of the most energetic cluster it owns."""
         cluster_pos = {}
         x = self.ev("X_cluster", iev)
-        y = self.ev("ytarget_cluster", iev)
+        y = self.ev("ylabel_cluster", iev)
         if len(x) == 0 or len(y) == 0:
             return cluster_pos
-        mask = x[:, X_ELEMTYPE] != 0
-        pns = y[mask, PN].astype(int)
-        pids = y[mask, PID].astype(int)
+        mask = (x[:, X_ELEMTYPE] != 0) & (y[:, LABEL_PN] > 0)
+        pns = y[mask, LABEL_PN].astype(int)
+        energy = x[mask, X_HIT_ENERGY]
         pos = x[mask, 6:9]
-        for p, pid, pp in zip(pns, pids, pos):
-            if pid > 0:
-                cluster_pos[int(p)] = pp
+        for index in np.argsort(energy):  # ascending, so the most energetic cluster is written last
+            cluster_pos[int(pns[index])] = pos[index]
         return cluster_pos
 
     def gate_tracks_clusters(self):
@@ -1773,22 +1817,22 @@ class ParquetValidator:
         calo_results = {"E_truth": [], "E_hit_sum": []}
 
         for iev in tqdm(range(self.nev_used), desc="inclusive hits"):
+            # Full-view targets and labels: one particle numbering for every hit.
             pn_to_truth = {}
-            for f in ["ytarget_track", "ytarget_cluster"]:
-                y = self.ev(f, iev)
-                for row in y:
-                    pn = int(row[PN])
-                    if pn > 0 and row[PID] > 0:
-                        pn_to_truth[pn] = {"pt": row[PT], "energy": row[ENERGY]}
+            for row in self.ev("target_particles", iev):
+                pn_to_truth[int(row[PN])] = {"pt": row[PT], "energy": row[ENERGY]}
 
-            # Tracker hits: circle fit per particle -> pT
+            # Tracker hits: circle fit per particle -> pT. Only hits the particle made itself
+            # (primary origins), excluding drift-chamber wire hits whose position is on the wire.
             x = self.ev("X_hit_tracker", iev)
-            y = self.ev("ytarget_hit_tracker", iev)
+            y = self.ev("ylabel_hit_tracker", iev)
             if len(x) and len(y):
-                mask = x[:, X_ELEMTYPE] != 0
+                mask = (x[:, X_ELEMTYPE] != 0) & np.isin(y[:, LABEL_ORIGIN].astype(int), PRIMARY_ORIGINS)
+                if self.detector == "idea":
+                    mask &= x[:, X_HIT_TYPE] == 0
                 if np.any(mask):
                     pos = x[mask, X_HIT_POS_XY]
-                    pns = y[mask, PN]
+                    pns = y[mask, LABEL_PN]
                     for pn in np.unique(pns):
                         if pn == 0 or pn not in pn_to_truth:
                             continue
@@ -1811,12 +1855,12 @@ class ParquetValidator:
 
             # Calo hits: energy sum per particle
             x = self.ev("X_hit_calo", iev)
-            y = self.ev("ytarget_hit_calo", iev)
+            y = self.ev("ylabel_hit_calo", iev)
             if len(x) and len(y):
                 mask = x[:, X_ELEMTYPE] != 0
                 if np.any(mask):
                     e_calo = x[mask, X_HIT_ENERGY]
-                    pns = y[mask, PN]
+                    pns = y[mask, LABEL_PN]
                     for pn in np.unique(pns):
                         if pn == 0 or pn not in pn_to_truth:
                             continue

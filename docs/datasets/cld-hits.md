@@ -1,21 +1,21 @@
 # CLD hits
 
-CLD hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4hep production at 365 GeV. The schema version is **3.3.0**, and the standard hit recipe is `pyg-cld-hits-v1`. Hit reconstruction is a research workflow.
+CLD hit datasets contain tracker and calorimeter measurements from Key4HEP/EDM4hep production at 365 GeV. Hits are part of the [general datasets](full.md) `cld_edm_<process>_full` (version **1.0.0**), together with tracks, clusters and per-element truth labels. The hit recipes are `pyg-cld-hits-heptv2-set-v1` (recommended) and `pyg-cld-hits-heptv2-sector-set-v1`. Hit reconstruction is a research workflow.
 
 ## Physics samples
 
 | Physics sample | TFDS dataset | Training selection |
 |---|---|---|
-| Top-quark pairs | `cld_edm_ttbar_hits` | Included in default recipe |
-| Fully hadronic WW | `cld_edm_ww_fullhad_hits` | Included in default recipe |
-| Inclusive quark pairs | `cld_edm_qq_hits` | Included in default recipe |
-| Z→qq (91 GeV) | `cld_edm_z_qq_hits` | Additional builder; outside default recipe |
-| Z→tautau (91 GeV) | `cld_edm_z_tautau_hits` | Additional builder; outside default recipe |
-| ZZ | `cld_edm_zz_hits` | Additional builder; outside default recipe |
+| Top-quark pairs | `cld_edm_ttbar_full` | Included in default recipe |
+| Fully hadronic WW | `cld_edm_ww_fullhad_full` | Included in default recipe |
+| Inclusive quark pairs | `cld_edm_qq_full` | Included in default recipe |
+| Z→qq (91 GeV) | `cld_edm_z_qq_full` | Produced; outside default recipe |
+| Z→tautau (91 GeV) | `cld_edm_z_tautau_full` | Produced; outside default recipe |
+| ZZ and the 240/365 GeV tau samples | `cld_edm_<process>_full` | Additional builders; not produced by default |
 
-Recipes configure partitions 1--10. Version 3.3.0 is not yet on the Hub, which has 3.2.2 for `ttbar`, `WW`, and `qq` (see the [catalog](catalog.md#published-availability)); produce 3.3.0 with the [Key4hep v1.4.0 production](key4hep-50k.md).
+Recipes configure partitions 1--10. The general datasets are not yet on the Hub (see the [catalog](catalog.md#published-availability)); produce them with the [Key4hep v1.4.0 production](key4hep-50k.md).
 
-For CLD particle-set studies, the recommended research preset is `pyg-cld-hits-heptv2-set-v1`; see the [evidence and recommendation](../studies/cld_hit_results.md).
+See the [evidence and recommendation](../studies/cld_hit_results.md) for the HEPTv2 set model.
 
 ## Event view
 
@@ -32,4 +32,4 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 
 ## Production and related inputs
 
-Follow [shared Key4HEP production](key4hep.md) through strict Parquet validation, then use `PROD=cld pixi run tfds_hit`. The [hit overview](hit-based.md) explains row targets, placeholder baseline candidates, decoding checks, and memory requirements. Use [CLD tracks and clusters](cld.md) for the reconstructed-object representation.
+Follow [shared Key4HEP production](key4hep.md) through strict Parquet validation, then use `PROD=cld pixi run tfds_full` to build the [general datasets](full.md) (`cld_edm_<process>_full`), which contain the raw hits together with tracks, clusters and truth labels. They replace the `cld_edm_<process>_hits` builders. The [hit overview](hit-based.md) explains row targets, placeholder baseline candidates, decoding checks, and memory requirements. Use [CLD tracks and clusters](cld.md) for the reconstructed-object representation.

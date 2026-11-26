@@ -70,20 +70,19 @@ The scenario directory also holds historical and single-study recipes. These are
 
 | Scenario | Purpose |
 |---|---|
-| `release_checkpoints` | Reference checkpoints for each release: CLD, CLIC, ColliderML PU0 (tracks/clusters and hits) and CMS, attention and HEPTv2, 100k OneCycle steps. Train each release from its tag with the scenario unchanged. |
-| `clic_cld_backbone_benchmark` | CLIC/CLD × tracks-and-clusters/hits × attention/HEPTv2 at matched event exposure |
+| `release_checkpoints` | Reference checkpoints for each release: CLD, CLIC, ColliderML PU0 and CMS track/cluster models with attention and HEPTv2, and CLD and CLIC HEPTv2 hit models, 100k OneCycle steps. Train each release from its tag with the scenario unchanged. |
 | `cms_backbone_comparison` | CMS attention vs HEPTv2 on TFDS 2.8.0 for 320k steps ([rationale](../studies/cms_training_exposure.md)) |
 | `cms_input_normalization`, `colliderml_input_normalization` | Same model with and without [input normalization](train.md#input-normalization) |
 | `pf_fm_experts`, `pf_fm_joint`, `pf_fm_finetuning` | Per-detector attention experts, one joint CLD+CLIC+ColliderML model, and fine-tuning of the joint model on IDEA or CLD granularity variants |
 | `cld_clic_colliderml_feature_bag` | Joint training with and without the shared [feature bag](train.md#train-on-several-detectors) |
 | `cld_pf_heptv2_default_50k` | Training recipe for the recommended CLD hit-set model `pyg-cld-hits-heptv2-set-v1` |
-| `cld_backbone_benchmark` | Fixed recipe for [portable GPU benchmarks](benchmark-portability.md) |
+| `cld_hits_heptv2_benchmark` | Fixed recipe for [portable GPU benchmarks](benchmark-portability.md) |
 
 The [scenario README](https://github.com/jpata/particleflow/blob/main/configs/training/README.md) lists every scenario with its recipe, data versions, and platform requirements, including the study scenarios whose results are in the [research notes](../studies/index.md).
 
 ## Release checkpoints
 
-`release_checkpoints` is trained from each release tag without changes, so that checkpoints of consecutive releases differ only in code. It covers CLD, CLIC, and ColliderML PU0 (tracks/clusters and hits) and CMS, each with attention and HEPTv2, for 100,000 OneCycle steps without early stopping. Track/cluster models use input normalization.
+`release_checkpoints` is trained from each release tag without changes, so that checkpoints of consecutive releases differ only in code. It covers CLD, CLIC, ColliderML PU0, and CMS track/cluster models, each with attention and HEPTv2, and CLD and CLIC hit models with HEPTv2 on the [general datasets](../datasets/full.md), for 100,000 OneCycle steps without early stopping. Track/cluster models use input normalization.
 
 v3.3.0 is the first release with this recipe. Relative to the v3.2.0 checkpoints (CLD/CLIC 50k steps, CMS 100k, cosine decay), the schedule, the CLD/CLIC step count, the [CMS batches](../studies/cms_training_exposure.md), and input normalization changed, and ColliderML is new, so a v3.2.0 → v3.3.0 difference mixes code and recipe changes. Re-evaluate older checkpoints with the current evaluation code on the same test events before comparing physics metrics.
 
@@ -93,7 +92,7 @@ Before a full release run, smoke-test variants that have not been trained with t
 uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/release_checkpoints.yaml \
   --platform configs/training/platforms/lumi_mi250x.yaml \
-  --variant colliderml_hits_heptv2 --set num_steps=200 --set val_freq=100 \
+  --variant cld_hits_heptv2 --set num_steps=200 --set val_freq=100 \
   --experiments-dir /tmp/release_smoke
 ```
 

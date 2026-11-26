@@ -20,8 +20,10 @@ Backend and loader differences must stay explicit. Forcing NVIDIA and AMD to use
 identical kernels would defeat portability. Conversely, letting a profile change
 BF16 to FP32 or the warmup interval would silently change the experiment. The
 sweep rejects conflicting precision, compilation and recorder overrides. The
-canonical recipe is `configs/training/scenarios/cld_backbone_benchmark.yaml`.
-The GH200-named and H100-3.2.1 scenarios remain frozen historical recipes.
+canonical recipe is `configs/training/scenarios/cld_hits_heptv2_benchmark.yaml`
+(HEPTv2 set hit model on `cld_edm_ttbar_full` 1.0.0, config 1). Create the data manifest
+from the reference copy as described in the [site setup](hpc-batch-sweep.md). The earlier attention/HEPTv2 benchmark scenarios were removed
+with the attention hit recipes; their definitions remain in the git history.
 
 ## Run on an existing or new platform
 
@@ -50,7 +52,7 @@ python -m scripts.training.submit_batch_sweep \
   --platform configs/training/platforms/flatiron_h100_benchmark.yaml \
   --python-wrapper scripts/flatiron/batch_python.sh \
   --dry-run \
-  --data-manifest configs/training/data/cld_ttbar_hits_config1_3.2.2.json \
+  --data-manifest cld_ttbar_full_config1_1.0.0.json \
   --require-clean-git
 ```
 
@@ -91,7 +93,7 @@ batch 8, inspect completion and telemetry coverage, then run the full grid.
 
 ## Qualification
 
-After the [site environment setup](hpc-batch-sweep.md), qualify both backbones at
+After the [site environment setup](hpc-batch-sweep.md), qualify the HEPTv2 hit model at
 batch 8 before using the full grid. Run the submitter in the prepared environment;
 for GH200 that requires an ARM allocation. Select the profile and adapter together:
 
@@ -99,7 +101,7 @@ for GH200 that requires an ARM allocation. Select the profile and adapter togeth
 python -m scripts.training.submit_batch_sweep \
   --platform configs/training/platforms/flatiron_h100_benchmark.yaml \
   --python-wrapper scripts/flatiron/batch_python.sh \
-  --data-manifest configs/training/data/cld_ttbar_hits_config1_3.2.2.json \
+  --data-manifest cld_ttbar_full_config1_1.0.0.json \
   --require-clean-git --batch-sizes 8 --steps 20 --warmup 2
 ```
 

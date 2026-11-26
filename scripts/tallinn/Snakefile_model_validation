@@ -18,8 +18,8 @@ DATASET = "cms_pf_ttbar"
 PRODUCTION = "cms_run3"
 DATASET_VERSION = "3.0.0"
 
-#MODEL_NAME = "pyg-cld-hits-v1"
-#DATASET = "cld_edm_ttbar_hits"
+#MODEL_NAME = "pyg-cld-hits-heptv2-set-v1"
+#DATASET = "cld_edm_ttbar_full"
 #PRODUCTION = "cld"
 
 PF_SITE = os.environ.get("PF_SITE", "tallinn")

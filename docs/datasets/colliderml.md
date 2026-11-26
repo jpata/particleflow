@@ -34,7 +34,7 @@ See [event-view conventions](event-displays.md) for particle sources, sampling a
 
 At Flatiron, `scripts/flatiron/colliderml_process_samples.sh` submits the whole chain as dependent Slurm jobs per sample (download, conversion of all 1,000 shards, one TFDS build per configuration). Every step is resumable; run it with `--dry-run` first. Downloads are deliberately bandwidth-limited.
 
-For a local check, `scripts/local_test_colliderml.sh` converts an offline synthetic fixture and trains two CPU steps, and `scripts/local_test_colliderml_real.sh` converts and trains on 1,000 real events; see the [detector-comparison runbook](../validation/detector-comparison.md). [ColliderML hit datasets](colliderml-hits.md) use separate builders and recipes.
+For a local check, `scripts/local_test_colliderml.sh` converts an offline synthetic fixture and trains two CPU steps, and `scripts/local_test_colliderml_real.sh` converts and trains on 1,000 real events; see the [detector-comparison runbook](../validation/detector-comparison.md). The [general ColliderML datasets](colliderml-hits.md) add raw hits and truth labels.
 
 ## Target assignment
 

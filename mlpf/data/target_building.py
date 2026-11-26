@@ -11,7 +11,7 @@
 #     (ColliderML runs anti-kt R=0.4; key4hep ee runs ee_genkt)
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import awkward
 import fastjet
@@ -58,6 +58,9 @@ class EventData:
     genparticle_to_track: SparseMatrixCOO  # sparse COO matrix of genparticles to tracks (idx_gp, idx_track, weight)
     hit_to_cluster: SparseMatrixCOO  # sparse COO matrix of hits to clusters (idx_hit, idx_cluster, weight)
     gp_merges: Tuple[np.ndarray, np.ndarray]  # sparse COO matrix of any merged genparticles
+    # Optional direct (not ancestor-propagated) truth links for the full dataset view,
+    # see mlpf.data.full_targets.TruthLinks. Not used by track/cluster target building.
+    truth: Optional[Any] = None
 
     def __post_init__(self):
         self.genparticle_to_hit = (

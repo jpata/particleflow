@@ -33,13 +33,13 @@ rule gen:
         "touch {output}"
 
 rule gen_task:
-    threads: 4
+    threads: 1
     params:
         workspace='/local/joosep/mlpf/idea/v1.4.0/50k'
     output:
         "snakemake_jobs/idea/gen/gen_{sample}_{seed}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=48000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=4, threads=4
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=36000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/home/joosep/particleflow/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     shell:

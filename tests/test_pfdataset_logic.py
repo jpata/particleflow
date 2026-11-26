@@ -112,49 +112,19 @@ class TestTFDSDataSource(unittest.TestCase):
         self.assertEqual(ret["ytarget"].shape[0], 4)
         self.assertEqual(ret["X"][1, 0], 0)  # Padded with zero
 
-    def test_compact_set_target_extraction(self):
-        ytarget = np.zeros((4, 14), dtype=np.float32)
-        ytarget[0, [0, 2, 5, 6, 13]] = [1, 20.0, 1.0, 40.0, 1]
-        ytarget[1, 13] = 1  # related hit carrying only particle_number
-        ytarget[2, [0, 2, 5, 6, 13]] = [2, 5.0, 1.0, 8.0, 2]
-        data = {
-            "X": np.array(
-                [
-                    [1, 10.0, 0.0, 0.0, 1.0, 10.0],
-                    [1, 8.0, 0.0, 0.0, 1.0, 8.0],
-                    [2, 4.0, 0.0, 0.0, 1.0, 4.0],
-                    [2, 1.0, 0.0, 0.0, 1.0, 1.0],
-                ],
-                dtype=np.float32,
-            ),
-            "ytarget": ytarget,
-            "ycand": np.zeros_like(ytarget),
-        }
-        ds = TFDSDataSource(MockTFDS([data], name="cld_hits"), sort=False, build_target_set=True)
-
-        ret = ds[0]
-
-        self.assertEqual(ret["ytarget_set"].shape, (2, 14))
-        np.testing.assert_array_equal(ret["ytarget_set"][:, 0], [1, 2])
-        np.testing.assert_array_equal(ret["ytarget_set"][:, 13], [1, 2])
-        np.testing.assert_allclose(ret["ytarget_set"][:, 2], np.log([20.0, 5.0]))
-        np.testing.assert_allclose(ret["ytarget_set"][:, 6], np.log([40.0, 8.0]))
-        self.assertAlmostEqual(ret["ytarget"][0, 2], np.log(2.0))
-
-    def test_compact_set_target_rejects_duplicate_particle_numbers(self):
+    def test_set_mode_requires_general_dataset(self):
+        # Old-style hit examples (one full target row per particle on a representative hit)
+        # are no longer supported: set-mode targets come from the *_full target table.
         ytarget = np.zeros((2, 14), dtype=np.float32)
-        ytarget[:, 0] = [1, 2]
-        ytarget[:, 2] = [1.0, 2.0]
-        ytarget[:, 6] = [1.0, 2.0]
-        ytarget[:, 13] = 1
+        ytarget[0, [0, 2, 5, 6, 13]] = [1, 20.0, 1.0, 40.0, 1]
         data = {
-            "X": np.array([[1, 1, 0, 0, 1, 1], [2, 2, 0, 0, 1, 2]], dtype=np.float32),
+            "X": np.array([[1, 10.0, 0.0, 0.0, 1.0, 10.0], [2, 4.0, 0.0, 0.0, 1.0, 4.0]], dtype=np.float32),
             "ytarget": ytarget,
             "ycand": np.zeros_like(ytarget),
         }
-        ds = TFDSDataSource(MockTFDS([data], name="cld_hits"), sort=False, build_target_set=True)
+        ds = TFDSDataSource(MockTFDS([data], name="cld_edm_ttbar_hits"), sort=False, build_target_set=True)
 
-        with self.assertRaisesRegex(ValueError, "unique, nonzero particle_number"):
+        with self.assertRaisesRegex(ValueError, "requires a general \\*_full dataset"):
             ds[0]
 
 

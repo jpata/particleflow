@@ -36,12 +36,12 @@ MIXED_DATA_DIR=${MIXED_DATA_DIR:-${TMPDIR:-/tmp}/particleflow_dedicated_hits_tfd
 CLEAN_SPEC_FILE=${CLEAN_SPEC_FILE:-${TMPDIR:-/tmp}/particleflow_hit_training_spec_${SLURM_JOB_ID}.yaml}
 
 mkdir -p "$MIXED_DATA_DIR" logs
-ln -sfn "$CLD_DATA_DIR/cld_edm_ttbar_hits" "$MIXED_DATA_DIR/cld_edm_ttbar_hits"
-ln -sfn "$CLD_DATA_DIR/cld_edm_qq_hits" "$MIXED_DATA_DIR/cld_edm_qq_hits"
-ln -sfn "$CLD_DATA_DIR/cld_edm_ww_fullhad_hits" "$MIXED_DATA_DIR/cld_edm_ww_fullhad_hits"
-ln -sfn "$CLIC_DATA_DIR/clic_edm_ttbar_hits" "$MIXED_DATA_DIR/clic_edm_ttbar_hits"
-ln -sfn "$CLIC_DATA_DIR/clic_edm_qq_hits" "$MIXED_DATA_DIR/clic_edm_qq_hits"
-ln -sfn "$CLIC_DATA_DIR/clic_edm_ww_fullhad_hits" "$MIXED_DATA_DIR/clic_edm_ww_fullhad_hits"
+ln -sfn "$CLD_DATA_DIR/cld_edm_ttbar_full" "$MIXED_DATA_DIR/cld_edm_ttbar_full"
+ln -sfn "$CLD_DATA_DIR/cld_edm_qq_full" "$MIXED_DATA_DIR/cld_edm_qq_full"
+ln -sfn "$CLD_DATA_DIR/cld_edm_ww_fullhad_full" "$MIXED_DATA_DIR/cld_edm_ww_fullhad_full"
+ln -sfn "$CLIC_DATA_DIR/clic_edm_ttbar_full" "$MIXED_DATA_DIR/clic_edm_ttbar_full"
+ln -sfn "$CLIC_DATA_DIR/clic_edm_qq_full" "$MIXED_DATA_DIR/clic_edm_qq_full"
+ln -sfn "$CLIC_DATA_DIR/clic_edm_ww_fullhad_full" "$MIXED_DATA_DIR/clic_edm_ww_fullhad_full"
 ls -al $MIXED_DATA_DIR
 
 uv run python3 scripts/tallinn/l40/make_hit_training_spec.py "$SPEC_FILE" "$CLEAN_SPEC_FILE"
@@ -77,19 +77,9 @@ COMMON_ARGS=(
     --pad_to_multiple_elements "$PAD_TO_MULTIPLE_ELEMENTS"
     --sampler_mode interleaved-shards
     --validation_diagnostics_batches "$VALIDATION_DIAGNOSTICS_BATCHES"
-    --test-datasets cld_edm_ttbar_hits clic_edm_ttbar_hits
+    --test-datasets cld_edm_ttbar_full clic_edm_ttbar_full
 )
 
 uv run python3 mlpf/pipeline.py \
     "${COMMON_ARGS[@]}" \
-    --model.attention.use_jagged_attention True \
-    --model.attention.use_flash_attn_varlen False \
-    --pad_to_multiple_elements 100 \
-    --model.backbone.mode shared \
-    --model.backbone.num_convs 6 \
-    --model.backbone.num_tracker_layers 2 \
-    --model.backbone.num_calo_layers 2 \
-    --model.backbone.num_common_layers 2 \
-    --model.type attention \
-    --model.task_queries false \
-    --lr 0.0005
+    --model.heptv2.activation_checkpointing true

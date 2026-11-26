@@ -177,8 +177,6 @@ def main():
         "cms": "cms_pf_ttbar",
         "cld": "cld_edm_ttbar_pf",
         "clic": "clic_edm_ttbar_pf",
-        "cld_hits": "cld_edm_ttbar_hits",
-        "clic_hits": "clic_edm_ttbar_hits",
     }
     onnx_dataset = dataset_map.get(detector, "cms_pf_ttbar")
     tfds_dir = os.path.join(workspace_dir, "tfds")

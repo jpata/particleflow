@@ -18,7 +18,8 @@ os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
 
 rule all:
     input:
-        "snakemake_jobs/ild/train/train_pyg-ild-v1_ild.done"
+        "snakemake_jobs/ild/train/train_pyg-ild-v1_ild.done",
+        "snakemake_jobs/ild/train/train_pyg-ild-key4hep-v140_ild.done"
 
 rule train_pyg_ild_v1:
     input:
@@ -32,3 +33,16 @@ rule train_pyg_ild_v1:
         "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:
         "snakemake_jobs/ild/train/train_pyg-ild-v1_ild.sh && touch {output}"
+
+rule train_pyg_ild_key4hep_v140:
+    input:
+        "snakemake_jobs/ild/tfds/all.done"
+    output:
+        "snakemake_jobs/ild/train/train_pyg-ild-key4hep-v140_ild.done"
+    threads: 16
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=40000, slurm_partition="gpu", runtime=10080, slurm_account="hepusers", gres="gpu:l40:1", cpus_per_task=16, threads=16
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/ild/train/train_pyg-ild-key4hep-v140_ild.sh && touch {output}"

@@ -26,4 +26,4 @@ def test_cld_guns_remain_available_manually_and_outside_dataset_campaign():
         assert f"gun_{particle}_*" in script
     assert GUN_SAMPLES.isdisjoint(cld["samples"])
     assert GUN_SAMPLES.isdisjoint(cld["tfds_mapping"])
-    assert GUN_SAMPLES.isdisjoint(cld["tfds_hit_mapping"])
+    assert GUN_SAMPLES.isdisjoint(cld["tfds_full_mapping"])

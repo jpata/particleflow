@@ -8,7 +8,7 @@ from scripts.local.plot_training_evolution import load_history, plot_training_ev
 def test_load_and_plot_training_evolution(tmp_path):
     history_dir = tmp_path / "history"
     history_dir.mkdir()
-    metric_prefix = "step/cld_edm_ttbar_hits/jet_ratio/jet_ratio_target_to_pred_pt/"
+    metric_prefix = "step/cld_edm_ttbar_full/jet_ratio/jet_ratio_target_to_pred_pt/"
     for step, loss in [(4000, 0.8), (2000, 1.0)]:
         data = {
             "train": {"Total": loss},
@@ -19,7 +19,7 @@ def test_load_and_plot_training_evolution(tmp_path):
         }
         (history_dir / f"step_{step}.json").write_text(json.dumps(data))
 
-    history = load_history(history_dir, "cld_edm_ttbar_hits")
+    history = load_history(history_dir, "cld_edm_ttbar_full")
 
     np.testing.assert_array_equal(history["step"], [2000, 4000])
     np.testing.assert_allclose(history["train_loss"], [1.0, 0.8])

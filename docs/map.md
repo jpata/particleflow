@@ -22,7 +22,8 @@ Where to find each part of the code. Run Python entry points from the repository
 | `mlpf/data/key4hep/` | Key4HEP generation configurations (`gen/`) and `postprocessing.py` (EDM4hep → Parquet) for CLD, CLIC, IDEA, and MAIA |
 | `mlpf/data/colliderml/` | ColliderML reader, track features, truth, calorimeter clustering (`clue.py`, `radius_graph.py`), and `postprocessing.py` |
 | `mlpf/data/target_building.py` | Shared target allocator: assignment rules (greedy, `majority_energy`), merging, and energy accounting |
-| `mlpf/heptfds/` | TFDS builders: `<detector>_pf*` for tracks and clusters, `*_hits` for hits, shared helpers in `edm4hep_utils/` and `colliderml_utils/` |
+| `mlpf/data/full_targets.py` | Cluster-independent target table and per-element particle, instance, and origin labels of the [general datasets](datasets/full.md) |
+| `mlpf/heptfds/` | TFDS builders: `<detector>_pf*` for tracks and clusters, `<detector>_full` for the general datasets with tracks, clusters, and hits; shared helpers in `edm4hep_utils/`, `colliderml_utils/`, and `full_utils/` |
 | `scripts/cld_ecal_readout/` | CLD calorimeter granularity scan geometries and conversion; see `GRANULARITY_SCAN.md` |
 | `scripts/flatiron/colliderml_*.sh` | ColliderML download, conversion, and TFDS chain on Slurm |
 | `scripts/tfds_webdav*.py`, `upload_hf.py` | [Grid WebDAV transfer](datasets/webdav.md) and Hugging Face publication |
@@ -40,6 +41,7 @@ Where to find each part of the code. Run Python entry points from the repository
 | `mlpf/model/set_decoder.py`, `set_losses.py` | Particle-set decoder, Hungarian matching, hit grouping |
 | `mlpf/model/tracker_*.py` | Optional tracker features, momentum readout, circle-fit readout, and fit losses for hit models |
 | `mlpf/model/PFDataset.py` | TFDS loading, padding, samplers, and weighted mixing of dataset groups |
+| `mlpf/model/full_view.py` | Selection of element kinds (`full_elements`) from the general datasets at load time |
 | `mlpf/model/training.py`, `losses.py` | Training loop (single GPU, DDP, Ray), checkpointing, losses |
 | `mlpf/model/inference.py`, `plots.py`, `validation_metrics.py` | Test-time prediction, particle and jet plots, validation metrics |
 | `mlpf/model/reconstruction_diagnostics.py`, `validation_probes.py`, `*_probe.py` | Optional diagnostics and frozen-embedding probes for hit-model studies |

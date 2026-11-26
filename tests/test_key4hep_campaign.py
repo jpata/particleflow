@@ -66,7 +66,7 @@ def test_campaign_event_budget_and_builder_versions(tmp_path, monkeypatch):
             assert settings["events_per_job"] == EVENTS_PER_SHARD
             assert last - first == SHARDS_PER_SAMPLE[detector]
             total += count
-        for kind in ("tfds_mapping", "tfds_hit_mapping"):
+        for kind in ("tfds_mapping", "tfds_full_mapping"):
             for sample, settings in production.get(kind, {}).items():
                 module = importlib.import_module(settings["builder_path"].replace("/", "."))
                 classes = [
@@ -77,7 +77,7 @@ def test_campaign_event_budget_and_builder_versions(tmp_path, monkeypatch):
                 assert len(classes) == 1
                 builder = classes[0](config="1", data_dir=tmp_path / "tfds")
                 assert str(builder.version) == settings["version"]
-                assert settings["version"] == ("3.3.0" if kind == "tfds_hit_mapping" else VERSIONS[detector])
+                assert settings["version"] == ("1.0.0" if kind == "tfds_full_mapping" else VERSIONS[detector])
     assert total == 800000
 
 
@@ -178,43 +178,6 @@ def test_new_z_dataset_arrayrecord_roundtrip(tmp_path, detector):
     assert example["X"].shape == (1, 19)
     assert example["ytarget"].shape == (1, 14)
     assert example["ytarget"][0, 0] == 1  # charged-hadron class, rather than a raw PDG ID
-
-
-@pytest.mark.parametrize("detector", ("cld", "clic"))
-def test_z_hit_dataset_arrayrecord_roundtrip(tmp_path, detector):
-    import awkward as ak
-    import numpy as np
-    import tensorflow_datasets as tfds
-    from mlpf.heptfds.edm4hep_utils.utils_hits import X_FEATURES, Y_FEATURES
-    from tests.test_ild_pipeline import write_event
-
-    manual = tmp_path / "manual"
-    directory = manual / "p8_ee_Z_tautau_ecm91"
-    directory.mkdir(parents=True)
-    for index in range(100):
-        path = directory / f"seed{index:03d}.parquet"
-        write_event(path)
-        data = ak.from_parquet(path)
-        fields = {name: data[name] for name in data.fields}
-        fields.update(
-            {
-                "X_hit_tracker": ak.Array([np.ones((1, len(X_FEATURES)), dtype=np.float32)]),
-                "X_hit_calo": ak.Array([np.zeros((0, len(X_FEATURES)), dtype=np.float32)]),
-                "ytarget_hit_tracker": data.ytarget_track,
-                "ytarget_hit_calo": data.ytarget_cluster,
-            }
-        )
-        ak.to_parquet(ak.Record(fields), path)
-    module = importlib.import_module(f"mlpf.heptfds.{detector}_pf_edm4hep_hits.z_tautau")
-    cls = next(c for c in vars(module).values() if isinstance(c, type) and c.__module__ == module.__name__)
-    builder = cls(config="1", data_dir=tmp_path / "tfds")
-    builder.download_and_prepare(download_config=tfds.download.DownloadConfig(manual_dir=manual))
-    assert builder.info.splits["train"].num_examples == 9
-    assert builder.info.splits["test"].num_examples == 1
-    example = builder.as_data_source(split="test")[0]
-    assert example["X"].shape == (1, len(X_FEATURES))
-    assert example["ytarget"].shape == (1, len(Y_FEATURES))
-    assert not example["ycand"].any()
 
 
 def test_smoke_graph_runs_ten_generation_jobs_per_sample(tmp_path, monkeypatch):

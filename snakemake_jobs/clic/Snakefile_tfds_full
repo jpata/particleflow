@@ -1,0 +1,47 @@
+import os
+
+os.environ["GOTO_NUM_THREADS"]="1"
+os.environ["MKL_NUM_THREADS"]="1"
+os.environ["NUMEXPR_NUM_THREADS"]="1"
+os.environ["OMP_NUM_THREADS"]="1"
+os.environ["OPENBLAS_NUM_THREADS"]="1"
+os.environ["VECLIB_MAXIMUM_THREADS"]="1"
+os.environ["PYTHONNOUSERSITE"]="1"
+os.environ["TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["TEMP"]="/scratch/local/joosep/tmp"
+os.environ["TMP"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["APPTAINER_CACHEDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_TMPDIR"]="/scratch/local/joosep/tmp"
+os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
+
+rule all:
+    input:
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_ttbar_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_ww_fullhad_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_z_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_z_tautau_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+rule tfds_full_task:
+    input:
+        "snakemake_jobs/clic/post/post_{sample}_all.done"
+    params:
+        workspace='/local/joosep/mlpf/clic/v1.4.0/50k', versions={'ttbar': '1.0.0', 'ww_fullhad': '1.0.0', 'qq': '1.0.0', 'z_qq': '1.0.0', 'z_tautau': '1.0.0'}
+    output:
+        "snakemake_jobs/clic/tfds_full/tfds_full_{sample}_tfds_full_{config}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/clic/tfds_full/tfds_full_{wildcards.sample}.sh {wildcards.config} && touch {output}"
+
+rule tfds_full:
+    input:
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_ttbar_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_full/tfds_full_ww_fullhad_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_full/tfds_full_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_full/tfds_full_z_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_full/tfds_full_z_tautau_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    output:
+        "snakemake_jobs/clic/tfds_full/all.done"
+    shell:
+        "touch {output}"

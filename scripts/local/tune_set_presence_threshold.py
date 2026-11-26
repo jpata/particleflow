@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--data-dir", type=Path, required=True)
-    parser.add_argument("--sample", default="cld_edm_ttbar_hits")
+    parser.add_argument("--sample", default="cld_edm_ttbar_full")
     parser.add_argument("--split-config", default="10")
     parser.add_argument("--dataset-split", default="test")
     parser.add_argument("--num-events", type=int, default=512)

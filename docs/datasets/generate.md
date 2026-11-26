@@ -15,7 +15,7 @@ builds five samples per detector in one Slurm workflow.
 | Simulation | `pixi run gen` | Production sample and detector configuration | ROOT/EDM files below `gen/` | Expected files exist and generation logs finish successfully |
 | Postprocessing | `pixi run post` | Generated ROOT/EDM files | CMS pickle or Key4HEP Parquet below `post/` | Files open; for CLD/CLIC, strict Parquet validation passes |
 | TFDS, track/cluster | `pixi run tfds` | Postprocessed files | Versioned TFDS directories below `tfds/` | Builder metadata and one event can be read |
-| TFDS, hits | `pixi run tfds_hit` | Key4HEP Parquet containing hit fields | Versioned hit TFDS below `tfds/` | Metadata/event read plus hit validation passes |
+| TFDS, general | `pixi run tfds_full` | Postprocessed Parquet for one physics sample | Versioned `*_full` TFDS below `tfds/` | Label alignment, references and energy accounting validate during the build |
 
 Dataset-integrity gates establish the quality of upstream events before a long training run. Training and physics validation then answer downstream model and performance questions.
 
@@ -113,11 +113,21 @@ Build the track-and-cluster representation after the intermediate-data checks pa
 PROD=cld pixi run tfds
 ```
 
-For a CLD or CLIC hit study, the same validated Parquet files supply the hit representation:
+For hit-level studies, the same validated Parquet files supply the general representation:
 
 ```bash
-PROD=cld pixi run tfds_hit
+PROD=cld pixi run tfds_full
 ```
+
+This builds the [general datasets](full.md) (tracks, clusters and hits with truth
+labels) for every sample in the production's `tfds_full_mapping` (CLD, CLIC and
+IDEA). The generated jobs read each sample's `post/<process_name>/` directory and
+split its Parquet files by source file, with separate train and test events.
+ColliderML uses its Flatiron launcher with the `full` view, for example
+`sbatch --array=1-10 scripts/flatiron/colliderml_tfds.sh pu0 /path/to/parquet full`.
+
+Run `PROD=<production> pixi run snakefile` after changing a production workspace
+or merging generator changes, then review the generated scripts before launch.
 
 Adapt the metadata and single-event checks in [Download a dataset](download.md) to the workspace's `tfds/` directory and exact configured version. A successful read is the final dataset-production gate.
 

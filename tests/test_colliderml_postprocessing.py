@@ -1,4 +1,4 @@
-# Unit tests for the ColliderML converter's per-event record (hits view).
+# Unit tests for the ColliderML converter's per-event record (track/cluster and general views).
 import awkward as ak
 import numpy as np
 import pyarrow.compute as pc
@@ -76,7 +76,7 @@ def test_all_pileup_marks_every_target_ispu():
     particles, tracks, calo, tracker = _shared_hits_event()
     for all_pileup, expected in ((False, 0.0), (True, 1.0)):
         rec = _event_record_one(0, particles, tracks, calo, tracker, all_pileup=all_pileup)
-        for key in ("ytarget_track", "ytarget_cluster", "ytarget_hit_calo"):
+        for key in ("ytarget_track", "ytarget_cluster", "target_particles"):
             y = rec[key]
             targets = y[y[:, 0] != 0]
             assert len(targets) and np.all(targets[:, ISPU] == expected), key
@@ -90,23 +90,27 @@ def test_calo_hit_pn_is_largest_contributor():
     particles, tracks, calo, tracker = _shared_hits_event()
     rec = _event_record_one(0, particles, tracks, calo, tracker)
 
-    y = rec["ytarget_hit_calo"]
-    # both photons are kept calo-hosted targets; particle_number follows leaf order (A=1, B=2)
-    assert sorted(y[y[:, 0] != 0, PN].tolist()) == [1.0, 2.0]
-    assert y[:, PN].tolist() == [1.0, 2.0, 1.0, 2.0]
+    labels = rec["ylabel_hit_calo"]
+    # both photons are targets; particle_number follows leaf order (A=1, B=2)
+    assert labels[:, 0].tolist() == [1.0, 2.0, 1.0, 2.0]
+    assert np.all(labels[:, 2] == 1)  # each photon made its own deposits
+    np.testing.assert_allclose(labels[:, 3], [3.0 / 3.1, 2.0 / 2.1, 1.0 / 1.05, 0.8 / 0.85], rtol=1e-5)
 
 
-def test_target_without_calo_claim_falls_back_to_innermost_tracker_hit():
-    # The pi+ has no calo deposit, so its full target row lands on its innermost owned tracker
-    # hit (x=30 mm) while every owned tracker hit carries its particle_number. Tracker-hit
-    # kinematic inputs stay zero: the release has no tracker-hit energy.
+def test_tracker_only_target_and_tracker_hit_labels():
+    # The pi+ has no calo deposit; it is a target through its track and tracker hits, which
+    # all carry its particle number. Tracker-hit kinematic inputs stay zero: the release has
+    # no tracker-hit energy (and no simulated momentum, so the true momentum labels are zero).
     particles, tracks, calo, tracker = _shared_hits_event()
     rec = _event_record_one(0, particles, tracks, calo, tracker)
 
-    x, y = rec["X_hit_tracker"], rec["ytarget_hit_tracker"]
-    assert (y[:, 0] != 0).tolist() == [True, False, False]
-    assert y[:, PN].tolist() == [3.0, 3.0, 3.0]
+    x, labels = rec["X_hit_tracker"], rec["ylabel_hit_tracker"]
+    assert labels[:, 0].tolist() == [3.0, 3.0, 3.0]
+    assert labels[:, 2].tolist() == [1.0, 1.0, 1.0]
+    assert np.all(labels[:, 4:7] == 0.0)
     assert np.all(x[:, 1:6] == 0.0)
+    assert rec["ylabel_track"][0, :3].tolist() == [3.0, labels[0, 1], 1.0]
+    assert rec["target_particles"][2, 0] == 211
 
 
 def test_resume_reconverts_partial_output_and_skips_complete_one(tmp_path):
@@ -121,6 +125,7 @@ def test_resume_reconverts_partial_output_and_skips_complete_one(tmp_path):
     assert rows() == 2
     process_one_file(*paths, ofn)  # a full run must not take the capped file for done
     assert rows() == 3
+    assert "target_particles" in pq.read_schema(ofn).names
     mtime = ofn.stat().st_mtime_ns
     process_one_file(*paths, ofn)  # complete: skipped
     assert ofn.stat().st_mtime_ns == mtime
@@ -282,3 +287,32 @@ def test_pileup_fields_roundtrip_to_tfds(tmp_path):
     np.testing.assert_array_equal(example["genjets_withpu"], rec["genjet_withpu"])
     assert example["genmet"] == rec["genmet"]
     assert example["genmet_withpu"] == rec["genmet_withpu"]
+
+
+def test_full_view_targets_and_accounting():
+    particles, tracks, calo, tracker = _shared_hits_event()
+    rec = _event_record_one(0, particles, tracks, calo, tracker)
+    targets = rec["target_particles"]
+    assert targets[:, PN].tolist() == [1, 2, 3]
+    assert targets[:, 0].tolist() == [22, 22, 211]
+    accounting = rec["target_energy_accounting"]
+    assert np.isclose(accounting[0], accounting[1:].sum()) and np.isclose(accounting[3], targets[:, 6].sum())
+
+
+def test_full_view_parquet_roundtrip_and_tfds_contract(tmp_path):
+    from mlpf.heptfds.full_utils.utils import OPTIONAL_EVENT_FIELDS, REQUIRED, convert_event
+
+    make_fixture(tmp_path / "src", n_events=6)
+    paths = [shard_paths(tmp_path / "src", "ttbar_pu0", obj)[0] for obj in ("particles", "tracks", "calo_hits", "tracker_hits")]
+    ofn = tmp_path / "out" / "shard.parquet"
+    process_one_file(*paths, ofn)
+    mtime = ofn.stat().st_mtime_ns
+    process_one_file(*paths, ofn)
+    assert ofn.stat().st_mtime_ns == mtime
+    result = ak.from_parquet(ofn)
+    fields = REQUIRED | set(OPTIONAL_EVENT_FIELDS["colliderml"])
+    for index in range(len(result["X_track"])):
+        example = convert_event({name: result[name][index] for name in fields}, "colliderml")
+        assert example["X_track"].shape[1] == 17 and example["X_cluster"].shape[1] == 17
+        assert len(example["ylabel_hit_calo"]) == len(example["X_hit_calo"])
+        assert "genmet_withpu" in example and "genjets_withpu" in example

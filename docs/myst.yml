@@ -35,6 +35,7 @@ project:
             - file: datasets/maia.md
             - file: datasets/idea.md
             - file: datasets/ild.md
+        - file: datasets/full.md
         - file: datasets/hit-based.md
           children:
             - file: datasets/cld-hits.md

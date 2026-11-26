@@ -36,6 +36,10 @@ Common options: `--variant NAME` (repeatable; array indices stay those of the fu
 - **LUMI environment.** Submitter and worker run inside the LAIF container (`IMG`) with the overlay `LUMI_VENV` created by `bash scripts/lumi/setup_env.sh`; even `--list` and `--dry-run` need it. For a configuration-only preview, use `run_scenario.py --dry-run`.
 - **Benchmark telemetry.** Off unless `benchmark.enabled=true` (`--set` or a profile runtime override); written to each experiment's `benchmark/` directory. `python -m mlpf.benchmark_report experiments/<scenario>` exports JSON/CSV. See [benchmark portability](../../docs/training/benchmark-portability.md#recorder-artifacts-and-metric-scope).
 
+## Hit-model recipes
+
+All hit-input models use HEPTv2 with the set output on the general `*_full` datasets (`full_elements` selects tracker hits, calorimeter hits, tracks and clusters): `pyg-cld-hits-heptv2-set-v1` (recommended CLD model), `pyg-cld-hits-heptv2-sector-set-v1`, `pyg-clic-hits-heptv2-set-v1`, `pyg-idea-hits-heptv2-set-v1`, `pyg-maia-hits-heptv2-set-v1`, and `pyg-colliderml-hits-heptv2-set-v1`. See [General datasets](../../docs/datasets/full.md). The attention and elementwise hit recipes and the scenarios that compared them were removed; their definitions remain in the git history and their results in the dated study archives.
+
 ## Maintained scenarios
 
 ### `release_checkpoints`
@@ -45,12 +49,11 @@ Reference checkpoints published with each release under `{cld,clic,colliderml}/{
 | Variants | Model | Data | Global batch | GPUs |
 |---|---|---|---:|---|
 | `{cld,clic}_pf_{attention,heptv2}` | `pyg-{cld,clic}-v1` | PF 3.3.0 | 128 | 1 |
-| `{cld,clic}_hits_{attention,heptv2}` | `pyg-{cld,clic}-hits-set-v1` | hits 3.2.2 | 128 | platform |
+| `{cld,clic}_hits_heptv2` | `pyg-{cld,clic}-hits-heptv2-set-v1` | full 1.0.0 (tracker and calorimeter hits) | 128 | platform |
 | `colliderml_pf_{attention,heptv2}` | `pyg-colliderml-v1` | PU0 PF 1.5.0 | 128 | 1 |
-| `colliderml_hits_{attention,heptv2}` | `pyg-colliderml-hits-set-v1` | PU0 hits 1.3.0 | 128 | platform |
 | `cms_{attention,heptv2}` | `pyg-cms-v1` | PU and no-PU 2.8.0 | 96 PU / 768 no-PU | platform |
 
-100,000 steps, OneCycle (30% warm-up), no early stopping. CLD, CLIC and ColliderML follow the backbone benchmark below (LAMB, peak LR 0.001, six layers of width 256, validation on 512 events every 1,000 steps); ColliderML hit models use 512 slots. CMS keeps the `cms_backbone_comparison` model (three layers of width 512, LR 0.0004, validation every 10,000 steps) with the [96/768 batches](../../docs/studies/cms_training_exposure.md). Track/cluster models use input normalization. Checkpoints are written every 1,000 steps (CMS 10,000) and all are kept; hit models need several 48-hour allocations, so resubmit them with `--continue`.
+100,000 steps, OneCycle (30% warm-up), no early stopping. CLD, CLIC and ColliderML use LAMB, peak LR 0.001, six layers of width 256, and validation on 512 events every 1,000 steps. The hit variants apply the decoder settings described in [CLD hit-model campaigns](../../docs/studies/cld_hit_campaigns.md#hit-recipe-in-the-backbone-benchmark); the ColliderML hit variant is defined but commented out. CMS keeps the `cms_backbone_comparison` model (three layers of width 512, LR 0.0004, validation every 10,000 steps) with the [96/768 batches](../../docs/studies/cms_training_exposure.md). Track/cluster models use input normalization. Checkpoints are written every 1,000 steps (CMS 10,000) and all are kept; hit models need several 48-hour allocations, so resubmit them with `--continue`.
 
 ```bash
 scripts/lumi/train_scenario.sh release_checkpoints mi250x --dry-run
@@ -70,16 +73,6 @@ uv run python3 scripts/training/run_scenario.py \
   --scenario configs/training/scenarios/colliderml_heptv2_position_embedding_10k.yaml \
   --platform configs/training/platforms/tallinn_l40.yaml --variant shared
 ```
-
-### `clic_cld_backbone_benchmark`
-
-CLIC/CLD × tracks-and-clusters/hits × attention/HEPTv2 (`{cld,clic}_{pf,hits}_{attention,heptv2}`), from scratch, 50k steps at global batch 128, LAMB, LR 0.001, cosine decay. Both backbones have six layers of width 256 with 16 heads; HEPTv2 uses block size 128 and activation checkpointing. This matches event exposure and width, not parameter count. Track/cluster jobs use one GPU, hit jobs the platform count. The hit recipe is described in [CLD hit-model campaigns](../../docs/studies/cld_hit_campaigns.md#hit-recipe-in-the-backbone-benchmark). The older `clic_cld_pf_set_hits_comparison` keeps its historical attention-only recipe.
-
-```bash
-scripts/flatiron/train_scenario.sh clic_cld_backbone_benchmark h100 --dry-run
-```
-
-The LUMI profile maps one CLD directory for all productions; give it a `data_dir` map with CLD and CLIC roots before running the full benchmark.
 
 ### `cms_backbone_comparison` and `cms_input_normalization`
 
@@ -135,7 +128,7 @@ scripts/lumi/train_scenario.sh cld_pf_heptv2_default_50k mi250x --dry-run
 
 ### Portable benchmarks
 
-`cld_backbone_benchmark` is the fixed recipe for GPU comparisons. Preview a sweep with `python -m scripts.training.submit_batch_sweep --platform <profile.yaml> --dry-run` (add `--python-wrapper` for a site environment adapter). See [benchmark portability](../../docs/training/benchmark-portability.md) and the [site setup](../../docs/training/hpc-batch-sweep.md). `cld_gh200_backbone_benchmark`, `cld_gh200_smoke`, and `cld_h100_backbone_benchmark_321` reproduce the historical v3.2.0 runs; for the EmpireAI GH200 node see [`scripts/empireai/README.md`](../../scripts/empireai/README.md).
+`cld_hits_heptv2_benchmark` (HEPTv2 set hit model) is the fixed recipe for GPU comparisons. Preview a sweep with `python -m scripts.training.submit_batch_sweep --platform <profile.yaml> --dry-run` (add `--python-wrapper` for a site environment adapter). See [benchmark portability](../../docs/training/benchmark-portability.md) and the [site setup](../../docs/training/hpc-batch-sweep.md). `cld_gh200_smoke` runs a short HEPTv2 hit-model smoke test on the EmpireAI GH200 node; see [`scripts/empireai/README.md`](../../scripts/empireai/README.md). The earlier attention/HEPTv2 benchmark scenarios were removed together with the attention hit recipes.
 
 ## Study scenarios
 
@@ -151,6 +144,4 @@ These scenarios define completed or historical studies. They stay unchanged so t
 | `cld_pf_heptv2_tracker_grouping_losses_50k` | [Tracker grouping losses](../../docs/studies/tracker_grouping_loss_experiments.md) |
 | `cld_pf_heptv2_tracker_width_scaling_50k` | [Tracker width scaling](../../docs/studies/tracker_width_scaling.md) |
 | `cld_pf_heptv2_batch512_50k`, `cld_pf_track_cluster_batch6144_{10k,50k}` | [HEPTv2 activation checkpointing](../../docs/studies/heptv2_checkpointing.md) and its large-batch track/cluster counterparts |
-| `cld_pf_heptv2_hit_grouping_50k`, `cld_pf_heptv2_momentum_50k_comparison`, `cld_pf_hit_models_200k_comparison`, `cld_pf_hits_comparison` | Earlier hit-grouping and momentum comparisons; see [CLD hit-model evidence](../../docs/studies/cld_hit_results.md) |
-| `cld_set_hits_{heptv2_sector,improvement,object_formation,query_matching}_comparison`, `cld_hits_{backbone,output}_comparison` | Earlier set-decoder and backbone comparisons |
-| `clic_cld_pf_set_hits_comparison` | Original CLD/CLIC track/cluster vs hit-set comparison |
+| `cld_pf_heptv2_hit_grouping_50k`, `cld_pf_heptv2_momentum_50k_comparison` | Earlier hit-grouping and momentum comparisons; see [CLD hit-model evidence](../../docs/studies/cld_hit_results.md) |
