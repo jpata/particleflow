@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 REPO = Path(__file__).resolve().parents[2]
-ENGINE = "fiducial_gen_response_v1"
+ENGINE = "fiducial_gen_response_v2_full_hgcal"
 
 
 def main():

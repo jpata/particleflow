@@ -13,7 +13,7 @@ import sys
 
 from mlpf.data.cms.postprocessing_truth import process_event, read_events
 
-ENGINE = "fiducial_gen_response_v1"
+ENGINE = "fiducial_gen_response_v2_full_hgcal"
 
 
 def validate_sample(label, run, output, cached_events=None):

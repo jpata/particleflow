@@ -15,7 +15,7 @@ import numpy as np
 from mlpf.data.cms.gen_target_response import ResponseConfig, analyze_event, binned_stats, bootstrap_stats, kinematics
 
 JET_PT_BINS = [20, 30, 50, 80, 120, 200, 350, 600, 1000, 2000]
-JET_ETA_BINS = [0, 0.5, 1, 1.5, 2, 2.6]
+JET_ETA_BINS = [0, 0.5, 1, 1.5, 2, 2.6, 2.8, 3.0, 3.2]
 MET_BINS = [20, 30, 50, 80, 120, 200, 400, 800]
 MET_COMPONENT_BINS = [0, 10, 20, 30, 50, 80, 120, 200, 400, 800]
 
@@ -48,7 +48,7 @@ def jet_plots(events, pairs, bins_pt, bins_eta, output, title):
         curve(ax, bins, "relative_sigma68", log=log, percent=True)
         ax.set(xlabel=xlabel, ylabel="Relative resolution: sigma68 / |median| [%]")
     fig.suptitle(
-        title + "\nMatched anti-kT R=0.4 jets; GEN pT ≥ 20 GeV, target pT ≥ 5 GeV, |eta| < 2.6, dR < 0.2"
+        title + "\nMatched anti-kT R=0.4 jets; GEN pT ≥ 20 GeV, target pT ≥ 5 GeV, |eta| ≤ 3.2, dR < 0.2"
         "\nResolution: sigma68=(Q84−Q16)/2; error bars: event-bootstrap 68% intervals; bins require N≥20"
     )
     fig.savefig(output / "jet_response.png", dpi=160, bbox_inches="tight")
@@ -59,7 +59,7 @@ def jet_plots(events, pairs, bins_pt, bins_eta, output, title):
     maximum = max([j["pt"] for j in gen + target], default=40)
     for collection, name, color in [(gen, "Fiducial GEN status 1", "black"), (target, "New targets", "#1764ab")]:
         axes[0, 0].hist([j["pt"] for j in collection], bins=np.geomspace(20, maximum * 1.01, 35), histtype="step", label=name, color=color)
-        axes[0, 1].hist([j["eta"] for j in collection], bins=np.linspace(-2.6, 2.6, 32), histtype="step", label=name, color=color)
+        axes[0, 1].hist([j["eta"] for j in collection], bins=np.linspace(-3.2, 3.2, 38), histtype="step", label=name, color=color)
     axes[0, 0].set(xscale="log", yscale="log", xlabel="Jet pT [GeV]", ylabel="Jets (both spectra pT ≥ 20 GeV)")
     axes[0, 0].legend()
     axes[0, 1].set(xlabel="Jet eta", ylabel="Jets (both spectra pT ≥ 20 GeV)")
@@ -70,7 +70,7 @@ def jet_plots(events, pairs, bins_pt, bins_eta, output, title):
     axes[1, 1].scatter([p["gen_pt"] for p in pairs], [p["target_pt"] for p in pairs], s=5, alpha=0.25)
     axes[1, 1].plot([5, maximum], [5, maximum], color="0.6", linestyle=":")
     axes[1, 1].set(xscale="log", yscale="log", xlabel="Matched GEN jet pT [GeV]", ylabel="Matched target jet pT [GeV]")
-    fig.suptitle(title + "\nJets clustered independently from visible particles with pT > 0.5 GeV, |eta| < 3 (including electrons/muons)")
+    fig.suptitle(title + "\nJets clustered independently from visible particles with pT > 0.5 GeV, |eta| ≤ 3.2 (including electrons/muons)")
     fig.savefig(output / "jet_distributions.png", dpi=160, bbox_inches="tight")
     plt.close(fig)
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), constrained_layout=True)
@@ -154,7 +154,7 @@ def met_plots(rows, tables, output, title):
     axes[1, 1].scatter([r["gen_met"] for r in rows], [r["target_met"] for r in rows], s=8, alpha=0.4)
     axes[1, 1].plot([0, maximum], [0, maximum], color="0.6", linestyle=":")
     axes[1, 1].set(xlabel="GEN fiducial MET [GeV]", ylabel="Target fiducial MET [GeV]")
-    fig.suptitle(title + "\nFiducial imbalance from visible particles with pT > 0.5 GeV, |eta| < 3; not full-acceptance neutrino MET")
+    fig.suptitle(title + "\nFiducial imbalance from visible particles with pT > 0.5 GeV, |eta| ≤ 3.2; not full-acceptance neutrino MET")
     fig.savefig(output / "met_distributions.png", dpi=160, bbox_inches="tight")
     plt.close(fig)
 
@@ -170,7 +170,7 @@ def particle_plots(events, output, title):
     for vectors, label, color in collections:
         pt, eta, _ = kinematics(vectors)
         axes[0].hist(pt, bins=pt_bins, histtype="step", label=label, color=color)
-        axes[1].hist(eta, bins=np.linspace(-3, 3, 45), histtype="step", label=label, color=color)
+        axes[1].hist(eta, bins=np.linspace(-3.2, 3.2, 49), histtype="step", label=label, color=color)
         axes[2].hist(vectors[:, 3], bins=energy_bins, histtype="step", label=label, color=color)
     for ax, xlabel in zip(axes, ["Particle pT [GeV]", "Particle eta", "Particle energy [GeV]"]):
         ax.set(xlabel=xlabel, ylabel="Particles / targets")
@@ -178,7 +178,7 @@ def particle_plots(events, output, title):
         ax.set_xscale("log")
         ax.set_yscale("log")
     axes[0].legend()
-    fig.suptitle(title + "\nVisible fiducial particles only: pT > 0.5 GeV, |eta| < 3; no association or ancestor matching imposed")
+    fig.suptitle(title + "\nVisible fiducial particles only: pT > 0.5 GeV, |eta| ≤ 3.2; no association or ancestor matching imposed")
     fig.savefig(output / "particle_distributions.png", dpi=160, bbox_inches="tight")
     plt.close(fig)
     import collections
@@ -191,7 +191,7 @@ def particle_plots(events, output, title):
         ax.bar(x + (i - 0.5) * 0.4, [count[pid] for pid in species], width=0.4, label=label, color=color)
     ax.set(xticks=x, xticklabels=species, xlabel="Absolute PDG ID", ylabel="Particles / targets", yscale="log")
     ax.legend()
-    fig.suptitle(title + "\nVisible particles with pT > 0.5 GeV, |eta| < 3; assigned targets after splitting/merging")
+    fig.suptitle(title + "\nVisible particles with pT > 0.5 GeV, |eta| ≤ 3.2; assigned targets after splitting/merging")
     fig.savefig(output / "particle_content.png", dpi=160, bbox_inches="tight")
     plt.close(fig)
 

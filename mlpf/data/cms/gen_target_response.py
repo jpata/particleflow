@@ -11,19 +11,19 @@ from mlpf.jet_utils import _match_jets_event
 @dataclass(frozen=True)
 class ResponseConfig:
     particle_pt_min: float = 0.5
-    particle_eta_max: float = 3.0
+    particle_eta_max: float = 3.2
     jet_radius: float = 0.4
     genjet_pt_min: float = 20.0
     targetjet_pt_min: float = 5.0
-    jet_eta_max: float = 2.6
+    jet_eta_max: float = 3.2
     match_dr: float = 0.2
     met_response_min: float = 20.0
 
     def __post_init__(self):
         if min(asdict(self).values()) <= 0:
             raise ValueError("Response cuts must be positive")
-        if self.jet_eta_max > self.particle_eta_max - self.jet_radius + 1e-9:
-            raise ValueError("Jet-axis acceptance must leave a radius margin")
+        if self.jet_eta_max > self.particle_eta_max + 1e-9:
+            raise ValueError("Jet-axis acceptance must not exceed constituent acceptance")
         if self.targetjet_pt_min > self.genjet_pt_min:
             raise ValueError("Target matching threshold must not exceed GEN threshold")
 
@@ -32,7 +32,7 @@ class ResponseConfig:
             **asdict(self),
             reference="Visible GEN status 1 versus new assigned targets only",
             particles="Same independent particle cuts on both collections; neutrinos excluded; electrons and muons included in jets",
-            jets="anti-kT, E-scheme; matched response conditional on unique angular matching, with no response cut",
+            jets="anti-kT, E-scheme; matched response conditional on unique angular matching, with no response cut; fiducial constituents and axes, edge cones are truncated",
             matching="Maximum-cardinality minimum-total-dR one-to-one matching",
             met="Negative vector sum of fiducial visible particle momenta; fiducial imbalance, not full-acceptance neutrino MET",
             resolution="sigma68=(Q84-Q16)/2; relative response resolution=sigma68/abs(median)",
@@ -53,7 +53,7 @@ def fiducial(vectors, config):
     if not np.all(np.isfinite(vectors)):
         raise ValueError("Non-finite particle four-vector")
     pt, eta, _ = kinematics(vectors)
-    return vectors[(pt > config.particle_pt_min) & (np.abs(eta) < config.particle_eta_max)]
+    return vectors[(pt > config.particle_pt_min) & (np.abs(eta) <= config.particle_eta_max + 1e-12)]
 
 
 def cluster_jets(vectors, min_pt, config):
@@ -63,7 +63,7 @@ def cluster_jets(vectors, min_pt, config):
     sequence = fastjet.ClusterSequence(inputs, fastjet.JetDefinition(fastjet.antikt_algorithm, config.jet_radius))
     jets = fastjet.sorted_by_pt(sequence.inclusive_jets(min_pt))
     p4 = np.array([[j.px(), j.py(), j.pz(), j.E()] for j in jets]).reshape(-1, 4)
-    return p4[np.abs(kinematics(p4)[1]) < config.jet_eta_max]
+    return p4[np.abs(kinematics(p4)[1]) <= config.jet_eta_max + 1e-12]
 
 
 def met_quantities(gen, target):
@@ -104,12 +104,12 @@ def analyze_event(result, event_index, config):
     gen_particles = [p for p in result["gen"] if abs(p.pdg_id) not in (12, 14, 16)]
     gen_p4 = np.array([p.p4 for p in gen_particles]).reshape(-1, 4)
     mask_pt, mask_eta, _ = kinematics(gen_p4)
-    gen_mask = (mask_pt > config.particle_pt_min) & (np.abs(mask_eta) < config.particle_eta_max)
+    gen_mask = (mask_pt > config.particle_pt_min) & (np.abs(mask_eta) <= config.particle_eta_max + 1e-12)
     target_rows = np.flatnonzero(result["target_id"])
     target_rows = target_rows[~np.isin(result["ytarget"]["pid"][target_rows], (12, 14, 16))]
     target_p4 = result["target_p4"][target_rows]
     target_pt, target_eta, _ = kinematics(target_p4)
-    target_mask = (target_pt > config.particle_pt_min) & (np.abs(target_eta) < config.particle_eta_max)
+    target_mask = (target_pt > config.particle_pt_min) & (np.abs(target_eta) <= config.particle_eta_max + 1e-12)
     gen = fiducial(gen_p4, config)
     target = fiducial(target_p4, config)
     gen_jets = cluster_jets(gen, config.genjet_pt_min, config)

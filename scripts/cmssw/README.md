@@ -24,11 +24,11 @@ Outputs are under `reports/cmssw_truth_postprocessing_guns/<suite>/`.
 
 The default validator now compares only visible GEN status-1 particles with the
 new truth-graph targets. It does not run the old normalizer as a physics baseline.
-Both collections independently require particle pT > 0.5 GeV and |eta| < 3;
+Both collections independently require particle pT > 0.5 GeV and |eta| <= 3.2;
 neutrinos are excluded and charged leptons included. The inclusive PU0 event,
 including underlying event, is the reference.
 
-Jets use anti-kT R=0.4, |eta| < 2.6, GEN pT >= 20 GeV, and target matching
+Jets use anti-kT R=0.4, |eta| <= 3.2, GEN pT >= 20 GeV, and target matching
 candidates pT >= 5 GeV. Unique angular matching requires dR < 0.2 without a
 response cut. MET is the negative vector sum of fiducial visible momenta.
 It measures fiducial imbalance rather than full-acceptance neutrino MET.
@@ -54,6 +54,8 @@ Earlier normalizer compatibility plots for this sample were moved to
 `historical_assignment_compatibility/` and are excluded from current summaries.
 Compatibility comparisons described later in this document are historical
 implementation checks, not the current physics validation.
+
+The full-HGCal fiducial cut is inclusive |eta| <= 3.2. The Run4D121 cell-corner envelope reaches 3.1493. Jets use this limit for constituents and axes; edge cones are truncated rather than imposing an R-sized axis inset. Guns remain generated within |eta| < 3.
 
 From any working directory, use this repository's `env.sh` to execute commands in
 EL9 with the local CMSSW runtime initialized. The defaults match the original job:

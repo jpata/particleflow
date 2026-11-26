@@ -97,7 +97,7 @@ def test_jet_clustering_wraps_phi_and_preserves_four_vector():
 
 def test_fiducial_cuts_apply_independently_and_exclude_neutrinos():
     result = make_result()
-    result["gen"] += [Particle(10, 22, 0, four_vector(5, 3.1, 1, 5 * np.cosh(3.1))), Particle(11, 22, 0, four_vector(0.2, 0, 1, 0.2))]
+    result["gen"] += [Particle(10, 22, 0, four_vector(5, 3.3, 1, 5 * np.cosh(3.3))), Particle(11, 22, 0, four_vector(0.2, 0, 1, 0.2))]
     event = analyze_event(result, 0, ResponseConfig())
     assert event["gen_particles"] == 2
 
@@ -127,8 +127,20 @@ def test_low_statistics_bins_are_reported_but_not_plotted():
     assert not any(b["plot"] for b in bins)
 
 
-def test_jet_axis_margin_and_threshold_config_are_checked():
+def test_jet_axis_acceptance_and_threshold_config_are_checked():
     with pytest.raises(ValueError):
-        ResponseConfig(jet_eta_max=3)
+        ResponseConfig(jet_eta_max=3.3)
     with pytest.raises(ValueError):
         ResponseConfig(targetjet_pt_min=30)
+
+
+def test_full_hgcal_forward_band_and_eta_endpoint_are_included():
+    result = make_result()
+    vectors = np.array([four_vector(40, eta, phi, 40*np.cosh(eta)) for eta, phi in [(3.1,0),(-3.2,2)]])
+    result['gen'] = [Particle(i, 211, 1, p) for i,p in enumerate(vectors)]
+    result['target_p4'] = vectors.copy()
+    event = analyze_event(result,0,ResponseConfig())
+    assert event['gen_particles'] == 2
+    assert event['target_particles'] == 2
+    assert len(event['jet_matches']) == 2
+    assert all(p['response'] == pytest.approx(1) for p in event['jet_matches'])
