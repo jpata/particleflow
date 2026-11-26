@@ -4,6 +4,10 @@ Use this workflow to create a custom or unpublished dataset. New users should no
 
 This guide covers the shared Pixi/Snakemake procedure. Read [CMS data production](cms.md) or [CLD and CLIC production](key4hep.md) before launching a detector-specific campaign. For a two-file software check, use the [quickstart](../getting-started/quickstart.md).
 
+To reproduce the CLD, CLICdet, IDEA and ILD datasets of the Key4hep v1.4.0
+release, follow the [Key4hep v1.4.0 production](key4hep-50k.md) instead. It
+builds five samples per detector in one Slurm workflow.
+
 ## Stages and gates
 
 | Stage | Command | Input | Output | Gate before continuing |

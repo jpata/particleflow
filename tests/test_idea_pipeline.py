@@ -13,6 +13,12 @@ from mlpf.heptfds.edm4hep_utils.utils_pf import N_X_FEATURES
 from mlpf.heptfds.edm4hep_utils.utils_idea import (
     CANDIDATE_SOURCE,
     TRACK_SOURCE,
+    PROXY_TRACK_SOURCE,
+    TRACK_COLLECTION,
+    TRACK_QUALITY_POLICY,
+    TRACK_TRUTH_POLICY,
+    TRACK_TRUTH_MIN_PURITY,
+    validate_track_provenance,
     find_idea_parquets,
     make_oracle_candidates,
     prepare_data_idea,
@@ -46,6 +52,11 @@ def test_prepare_pipeline_file_adds_provenance_and_oracle_candidates(tmp_path):
     target_track[0, [0, 2, 6, 12, 13]] = [211, 5, 5.2, 0, 1]
     source = ak.Record(
         {
+            "metadata_track_source": ak.Array([TRACK_SOURCE]),
+            "metadata_track_collection": ak.Array([TRACK_COLLECTION]),
+            "metadata_track_quality_policy": ak.Array([TRACK_QUALITY_POLICY]),
+            "metadata_track_truth_policy": ak.Array([TRACK_TRUTH_POLICY]),
+            "metadata_track_truth_min_purity": ak.Array([TRACK_TRUTH_MIN_PURITY]),
             "X_track": ak.Array([np.ones((1, 16), dtype=np.float32)]),
             "X_cluster": ak.Array([np.ones((1, 19), dtype=np.float32)]),
             "ytarget_track": ak.Array([target_track]),
@@ -75,8 +86,8 @@ def test_prepare_pipeline_file_adds_provenance_and_oracle_candidates(tmp_path):
     not IDEA_100_PARQUET.exists(),
     reason="workspace IDEA 100-event parquet is not available",
 )
-def test_current_idea_100_parquet_loads_into_mlpf_contract():
-    examples = prepare_data_idea(IDEA_100_PARQUET, event_indices=[0, 31, 99])
+def test_legacy_idea_100_parquet_loads_only_in_explicit_proxy_mode():
+    examples = prepare_data_idea(IDEA_100_PARQUET, event_indices=[0, 31, 99], expected_track_source=PROXY_TRACK_SOURCE)
 
     assert len(examples) == 3
     for example in examples:
@@ -106,8 +117,8 @@ def test_idea_tfds_mapping_excludes_validation_gun():
         production = yaml.safe_load(handle)["productions"]["idea"]
 
     guns = {name for name in production["samples"] if name.startswith("gun_")}
-    assert guns
-    assert guns.isdisjoint(production["tfds_mapping"])
+    assert not guns
+    assert all(not name.startswith("gun_") for name in production["tfds_mapping"])
 
 
 def test_idea_parquet_discovery_selects_requested_process(tmp_path):
@@ -166,3 +177,64 @@ def test_perigee_at_origin_keeps_tracks_from_the_origin_and_straight_tracks():
     # straight (omega = 0): the perigee is the foot of the perpendicular from the origin
     d0, phi0, z0 = perigee_at_origin(np.array([100.0]), np.array([50.0]), np.array([20.0]), np.array([0.0]), np.array([0.0]), np.array([0.5]))
     np.testing.assert_allclose([d0[0], phi0[0], z0[0]], [50.0, 0.0, 20.0 - 100.0 * 0.5])
+
+
+def test_proxy_features_keep_upstream_perigee_and_first_hit_fixes():
+    from mlpf.data.key4hep.postprocessing import idea_track_to_features
+
+    coll = "TracksFromGenParticles"
+    states = f"_{coll}_trackStates"
+    x, y, z, phi = _point_on_helix(5.0, 0.3, 20.0, 0.001, 0.5, 100.0)
+    track_fields = {"type": [0], "chi2": [0.0], "ndf": [0], "trackStates_begin": [0], "trackStates_end": [2]}
+    state_fields = {
+        "location": [1, 2],
+        "phi": [phi, phi],
+        "omega": [0.001, 0.001],
+        "tanLambda": [0.5, 0.5],
+        "D0": [999.0, 0.0],
+        "Z0": [999.0, 0.0],
+        "time": [0.0, 0.0],
+        "referencePoint.x": [x, 30.0],
+        "referencePoint.y": [y, 40.0],
+        "referencePoint.z": [z, 0.0],
+    }
+    prop = {
+        coll: [ak.Array({f"{coll}.{key}": value for key, value in track_fields.items()})],
+        states: [ak.Array({f"{states}.{key}": value for key, value in state_fields.items()})],
+    }
+    features = idea_track_to_features(prop, 0, 2.0, coll=coll)
+    np.testing.assert_allclose([features[name][0] for name in ("D0", "phi", "Z0")], [5.0, 0.3, 20.0])
+    np.testing.assert_allclose(features["radiusOfInnermostHit"], [50.0])
+
+
+@pytest.mark.parametrize("source", [None, PROXY_TRACK_SOURCE, "mixed"])
+def test_current_loader_rejects_missing_proxy_or_mixed_provenance(source):
+    fields = {"X_track": ak.Array([[], []])}
+    if source is not None:
+        fields["metadata_track_source"] = ak.Array([TRACK_SOURCE, PROXY_TRACK_SOURCE] if source == "mixed" else [source, source])
+    with pytest.raises(ValueError, match="provenance"):
+        validate_track_provenance(ak.Record(fields))
+
+
+def test_pipeline_preparation_does_not_relabel_unmarked_legacy_data(tmp_path):
+    data = ak.Record(
+        {
+            "X_track": ak.Array([[]]),
+            "X_cluster": ak.Array([[]]),
+            "ytarget_track": ak.Array([[]]),
+            "ytarget_cluster": ak.Array([[]]),
+            "targetjet": ak.Array([[]]),
+        }
+    )
+    source, target = tmp_path / "source.parquet", tmp_path / "target.parquet"
+    ak.to_parquet(data, source)
+    with pytest.raises(ValueError, match="provenance"):
+        prepare_pipeline_file(source, target)
+    prepare_pipeline_file(source, target, legacy_proxy=True)
+    assert ak.from_parquet(target)["metadata_track_source"].to_list() == [PROXY_TRACK_SOURCE]
+
+
+def test_fitted_provenance_requires_quality_and_truth_policy():
+    data = ak.Record({"X_track": ak.Array([[]]), "metadata_track_source": ak.Array([TRACK_SOURCE])})
+    with pytest.raises(ValueError, match="metadata_track_collection"):
+        validate_track_provenance(data)

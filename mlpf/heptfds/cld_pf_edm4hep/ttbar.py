@@ -25,8 +25,9 @@ FIXME
 
 
 class CldEdmTtbarPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.3.0"))
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.4.0"))
     RELEASE_NOTES = {
+        "3.4.0": "Regenerated with key4hep-sim v1.4.0 and stable Key4hep 2026-04-08 for the 50k-event campaign.",
         "2.0.0": "Initial release",
         "2.3.0": "Fix target/truth momentum, st=1 more inclusive: PR352",
         "2.5.0": "Use 10 splits, skip 2.4.0 to unify with CMS datasets",

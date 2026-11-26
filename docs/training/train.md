@@ -1,13 +1,13 @@
 # Train a model
 
-This guide trains the standard CLD track-and-cluster model on configuration 1, version 3.3.0 of the `ttbar`, `WW`, and `qq` datasets. The [catalog](../datasets/catalog.md) lists compatible recipes and published versions. Start with the two-step CPU run to check the complete path. Use the GPU example only after that check succeeds.
+This guide trains the standard CLD track-and-cluster model on configuration 1, version 3.4.0 of the `ttbar`, `WW`, and `qq` datasets. The [catalog](../datasets/catalog.md) lists compatible recipes and published versions. Start with the two-step CPU run to check the complete path. Use the GPU example only after that check succeeds.
 
 A **training step** updates the model once using one dataset-group batch. A **validation cycle** pauses training to measure loss on a separate set of held-out events. A **checkpoint** is a saved model and training state from a particular step.
 
 ## Prerequisites
 
 - Complete the [main installation](../getting-started/installation.md).
-- [Download and verify](../datasets/download.md) configuration 1, version 3.3.0 of the three CLD training datasets. You can also produce matching data using [Key4HEP production](../datasets/key4hep.md).
+- [Download and verify](../datasets/download.md) configuration 1, version 3.4.0 of the three CLD training datasets. You can also produce matching data using [Key4HEP production](../datasets/key4hep.md).
 - The commands below use the download guide's data root, `data/tfds/tensorflow_datasets/cld`. For locally produced data, replace it with the directory containing the three dataset-name directories (typically `<workspace>/tfds`). For a small integration check without downloading the full partition, use the [quickstart](../getting-started/quickstart.md).
 - Run commands from the repository root.
 
@@ -127,10 +127,11 @@ The command shape is the same; the production, model recipe, data root, and data
 | Detector | Production | Model recipe | Data version |
 |---|---|---|---|
 | CMS | `cms_run3` | `pyg-cms-v1` | 3.2.0 (scenarios use 2.8.0) |
-| CLD | `cld` | `pyg-cld-v1` | 3.3.0 |
-| CLIC | `clic` | `pyg-clic-v1` | 3.3.0 |
+| CLD | `cld` | `pyg-cld-v1` | 3.4.0 |
+| CLIC | `clic` | `pyg-clic-v1` | 3.4.0 |
 | ColliderML | `colliderml` | `pyg-colliderml-v1`, `pyg-colliderml-pu200-v1` | 1.5.0 |
-| IDEA | `idea` | `pyg-idea-pipeline-v1` | 0.3.0 |
+| IDEA | `idea` | `pyg-idea-pipeline-v1` | 0.5.0 |
+| ILD@FCC-ee | `ild` | `pyg-ild-v1` | 0.2.0 |
 | MAIA | `maia` | `pyg-maia-v1` | 1.2.0 |
 
 Hit inputs use the dedicated `*-hits-*` recipes and need substantially more memory. The [dataset catalog](../datasets/catalog.md) lists all recipes and which versions are published.
@@ -151,13 +152,13 @@ Track and cluster features span very different ranges: energies from MeV to TeV,
 ... train --model.input_normalization true
 ```
 
-The statistics are committed per dataset version in `mlpf/model/input_normalization_stats/<dataset>_<version>.yaml` (CMS 2.8.0, CLD and CLIC 3.3.0, ColliderML 1.5.0, IDEA 0.1.0–0.3.0). Training fails with a clear error if the file for a selected version is missing. Compute it for a new version from the full training split:
+The statistics are committed per dataset version in `mlpf/model/input_normalization_stats/<dataset>_<version>.yaml` (CMS 2.8.0, CLD and CLIC 3.3.0 and 3.4.0, ColliderML 1.5.0, IDEA 0.1.0–0.5.0, ILD 0.2.0). Training fails with a clear error if the file for a selected version is missing. Compute it for a new version from the full training split:
 
 ```bash
-uv run python3 scripts/compute_input_normalization_stats.py map cld 3.3.0 \
-  --data-dir /path/to/cld/tfds --work-dir results/input_normalization/cld_3.3.0
-uv run python3 scripts/compute_input_normalization_stats.py reduce cld 3.3.0 \
-  --work-dir results/input_normalization/cld_3.3.0
+uv run python3 scripts/compute_input_normalization_stats.py map cld 3.4.0 \
+  --data-dir /path/to/cld/tfds --work-dir results/input_normalization/cld_3.4.0
+uv run python3 scripts/compute_input_normalization_stats.py reduce cld 3.4.0 \
+  --work-dir results/input_normalization/cld_3.4.0
 ```
 
 `map` can be split over Slurm tasks (`--shard`, `--num-shards` default to the `srun` task index and count). The statistics become part of the checkpoint, so inference and [ONNX export](../validation/onnx.md#models-with-input-normalization) do not need the YAML files. Normalized models need each event's dataset `source_id`, which the training and `test` pipelines supply automatically.

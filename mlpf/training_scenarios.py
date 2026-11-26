@@ -536,7 +536,8 @@ def _checkpoint_step(path):
 def find_scenario_continuation(job, platform):
     """Find the most advanced compatible run for one scenario job."""
     scenario_dir = Path(platform.experiments_dir) / job.scenario_name
-    desired_config = job.resolved_config.model_dump(mode="json")
+    # The sampler resumes from consumed batches, independently of the prefetch queue depth.
+    desired_config = job.resolved_config.model_dump(mode="json", exclude={"prefetch_factor"})
     candidates = []
     for manifest_path in scenario_dir.glob("*/scenario-manifest.json"):
         try:
@@ -547,9 +548,10 @@ def find_scenario_continuation(job, platform):
         saved_job = manifest.get("job", {})
         saved_config = manifest.get("resolved_config")
         if isinstance(saved_config, dict):
-            # Older manifests predate this validation-only setting.
-            field = "validation_particle_metrics_max_events"
-            saved_config.setdefault(field, MLPFConfig.model_fields[field].default)
+            # Older manifests retain the original defaults for these settings.
+            for field in ("validation_particle_metrics_max_events", "train_fraction"):
+                saved_config.setdefault(field, MLPFConfig.model_fields[field].default)
+            saved_config.pop("prefetch_factor", None)
         if (
             saved_job.get("scenario_name") != job.scenario_name
             or saved_job.get("platform_name") != job.platform_name
@@ -574,6 +576,14 @@ def find_scenario_continuation(job, platform):
     return ScenarioContinuation(experiment_dir=experiment_dir, checkpoint=checkpoint, step=step)
 
 
+def require_scenario_checkpoint(job):
+    if job.settings.get("load_weights_only") and not job.settings.get("load"):
+        raise ValueError(
+            f"{job.scenario_name}/{job.variant_name} requires a source checkpoint. "
+            "Set training.parameters.load in the scenario or pass --set load=PATH to the direct runner."
+        )
+
+
 def run_scenario_job(job, scenario, platform, spec_file, *, dry_run=False, continue_run=False):
     continuation = find_scenario_continuation(job, platform) if continue_run else None
     if continue_run and continuation is None:
@@ -589,6 +599,8 @@ def run_scenario_job(job, scenario, platform, spec_file, *, dry_run=False, conti
             job.settings["load_weights_only"] = False
         if job.settings.get("reset_task_loss_weights"):
             job.settings["reset_task_loss_weights"] = False
+    if not dry_run:
+        require_scenario_checkpoint(job)
     command = _pipeline_command(job, scenario, platform, spec_file, experiment_dir)
     print(shlex.join(command), flush=True)
     if dry_run:

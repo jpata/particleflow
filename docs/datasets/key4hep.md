@@ -1,6 +1,6 @@
 # Shared Key4HEP data production
 
-CLD and CLICdet share the Key4HEP/EDM4hep production and postprocessing path for both [tracks and clusters](track-cluster.md) and [hits](hit-based.md). This page records the common workflow; use [Generate a dataset](generate.md) for the full execution procedure. IDEA, MAIA, and the CLD granularity scans use the same postprocessor with detector-specific options; see their dataset pages.
+CLD and CLICdet share the Key4HEP/EDM4hep production and postprocessing path for both [tracks and clusters](track-cluster.md) and [hits](hit-based.md). This page records the common workflow; use [Generate a dataset](generate.md) for the full execution procedure. IDEA, ILD@FCC-ee, MAIA, and the CLD granularity scans use the same postprocessor with detector-specific options; see their dataset pages. The [Key4hep v1.4.0 production](key4hep-50k.md) runs CLD, CLICdet, IDEA and ILD together on Tallinn.
 
 ## Requirements
 
@@ -16,12 +16,12 @@ CLD uses the detector configuration under `mlpf/data/key4hep/gen/cld/CLDConfig`.
 
 | Production | Centre-of-mass energy | Configured TFDS samples |
 |---|---:|---|
-| CLD | 365 GeV | `ttbar`, fully hadronic `WW`, inclusive `qq`, and `ZZ` |
-| CLICdet | 380 GeV | `ttbar`, fully hadronic `WW`, and inclusive `qq` |
+| CLD | 365 GeV; 91 GeV for Z samples | `ttbar`, fully hadronic `WW`, inclusive `qq`, `Z→qq`, and `Z→tautau` |
+| CLICdet | 380 GeV; 91 GeV for Z samples | `ttbar`, fully hadronic `WW`, inclusive `qq`, `Z→qq`, and `Z→tautau` |
 
 CLD also configures particle-gun and additional 91/240/365 GeV samples for detector studies. The `tfds_mapping` and `tfds_hit_mapping` entries restrict training-data production to the samples in the table.
 
-Track/cluster builders use version 3.3.0 and hit builders use 3.2.2 and configuration partitions 1--10. The default model recipes select `ttbar`, `WW`, and `qq`; CLD `ZZ` is available through an additional builder.
+Track/cluster builders use version 3.4.0 and hit builders version 3.3.0, both with configuration partitions 1--10. The default model recipes (`pyg-cld-v1`, `pyg-clic-v1` and the hit recipes) select `ttbar`, `WW`, and `qq`; the `pyg-cld-key4hep-v140` and `pyg-clic-key4hep-v140` recipes use all five samples. CLD also has a `ZZ` builder, which is not produced by default.
 
 ## Detector commands and paths
 

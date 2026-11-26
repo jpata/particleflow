@@ -18,22 +18,15 @@ os.environ["SINGULARITY_CACHEDIR"]="/scratch/local/joosep/tmp"
 
 rule all:
     input:
-        "snakemake_jobs/cld/post/post_zz_all.done",
         "snakemake_jobs/cld/post/post_ttbar_all.done",
         "snakemake_jobs/cld/post/post_ww_fullhad_all.done",
-        "snakemake_jobs/cld/post/post_qq_all.done"
-
-rule post_zz_all:
-    input:
-        lambda wildcards: expand("snakemake_jobs/cld/post/post_zz_{seed}.done", seed=glob_wildcards("snakemake_jobs/cld/gen/gen_zz_{seed}.done").seed) if glob_wildcards("snakemake_jobs/cld/gen/gen_zz_{seed}.done").seed else expand("snakemake_jobs/cld/post/post_zz_{seed}.done", seed=range(100000, 105010, 1))
-    output:
-        "snakemake_jobs/cld/post/post_zz_all.done"
-    shell:
-        "touch {output}"
+        "snakemake_jobs/cld/post/post_qq_all.done",
+        "snakemake_jobs/cld/post/post_z_qq_all.done",
+        "snakemake_jobs/cld/post/post_z_tautau_all.done"
 
 rule post_ttbar_all:
     input:
-        lambda wildcards: expand("snakemake_jobs/cld/post/post_ttbar_{seed}.done", seed=glob_wildcards("snakemake_jobs/cld/gen/gen_ttbar_{seed}.done").seed) if glob_wildcards("snakemake_jobs/cld/gen/gen_ttbar_{seed}.done").seed else expand("snakemake_jobs/cld/post/post_ttbar_{seed}.done", seed=range(300000, 310010, 1))
+        expand("snakemake_jobs/cld/post/post_ttbar_{seed}.done", seed=range(300000, 305000, 1))
     output:
         "snakemake_jobs/cld/post/post_ttbar_all.done"
     shell:
@@ -41,7 +34,7 @@ rule post_ttbar_all:
 
 rule post_ww_fullhad_all:
     input:
-        lambda wildcards: expand("snakemake_jobs/cld/post/post_ww_fullhad_{seed}.done", seed=glob_wildcards("snakemake_jobs/cld/gen/gen_ww_fullhad_{seed}.done").seed) if glob_wildcards("snakemake_jobs/cld/gen/gen_ww_fullhad_{seed}.done").seed else expand("snakemake_jobs/cld/post/post_ww_fullhad_{seed}.done", seed=range(400000, 410010, 1))
+        expand("snakemake_jobs/cld/post/post_ww_fullhad_{seed}.done", seed=range(400000, 405000, 1))
     output:
         "snakemake_jobs/cld/post/post_ww_fullhad_all.done"
     shell:
@@ -49,15 +42,31 @@ rule post_ww_fullhad_all:
 
 rule post_qq_all:
     input:
-        lambda wildcards: expand("snakemake_jobs/cld/post/post_qq_{seed}.done", seed=glob_wildcards("snakemake_jobs/cld/gen/gen_qq_{seed}.done").seed) if glob_wildcards("snakemake_jobs/cld/gen/gen_qq_{seed}.done").seed else expand("snakemake_jobs/cld/post/post_qq_{seed}.done", seed=range(500000, 510010, 1))
+        expand("snakemake_jobs/cld/post/post_qq_{seed}.done", seed=range(500000, 505000, 1))
     output:
         "snakemake_jobs/cld/post/post_qq_all.done"
     shell:
         "touch {output}"
 
+rule post_z_qq_all:
+    input:
+        expand("snakemake_jobs/cld/post/post_z_qq_{seed}.done", seed=range(600000, 605000, 1))
+    output:
+        "snakemake_jobs/cld/post/post_z_qq_all.done"
+    shell:
+        "touch {output}"
+
+rule post_z_tautau_all:
+    input:
+        expand("snakemake_jobs/cld/post/post_z_tautau_{seed}.done", seed=range(700000, 705000, 1))
+    output:
+        "snakemake_jobs/cld/post/post_z_tautau_all.done"
+    shell:
+        "touch {output}"
+
 rule post:
     input:
-        "snakemake_jobs/cld/post/post_zz_all.done", "snakemake_jobs/cld/post/post_ttbar_all.done", "snakemake_jobs/cld/post/post_ww_fullhad_all.done", "snakemake_jobs/cld/post/post_qq_all.done"
+        "snakemake_jobs/cld/post/post_ttbar_all.done", "snakemake_jobs/cld/post/post_ww_fullhad_all.done", "snakemake_jobs/cld/post/post_qq_all.done", "snakemake_jobs/cld/post/post_z_qq_all.done", "snakemake_jobs/cld/post/post_z_tautau_all.done"
     output:
         "snakemake_jobs/cld/post/all.done"
     shell:
@@ -66,10 +75,12 @@ rule post:
 rule post_task:
     input:
         "snakemake_jobs/cld/gen/gen_{sample}_{seed}.done"
+    params:
+        workspace='/local/joosep/mlpf/cld/v1.4.0/50k'
     output:
         "snakemake_jobs/cld/post/post_{sample}_{seed}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=2000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=1000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:

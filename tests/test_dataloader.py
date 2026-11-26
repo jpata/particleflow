@@ -21,6 +21,44 @@ from mlpf.model.mlpf import MLPF
 from mlpf.conf import MLPFConfig
 
 
+def test_train_fraction_selects_nested_events_from_each_configuration(monkeypatch):
+    def mock_dataset(data_dir, name, split, num_samples=None, **kwargs):
+        _, partition = name.split("/")
+        events = range(9) if partition == "1:1.0.0" else range(100, 115)
+        return SimpleNamespace(ds=events[:num_samples])
+
+    monkeypatch.setattr("mlpf.model.PFDataset.PFDataset", mock_dataset)
+    datasets = {"colliderml": {"physical": {"batch_size": 1, "samples": {"colliderml_ttbar_nopu_pf": {"version": "1.0.0", "splits": ["1", "2"]}}}}}
+    config = MLPFConfig.model_validate(
+        {
+            "dataset": "colliderml",
+            "data_dir": "/tmp/dummy_data",
+            "model": {"type": "attention", "attention": {"num_convs": 2}},
+            "conv_type": "attention",
+            "train_dataset": datasets,
+            "valid_dataset": datasets,
+            "nvalid": 8,
+            "num_workers": 0,
+            "sampler_mode": "interleaved-shards",
+        }
+    )
+
+    previous = [set(), set()]
+    for fraction, counts in ((0.25, [2, 3]), (0.5, [4, 7]), (0.75, [6, 11]), (1.0, [9, 15])):
+        config.train_fraction = fraction
+        loaders, _ = get_interleaved_dataloaders(1, "cpu", config, use_cuda=False, use_ray=False)
+        train = loaders["train"].data_loaders[0].dataset.datasets
+        valid = loaders["valid"].data_loaders[0].dataset.datasets
+        assert [len(shard) for shard in train] == counts
+        assert [list(shard) for shard in valid] == [list(range(4)), list(range(100, 104))]
+        selected = [set(shard) for shard in train]
+        assert all(smaller < larger for smaller, larger in zip(previous, selected, strict=True))
+        previous = selected
+        if fraction == 0.5:
+            distributed, _ = get_interleaved_dataloaders(2, 1, config, use_cuda=False, use_ray=False)
+            assert [set(shard) for shard in distributed["train"].data_loaders[0].dataset.datasets] == selected
+
+
 class TestDataloaderRestoration(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()

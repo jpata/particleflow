@@ -1,12 +1,12 @@
 # Download a dataset
 
-This guide downloads version 3.3.0, configuration 1 of the three CLD track-and-cluster datasets used by `pyg-cld-v1` and verifies that TensorFlow Datasets (TFDS) can open them. These data are published on Hugging Face and match the [training guide](../training/train.md). Choose another compatible selection from the [dataset catalog](catalog.md).
+This guide downloads version 3.4.0, configuration 1 of the three CLD track-and-cluster datasets used by `pyg-cld-v1` and verifies that TensorFlow Datasets (TFDS) can open them. These data are published on Hugging Face and match the [training guide](../training/train.md). Choose another compatible selection from the [dataset catalog](catalog.md).
 
 ## Prerequisites
 
 Complete the [main environment installation](../getting-started/installation.md). The commands below run from the repository root and use the Hugging Face CLI supplied by that environment. Public files support anonymous downloads.
 
-Choose a destination with enough free space. TFDS shards can be large, especially for hit inputs. Use the dry run below to inspect file counts and sizes for the revision you download.
+Choose a destination with enough free space. The three datasets below take about 150 MB; other selections, especially hit inputs, can be much larger. Use the dry run below to inspect file counts and sizes for the revision you download.
 
 ## Download the three training datasets
 
@@ -14,9 +14,9 @@ First preview the exact selection:
 
 ```bash
 uv run hf download jpata/particleflow \
-  --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/3.3.0/*" \
-  --include "tensorflow_datasets/cld/cld_edm_ww_fullhad_pf/1/3.3.0/*" \
-  --include "tensorflow_datasets/cld/cld_edm_qq_pf/1/3.3.0/*" \
+  --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/3.4.0/*" \
+  --include "tensorflow_datasets/cld/cld_edm_ww_fullhad_pf/1/3.4.0/*" \
+  --include "tensorflow_datasets/cld/cld_edm_qq_pf/1/3.4.0/*" \
   --local-dir data/tfds \
   --repo-type dataset \
   --dry-run
@@ -26,9 +26,9 @@ Remove `--dry-run` to download it:
 
 ```bash
 uv run hf download jpata/particleflow \
-  --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/3.3.0/*" \
-  --include "tensorflow_datasets/cld/cld_edm_ww_fullhad_pf/1/3.3.0/*" \
-  --include "tensorflow_datasets/cld/cld_edm_qq_pf/1/3.3.0/*" \
+  --include "tensorflow_datasets/cld/cld_edm_ttbar_pf/1/3.4.0/*" \
+  --include "tensorflow_datasets/cld/cld_edm_ww_fullhad_pf/1/3.4.0/*" \
+  --include "tensorflow_datasets/cld/cld_edm_qq_pf/1/3.4.0/*" \
   --local-dir data/tfds \
   --repo-type dataset
 ```
@@ -51,20 +51,20 @@ import tensorflow_datasets as tfds
 
 for name in ("cld_edm_ttbar_pf", "cld_edm_ww_fullhad_pf", "cld_edm_qq_pf"):
     builder = tfds.builder(
-        f"{name}/1:3.3.0",
+        f"{name}/1:3.4.0",
         data_dir="data/tfds/tensorflow_datasets/cld",
     )
     print(builder.info.full_name, builder.info.splits)
 PY
 ```
 
-Success prints the full names of all three datasets and metadata for their `train` and `test` splits. The published configuration-1 metadata at the [verified Hub revision](https://huggingface.co/datasets/jpata/particleflow/tree/d03df152669939dae26336f68de7c0af575bb12d/tensorflow_datasets/cld) records:
+Success prints the full names of all three datasets and metadata for their `train` and `test` splits. The published configuration-1 metadata at the [verified Hub revision](https://huggingface.co/datasets/jpata/particleflow/tree/b024304b5dd9e47e9d71d7e51ad77029e5002d8d/tensorflow_datasets/cld) records:
 
 | Dataset | Training events | Test events |
 |---|---:|---:|
-| `cld_edm_ttbar_pf/1:3.3.0` | 90,000 | 10,000 |
-| `cld_edm_ww_fullhad_pf/1:3.3.0` | 90,000 | 10,000 |
-| `cld_edm_qq_pf/1:3.3.0` | 89,998 | 10,000 |
+| `cld_edm_ttbar_pf/1:3.4.0` | 4,500 | 500 |
+| `cld_edm_ww_fullhad_pf/1:3.4.0` | 4,500 | 500 |
+| `cld_edm_qq_pf/1:3.4.0` | 4,490 | 500 |
 
 Then read one `ttbar` event through the same random-access path used by MLPF:
 
@@ -73,7 +73,7 @@ uv run python - <<'PY'
 import tensorflow_datasets as tfds
 
 builder = tfds.builder(
-    "cld_edm_ttbar_pf/1:3.3.0",
+    "cld_edm_ttbar_pf/1:3.4.0",
     data_dir="data/tfds/tensorflow_datasets/cld",
 )
 event = builder.as_data_source(split="train")[0]
@@ -100,7 +100,7 @@ data/tfds/tensorflow_datasets/
 └── clic/
 ```
 
-Pass one of those detector directories to MLPF as `--data-dir`. The event read confirms decoding only. The [current CLD training example](../training/train.md) requires version 3.3.0; do not rename an older dataset directory or change only its version string to satisfy that requirement.
+Pass one of those detector directories to MLPF as `--data-dir`. The event read confirms decoding only. The [current CLD training example](../training/train.md) requires version 3.4.0; do not rename an older dataset directory or change only its version string to satisfy that requirement.
 
 ## Data not on the Hub
 

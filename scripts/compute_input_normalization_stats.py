@@ -33,7 +33,7 @@ DEBUG_ARGS = [
     "clic",
     "3.3.0",
     "--data-dir",
-    "/mnt/ceph/users/jpata/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds",
+    "/mnt/ceph/users/jpata/mlpf/clic/tfds",
     "--work-dir",
     "/tmp/input_normalization_debug",
     "--shard",

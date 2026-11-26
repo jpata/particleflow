@@ -3,7 +3,7 @@
 
 One figure column per sample, given as --parquet/--tfds LABEL[:DETECTOR]=PATH in plotting order;
 DETECTOR (default LABEL) selects the feature layout. Columns can be detectors (ttbar on ColliderML,
-CLIC, CLD, IDEA, MAIA; see scripts/run_detector_feature_comparison.sh) or samples of one detector,
+CLIC, CLD, IDEA, ILD, MAIA; see scripts/run_detector_feature_comparison.sh) or samples of one detector,
 e.g. --tfds ttbar_pu0:colliderml=... --tfds zprime_pu0:colliderml=...
 """
 
@@ -25,7 +25,7 @@ import tensorflow_datasets as tfds  # noqa: E402
 from mlpf.conf import EDM4HEP, X_FEATURES, ParticleFeatures  # noqa: E402
 from mlpf.jet_utils import _match_jets_event  # noqa: E402
 
-DETECTORS = ["colliderml", "clic", "cld", "idea", "maia"]
+DETECTORS = ["colliderml", "clic", "cld", "idea", "maia", "ild"]
 COLORS = ["#a23b72", "#0072b2", "#d55e00", "#009e73", "#9467bd", "#e69f00", "#56b4e9", "#8c564b", "#cc79a7", "#7f7f7f", "#bcbd22", "#17becf"]
 LABELS = np.array([0, 211, 130, 22, 11, 13])
 CML_TRACK = [
@@ -54,12 +54,40 @@ def matrix(value, width):
     return arr.reshape(-1, width) if arr.size else np.empty((0, width))
 
 
+SHARED_PF_FEATURES = ("X", "ytarget", "ycand", "genmet", "genjets", "targetjets")
+
+
+def shared_pf_features(features):
+    """Restrict a builder's features to the PF fields every detector provides.
+
+    Builders can add detector-specific fields (for example ColliderML's event_id and pileup
+    reference); the serialization check only covers the fields the comparison encodes.
+    """
+    return tfds.features.FeaturesDict({key: features[key] for key in SHARED_PF_FEATURES if key in features})
+
+
+def idea_track_description(path):
+    """Describe the IDEA track source recorded by postprocessing in the first Parquet file."""
+    path = Path(path)
+    files = sorted(path.glob("*.parquet")) if path.is_dir() else [path]
+    sources = set()
+    if files and "metadata_track_source" in ak.metadata_from_parquet(files[0])["form"].fields:
+        data = ak.from_parquet(files[0], columns=["metadata_track_source"])
+        sources = {str(value) for value in ak.to_list(data["metadata_track_source"])}
+    if sources == {"ggtf_genfit"}:
+        return "IDEA tracks are fitted GGTF/GenFit tracks"
+    if sources == {"truth_seeded"}:
+        return "IDEA tracks are truth-seeded proxies"
+    return "The IDEA track source is not recorded in the Parquet files"
+
+
 def parquet_events(paths, limit, width):
     count = 0
+    wanted = ("X_track", "X_cluster", "ytarget_track", "ytarget_cluster", "ycand_track", "ycand_cluster", "genmet", "genjet", "targetjet")
     for path in paths:
-        data = ak.from_parquet(path)
+        # Native hit matrices can dominate ILD files; these plots only use PF inputs.
+        data = ak.from_parquet(path, columns=list(wanted))
         for index in range(len(data["X_track"])):
-            wanted = ("X_track", "X_cluster", "ytarget_track", "ytarget_cluster", "ycand_track", "ycand_cluster", "genmet", "genjet", "targetjet")
             event = {key: ak.to_numpy(data[key][index]) for key in wanted if key in data.fields}
             xt = np.asarray(event["X_track"])
             xc = np.asarray(event["X_cluster"])
@@ -114,6 +142,7 @@ def jet_matching_values(genjets, targetjets, match_dr):
         "matched_gen_pt": gen[gi, 0],
         "matched_gen_eta": gen[gi, 1],
         "pt_ratio": target[ti, 0] / gen[gi, 0],
+        "energy_ratio": np.divide(target[ti, 3], gen[gi, 3], out=np.full(len(gi), np.nan), where=gen[gi, 3] > 0),
     }
 
 
@@ -177,6 +206,7 @@ def collect(events, detector, features=None, match_dr=0.1):
         for kind, code, names in (("track", 1, track_names), ("cluster", 2, cluster_names)):
             rows = x[x[:, 0] == code]
             add(f"event/n_{kind}", len(rows))
+            add(f"event/n_target_{kind}", np.count_nonzero(y[x[:, 0] == code, 0]))
             # ColliderML's narrower layout has no columns for the trailing EDM4hep cluster features
             for col, name in enumerate(names[: x.shape[1]]):
                 if not name.startswith("unused") and name != "elemtype":
@@ -218,6 +248,8 @@ def stats(arr):
         "zero_fraction": float(np.mean(finite == 0)) if len(finite) else None,
         "min": float(finite.min()) if len(finite) else None,
         "max": float(finite.max()) if len(finite) else None,
+        "mean": float(finite.mean()) if len(finite) else None,
+        "quantiles_16_50_84": np.quantile(finite, [0.16, 0.5, 0.84]).tolist() if len(finite) else [],
         "quantiles_01_50_99": np.quantile(finite, [0.01, 0.5, 0.99]).tolist() if len(finite) else [],
     }
 
@@ -338,7 +370,7 @@ def plot_group(datasets, keys, title, path, columns, synthetic):
         for ax in axes[row]:
             ax.set_ylim(0, ymax)
     layout_comparison_figure(fig, axes, title + " — shared bins/axes; union of per-column 0.5–99.5% ranges", synthetic, columns)
-    fig.savefig(path, dpi=130)
+    fig.savefig(path, dpi=130, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -361,7 +393,7 @@ def binned_fraction(values, matched, edges):
 
 def plot_jet_matching(datasets, stage, path, match_dr, columns, process="ttbar"):
     labels = [label for label, _ in columns]
-    fig, axes = plt.subplots(5, len(labels), figsize=(4 * len(labels), 13), squeeze=False)
+    fig, axes = plt.subplots(6, len(labels), figsize=(4 * len(labels), 15), squeeze=False)
     all_pt = np.concatenate([v["jetmatch/gen_pt"] for v in datasets.values()])
     all_eta = np.concatenate([v["jetmatch/gen_eta"] for v in datasets.values()])
     all_target_pt = np.concatenate([v["jetmatch/target_pt"] for v in datasets.values()])
@@ -403,8 +435,26 @@ def plot_jet_matching(datasets, stage, path, match_dr, columns, process="ttbar")
             "target_jets": len(data["jetmatch/target_pt"]),
             "matched_pairs": len(ratio),
             "pt_ratio": stats(ratio),
+            "energy_ratio": stats(data["jetmatch/energy_ratio"]),
             "bins": {},
         }
+        energy_ratio = data["jetmatch/energy_ratio"]
+        energy_counts = np.histogram(energy_ratio, response_edges)[0]
+        axes[5, col].stairs(energy_counts / max(len(energy_ratio), 1), response_edges, color=color(col))
+        axes[5, col].axvline(1, color="black", linestyle=":", linewidth=1)
+        axes[5, col].set_xlim(0.5, 1.5)
+        axes[5, col].set_xlabel(r"Matched $E^{target}/E^{gen}$")
+        if len(energy_ratio):
+            outside_energy = np.mean((energy_ratio < 0.5) | (energy_ratio > 1.5))
+            axes[5, col].text(
+                0.98,
+                0.95,
+                f"median={np.nanmedian(energy_ratio):.3f}\noutside={outside_energy:.1%}",
+                transform=axes[5, col].transAxes,
+                ha="right",
+                va="top",
+                fontsize=8,
+            )
         for dim, edges, response_row, fraction_row in (("pt", pt_edges, 1, 3), ("eta", eta_edges, 2, 4)):
             centers = np.sqrt(edges[:-1] * edges[1:]) if dim == "pt" else (edges[:-1] + edges[1:]) / 2
             matched_x = data[f"jetmatch/matched_gen_{dim}"]
@@ -435,22 +485,61 @@ def plot_jet_matching(datasets, stage, path, match_dr, columns, process="ttbar")
                     axes[row, col].set_xscale("log")
         axes[3, col].legend(fontsize=8, loc="lower right")
     for row, label in enumerate(
-        ("Fraction / bin", "pT ratio: median, 16–84%", "pT ratio: median, 16–84%", "Matched fraction (68% Wilson)", "Matched fraction (68% Wilson)")
+        (
+            "Fraction / bin",
+            "pT ratio: median, 16–84%",
+            "pT ratio: median, 16–84%",
+            "Matched fraction (68% Wilson)",
+            "Matched fraction (68% Wilson)",
+            "Fraction / bin",
+        )
     ):
         axes[row, 0].set_ylabel(label)
-        if row < 3:
+        if row < 3 or row == 5:
             upper = max(ax.get_ylim()[1] for ax in axes[row])
             lower = min(ax.get_ylim()[0] for ax in axes[row])
             for ax in axes[row]:
-                ax.set_ylim(0, upper) if row == 0 else ax.set_ylim(min(0.9, lower), max(1.1, upper))
+                ax.set_ylim(0, upper) if row in (0, 5) else ax.set_ylim(min(0.9, lower), max(1.1, upper))
         for ax in axes[row]:
             ax.grid(alpha=0.2)
     layout_comparison_figure(
         fig, axes, f"{process} • {stage} • genjet ↔ targetjet: one-to-one ΔR < {match_dr:g}; no pT response cut", columns=columns
     )
-    fig.savefig(path, dpi=130)
+    fig.savefig(path, dpi=130, bbox_inches="tight")
     plt.close(fig)
     return summaries
+
+
+def plot_jet_spectra(datasets, stage, path, columns, process):
+    """Overlay target and generator jets, preserving their yield per event."""
+    fig, axes = plt.subplots(4, len(columns), figsize=(4 * len(columns), 10.5), squeeze=False)
+    for row, (feature, xlabel) in enumerate((("pt", "Jet pT [GeV]"), ("eta", "Jet eta"), ("phi", "Jet phi [rad]"), ("energy", "Jet energy [GeV]"))):
+        pooled = np.concatenate([data[f"{kind}/{feature}"] for data in datasets.values() for kind in ("genjets", "targetjets")])
+        pooled = pooled[np.isfinite(pooled)]
+        if not len(pooled):
+            continue
+        lo, hi = pooled.min(), pooled.max()
+        if lo == hi:
+            lo, hi = lo - 0.5, hi + 0.5
+        edges = np.linspace(lo, hi, 51)
+        for col, (label, _) in enumerate(columns):
+            data = datasets[label]
+            events = len(data["event/n_genjets"])
+            for kind, legend, linecolor in (("genjets", "Generator truth", "black"), ("targetjets", "Target", color(col))):
+                counts = np.histogram(data[f"{kind}/{feature}"], edges)[0]
+                axes[row, col].stairs(counts / max(events, 1), edges, label=legend, color=linecolor)
+            axes[row, col].set_xlabel(xlabel)
+            axes[row, col].set_xlim(lo, hi)
+            axes[row, col].grid(alpha=0.2)
+            if row == 0:
+                axes[row, col].legend(fontsize=8)
+        ymax = max(ax.get_ylim()[1] for ax in axes[row])
+        for ax in axes[row]:
+            ax.set_ylim(0, ymax)
+        axes[row, 0].set_ylabel("Jets / event / bin")
+    layout_comparison_figure(fig, axes, f"{process} • {stage} • target versus generator truth jet spectra", columns=columns)
+    fig.savefig(path, dpi=130, bbox_inches="tight")
+    plt.close(fig)
 
 
 def main():
@@ -508,7 +597,11 @@ def main():
                 if stage == "parquet"
                 else tfds_events(path, args.num_events, args.split, args.seed)
             )
-            features = tfds.builder_from_directory(tfds_paths[label]).info.features if stage == "parquet" and label in tfds_paths else None
+            features = (
+                shared_pf_features(tfds.builder_from_directory(tfds_paths[label]).info.features)
+                if stage == "parquet" and label in tfds_paths
+                else None
+            )
             values, checks = collect(events, detector, features, args.jet_match_dr)
             datasets[label] = values
             columns.append((label, detector))
@@ -524,6 +617,9 @@ def main():
         report.setdefault("jet_matching", {})[stage] = plot_jet_matching(
             datasets, stage, args.output_dir / filename, args.jet_match_dr, columns, args.process
         )
+        images.append(filename)
+        filename = f"{stage}_jet_spectra.png"
+        plot_jet_spectra(datasets, stage, args.output_dir / filename, columns, args.process)
         images.append(filename)
         allkeys = sorted(set().union(*(v.keys() for v in datasets.values())))
         for group in ("event", "track", "cluster", "target", "genjets", "targetjets", "diagnostic"):
@@ -551,12 +647,13 @@ def main():
     note = args.note or (
         "ColliderML is SYNTHETIC: this validates schema and plumbing only."
         if args.colliderml_synthetic
-        else "ColliderML: pp ttbar; CLIC/CLD/IDEA: ee ttbar at 380/365/365 GeV; MAIA: muon-collider ttbar. Shape agreement is not expected."
+        else "ColliderML: pp ttbar; CLIC/CLD/IDEA/ILD: ee ttbar at 380/365/365/365 GeV; MAIA: muon-collider ttbar. Shape agreement is not expected."
     )
     html = f"<!doctype html><meta charset='utf-8'><title>{args.title}</title><style>body{{font:16px sans-serif;max-width:1600px;margin:30px auto}}img{{width:100%}}</style>"
     html += f"<h1>{args.title}</h1><p>{note}</p>"
-    if detector_comparison:
-        html += "<p>CLIC uses ee ttbar at 380 GeV; CLD and IDEA use ee ttbar at 365 GeV. IDEA tracks are truth-seeded and candidates are target oracles. ColliderML has no PF baseline. For CLIC/CLD/IDEA, stored TFDS and newly converted ROOT samples are independent; distributions are not an event-matched serialization test. ColliderML and MAIA TFDS are built from the plotted parquet samples. The serialization checks separately verify each parquet event against the TFDS feature encoder/decoder.</p>"
+    if detector_comparison and not args.note:
+        idea_tracks = idea_track_description(parquet_paths["idea"]) if "idea" in parquet_paths else "IDEA is not included"
+        html += f"<p>CLIC uses ee ttbar at 380 GeV; CLD, IDEA and ILD use ee ttbar at 365 GeV. {idea_tracks}, and IDEA candidates are target oracles. ILD dE/dx is not stored and is filled with zero. ColliderML has no PF baseline. For CLIC/CLD/IDEA/ILD, stored TFDS and newly converted ROOT samples are independent; distributions are not an event-matched serialization test. ColliderML and MAIA TFDS are built from the plotted parquet samples. The serialization checks separately verify each parquet event against the TFDS feature encoder/decoder.</p>"
     html += "<p>Targets exclude PDG=0 padding/unassigned rows. Non-finite values are counted in summary.json and excluded from histograms. Tail fractions are shown per panel. Input paths, sample counts, full ranges, quantiles, zero fractions and validation results are in <a href='summary.json'>summary.json</a>.</p>"
     if detector_comparison and (args.output_dir.parent / "event_displays" / "index.html").exists():
         html += "<p><a href='../event_displays/index.html'>Five-detector event-display gallery</a>: tracks, clusters, hits and truth guides on a common transverse scale.</p>"
@@ -571,8 +668,8 @@ def main():
     if detector_comparison:
         html += "<p>Features are matched by meaning, not raw column number. After the first six track columns, ColliderML stores ACTS perigee parameters while the other detectors store EDM4hep track features.</p>"
     html += "<p>GeV is used for momenta and energies; phi is in radians; eta is dimensionless. Positive features spanning several orders of magnitude use a shared symlog x-axis. Every row uses shared bins and y limits, with equal event limits per column; object histograms count objects, not events.</p>"
-    html += f"<p>Jet matching uses a maximum-cardinality, minimum-ΔR one-to-one assignment within ΔR &lt; {args.jet_match_dr:g}, with wrapped phi and no response cut. Response is targetjet pT / genjet pT; profiles show the median and 16–84% spread for matched pairs versus genjet coordinates. Solid matching-fraction curves use all genjets as denominator (efficiency); dashed curves use all targetjets (purity), each binned in its own coordinates. Shading shows 68% Wilson intervals; empty bins are omitted. Jets retain their original detector-specific clustering and pT cuts. Binned numerator and denominator counts are saved in summary.json.</p>"
-    if detector_comparison:
+    html += f"<p>Jet matching uses a maximum-cardinality, minimum-ΔR one-to-one assignment within ΔR &lt; {args.jet_match_dr:g}, with wrapped phi and no response cut. Matched response histograms show targetjet pT / genjet pT and targetjet energy / genjet energy; profiles show the median and 16–84% pT-response spread versus genjet coordinates. Jet spectra are normalized per event, retaining differences in jet yield. Solid matching-fraction curves use all genjets as denominator (efficiency); dashed curves use all targetjets (purity), each binned in its own coordinates. Shading shows 68% Wilson intervals; empty bins are omitted. Jets retain their original detector-specific clustering and pT cuts. Binned numerator and denominator counts are saved in summary.json.</p>"
+    if detector_comparison and not args.note:
         html += "<p><strong>ColliderML track features:</strong> tanLambda is derived as sinh(eta), omega uses the nominal 3 T field with the Key4hep 3e-4 conversion factor, and radiusOfInnermostHit is the minimum transverse radius of associated tracker hits. These occupy track columns 10/11/12; the equivalent EDM4hep columns are 11/13/10. The diagnostic compares tanLambda with sinh(eta) for every detector. ColliderML's minimum hit radius and EDM4hep's AtFirstHit reference-point radius are related but not identical definitions.</p>"
     html += "<h2>Validation checks</h2><table border='1' cellpadding='6'><tr><th>Sample</th><th>Events</th><th>Non-finite</th><th>Alignment</th><th>Phi normalization</th><th>Jet indices</th><th>p / pt / eta</th><th>ET / E / eta</th><th>Target E &lt; p</th><th>Encoding mismatches</th></tr>"
     for sample, entry in report["samples"].items():

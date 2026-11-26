@@ -4,7 +4,7 @@ data_dir:
   cld: /mnt/ceph/users/${USER}/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
   clic: /mnt/ceph/users/${USER}/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds
   colliderml: /mnt/ceph/users/${USER}/tensorflow_datasets/colliderml
-  idea: /mnt/ceph/users/jpata/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9/tfds
+  idea: /mnt/ceph/users/jpata/mlpf/idea/tfds
   cld_granularity: /mnt/work/mlpf/tensorflow_datasets/cld/granularity_scan_2025-05-29
 experiments_dir: /mnt/home/${USER}/particleflow/experiments
 runtime_overrides:

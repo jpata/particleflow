@@ -513,6 +513,8 @@ def test_continuation_chooses_most_advanced_compatible_checkpoint(tmp_path):
         }
         if suffix == "best":
             del manifest["resolved_config"]["validation_particle_metrics_max_events"]
+            del manifest["resolved_config"]["train_fraction"]
+            manifest["resolved_config"]["prefetch_factor"] = job.resolved_config.prefetch_factor + 1
         if suffix == "different_limit":
             manifest["resolved_config"]["validation_particle_metrics_max_events"] = 0
         (run_dir / "scenario-manifest.json").write_text(json.dumps(manifest))
@@ -574,6 +576,20 @@ def test_shipped_scenarios_resolve(scenario_path):
     platform = PlatformProfile(name="test", gpus=1, data_dir="/tmp/data", experiments_dir="/tmp/experiments")
     jobs = resolve_scenario_jobs(scenario, platform, spec_file=ROOT / scenario.spec_file)
     assert [(job.seed, job.variant_name) for job in jobs] == [(seed, variant) for seed in scenario.seeds for variant in scenario.variants]
+
+
+def test_finetuning_scenario_requires_source_checkpoint_before_starting(tmp_path):
+    from mlpf.training_scenarios import run_scenario_job
+
+    scenario = load_training_scenario(ROOT / "configs/training/scenarios/pf_fm_finetuning.yaml")
+    scenario.training.parameters["load"] = None
+    platform = PlatformProfile(name="test", gpus=1, data_dir="/tmp/data", experiments_dir=str(tmp_path))
+    spec_file = ROOT / scenario.spec_file
+    job = resolve_scenario_jobs(scenario, platform, spec_file=spec_file)[0]
+    run_scenario_job(job, scenario, platform, spec_file, dry_run=True)
+    with pytest.raises(ValueError, match="requires a source checkpoint"):
+        run_scenario_job(job, scenario, platform, spec_file)
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize("gpus", [1, 2, 4, 8])
@@ -752,7 +768,7 @@ def test_feature_bag_scenario_differs_only_in_the_feature_bag():
         # Each detector's samples come from that detector's platform data_dir.
         assert config.data_dir == {name: platform.data_dir[name] for name in ("cld", "clic", "colliderml")}
         assert config.data_dir_for("colliderml_ttbar_nopu_pf") == platform.data_dir["colliderml"]
-        assert config.dataset_versions() == {"cld": "3.3.0", "clic": "3.3.0", "colliderml": "1.5.0"}
+        assert config.dataset_versions() == {"cld": "3.4.0", "clic": "3.4.0", "colliderml": "1.5.0"}
         # Each detector gets the same share of the training steps.
         assert {name: group.weight for name, group in config.train_dataset["cld"].items()} == {"cld": 1.0, "clic": 1.0, "colliderml": 1.0}
     reference, candidate = (job.resolved_config.model_dump(mode="json") for job in jobs)

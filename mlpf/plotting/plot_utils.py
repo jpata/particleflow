@@ -85,6 +85,7 @@ CLASS_LABELS = {
     "clic": CLASS_LABELS_CLIC,
     "cld": CLASS_LABELS_CLIC,
     "idea": CLASS_LABELS_CLIC,
+    "ild": CLASS_LABELS_CLIC,
     "maia": CLASS_LABELS_CLIC,
     "colliderml": CLASS_LABELS_CLIC,
     "colliderml_hits": CLASS_LABELS_CLIC,
@@ -137,10 +138,13 @@ def get_class_names(sample_name):
 
 # overline results in misalignment
 EVALUATION_DATASET_NAMES = {
-    "idea_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$ (proxy tracks)",
-    "idea_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$ (proxy tracks)",
-    "idea_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$ (proxy tracks)",
+    "idea_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
+    "idea_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "idea_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
+    "idea_edm_z_qq_pf": r"$e^+e^- \rightarrow Z \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
+    "idea_edm_z_tautau_pf": r"$e^+e^- \rightarrow Z \rightarrow \tau^+\tau^-$",
     "cld_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "cld_edm_z_qq_pf": r"$e^+e^- \rightarrow Z \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
     "cld_edm_z_tautau_pf": r"$e^+e^- \rightarrow Z \rightarrow \tau^+\tau^-$",
     "cld_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
     "cld_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
@@ -153,7 +157,14 @@ EVALUATION_DATASET_NAMES = {
     "clic_edm_qq_hits": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_hits": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
+    "clic_edm_z_qq_pf": r"$e^+e^- \rightarrow Z \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
+    "clic_edm_z_tautau_pf": r"$e^+e^- \rightarrow Z \rightarrow \tau^+\tau^-$",
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
+    "ild_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
+    "ild_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
+    "ild_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
+    "ild_edm_z_qq_pf": r"$e^+e^- \rightarrow Z \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
+    "ild_edm_z_tautau_pf": r"$e^+e^- \rightarrow Z \rightarrow \tau^+\tau^-$",
     "cms_pf_qcd": r"QCD multijets, pileup 55-75",
     "cms_pf_qcd_nopu": r"QCD multijets, no pileup",
     "cms_pf_ttbar": r"$\mathrm{t}\bar{\mathrm{t}}$, pileup 55-75",
@@ -183,6 +194,7 @@ GENJET_BINS_PT_DATASET = {
     "clic": [10, 20, 40, 60, 80, 100, 200],
     "cld": [10, 20, 40, 60, 80, 100, 200],
     "idea": [10, 20, 40, 60, 80, 100, 200],
+    "ild": [10, 20, 40, 60, 80, 100, 200],
     "maia": [10, 20, 40, 60, 80, 100, 200, 400, 800, 1600],
     "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
     "colliderml": [10, 20, 40, 60, 80, 100, 200, 400, 800],
@@ -387,6 +399,10 @@ def colliderml_label(ax):
     return experiment_label(ax, experiment="ColliderML-ODD", tag1="Sim.", tag2="pp (14 TeV)", x1=0.35)
 
 
+def ild_label(ax):
+    return experiment_label(ax, experiment="Key4HEP-ILD", tag1="Sim.", tag2="ee (365 GeV)", x1=0.35)
+
+
 def maia_label(ax):
     return experiment_label(ax, experiment="MAIA", tag1="Sim.", tag2="Muon collider", x1=0.35)
 
@@ -396,6 +412,7 @@ EXPERIMENT_LABELS = {
     "clic": clic_label,
     "cld": cld_label,
     "idea": idea_label,
+    "ild": ild_label,
     "maia": maia_label,
     "clic_hits": clic_label,
     "cld_hits": cld_label,

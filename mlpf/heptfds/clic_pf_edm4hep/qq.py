@@ -21,8 +21,11 @@ Zenodo. https://doi.org/10.5281/zenodo.8260741
 
 
 class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
-    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.3.0"))
+    DESCRIPTION = _DESCRIPTION
+    PROCESS_NAME = "p8_ee_qq_ecm380"
+    VERSION = tfds.core.Version(os.environ.get("TFDS_VERSION", "3.4.0"))
     RELEASE_NOTES = {
+        "3.4.0": "Regenerated with key4hep-sim v1.4.0 and stable Key4hep 2026-04-08 for the 50k-event campaign.",
         "1.0.0": "Initial release.",
         "1.1.0": "update stats, move to 380 GeV",
         "1.2.0": "sin cos as separate features",
@@ -59,7 +62,7 @@ class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
         """Returns the dataset metadata."""
         return tfds.core.DatasetInfo(
             builder=self,
-            description=_DESCRIPTION,
+            description=self.DESCRIPTION,
             features=tfds.features.FeaturesDict(
                 {
                     "X": tfds.features.Tensor(
@@ -88,7 +91,7 @@ class ClicEdmQqPf(tfds.core.GeneratorBasedBuilder):
     # Abstract method needs to be specified
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         path = dl_manager.manual_dir
-        return split_sample(Path(path / "p8_ee_qq_ecm380/"), self.builder_config, num_splits=NUM_SPLITS)
+        return split_sample(Path(path / self.PROCESS_NAME), self.builder_config, num_splits=NUM_SPLITS)
 
     # Abstract method needs to be specified
     def _generate_examples(self, files):
