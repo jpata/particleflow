@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Replay the ColliderML PU0 release recipes on identical TFDS inputs."""
+"""Replay the ColliderML PU0 release recipes or capacity-matched backbones."""
 
 import argparse
+from collections import Counter
+from contextlib import ExitStack, contextmanager
 import json
 import os
 from pathlib import Path
@@ -11,9 +13,11 @@ import threading
 import time
 
 import torch
+from torch import nn
 
 from mlpf.model.PFDataset import Collater, PFDataset
 from mlpf.model.benchmarking import telemetry_backend
+from mlpf.model.heptv2 import HEPTv2Layer
 from mlpf.model.losses import make_task_loss_weighter, mlpf_loss
 from mlpf.model.mlpf import MLPF, configure_model_trainable
 from mlpf.model.training import UNIT_REGRESSION_WEIGHTS, model_step
@@ -78,9 +82,31 @@ def training_batches(config, args, collate):
         ]
 
 
-def make_model(config, weights):
+def trainable_parameters(module):
+    return sum(parameter.numel() for parameter in module.parameters() if parameter.requires_grad)
+
+
+def widen_attention_ffn(model, target_params):
+    # Keep the release's input/output embedding and heads. Widen only the
+    # two-linear attention FFN and round to a multiple suitable for tensor cores.
+    layers = model.backbone
+    input_width = layers[0].seq[0].in_features
+    other_params = trainable_parameters(layers) - sum(trainable_parameters(layer.seq) for layer in layers)
+    params_per_hidden_unit = len(layers) * (2 * input_width + 1)
+    width = round((target_params - other_params - len(layers) * input_width) / params_per_hidden_unit / 8) * 8
+    if width <= 0:
+        raise ValueError(f"Invalid matched attention FFN width {width}")
+    for layer in layers:
+        layer.seq[0] = nn.Linear(input_width, width)
+        layer.seq[2] = nn.Linear(width, input_width)
+    return width
+
+
+def make_model(config, weights, match_backbone_params=None):
     torch.manual_seed(config.seed)
     model = MLPF(config)
+    if match_backbone_params is not None:
+        widen_attention_ffn(model, match_backbone_params)
     model.task_loss_weighter = make_task_loss_weighter(config.task_loss_weights.model_dump())
     if weights:
         checkpoint = torch.load(weights, map_location="cpu", weights_only=True)
@@ -107,6 +133,7 @@ def train_step(model, batch, optimizer, scheduler):
     optimizer.zero_grad(set_to_none=True)
     with torch.autocast("cuda", dtype=torch.bfloat16):
         loss, *_ = model_step(batch, model, mlpf_loss, UNIT_REGRESSION_WEIGHTS)
+    retained_mib = torch.cuda.memory_allocated() / 2**20
     forward_end = torch.cuda.Event(enable_timing=True)
     forward_end.record()
     loss.backward()
@@ -114,7 +141,7 @@ def train_step(model, batch, optimizer, scheduler):
     backward_end.record()
     optimizer.step()
     scheduler.step()
-    return loss.detach(), forward_end, backward_end
+    return loss.detach(), forward_end, backward_end, retained_mib
 
 
 def measure(model, host_batches, args, optimizer, scheduler):
@@ -141,7 +168,7 @@ def measure(model, host_batches, args, optimizer, scheduler):
             start.record()
             wall_start = time.perf_counter()
             if training:
-                loss, forward_end, backward_end = train_step(model, batch, optimizer, scheduler)
+                loss, forward_end, backward_end, retained_mib = train_step(model, batch, optimizer, scheduler)
             else:
                 with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
                     model.predict_particles(batch.X, batch.mask, source_id=batch.source_id)
@@ -162,6 +189,7 @@ def measure(model, host_batches, args, optimizer, scheduler):
                 "padded_width": host_batch.mask.shape[1],
             }
             if training:
+                step["allocated_after_forward_loss_mib"] = retained_mib
                 step["forward_loss_cuda_ms"] = start.elapsed_time(forward_end)
                 step["backward_cuda_ms"] = forward_end.elapsed_time(backward_end)
                 step["optimizer_cuda_ms"] = backward_end.elapsed_time(end)
@@ -201,17 +229,102 @@ def is_cuda_oom(error):
     return False
 
 
+def backbone_modules(model):
+    for layer in model.backbone:
+        yield "backbone", layer
+        if isinstance(layer, HEPTv2Layer):
+            yield "position_embedding", layer.pe_func
+            yield "feedforward", layer.ff
+            for norm in (layer.norm1, layer.norm2, layer.q_norm, layer.k_norm):
+                yield "normalization", norm
+            yield "attention", layer.attn
+        else:
+            yield "feedforward", layer.seq
+            for norm in (layer.norm0, layer.norm1):
+                yield "normalization", norm
+            yield "attention", layer.mha
+
+
+@contextmanager
+def observe_backbone(model, scope):
+    with ExitStack() as cleanup:
+        for name, module in backbone_modules(model):
+            if module is None:
+                continue
+            active = []
+
+            def enter(_module, _inputs, name=name, active=active):
+                context = scope(name)
+                context.__enter__()
+                active.append(context)
+
+            def leave(_module, _inputs, _output, active=active):
+                if active:
+                    active.pop().__exit__(None, None, None)
+
+            cleanup.callback(module.register_forward_pre_hook(enter).remove)
+            cleanup.callback(module.register_forward_hook(leave, always_call=True).remove)
+        yield
+
+
+def diagnose_training(model, batch):
+    # Count unique saved CUDA storage once, attributing shared views to the
+    # first saving scope. Live parameters, buffers and input tensors are excluded.
+    batch = batch.to("cuda")
+    static = (*model.parameters(), *model.buffers(), batch.X, batch.mask, batch.ytarget, batch.source_id, batch.input_type_id)
+    seen = {tensor.untyped_storage().data_ptr() for tensor in static if tensor is not None and tensor.is_cuda}
+    groups = Counter()
+    scopes = ["encoder_heads_loss"]
+
+    @contextmanager
+    def record_scope(name):
+        scopes.append(name)
+        try:
+            yield
+        finally:
+            scopes.pop()
+
+    def save(tensor):
+        if tensor.is_cuda:
+            with torch.no_grad():
+                values = tensor.values() if tensor.is_nested else tensor
+            storage = values.untyped_storage()
+            pointer = storage.data_ptr()
+            if pointer not in seen:
+                seen.add(pointer)
+                groups[scopes[-1]] += storage.nbytes()
+        return tensor.detach()
+
+    model.zero_grad(set_to_none=True)
+    with observe_backbone(model, record_scope), torch.autograd.graph.saved_tensors_hooks(save, lambda tensor: tensor):
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            loss, *_ = model_step(batch, model, mlpf_loss, UNIT_REGRESSION_WEIGHTS)
+    del loss
+    return {"saved_storage_mib": {name: size / 2**20 for name, size in sorted(groups.items())}}
+
+
 def profile_inference(model, batch):
     from torch.profiler import ProfilerActivity, profile
 
     batch = batch.to("cuda")
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-        with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as profiler:
-            model.predict_particles(batch.X, batch.mask, source_id=batch.source_id)
-            torch.cuda.synchronize()
-    cuda_events = [event for event in profiler.events() if event.device_type == torch.autograd.DeviceType.CUDA]
-    kernels = [event for event in cuda_events if not event.name.startswith(("Memcpy", "Memset"))]
-    return {"kernel_count": len(kernels), "kernel_time_ms_sum": sum(event.time_range.elapsed_us() for event in kernels) / 1000}
+    samples = []
+    with torch.inference_mode():
+        for _ in range(3):
+            with profile(activities=[ProfilerActivity.CUDA]) as profiler:
+                with torch.autocast("cuda", dtype=torch.bfloat16):
+                    model.predict_particles(batch.X, batch.mask, source_id=batch.source_id)
+                torch.cuda.synchronize()
+            kernels = [
+                event
+                for event in profiler.events()
+                if event.device_type == torch.autograd.DeviceType.CUDA and not event.name.startswith(("Memcpy", "Memset"))
+            ]
+            samples.append({"kernel_count": len(kernels), "kernel_time_ms_sum": sum(event.time_range.elapsed_us() for event in kernels) / 1000})
+    return {
+        "kernel_count": statistics.median(sample["kernel_count"] for sample in samples),
+        "kernel_time_ms_sum": statistics.median(sample["kernel_time_ms_sum"] for sample in samples),
+        "samples": samples,
+    }
 
 
 def parity_snapshot(model, train_batch, test_batches, seed):
@@ -276,7 +389,9 @@ def main():
     parser.add_argument("--variant", choices=("attention", "heptv2"), required=True)
     parser.add_argument("--checkpointing", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--pack-padding", action="store_true")
-    parser.add_argument("--profile-length", type=int, help="Profile kernels for this unpadded sequence after timing")
+    parser.add_argument("--matched-capacity", action="store_true", help="Use seeded models and match Attention's backbone parameter count to HEPTv2")
+    parser.add_argument("--diagnose-training-batch", type=int, help="Inspect saved forward storage at this training batch size")
+    parser.add_argument("--profile-length", type=int, action="append", default=[], help="Profile this unpadded sequence after timing")
     parser.add_argument("--reference-snapshot", type=Path, help="Compare a parity replay with this snapshot")
     parser.add_argument("--platform", default="configs/training/platforms/tallinn_l40.yaml")
     parser.add_argument("--data-dir", default="/scratch/persistent/joosep/colliderml/tfds/")
@@ -290,8 +405,12 @@ def main():
     args.batches = sorted(set(args.batches or ([8] if args.phase == "parity" else BATCH_SIZES)))
     if min(args.batches) < 1 or min(args.lengths, default=1) < 1 or args.warmup < 1 or args.repeats < 1:
         parser.error("Batch sizes, lengths, warmup and repeats must be positive")
-    if args.profile_length is not None and (args.phase != "infer" or args.profile_length not in args.lengths):
+    if args.profile_length and (args.phase != "infer" or not set(args.profile_length).issubset(args.lengths)):
         parser.error("--profile-length requires an inference length included in --lengths")
+    if args.diagnose_training_batch is not None and (args.phase != "train" or args.diagnose_training_batch not in args.batches):
+        parser.error("--diagnose-training-batch requires a training batch included in --batches")
+    if args.matched_capacity and (args.weights or args.phase == "parity"):
+        parser.error("--matched-capacity uses seeded models for training and inference")
     if not torch.cuda.is_available():
         parser.error("A CUDA or ROCm GPU is required")
     torch.set_num_threads(2)
@@ -305,6 +424,20 @@ def main():
         extra_overrides={"data_dir": args.data_dir},
     )
     config = job.resolved_config
+    target_params = None
+    if args.matched_capacity:
+        config.lr = 0.0005
+        if args.variant == "attention":
+            heptv2_job = resolve_scenario_job(
+                scenario,
+                platform,
+                "colliderml_pf_heptv2",
+                scenario.seeds[0],
+                extra_overrides={"data_dir": args.data_dir},
+            )
+            target_params = trainable_parameters(MLPF(heptv2_job.resolved_config).backbone)
+        else:
+            config.model.heptv2.activation_checkpointing = False
     if args.variant == "heptv2":
         if args.checkpointing is not None:
             config.model.heptv2.activation_checkpointing = args.checkpointing
@@ -332,6 +465,7 @@ def main():
         "device": torch.cuda.get_device_name(),
         "device_uuid": str(torch.cuda.get_device_properties(0).uuid),
         "hostname": os.uname().nodename,
+        "heptv2_hash_limit": os.getenv("HEPTV2_ENCODER_NUM_HASHES"),
         "device_total_mib": torch.cuda.get_device_properties(0).total_memory / 2**20,
         "recipe": config.model_dump(mode="json"),
         "results": {},
@@ -343,7 +477,14 @@ def main():
         if args.phase == "infer" and args.variant == "heptv2":
             if host_batches[0].mask.shape[1] % config.model.heptv2.block_size:
                 parser.error("HEPTv2 requires widths divisible by its block size")
-        model = make_model(config, args.weights)
+        model = make_model(config, args.weights, target_params)
+        if "parameters" not in result:
+            first_layer = model.backbone[0]
+            result["parameters"] = {
+                "model_trainable": trainable_parameters(model),
+                "backbone_trainable": trainable_parameters(model.backbone),
+                "ffn_width": first_layer.ff.gate_proj.out_features if args.variant == "heptv2" else first_layer.seq[0].out_features,
+            }
         optimizer = get_optimizer(model, config) if training else None
         scheduler = get_lr_schedule(config, optimizer, config.num_steps) if training else None
         try:
@@ -352,8 +493,11 @@ def main():
             if not is_cuda_oom(error):
                 raise
             point = {"status": "oom", "error": str(error)}
-        if point["status"] == "ok" and args.phase == "infer" and label == f"unpadded/{args.profile_length}":
-            point["profile"] = profile_inference(model, host_batches[0])
+        if point["status"] == "ok":
+            if label in {f"unpadded/{length}" for length in args.profile_length}:
+                point["profile"] = profile_inference(model, host_batches[0])
+            if label == f"batch/{args.diagnose_training_batch}":
+                point["diagnostics"] = diagnose_training(model, host_batches[args.warmup])
         result["results"][label] = point
         reference = result["results"].get("batch/1", {})
         if label.startswith("batch/") and point["status"] == reference.get("status") == "ok":

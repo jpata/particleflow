@@ -160,6 +160,117 @@ The full sweep and replay JSON are in the worktree's
 These short replays measure performance from the published weights. The issue
 records the full-run physics results. [Issue 588](https://github.com/jpata/particleflow/issues/588)
 
+## Capacity-matched follow-up
+
+The release Attention model has 3.114M trainable parameters. For the
+follow-up, its feed-forward width was widened from 256 to 2,048, which
+gave 8.630M trainable parameters versus packed HEPTv2's 8.639M (0.12%
+apart). Both models have six layers, 256-wide embeddings, 16 heads, and
+zero backbone dropout. Attention uses the Tallinn profile's native
+jagged Flash SDPA. HEPTv2 uses the packed path with three hashes.
+The comparison starts from seeded weights, uses the same ColliderML PU0
+inputs and BF16, and runs LAMB with the same learning-rate schedule and
+activation checkpointing disabled. The training measurements replay
+short optimizer-step windows from initialization.
+
+### Throughput and memory at matched capacity
+
+Training arms ran on one L40S (job 62896983), and inference arms ran
+on one L40S (array 62896883, task 1).
+
+| Phase | Events/batch | Backbone | Median (ms) | Events/s | Peak GiB allocated / reserved / device |
+|---|---:|---|---:|---:|---:|
+| Training | 32 | Flash Attention | 138.2 | 231.5 | 3.44 / 4.60 / 5.17 |
+| Training | 32 | HEPTv2 | 177.7 | 180.2 | 8.06 / 10.22 / 10.79 |
+| Training | 128 | Flash Attention | 245.9 | 521.6 | 13.14 / 24.38 / 24.94 |
+| Training | 128 | HEPTv2 | 710.7 | 179.8 | 31.52 / 38.48 / 39.05 |
+| Inference | 32 | Flash Attention | 40.2 | 741 | 0.42 / 0.61 / 1.15 |
+| Inference | 32 | HEPTv2 | 56.0 | 578 | 0.84 / 1.02 / 1.55 |
+| Inference | 128 | Flash Attention | 73.7 | 1,734 | 1.59 / 2.41 / 2.95 |
+| Inference | 128 | HEPTv2 | 246.9 | 518 | 3.41 / 4.22 / 4.75 |
+
+At batch 128, Flash Attention delivered 2.90× the training throughput
+and 3.35× the inference throughput. Its forward/loss and backward
+phases took 76 and 147 ms, versus 258 and 409 ms for HEPTv2. Training
+batch scaling efficiency at 128 was 62% for Flash Attention and 15% for
+HEPTv2. Inference efficiency was 94% and 19%, respectively.
+
+### Batch-one latency
+
+The two models alternated request by request on one GPU (job 62896982).
+Every point has 40 measured pairs. Peak device VRAM is from separate
+single-model replays in array 62896883.
+
+| Valid elements | Flash Attention median / p95 (ms) | HEPTv2 median / p95 (ms) | Flash / HEPTv2 device MiB |
+|---:|---:|---:|---:|
+| 1,280 | 58.7 / 61.8 | 47.9 / 51.6 | 653 / 667 |
+| 8,192 | 61.8 / 65.0 | 63.4 / 66.7 | 813 / 931 |
+| 19,968 | 61.5 / 65.2 | 64.2 / 67.3 | 1,055 / 1,311 |
+| 32,768 | 90.3 / 95.0 | 75.6 / 80.5 | 1,349 / 1,803 |
+| 65,536 | 310.6 / 313.9 | 144.3 / 148.8 | 2,073 / 3,005 |
+
+At 1,280 elements, the CUDA-only profiler measured 472 kernels and
+1.27 ms of summed kernel time for Flash Attention, and 1,704 kernels
+and 3.94 ms for HEPTv2. A separate interleaved diagnostic held the
+Attention weights fixed and used dense or jagged Flash SDPA on fully
+valid inputs (job 62897041).
+
+| Valid elements | Jagged Flash median (ms) | Dense Flash median (ms) | HEPTv2 median (ms) |
+|---:|---:|---:|---:|
+| 1,280 | 57.3 | 20.1 | 47.7 |
+| 8,192 | 57.9 | 20.4 | 51.6 |
+| 32,768 | 85.7 | 80.2 | 68.6 |
+| 65,536 | 299.9 | 297.1 | 139.2 |
+
+The layout change matched the raw Attention outputs exactly at these
+sizes. The 37 ms gap between the two Flash paths at 1,280 elements
+shows how strongly the end-to-end result depends on jagged dispatch
+when GPU work is small. At 32,768 elements, summed kernel time in the
+first interleaved replay was 80.8 ms for Flash Attention and 50.5 ms
+for HEPTv2. HEPTv2's long-sequence speedup persists with dense Flash.
+
+### Where the cost comes from
+
+Flash Attention computes all pair scores within each event using tiled
+SDPA. It keeps the score matrix out of device memory. Packed HEPTv2
+sorts by hash, gathers Q/K/V into each hash's buckets, runs local
+attention, undoes the permutations, and combines the results using
+their log-sum-exp values. Its position embedding and RMSNorm also keep
+backward activations.
+
+Per head and layer, global Attention computes `sum(L_i ** 2)` pair
+scores for a batch with event lengths `L_i`. HEPTv2 computes roughly
+`sum(3 * 128 * round_up(L_i, 128))`. At batch 32 the measured event
+lengths gave HEPTv2 about 56% as many pair scores. The routing,
+copies, and per-layer saved activations outweighed that savings. A
+batch of independent short events keeps the per-event global attention
+problem small. On one 65,536-element sequence HEPTv2 computes about
+0.6% as many pair scores, so the local attention has room to pay for
+routing overhead.
+
+At batch 32, unique CUDA storage saved for backward was 2.79 GiB for
+Attention and 6.89 GiB for HEPTv2. The widened feed-forward blocks
+accounted for about 1.16 GiB in each model. HEPTv2 retained an extra
+1.81 GiB in bucket attention and hash mixing, 1.40 GiB in its learned
+position embedding, and 0.84 GiB in normalization. The diagnostic
+excludes live weights, buffers, and batch inputs, and assigns shared
+storage to the first scope that saves it.
+
+As an ablation, limiting packed HEPTv2 to one hash lowered batch-32
+saved attention storage from 2.16 to 0.91 GiB and raised batch-128
+training throughput from 180 to 240 events/s. At batch 128 it lowered
+peak allocated memory from 31.52 to 26.06 GiB, while sampled device
+VRAM rose from 39.05 to 40.35 GiB with the larger allocator reservation.
+The ablation changes routing. It measures system cost using seeded
+weights.
+
+Raw capacity-matched results, interleaved timing drivers, plots, and
+Slurm logs are in the worktree's `experiments/issue588/capacity/`.
+Use `--matched-capacity` with the benchmark driver on either variant
+and omit `--weights`. Use `--pack-padding` for HEPTv2 and
+`--diagnose-training-batch 32` for storage attribution. Both training
+arms use `--batches 1 8 16 32 64 128 --repeats 12`.
+
 ## Reproduce
 
 Run on a single GPU with the release weights downloaded to `attention.pth`
