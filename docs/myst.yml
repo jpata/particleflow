@@ -86,6 +86,7 @@ project:
             - file: studies/tracker_momentum_readout.md
             - file: studies/charged_fit_correction.md
             - file: studies/heptv2_checkpointing.md
+            - file: studies/heptv2_colliderml_pu0.md
             - file: studies/reconstruction_diagnostics.md
             - file: studies/tracker_grouping_loss_experiments.md
             - file: studies/tracker_fit_loss_experiments.md

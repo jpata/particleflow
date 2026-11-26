@@ -1070,6 +1070,7 @@ class HEPTConfig(BaseModel):
 class HEPTv2Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     activation_checkpointing: bool = False
+    pack_padding: bool = False
     embedding_dim: int = 128
     width: int = 512
     num_convs: int = 6

@@ -110,3 +110,31 @@ def test_checkpoint_bypassed_outside_opt_in_training(monkeypatch, training, grad
     with torch.set_grad_enabled(grad_enabled):
         outputs = model(x, mask)
     assert torch.isfinite(outputs[2]).all()
+
+
+def test_checkpoint_reuses_coordinates_after_backbone_transform(monkeypatch):
+    import mlpf.model.heptv2 as heptv2
+
+    model = make_model(checkpointing=True)
+    x, mask = make_inputs("cpu")
+    transformed = x.clone()
+    transformed[..., 2] += 1
+
+    class TrackTransform(torch.nn.Module):
+        def forward(self, features, source_id):
+            torch.testing.assert_close(features[..., 2:5], x[..., 2:5])
+            return transformed
+
+    def convert(features):
+        calls.append(features)
+        return reference_conversion(features)
+
+    calls = []
+    reference_conversion = heptv2.fixed_point_coordinates
+    monkeypatch.setattr(mlpf_module, "fixed_point_coordinates", convert)
+    monkeypatch.setattr(heptv2, "fixed_point_coordinates", convert)
+    model.track_calo_entry = TrackTransform()
+
+    model.encode_backbone(x, mask).square().mean().backward()
+    assert len(calls) == 1
+    assert calls[0] is transformed

@@ -119,3 +119,33 @@ def test_gpu_never_falls_back_to_dense_attention(monkeypatch):
     with pytest.raises(RuntimeError, match="dense GPU fallback is disabled") as error:
         qkv_res(*tensors)
     assert isinstance(error.value.__cause__, ValueError)
+
+
+@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required"))])
+def test_packed_padding_preserves_partial_buckets_and_gradients(device):
+    from mlpf.model.heptv2 import fixed_point_coordinates, heptv2_padding_layout
+
+    torch.manual_seed(12)
+    block_size = 8
+    layer = HEPTv2Layer(embedding_dim=32, num_heads=2, dropout=0.0, block_size=block_size, n_hashes=3).to(device)
+    inputs = torch.randn(3, 24, 32, device=device, requires_grad=True)
+    features = torch.randn(3, 24, 6, device=device)
+    features[:, 3:6, 2:5] = features[:, :1, 2:5]
+    # Interior padding, ties, nonzero padding coordinates and an empty event.
+    mask = torch.arange(24, device=device) < torch.tensor([19, 10, 0], device=device)[:, None]
+    mask[0, 2] = False
+    mask[1, 5] = False
+    layout = heptv2_padding_layout(mask, block_size)
+    assert len(layout.occupied_slots) == 5 * block_size
+    assert heptv2_padding_layout(torch.zeros_like(mask), block_size) is None
+    assert heptv2_padding_layout(torch.ones_like(mask), block_size) is None
+
+    params = tuple(p for p in layer.parameters() if p.requires_grad)
+    weights = torch.randn_like(inputs)
+    dense = layer(inputs, mask, features)
+    dense_grad = torch.autograd.grad((dense * weights).sum(), (inputs, *params))
+    packed = layer(inputs, mask, features, fixed_coords=fixed_point_coordinates(features), padding_layout=layout)
+    packed_grad = torch.autograd.grad((packed * weights).sum(), (inputs, *params))
+    torch.testing.assert_close(packed, dense, rtol=2e-5, atol=2e-6)
+    for actual, expected in zip(packed_grad, dense_grad, strict=True):
+        torch.testing.assert_close(actual, expected, rtol=2e-4, atol=2e-5)
