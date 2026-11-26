@@ -1,0 +1,45 @@
+# Input-only pretraining. Validation is carved out of train; test stays untouched.
+model_name: pyg-cld-v1
+production: cld
+data_dir: /mnt/work/mlpf/tensorflow_datasets/cld
+datasets:
+  - cld_edm_ttbar_pf/1:3.3.0
+  - cld_edm_ww_fullhad_pf/1:3.3.0
+  - cld_edm_qq_pf/1:3.3.0
+model_overrides:
+  model:
+    backbone:
+      mode: shared
+    attention:
+      use_flash_attn_varlen: false
+# RTX 5060 Ti 16 GB: measured 10.51 GiB reserved for 768 copies of the
+# largest event in the configured 12,288-event pool; see references/cld_ssl_local_batch.json.
+batch_size: 768
+num_workers: 4
+prefetch_factor: 2
+timing_frequency: 10
+steps: 2000
+train_events_per_dataset: 4096
+valid_events_per_dataset: 32
+validation_frequency: 100
+checkpoint_frequency: 100
+dtype: bfloat16
+ssl:
+  prototypes: 256
+  keep_fraction: 0.6
+  student_views: 2
+probe:
+  enabled: true
+  frequency: 500
+  at_start: true
+  steps: 200
+  batch_size: 8
+  train_events_per_dataset: 64
+  valid_events_per_dataset: 32
+  save_events_per_dataset: 4
+snapshots:
+  enabled: true
+  frequency: 100
+  events_per_dataset: 4
+  elements_per_event: 256
+  teacher: true
