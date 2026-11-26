@@ -172,7 +172,7 @@ Each detector has its own feature layout. Two settings let one encoder handle al
 - `model.input_normalization: true` (required) brings the columns of each detector to a comparable scale.
 - `model.feature_bag: true` maps each detector's columns into a shared vocabulary of named physical quantities, so that, for example, track pT always enters the encoder in the same slot. Quantities a detector does not provide are zero. It requires `model.input_encoding: split`.
 
-The `cld_clic_colliderml_feature_bag` scenario compares joint training with and without the feature bag; `pf_fm_joint` and `pf_fm_finetuning` pretrain on ColliderML and fine-tune on the Key4hep v1.4.0 CLD, CLIC, ILD and IDEA datasets. These are research workflows; see the [scenario guide](scenarios.md).
+The `cld_clic_colliderml_feature_bag` scenario compares joint training with and without the feature bag; `pf_fm_joint` and `pf_fm_finetuning` train a joint model and fine-tune it on IDEA or on CLD granularity variants. These are research workflows; see the [scenario guide](scenarios.md).
 
 ## CLD hit models
 

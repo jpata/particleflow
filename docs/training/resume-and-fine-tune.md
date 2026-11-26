@@ -75,7 +75,7 @@ the weights. For a new fine-tuning dataset, add `--reset_task_loss_weights true`
 to start its configured task-loss calibration from scratch. This requires
 `--load_weights_only true`; a full resume retains its existing calibration.
 
-The `pf_fm_finetuning` [scenario](scenarios.md) applies this recipe for 30,000 updates on each of the Key4hep v1.4.0 CLD, CLIC, ILD and IDEA track/cluster datasets, starting from `checkpoint-100000.pth` of the ColliderML `data_25pct` variant of `pf_fm_joint`. See the [scenario reference](../../configs/training/README.md#pf_fm_experts-pf_fm_joint-pf_fm_finetuning) for the launch command and dataset requirements.
+The `pf_fm_finetuning` [scenario](scenarios.md) applies this recipe to fine-tune a joint attention checkpoint on IDEA or on CLD granularity variants.
 
 For a full resume that only restarts data iteration, use `--sampler_from_scratch true` instead. That option retains the checkpoint step, optimizer, and scheduler. A full resume also retains the saved learning-rate schedule; a changed configured learning rate is ignored with a warning. Simply extending `--num_steps` does not create a fresh schedule.
 

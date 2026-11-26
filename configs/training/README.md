@@ -83,41 +83,29 @@ uv run python3 scripts/training/run_scenario.py \
 
 ### `pf_fm_experts`, `pf_fm_joint`, `pf_fm_finetuning`
 
-| Scenario | Train, validation and test datasets | Initialization |
+| Scenario | Training data | Initialization |
 |---|---|---|
-| `pf_fm_experts` | One model per Key4hep v1.4.0 detector (CLD, CLIC, ILD, IDEA) | Fresh weights |
-| `pf_fm_joint` | ColliderML Release 1 ttbar without pileup (TFDS 1.5.0, configurations 1–10), at four training-data fractions | Fresh weights |
-| `pf_fm_finetuning` | One model per Key4hep v1.4.0 detector, on the same data as its expert | `pf_fm_joint` checkpoint trained on 25% of the data |
+| `pf_fm_experts` | Separate CLD, CLIC, IDEA 0.3.0 and ColliderML PU0 experts, plus CLD granularity variants | Fresh weights |
+| `pf_fm_joint` | CLD, CLIC and ColliderML PU0 with `pyg-cldcliccolliderml-v1` | Fresh weights |
+| `pf_fm_finetuning` | IDEA 0.3.0 and CLD granularity variants | A joint attention checkpoint |
 
-Each [Key4hep v1.4.0 detector](../../docs/datasets/key4hep-50k.md) uses five track/cluster samples (ttbar, fully hadronic WW, qq, Z→qq and Z→tautau). CLD and CLIC use TFDS 3.4.0, configurations 1–10; ILD uses 0.2.0 and IDEA 0.5.0, both with configuration 1. The scenarios use the committed normalization tables for these versions and for [ColliderML 1.5.0](../../docs/datasets/colliderml.md).
+All use six shared attention layers of width 256, native Flash attention, input normalization, LAMB with peak LR 0.0005, OneCycle with 30% warm-up, up to 500,000 updates at global batch 16, and benchmark telemetry. Joint training, fine-tuning, and CLD scan experts enable the feature bag; nominal experts use native inputs. The Flatiron profiles `h100_single`, `a100`, and `h100` use 1, 4, and 8 GPUs at the same global batch.
 
-All three use four attention layers of width 512 (16 heads × 32 channels), native Flash attention, input normalization, the LAMB optimizer with a OneCycle schedule (peak LR 0.001, 30% warm-up), and a global batch of 32 events. Experts use each detector's native inputs. The joint and fine-tuning scenarios use the same feature bag, so the pretrained weights load without changes.
+| Scenario | Validation interval | Early stopping |
+|---|---:|---|
+| Experts | 10,000 | 3 validations without improvement |
+| Joint | 10,000 | none |
+| Fine-tuning | 1,000 | 30 validations without improvement |
 
-| Scenario | Update budget | Warm-up | Validation interval |
-|---|---:|---:|---:|
-| Experts | 100,000 | 30,000 | 10,000 |
-| Joint | 100,000 | 30,000 | 10,000 |
-| Fine-tuning | 30,000 | 9,000 | 1,000 |
+Checkpoints are written every 2,000 updates, and the lowest-loss one is kept as `checkpoints/best.pth`. Fine-tuning loads weights only and recalibrates the task-loss weights; set `load` in the scenario, or pass `--set load=/path/to/joint/checkpoint.pth` to the direct runner.
 
-Training always runs for the full update budget; there is no early stopping. Checkpoints are written every 2,000 updates, and the lowest-loss one is kept as `checkpoints/best.pth`. Resuming a run from an earlier version of these scenarios restores the learning-rate schedule saved in its checkpoint, so start such runs afresh. The Flatiron `h100_single` profile requests one H100, 24 CPUs, 128 GiB of host memory and 48 hours per run.
-
-```bash
-scripts/flatiron/train_scenario.sh pf_fm_experts h100_single --dry-run
-scripts/flatiron/train_scenario.sh pf_fm_joint h100_single --dry-run
-scripts/flatiron/train_scenario.sh pf_fm_finetuning h100_single --dry-run
-```
-
-`pf_fm_joint` has four variants, `data_25pct`, `data_50pct`, `data_75pct` and `joint` (100%), with the same update budget and the same validation and test events. Each subset takes its fraction of the events from every TFDS configuration (rounded down, but at least one event per nonempty configuration). The subsets are nested: each smaller subset is contained in the larger ones. Pass `--variant joint` to run only the full-data variant.
-
-`pf_fm_finetuning` starts from `checkpoint-100000.pth` of the `data_25pct` variant. It loads only the weights (with a fresh optimizer and schedule), trains all parameters, and recalibrates the task-loss weights for each detector, so compare runs on raw loss components or physics metrics rather than the weighted total loss. To start from another checkpoint, set `training.parameters.load` in the scenario or pass `--set load=PATH` to the direct runner. See [resume and fine-tuning](../../docs/training/resume-and-fine-tune.md).
-
-The previous CLD, CLIC and ColliderML campaign, including the CLD granularity variants, is kept under `scenarios/legacy/`. The granularity variants are `cld_ecal_{1p5mm,2mm,2p5mm,3mm,4mm,5p1mm}` (`cld_edm_z_tautau_pf`) and `cld_hcal_{10mm,12mm,15mm,20mm,25mm,30mm}` (`cld_edm_ttbar_pf`), all at 3.3.0 with configurations 1–10 and the nominal `cld_3.3.0` normalization statistics. Set the platform's `data_dir.cld_granularity` to the scan root; each variant appends its `data_subdir` (e.g. `ecal_3mm/tfds`).
+CLD granularity variants are `cld_ecal_{1p5mm,2mm,2p5mm,3mm,4mm,5p1mm}` (`cld_edm_z_tautau_pf`) and `cld_hcal_{10mm,12mm,15mm,20mm,25mm,30mm}` (`cld_edm_ttbar_pf`), all at 3.3.0 with configurations 1–10 and the nominal `cld_3.3.0` normalization statistics. Set the platform's `data_dir.cld_granularity` to the scan root; each variant appends its `data_subdir` (e.g. `ecal_3mm/tfds`).
 
 ```bash
 uv run python3 scripts/training/run_scenario.py \
-  --scenario configs/training/scenarios/legacy/pf_fm_finetuning.yaml \
+  --scenario configs/training/scenarios/pf_fm_finetuning.yaml \
   --platform configs/training/platforms/flatiron_h100_single.yaml \
-  --variant cld_ecal_3mm --set load=/path/to/legacy/joint/checkpoint.pth --dry-run
+  --variant cld_ecal_3mm --set load=/path/to/joint/checkpoint.pth --dry-run
 ```
 
 Input normalization needs statistics for every selected dataset version; compute missing ones as described in [Train a model](../../docs/training/train.md#input-normalization).

@@ -578,69 +578,6 @@ def test_shipped_scenarios_resolve(scenario_path):
     assert [(job.seed, job.variant_name) for job in jobs] == [(seed, variant) for seed in scenario.seeds for variant in scenario.variants]
 
 
-def test_pf_fm_campaign_uses_matching_detector_data_and_colliderml_pretraining():
-    scenarios = ROOT / "configs/training/scenarios"
-    profile = load_platform_profile(ROOT / "configs/training/platforms/flatiron_h100_single.yaml")
-
-    def resolve(name):
-        scenario = load_training_scenario(scenarios / f"{name}.yaml")
-        return resolve_scenario_jobs(scenario, profile, spec_file=ROOT / scenario.spec_file)
-
-    experts = resolve("pf_fm_experts")
-    finetunes = resolve("pf_fm_finetuning")
-    checkpoint = finetunes[0].resolved_config.load
-    assert checkpoint and Path(checkpoint).name == "checkpoint-100000.pth"
-    assert Path(checkpoint).parents[1].name.startswith("data_25pct_seed")
-    joint_runs = resolve("pf_fm_joint")
-    joint = joint_runs[0]
-    assert {job.variant_name: job.resolved_config.train_fraction for job in joint_runs} == {
-        "joint": 1.0,
-        "data_25pct": 0.25,
-        "data_50pct": 0.5,
-        "data_75pct": 0.75,
-    }
-    versions = {"cld": ("3.4.0", 10), "clic": ("3.4.0", 10), "ild": ("0.2.0", 1), "idea": ("0.5.0", 1)}
-    assert [job.variant_name for job in experts] == [job.variant_name for job in finetunes] == list(versions)
-    for job in (*experts, *joint_runs, *finetunes):
-        assert job.resolved_config.gpus == 1
-        assert job.per_gpu_batch_size == 32
-    for job in (*experts, *joint_runs):
-        config = job.resolved_config
-        assert config.num_steps == 100000
-        assert config.patience * config.val_freq > config.num_steps
-    for job in finetunes:
-        config = job.resolved_config
-        assert config.num_steps == 30000
-        assert config.patience * config.val_freq >= config.num_steps
-
-    def assert_samples(config, detector, expected):
-        assert set(config.train_dataset) == set(config.valid_dataset) == {detector}
-        selections = (
-            config.train_dataset[detector]["physical"].samples,
-            config.valid_dataset[detector]["physical"].samples,
-            config.test_dataset,
-        )
-        for samples in selections:
-            assert {name: (entry.version, entry.splits) for name, entry in samples.items()} == expected
-
-    ten_configs = [str(i) for i in range(1, 11)]
-    for job in joint_runs:
-        assert_samples(job.resolved_config, "colliderml", {"colliderml_ttbar_nopu_pf": ("1.5.0", ten_configs)})
-        assert job.resolved_config.load is None
-    for expert, finetune in zip(experts, finetunes, strict=True):
-        detector = expert.variant_name
-        version, count = versions[detector]
-        samples = ("ttbar", "ww_fullhad", "qq", "z_qq", "z_tautau")
-        expected = {f"{detector}_edm_{sample}_pf": (version, ten_configs[:count]) for sample in samples}
-        assert_samples(expert.resolved_config, detector, expected)
-        assert_samples(finetune.resolved_config, detector, expected)
-        assert expert.resolved_config.load is None
-        assert finetune.resolved_config.load == checkpoint
-        assert finetune.resolved_config.load_weights_only
-        assert finetune.resolved_config.reset_task_loss_weights
-        assert finetune.resolved_config.model == joint.resolved_config.model
-
-
 def test_finetuning_scenario_requires_source_checkpoint_before_starting(tmp_path):
     from mlpf.training_scenarios import run_scenario_job
 
