@@ -10,18 +10,21 @@ from mlpf.heptfds.edm4hep_utils.utils_pf import (
 
 from mlpf.heptfds.edm4hep_utils.utils_ild import generate_examples, split_sample
 
-_DESCRIPTION = """
-ILD@FCC-ee EDM4HEP dataset with ee -> qq at 365 GeV.
+
+def describe(process):
+    return f"""
+ILD@FCC-ee EDM4HEP dataset with ee -> {process}.
   - X: reconstructed tracks and clusters, variable number N per event
   - ytarget: visible generator particles assigned and merged onto PF elements, zero-padded to N per event
   - ycand: baseline particle flow particles, zero-padded to N per event
 """
 
+
 _CITATION = ""
 
 
 class IldEdmQqPf(tfds.core.GeneratorBasedBuilder):
-    DESCRIPTION = _DESCRIPTION
+    DESCRIPTION = describe("qq at 365 GeV")
     PROCESS_NAME = "p8_ee_qq_ecm365"
     VERSION = tfds.core.Version("0.2.0")
     RELEASE_NOTES = {
@@ -34,7 +37,7 @@ class IldEdmQqPf(tfds.core.GeneratorBasedBuilder):
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD
-        super(IldEdmQqPf, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def _info(self) -> tfds.core.DatasetInfo:
         """Returns the dataset metadata."""
