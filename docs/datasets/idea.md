@@ -17,7 +17,7 @@ reconstruction baseline, so the datasets do not establish physics performance.
 All datasets use version **0.5.0** and configuration **1**. The
 `pyg-idea-pipeline-v1` recipe trains on ttbar, WW and qq. The
 [catalog](catalog.md#published-availability) records public availability; the
-published 0.2.1 data use proxy tracks and are not interchangeable with 0.5.0.
+published 0.3.0 data use proxy tracks and are not interchangeable with 0.5.0.
 
 ## Event view
 
@@ -100,12 +100,23 @@ code: a merged cluster can abandon part of its growth frontier (a small
 energy loss), and the `dR_over_E` shape parameter uses a wrong azimuth
 reference (MLPF recomputes widths from cells and ignores it).
 
+## Version history
+
+| Version | Change |
+|---|---|
+| 0.5.0 | Measured GGTF/GenFit tracks from the v1.4.0 campaign, with truth used only for labels; Z→qq and Z→tautau samples |
+| 0.3.0 | Track phi, D0, and Z0 stored at the perigee relative to the origin, as for CLD and CLIC (previously at the production vertex for secondaries); `radiusOfInnermostHit` from the AtFirstHit track state |
+| 0.2.1 | Cluster shower widths from the associated calorimeter cells |
+| 0.2.0 | Muon-system cluster features; input width 17 → 19 |
+
+Versions are not interchangeable: rebuild rather than relabel an older dataset directory. Input-normalization statistics exist for 0.1.0, 0.2.1, 0.3.0, and 0.5.0.
+
 ## Limitations
 
 - Track direction alignment does not yet meet the 95% validation gate;
   residual outliers are concentrated at low pT, and charged-source clusters
   align poorly with production directions. Treat `ycand` as an oracle and
   `suitable_for_physics` as false.
-- Datasets produced with proxy tracks (0.2.1, 0.3.0) or before the tracking
+- Datasets produced with proxy tracks (0.3.0 and earlier) or before the tracking
   fix cannot be relabelled as 0.5.0; regenerate reconstruction, Parquet and
   TFDS in a fresh workspace.

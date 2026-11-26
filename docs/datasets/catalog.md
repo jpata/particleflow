@@ -13,14 +13,14 @@ Start with the input representation. Each detector page lists its physics sample
 
 The catalog includes maintained recipes and explicitly identified partial workflows. A builder's existence does not imply a trained model, physics validation, or public download. Detector pages identify those boundaries. Dataset schema, Python package, and model artifact versions are independent.
 
-After selecting a sample, [download and verify](download.md) published data or follow [dataset generation](generate.md). For data produced in Tallinn and copied between Grid sites, use the [WebDAV transfer guide](webdav.md). The shared [Key4HEP production guide](key4hep.md) covers both CLD/CLIC representations.
+After selecting a sample, [download and verify](download.md) published data or follow [dataset generation](generate.md). Full productions and unpublished versions are available to Grid users through [WebDAV](webdav.md). The shared [Key4HEP production guide](key4hep.md) covers both CLD/CLIC representations.
 
 See [detector event views](event-displays.md) for reusable visualizations of the
 input representations and reference particles.
 
 ## Configuration partitions and event splits
 
-CMS, CLD, CLIC, MAIA, and ColliderML recipes use configuration partitions `1` through `10`; IDEA and ILD@FCC-ee use configuration `1`. A configuration partition contains its own `train` and `test` event splits: the number identifies the partition, while `train` or `test` identifies the event split. The standard ten-partition model recipes combine all ten partitions. Configuration `1` provides a one-partition subset for a small experiment; the configured training corpus spans all ten.
+CMS, CLD, CLIC, and ColliderML recipes use configuration partitions `1` through `10`; IDEA and ILD@FCC-ee use configuration `1`. A configuration partition contains its own `train` and `test` event splits: the number identifies the partition, while `train` or `test` identifies the event split. The standard ten-partition model recipes combine all ten partitions. Configuration `1` provides a one-partition subset for a small experiment; the configured training corpus spans all ten.
 
 The on-disk layout is:
 
@@ -38,22 +38,23 @@ Pass the detector-level directory containing the dataset-name directories as `--
 
 ## Published availability
 
-The [Hub snapshot](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) includes metadata, feature definitions, and all declared split shards for these selections:
+The [Hub](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) publishes configuration 1 of each dataset. As checked on 25 November 2026, it has these versions:
 
-| Representation | Detector | Published datasets | Version | Configuration |
-|---|---|---|---|---|
-| Tracks and clusters | CLD | `cld_edm_{ttbar,ww_fullhad,qq,zz}_pf` | 3.3.0 | 1 |
-| Tracks and clusters | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_pf` | 3.3.0 | 1 |
-| Tracks and clusters | ColliderML | `colliderml_ttbar_nopu_pf`, `colliderml_ttbar_pu200_pf` | 1.2.0 | 1 |
-| Tracks and clusters | IDEA | `idea_edm_{ttbar,ww_fullhad,qq}_pf` | 0.2.1 | 1 |
-| Hits | CLD | `cld_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
-| Hits | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 | 1 |
+| Representation | Detector | Published datasets | Version |
+|---|---|---|---|
+| Tracks and clusters | CLD | `cld_edm_{ttbar,ww_fullhad,qq,zz}_pf` | 3.3.0 |
+| Tracks and clusters | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_pf` | 3.3.0 |
+| Tracks and clusters | IDEA | `idea_edm_{ttbar,ww_fullhad,qq}_pf` | 0.3.0 |
+| Hits | CLD | `cld_edm_{ttbar,ww_fullhad,qq,zz}_hits` | 3.2.2 |
+| Hits | CLICdet | `clic_edm_{ttbar,ww_fullhad,qq}_hits` | 3.2.2 |
 
-The current recipes use CLD/CLIC track/cluster **3.4.0**, CLD/CLIC hit **3.3.0**,
-IDEA **0.5.0** (measured GGTF/GenFit tracks) and ILD **0.2.0**, produced by the
-[v1.4.0 campaign](key4hep-50k.md); the published entries above describe the
-previous campaigns.
+The current recipes use the [v1.4.0 campaign](key4hep-50k.md) versions instead: CLD/CLIC track/cluster **3.4.0**, CLD/CLIC hits **3.3.0**, IDEA **0.5.0** (measured GGTF/GenFit tracks) and ILD **0.2.0**. The Hub entries above describe the previous campaigns.
 
-Treat the [live Hub tree](https://huggingface.co/datasets/jpata/particleflow/tree/main/tensorflow_datasets) as the source of truth for data availability. The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects.
+Also not yet published at the recipe version:
 
-For scientific provenance and citations, use the [publication map](../science/publications.md) and the dataset record associated with the version you consume.
+- ColliderML tracks and clusters: the Hub has 1.4.0; recipes expect 1.5.0, which drops out-of-acceptance truth particles. ColliderML hits are not published.
+- CMS and MAIA datasets are not on the Hub.
+
+The Hub also holds older versions, and some v1.4.0-campaign datasets (for example CLD/CLIC 3.4.0 and ILD) may already be present; check the live tree. Use the version your recipe names; do not rename a dataset directory to a different version.
+
+The `tfds_mapping`, `tfds_hit_mapping`, and model dataset entries in [`particleflow_spec.yaml`](https://github.com/jpata/particleflow/blob/main/particleflow_spec.yaml) define what the current code expects. For scientific provenance and citations, use the [publication map](../science/publications.md).
