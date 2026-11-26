@@ -26,6 +26,11 @@ def write_smoke_shards(input_path, manual_dir, train_fraction=0.5):
         "genmet",
         "genjet",
         "targetjet",
+        # ColliderML pileup reference; absent from MAIA files and then skipped.
+        "genmet_withpu",
+        "genjet_withpu",
+        "pufrac_track",
+        "pufrac_cluster",
     )
     table = ak.from_parquet(input_path, columns=[field for field in required if any(c == field or c.startswith(field + ".") for c in fields)])
     # Key4hep writes one outer Record of event lists; ColliderML writes rows.

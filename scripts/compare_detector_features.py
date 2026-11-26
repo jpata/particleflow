@@ -54,6 +54,33 @@ def matrix(value, width):
     return arr.reshape(-1, width) if arr.size else np.empty((0, width))
 
 
+SHARED_PF_FEATURES = ("X", "ytarget", "ycand", "genmet", "genjets", "targetjets")
+
+
+def shared_pf_features(features):
+    """Restrict a builder's features to the PF fields every detector provides.
+
+    Builders can add detector-specific fields (for example ColliderML's event_id and pileup
+    reference); the serialization check only covers the fields the comparison encodes.
+    """
+    return tfds.features.FeaturesDict({key: features[key] for key in SHARED_PF_FEATURES if key in features})
+
+
+def idea_track_description(path):
+    """Describe the IDEA track source recorded by postprocessing in the first Parquet file."""
+    path = Path(path)
+    files = sorted(path.glob("*.parquet")) if path.is_dir() else [path]
+    sources = set()
+    if files and "metadata_track_source" in ak.metadata_from_parquet(files[0])["form"].fields:
+        data = ak.from_parquet(files[0], columns=["metadata_track_source"])
+        sources = {str(value) for value in ak.to_list(data["metadata_track_source"])}
+    if sources == {"ggtf_genfit"}:
+        return "IDEA tracks are fitted GGTF/GenFit tracks"
+    if sources == {"truth_seeded"}:
+        return "IDEA tracks are truth-seeded proxies"
+    return "The IDEA track source is not recorded in the Parquet files"
+
+
 def parquet_events(paths, limit, width):
     count = 0
     wanted = ("X_track", "X_cluster", "ytarget_track", "ytarget_cluster", "ycand_track", "ycand_cluster", "genmet", "genjet", "targetjet")
@@ -570,7 +597,7 @@ def main():
                 if stage == "parquet"
                 else tfds_events(path, args.num_events, args.split, args.seed)
             )
-            features = tfds.builder_from_directory(tfds_paths[label]).info.features if stage == "parquet" and label in tfds_paths else None
+            features = shared_pf_features(tfds.builder_from_directory(tfds_paths[label]).info.features) if stage == "parquet" and label in tfds_paths else None
             values, checks = collect(events, detector, features, args.jet_match_dr)
             datasets[label] = values
             columns.append((label, detector))
@@ -621,7 +648,8 @@ def main():
     html = f"<!doctype html><meta charset='utf-8'><title>{args.title}</title><style>body{{font:16px sans-serif;max-width:1600px;margin:30px auto}}img{{width:100%}}</style>"
     html += f"<h1>{args.title}</h1><p>{note}</p>"
     if detector_comparison and not args.note:
-        html += "<p>CLIC uses ee ttbar at 380 GeV; CLD and IDEA use ee ttbar at 365 GeV. IDEA tracks are truth-seeded and candidates are target oracles. ColliderML has no PF baseline. For CLIC/CLD/IDEA, stored TFDS and newly converted ROOT samples are independent; distributions are not an event-matched serialization test. ColliderML and MAIA TFDS are built from the plotted parquet samples. The serialization checks separately verify each parquet event against the TFDS feature encoder/decoder.</p>"
+        idea_tracks = idea_track_description(parquet_paths["idea"]) if "idea" in parquet_paths else "IDEA is not included"
+        html += f"<p>CLIC uses ee ttbar at 380 GeV; CLD and IDEA use ee ttbar at 365 GeV. {idea_tracks}, and IDEA candidates are target oracles. ColliderML has no PF baseline. For CLIC/CLD/IDEA, stored TFDS and newly converted ROOT samples are independent; distributions are not an event-matched serialization test. ColliderML and MAIA TFDS are built from the plotted parquet samples. The serialization checks separately verify each parquet event against the TFDS feature encoder/decoder.</p>"
     html += "<p>Targets exclude PDG=0 padding/unassigned rows. Non-finite values are counted in summary.json and excluded from histograms. Tail fractions are shown per panel. Input paths, sample counts, full ranges, quantiles, zero fractions and validation results are in <a href='summary.json'>summary.json</a>.</p>"
     if detector_comparison and (args.output_dir.parent / "event_displays" / "index.html").exists():
         html += "<p><a href='../event_displays/index.html'>Five-detector event-display gallery</a>: tracks, clusters, hits and truth guides on a common transverse scale.</p>"

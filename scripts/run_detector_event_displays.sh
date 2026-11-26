@@ -6,13 +6,14 @@ export PYTHONPATH="$PWD"
 export MPLBACKEND=Agg
 OUTPUT_DIR=${EVENT_DISPLAY_DIR:-local_test_data/detector_comparison/event_displays}
 COLLIDERML_PARQUET=${COLLIDERML_DISPLAY_PARQUET:-local_test_data/detector_comparison/colliderml/train-00000-of-01000.parquet}
+KEY4HEP_ROOT_DIR=${KEY4HEP_ROOT_DIR:-/mnt/work/mlpf/root}
 events=(0 1 2)
 if [ "$#" -gt 0 ]; then events=("$@"); fi
 
 .venv/bin/python scripts/visualize_key4hep.py \
-    /mnt/work/mlpf/root/clic/ttbar/reco_p8_ee_ttbar_ecm380_300000.root \
-    /mnt/work/mlpf/root/cld/ttbar/reco_p8_ee_ttbar_ecm365_300000.root \
-    /mnt/work/mlpf/root/idea/ttbar/reco_p8_ee_ttbar_ecm365_300000.root \
+    "$KEY4HEP_ROOT_DIR/clic/ttbar/reco_p8_ee_ttbar_ecm380_300000.root" \
+    "$KEY4HEP_ROOT_DIR/cld/ttbar/reco_p8_ee_ttbar_ecm365_300000.root" \
+    "$KEY4HEP_ROOT_DIR/idea/ttbar/reco_p8_ee_ttbar_ecm365_300000.root" \
     local_test_data/maia_smoke/root/ttbar_reco_10000.slcio.edm4hep.root \
     --events "${events[@]}" --plot-limit 6500 --max-hits 800 --output-dir "$OUTPUT_DIR"
 
