@@ -2,7 +2,8 @@
 # the third attention scaling study: 6 layers x 16 heads, head dim 32 (width 512), peak lr 3.5e-4 (LAMB,
 # OneCycle), 16 events per step, feature bag and input normalization on everywhere, no early stopping.
 # High-energy e+e- samples only: ttbar, WW -> hadrons and qq at 365 GeV (CLD, ILD, IDEA) or 380 GeV (CLIC);
-# the 91 GeV Z -> qq and Z -> tautau samples are excluded.
+# the 91 GeV Z -> qq and Z -> tautau samples are excluded. ColliderML: the six hard-scatter pu0 samples
+# (ttbar, dihiggs, ggf, hidden_valley, higgs_portal, zprime; not pileup_only), mixed in proportion to their sizes.
 #
 # Stage 1 (array 0-8, independent):
 #   experts      cld, clic, ild, idea, colliderml  -- colliderml is also the ColliderML-only pretraining
@@ -62,6 +63,16 @@ variants:
   colliderml:
     model_name: pyg-colliderml-v1
     production_name: colliderml
+    overrides:
+      train_dataset.colliderml.physical.samples: &colliderml_samples
+        colliderml_ttbar_nopu_pf: &cml_configs {version: "1.5.0", splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]}
+        colliderml_dihiggs_nopu_pf: *cml_configs
+        colliderml_ggf_nopu_pf: *cml_configs
+        colliderml_hidden_valley_nopu_pf: *cml_configs
+        colliderml_higgs_portal_nopu_pf: *cml_configs
+        colliderml_zprime_nopu_pf: *cml_configs
+      valid_dataset.colliderml.physical.samples: *colliderml_samples
+      test_dataset: *colliderml_samples
   # --- stage 1: leave-one-detector-out joints ---
   joint_nocld:
     model_name: pyg-fm-v140-joint-nocld
