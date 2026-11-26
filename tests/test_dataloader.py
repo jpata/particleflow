@@ -28,11 +28,7 @@ def test_train_fraction_selects_nested_events_from_each_configuration(monkeypatc
         return SimpleNamespace(ds=events[:num_samples])
 
     monkeypatch.setattr("mlpf.model.PFDataset.PFDataset", mock_dataset)
-    datasets = {
-        "colliderml": {
-            "physical": {"batch_size": 1, "samples": {"colliderml_ttbar_nopu_pf": {"version": "1.0.0", "splits": ["1", "2"]}}}
-        }
-    }
+    datasets = {"colliderml": {"physical": {"batch_size": 1, "samples": {"colliderml_ttbar_nopu_pf": {"version": "1.0.0", "splits": ["1", "2"]}}}}}
     config = MLPFConfig.model_validate(
         {
             "dataset": "colliderml",

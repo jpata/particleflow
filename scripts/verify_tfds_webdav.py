@@ -58,10 +58,25 @@ def selected_versions(root):
 def remote_listing(proxy, rel):
     url = REMOTE + "/" + "/".join(urllib.parse.quote(p, safe="") for p in rel.split("/"))
     result = subprocess.run(
-        ["curl", "-fsSL", "--retry", "3", "--max-time", "60",
-         "--cert", str(proxy), "--key", str(proxy), "-X", "PROPFIND",
-         "-H", "Depth: 1", url + "/"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        [
+            "curl",
+            "-fsSL",
+            "--retry",
+            "3",
+            "--max-time",
+            "60",
+            "--cert",
+            str(proxy),
+            "--key",
+            str(proxy),
+            "-X",
+            "PROPFIND",
+            "-H",
+            "Depth: 1",
+            url + "/",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
     if result.returncode:
         raise RuntimeError(f"{rel}: {result.stderr.decode(errors='replace').strip()}")
@@ -98,10 +113,30 @@ def digest_stream(stream):
 
 def server_md5(proxy, url):
     result = subprocess.run(
-        ["curl", "--fail", "--silent", "--show-error", "--location", "--head",
-         "--retry", "3", "--retry-delay", "2", "--max-time", "900",
-         "--header", "Want-Digest: md5", "--cert", str(proxy), "--key", str(proxy), url],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        [
+            "curl",
+            "--fail",
+            "--silent",
+            "--show-error",
+            "--location",
+            "--head",
+            "--retry",
+            "3",
+            "--retry-delay",
+            "2",
+            "--max-time",
+            "900",
+            "--header",
+            "Want-Digest: md5",
+            "--cert",
+            str(proxy),
+            "--key",
+            str(proxy),
+            url,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
     if result.returncode:
         raise RuntimeError(f"remote MD5 request failed for {url}: {result.stderr.strip()}")
@@ -111,10 +146,8 @@ def server_md5(proxy, url):
     lines = blocks[-1].splitlines()
     if len(lines) < 2 or not lines[0].startswith("HTTP/") or lines[0].split()[1] != "200":
         raise RuntimeError(f"unexpected remote MD5 response: {lines[0] if lines else 'empty'}")
-    headers = {name.lower(): value.strip() for line in lines[1:] if ":" in line
-               for name, _, value in [line.partition(":")]}
-    digest = next((item.partition("=")[2] for item in headers.get("digest", "").split(",")
-                   if item.strip().lower().startswith("md5=")), None)
+    headers = {name.lower(): value.strip() for line in lines[1:] if ":" in line for name, _, value in [line.partition(":")]}
+    digest = next((item.partition("=")[2] for item in headers.get("digest", "").split(",") if item.strip().lower().startswith("md5=")), None)
     if digest is None or "content-length" not in headers:
         raise RuntimeError(f"server did not return MD5 digest and size: {url}")
     return int(headers["content-length"]), base64.b64decode(digest, validate=True)
@@ -134,17 +167,21 @@ def main():
     context.load_cert_chain(str(args.proxy))
     versions = list(selected_versions(args.local_root))
     if args.scope == "cld-existing":
-        versions = [(rel, local) for rel, local in versions
-                    if rel.startswith("cld/v1.2.5_key4hep_2025-05-29/")
-                    and ("/cld_edm_ttbar_pf/" in rel or "/cld_edm_qq_pf/" in rel)]
+        versions = [
+            (rel, local)
+            for rel, local in versions
+            if rel.startswith("cld/v1.2.5_key4hep_2025-05-29/") and ("/cld_edm_ttbar_pf/" in rel or "/cld_edm_qq_pf/" in rel)
+        ]
     elif args.scope == "scan":
-        versions = [(rel, local) for rel, local in versions
-                    if rel.startswith("cld/granularity_scan_2025-05-29/")]
+        versions = [(rel, local) for rel, local in versions if rel.startswith("cld/granularity_scan_2025-05-29/")]
     elif args.scope == "new":
-        versions = [(rel, local) for rel, local in versions
-                    if rel.startswith("clic/") or rel.startswith("idea/")
-                    or (rel.startswith("cld/v1.2.5_key4hep_2025-05-29/")
-                        and ("/cld_edm_ww_fullhad_pf/" in rel or "/cld_edm_zz_pf/" in rel))]
+        versions = [
+            (rel, local)
+            for rel, local in versions
+            if rel.startswith("clic/")
+            or rel.startswith("idea/")
+            or (rel.startswith("cld/v1.2.5_key4hep_2025-05-29/") and ("/cld_edm_ww_fullhad_pf/" in rel or "/cld_edm_zz_pf/" in rel))
+        ]
     manifest = []
     errors = []
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
@@ -159,8 +196,7 @@ def main():
                     extra = sorted(actual.keys() - expected.keys())
                     wrong = sorted(k for k in expected.keys() & actual.keys() if expected[k] != actual[k])
                     raise RuntimeError(f"file manifest differs: missing={missing}, extra={extra}, wrong_size={wrong}")
-                manifest.extend((url + "/" + urllib.parse.quote(name, safe=""), local / name, size)
-                                for name, size in expected.items())
+                manifest.extend((url + "/" + urllib.parse.quote(name, safe=""), local / name, size) for name, size in expected.items())
             except Exception as exc:
                 errors.append(f"{rel}: {exc}")
             if done % 40 == 0 or done == len(versions):

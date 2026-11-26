@@ -8,7 +8,6 @@ from pathlib import Path
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLATFORM = REPO_ROOT / "configs/training/platforms/flatiron_h100.yaml"
 REMOTE = "davs://xrootd.hep.kbfi.ee:1094/store/user/jpata/mlpf/tfds"

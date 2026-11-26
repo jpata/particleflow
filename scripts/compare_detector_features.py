@@ -597,7 +597,11 @@ def main():
                 if stage == "parquet"
                 else tfds_events(path, args.num_events, args.split, args.seed)
             )
-            features = shared_pf_features(tfds.builder_from_directory(tfds_paths[label]).info.features) if stage == "parquet" and label in tfds_paths else None
+            features = (
+                shared_pf_features(tfds.builder_from_directory(tfds_paths[label]).info.features)
+                if stage == "parquet" and label in tfds_paths
+                else None
+            )
             values, checks = collect(events, detector, features, args.jet_match_dr)
             datasets[label] = values
             columns.append((label, detector))

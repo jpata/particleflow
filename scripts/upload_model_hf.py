@@ -46,9 +46,7 @@ def resolve_variables(value, data):
 
 def folder_files(folder, ignore_patterns=None):
     """Enumerate the relative paths selected by the Hub's folder upload."""
-    candidates = (
-        p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()
-    )
+    candidates = (p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
     return list(filter_repo_objects(candidates, ignore_patterns=ignore_patterns))
 
 
@@ -56,9 +54,7 @@ def preflight_file_count(api, repo_id, repo_type, destinations):
     existing = set(api.list_repo_files(repo_id, repo_type=repo_type))
     additions = len(destinations - existing)
     projected = len(existing) + additions
-    print(
-        f"Hub file count is {len(existing):,}. This upload adds {additions:,}, for {projected:,} total."
-    )
+    print(f"Hub file count is {len(existing):,}. This upload adds {additions:,}, for {projected:,} total.")
     if repo_id != MAIN_MODEL_REPO or repo_type != "model":
         return
     if additions and projected > MAIN_REPO_FILE_LIMIT:
@@ -197,11 +193,7 @@ def main():
         dirs_to_upload.append((plots_dir.name, "plots_best_weights"))
 
     destinations = {f"{remote_path}/checkpoints/best_weights.pth"}
-    destinations.update(
-        f"{remote_path}/{remote_file}"
-        for local_file, remote_file in files_to_upload
-        if (exp_path / local_file).exists()
-    )
+    destinations.update(f"{remote_path}/{remote_file}" for local_file, remote_file in files_to_upload if (exp_path / local_file).exists())
     folder_uploads = []
     for local_dir, remote_dir, *patterns in dirs_to_upload:
         folder = exp_path / local_dir
