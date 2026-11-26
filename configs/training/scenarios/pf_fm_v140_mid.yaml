@@ -1,6 +1,6 @@
-# PF foundation-model transfer study on the Key4hep v1.4.0 datasets with ColliderML pu0, at the mid size of
-# the third attention scaling study: 6 layers x 16 heads, head dim 32 (width 512), peak lr 3.5e-4 (LAMB,
-# OneCycle), 16 events per step, feature bag and input normalization on everywhere, no early stopping.
+# PF foundation-model transfer study on the Key4hep v1.4.0 datasets with ColliderML pu0. Attention model:
+# 6 layers x 16 heads, head dim 32 (width 512), peak lr 3.5e-4 (LAMB, OneCycle), 16 events per step,
+# feature bag and input normalization on everywhere, no early stopping.
 # High-energy e+e- samples only: ttbar, WW -> hadrons and qq at 365 GeV (CLD, ILD, IDEA) or 380 GeV (CLIC);
 # the 91 GeV Z -> qq and Z -> tautau samples are excluded. ColliderML: the six hard-scatter pu0 samples
 # (ttbar, dihiggs, ggf, hidden_valley, higgs_portal, zprime; not pileup_only), mixed in proportion to their sizes.
