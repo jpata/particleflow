@@ -87,6 +87,7 @@ CLASS_LABELS = {
     "idea": CLASS_LABELS_CLIC,
     "idea_hits": CLASS_LABELS_CLIC,
     "ild": CLASS_LABELS_CLIC,
+    "ild_hits": CLASS_LABELS_CLIC,
     "maia": CLASS_LABELS_CLIC,
     "maia_hits": CLASS_LABELS_CLIC,
     "colliderml": CLASS_LABELS_CLIC,
@@ -188,7 +189,7 @@ EVALUATION_DATASET_NAMES.update(
     {
         name[: -len("_pf")] + "_full": label
         for name, label in list(EVALUATION_DATASET_NAMES.items())
-        if name.startswith(("cld_edm_", "clic_edm_", "maia_edm_", "idea_edm_")) and name.endswith("_pf")
+        if name.startswith(("cld_edm_", "clic_edm_", "maia_edm_", "idea_edm_", "ild_edm_")) and name.endswith("_pf")
     }
 )
 EVALUATION_DATASET_NAMES.update(
@@ -204,6 +205,7 @@ GENJET_BINS_PT_DATASET = {
     "idea": [10, 20, 40, 60, 80, 100, 200],
     "idea_hits": [10, 20, 40, 60, 80, 100, 200],
     "ild": [10, 20, 40, 60, 80, 100, 200],
+    "ild_hits": [10, 20, 40, 60, 80, 100, 200],
     "maia": [10, 20, 40, 60, 80, 100, 200, 400, 800, 1600],
     "maia_hits": [10, 20, 40, 60, 80, 100, 200, 400, 800, 1600],
     "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
@@ -423,6 +425,7 @@ EXPERIMENT_LABELS = {
     "cld": cld_label,
     "idea": idea_label,
     "ild": ild_label,
+    "ild_hits": ild_label,
     "maia": maia_label,
     "maia_hits": maia_label,
     "clic_hits": clic_label,

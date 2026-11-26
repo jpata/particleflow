@@ -1,6 +1,6 @@
 # General datasets: tracks, clusters and hits
 
-CLD, CLIC, MAIA, IDEA and ColliderML have two dataset kinds:
+CLD, CLIC, MAIA, IDEA, ILD and ColliderML have two dataset kinds:
 
 | Kind | TFDS name | Inputs | Use |
 |---|---|---|---|
@@ -99,6 +99,7 @@ Every hit recipe uses HEPTv2 with the set output on the full datasets:
 | `pyg-cld-hits-heptv2-sector-set-v1` | `cld_hits` | Phi-sectorized decoder attention |
 | `pyg-clic-hits-heptv2-set-v1` | `clic_hits` | 4 T field for the optional fit readout |
 | `pyg-idea-hits-heptv2-set-v1` | `idea_hits` | Drift-chamber events need activation checkpointing on small GPUs |
+| `pyg-ild-hits-heptv2-set-v1` | `ild_hits` | TPC events have about 10⁴ tracker hits; use activation checkpointing on small GPUs |
 | `pyg-maia-hits-heptv2-set-v1` | `maia_hits` | 512 slots, 5 T field; needs activation checkpointing |
 | `pyg-colliderml-hits-heptv2-set-v1` | `colliderml_hits` | 512 slots, 3 T field |
 
@@ -131,7 +132,7 @@ python mlpf/pipeline.py --spec-file particleflow_spec.yaml \
 
 ## Produce
 
-The key4hep (CLD, CLIC, MAIA, IDEA) and ColliderML postprocessors write the full view
+The key4hep (CLD, CLIC, MAIA, IDEA, ILD) and ColliderML postprocessors write the full view
 into every Parquet file next to the track/cluster targets: `ylabel_{track,cluster,hit_tracker,hit_calo}`,
 `target_particles`, `target_instances`, `target_energy_accounting` and
 `targetjet_full`. It no longer writes the legacy `ytarget_hit_*` or
@@ -163,7 +164,7 @@ The builder validates:
 
 ## Scope
 
-- **Covered:** CLD, CLIC and IDEA (ttbar, WW, qq, Z→qq, Z→tautau; CLD also the granularity scans), MAIA (ttbar builder) and ColliderML (ttbar without pileup and with pileup 200). ILD has track/cluster datasets only.
+- **Covered:** CLD, CLIC, IDEA and ILD (ttbar, WW, qq, Z→qq, Z→tautau; CLD also the granularity scans), MAIA (ttbar builder) and ColliderML (ttbar without pileup and with pileup 200).
 - **Validated on converted events:** CLD, CLIC, MAIA, IDEA and ColliderML (no pileup). The strict Parquet validator runs the TFDS contract on every event (`full_view_labels` gate).
 
 **CLIC.**
@@ -179,6 +180,12 @@ The builder validates:
 - Tracks are sparse (some events have none).
 - On converted ttbar events, fits to primary tracker hits give a 0.35% relative-pT half-width (1.2% with inclusive `particle_number`).
 - The strict validator fails the calorimeter hit energy, track target direction and Pandora baseline energy gates, which also fail on `main`. The tracker hit momentum gate, which fails on `main`, passes with primary-origin hits.
+
+**ILD.**
+- Uses the shared key4hep path at 2 T with the `MarlinTrkTracks` and the ILD hit collections.
+- Tracker hits come from the vertex detector, the inner tracker, the TPC and the SET, each linked through its digitization relation to the simulated hit. A ttbar event has about 10⁴ tracker hits, mostly from the TPC.
+- `system`, `side` and `layer` are zero, because the reconstruction output carries no CellIDEncoding metadata.
+- Tracks are labelled from their hits as in the [track/cluster view](ild.md#inputs-and-targets); tracks that match no target particle keep label 0.
 
 **IDEA.**
 - Tracker hits come from the vertex detector (`VTXB/VTXD`), the silicon wrapper (`SiWrB/SiWrD`) and the drift chamber (`DCHDigis`, or `DCH_DigiCollection` in files reconstructed with the older digitizer), each linked digi → SimTrackerHit → MCParticle.

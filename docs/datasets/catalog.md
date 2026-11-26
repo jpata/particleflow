@@ -9,7 +9,7 @@ Start with the input representation. Each detector page lists its physics sample
 | Input representation | Detector or dataset family | Typical use |
 |---|---|---|
 | [Tracks and clusters](track-cluster.md) | [CMS](cms.md), [CLD](cld.md), [CLICdet](clic.md), [ColliderML](colliderml.md), [MAIA](maia.md), [IDEA](idea.md), [ILD@FCC-ee](ild.md) | Reconstructed tracks and calorimeter clusters; the default starting point for CMS, CLD, and CLIC. |
-| [General: tracks, clusters and hits](full.md) | [CLD](cld-hits.md), [CLICdet](clic-hits.md), [ColliderML](colliderml-hits.md), [IDEA](full.md#detector-specifics), [MAIA](full.md#detector-specifics) | Raw tracker and calorimeter hits with tracks, clusters and truth labels for hit-model research. |
+| [General: tracks, clusters and hits](full.md) | [CLD](cld-hits.md), [CLICdet](clic-hits.md), [ColliderML](colliderml-hits.md), [IDEA](full.md#detector-specifics), [ILD@FCC-ee](full.md#detector-specifics), [MAIA](full.md#detector-specifics) | Raw tracker and calorimeter hits with tracks, clusters and truth labels for hit-model research. |
 
 The catalog includes maintained recipes and explicitly identified partial workflows. A builder's existence does not imply a trained model, physics validation, or public download. Detector pages identify those boundaries. Dataset schema, Python package, and model artifact versions are independent.
 
@@ -53,7 +53,7 @@ Not yet published at the recipe version:
 
 | Selection | Recipe version | Newest on the Hub |
 |---|---|---|
-| General datasets with hits (`*_full`: CLD, CLICdet, IDEA, MAIA, ColliderML) | 1.0.0 | Not published. The Hub's `*_hits` 3.2.2 datasets use the old hit layout, which the current code no longer reads |
+| General datasets with hits (`*_full`: CLD, CLICdet, IDEA, ILD@FCC-ee, MAIA, ColliderML) | 1.0.0 | Not published. The Hub's `*_hits` 3.2.2 datasets use the old hit layout, which the current code no longer reads |
 | ColliderML tracks and clusters | 1.5.0 | 1.4.0, for the no-pileup and pileup-200 ttbar samples; 1.5.0 drops out-of-acceptance truth particles |
 | CMS, MAIA | | Not published |
 

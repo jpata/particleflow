@@ -27,6 +27,7 @@ class Dataset(Enum):
     CLIC_HITS = "clic_hits"
     CLD_HITS = "cld_hits"
     IDEA_HITS = "idea_hits"
+    ILD_HITS = "ild_hits"
     MAIA_HITS = "maia_hits"
     COLLIDERML = "colliderml"
     COLLIDERML_HITS = "colliderml_hits"
@@ -914,9 +915,9 @@ JET_CONFIG = {
     ),
 }
 
-# IDEA and MAIA hit inputs (general *_full datasets): hit-input layout of cld_hits, physics
+# IDEA, ILD and MAIA hit inputs (general *_full datasets): hit-input layout of cld_hits, physics
 # conventions (classes, jets) of the detector's track/cluster model.
-for _hits, _detector in ((Dataset.IDEA_HITS, Dataset.IDEA), (Dataset.MAIA_HITS, Dataset.MAIA)):
+for _hits, _detector in ((Dataset.IDEA_HITS, Dataset.IDEA), (Dataset.ILD_HITS, Dataset.ILD), (Dataset.MAIA_HITS, Dataset.MAIA)):
     for _table, _source in (
         (ELEM_TYPES, Dataset.CLD_HITS),
         (ELEM_TYPES_NONZERO, Dataset.CLD_HITS),
@@ -1667,8 +1668,15 @@ class MLPFConfig(BaseModel):
             if self.elemtypes_nonzero is None:
                 self.elemtypes_nonzero = ELEM_TYPES_NONZERO[self.dataset.value]
         if self.model.output_mode == OutputMode.SET:
-            if self.dataset not in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.COLLIDERML_HITS, Dataset.IDEA_HITS, Dataset.MAIA_HITS):
-                raise ValueError("model.output_mode='set' is currently supported only for the CLD/CLIC/ColliderML hit datasets")
+            if self.dataset not in (
+                Dataset.CLD_HITS,
+                Dataset.CLIC_HITS,
+                Dataset.COLLIDERML_HITS,
+                Dataset.IDEA_HITS,
+                Dataset.ILD_HITS,
+                Dataset.MAIA_HITS,
+            ):
+                raise ValueError("model.output_mode='set' is supported only for the hit datasets (*_hits)")
             if self.model.set_decoder is None:
                 self.model.set_decoder = SetDecoderConfig()
             if self.model.backbone.mode != BackboneMode.SHARED:

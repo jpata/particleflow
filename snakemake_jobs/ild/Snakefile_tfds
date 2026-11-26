@@ -32,7 +32,7 @@ rule tfds_task:
     output:
         "snakemake_jobs/ild/tfds/tfds_{sample}_tfds_{config}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=8000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:

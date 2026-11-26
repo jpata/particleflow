@@ -1237,7 +1237,7 @@ class MLPF(nn.Module):
 
         self.config = config.model
         self.output_mode = OutputMode(self.config.output_mode)
-        self.is_hit_dataset = config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.IDEA_HITS, Dataset.MAIA_HITS)
+        self.is_hit_dataset = config.dataset in (Dataset.CLD_HITS, Dataset.CLIC_HITS, Dataset.IDEA_HITS, Dataset.ILD_HITS, Dataset.MAIA_HITS)
         # General *_full datasets: element type codes follow config.full_elements. Hit
         # feature engineering sees only hit rows, with the legacy tracker=1, calo=2 codes.
         full_elements = tuple(config.full_elements) if config.uses_full_datasets() else ("hit_tracker", "hit_calo")

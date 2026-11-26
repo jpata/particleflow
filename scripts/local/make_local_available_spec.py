@@ -36,6 +36,7 @@ def main():
         "pyg-cld-hits-heptv2-sector-set-v1": ("cld_hits", "cld_edm_ttbar_full", args.hit_version, args.hit_splits),
         "pyg-clic-hits-heptv2-set-v1": ("clic_hits", "clic_edm_ttbar_full", args.hit_version, args.hit_splits),
         "pyg-idea-hits-heptv2-set-v1": ("idea_hits", "idea_edm_ttbar_full", args.hit_version, args.hit_splits),
+        "pyg-ild-hits-heptv2-set-v1": ("ild_hits", "ild_edm_ttbar_full", args.hit_version, args.hit_splits),
         "pyg-colliderml-hits-heptv2-set-v1": ("colliderml_hits", "colliderml_ttbar_full", args.hit_version, args.hit_splits),
         "pyg-cld-v1": ("cld", "cld_edm_ttbar_pf", args.pf_version, args.pf_splits),
         "pyg-clic-v1": ("clic", "clic_edm_ttbar_pf", args.pf_version, args.pf_splits),

@@ -38,7 +38,7 @@ Common options: `--variant NAME` (repeatable; array indices stay those of the fu
 
 ## Hit-model recipes
 
-All hit-input models use HEPTv2 with the set output on the general `*_full` datasets (`full_elements` selects tracker hits, calorimeter hits, tracks and clusters): `pyg-cld-hits-heptv2-set-v1` (recommended CLD model), `pyg-cld-hits-heptv2-sector-set-v1`, `pyg-clic-hits-heptv2-set-v1`, `pyg-idea-hits-heptv2-set-v1`, `pyg-maia-hits-heptv2-set-v1`, and `pyg-colliderml-hits-heptv2-set-v1`. See [General datasets](../../docs/datasets/full.md). The attention and elementwise hit recipes and the scenarios that compared them were removed; their definitions remain in the git history and their results in the dated study archives.
+All hit-input models use HEPTv2 with the set output on the general `*_full` datasets (`full_elements` selects tracker hits, calorimeter hits, tracks and clusters): `pyg-cld-hits-heptv2-set-v1` (recommended CLD model), `pyg-cld-hits-heptv2-sector-set-v1`, `pyg-clic-hits-heptv2-set-v1`, `pyg-idea-hits-heptv2-set-v1`, `pyg-ild-hits-heptv2-set-v1`, `pyg-maia-hits-heptv2-set-v1`, and `pyg-colliderml-hits-heptv2-set-v1`. See [General datasets](../../docs/datasets/full.md). The attention and elementwise hit recipes and the scenarios that compared them were removed; their definitions remain in the git history and their results in the dated study archives.
 
 ## Maintained scenarios
 
