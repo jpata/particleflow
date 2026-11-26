@@ -271,6 +271,96 @@ and omit `--weights`. Use `--pack-padding` for HEPTv2 and
 `--diagnose-training-batch 32` for storage attribution. Both training
 arms use `--batches 1 8 16 32 64 128 --repeats 12`.
 
+## Follow-up optimization experiments
+
+The L40S prototypes kept the three hashes, the padded quantile geometry,
+and the original model parameters. Training uses the matched-capacity
+setup above, with four warmup and eight timed optimizer steps per batch
+size. A separate deterministic BF16 replay loads the published HEPTv2
+checkpoint and compares valid predictions, training loss, and gradients
+against packed HEPTv2.
+
+- **Permutation and output dtype.** Invert the known permutation with
+  scatter and unsort the BF16 attention output separately from the FP32
+  log-sum-exp. The weighted sum still accumulates in FP32. The
+  existing flags are `HEPTV2_FAST_INVERT_PERM=1` and
+  `HEPTV2_COMBINED_UNSORT=0`.
+- **Bucket layout.** Gather the Q/K/V rows directly into the
+  `[hash × bucket, head, slot, dim]` layout FlexAttention consumes.
+  This removes the subsequent full-tensor rearrangement and copies.
+- **RMSNorm fusion.** Compile the existing normalization arithmetic so
+  it can avoid retaining FP32 intermediates for every reduction.
+- **Position embedding checkpoint.** Recompute only the learned
+  position embedding during backward. The attention and feed-forward
+  computations take their ordinary backward paths.
+- **Hash mixing fusion.** Compile unsorting and the LSE-weighted hash
+  reduction together to reduce the number of intermediate buffers.
+
+The permutation and output-dtype flags raised batch-128 training
+throughput from 187.5 to 209.5 events/s and reduced sampled device VRAM
+from 38.13 to 35.37 GiB in their paired run. Inference throughput rose
+from 522 to 606 events/s at that batch size. Both paths matched all 41
+prediction and loss tensors and all 168 parameter gradients exactly in
+the deterministic replay. Direct bucket layout raised the paired
+inference throughput to 611 events/s and lowered sampled VRAM to
+3.86 GiB (4.75 GiB baseline). Its tested predictions and loss were
+exact, and its aggregate gradient difference was 1.32% relative L2.
+
+The first RMSNorm fusion reduced batch-32 storage saved by normalization
+from 993 to 435 MiB. A checkpoint around the positional embedding saved
+another 1,430 MiB in the same storage diagnostic. The default compiled
+RMSNorm changed prediction tensors and produced a 12.50% relative L2
+gradient difference. Hash mixing fusion with the default compiler
+settings produced a 3.25% relative L2 gradient difference. These
+measurements separate the potential savings from checkpoint parity.
+
+The paired replay without RMSNorm fusion (job 62897653) measured the
+following batch-128 training results.
+
+| Packed HEPTv2 | Events/s | Peak allocated GiB | Sampled device GiB |
+|---|---:|---:|---:|
+| Baseline | 185.5 | 31.32 | 38.13 |
+| Permutation and dtype flags + positional checkpoint | 197.7 | 23.53 | 26.92 |
+
+That combination matched all 41 prediction and loss tensors and
+168 parameter gradients exactly against packed HEPTv2. It is the
+lowest-memory tested option with exact checkpoint replay. Enabling
+Inductor's eager-precision cast emulation for compiled RMSNorm
+reduced its gradient difference to 9.44% relative L2. The replay still
+detected prediction differences. The cast-emulation training arm with
+the positional checkpoint measured 220.7 events/s, 21.21 GiB peak
+allocated, and 24.10 GiB sampled device VRAM.
+
+A same-GPU training replay of the combined prototypes gives the
+following batch-128 results (array 62897498, task 0).
+
+| Backbone or prototype | Events/s | Peak allocated GiB | Sampled device GiB |
+|---|---:|---:|---:|
+| Matched Flash Attention | 479.1 | 13.14 | 20.57 |
+| Packed HEPTv2 | 182.3 | 31.32 | 38.14 |
+| Permutation and dtype flags + compiled RMSNorm | 241.7 | 27.13 | 32.98 |
+| Direct layout + flags + compiled RMSNorm | 242.3 | 26.25 | 34.39 |
+| Direct layout + flags + compiled RMSNorm + positional checkpoint | 226.7 | 20.34 | 25.15 |
+
+The final three rows used default Inductor rounding and changed
+checkpoint predictions. They measure the potential performance of
+the implementation strategies.
+
+The routing ablation and saved-storage diagnostic point to a larger
+throughput opportunity inside bucket attention. The attention kernel
+could load Q/K/V through the bucket indices directly from the original
+token-major tensors. In backward, it would accumulate across hashes
+and retain gradients through the LSE weights. This removes the explicit
+per-hash Q/K/V copies that remain even with the improved layout.
+Caching the stable geometry ranks once per backbone call would also
+remove repeated sorts while retaining each layer's quantile region sizes.
+A different model could use global Flash attention for short events and
+hashed attention for long sequences. That changes which tokens interact
+and would need training and a physics comparison.
+
+The prototype source, Slurm drivers and raw metrics are under
+`experiments/issue588/next/` in the worktree.
+
 ## Reproduce
 
 Run on a single GPU with the release weights downloaded to `attention.pth`
