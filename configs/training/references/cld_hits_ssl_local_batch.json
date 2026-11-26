@@ -1,0 +1,595 @@
+{
+  "dataset": "cld_edm_ttbar_hits/1:3.2.1",
+  "device": "NVIDIA GeForce RTX 5060 Ti 16 GB",
+  "selected_ssl_batch_size": 2,
+  "selected_probe_batch_size": 16,
+  "activation_checkpointing": false,
+  "reason": "Batch 2 without checkpointing has almost identical throughput to batch 3 with substantially more memory headroom; checkpointed large batches are slower.",
+  "benchmarks": [
+    {
+      "gpu": "NVIDIA GeForce RTX 5060 Ti",
+      "total_bytes": 16620060672,
+      "free_before_bytes": 15703474176,
+      "config": {
+        "spec_file": "particleflow_spec.yaml",
+        "model_name": "pyg-cld-hits-heptv2-set-v1",
+        "production": "cld",
+        "model_overrides": {
+          "model": {
+            "backbone": {
+              "mode": "shared"
+            },
+            "heptv2": {
+              "activation_checkpointing": true
+            }
+          }
+        },
+        "data_dir": "/mnt/work/mlpf/tensorflow_datasets/cld",
+        "datasets": [
+          "cld_edm_ttbar_hits/1:3.2.1"
+        ],
+        "train_split": "train[:95%]",
+        "valid_split": "train[95%:]",
+        "train_events_per_dataset": 512,
+        "valid_events_per_dataset": 16,
+        "batch_size": 1,
+        "num_workers": 2,
+        "prefetch_factor": 2,
+        "timing_frequency": 10,
+        "steps": 1000,
+        "validation_frequency": 100,
+        "checkpoint_frequency": 100,
+        "lr": 0.0001,
+        "weight_decay": 0.01,
+        "seed": 12345,
+        "dtype": "bfloat16",
+        "ssl": {
+          "prototypes": 256,
+          "hidden_dim": 256,
+          "projection_dim": 64,
+          "keep_fraction": 0.6,
+          "student_views": 2,
+          "student_temperature": 0.1,
+          "teacher_temperature": 0.04,
+          "teacher_momentum": 0.996,
+          "center_momentum": 0.9
+        },
+        "probe": {
+          "enabled": true,
+          "frequency": 250,
+          "at_start": true,
+          "steps": 200,
+          "batch_size": 1,
+          "train_events_per_dataset": 64,
+          "valid_events_per_dataset": 16,
+          "lr": 0.001,
+          "weight_decay": 0.01,
+          "seed": 31415,
+          "save_events_per_dataset": 2,
+          "hit_pairs": {
+            "enabled": true,
+            "neighbors": 16,
+            "train_pairs_per_event": 2048,
+            "valid_pairs_per_event": 8192,
+            "epochs": 10,
+            "alpha": 0.0001
+          }
+        },
+        "snapshots": {
+          "enabled": true,
+          "frequency": 100,
+          "events_per_dataset": 4,
+          "elements_per_event": 2048,
+          "seed": 27182,
+          "teacher": true
+        }
+      },
+      "scan_events": 512,
+      "elements_quantiles": [
+        3065.0,
+        9996.5,
+        12568.45,
+        13446.0
+      ],
+      "stress_event_index": 166,
+      "stress_event_elements": 13446,
+      "results": [
+        {
+          "batch_size": 1,
+          "peak_allocated_bytes": 815852544,
+          "peak_reserved_bytes": 964689920,
+          "seconds_per_step": 0.610543992370367,
+          "events_per_second": 1.6378836128050571
+        },
+        {
+          "batch_size": 2,
+          "peak_allocated_bytes": 1435368960,
+          "peak_reserved_bytes": 1690304512,
+          "seconds_per_step": 0.6467153551056981,
+          "events_per_second": 3.0925506626839305
+        },
+        {
+          "batch_size": 4,
+          "peak_allocated_bytes": 2672883200,
+          "peak_reserved_bytes": 3160408064,
+          "seconds_per_step": 1.2096720337867737,
+          "events_per_second": 3.3066813882423536
+        },
+        {
+          "batch_size": 8,
+          "peak_allocated_bytes": 5151518208,
+          "peak_reserved_bytes": 6251610112,
+          "seconds_per_step": 2.307443323545158,
+          "events_per_second": 3.467040736545066
+        },
+        {
+          "batch_size": 12,
+          "peak_allocated_bytes": 7625350144,
+          "peak_reserved_bytes": 9386852352,
+          "seconds_per_step": 3.402781863696873,
+          "events_per_second": 3.5265263777334463
+        },
+        {
+          "batch_size": 16,
+          "peak_allocated_bytes": 10104314368,
+          "peak_reserved_bytes": 12280922112,
+          "seconds_per_step": 4.497348009608686,
+          "events_per_second": 3.5576521909835837
+        }
+      ],
+      "probe_results": [
+        {
+          "batch_size": 1,
+          "peak_allocated_bytes": 635640320,
+          "peak_reserved_bytes": 824180736,
+          "seconds_total": 4.42651723138988
+        },
+        {
+          "batch_size": 2,
+          "peak_allocated_bytes": 1020102144,
+          "peak_reserved_bytes": 1356857344,
+          "seconds_total": 1.0095070926472545
+        },
+        {
+          "batch_size": 4,
+          "peak_allocated_bytes": 1800630784,
+          "peak_reserved_bytes": 2181038080,
+          "seconds_total": 1.3771470980718732
+        },
+        {
+          "batch_size": 8,
+          "peak_allocated_bytes": 3358681600,
+          "peak_reserved_bytes": 4259315712,
+          "seconds_total": 2.4593883445486426
+        }
+      ]
+    },
+    {
+      "gpu": "NVIDIA GeForce RTX 5060 Ti",
+      "total_bytes": 16620060672,
+      "free_before_bytes": 15700328448,
+      "config": {
+        "spec_file": "particleflow_spec.yaml",
+        "model_name": "pyg-cld-hits-heptv2-set-v1",
+        "production": "cld",
+        "model_overrides": {
+          "model": {
+            "backbone": {
+              "mode": "shared"
+            },
+            "heptv2": {
+              "activation_checkpointing": false
+            }
+          }
+        },
+        "data_dir": "/mnt/work/mlpf/tensorflow_datasets/cld",
+        "datasets": [
+          "cld_edm_ttbar_hits/1:3.2.1"
+        ],
+        "train_split": "train[:95%]",
+        "valid_split": "train[95%:]",
+        "train_events_per_dataset": 512,
+        "valid_events_per_dataset": 16,
+        "batch_size": 1,
+        "num_workers": 2,
+        "prefetch_factor": 2,
+        "timing_frequency": 10,
+        "steps": 1000,
+        "validation_frequency": 100,
+        "checkpoint_frequency": 100,
+        "lr": 0.0001,
+        "weight_decay": 0.01,
+        "seed": 12345,
+        "dtype": "bfloat16",
+        "ssl": {
+          "prototypes": 256,
+          "hidden_dim": 256,
+          "projection_dim": 64,
+          "keep_fraction": 0.6,
+          "student_views": 2,
+          "student_temperature": 0.1,
+          "teacher_temperature": 0.04,
+          "teacher_momentum": 0.996,
+          "center_momentum": 0.9
+        },
+        "probe": {
+          "enabled": true,
+          "frequency": 250,
+          "at_start": true,
+          "steps": 200,
+          "batch_size": 1,
+          "train_events_per_dataset": 64,
+          "valid_events_per_dataset": 16,
+          "lr": 0.001,
+          "weight_decay": 0.01,
+          "seed": 31415,
+          "save_events_per_dataset": 2,
+          "hit_pairs": {
+            "enabled": true,
+            "neighbors": 16,
+            "train_pairs_per_event": 2048,
+            "valid_pairs_per_event": 8192,
+            "epochs": 10,
+            "alpha": 0.0001
+          }
+        },
+        "snapshots": {
+          "enabled": true,
+          "frequency": 100,
+          "events_per_dataset": 4,
+          "elements_per_event": 2048,
+          "seed": 27182,
+          "teacher": true
+        }
+      },
+      "scan_events": 512,
+      "elements_quantiles": [
+        3065.0,
+        9996.5,
+        12568.45,
+        13446.0
+      ],
+      "stress_event_index": 166,
+      "stress_event_elements": 13446,
+      "results": [
+        {
+          "batch_size": 1,
+          "peak_allocated_bytes": 4814387200,
+          "peak_reserved_bytes": 4901044224,
+          "seconds_per_step": 0.36791061516851187,
+          "events_per_second": 2.718051501563705
+        },
+        {
+          "batch_size": 2,
+          "peak_allocated_bytes": 9407798272,
+          "peak_reserved_bytes": 9728688128,
+          "seconds_per_step": 0.4879135265946388,
+          "events_per_second": 4.099087012321367
+        },
+        {
+          "batch_size": 4,
+          "oom": true
+        }
+      ],
+      "probe_results": [
+        {
+          "batch_size": 16,
+          "peak_allocated_bytes": 6470256128,
+          "peak_reserved_bytes": 9065988096,
+          "seconds_total": 7.74889718927443
+        },
+        {
+          "batch_size": 24,
+          "peak_allocated_bytes": 9588697600,
+          "peak_reserved_bytes": 12073304064,
+          "seconds_total": 6.732139096595347
+        }
+      ]
+    },
+    {
+      "gpu": "NVIDIA GeForce RTX 5060 Ti",
+      "total_bytes": 16620060672,
+      "free_before_bytes": 15700328448,
+      "config": {
+        "spec_file": "particleflow_spec.yaml",
+        "model_name": "pyg-cld-hits-heptv2-set-v1",
+        "production": "cld",
+        "model_overrides": {
+          "model": {
+            "backbone": {
+              "mode": "shared"
+            },
+            "heptv2": {
+              "activation_checkpointing": false
+            }
+          }
+        },
+        "data_dir": "/mnt/work/mlpf/tensorflow_datasets/cld",
+        "datasets": [
+          "cld_edm_ttbar_hits/1:3.2.1"
+        ],
+        "train_split": "train[:95%]",
+        "valid_split": "train[95%:]",
+        "train_events_per_dataset": 512,
+        "valid_events_per_dataset": 16,
+        "batch_size": 1,
+        "num_workers": 2,
+        "prefetch_factor": 2,
+        "timing_frequency": 10,
+        "steps": 1000,
+        "validation_frequency": 100,
+        "checkpoint_frequency": 100,
+        "lr": 0.0001,
+        "weight_decay": 0.01,
+        "seed": 12345,
+        "dtype": "bfloat16",
+        "ssl": {
+          "prototypes": 256,
+          "hidden_dim": 256,
+          "projection_dim": 64,
+          "keep_fraction": 0.6,
+          "student_views": 2,
+          "student_temperature": 0.1,
+          "teacher_temperature": 0.04,
+          "teacher_momentum": 0.996,
+          "center_momentum": 0.9
+        },
+        "probe": {
+          "enabled": true,
+          "frequency": 250,
+          "at_start": true,
+          "steps": 200,
+          "batch_size": 1,
+          "train_events_per_dataset": 64,
+          "valid_events_per_dataset": 16,
+          "lr": 0.001,
+          "weight_decay": 0.01,
+          "seed": 31415,
+          "save_events_per_dataset": 2,
+          "hit_pairs": {
+            "enabled": true,
+            "neighbors": 16,
+            "train_pairs_per_event": 2048,
+            "valid_pairs_per_event": 8192,
+            "epochs": 10,
+            "alpha": 0.0001
+          }
+        },
+        "snapshots": {
+          "enabled": true,
+          "frequency": 100,
+          "events_per_dataset": 4,
+          "elements_per_event": 2048,
+          "seed": 27182,
+          "teacher": true
+        }
+      },
+      "scan_events": 512,
+      "elements_quantiles": [
+        3065.0,
+        9996.5,
+        12568.45,
+        13446.0
+      ],
+      "stress_event_index": 166,
+      "stress_event_elements": 13446,
+      "results": [
+        {
+          "batch_size": 3,
+          "peak_allocated_bytes": 13956180992,
+          "peak_reserved_bytes": 14453571584,
+          "seconds_per_step": 0.7270745197311044,
+          "events_per_second": 4.126124514870218
+        }
+      ],
+      "probe_results": []
+    }
+  ],
+  "real_data_run": {
+    "scope": "Steady-state SSL steps 10-60; excludes probe/snapshot/validation time. Device-wide nvidia-smi samples selected by timestamp; approximate utilization, not kernel profiling.",
+    "steps": 51,
+    "batch_size": 2,
+    "median_training_seconds": 0.446661707945168,
+    "events_per_second": 4.4584666006870135,
+    "gpu_samples": 22,
+    "mean_gpu_utilization": 82.31818181818181,
+    "median_gpu_utilization": 79.5,
+    "peak_allocated_gib": 8.336579322814941,
+    "peak_reserved_gib": 9.130859375,
+    "phase_medians": {
+      "data_wait": 0.00020686443895101547,
+      "forward": 0.29158571315929294,
+      "backward": 0.08687600120902061,
+      "optimizer": 0.06908043520525098,
+      "ema": 0.0018207952380180359
+    },
+    "probes": {
+      "0": {
+        "unweighted_task_loss": 3.2710380585922394,
+        "particle_f1": 0.21214285714285713,
+        "matched_pid_accuracy": 0.494949494949495,
+        "hit_pairs": {
+          "tracker": {
+            "raw": {
+              "positive_fraction": 0.171783447265625,
+              "average_precision": 0.3578850154372754,
+              "roc_auc": 0.6969498370255676
+            },
+            "embedding": {
+              "positive_fraction": 0.171783447265625,
+              "average_precision": 0.41908168602068696,
+              "roc_auc": 0.718868931048422
+            }
+          },
+          "calorimeter": {
+            "raw": {
+              "positive_fraction": 0.9011611938476562,
+              "average_precision": 0.9773887520950097,
+              "roc_auc": 0.8535106678681481
+            },
+            "embedding": {
+              "positive_fraction": 0.9011611938476562,
+              "average_precision": 0.9437603705729297,
+              "roc_auc": 0.678196039363712
+            }
+          }
+        }
+      },
+      "60": {
+        "unweighted_task_loss": 3.206245863577351,
+        "particle_f1": 0.18972659486329743,
+        "matched_pid_accuracy": 0.49344978165938863,
+        "hit_pairs": {
+          "tracker": {
+            "raw": {
+              "positive_fraction": 0.171783447265625,
+              "average_precision": 0.3578850154372754,
+              "roc_auc": 0.6969498370255676
+            },
+            "embedding": {
+              "positive_fraction": 0.171783447265625,
+              "average_precision": 0.4153415222829511,
+              "roc_auc": 0.7229407109372428
+            }
+          },
+          "calorimeter": {
+            "raw": {
+              "positive_fraction": 0.9011611938476562,
+              "average_precision": 0.9773887520950097,
+              "roc_auc": 0.8535106678681481
+            },
+            "embedding": {
+              "positive_fraction": 0.9011611938476562,
+              "average_precision": 0.9453072261640926,
+              "roc_auc": 0.6833438724430843
+            }
+          }
+        }
+      }
+    }
+  },
+  "selected_probe_hit_grouping_chunk_size": 8192,
+  "probe_chunk_benchmark": {
+    "gpu": "NVIDIA GeForce RTX 5060 Ti",
+    "total_bytes": 16620060672,
+    "free_before_bytes": 15703212032,
+    "config": {
+      "spec_file": "particleflow_spec.yaml",
+      "model_name": "pyg-cld-hits-heptv2-set-v1",
+      "production": "cld",
+      "model_overrides": {
+        "model": {
+          "backbone": {
+            "mode": "shared"
+          },
+          "heptv2": {
+            "activation_checkpointing": false
+          }
+        }
+      },
+      "data_dir": "/mnt/work/mlpf/tensorflow_datasets/cld",
+      "datasets": [
+        "cld_edm_ttbar_hits/1:3.2.1"
+      ],
+      "train_split": "train[:95%]",
+      "valid_split": "train[95%:]",
+      "train_events_per_dataset": 512,
+      "valid_events_per_dataset": 16,
+      "batch_size": 2,
+      "num_workers": 2,
+      "prefetch_factor": 2,
+      "timing_frequency": 10,
+      "steps": 1000,
+      "validation_frequency": 100,
+      "checkpoint_frequency": 100,
+      "lr": 0.0001,
+      "weight_decay": 0.01,
+      "seed": 12345,
+      "dtype": "bfloat16",
+      "ssl": {
+        "prototypes": 256,
+        "hidden_dim": 256,
+        "projection_dim": 64,
+        "keep_fraction": 0.6,
+        "student_views": 2,
+        "student_temperature": 0.1,
+        "teacher_temperature": 0.04,
+        "teacher_momentum": 0.996,
+        "center_momentum": 0.9
+      },
+      "probe": {
+        "enabled": true,
+        "frequency": 250,
+        "at_start": true,
+        "steps": 200,
+        "batch_size": 16,
+        "train_events_per_dataset": 64,
+        "valid_events_per_dataset": 16,
+        "lr": 0.001,
+        "weight_decay": 0.01,
+        "seed": 31415,
+        "save_events_per_dataset": 2,
+        "hit_pairs": {
+          "enabled": true,
+          "neighbors": 16,
+          "train_pairs_per_event": 2048,
+          "valid_pairs_per_event": 8192,
+          "epochs": 10,
+          "alpha": 0.0001
+        }
+      },
+      "snapshots": {
+        "enabled": true,
+        "frequency": 100,
+        "events_per_dataset": 4,
+        "elements_per_event": 2048,
+        "seed": 27182,
+        "teacher": true
+      }
+    },
+    "scan_events": 512,
+    "elements_quantiles": [
+      3065.0,
+      9996.5,
+      12568.45,
+      13446.0
+    ],
+    "stress_event_index": 166,
+    "stress_event_elements": 13446,
+    "results": [
+      {
+        "batch_size": 2,
+        "peak_allocated_bytes": 9405766656,
+        "peak_reserved_bytes": 9718202368,
+        "seconds_per_step": 0.5635593966580927,
+        "events_per_second": 3.5488717105242147
+      }
+    ],
+    "probe_results": [
+      {
+        "batch_size": 16,
+        "peak_allocated_bytes": 6469043712,
+        "peak_reserved_bytes": 9070182400,
+        "seconds_total": 15.004911539144814,
+        "updates": 10,
+        "hit_grouping_chunk_size": 1024,
+        "timings": {
+          "embedding_seconds": 1.125653300434351,
+          "readout_training_seconds": 10.361779884435236
+        }
+      },
+      {
+        "batch_size": 16,
+        "peak_allocated_bytes": 6469304832,
+        "peak_reserved_bytes": 8067743744,
+        "seconds_total": 7.908139823004603,
+        "updates": 10,
+        "hit_grouping_chunk_size": 8192,
+        "timings": {
+          "embedding_seconds": 1.0800266526639462,
+          "readout_training_seconds": 6.687535553239286
+        }
+      }
+    ]
+  }
+}

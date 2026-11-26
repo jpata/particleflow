@@ -1,0 +1,54 @@
+# Raw-hit baseline: full teacher, two independently thinned student views.
+# Use the version actually available on the local machine; do not resolve latest.
+model_name: pyg-cld-hits-heptv2-set-v1
+production: cld
+data_dir: /mnt/work/mlpf/tensorflow_datasets/cld
+datasets:
+  - cld_edm_ttbar_hits/1:3.2.1
+model_overrides:
+  model:
+    backbone:
+      mode: shared
+    heptv2:
+      activation_checkpointing: false
+    set_decoder:
+      # Same grouping loss, fewer small GPU launches during frozen PF probes.
+      hit_grouping_chunk_size: 8192
+# RTX 5060 Ti 16 GB, largest of all 512 training events (13,446 hits):
+# batch 2 reserves 9.1 GiB and processes 4.10 events/s; batch 3 buys <1%
+# throughput for 13.5 GiB, batch 4 OOMs. Checkpointing is slower here.
+batch_size: 2
+num_workers: 2
+prefetch_factor: 2
+timing_frequency: 10
+steps: 1000
+train_events_per_dataset: 512
+valid_events_per_dataset: 16
+validation_frequency: 100
+checkpoint_frequency: 100
+dtype: bfloat16
+ssl:
+  prototypes: 256
+  keep_fraction: 0.6
+  student_views: 2
+probe:
+  enabled: true
+  frequency: 250
+  at_start: true
+  steps: 200
+  batch_size: 16
+  train_events_per_dataset: 64
+  valid_events_per_dataset: 16
+  save_events_per_dataset: 2
+  hit_pairs:
+    enabled: true
+    neighbors: 16
+    train_pairs_per_event: 2048
+    valid_pairs_per_event: 8192
+    epochs: 10
+snapshots:
+  enabled: true
+  frequency: 100
+  events_per_dataset: 4
+  elements_per_event: 2048
+  teacher: true

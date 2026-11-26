@@ -1,0 +1,54 @@
+{
+  "primary_endpoint": "Validation matched particle F1 after 5000 probe updates; final 100000-event-exposure comparison primary, earlier checkpoints secondary.",
+  "secondary_endpoints": [
+    "matched PID accuracy",
+    "event energy relative absolute error",
+    "particle count MAE",
+    "PF task loss",
+    "matching efficiency"
+  ],
+  "seeds": [
+    31415,
+    31416,
+    31417,
+    31418,
+    31419
+  ],
+  "budgets": [
+    0,
+    50,
+    100,
+    200,
+    500,
+    1000,
+    2000,
+    5000
+  ],
+  "event_exposures": [
+    0,
+    60000,
+    80000,
+    100000
+  ],
+  "regions_run": "experiments/cld_hits_ssl_regions",
+  "regions_steps": [
+    0,
+    60000,
+    80000,
+    100000
+  ],
+  "thinning_run": "experiments/cld_hits_ssl_large",
+  "thinning_steps": [
+    0,
+    30000,
+    40000,
+    50000
+  ],
+  "train_events": 1024,
+  "valid_events": 256,
+  "probe_batch_size": 16,
+  "parallel_workers": 2,
+  "gpu_memory_fraction": 0.46,
+  "trials": 40,
+  "limitations": "Single SSL seed per method; multiple probe seeds only. Exposure matched, not optimizer steps or compute. Same validation cohort used in previous analyses. No test set evaluation."
+}

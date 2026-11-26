@@ -49,6 +49,7 @@ project:
     - title: Training
       children:
         - file: training/train.md
+        - file: training/self-supervised.md
         - file: training/data-mixing.md
         - file: training/resume-and-fine-tune.md
         - file: training/scenarios.md

@@ -1,0 +1,49 @@
+# Larger-data follow-up to cld_hits_ssl.yaml. Start in a new output directory.
+# Batch sizes are candidates: benchmark the full selected pool before running.
+model_name: pyg-cld-hits-heptv2-set-v1
+production: cld
+data_dir: /mnt/work/mlpf/tensorflow_datasets/cld
+datasets:
+  - cld_edm_ttbar_hits/1:3.2.1
+train_split: train[:95%]
+valid_split: train[95%:]
+model_overrides:
+  model:
+    backbone:
+      mode: shared
+    heptv2:
+      activation_checkpointing: false
+    set_decoder:
+      hit_grouping_chunk_size: 8192
+batch_size: 2
+num_workers: 2
+prefetch_factor: 2
+timing_frequency: 50
+steps: 50000
+train_events_per_dataset: 20000
+valid_events_per_dataset: 128
+validation_frequency: 1000
+checkpoint_frequency: 1000
+dtype: bfloat16
+ssl:
+  prototypes: 256
+  keep_fraction: 0.6
+  student_views: 2
+probe:
+  enabled: true
+  frequency: 10000
+  at_start: true
+  steps: 1000
+  batch_size: 16
+  train_events_per_dataset: 1024
+  valid_events_per_dataset: 256
+  save_events_per_dataset: 2
+  hit_pairs:
+    # Keep periodic diagnostics affordable; focus this run on the PF probe.
+    enabled: false
+snapshots:
+  enabled: true
+  frequency: 1000
+  events_per_dataset: 4
+  elements_per_event: 2048
+  teacher: true

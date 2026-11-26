@@ -1,0 +1,91 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5060 Ti",
+  "total_bytes": 16620060672,
+  "free_before_bytes": 16223567872,
+  "config": {
+    "spec_file": "particleflow_spec.yaml",
+    "model_name": "pyg-cld-v1",
+    "production": "cld",
+    "model_overrides": {
+      "model": {
+        "backbone": {
+          "mode": "shared"
+        },
+        "attention": {
+          "use_flash_attn_varlen": false
+        }
+      }
+    },
+    "data_dir": "/mnt/work/mlpf/tensorflow_datasets/cld",
+    "datasets": [
+      "cld_edm_ttbar_pf/1:3.3.0",
+      "cld_edm_ww_fullhad_pf/1:3.3.0",
+      "cld_edm_qq_pf/1:3.3.0"
+    ],
+    "train_split": "train[:95%]",
+    "valid_split": "train[95%:]",
+    "train_events_per_dataset": 4096,
+    "valid_events_per_dataset": 32,
+    "batch_size": 4,
+    "steps": 2000,
+    "validation_frequency": 100,
+    "checkpoint_frequency": 100,
+    "lr": 0.0001,
+    "weight_decay": 0.01,
+    "seed": 12345,
+    "dtype": "bfloat16",
+    "ssl": {
+      "prototypes": 256,
+      "hidden_dim": 256,
+      "projection_dim": 64,
+      "keep_fraction": 0.6,
+      "student_views": 2,
+      "student_temperature": 0.1,
+      "teacher_temperature": 0.04,
+      "teacher_momentum": 0.996,
+      "center_momentum": 0.9
+    },
+    "probe": {
+      "enabled": true,
+      "frequency": 500,
+      "at_start": true,
+      "steps": 200,
+      "batch_size": 8,
+      "train_events_per_dataset": 64,
+      "valid_events_per_dataset": 32,
+      "lr": 0.001,
+      "weight_decay": 0.01,
+      "seed": 31415
+    }
+  },
+  "scan_events": 12288,
+  "stress_event_elements": 310,
+  "results": [
+    {
+      "batch_size": 256,
+      "peak_allocated_bytes": 3382690304,
+      "peak_reserved_bytes": 3846176768,
+      "seconds_per_step": 1.3588846021642287
+    },
+    {
+      "batch_size": 512,
+      "peak_allocated_bytes": 6666667008,
+      "peak_reserved_bytes": 7593787392,
+      "seconds_per_step": 2.470031852213045
+    },
+    {
+      "batch_size": 768,
+      "peak_allocated_bytes": 9955467776,
+      "peak_reserved_bytes": 11288969216,
+      "seconds_per_step": 3.484983715849618
+    },
+    {
+      "batch_size": 1024,
+      "peak_allocated_bytes": 13266354176,
+      "peak_reserved_bytes": 14990442496,
+      "seconds_per_step": 4.83133136232694
+    }
+  ],
+  "recommended_batch_size": 768,
+  "reason": "Largest tested size below 80% reserved VRAM on the maximum-occupancy event of the complete configured training pool; leave headroom for diagnostics and the display."
+}
