@@ -74,7 +74,7 @@ The scenario directory also holds historical and single-study recipes. These are
 | `clic_cld_backbone_benchmark` | CLIC/CLD × tracks-and-clusters/hits × attention/HEPTv2 at matched event exposure |
 | `cms_backbone_comparison` | CMS attention vs HEPTv2 on TFDS 2.8.0 for 320k steps ([rationale](../studies/cms_training_exposure.md)) |
 | `cms_input_normalization`, `colliderml_input_normalization` | Same model with and without [input normalization](train.md#input-normalization) |
-| `pf_fm_experts`, `pf_fm_joint`, `pf_fm_finetuning` | Per-detector attention experts, one joint CLD+CLIC+ColliderML model, and fine-tuning of the joint model on IDEA or CLD granularity variants |
+| `pf_fm_experts`, `pf_fm_joint`, `pf_fm_finetuning` | Attention experts for the Key4hep v1.4.0 CLD, CLIC, ILD and IDEA datasets, ColliderML pretraining with four training-data fractions, and fine-tuning of the pretrained model on each Key4hep detector; the earlier three-detector campaign is under `scenarios/legacy/` |
 | `cld_clic_colliderml_feature_bag` | Joint training with and without the shared [feature bag](train.md#train-on-several-detectors) |
 | `cld_pf_heptv2_default_50k` | Training recipe for the recommended CLD hit-set model `pyg-cld-hits-heptv2-set-v1` |
 | `cld_backbone_benchmark` | Fixed recipe for [portable GPU benchmarks](benchmark-portability.md) |
