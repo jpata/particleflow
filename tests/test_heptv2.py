@@ -149,3 +149,62 @@ def test_packed_padding_preserves_partial_buckets_and_gradients(device):
     torch.testing.assert_close(packed, dense, rtol=2e-5, atol=2e-6)
     for actual, expected in zip(packed_grad, dense_grad, strict=True):
         torch.testing.assert_close(actual, expected, rtol=2e-4, atol=2e-5)
+
+
+@pytest.mark.skipif(
+    not torch.cuda.is_available() or torch.version.hip is not None or torch.cuda.get_device_capability()[0] < 8,
+    reason="NVIDIA BF16 GPU required",
+)
+@pytest.mark.parametrize("deterministic", [False, True])
+def test_indexed_bucket_attention_and_lse_backward(deterministic):
+    pytest.importorskip("triton")
+    from mlpf.model.heptv2 import sort_qkv_to_buckets, unsort_from_buckets
+    from mlpf.model.heptv2_indexed import indexed_bucket_attention
+
+    torch.manual_seed(3)
+    hashes, heads, tokens, dim, block_size = 3, 2, 384, 16, 128
+    positions = torch.rand(hashes, heads, tokens, device="cuda").argsort(dim=-1)
+    inverse = positions.argsort(dim=-1)
+    tensors = [torch.randn(tokens, heads, dim, device="cuda", dtype=torch.bfloat16, requires_grad=True) for _ in range(3)]
+    gathered = sort_qkv_to_buckets(*(tensor.float().transpose(0, 1) for tensor in tensors), positions, block_size)
+    query, key, value = gathered
+    scores = query @ key.transpose(-1, -2) / math.sqrt(dim)
+    reference = unsort_from_buckets(scores.logsumexp(-1, keepdim=True), inverse), unsort_from_buckets(scores.softmax(-1) @ value, inverse)
+
+    old_determinism = torch.are_deterministic_algorithms_enabled()
+    old_warn_only = torch.is_deterministic_algorithms_warn_only_enabled()
+    torch.use_deterministic_algorithms(deterministic)
+    try:
+        actual = indexed_bucket_attention(*tensors, positions, block_size)
+        torch.testing.assert_close(actual[0], reference[0], atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(actual[1].float(), reference[1], atol=3e-3, rtol=8e-3)
+        lse_weight = torch.randn_like(reference[0]) * 3
+        out_weight = torch.randn_like(reference[1])
+        for lse_only in (True, False):
+
+            def objective(result):
+                lse, out = result
+                loss = (lse * lse_weight).sum()
+                if not lse_only:
+                    loss = loss + (out.float() * out_weight).sum()
+                return loss
+
+            expected_grads = torch.autograd.grad(objective(reference), tensors, retain_graph=True, allow_unused=True)
+            actual_grads = torch.autograd.grad(objective(actual), tensors, retain_graph=True, allow_unused=True)
+            for gradient, expected in zip(actual_grads, expected_grads, strict=True):
+                if gradient is None:
+                    assert expected is None or not torch.count_nonzero(expected)
+                else:
+                    torch.testing.assert_close(gradient.float(), expected.float(), atol=2e-2, rtol=1e-2)
+                    relative_error = (gradient.float() - expected.float()).norm() / expected.float().norm()
+                    assert relative_error.item() < 0.01
+            if deterministic:
+                replay = indexed_bucket_attention(*tensors, positions, block_size)
+                replay_grads = torch.autograd.grad(objective(replay), tensors, allow_unused=True)
+                for gradient, repeated in zip(actual_grads, replay_grads, strict=True):
+                    if gradient is None:
+                        assert repeated is None
+                    else:
+                        torch.testing.assert_close(gradient, repeated, atol=0, rtol=0)
+    finally:
+        torch.use_deterministic_algorithms(old_determinism, warn_only=old_warn_only)

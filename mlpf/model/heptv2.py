@@ -20,7 +20,7 @@ Local modifications in this repository:
 - Batched `[B, S, D]` handling in `HEPTv2Layer.forward`, including mask-aware
   per-event hashing and flattened batch-offset gather indices.
 - Dense bucket attention only on CPU; GPU execution requires compiled
-  `flex_attention`, with dynamic bucket counts and optional shape/debug logging.
+  `flex_attention`, with dynamic bucket counts, or the experimental indexed Triton path.
 - Integration with the MLPF stack through the repo-specific feature layout
   (`eta`, `sin_phi`, `cos_phi` -> eta-phi coordinates).
 - Several `HEPTV2_*` environment switches are preserved from the upstream
@@ -76,6 +76,7 @@ _HEPTV2_COMBINED_UNSORT = _env_bool("HEPTV2_COMBINED_UNSORT", _HEPTV2_DEFAULTS["
 _HEPTV2_MANUAL_HASH_SOFTMAX = _env_bool("HEPTV2_MANUAL_HASH_SOFTMAX", _HEPTV2_DEFAULTS["HEPTV2_MANUAL_HASH_SOFTMAX"])
 _HEPTV2_DIRECT_BUCKET_GATHER = _env_bool("HEPTV2_DIRECT_BUCKET_GATHER", _HEPTV2_DEFAULTS["HEPTV2_DIRECT_BUCKET_GATHER"])
 _HEPTV2_E2LSH_COORDS_EINSUM = _env_bool("HEPTV2_E2LSH_COORDS_EINSUM", _HEPTV2_DEFAULTS["HEPTV2_E2LSH_COORDS_EINSUM"])
+_HEPTV2_INDEXED_BUCKET_ATTENTION = _env_bool("HEPTV2_INDEXED_BUCKET_ATTENTION")
 _HEPTV2_DEBUG_SHAPES = _env_bool("HEPTV2_DEBUG_SHAPES", _HEPTV2_DEFAULTS["HEPTV2_DEBUG_SHAPES"])
 
 
@@ -453,13 +454,9 @@ class HEPTv2Attention(nn.Module):
         key = key.view(-1, self.num_heads, self.dim_per_head)
         value = value.view(-1, self.num_heads, self.dim_per_head)
 
-        q_hat = rearrange(query, "n h d -> h n d")
-        k_hat = rearrange(key, "n h d -> h n d")
-        value = rearrange(value, "n h d -> h n d")
-
         valid_mask = kwargs.get("valid_mask")
         if valid_mask is None:
-            valid_mask = torch.ones(q_hat.shape[1], dtype=torch.bool, device=q_hat.device)
+            valid_mask = torch.ones(query.shape[0], dtype=torch.bool, device=query.device)
         else:
             valid_mask = valid_mask.bool()
         coords2 = kwargs["coords"][..., :2]
@@ -555,22 +552,39 @@ class HEPTv2Attention(nn.Module):
             positions = padding_layout.token_to_lane[positions.index_select(-1, padding_layout.occupied_slots)]
 
         _debug_shape("HEPTv2Attention hash positions", positions)
-        s_query, s_key, s_value = sort_qkv_to_buckets(q_hat, k_hat, value, positions, self.block_size)
-        _debug_shape("HEPTv2Attention buckets s_query", s_query)
+        if (
+            _HEPTV2_INDEXED_BUCKET_ATTENTION
+            and query.is_cuda
+            and torch.version.hip is None
+            and query.dtype == key.dtype == value.dtype == torch.bfloat16
+            and torch.cuda.get_device_capability(query.device)[0] >= 8
+            and self.block_size == 128
+            and self.dim_per_head == 16
+            and not torch.onnx.is_in_onnx_export()
+        ):
+            from mlpf.model.heptv2_indexed import indexed_bucket_attention
 
-        if torch.onnx.is_in_onnx_export() and self.onnx_attention_dtype is not None:
-            s_query, s_key, s_value = (t.to(self.onnx_attention_dtype) for t in (s_query, s_key, s_value))
-        denom, so = qkv_res(s_query, s_key, s_value, attention_format=self.onnx_attention_format)
-        q_rev_positions = invert_permutation(positions)
-
-        if _HEPTV2_COMBINED_UNSORT:
-            combined = torch.cat([so, denom], dim=-1)
-            combined = unsort_from_buckets(combined, q_rev_positions)
-            o = combined[..., : self.dim_per_head]
-            logits = combined[..., self.dim_per_head :]
+            logits, o = indexed_bucket_attention(query, key, value, positions, self.block_size)
         else:
-            o = unsort_from_buckets(so, q_rev_positions)
-            logits = unsort_from_buckets(denom, q_rev_positions)
+            q_hat = rearrange(query, "n h d -> h n d")
+            k_hat = rearrange(key, "n h d -> h n d")
+            v_hat = rearrange(value, "n h d -> h n d")
+            s_query, s_key, s_value = sort_qkv_to_buckets(q_hat, k_hat, v_hat, positions, self.block_size)
+            _debug_shape("HEPTv2Attention buckets s_query", s_query)
+
+            if torch.onnx.is_in_onnx_export() and self.onnx_attention_dtype is not None:
+                s_query, s_key, s_value = (t.to(self.onnx_attention_dtype) for t in (s_query, s_key, s_value))
+            denom, so = qkv_res(s_query, s_key, s_value, attention_format=self.onnx_attention_format)
+            q_rev_positions = invert_permutation(positions)
+
+            if _HEPTV2_COMBINED_UNSORT:
+                combined = torch.cat([so, denom], dim=-1)
+                combined = unsort_from_buckets(combined, q_rev_positions)
+                o = combined[..., : self.dim_per_head]
+                logits = combined[..., self.dim_per_head :]
+            else:
+                o = unsort_from_buckets(so, q_rev_positions)
+                logits = unsort_from_buckets(denom, q_rev_positions)
 
         if _HEPTV2_MANUAL_HASH_SOFTMAX:
             weights = torch.exp(logits - logits.max(dim=0, keepdim=True).values)

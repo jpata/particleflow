@@ -361,6 +361,57 @@ and would need training and a physics comparison.
 The prototype source, Slurm drivers and raw metrics are under
 `experiments/issue588/next/` in the worktree.
 
+## Indexed bucket attention prototype
+
+`HEPTV2_INDEXED_BUCKET_ATTENTION=1` enables an experimental Triton
+kernel for 128-token buckets with BF16 Q/K/V and head dimension 16
+on NVIDIA Ampere and newer GPUs. The kernel uses the same integer
+bucket assignments, loads Q/K/V indirectly from their token-major
+tensors, and stores the output and FP32 LSE directly to original
+token order. This removes the per-hash Q/K/V tensors, inverse
+permutation, and output gather in the FlexAttention path. The
+implementation uses 64-element online softmax tiles and includes
+gradients of the LSE used in hash mixing. It rounds each hash's
+gradients to BF16, accumulates across hashes in FP32, and processes
+hashes in order when deterministic algorithms are enabled.
+The experimental switch is off by default.
+
+L40S resources were queued (Slurm array 62903767). The paired BF16
+measurements below used an A100 80 GB PCIe (array 62904029), the
+matched-capacity recipes and the same ColliderML PU0 inputs as the
+earlier studies. HEPTv2 arms used packed padding, three hashes,
+`HEPTV2_FAST_INVERT_PERM=1` and `HEPTV2_COMBINED_UNSORT=0`.
+Training used four warmup steps and eight timed steps with
+checkpointing disabled. Inference used 28 timed requests per point.
+
+| A100 replay | Matched Flash Attention | HEPTv2 FlexAttention | HEPTv2 indexed |
+|---|---:|---:|---:|
+| Training at batch 128, events/s | 733.4 | 337.8 | 403.5 |
+| Training at batch 128, peak allocated GiB | 13.13 | 29.43 | 24.68 |
+| Training at batch 128, sampled device GiB | 20.65 | 35.17 | 33.00 |
+| Inference at batch 128, events/s | 2,422 | 987 | 1,232 |
+| Inference at batch 128, sampled device GiB | 2.94 | 4.50 | 3.90 |
+| Unpadded 1,280-element median (ms) | 33.0 | 25.9 | 24.1 |
+| Unpadded 32,768-element median (ms) | 130.0 | 50.3 | 41.8 |
+
+At batch 32, bucket attention's saved storage fell from 1,755 to
+606 MiB. The 19 HEPTv2 and checkpointing tests passed on A100 MIG.
+The indexed kernel tests compare outputs and gradients to a dense
+FP32 reference, exercise LSE-only loss, and check exact repeatability
+in deterministic mode. The kernels also compiled for SM80 and SM89.
+
+Holding each layer's actual input fixed, the maximum relative L2
+difference in its indexed attention output was 0.013% across the
+ColliderML replay. The whole-model replay on the same A100 MIG instance
+showed a 0.63% difference in raw training predictions and a 9.00%
+aggregate gradient difference. The one-tile prototype had similar
+performance and a 15.99% aggregate gradient difference. These results
+support the throughput and memory gains while keeping the tiled backend
+an explicit experiment for checkpoint evaluation.
+
+Raw measurements and Slurm launchers are in the worktree's
+`experiments/issue588/indexed-a100/` and `experiments/issue588/indexed/`.
+
 ## Reproduce
 
 Run on a single GPU with the release weights downloaded to `attention.pth`
