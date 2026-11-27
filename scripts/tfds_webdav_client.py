@@ -306,10 +306,8 @@ class WebDAV:
         except requests.RequestException as exc:
             raise WebDAVError(f"GET {url}: interrupted response ({exc.__class__.__name__})", retryable=True) from exc
 
-    def checksum(self, url, mode):
-        if mode == "sha256-readback":
-            with self.request("GET", url, (200,), stream=True) as response:
-                return digest_blocks(self.blocks(response, url), "sha256")
+    def checksum(self, url):
+        """Size and MD5 computed by the server, without transferring the file."""
         with self.request("HEAD", url, (200,), headers={"Want-Digest": "md5"}) as response:
             fields = dict(value.strip().partition("=")[::2] for value in response.headers.get("Digest", "").split(","))
             md5 = next((value for name, value in fields.items() if name.lower() == "md5"), "")
@@ -319,5 +317,5 @@ class WebDAV:
                 if size < 0 or len(digest) != 16:
                     raise ValueError("invalid size or digest")
             except (KeyError, ValueError) as exc:
-                raise WebDAVError(f"{url}: server did not return a valid MD5 and file size; try --verify-mode sha256-readback") from exc
+                raise WebDAVError(f"{url}: server did not return a valid MD5 and file size") from exc
             return size, digest

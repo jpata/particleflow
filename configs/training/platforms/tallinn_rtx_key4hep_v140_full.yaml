@@ -20,7 +20,7 @@ slurm:
   time: "24:00:00"
   nodes: 1
   tasks_per_node: 1
-  cpus_per_task: 3
+  cpus_per_task: 2
   gpu_request: gres
   gpu_type: rtx
-  memory_per_gpu: 11G
+  memory_per_gpu: 22G

@@ -120,7 +120,7 @@ def test_transfer_resume_and_json(webdav, tmp_path, monkeypatch, capsys):
     storage.files[f"{remote_path}/shard"] = b"corrupt"  # Same size as the local shard.
     status = tmp_path / "status.json"
     common = ["--remote-url", remote, "--dataset", "sample", "--proxy", str(proxy), "--jobs", "1", "--attempts", "1", "--json"]
-    upload = ["upload", "--local-root", str(tmp_path / "source"), "--status-file", str(status), "--verify-mode", "md5-server", *common]
+    upload = ["upload", "--local-root", str(tmp_path / "source"), "--status-file", str(status), *common]
     webdav.main(upload)
     assert json.loads(capsys.readouterr().out)["transferred_files"] == 2
     assert storage.files[f"{remote_path}/shard"] == b"correct"
@@ -169,7 +169,7 @@ def test_collection_creation_and_full_get_fallback(webdav, tmp_path, monkeypatch
     with webdav.WebDAV(root, proxy=proxy) as client:
         client.ensure_collection(version)
         client.put(address, source, 5)
-        assert client.checksum(address, "sha256-readback") == (5, hashlib.sha256(b"whole").digest())
+        assert client.checksum(address) == (5, hashlib.md5(b"whole").digest())
         entry = client.list(version)["shard"]
         part, state = partial_paths(path)
         part.write_bytes(b"wh")
