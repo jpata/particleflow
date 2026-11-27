@@ -5,6 +5,5 @@ import sys
 
 from tfds_webdav import main
 
-
 if __name__ == "__main__":
     main(["upload", *sys.argv[1:]])

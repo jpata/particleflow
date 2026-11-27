@@ -5,7 +5,6 @@ import sys
 
 from tfds_webdav import main
 
-
 if __name__ == "__main__":
     argv = sys.argv[1:]
     selection = [] if any(arg == "--dataset" or arg.startswith("--dataset=") for arg in argv) else ["--all"]
