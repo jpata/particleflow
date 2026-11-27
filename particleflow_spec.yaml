@@ -614,6 +614,14 @@ productions:
     comment: "Joint CLD+CLIC+ColliderML pu0 tracks/clusters"
     source_productions: {cld: cld, clic: clic, colliderml: colliderml}
 
+  # Training-only: ColliderML pu0 plus the Key4hep v1.4.0 detectors, each read from its own production.
+  # Used by the leave-one-detector-out joint models (pyg-fm-v140-joint-no*).
+  fm_v140_joint:
+    type: "key4hep"
+    model: "pyg-fm-v140-joint-nocld"
+    comment: "Joint ColliderML pu0 + Key4hep v1.4.0 CLD/CLIC/ILD/IDEA tracks/clusters"
+    source_productions: {cld: cld, clic: clic, ild: ild, idea: idea, colliderml: colliderml}
+
   # ILD full simulation, fitted Clupatra tracks and Pandora particle flow.
   ild:
     type: "key4hep"
@@ -1611,6 +1619,135 @@ models:
       - name: "colliderml_ttbar_nopu_pf"
         version: "1.5.0"
         splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+
+  # Leave-one-detector-out joint models: ColliderML pu0 plus three of the four Key4hep v1.4.0
+  # detectors (one train group each, equal share of the steps); the left-out detector is the
+  # fine-tuning target. High-energy samples only (ttbar, WW, qq at 365 GeV, CLIC at 380 GeV), no
+  # 91 GeV Z samples. ColliderML: the six hard-scatter pu0 samples, mixed in proportion to their sizes.
+  # Architecture and lr come from the scenario (pf_fm_v140_mid.yaml).
+  pyg-fm-v140-joint-nocld: &pyg_fm_v140_joint
+    <<: *defaults
+    dataset: cld
+    gpu_batch_multiplier: 1
+    hyperparameters:
+      batch_size: 1
+      lr: 0.0005
+    architecture:
+      type: "attention"
+      input_encoding: "split"
+    train_datasets:
+      clic: {batch_size: 1, weight: 1.0, samples: [{name: clic_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      ild: {batch_size: 1, weight: 1.0, samples: [{name: ild_edm_ttbar_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_ww_fullhad_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}]}
+      idea: {batch_size: 1, weight: 1.0, samples: [{name: idea_edm_ttbar_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_ww_fullhad_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}]}
+      colliderml: {batch_size: 1, weight: 1.0, samples: &fm_v140_cml_samples [{name: colliderml_ttbar_nopu_pf, version: "1.5.0", splits: &fm_v140_cml_configs ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]}, {name: colliderml_dihiggs_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}, {name: colliderml_ggf_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}, {name: colliderml_hidden_valley_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}, {name: colliderml_higgs_portal_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}, {name: colliderml_zprime_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}]}
+    validation_datasets:
+      clic: {batch_size: 1, samples: [{name: clic_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      ild: {batch_size: 1, samples: [{name: ild_edm_ttbar_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_ww_fullhad_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}]}
+      idea: {batch_size: 1, samples: [{name: idea_edm_ttbar_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_ww_fullhad_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}]}
+      colliderml: {batch_size: 1, samples: *fm_v140_cml_samples}
+    test_datasets:
+      - {name: clic_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: clic_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: clic_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: ild_edm_ttbar_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+      - {name: ild_edm_ww_fullhad_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+      - {name: ild_edm_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+      - {name: idea_edm_ttbar_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+      - {name: idea_edm_ww_fullhad_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+      - {name: idea_edm_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+      - {name: colliderml_ttbar_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_dihiggs_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_ggf_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_hidden_valley_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_higgs_portal_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_zprime_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+
+  pyg-fm-v140-joint-noclic:
+    <<: *pyg_fm_v140_joint
+    train_datasets:
+      cld: {batch_size: 1, weight: 1.0, samples: [{name: cld_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      ild: {batch_size: 1, weight: 1.0, samples: [{name: ild_edm_ttbar_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_ww_fullhad_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}]}
+      idea: {batch_size: 1, weight: 1.0, samples: [{name: idea_edm_ttbar_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_ww_fullhad_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}]}
+      colliderml: {batch_size: 1, weight: 1.0, samples: *fm_v140_cml_samples}
+    validation_datasets:
+      cld: {batch_size: 1, samples: [{name: cld_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      ild: {batch_size: 1, samples: [{name: ild_edm_ttbar_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_ww_fullhad_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}]}
+      idea: {batch_size: 1, samples: [{name: idea_edm_ttbar_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_ww_fullhad_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}]}
+      colliderml: {batch_size: 1, samples: *fm_v140_cml_samples}
+    test_datasets:
+      - {name: cld_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: cld_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: cld_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: ild_edm_ttbar_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+      - {name: ild_edm_ww_fullhad_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+      - {name: ild_edm_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+      - {name: idea_edm_ttbar_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+      - {name: idea_edm_ww_fullhad_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+      - {name: idea_edm_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+      - {name: colliderml_ttbar_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_dihiggs_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_ggf_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_hidden_valley_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_higgs_portal_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_zprime_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+
+  pyg-fm-v140-joint-noild:
+    <<: *pyg_fm_v140_joint
+    train_datasets:
+      cld: {batch_size: 1, weight: 1.0, samples: [{name: cld_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      clic: {batch_size: 1, weight: 1.0, samples: [{name: clic_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      idea: {batch_size: 1, weight: 1.0, samples: [{name: idea_edm_ttbar_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_ww_fullhad_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}]}
+      colliderml: {batch_size: 1, weight: 1.0, samples: *fm_v140_cml_samples}
+    validation_datasets:
+      cld: {batch_size: 1, samples: [{name: cld_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      clic: {batch_size: 1, samples: [{name: clic_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      idea: {batch_size: 1, samples: [{name: idea_edm_ttbar_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_ww_fullhad_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}, {name: idea_edm_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}]}
+      colliderml: {batch_size: 1, samples: *fm_v140_cml_samples}
+    test_datasets:
+      - {name: cld_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: cld_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: cld_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: clic_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: clic_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: clic_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: idea_edm_ttbar_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+      - {name: idea_edm_ww_fullhad_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+      - {name: idea_edm_qq_pf, version: *key4hep_v140_idea_version, splits: *key4hep_v140_one_config}
+      - {name: colliderml_ttbar_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_dihiggs_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_ggf_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_hidden_valley_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_higgs_portal_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_zprime_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+
+  pyg-fm-v140-joint-noidea:
+    <<: *pyg_fm_v140_joint
+    train_datasets:
+      cld: {batch_size: 1, weight: 1.0, samples: [{name: cld_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      clic: {batch_size: 1, weight: 1.0, samples: [{name: clic_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      ild: {batch_size: 1, weight: 1.0, samples: [{name: ild_edm_ttbar_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_ww_fullhad_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}]}
+      colliderml: {batch_size: 1, weight: 1.0, samples: *fm_v140_cml_samples}
+    validation_datasets:
+      cld: {batch_size: 1, samples: [{name: cld_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: cld_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      clic: {batch_size: 1, samples: [{name: clic_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}, {name: clic_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}]}
+      ild: {batch_size: 1, samples: [{name: ild_edm_ttbar_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_ww_fullhad_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}, {name: ild_edm_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}]}
+      colliderml: {batch_size: 1, samples: *fm_v140_cml_samples}
+    test_datasets:
+      - {name: cld_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: cld_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: cld_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: clic_edm_ttbar_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: clic_edm_ww_fullhad_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: clic_edm_qq_pf, version: *key4hep_v140_cld_clic_version, splits: *key4hep_v140_ten_configs}
+      - {name: ild_edm_ttbar_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+      - {name: ild_edm_ww_fullhad_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+      - {name: ild_edm_qq_pf, version: *key4hep_v140_ild_version, splits: *key4hep_v140_one_config}
+      - {name: colliderml_ttbar_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_dihiggs_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_ggf_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_hidden_valley_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_higgs_portal_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
+      - {name: colliderml_zprime_nopu_pf, version: "1.5.0", splits: *fm_v140_cml_configs}
 
   # Same recipe as pyg-colliderml-v1 but on the ~200-pileup dataset (ispu flag carried per
   # target/gen particle)

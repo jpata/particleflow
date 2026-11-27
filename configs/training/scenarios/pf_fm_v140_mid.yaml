@@ -1,0 +1,194 @@
+# PF foundation-model transfer study on the Key4hep v1.4.0 datasets with ColliderML pu0. Attention model:
+# 6 layers x 16 heads, head dim 32 (width 512), peak lr 3.5e-4 (LAMB, OneCycle), 16 events per step,
+# feature bag and input normalization on everywhere, no early stopping.
+# High-energy e+e- samples only: ttbar, WW -> hadrons and qq at 365 GeV (CLD, ILD, IDEA) or 380 GeV (CLIC);
+# the 91 GeV Z -> qq and Z -> tautau samples are excluded. ColliderML: the six hard-scatter pu0 samples
+# (ttbar, dihiggs, ggf, hidden_valley, higgs_portal, zprime; not pileup_only), mixed in proportion to their sizes.
+#
+# Stage 1 (array 0-8, independent):
+#   experts      cld, clic, ild, idea, colliderml  -- colliderml is also the ColliderML-only pretraining
+#   joints       joint_no<det>: ColliderML + three of CLD/CLIC/ILD/IDEA (pyg-fm-v140-joint-no<det>)
+# Stage 2 (array 9-16): fine-tunes that start from the source checkpoint's weights, with a fresh optimizer, LR
+# schedule and step count; the full model is trainable and the task loss weights are recalibrated:
+#   ft_cml_<det> from the colliderml expert's final checkpoint
+#   ft_loo_<det> from joint_no<det>'s final checkpoint (the detector that joint never saw)
+# Stage-2 `load` paths are null until the stage-1 runs finish; the runner refuses to start them before
+# they are filled in. Every run trains 300k steps except the IDEA expert and IDEA fine-tunes (100k).
+name: pf_fm_v140_mid
+spec_file: particleflow_spec.yaml
+production_name: cld
+variants:
+  # --- stage 1: experts (the detector models' sample lists restricted to the high-energy samples) ---
+  cld:
+    model_name: pyg-cld-key4hep-v140
+    production_name: cld
+    overrides: &cld_data
+      train_dataset.cld.physical.samples: &cld_samples
+        cld_edm_ttbar_pf: &ten_configs {version: "3.4.0", splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]}
+        cld_edm_ww_fullhad_pf: *ten_configs
+        cld_edm_qq_pf: *ten_configs
+      valid_dataset.cld.physical.samples: *cld_samples
+      test_dataset: *cld_samples
+  clic:
+    model_name: pyg-clic-key4hep-v140
+    production_name: clic
+    overrides: &clic_data
+      train_dataset.clic.physical.samples: &clic_samples
+        clic_edm_ttbar_pf: *ten_configs
+        clic_edm_ww_fullhad_pf: *ten_configs
+        clic_edm_qq_pf: *ten_configs
+      valid_dataset.clic.physical.samples: *clic_samples
+      test_dataset: *clic_samples
+  ild:
+    model_name: pyg-ild-key4hep-v140
+    production_name: ild
+    overrides: &ild_data
+      train_dataset.ild.physical.samples: &ild_samples
+        ild_edm_ttbar_pf: &ild_config {version: "0.2.0", splits: ["1"]}
+        ild_edm_ww_fullhad_pf: *ild_config
+        ild_edm_qq_pf: *ild_config
+      valid_dataset.ild.physical.samples: *ild_samples
+      test_dataset: *ild_samples
+  idea:
+    model_name: pyg-idea-key4hep-v140
+    production_name: idea
+    overrides:
+      <<: &idea_data
+        train_dataset.idea.physical.samples: &idea_samples
+          idea_edm_ttbar_pf: &idea_config {version: "0.5.0", splits: ["1"]}
+          idea_edm_ww_fullhad_pf: *idea_config
+          idea_edm_qq_pf: *idea_config
+        valid_dataset.idea.physical.samples: *idea_samples
+        test_dataset: *idea_samples
+      num_steps: 100000  # IDEA: 100k steps (~65 epochs of its ~24k training events)
+  colliderml:
+    model_name: pyg-colliderml-v1
+    production_name: colliderml
+    overrides:
+      train_dataset.colliderml.physical.samples: &colliderml_samples
+        colliderml_ttbar_nopu_pf: &cml_configs {version: "1.5.0", splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]}
+        colliderml_dihiggs_nopu_pf: *cml_configs
+        colliderml_ggf_nopu_pf: *cml_configs
+        colliderml_hidden_valley_nopu_pf: *cml_configs
+        colliderml_higgs_portal_nopu_pf: *cml_configs
+        colliderml_zprime_nopu_pf: *cml_configs
+      valid_dataset.colliderml.physical.samples: *colliderml_samples
+      test_dataset: *colliderml_samples
+  # --- stage 1: leave-one-detector-out joints ---
+  joint_nocld:
+    model_name: pyg-fm-v140-joint-nocld
+    production_name: fm_v140_joint
+  joint_noclic:
+    model_name: pyg-fm-v140-joint-noclic
+    production_name: fm_v140_joint
+  joint_noild:
+    model_name: pyg-fm-v140-joint-noild
+    production_name: fm_v140_joint
+  joint_noidea:
+    model_name: pyg-fm-v140-joint-noidea
+    production_name: fm_v140_joint
+  # --- stage 2: fine-tunes from the ColliderML-only pretraining (colliderml expert) ---
+  ft_cml_cld:
+    model_name: pyg-cld-key4hep-v140
+    production_name: cld
+    overrides:
+      <<: [&ft_cml {load: null, load_weights_only: true, reset_task_loss_weights: true, model.trainable: all}, *cld_data]
+      load: null  # TODO: <colliderml run>/checkpoints/checkpoint-300000.pth (same path for all four ft_cml_*)
+  ft_cml_clic:
+    model_name: pyg-clic-key4hep-v140
+    production_name: clic
+    overrides:
+      <<: [*ft_cml, *clic_data]
+      load: null  # TODO: <colliderml run>/checkpoints/checkpoint-300000.pth
+  ft_cml_ild:
+    model_name: pyg-ild-key4hep-v140
+    production_name: ild
+    overrides:
+      <<: [*ft_cml, *ild_data]
+      load: null  # TODO: <colliderml run>/checkpoints/checkpoint-300000.pth
+  ft_cml_idea:
+    model_name: pyg-idea-key4hep-v140
+    production_name: idea
+    overrides:
+      <<: [*ft_cml, *idea_data]
+      load: null  # TODO: <colliderml run>/checkpoints/checkpoint-300000.pth
+      num_steps: 100000
+  # --- stage 2: fine-tunes on the detector each joint left out ---
+  ft_loo_cld:
+    model_name: pyg-cld-key4hep-v140
+    production_name: cld
+    overrides:
+      <<: [*ft_cml, *cld_data]
+      load: null  # TODO: <joint_nocld run>/checkpoints/checkpoint-300000.pth
+  ft_loo_clic:
+    model_name: pyg-clic-key4hep-v140
+    production_name: clic
+    overrides:
+      <<: [*ft_cml, *clic_data]
+      load: null  # TODO: <joint_noclic run>/checkpoints/checkpoint-300000.pth
+  ft_loo_ild:
+    model_name: pyg-ild-key4hep-v140
+    production_name: ild
+    overrides:
+      <<: [*ft_cml, *ild_data]
+      load: null  # TODO: <joint_noild run>/checkpoints/checkpoint-300000.pth
+  ft_loo_idea:
+    model_name: pyg-idea-key4hep-v140
+    production_name: idea
+    overrides:
+      <<: [*ft_cml, *idea_data]
+      load: null  # TODO: <joint_noidea run>/checkpoints/checkpoint-300000.pth
+      num_steps: 100000
+seeds: [12345]
+training:
+  global_batch_size: 16
+  parameters:
+    optimizer: lamb
+    lr: 0.00035
+    lr_schedule: onecycle
+    lr_schedule_config.onecycle.pct_start: 0.3
+    num_steps: 300000
+    tensorboard_step_freq: 1000
+    benchmark.enabled: true
+    benchmark.sample_interval_seconds: 1.0
+    benchmark.warmup_steps: 100
+    benchmark.gpu_timing_interval: 0
+    val_freq: 10000
+    checkpoint_freq: 2000
+    # Early stopping off: more than the number of validations, so every run trains num_steps.
+    patience: 1000
+    nvalid: 256
+    ntest: 256
+    sampler_mode: interleaved-shards
+    pad_to_multiple_elements: 128
+    validation_particle_metrics: true
+    make_plots: true
+common_overrides:
+  model.type: attention
+  model.heptv2: null
+  model.attention:
+    num_convs: 6
+    num_heads: 16
+    head_dim: 32
+    attention_type: flash
+    dropout_ff: 0.0
+  model.input_encoding: split
+  model.feature_bag: true
+  model.input_normalization: true
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+allowed_variant_differences:
+  - num_steps
+  - data_dir
+  - dataset
+  - hyperparameters.lr  # spec recipe metadata; the top-level lr is shared
+  - input_dim
+  - train_dataset
+  - valid_dataset
+  - test_dataset
+  - enabled_test_datasets
+  - data_config
+  - load
+  - load_weights_only
+  - reset_task_loss_weights
+  - model.trainable
