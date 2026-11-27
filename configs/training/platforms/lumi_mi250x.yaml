@@ -8,6 +8,7 @@ data_dir:
   cms_run3: /scratch/project_465001293/joosep/mlpf/cms/2.8.0/
   colliderml: /scratch/project_465001293/joosep/mlpf/colliderml/
   idea: /scratch/project_465001293/joosep/mlpf/idea/
+  ild: /scratch/project_465001293/joosep/mlpf/ild/
 experiments_dir: /scratch/project_465001293/${USER}/particleflow/experiments
 environment:
   MLPF_SHARING_STRATEGY: file_descriptor
