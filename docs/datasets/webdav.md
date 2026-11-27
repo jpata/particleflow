@@ -71,12 +71,7 @@ python scripts/tfds_webdav.py upload \
   --dry-run --json
 ```
 
-Remove `--dry-run` to create the destination directories and upload. Review the remote path first, since the command replaces a remote file when its contents differ from the local source. Uploads always resume. Files with the expected size are checked against the local checksum before being skipped. Incomplete or mismatching files are sent again in full. Rerun the same command after a failure. The CLI verifies every file and checks the final remote directory listing.
-
-| `--verify-mode` | Verification |
-|---|---|
-| `sha256-readback` (default) | Stream the remote file and compare its SHA-256 with the local file |
-| `md5-server` | Compare the size and server-provided MD5 using `HEAD` with `Want-Digest: md5` |
+Remove `--dry-run` to create the destination directories and upload. Review the remote path first, since the command replaces a remote file when its contents differ from the local source. Uploads always resume. Files with the expected size are checked against the local checksum before being skipped. Incomplete or mismatching files are sent again in full. Rerun the same command after a failure. The CLI verifies every file by comparing its size and MD5 with the values the server returns for `HEAD` with `Want-Digest: md5`, so nothing is downloaded again, and then checks the final remote directory listing.
 
 For all twelve CLD granularity-scan roots, use `scripts/upload_granularity_scan.py`. Repeat `--point` to select specific scan points.
 

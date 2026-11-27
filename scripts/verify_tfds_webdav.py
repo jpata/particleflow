@@ -61,7 +61,6 @@ def main():
     parser.add_argument("--proxy", type=Path)
     parser.add_argument("--capath", type=Path)
     parser.add_argument("--jobs", type=int, default=4)
-    parser.add_argument("--mode", choices=("md5-server", "sha256-readback"), default="md5-server")
     parser.add_argument("--scope", choices=("all", "cld-existing", "scan", "new"), default="all")
     args = parser.parse_args()
     if args.jobs < 1 or args.jobs > 8:
@@ -111,17 +110,16 @@ def verify(args, client):
         for error in errors:
             print("ERROR", error, file=sys.stderr)
         raise SystemExit(f"Manifest check failed for {len(errors)} version(s)")
-    print(f"Comparing {len(manifest)} files, {sum(item[2] for item in manifest):,} bytes using {args.mode}", flush=True)
+    print(f"Comparing {len(manifest)} files, {sum(item[2] for item in manifest):,} bytes using server MD5", flush=True)
 
     def compare(item):
         url, path, expected_size = item
-        algorithm = "md5" if args.mode == "md5-server" else "sha256"
-        local_size, local_hash = file_digest(path, algorithm)
+        local_size, local_hash = file_digest(path, "md5")
         if local_size != expected_size:
             raise RuntimeError(f"local size changed: {path}")
-        remote_size, remote_hash = retry(lambda: client.checksum(url, args.mode), client.attempts)
+        remote_size, remote_hash = retry(lambda: client.checksum(url), client.attempts)
         if remote_size != expected_size or local_hash != remote_hash:
-            raise RuntimeError(f"{algorithm} mismatch: {path} local={local_hash.hex()} remote={remote_hash.hex()}")
+            raise RuntimeError(f"MD5 mismatch: {path} local={local_hash.hex()} remote={remote_hash.hex()}")
         return expected_size
 
     verified = 0
@@ -139,7 +137,7 @@ def verify(args, client):
                 print(f"Verified {verified}/{len(manifest)} files, {total_bytes:,} bytes; {len(errors)} errors", flush=True)
     if errors:
         raise SystemExit(f"Checksum comparison failed for {len(errors)} file(s)")
-    print(f"PASS: {verified} files and {total_bytes:,} bytes match remote using {args.mode}", flush=True)
+    print(f"PASS: {verified} files and {total_bytes:,} bytes match remote using server MD5", flush=True)
 
 
 if __name__ == "__main__":

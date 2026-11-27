@@ -155,8 +155,8 @@ def test_input_normalization_needs_one_version_with_statistics_per_track_cluster
         make_config({"cld_edm_ttbar_pf": "3.2.1", "cld_edm_qq_pf": "3.3.0"})
     with pytest.raises(ValueError, match="No input normalization statistics"):
         make_config({"cld_edm_ttbar_pf": "0.0.0"})
-    with pytest.raises(ValueError, match="supports track/cluster samples"):
-        make_config({"clic_edm_ttbar_hits": "3.2.1"})
+    with pytest.raises(ValueError, match="supports track/cluster samples|support only model.output_mode='set'"):
+        make_config({"clic_edm_ttbar_full": "1.0.0"})
 
 
 class FakeBuilder:

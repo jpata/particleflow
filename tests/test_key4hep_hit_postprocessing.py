@@ -15,7 +15,6 @@ from mlpf.data.key4hep.postprocessing import (
     track_to_features,
 )
 from mlpf.data.target_building import represented_pid
-from mlpf.heptfds.edm4hep_utils.utils_hits import X_FEATURES
 
 HIT_FEATURES = ["type", "cellID", "energy", "energyError", "time", "position.x", "position.y", "position.z"]
 TRACKER_ENCODING = "system:5,side:-2,layer:6,module:11,sensor:8"
@@ -393,6 +392,8 @@ def test_only_maia_follows_the_muon_hit_relation():
         assert EDM4HEP.DETECTORS[name].hit_truth_relations == ()
 
 
-def test_tfds_hit_schema_retains_detector_surface_fields():
+def test_full_hit_schema_retains_detector_surface_fields():
+    from mlpf.heptfds.full_utils.utils import X_FEATURES
+
     assert EDM4HEP.HitFeatures.get_names()[-3:] == ["system", "side", "layer"]
-    assert X_FEATURES[-3:] == ["system", "side", "layer"]
+    assert X_FEATURES["hit_tracker"][-3:] == ["system", "side", "layer"]

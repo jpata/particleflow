@@ -22,6 +22,7 @@ from mlpf.data.target_building import (  # noqa: F401  (re-exported for existing
     assign_genparticles_to_obj_and_merge,
     visibility_mask,
 )
+from mlpf.data.full_targets import TruthLinks, build_full_targets, parents_from_daughters
 
 # Set these before importing numerical libraries to avoid OpenBLAS thread-init failures.
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -90,8 +91,6 @@ class EventRecord:
     X_hit_calo: np.ndarray
     ytarget_track: np.ndarray
     ytarget_cluster: np.ndarray
-    ytarget_hit_tracker: np.ndarray
-    ytarget_hit_calo: np.ndarray
     ycand_track: np.ndarray
     ycand_cluster: np.ndarray
     genmet: float
@@ -100,8 +99,6 @@ class EventRecord:
     # per ytarget row: the target's class changed charge to fit its element (see represented_pid)
     ytarget_track_charge_flip: np.ndarray
     ytarget_cluster_charge_flip: np.ndarray
-    ytarget_hit_tracker_charge_flip: np.ndarray
-    ytarget_hit_calo_charge_flip: np.ndarray
 
     def keys(self):
         return self.__dataclass_fields__.keys()
@@ -347,7 +344,15 @@ def get_hit_matrix_and_genadj(
     cellid_encodings: Optional[Dict[str, str]] = None,
     require_cellid_encoding: bool = True,
     tracker_relations=None,
+    sim_info: Optional[Dict[str, Any]] = None,
 ) -> Tuple[awkward.Record, SparseMatrixCOO, Dict[Tuple[int, int], int]]:
+    """Hit features and direct MC-particle-to-hit links.
+
+    If ``sim_info`` is a dict, it is filled with per-hit SimTrackerHit truth for the
+    full dataset view: ``momentum`` [n_hit, 3] (GeV, zero for calorimeter hits or
+    when the momentum branches were not loaded) and ``unsaved_secondary`` [n_hit]
+    (SimTrackerHit quality bit 30, produced by an MC particle that was not stored).
+    """
     feats = [
         "type",
         "cellID",
@@ -367,6 +372,8 @@ def get_hit_matrix_and_genadj(
     genparticle_to_hit_matrix_coo0 = []
     genparticle_to_hit_matrix_coo1 = []
     genparticle_to_hit_matrix_w = []
+    sim_momentum = []
+    sim_unsaved = []
 
     relations = (
         tracker_relations if tracker_relations is not None else {col: (rel, tracker_hit_sim[col]) for col, rel in tracker_hit_relations.items()}
@@ -393,14 +400,29 @@ def get_hit_matrix_and_genadj(
             # Sim -> MCParticle mapping
             sim_mcp_idx = tracker_links[f"_{sim_name}_particle/_{sim_name}_particle.index"][iev]
             sim_mcp_cid = tracker_links[f"_{sim_name}_particle/_{sim_name}_particle.collectionID"][iev]
+            sim_fields = tracker_links.fields
+            momentum_keys = [f"{sim_name}/{sim_name}.momentum.{axis}" for axis in "xyz"]
+            sim_p = (
+                np.stack([np.asarray(tracker_links[key][iev], dtype=np.float32) for key in momentum_keys], axis=-1)
+                if all(key in sim_fields for key in momentum_keys)
+                else None
+            )
+            quality_key = f"{sim_name}/{sim_name}.quality"
+            sim_quality = np.asarray(tracker_links[quality_key][iev], dtype=np.int64) if quality_key in sim_fields else None
         else:
             reco_to_sim = None
 
         for ihit in range(n_hits):
             hit_idx_global_to_local[hit_idx_global] = (icol, ihit)
+            hit_momentum = (0.0, 0.0, 0.0)
+            hit_unsaved = False
 
             if reco_to_sim and ihit in reco_to_sim:
                 isim = reco_to_sim[ihit]
+                if sim_p is not None and isim < len(sim_p):
+                    hit_momentum = tuple(sim_p[isim])
+                if sim_quality is not None and isim < len(sim_quality):
+                    hit_unsaved = bool(sim_quality[isim] & (1 << 30))
                 if isim < len(sim_mcp_idx) and sim_mcp_cid[isim] == mcp_id:
                     mcp_idx = sim_mcp_idx[isim]
                     genparticle_to_hit_matrix_coo0.append(mcp_idx)
@@ -410,6 +432,8 @@ def get_hit_matrix_and_genadj(
                     # throughout this matrix, see the calorimeter branch below.
                     genparticle_to_hit_matrix_w.append(hit_features["energy"][ihit])
 
+            sim_momentum.append(hit_momentum)
+            sim_unsaved.append(hit_unsaved)
             hit_idx_global += 1
 
     hit_idx_local_to_global = {v: k for k, v in hit_idx_global_to_local.items()}
@@ -452,6 +476,10 @@ def get_hit_matrix_and_genadj(
             genparticle_to_hit_matrix_coo0.extend(link_gen_idx)
             genparticle_to_hit_matrix_coo1.extend(link_hit_idx.tolist())
             genparticle_to_hit_matrix_w.extend((share * hit_energy[link_hit_idx]).tolist())
+
+    if sim_info is not None:
+        sim_info["momentum"] = np.asarray(sim_momentum, dtype=np.float32).reshape(-1, 3)
+        sim_info["unsaved_secondary"] = np.asarray(sim_unsaved, dtype=bool)
 
     return (
         hit_feature_matrix,
@@ -1154,6 +1182,7 @@ def get_genparticles_and_adjacencies(
     cluster_angles_from_position: bool = False,
 ) -> EventData:
     gen_features = gen_to_features(prop_data, iev)
+    sim_info: Dict[str, Any] = {}
     hit_features, genparticle_to_hit, hit_idx_local_to_global = get_hit_matrix_and_genadj(
         hit_data,
         calohit_links,
@@ -1164,6 +1193,7 @@ def get_genparticles_and_adjacencies(
         cellid_encodings,
         require_cellid_encoding,
         tracker_relations,
+        sim_info,
     )
     hit_to_cluster = hit_cluster_adj(prop_data, hit_idx_local_to_global, iev, collectionIDs_reverse)
     cluster_features = cluster_to_features(prop_data, hit_features, hit_to_cluster, iev, muon_collection_ids, cluster_angles_from_position)
@@ -1171,6 +1201,11 @@ def get_genparticles_and_adjacencies(
     genparticle_to_trk = genparticle_track_adj(sitrack_links, iev)
     if direct_track_truth:
         genparticle_to_trk = ild_track_truth(prop_data, tracker_links, iev, collectionIDs, tracker_relations, gen_features)
+
+    # The full dataset view needs the producing particle of every element, so keep the
+    # direct links before descendants are folded into their status-1 ancestor.
+    direct_genparticle_to_hit = tuple(np.asarray(x).copy() for x in genparticle_to_hit)
+    direct_genparticle_to_trk = tuple(np.asarray(x).copy() for x in genparticle_to_trk)
 
     # collect hits of st=1 direct daughters to the st=1 particles
     propagated_hit, propagated_track = add_daughters_to_status1(gen_features, genparticle_to_hit, genparticle_to_trk)
@@ -1301,6 +1336,18 @@ def get_genparticles_and_adjacencies(
     genparticle_to_hit = filter_adj(genparticle_to_hit, genpart_idx_all_to_filtered)
     genparticle_to_trk = filter_adj(genparticle_to_trk, genpart_idx_all_to_filtered)
 
+    truth = full_truth_links(
+        prop_data,
+        iev,
+        gen_features,
+        idx_all_masked,
+        direct_genparticle_to_hit,
+        direct_genparticle_to_trk,
+        hit_to_cluster,
+        hit_features,
+        sim_info,
+    )
+
     return EventData(
         awkward.Record(gen_features_record),
         hit_features,
@@ -1310,6 +1357,60 @@ def get_genparticles_and_adjacencies(
         genparticle_to_trk,
         hit_to_cluster,
         ([], []),
+        truth,
+    )
+
+
+def full_truth_links(
+    prop_data: awkward.Record,
+    iev: int,
+    gen_features: GenFeatures,
+    target_indices: np.ndarray,
+    mc_to_hit: SparseMatrixCOO,
+    mc_to_track: SparseMatrixCOO,
+    hit_to_cluster: SparseMatrixCOO,
+    hit_features: awkward.Record,
+    sim_info: Dict[str, Any],
+) -> TruthLinks:
+    """Collect the unfiltered MC table and direct links used by the full dataset labels."""
+    gen_arr = prop_data[mc_coll][iev]
+    fields = set(gen_arr.fields)
+
+    def mc_field(name: str) -> np.ndarray:
+        key = f"{mc_coll}.{name}"
+        if key not in fields:
+            return np.zeros(len(gen_features["PDG"]), dtype=np.float64)
+        return np.asarray(awkward.to_numpy(gen_arr[key]), dtype=np.float64)
+
+    n_mc = len(gen_features["PDG"])
+    momentum = np.stack([mc_field(f"momentum.{axis}") for axis in "xyz"], axis=-1)
+    mass = mc_field("mass")
+    mc = {
+        "PDG": np.asarray(awkward.to_numpy(gen_features["PDG"]), dtype=np.float64),
+        "charge": np.asarray(awkward.to_numpy(gen_features["charge"]), dtype=np.float64),
+        "simulatorStatus": np.asarray(awkward.to_numpy(gen_features["simulatorStatus"]), dtype=np.int64),
+        "px": momentum[:, 0],
+        "py": momentum[:, 1],
+        "pz": momentum[:, 2],
+        "energy": np.sqrt(np.square(momentum).sum(axis=-1) + np.square(mass)),
+        "vertex_x": mc_field("vertex.x"),
+        "vertex_y": mc_field("vertex.y"),
+        "vertex_z": mc_field("vertex.z"),
+    }
+    parent = parents_from_daughters(n_mc, gen_features["daughters_begin"], gen_features["daughters_end"], gen_features["index"])
+    n_hit = len(hit_features["type"])
+    positions = np.stack([np.asarray(awkward.to_numpy(hit_features[f"position.{axis}"]), dtype=np.float64) for axis in "xyz"], axis=-1)
+    return TruthLinks(
+        mc=mc,
+        parent=parent,
+        targets=np.asarray(target_indices, dtype=np.int64),
+        mc_to_hit=mc_to_hit,
+        mc_to_track=mc_to_track,
+        hit_to_cluster=hit_to_cluster,
+        tracker_momentum=sim_info.get("momentum", np.zeros((n_hit, 3), dtype=np.float32)),
+        tracker_unsaved_secondary=sim_info.get("unsaved_secondary", np.zeros(n_hit, dtype=bool)),
+        is_tracker_hit=np.asarray(awkward.to_numpy(hit_features["subdetector"])) == 3,
+        hit_positions=positions,
     )
 
 
@@ -1621,7 +1722,12 @@ def _idea_relation(prop_data: Any, name: str, iev: int) -> SparseMatrixCOO:
 
 
 def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: int = -1, track_source: str = "fitted") -> None:
-    """IDEA fitted-track/cluster postprocessing; legacy proxies require an explicit option."""
+    """Convert IDEA events to the track/cluster view and the general (full) view.
+
+    Tracks are the fitted tracks; the legacy truth-seeded proxies require an explicit option.
+    """
+    from mlpf.data.key4hep.idea_full import build_idea_full, required_branches, tracker_digis
+
     if track_source not in {"fitted", "truth_seeded"}:
         raise ValueError(f"Unknown IDEA track source: {track_source}")
     fitted = track_source == "fitted"
@@ -1644,6 +1750,7 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         raise ValueError(
             f"IDEA input has no {track_collection}. Regenerate reconstruction with GGTF/GenFit, or explicitly use --idea-track-source truth_seeded for legacy files."
         )
+    digis = tracker_digis(collection_ids)
     stop = tree.num_entries if num_events == -1 else min(tree.num_entries, first_event + num_events)
     if first_event < 0 or first_event >= tree.num_entries or stop <= first_event:
         raise ValueError(f"Invalid IDEA event range [{first_event}, {stop}) for input with {tree.num_entries} events")
@@ -1687,6 +1794,8 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
             "_TracksFromGenParticlesAssociation_from/_TracksFromGenParticlesAssociation_from.index",
             "_TracksFromGenParticlesAssociation_to/_TracksFromGenParticlesAssociation_to.index",
         ]
+    # Hit inputs and direct truth links of the general view; some are shared with the fitted-track truth.
+    branches = list(dict.fromkeys(branches + required_branches(digis)))
     load_started = time.monotonic()
     print(f"idea_postprocessing: source={track_collection}; loading {len(branches)} ROOT branch groups", flush=True)
     # Apply the event selection while uproot reads the ROOT file. Previously
@@ -1698,8 +1807,6 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
         flush=True,
     )
     b_field = EDM4HEP.DETECTORS["idea"].b_field
-    empty_x_hit = np.empty((0, len(hit_feature_order)), dtype=np.float32)
-    empty_y_hit = np.empty((0, len(particle_feature_order)), dtype=np.float32)
     ret = []
 
     # Truth reference uses the same propagated-particle definition as the
@@ -1747,6 +1854,22 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
             preferred_tracks = None
         clusters = idea_cluster_to_features(prop_data, local_iev, cell_collection_id)
         gp_to_cluster = _idea_relation(prop_data, "ClusterMCParticleLinks", local_iev)
+        # General view from the direct (not ancestor-propagated) links.
+        full_view = build_idea_full(
+            prop_data,
+            local_iev,
+            collection_ids,
+            gen,
+            len(tracks["type"]),
+            len(clusters["elemtype"]),
+            gp_to_track,
+            gp_to_cluster,
+            awkward.to_numpy(clusters["energy"]),
+            float(awkward.sum(truth_p4[local_iev].energy)),
+            jetdef,
+            jet_ptcut,
+            digis,
+        )
         # Shower descendants can belong to a primary calorimeter target. A fitted
         # secondary track must not acquire an ancestor's charge or four-momentum.
         if fitted:
@@ -1874,6 +1997,7 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
             sanitize(arr)
         ret.append(
             {
+                **full_view,
                 "X_track": xtrack,
                 "X_cluster": xcluster,
                 "metadata_track_source": TRACK_SOURCE if fitted else PROXY_TRACK_SOURCE,
@@ -1886,12 +2010,8 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
                 "metadata_tracks_truth_matched": len(gp_to_track[0]),
                 "metadata_candidate_source": "target_oracle",
                 "metadata_suitable_for_physics": False,
-                "X_hit_tracker": empty_x_hit,
-                "X_hit_calo": empty_x_hit,
                 "ytarget_track": ytrack,
                 "ytarget_cluster": ycluster,
-                "ytarget_hit_tracker": empty_y_hit,
-                "ytarget_hit_calo": empty_y_hit,
                 # IDEA_o1_v03 does not produce reconstructed PFOs.
                 "genmet": float(genmet[local_iev]),
                 "genjet": get_feature_matrix(genjets[local_iev], ["pt", "eta", "phi", "energy"]),
@@ -1914,6 +2034,26 @@ def process_one_file_idea(fn: str, ofn: str, first_event: int = 0, num_events: i
             f"idea_postprocessing: parquet write completed in {time.monotonic() - write_started:.1f}s; total={time.monotonic() - started:.1f}s",
             flush=True,
         )
+
+
+FULL_VIEW_FIELDS = {
+    "ylabel_track",
+    "ylabel_cluster",
+    "ylabel_hit_tracker",
+    "ylabel_hit_calo",
+    "target_particles",
+    "target_instances",
+    "target_energy_accounting",
+    "targetjet_full",
+}
+
+
+def _has_full_targets(ofn: str) -> bool:
+    try:
+        fields = set(awkward.metadata_from_parquet(ofn)["form"].fields)
+    except Exception:
+        return False
+    return FULL_VIEW_FIELDS.issubset(fields)
 
 
 def _validate_cached_idea_tracks(filename: str, track_source: str) -> None:
@@ -2000,6 +2140,9 @@ def _read_pf_properties(tree, detector_cfg, include_track_refs=False):
             f"{mc_coll}.daughters_begin",
             f"{mc_coll}.daughters_end",
             f"_{mc_coll}_daughters/_{mc_coll}_daughters.index",
+            f"{mc_coll}.vertex.x",
+            f"{mc_coll}.vertex.y",
+            f"{mc_coll}.vertex.z",
             track_coll,
             f"_{track_coll}_trackStates",
             "PandoraClusters",
@@ -2072,14 +2215,16 @@ def process_one_file(
     num_events: int = -1,
     idea_track_source: str = "fitted",
 ) -> None:
-    # output exists, do not recreate
     if os.path.isfile(ofn) and num_events == -1 and first_event == 0:
+        # An output with incompatible provenance is an error, never silently replaced.
         if detector == "idea":
             _validate_cached_idea_tracks(ofn, idea_track_source)
         elif detector == "ild":
             _validate_cached_ild_tracks(ofn, fn)
-        print("{} exists".format(ofn))
-        return
+        # A complete output with the full target view can be reused; one without it is regenerated.
+        if _has_full_targets(ofn):
+            print("{} exists".format(ofn))
+            return
 
     if detector == "idea":
         process_one_file_idea(fn, ofn, first_event, num_events, track_source=idea_track_source)
@@ -2112,7 +2257,7 @@ def process_one_file(
     collectionIDs_reverse = {v: k for (k, v) in collectionIDs.items()}
     cellid_encodings = get_cellid_encodings(fi)
     if detector == "maia" and not cellid_encodings:
-        print("MAIA has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero); use track/cluster inputs only.")
+        print("MAIA has no CellIDEncoding metadata: tracker system/side/layer are unknown (zero).")
 
     prop_data = _read_pf_properties(arrs, detector_cfg, detector == "ild")
     calohit_links = arrs.arrays(
@@ -2147,7 +2292,12 @@ def process_one_file(
         )
     sitrack_links = _read_track_truth_links(arrs, detector_cfg, collectionIDs, detector == "ild")
 
-    tracker_links = arrs.arrays(_tracker_link_branches(relations, detector == "ild"))
+    tracker_link_branches = _tracker_link_branches(relations, detector == "ild")
+    for _, sim_name in relations.values():
+        # Per-hit simulated momentum and the produced-by-secondary flag for the full view labels.
+        sim_fields = [f"{sim_name}/{sim_name}.{field}" for field in ("momentum.x", "momentum.y", "momentum.z", "quality")]
+        tracker_link_branches.extend(branch for branch in sim_fields if branch in arrs)
+    tracker_links = arrs.arrays(list(dict.fromkeys(tracker_link_branches)))
     mcp_id = collectionIDs[mc_coll]
 
     # maps the recoparticle track/cluster index (in tracks_begin,end and clusters_begin,end)
@@ -2274,6 +2424,18 @@ def process_one_file(
             print(f"Skipping event {iev} because it has no visible particles: {e}")
             continue
 
+        # Cluster-independent targets and per-element truth labels for the full view.
+        # Built before the track/cluster cleaning, which merges particles for the PF view only.
+        full_targets = build_full_targets(
+            gpdata.truth,
+            gpdata.gen_features,
+            len(gpdata.track_features["type"]),
+            len(gpdata.cluster_features["type"]),
+            source_energy=float(awkward.sum(mc_st1_p4[iev].energy)),
+            jetdef=jetdef,
+            jet_ptcut=jet_ptcut,
+        )
+
         # find the reconstructable genparticles and associate them to the best track/cluster
         premerge_energy = float(awkward.sum(gpdata.gen_features["energy"]))
         premerge_particles = len(gpdata.gen_features["energy"])
@@ -2288,7 +2450,6 @@ def process_one_file(
 
         n_tracks = len(gpdata_cleaned.track_features["type"])
         n_clusters = len(gpdata_cleaned.cluster_features["type"])
-        n_hits = len(gpdata_cleaned.hit_features["type"])
         n_gps = len(gpdata_cleaned.gen_features["PDG"])
 
         assert len(gp_to_obj) == len(gpdata_cleaned.gen_features["PDG"])
@@ -2303,18 +2464,13 @@ def process_one_file(
         else:
             track_to_rp, cluster_to_rp = get_recoptcl_to_obj(n_rps, reco_arr, idx_rp_to_track[iev], idx_rp_to_cluster[iev])
 
-        # get the track/cluster/hit -> genparticle map (exclusive)
+        # get the track/cluster -> genparticle map (exclusive)
         track_to_gp_exclusive_map = {itrk: igp for igp, itrk in enumerate(gp_to_obj[:, 0]) if itrk != -1}
         cluster_to_gp_exclusive_map = {icl: igp for igp, icl in enumerate(gp_to_obj[:, 1]) if icl != -1}
-        hit_to_gp_exclusive_map = {ihit: igp for igp, ihit in enumerate(gp_to_hit_idx) if ihit != -1}
 
         used_gps = np.zeros(n_gps, dtype=np.int64)
         track_to_gp_exclusive = assign_to_recoobj(n_tracks, track_to_gp_exclusive_map, used_gps)
         cluster_to_gp_exclusive = assign_to_recoobj(n_clusters, cluster_to_gp_exclusive_map, used_gps)
-
-        # assignment between the target particles and hits separately
-        used_gps_hit = np.zeros(n_gps, dtype=np.int64)
-        hit_to_gp_exclusive = assign_to_recoobj(n_hits, hit_to_gp_exclusive_map, used_gps_hit)
 
         # all genparticles must be assigned to some track or cluster
         if not np.all(used_gps == 1):
@@ -2328,19 +2484,6 @@ def process_one_file(
                     )
                 )
         assert np.all(used_gps == 1)
-
-        # all genparticles must be assigned to some hit.
-        if not np.all(used_gps_hit == 1):
-            for idx in np.where(used_gps_hit == 0)[0]:
-                print(
-                    "ERROR: iev={} genparticle idx={}, PID={}, pt={:.2f} not assigned to any hit".format(
-                        iev,
-                        idx,
-                        gpdata_cleaned.gen_features["PDG"][idx],
-                        gpdata_cleaned.gen_features["pt"][idx],
-                    )
-                )
-        assert np.all(used_gps_hit == 1)
 
         used_rps = np.zeros(n_rps, dtype=np.int64)
         track_to_rp_all = assign_to_recoobj(n_tracks, track_to_rp, used_rps)
@@ -2384,16 +2527,6 @@ def process_one_file(
         mask_cluster_inclusive_only = (cluster_to_gp_inclusive != -1) & (~mask_cluster_exclusive)
         gps_cluster[mask_cluster_inclusive_only, PN_IDX] = gps_canonical[cluster_to_gp_inclusive[mask_cluster_inclusive_only], PN_IDX]
 
-        # 3. Fill Hits
-        gps_hit = np.zeros((n_hits, gps_canonical.shape[1]), dtype=np.float32)
-        # Exclusive matching takes priority for both properties and PN
-        mask_hit_exclusive = hit_to_gp_exclusive != -1
-        gps_hit[mask_hit_exclusive] = gps_canonical[hit_to_gp_exclusive[mask_hit_exclusive]]
-
-        # Inclusive matching only fills PN for elements that aren't already representatives
-        mask_hit_inclusive_only = (hit_to_gp_inclusive != -1) & (~mask_hit_exclusive)
-        gps_hit[mask_hit_inclusive_only, PN_IDX] = gps_canonical[hit_to_gp_inclusive[mask_hit_inclusive_only], PN_IDX]
-
         rps_track = get_particle_feature_matrix(track_to_rp_all, reco_features, particle_feature_order)
         rps_track[:, 0] = np.array([map_neutral_to_charged(map_pdgid_to_candid(p, c)) for p, c in zip(rps_track[:, 0], rps_track[:, 1])])
         rps_cluster = get_particle_feature_matrix(cluster_to_rp_all, reco_features, particle_feature_order)
@@ -2414,16 +2547,19 @@ def process_one_file(
         X_cluster = get_feature_matrix(gpdata_cleaned.cluster_features, cluster_feature_order)
         X_hit = get_feature_matrix(gpdata_cleaned.hit_features, hit_feature_order)
 
-        mask_tracker = gpdata_cleaned.hit_features["subdetector"] == 3
-        mask_calo = gpdata_cleaned.hit_features["subdetector"] != 3
+        mask_tracker = np.asarray(gpdata_cleaned.hit_features["subdetector"]) == 3
+        mask_calo = ~mask_tracker
+        # The full-view hit labels were built on gpdata; the PF cleaning must not reorder hits.
+        assert np.array_equal(mask_tracker, np.asarray(gpdata.truth.is_tracker_hit))
+        assert len(full_targets["ylabel_hit_tracker"]) == mask_tracker.sum()
+        assert len(full_targets["ylabel_hit_calo"]) == mask_calo.sum()
+        assert len(full_targets["ylabel_track"]) == n_tracks and len(full_targets["ylabel_cluster"]) == n_clusters
 
         X_hit_tracker = X_hit[mask_tracker]
         X_hit_calo = X_hit[mask_calo]
 
         ytarget_track = gps_track
         ytarget_cluster = gps_cluster
-        ytarget_hit_tracker = gps_hit[mask_tracker]
-        ytarget_hit_calo = gps_hit[mask_calo]
 
         # rows whose target changed charge to fit its element; rows without a target are False
         def charge_flip(element_to_gp):
@@ -2431,7 +2567,6 @@ def process_one_file(
             flip[element_to_gp != -1] = gp_charge_flip[element_to_gp[element_to_gp != -1]]
             return flip
 
-        hit_charge_flip = charge_flip(hit_to_gp_exclusive)
         ycand_track = rps_track
         ycand_cluster = rps_cluster
 
@@ -2441,8 +2576,6 @@ def process_one_file(
         sanitize(X_hit_calo)
         sanitize(ytarget_track)
         sanitize(ytarget_cluster)
-        sanitize(ytarget_hit_tracker)
-        sanitize(ytarget_hit_calo)
         sanitize(ycand_track)
         sanitize(ycand_cluster)
 
@@ -2454,11 +2587,9 @@ def process_one_file(
             "X_cluster": X_cluster,
             "ytarget_track": ytarget_track,
             "ytarget_cluster": ytarget_cluster,
-            # if we want to train on hits
+            # raw hits; their targets are in the full view (full_targets)
             "X_hit_tracker": X_hit_tracker,
             "X_hit_calo": X_hit_calo,
-            "ytarget_hit_tracker": ytarget_hit_tracker,
-            "ytarget_hit_calo": ytarget_hit_calo,
             # these are used for validation only
             "ycand_track": ycand_track,
             "ycand_cluster": ycand_cluster,
@@ -2467,9 +2598,8 @@ def process_one_file(
             "targetjet": get_feature_matrix(target_jets, ["pt", "eta", "phi", "energy"]),
             "ytarget_track_charge_flip": charge_flip(track_to_gp_exclusive),
             "ytarget_cluster_charge_flip": charge_flip(cluster_to_gp_exclusive),
-            "ytarget_hit_tracker_charge_flip": hit_charge_flip[mask_tracker],
-            "ytarget_hit_calo_charge_flip": hit_charge_flip[mask_calo],
         }
+        this_ev.update(full_targets)
         ret.append(this_ev)
 
         if detector == "ild":
@@ -2516,6 +2646,8 @@ def parse_args() -> Any:
 
 
 def process(args: Any) -> None:
+    os.makedirs(args.outpath, exist_ok=True)
+
     if os.path.isdir(args.input) is True:
         print("Will process all files in " + args.input)
 

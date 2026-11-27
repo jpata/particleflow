@@ -7,7 +7,7 @@ import yaml
 
 SPLITS = [str(i) for i in range(1, 11)]
 VERSION = "3.2.0"
-HIT_TEST_SAMPLES = ["cld_edm_ttbar_hits", "clic_edm_ttbar_hits"]
+HIT_TEST_SAMPLES = ["cld_edm_ttbar_full", "clic_edm_ttbar_full"]
 
 
 def sample(name):
@@ -31,17 +31,17 @@ def main():
     with input_spec.open() as f:
         spec = yaml.safe_load(f)
 
-    cld_hits = copy.deepcopy(spec["models"]["pyg-cld-hits-v1"])
-    cld_datasets = ["cld_edm_ttbar_hits", "cld_edm_qq_hits", "cld_edm_ww_fullhad_hits"]
+    cld_hits = copy.deepcopy(spec["models"]["pyg-cld-hits-heptv2-set-v1"])
+    cld_datasets = ["cld_edm_ttbar_full", "cld_edm_qq_full", "cld_edm_ww_fullhad_full"]
     set_datasets(cld_hits, "cld_hits", cld_datasets)
     spec["models"]["cld-hits"] = cld_hits
 
-    clic_hits = copy.deepcopy(spec["models"]["pyg-clic-hits-v1"])
-    clic_datasets = ["clic_edm_ttbar_hits", "clic_edm_qq_hits", "clic_edm_ww_fullhad_hits"]
+    clic_hits = copy.deepcopy(spec["models"]["pyg-clic-hits-heptv2-set-v1"])
+    clic_datasets = ["clic_edm_ttbar_full", "clic_edm_qq_full", "clic_edm_ww_fullhad_full"]
     set_datasets(clic_hits, "clic_hits", clic_datasets)
     spec["models"]["clic-hits"] = clic_hits
 
-    mixed_hits = copy.deepcopy(spec["models"]["pyg-cld-hits-v1"])
+    mixed_hits = copy.deepcopy(spec["models"]["pyg-cld-hits-heptv2-set-v1"])
     set_datasets(mixed_hits, "cld_hits", cld_datasets + clic_datasets)
     spec["models"]["mixed-hits"] = mixed_hits
 

@@ -21,7 +21,7 @@ def main(argv=None):
     jobs = Path(campaign["jobs_dir"])
     if args.smoke:
         jobs = jobs.with_name(jobs.name + "_smoke_10ev")
-    stages = {stage: [] for stage in ("gen", "post", "tfds", "tfds_hit")}
+    stages = {stage: [] for stage in ("gen", "post", "tfds", "tfds_full")}
     modules = []
     event_count_overrides = campaign.get("expected_events_per_sample_overrides", {})
     for detector in detectors:
@@ -36,8 +36,8 @@ def main(argv=None):
             if sample not in production["tfds_mapping"]:
                 raise ValueError(f"{detector}/{sample}: missing track/cluster TFDS mapping")
         steps = ["gen", "post", "tfds"]
-        if production.get("tfds_hit_mapping"):
-            steps.append("tfds_hit")
+        if production.get("tfds_full_mapping"):
+            steps.append("tfds_full")
         if args.smoke:
             production["workspace_dir"] += "/smoke_10ev"
             production["save_stage_logs"] = True
@@ -52,7 +52,7 @@ def main(argv=None):
         for step in steps:
             stages[step].append(str(jobs / detector / step / "all.done"))
         modules.append(f'\nmodule {detector}:\n    snakefile: "{detector}/Snakefile"\n\n' f"use rule * from {detector} as {detector}_*\n")
-    targets = stages["gen"] if args.smoke else stages["tfds"] + stages["tfds_hit"]
+    targets = stages["gen"] if args.smoke else stages["tfds"] + stages["tfds_full"]
     text = "# Generated Key4hep campaign.\n"
     text += f"rule all:\n    input: {targets!r}\n"
     if not args.smoke:

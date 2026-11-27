@@ -22,12 +22,12 @@ The production and representation comparison below applies to **CLD and CLIC**. 
 
 ## CLD and CLIC representation
 
-| Property | Track/cluster (`*_pf`) | Hit (`*_hits`) |
+| Property | Track/cluster (`*_pf`) | General with hits (`*_full`) |
 |---|---|---|
-| Input elements | Reconstructed tracks and calorimeter clusters | Tracker hits and calorimeter hits |
-| TFDS task | `pixi run tfds` | `pixi run tfds_hit` |
-| CLD model | `pyg-cld-v1` | `pyg-cld-hits-v1` |
-| CLIC model | `pyg-clic-v1` | `pyg-clic-hits-v1` |
+| Input elements | Reconstructed tracks and calorimeter clusters | Tracks, clusters, tracker hits and calorimeter hits (selected with `full_elements`) |
+| TFDS task | `pixi run tfds` | `pixi run tfds_full` ([general dataset](full.md)) |
+| CLD model | `pyg-cld-v1` | `pyg-cld-hits-heptv2-set-v1` |
+| CLIC model | `pyg-clic-v1` | `pyg-clic-hits-heptv2-set-v1` |
 | Baseline candidates | Stored in `ycand` | `ycand` is a zero-filled placeholder |
 | Operational status | Supported default | Research workflow |
 
@@ -38,7 +38,7 @@ Both representations are derived from the same validated Key4HEP Parquet files. 
 Follow [shared Key4HEP production](key4hep.md) through strict Parquet validation, then build the hit representation:
 
 ```bash
-PROD=cld pixi run tfds_hit
+PROD=cld pixi run tfds_full
 ```
 
 Verify the exact TFDS name, configuration, and version. For example, after producing CLD `ttbar` configuration 1:
@@ -48,15 +48,17 @@ uv run python - <<'PY'
 import tensorflow_datasets as tfds
 
 builder = tfds.builder(
-    "cld_edm_ttbar_hits/1:3.2.2",
+    "cld_edm_ttbar_full/1:1.0.0",
     data_dir="/path/to/cld-workspace/tfds",
 )
 event = builder.as_data_source(split="train")[0]
-print(builder.info.full_name, event["X"].shape, event["ytarget"].shape)
+for kind in ("track", "cluster", "hit_tracker", "hit_calo"):
+    print(kind, event[f"X_{kind}"].shape, event[f"ylabel_{kind}"].shape)
+print("targets", event["ytarget_particles"].shape)
 PY
 ```
 
-Success requires the same number of input and target rows. The hit-geometry and hit-representation gates in the Parquet validation report establish the corresponding detector relationships.
+Success requires the same number of input and label rows for every element kind. The hit-geometry and hit-representation gates in the Parquet validation report establish the corresponding detector relationships.
 
 ## Resource expectations
 

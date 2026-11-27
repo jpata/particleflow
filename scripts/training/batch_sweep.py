@@ -91,7 +91,7 @@ def save_state(output, state):
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SCENARIO = ROOT / "configs/training/scenarios/cld_backbone_benchmark.yaml"
+DEFAULT_SCENARIO = ROOT / "configs/training/scenarios/cld_hits_heptv2_benchmark.yaml"
 
 
 def validate_protocol_overrides(case, platform):

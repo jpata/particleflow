@@ -234,15 +234,15 @@ def download_file(client, url, destination, entry, bytes_per_second=None):
     state.unlink(missing_ok=True)
 
 
-def upload_file(client, url, source, size, present, mode, attempts):
-    expected = file_digest(source, "md5" if mode == "md5-server" else "sha256", client.check_running)
+def upload_file(client, url, source, size, present, attempts):
+    expected = file_digest(source, "md5", client.check_running)
     if expected[0] != size:
         raise ValueError(f"local file size changed: {source}")
     uploaded = False
 
     def matches():
         try:
-            return client.checksum(url, mode) == expected
+            return client.checksum(url) == expected
         except WebDAVError as exc:
             if exc.status != 404:
                 raise
@@ -257,7 +257,7 @@ def upload_file(client, url, source, size, present, mode, attempts):
         uploaded = True
         if not matches():
             present = False
-            raise WebDAVError(f"{mode} mismatch for {url}", retryable=True)
+            raise WebDAVError(f"server MD5 mismatch for {url}", retryable=True)
         return True
 
     return retry(copy_and_verify, attempts)

@@ -16,8 +16,11 @@ TRAIN_SCENARIO_SCRIPT = ROOT / "scripts/local/train_scenario.sh"
     [
         ("pf", "cld", ["pyg-cld-v1"]),
         ("pf", "clic", ["pyg-clic-v1"]),
-        ("hit", "cld_hits", ["pyg-cld-hits-v1", "pyg-cld-hits-set-v1", "pyg-cld-hits-heptv2-sector-set-v1", "pyg-cld-hits-heptv2-set-v1"]),
-        ("hit", "clic_hits", ["pyg-clic-hits-v1", "pyg-clic-hits-set-v1"]),
+        ("hit", "cld_hits", ["pyg-cld-hits-heptv2-set-v1", "pyg-cld-hits-heptv2-sector-set-v1"]),
+        ("hit", "clic_hits", ["pyg-clic-hits-heptv2-set-v1"]),
+        ("hit", "idea_hits", ["pyg-idea-hits-heptv2-set-v1"]),
+        ("hit", "ild_hits", ["pyg-ild-hits-heptv2-set-v1"]),
+        ("hit", "colliderml_hits", ["pyg-colliderml-hits-heptv2-set-v1"]),
         ("idea", "idea", ["pyg-idea-pipeline-v1"]),
     ],
 )

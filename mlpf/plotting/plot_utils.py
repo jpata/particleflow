@@ -85,8 +85,11 @@ CLASS_LABELS = {
     "clic": CLASS_LABELS_CLIC,
     "cld": CLASS_LABELS_CLIC,
     "idea": CLASS_LABELS_CLIC,
+    "idea_hits": CLASS_LABELS_CLIC,
     "ild": CLASS_LABELS_CLIC,
+    "ild_hits": CLASS_LABELS_CLIC,
     "maia": CLASS_LABELS_CLIC,
+    "maia_hits": CLASS_LABELS_CLIC,
     "colliderml": CLASS_LABELS_CLIC,
     "colliderml_hits": CLASS_LABELS_CLIC,
 }
@@ -148,15 +151,9 @@ EVALUATION_DATASET_NAMES = {
     "cld_edm_z_tautau_pf": r"$e^+e^- \rightarrow Z \rightarrow \tau^+\tau^-$",
     "cld_edm_qq_pf": r"$e^+e^- \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
     "cld_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
-    "cld_edm_ttbar_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
-    "cld_edm_qq_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
-    "cld_edm_ww_fullhad_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "clic_edm_ttbar_pf": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
-    "clic_edm_ttbar_hits": r"$e^+e^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
     "clic_edm_qq_pf": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
-    "clic_edm_qq_hits": r"$e^+e^- \rightarrow \gamma/\mathrm{Z}^* \rightarrow \mathrm{hadrons}$",
     "clic_edm_ww_fullhad_pf": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
-    "clic_edm_ww_fullhad_hits": r"$e^+e^- \rightarrow WW \rightarrow \mathrm{hadrons}$",
     "clic_edm_z_qq_pf": r"$e^+e^- \rightarrow Z \rightarrow \mathrm{q}\bar{\mathrm{q}}$",
     "clic_edm_z_tautau_pf": r"$e^+e^- \rightarrow Z \rightarrow \tau^+\tau^-$",
     "clic_edm_zh_tautau_pf": r"$e^+e^- \rightarrow ZH \rightarrow \tau \tau$",
@@ -186,16 +183,31 @@ EVALUATION_DATASET_NAMES = {
     "colliderml_zee_pu200_pf": r"ColliderML ODD, $pp \rightarrow \mathrm{Z} \rightarrow ee$, pileup 200",
     "colliderml_zmumu_pu200_pf": r"ColliderML ODD, $pp \rightarrow \mathrm{Z} \rightarrow \mu\mu$, pileup 200",
     "maia_edm_ttbar_pf": r"MAIA, $\mu^+\mu^- \rightarrow \mathrm{t}\bar{\mathrm{t}}$",
-    "colliderml_ttbar_hits": r"ColliderML ODD hits, $pp \rightarrow \mathrm{t}\bar{\mathrm{t}}$, no pileup",
-    "colliderml_ttbar_pu200_hits": r"ColliderML ODD hits, $pp \rightarrow \mathrm{t}\bar{\mathrm{t}}$, pileup 200",
 }
+# General datasets (tracks, clusters and hits) share the physics-sample labels of their PF view.
+EVALUATION_DATASET_NAMES.update(
+    {
+        name[: -len("_pf")] + "_full": label
+        for name, label in list(EVALUATION_DATASET_NAMES.items())
+        if name.startswith(("cld_edm_", "clic_edm_", "maia_edm_", "idea_edm_", "ild_edm_")) and name.endswith("_pf")
+    }
+)
+EVALUATION_DATASET_NAMES.update(
+    {
+        "colliderml_ttbar_full": EVALUATION_DATASET_NAMES["colliderml_ttbar_nopu_pf"],
+        "colliderml_ttbar_pu200_full": EVALUATION_DATASET_NAMES["colliderml_ttbar_pu200_pf"],
+    }
+)
 
 GENJET_BINS_PT_DATASET = {
     "clic": [10, 20, 40, 60, 80, 100, 200],
     "cld": [10, 20, 40, 60, 80, 100, 200],
     "idea": [10, 20, 40, 60, 80, 100, 200],
+    "idea_hits": [10, 20, 40, 60, 80, 100, 200],
     "ild": [10, 20, 40, 60, 80, 100, 200],
+    "ild_hits": [10, 20, 40, 60, 80, 100, 200],
     "maia": [10, 20, 40, 60, 80, 100, 200, 400, 800, 1600],
+    "maia_hits": [10, 20, 40, 60, 80, 100, 200, 400, 800, 1600],
     "cms": [10, 20, 40, 60, 80, 100, 200, 400, 800],
     "colliderml": [10, 20, 40, 60, 80, 100, 200, 400, 800],
     "colliderml_hits": [10, 20, 40, 60, 80, 100, 200, 400, 800],
@@ -413,9 +425,12 @@ EXPERIMENT_LABELS = {
     "cld": cld_label,
     "idea": idea_label,
     "ild": ild_label,
+    "ild_hits": ild_label,
     "maia": maia_label,
+    "maia_hits": maia_label,
     "clic_hits": clic_label,
     "cld_hits": cld_label,
+    "idea_hits": idea_label,
     "colliderml": colliderml_label,
     "colliderml_hits": colliderml_label,
 }

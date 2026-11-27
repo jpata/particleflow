@@ -1,8 +1,9 @@
 # Key4hep v1.4.0 production
 
 The `key4hep_50k` campaign in `particleflow_spec.yaml` produces the
-track/cluster datasets for CLD, CLICdet, IDEA and ILD@FCC-ee, and the hit
-datasets for CLD and CLICdet, from a single Snakemake graph. It runs
+track/cluster datasets for CLD, CLICdet, IDEA and ILD@FCC-ee, and the
+[general datasets](full.md) with hits for the same detectors, from a single
+Snakemake graph. It runs
 generation, simulation, reconstruction, postprocessing and TFDS building; it
 does not train models.
 
@@ -31,11 +32,12 @@ can still be generated manually but are not part of the campaign.
 | Dataset | TFDS version | Configurations | Train / test events |
 |---|---|---|---|
 | CLD and CLICdet tracks and clusters | 3.4.0 | 1–10 | 4,500 / 500 per configuration |
-| CLD and CLICdet hits | 3.3.0 | 1–10 | 4,500 / 500 per configuration |
+| CLD, CLICdet and ILD general (tracks, clusters, hits) | 1.0.0 | 1–10 | 4,500 / 500 per configuration |
+| IDEA general (tracks, clusters, hits) | 1.0.0 | 1–10 | 900 / 100 per configuration |
 | IDEA tracks and clusters | 0.5.0 | 1 | 8,000 / 2,000 |
 | ILD tracks and clusters | 0.2.0 | 1 | 45,000 / 5,000 |
 
-Configuration 1 of every track/cluster dataset is [published](catalog.md#published-availability) on the Hub; the hit datasets are not yet. All datasets are written in ArrayRecord format. CLD, CLICdet and ILD split
+Configuration 1 of every track/cluster dataset is [published](catalog.md#published-availability) on the Hub; the general datasets are not yet. All datasets are written in ArrayRecord format. CLD, CLICdet and ILD split
 train and test by ROOT file; IDEA uses a deterministic per-event split.
 Detector-specific inputs and targets are described on the [IDEA](idea.md) and
 [ILD](ild.md) pages and in [CLD and CLIC production](key4hep.md).
@@ -94,7 +96,7 @@ and reported without failing the file.
 Other entry points:
 
 - `pixi run snakefile_key4hep` only writes the Snakefile.
-- The graph has `gen`, `post`, `tfds` and `tfds_hit` targets in addition to
+- The graph has `gen`, `post`, `tfds` and `tfds_full` targets in addition to
   `all`.
 - For a subset of detectors, run
   `PYTHONPATH=. python3 mlpf/snakemake/produce_key4hep_snakemake.py --productions cld ild`

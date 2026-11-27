@@ -33,14 +33,14 @@ rule all:
         expand('snakemake_jobs/clic/tfds/tfds_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
         expand('snakemake_jobs/clic/tfds/tfds_z_qq_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
         expand('snakemake_jobs/clic/tfds/tfds_z_tautau_tfds_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_ww_fullhad_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_z_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_z_tautau_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_ttbar_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_ww_fullhad_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_z_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_z_tautau_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        "snakemake_jobs/clic/train/train_pyg-clic-hits-heptv2-set-v1_clic.done",
         "snakemake_jobs/clic/train/train_pyg-clic-v1_clic.done",
-        "snakemake_jobs/clic/train/train_pyg-clic-hits-v1_clic.done",
-        "snakemake_jobs/clic/train/train_pyg-clic-hits-set-v1_clic.done"
+        "snakemake_jobs/clic/train/train_pyg-clic-key4hep-v140_clic.done"
 
 rule gen:
     input:
@@ -119,7 +119,7 @@ rule post_task:
     output:
         "snakemake_jobs/clic/post/post_{sample}_{seed}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=1000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=2000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:
@@ -147,27 +147,40 @@ rule tfds:
     shell:
         "touch {output}"
 
-rule tfds_hit_task:
+rule tfds_full_task:
     input:
         "snakemake_jobs/clic/post/post_{sample}_all.done"
     params:
-        workspace='/local/joosep/mlpf/clic/v1.4.0/50k', versions={'ttbar': '3.3.0', 'ww_fullhad': '3.3.0', 'qq': '3.3.0', 'z_qq': '3.3.0', 'z_tautau': '3.3.0'}
+        workspace='/local/joosep/mlpf/clic/v1.4.0/50k', versions={'ttbar': '1.0.0', 'ww_fullhad': '1.0.0', 'qq': '1.0.0', 'z_qq': '1.0.0', 'z_tautau': '1.0.0'}
     output:
-        "snakemake_jobs/clic/tfds_hit/tfds_hit_{sample}_tfds_hit_{config}.done"
+        "snakemake_jobs/clic/tfds_full/tfds_full_{sample}_tfds_full_{config}.done"
     resources:
         tmpdir="/scratch/local/joosep/tmp", mem_mb=16000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:
-        "snakemake_jobs/clic/tfds_hit/tfds_hit_{wildcards.sample}.sh {wildcards.config} && touch {output}"
+        "snakemake_jobs/clic/tfds_full/tfds_full_{wildcards.sample}.sh {wildcards.config} && touch {output}"
 
-rule tfds_hit:
+rule tfds_full:
     input:
-        expand('snakemake_jobs/clic/tfds_hit/tfds_hit_ttbar_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_hit/tfds_hit_ww_fullhad_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_hit/tfds_hit_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_hit/tfds_hit_z_qq_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_hit/tfds_hit_z_tautau_tfds_hit_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        expand('snakemake_jobs/clic/tfds_full/tfds_full_ttbar_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_full/tfds_full_ww_fullhad_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_full/tfds_full_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_full/tfds_full_z_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/clic/tfds_full/tfds_full_z_tautau_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     output:
-        "snakemake_jobs/clic/tfds_hit/all.done"
+        "snakemake_jobs/clic/tfds_full/all.done"
     shell:
         "touch {output}"
+
+rule train_pyg_clic_hits_heptv2_set_v1:
+    input:
+        "snakemake_jobs/clic/tfds_full/all.done"
+    output:
+        "snakemake_jobs/clic/train/train_pyg-clic-hits-heptv2-set-v1_clic.done"
+    threads: 16
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=40000, slurm_partition="gpu", runtime=10080, slurm_account="hepusers", gres="gpu:l40:1", cpus_per_task=16, threads=16
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/clic/train/train_pyg-clic-hits-heptv2-set-v1_clic.sh && touch {output}"
 
 rule train_pyg_clic_v1:
     input:
@@ -182,28 +195,15 @@ rule train_pyg_clic_v1:
     shell:
         "snakemake_jobs/clic/train/train_pyg-clic-v1_clic.sh && touch {output}"
 
-rule train_pyg_clic_hits_v1:
+rule train_pyg_clic_key4hep_v140:
     input:
-        "snakemake_jobs/clic/tfds_hit/all.done"
+        "snakemake_jobs/clic/tfds/all.done"
     output:
-        "snakemake_jobs/clic/train/train_pyg-clic-hits-v1_clic.done"
+        "snakemake_jobs/clic/train/train_pyg-clic-key4hep-v140_clic.done"
     threads: 16
     resources:
         tmpdir="/scratch/local/joosep/tmp", mem_mb=40000, slurm_partition="gpu", runtime=10080, slurm_account="hepusers", gres="gpu:l40:1", cpus_per_task=16, threads=16
     container:
         "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:
-        "snakemake_jobs/clic/train/train_pyg-clic-hits-v1_clic.sh && touch {output}"
-
-rule train_pyg_clic_hits_set_v1:
-    input:
-        "snakemake_jobs/clic/tfds_hit/all.done"
-    output:
-        "snakemake_jobs/clic/train/train_pyg-clic-hits-set-v1_clic.done"
-    threads: 16
-    resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=40000, slurm_partition="gpu", runtime=10080, slurm_account="hepusers", gres="gpu:l40:1", cpus_per_task=16, threads=16
-    container:
-        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
-    shell:
-        "snakemake_jobs/clic/train/train_pyg-clic-hits-set-v1_clic.sh && touch {output}"
+        "snakemake_jobs/clic/train/train_pyg-clic-key4hep-v140_clic.sh && touch {output}"

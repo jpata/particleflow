@@ -20,4 +20,4 @@ point=${points[$SLURM_ARRAY_TASK_ID]}
 # stage completes before the next starts; rerunning skips finished outputs.
 PROD=$point pixi run post --jobs 20
 PROD=$point pixi run tfds --jobs 5
-PROD=$point pixi run tfds_hit --jobs 3
+PROD=$point pixi run tfds_full --jobs 3

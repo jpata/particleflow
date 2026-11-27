@@ -102,18 +102,18 @@ def test_data_preflight_matches_config_and_fails_before_training(tmp_path):
     import pytest
     from scripts.training.batch_sweep import verify_data
 
-    config = {"train_dataset": {"cld_hits": {"physical": {"samples": {"cld_edm_ttbar_hits": {"version": "3.2.1", "splits": ["1"]}}}}}}
+    config = {"train_dataset": {"cld_hits": {"physical": {"samples": {"cld_edm_ttbar_full": {"version": "0.9.0", "splits": ["1"]}}}}}}
     job = SimpleNamespace(data_dir=str(tmp_path), resolved_config=SimpleNamespace(model_dump=lambda **_: config))
     manifest = tmp_path / "manifest.json"
-    manifest.write_text(json.dumps({"relative_directory": "cld_edm_ttbar_hits/1/3.2.2", "files": {}, "metadata_sha256": {}}))
+    manifest.write_text(json.dumps({"relative_directory": "cld_edm_ttbar_full/1/1.0.0", "files": {}, "metadata_sha256": {}}))
     with pytest.raises(ValueError, match="match every"):
         verify_data([(None, job)], manifest)
-    config["train_dataset"]["cld_hits"]["physical"]["samples"]["cld_edm_ttbar_hits"]["version"] = "3.2.2"
-    manifest.write_text(json.dumps({"relative_directory": "cld_edm_ttbar_hits/1/3.2.2", "files": {"shard": 4}, "metadata_sha256": {}}))
+    config["train_dataset"]["cld_hits"]["physical"]["samples"]["cld_edm_ttbar_full"]["version"] = "1.0.0"
+    manifest.write_text(json.dumps({"relative_directory": "cld_edm_ttbar_full/1/1.0.0", "files": {"shard": 4}, "metadata_sha256": {}}))
     with pytest.raises(ValueError, match="missing"):
         verify_data([(None, job)], manifest)
-    (tmp_path / "cld_edm_ttbar_hits/1/3.2.2").mkdir(parents=True)
-    (tmp_path / "cld_edm_ttbar_hits/1/3.2.2/shard").write_bytes(b"data")
+    (tmp_path / "cld_edm_ttbar_full/1/1.0.0").mkdir(parents=True)
+    (tmp_path / "cld_edm_ttbar_full/1/1.0.0/shard").write_bytes(b"data")
     assert verify_data([(None, job)], manifest)["status"] == "verified"
 
 

@@ -24,6 +24,8 @@ def write_bash_script(path, content, project_root=None, tmpdir=None):
         f.write("export OMP_NUM_THREADS=1\n")
         f.write("export OPENBLAS_NUM_THREADS=1\n")
         f.write("export VECLIB_MAXIMUM_THREADS=1\n")
+        # Bytecode written into a container's --writable-tmpfs overlay fills it and leaves corrupt .pyc files.
+        f.write("export PYTHONDONTWRITEBYTECODE=1\n")
         if tmpdir:
             f.write(f'export TMPDIR="{tmpdir}/job_${{SLURM_JOB_ID:-manual-$$}}"\n')
             f.write("export TEMPDIR=$TMPDIR\n")
@@ -84,7 +86,7 @@ def main(argv=None, *, spec=None):  # noqa: C901
     parser.add_argument("--ignore-failures", action="store_true", help="Ignore failures in gen/post steps")
     parser.add_argument("--allow-partial", action="store_true", help="Allow partial production by only post-processing successful gen jobs")
     parser.add_argument("--jobs-root", default=LOCAL_JOBS_DIR, help="Root for generated scripts and completion markers")
-    parser.add_argument("--steps", nargs="+", choices=["gen", "post", "tfds", "tfds_hit", "train"], help="Stages to include")
+    parser.add_argument("--steps", nargs="+", choices=["gen", "post", "tfds", "tfds_full", "train"], help="Stages to include")
     args = parser.parse_args(argv)
 
     if spec is None:
@@ -93,7 +95,8 @@ def main(argv=None, *, spec=None):  # noqa: C901
     if "cms" in args.production:
         req_steps = ["gen", "post", "tfds", "train"]
     elif "cld" in args.production or "clic" in args.production:
-        req_steps = ["gen", "post", "tfds", "tfds_hit", "train"]
+        # key4hep detectors: the general full view replaces the hit and track/calo views
+        req_steps = ["gen", "post", "tfds", "tfds_full", "train"]
     else:
         req_steps = ["gen", "post", "tfds", "train"]
 
@@ -109,7 +112,9 @@ def main(argv=None, *, spec=None):  # noqa: C901
     if prod_config.get("generation_only", False):
         req_steps = ["gen"]
     elif prod_config.get("dataset_only", False):
-        req_steps = ["post", "tfds", "tfds_hit"]
+        req_steps = ["post", "tfds", "tfds_full"]
+    if prod_config.get("tfds_full_mapping") and "tfds_full" not in req_steps:
+        req_steps.append("tfds_full")
 
     if args.steps is not None:
         req_steps = args.steps
@@ -178,7 +183,7 @@ def main(argv=None, *, spec=None):  # noqa: C901
 
     samples = prod_config["samples"]
     tfds_mappings = prod_config.get("tfds_mapping", {})
-    tfds_hit_mappings = prod_config.get("tfds_hit_mapping", {})
+    tfds_full_mappings = prod_config.get("tfds_full_mapping", {})
 
     # Update jobs dir to include production name to avoid conflicts
     jobs_dir = f"{args.jobs_root}/{args.production}"
@@ -186,7 +191,8 @@ def main(argv=None, *, spec=None):  # noqa: C901
     ensure_dir(f"{jobs_dir}/gen")
     ensure_dir(f"{jobs_dir}/post")
     ensure_dir(f"{jobs_dir}/tfds")
-    ensure_dir(f"{jobs_dir}/tfds_hit")
+    if tfds_full_mappings or "tfds_full" in req_steps:
+        ensure_dir(f"{jobs_dir}/tfds_full")
     ensure_dir(f"{jobs_dir}/val")
     ensure_dir(tfds_root_dir)
 
@@ -200,7 +206,7 @@ def main(argv=None, *, spec=None):  # noqa: C901
         "gen": {"targets": [], "rules": ""},
         "post": {"targets": [], "rules": ""},
         "tfds": {"targets": [], "rules": ""},
-        "tfds_hit": {"targets": [], "rules": ""},
+        "tfds_full": {"targets": [], "rules": ""},
         "train": {"targets": [], "rules": ""},
         "val": {"targets": [], "rules": ""},
         "val_data": {"targets": [], "rules": ""},
@@ -212,7 +218,8 @@ def main(argv=None, *, spec=None):  # noqa: C901
     for sample_key, sample_data in samples.items():
         process_name = sample_data["process_name"]
         seed_start, seed_end = sample_data["seed_range"]
-        gen_script = sample_data["gen_script"]
+        # dataset_only productions that convert existing files (MAIA) have no generator
+        gen_script = sample_data.get("gen_script")
         output_subdir = sample_data.get("output_subdir", process_name)
         events_per_job = sample_data.get("events_per_job", 100)
         pu_type = sample_data.get("pu_type", "nopu")
@@ -244,7 +251,10 @@ def main(argv=None, *, spec=None):  # noqa: C901
             root_file_proto = os.path.join(sample_gen_root_dir, f"reco_{process_name}_" + "${seed}.root")
             gen_base_dir = os.path.join(workspace_dir, "gen")
 
-        gen_cmd = f"bash {gen_script} {process_name} $seed {pu_type}"
+        if gen_script is None:
+            gen_cmd = f"(echo 'No generator is configured for {args.production}/{sample_key}; supply the ROOT files' >&2; exit 1)"
+        else:
+            gen_cmd = f"bash {gen_script} {process_name} $seed {pu_type}"
         if copy_step2:
             gen_cmd += " True"
         if prod_type == "key4hep":
@@ -418,7 +428,7 @@ done
                     f"expand('{jobs_dir}/val/val_{sample_key}_{job_type}_{{seed}}.done', seed=range({seed_start}, {seed_end}, {CHUNK_SIZE}))"
                 )
 
-        if "post" in req_steps and (sample_key in tfds_mappings or sample_key in tfds_hit_mappings):
+        if "post" in req_steps and (sample_key in tfds_mappings or sample_key in tfds_full_mappings):
             step_data["post"]["targets"].append(f'"{jobs_dir}/post/post_{sample_key}_all.done"')
 
             if allow_partial:
@@ -570,11 +580,11 @@ rule val_data_task:
     # PART 2: TFDS Conversion
     # -------------------------------------------------------------------------
     tfds_sentinels = []
-    tfds_hit_sentinels = []
+    tfds_full_sentinels = []
 
     tfds_mappings_to_process = {
         "tfds": (prod_config.get("tfds_mapping", {}), tfds_sentinels),
-        "tfds_hit": (prod_config.get("tfds_hit_mapping", {}), tfds_hit_sentinels),
+        "tfds_full": (tfds_full_mappings, tfds_full_sentinels),
     }
 
     for step_name, (tfds_mappings, sentinels_list) in tfds_mappings_to_process.items():
@@ -591,7 +601,11 @@ rule val_data_task:
             output_subdir = sample_data.get("output_subdir", process_name)
 
             # Determine manual_dir for TFDS
-            if prod_type == "cms":
+            if step_name == "tfds_full":
+                # This builder consumes Parquet from one physics sample, rather than
+                # discovering process subdirectories under the production post root.
+                manual_dir = os.path.join(workspace_dir, "post", output_subdir)
+            elif prod_type == "cms":
                 # For CMS, data is in workspace/post/subdir/process
                 # TFDS builder expects workspace/post/subdir (containing process folder)
                 manual_dir = os.path.join(workspace_dir, "post", output_subdir)
@@ -672,13 +686,13 @@ rule tfds:
         "touch {{output}}"
 """
 
-    if tfds_hit_sentinels and "tfds_hit" in req_steps:
-        step_data["tfds_hit"]["rules"] += f"""
-rule tfds_hit:
+    if tfds_full_sentinels and "tfds_full" in req_steps:
+        step_data["tfds_full"]["rules"] += f"""
+rule tfds_full:
     input:
-        {", ".join(tfds_hit_sentinels)}
+        {", ".join(tfds_full_sentinels)}
     output:
-        "{jobs_dir}/tfds_hit/all.done"
+        "{jobs_dir}/tfds_full/all.done"
     shell:
         "touch {{output}}"
 """
@@ -723,8 +737,9 @@ nvidia-smi
             train_inputs = []
             model_dataset = model_spec.get("dataset", prod_config.get("type"))
             if "hits" in model_dataset:
-                if "tfds_hit" in req_steps:
-                    train_inputs.append(f'"{jobs_dir}/tfds_hit/all.done"')
+                # hit-input models read the general full datasets
+                if "tfds_full" in req_steps:
+                    train_inputs.append(f'"{jobs_dir}/tfds_full/all.done"')
             else:
                 if "tfds" in req_steps:
                     train_inputs.append(f'"{jobs_dir}/tfds/all.done"')

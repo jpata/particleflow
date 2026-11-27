@@ -14,7 +14,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, nargs="+", required=True, help="Input parquet file(s) from evaluator")
     parser.add_argument("--outdir", type=str, default="plots_eval", help="Output directory for plots")
-    parser.add_argument("--detector", type=str, default="clic", choices=["clic", "cld", "clic_hits", "cld_hits"], help="Detector type")
+    parser.add_argument("--detector", type=str, default="clic", choices=["clic", "cld"], help="Detector type (track/cluster models)")
     return parser.parse_args()
 
 

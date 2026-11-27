@@ -64,7 +64,9 @@ particle is slightly higher.
 The output keeps the simulated hits and the digitization relations, so that
 target assignments can be traced back to the original particles. The upstream
 reconstruction does not store dQ/dx or the tracker cell-ID encoding; the dE/dx
-features are therefore zero, and there is no ILD hit dataset.
+features are therefore zero, and the tracker hits of the
+[general datasets](full.md#detector-specifics) (`ild_edm_<process>_full`) have
+no system, side or layer information.
 
 ## Production
 

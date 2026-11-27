@@ -238,7 +238,6 @@ def upload(args, root, remote, selection):
                 root.joinpath(*relative.parts),
                 entry.size,
                 previous is not None and previous.size == entry.size,
-                args.verify_mode,
                 args.attempts,
             )
 
@@ -359,7 +358,6 @@ def main(argv=None, *, empty_root=False):
         if direction == "download":
             copy.add_argument("--limit-rate", type=positive, help="aggregate download limit in bytes per second")
         else:
-            copy.add_argument("--verify-mode", choices=("sha256-readback", "md5-server"), default="sha256-readback")
             copy.add_argument("--progress-every", type=positive, default=20)
     commands.add_parser("status", help="show live transfer progress")
     args = parser.parse_args(legacy_args(argv))

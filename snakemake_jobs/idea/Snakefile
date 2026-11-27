@@ -33,7 +33,14 @@ rule all:
         expand('snakemake_jobs/idea/tfds/tfds_qq_tfds_{config}.done', config=[1]),
         expand('snakemake_jobs/idea/tfds/tfds_z_qq_tfds_{config}.done', config=[1]),
         expand('snakemake_jobs/idea/tfds/tfds_z_tautau_tfds_{config}.done', config=[1]),
-        "snakemake_jobs/idea/train/train_pyg-idea-pipeline-v1_idea.done"
+        expand('snakemake_jobs/idea/tfds_full/tfds_full_ttbar_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/idea/tfds_full/tfds_full_ww_fullhad_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/idea/tfds_full/tfds_full_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/idea/tfds_full/tfds_full_z_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        expand('snakemake_jobs/idea/tfds_full/tfds_full_z_tautau_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        "snakemake_jobs/idea/train/train_pyg-idea-pipeline-v1_idea.done",
+        "snakemake_jobs/idea/train/train_pyg-idea-hits-heptv2-set-v1_idea.done",
+        "snakemake_jobs/idea/train/train_pyg-idea-key4hep-v140_idea.done"
 
 rule gen:
     input:
@@ -50,7 +57,7 @@ rule gen_task:
     output:
         "snakemake_jobs/idea/gen/gen_{sample}_{seed}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=28400, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=36000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/home/joosep/particleflow/mlpf/data/key4hep/gen/idea/idea-dev.sif"
     shell:
@@ -112,7 +119,7 @@ rule post_task:
     output:
         "snakemake_jobs/idea/post/post_{sample}_{seed}.done"
     resources:
-        tmpdir="/scratch/local/joosep/tmp", mem_mb=1000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=2700, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
     container:
         "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:
@@ -140,6 +147,28 @@ rule tfds:
     shell:
         "touch {output}"
 
+rule tfds_full_task:
+    input:
+        "snakemake_jobs/idea/post/post_{sample}_all.done"
+    params:
+        workspace='/local/joosep/mlpf/idea/v1.4.0/50k', versions={'ttbar': '1.0.0', 'ww_fullhad': '1.0.0', 'qq': '1.0.0', 'z_qq': '1.0.0', 'z_tautau': '1.0.0'}
+    output:
+        "snakemake_jobs/idea/tfds_full/tfds_full_{sample}_tfds_full_{config}.done"
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=8000, slurm_partition="main", runtime=2880, slurm_account="hepusers", cpus_per_task=1, threads=1
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/idea/tfds_full/tfds_full_{wildcards.sample}.sh {wildcards.config} && touch {output}"
+
+rule tfds_full:
+    input:
+        expand('snakemake_jobs/idea/tfds_full/tfds_full_ttbar_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/idea/tfds_full/tfds_full_ww_fullhad_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/idea/tfds_full/tfds_full_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/idea/tfds_full/tfds_full_z_qq_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), expand('snakemake_jobs/idea/tfds_full/tfds_full_z_tautau_tfds_full_{config}.done', config=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    output:
+        "snakemake_jobs/idea/tfds_full/all.done"
+    shell:
+        "touch {output}"
+
 rule train_pyg_idea_pipeline_v1:
     input:
         "snakemake_jobs/idea/tfds/all.done"
@@ -152,3 +181,29 @@ rule train_pyg_idea_pipeline_v1:
         "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
     shell:
         "snakemake_jobs/idea/train/train_pyg-idea-pipeline-v1_idea.sh && touch {output}"
+
+rule train_pyg_idea_hits_heptv2_set_v1:
+    input:
+        "snakemake_jobs/idea/tfds_full/all.done"
+    output:
+        "snakemake_jobs/idea/train/train_pyg-idea-hits-heptv2-set-v1_idea.done"
+    threads: 16
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=40000, slurm_partition="gpu", runtime=10080, slurm_account="hepusers", gres="gpu:l40:1", cpus_per_task=16, threads=16
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/idea/train/train_pyg-idea-hits-heptv2-set-v1_idea.sh && touch {output}"
+
+rule train_pyg_idea_key4hep_v140:
+    input:
+        "snakemake_jobs/idea/tfds/all.done"
+    output:
+        "snakemake_jobs/idea/train/train_pyg-idea-key4hep-v140_idea.done"
+    threads: 16
+    resources:
+        tmpdir="/scratch/local/joosep/tmp", mem_mb=40000, slurm_partition="gpu", runtime=10080, slurm_account="hepusers", gres="gpu:l40:1", cpus_per_task=16, threads=16
+    container:
+        "/scratch/persistent/joosep/singularity/particleflow-29042026-de861d.sif"
+    shell:
+        "snakemake_jobs/idea/train/train_pyg-idea-key4hep-v140_idea.sh && touch {output}"

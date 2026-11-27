@@ -1,0 +1,125 @@
+# HEPTv2 set models on the key4hep v1.4.0 full datasets (TFDS 1.0.0).
+# Each detector uses the same samples and full-view truth tables for all three input selections.
+name: key4hep_full_inputs_100k
+spec_file: particleflow_spec.yaml
+production_name: cld
+seeds: [12345]
+
+variants:
+  cld_hits:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides: &hits
+      full_elements: [hit_tracker, hit_calo]
+  cld_track_calohit:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides: &track_calohit
+      full_elements: [track, hit_calo]
+      model.heptv2.track_hash_at_calo: true
+  cld_track_cluster:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    gpus: 1
+    overrides: &track_cluster
+      full_elements: [track, cluster]
+      model.heptv2.track_hash_at_calo: true
+  clic_hits:
+    model_name: pyg-clic-hits-heptv2-set-v1
+    production_name: clic
+    overrides: *hits
+  clic_track_calohit:
+    model_name: pyg-clic-hits-heptv2-set-v1
+    production_name: clic
+    overrides: *track_calohit
+  clic_track_cluster:
+    model_name: pyg-clic-hits-heptv2-set-v1
+    production_name: clic
+    gpus: 1
+    overrides: *track_cluster
+  idea_hits:
+    model_name: pyg-idea-hits-heptv2-set-v1
+    production_name: idea
+    global_batch_size: 8  # One event per LUMI GCD for the long drift-chamber sequences.
+    overrides: *hits
+  idea_track_calohit:
+    model_name: pyg-idea-hits-heptv2-set-v1
+    production_name: idea
+    overrides: *track_calohit
+  idea_track_cluster:
+    model_name: pyg-idea-hits-heptv2-set-v1
+    production_name: idea
+    gpus: 1
+    overrides: *track_cluster
+  ild_hits:
+    model_name: pyg-ild-hits-heptv2-set-v1
+    production_name: ild
+    global_batch_size: 16  # Two events per LUMI GCD for the TPC sequences.
+    overrides: *hits
+  ild_track_calohit:
+    model_name: pyg-ild-hits-heptv2-set-v1
+    production_name: ild
+    overrides: *track_calohit
+  ild_track_cluster:
+    model_name: pyg-ild-hits-heptv2-set-v1
+    production_name: ild
+    gpus: 1
+    overrides: *track_cluster
+
+training:
+  # With mi250x, hit-based views use all eight GCDs and the cluster view uses one.
+  global_batch_size: 32
+  parameters:
+    optimizer: lamb
+    lr: 0.001
+    lr_schedule: onecycle
+    lr_schedule_config.onecycle.pct_start: 0.3
+    num_steps: 100000
+    patience: 100000
+    val_freq: 1000
+    checkpoint_freq: 1000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    validation_linear_probe: true
+    validation_linear_probe_max_events: 16
+    pad_to_multiple_elements: 128
+    make_plots: true
+    load: null
+    benchmark.enabled: true
+    benchmark.sample_interval_seconds: 1.0
+    benchmark.warmup_steps: 100
+    benchmark.gpu_timing_interval: 0
+
+common_overrides:
+  # Six layers of width 256 and split input encoding come from the set recipes.
+  # Use the packed three-hash backbone and shared learned embedding from pyg-colliderml-heptv2-v2.
+  model.heptv2.n_hashes: 3
+  model.heptv2.deterministic_hashing: true
+  model.heptv2.pack_padding: true
+  model.heptv2.share_position_embedding: true
+  model.heptv2.activation_checkpointing: false
+  # Set decoder and feature settings from the release hit recipe.
+  model.set_decoder.hit_grouping_background_weight: 0.1
+  model.set_decoder.hit_grouping_sparse: false
+  model.set_decoder.hit_grouping_tracker_particle_balanced: false
+  model.set_decoder.tracker_momentum_readout: true
+  model.set_decoder.tracker_overlap_loss_weight: 0.0
+  model.set_decoder.tracker_geometry_loss_weight: 0.0
+  model.set_decoder.tracker_curvature_loss_weight: 0.0
+  model.hit_feature_engineering.enabled: true
+  model.hit_feature_engineering.geometry: true
+  model.hit_feature_engineering.calorimeter_neighborhood: true
+  model.hit_feature_engineering.tracker_neighborhood: true
+  model.hit_feature_engineering.tracker_momentum: false
+  model.hit_feature_engineering.tracker_doublets: false
+
+allowed_variant_differences:
+  - data_dir
+  - dataset
+  - enabled_test_datasets
+  - full_elements
+  - input_dim
+  - model.heptv2.track_hash_at_calo
+  - model.set_decoder.tracker_group_magnetic_field
+  - train_dataset
+  - valid_dataset
+  - test_dataset
