@@ -478,6 +478,61 @@ gradient accumulation. Candidate fusions should account for the
 precision sensitivity in the published-checkpoint comparison. The two
 A100 runs and the probe source are in `experiments/issue588/gap/`.
 
+## Training with a shared positional embedding on L40S
+
+Slurm array 62904824 compared the default learned positional MLP in
+every layer with one learned MLP evaluated once and reused across all
+six layers. Both arms kept width 256, 16 heads, three hashes, Flex
+Attention, packed padding, and BF16. They started from seed 12345 with
+identical initial weights for all common parameters and trained from scratch
+for 10,000 optimizer steps at batch 32 on separate L40S GPUs. They
+used ColliderML ttbar PU0 TFDS 1.5.0 from
+`/scratch/persistent/joosep/colliderml/tfds/`. The 2,048 held-out
+events came from the test split of configuration 10. Validation
+used configurations 1–9. Both runs used the same LAMB and OneCycle
+settings. The validation comparison uses unweighted loss because
+the training loop calibrates its task weights independently.
+
+Both jobs completed all 10,000 steps and processed 320,000 event
+presentations each. The per-event sequence lengths matched at every
+paired step. The training timing excludes the first 100 steps,
+validation, and checkpoint writes.
+
+| Measure | Per-layer embedding | Shared embedding |
+|---|---:|---:|
+| Trainable parameters | 8,639,442 | 7,301,842 |
+| Training events/s | 197.84 | 212.37 |
+| Median training step (ms) | 154.24 | 140.02 |
+| p99 training step (ms) | 216.97 | 272.19 |
+| Peak PyTorch allocated VRAM (GiB) | 8.51 | 7.16 |
+| Peak sampled device VRAM (GiB) | 11.48 | 11.07 |
+| Slurm elapsed | 31m 38s | 30m 04s |
+| Final unweighted validation loss | 3.09365 | 3.09754 |
+| Final matched jet pT response median | 0.99672 | 0.99619 |
+| Final matched jet pT response IQR | 0.12441 | 0.12327 |
+| Final response-qualified jet F1 | 0.75989 | 0.76068 |
+
+Sharing raised training throughput by 7.3% and reduced peak PyTorch
+allocated VRAM by 15.8%. The recorded p99 step time increased on the
+shared run's node, where the p95 data wait was 22.9 ms versus 4.4 ms
+for the per-layer run.
+
+The per-layer model led response-qualified jet F1 through 8,000
+steps. At 10,000 steps the difference was +0.08 percentage points
+for the shared model. Paired resampling of the 2,048 test events
+gave a 95% interval of −0.23 to +0.38 percentage points for the
+F1 difference. The paired intervals for the jet response median
+and IQR differences also included zero. These intervals reflect
+test-event variation for this training seed.
+
+The scenario is
+`configs/training/scenarios/colliderml_heptv2_position_embedding_10k.yaml`
+with `configs/training/platforms/tallinn_l40.yaml`. Both tasks used
+`HEPTV2_FAST_INVERT_PERM=1`, `HEPTV2_COMBINED_UNSORT=0`, and
+`HEPTV2_INDEXED_BUCKET_ATTENTION=0`. The Slurm launcher, training
+logs, histories, checkpoints, and per-event predictions are in
+`experiments/issue588/position_embedding_10k/` in the worktree.
+
 ## Reproduce
 
 Run on a single GPU with the release weights downloaded to `attention.pth`
