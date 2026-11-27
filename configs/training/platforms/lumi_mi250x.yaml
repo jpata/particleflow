@@ -3,11 +3,11 @@ gpus: 8
 # The LAIF wrapper activates the environment before launching the scenario.
 python_command: [python3]
 data_dir:
-  cld: /scratch/project_465001293/joosep/mlpf/cld/v1.2.5_key4hep_2025-05-29/tfds
-  clic: /scratch/project_465001293/joosep/mlpf/clic/v1.2.5_key4hep_2025-05-29/tfds
+  cld: /scratch/project_465001293/joosep/mlpf/cld/
+  clic: /scratch/project_465001293/joosep/mlpf/clic/
   cms_run3: /scratch/project_465001293/joosep/mlpf/cms/2.8.0/
   colliderml: /scratch/project_465001293/joosep/mlpf/colliderml/
-  idea: /scratch/project_465001293/joosep/mlpf/idea/IDEA_o1_v03_fccconfig_a05a3a9
+  idea: /scratch/project_465001293/joosep/mlpf/idea/
 experiments_dir: /scratch/project_465001293/${USER}/particleflow/experiments
 environment:
   MLPF_SHARING_STRATEGY: file_descriptor
