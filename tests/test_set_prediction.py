@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from mlpf.conf import MLPFConfig
+from mlpf.conf import DatasetSample, MLPFConfig, PhysicalDataset
 from mlpf.model.mlpf import MLPF
 from mlpf.model.PFDataset import PFBatch
 from mlpf.model.set_decoder import _flash_multihead_attention, _phi_sector
@@ -1026,3 +1026,44 @@ def test_particle_metric_subset_preserves_full_validation_losses(monkeypatch):
     selected.clear()
     training.evaluate("cpu", 1, model, batches, 99, config, device_type="cpu")
     assert selected == [index + 1 for index in sorted(expected)]
+
+
+def test_validation_particle_metrics_split_mixed_batches_by_sample(monkeypatch):
+    from mlpf.model.training import evaluate
+
+    config = make_config(num_slots=4)
+    config.make_plots = False
+    config.validation_diagnostics_batches = 1
+    config.validation_particle_metrics_max_events = 0
+    qq, ttbar, ww = ("cld_edm_qq_hits", "cld_edm_ttbar_hits", "cld_edm_ww_fullhad_hits")
+    config.valid_dataset = {
+        config.dataset.value: {
+            "cld": PhysicalDataset(batch_size=3, samples={name: DatasetSample(version="1.0.0", splits=["1"]) for name in (qq, ttbar, ww)})
+        }
+    }
+    model = MLPF(config)
+    targets = make_target_tensor(batch_size=3)
+    batch = PFBatch(X=torch.ones(3, 5, config.input_dim), ytarget_set=targets, sample_names=(qq, ttbar, qq))
+    predictions = unpack_target(targets.clone(), None)
+    predictions["pt"] = predictions["pt"].exp()
+    predictions["energy"] = predictions["energy"].exp()
+    predictions["cls_id"][1] = 0
+    monkeypatch.setattr(model, "predict_particles", lambda *args, **kwargs: predictions)
+
+    metrics = evaluate("cpu", 1, model, [batch], 1, config, device_type="cpu")
+
+    def sample_metric(sample, metric):
+        return metrics[f"metrics/sample/{sample}/particle/{metric}"]
+
+    assert sample_metric(qq, "event_samples") == 2
+    assert sample_metric(qq, "matching/f1") == 1
+    assert sample_metric(qq, "event/met_abs_error") == 0
+    assert sample_metric(qq, "momentum/all/event/samples") == 2
+    assert sample_metric(ttbar, "event_samples") == 1
+    assert sample_metric(ttbar, "matching/f1") == 0
+    assert sample_metric(ttbar, "event/met_abs_error") == pytest.approx(19)
+    assert sample_metric(ww, "event_samples") == 0
+    assert f"metrics/sample/{ww}/particle/matching/f1" not in metrics
+    assert metrics["metrics/particle/event_samples"] == 3
+    assert metrics["metrics/particle/matching/f1"] == pytest.approx(0.8)
+    assert metrics["metrics/particle/event/met_abs_error"] == pytest.approx(19 / 3)

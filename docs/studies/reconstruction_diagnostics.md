@@ -14,8 +14,13 @@ validation cycles with the same loader order and world size. Set the limit to
 Detailed particle-momentum metrics use selected events within the first
 `validation_diagnostics_batches` batches; their support can be smaller or zero.
 `metrics/particle/event_samples` records the number of matched events summed
-across ranks. Setting `validation_particle_metrics` false also disables detailed
-particle-momentum metrics, but not set-slot or hit-grouping diagnostics.
+across ranks. Each configured validation sample also has
+`metrics/sample/<sample>/particle/event_samples` and the corresponding particle
+metrics, including matching F1, energy response, and MET error. The sample name
+is the full TFDS dataset name, shared by all its shards. The same selected events
+contribute to the sample and pooled results. A sample with no selected events
+reports zero support. Setting `validation_particle_metrics` false also disables
+detailed particle-momentum metrics, but not set-slot or hit-grouping diagnostics.
 
 Metrics are stored in each `history/step_*.json` under `valid` and sent through
 the existing TensorBoard/Comet logging. TensorBoard strips the `metrics/` prefix

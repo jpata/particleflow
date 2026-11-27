@@ -95,8 +95,13 @@ from mlpf.model.losses import (
     particle_loss,
 )
 from mlpf.model.set_losses import SetMatcherWeights, hungarian_match, set_mlpf_loss
-from mlpf.model.reconstruction_diagnostics import compute_hit_grouping_metrics, empty_momentum_metrics
-from mlpf.model.validation_metrics import compute_set_slot_metrics, compute_validation_particle_metrics, validation_particle_collections
+from mlpf.model.reconstruction_diagnostics import compute_hit_grouping_metrics
+from mlpf.model.validation_metrics import (
+    compute_set_slot_metrics,
+    compute_validation_particle_metrics,
+    empty_validation_particle_metrics,
+    validation_particle_collections,
+)
 from mlpf.utils import create_comet_experiment
 from mlpf.conf import INPUT_TYPE_LABELS, MLPFConfig, OutputMode, SOURCE_LABELS, dataset_for_sample
 from mlpf.jet_utils import get_jet_config
@@ -293,16 +298,16 @@ def _finalize_diagnostics(accum, world_size):
     packed = torch.stack([torch.stack(accum[key]) for key in keys])
     if world_size > 1:
         torch.distributed.all_reduce(packed)
-    for key, (value_sum, count_sum) in zip(keys, packed):
+    for key, (value_sum, count_sum) in zip(keys, packed.cpu()):
         if key.endswith("samples"):
-            finalized[key] = value_sum.cpu().item()
+            finalized[key] = value_sum.item()
             continue
         if count_sum.item() <= 0:
             continue
         value = value_sum / count_sum
         if key.endswith("_residual_rms"):
             value = torch.sqrt(torch.clamp(value, min=0.0))
-        finalized[key] = value.cpu().item()
+        finalized[key] = value.item()
     return finalized
 
 
@@ -959,24 +964,52 @@ def _particle_metric_event_indices(num_events, max_events, seed):
     return {rng.randrange(i * num_events // max_events, (i + 1) * num_events // max_events) for i in range(max_events)}
 
 
-def _prepare_validation_particle_metrics(valid_loader, config, rank, diagnostic_accum):
+def _prepare_validation_particle_metrics(valid_loader, config, rank):
     """Select reproducible validation events and initialize shared reduction keys."""
-    metric_event_indices = None
-    if config.validation_particle_metrics:
-        num_events = _validation_event_count(valid_loader)
-        metric_event_indices = _particle_metric_event_indices(
-            num_events, config.validation_particle_metrics_max_events, config.seed + (rank if isinstance(rank, int) else 0)
-        )
-        matched_events = num_events if metric_event_indices is None else len(metric_event_indices)
-        _logger.info(f"Particle metrics on rank{rank}: sampling {matched_events}/{num_events} validation events")
-        _add_accumulator(diagnostic_accum, "metrics/particle/event_samples", torch.tensor(0.0, device=rank))
-        # Some ranks may sample no events in the detailed-diagnostic batches.
-        # Keep reduction keys identical even when their detailed counts are zero.
-        if config.validation_diagnostics_batches > 0:
-            for name in empty_momentum_metrics(config.num_classes):
-                _add_accumulator(diagnostic_accum, f"metrics/particle/{name}", torch.tensor(0.0, device=rank), count=0)
+    if not config.validation_particle_metrics:
+        return None, {}
 
-    return metric_event_indices
+    num_events = _validation_event_count(valid_loader)
+    metric_event_indices = _particle_metric_event_indices(
+        num_events, config.validation_particle_metrics_max_events, config.seed + (rank if isinstance(rank, int) else 0)
+    )
+    matched_events = num_events if metric_event_indices is None else len(metric_event_indices)
+    _logger.info(f"Particle metrics on rank{rank}: sampling {matched_events}/{num_events} validation events")
+
+    groups = (config.valid_dataset or {}).get(config.dataset.value, {})
+    sample_names = sorted({sample for group in groups.values() for sample in group.samples})
+    # Every rank reduces the same keys, including samples with zero selected events on that rank.
+    particle_totals = {}
+    for sample in [None, *sample_names]:
+        particle_totals[sample] = empty_validation_particle_metrics(config.num_classes, detailed=config.validation_diagnostics_batches > 0)
+        particle_totals[sample]["event_samples"] = [0.0, 0.0]
+    return metric_event_indices, particle_totals
+
+
+def _accumulate_validation_particle_metrics(particle_totals, collections, metric_events, sample_names, num_classes, detailed):
+    events_by_sample = {}
+    for event in metric_events:
+        sample = sample_names[event] if sample_names is not None else None
+        events_by_sample.setdefault(sample, []).append(event)
+
+    targets, target_mask, predictions, prediction_mask = collections
+    for sample, events in events_by_sample.items():
+        metrics = compute_validation_particle_metrics(
+            {name: value[events] for name, value in targets.items()},
+            target_mask[events],
+            {name: value[events] for name, value in predictions.items()},
+            prediction_mask[events],
+            num_classes=num_classes,
+            detailed=detailed,
+        )
+        metrics["event_samples"] = (len(events), 0)
+        scopes = [particle_totals[None]]
+        if sample is not None and sample in particle_totals:
+            scopes.append(particle_totals[sample])
+        for totals in scopes:
+            for name, (total, count) in metrics.items():
+                totals[name][0] += total
+                totals[name][1] += count
 
 
 @record_phase("validation")
@@ -1025,7 +1058,7 @@ def evaluate(
 
         probe = ValidationCaloProbe(config.validation_linear_probe_max_events)
     group_losses = _GroupLossMeans(getattr(valid_loader, "names", []))
-    metric_event_indices = _prepare_validation_particle_metrics(valid_loader, config, rank, diagnostic_accum)
+    metric_event_indices, particle_totals = _prepare_validation_particle_metrics(valid_loader, config, rank)
     event_offset = 0
 
     # Only show progress bar on rank 0
@@ -1066,25 +1099,14 @@ def evaluate(
                     model_module.output_mode,
                 )
                 if config.validation_particle_metrics and metric_events:
-                    targets, target_mask, predictions, prediction_mask = metric_collections
-                    particle_metrics = compute_validation_particle_metrics(
-                        {name: value[metric_events] for name, value in targets.items()},
-                        target_mask[metric_events],
-                        {name: value[metric_events] for name, value in predictions.items()},
-                        prediction_mask[metric_events],
+                    _accumulate_validation_particle_metrics(
+                        particle_totals,
+                        metric_collections,
+                        metric_events,
+                        batch.sample_names,
                         num_classes=config.num_classes,
                         detailed=ival < config.validation_diagnostics_batches,
                     )
-                    _add_accumulator(
-                        diagnostic_accum, "metrics/particle/event_samples", torch.tensor(float(len(metric_events)), device=batch.X.device)
-                    )
-                    for metric_name, (metric_total, metric_count) in particle_metrics.items():
-                        _add_accumulator(
-                            diagnostic_accum,
-                            f"metrics/particle/{metric_name}",
-                            torch.as_tensor(metric_total, device=batch.X.device),
-                            count=metric_count,
-                        )
 
                 if model_module.output_mode == OutputMode.SET:
                     if ypred_raw.tracker_group_fit_valid is not None and ival < config.validation_diagnostics_batches:
@@ -1173,6 +1195,12 @@ def evaluate(
     if probe is not None:
         for name, (total, count) in probe.finalize().items():
             _add_accumulator(diagnostic_accum, name, torch.as_tensor(total, device=rank), count=count)
+
+    for sample, totals in particle_totals.items():
+        prefix = "metrics/particle" if sample is None else f"metrics/sample/{sample}/particle"
+        sums, counts = torch.tensor(list(totals.values()), device=rank, dtype=torch.float32).unbind(dim=1)
+        for name, total, count in zip(totals, sums, counts):
+            diagnostic_accum[f"{prefix}/{name}"] = (total, count)
 
     eval_loss.update(_finalize_diagnostics(diagnostic_accum, world_size))
 

@@ -229,6 +229,7 @@ def test_tfds_datasource_adds_source_and_input_type_metadata_and_pads_features()
 
     event = ds[0]
 
+    assert event["sample_name"] == "clic_edm_ttbar_hits"
     assert event["source_id"] == SOURCE_IDS["clic"]
     assert event["input_type_id"] == INPUT_TYPE_IDS["hits"]
     assert event["X"].shape == (3, 6)
@@ -253,18 +254,20 @@ def test_dataset_domain_metadata_mapping(dataset_name, source_id, input_type_id)
 
 
 def test_collater_preserves_source_and_input_type_metadata():
-    collater = Collater(["X", "ytarget"], ["source_id", "input_type_id"])
+    collater = Collater(["X", "ytarget"], ["source_id", "input_type_id"], include_sample_names=True)
     batch = collater(
         [
             {
                 "X": np.ones((2, 3), dtype=np.float32),
                 "ytarget": np.zeros((2, 2), dtype=np.float32),
+                "sample_name": "clic_edm_ttbar_hits",
                 "source_id": np.int64(2),
                 "input_type_id": np.int64(1),
             },
             {
                 "X": np.ones((3, 3), dtype=np.float32),
                 "ytarget": np.zeros((3, 2), dtype=np.float32),
+                "sample_name": "cld_edm_qq_pf",
                 "source_id": np.int64(3),
                 "input_type_id": np.int64(2),
             },
@@ -272,5 +275,6 @@ def test_collater_preserves_source_and_input_type_metadata():
     )
 
     assert batch.X.shape == (2, 3, 3)
+    assert batch.to("cpu").sample_names == ("clic_edm_ttbar_hits", "cld_edm_qq_pf")
     assert batch.source_id.tolist() == [2, 3]
     assert batch.input_type_id.tolist() == [1, 2]

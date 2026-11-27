@@ -151,7 +151,9 @@ class TestDataloaderRestoration(unittest.TestCase):
     def _fake_pfdataset(data_dir, name, split, **kwargs):
         # sample_big: 48 events (values 0..47), sample_small: 40 events (values 1000..1039)
         size, offset = (48, 0) if name.startswith("sample_big") else (40, 1000)
-        return SimpleNamespace(ds=MockDictDataset(size=size, offset=offset, keys=("X", "ytarget", "genmet"), shapes=((1, 2), (1, 2), (1,))))
+        return SimpleNamespace(
+            ds=MockDictDataset(size=size, offset=offset, keys=("X", "ytarget", "genmet"), shapes=((1, 2), (1, 2), (1,)), sample_name=name)
+        )
 
     def _check_multi_rank_resume(self, sampler_mode):
         """Every rank resumes its own batch sequence from rank 0's saved loader state, as in DDP."""

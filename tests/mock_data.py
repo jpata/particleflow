@@ -12,11 +12,12 @@ class MockDictDataset(Dataset):
     A flexible mock dataset that returns dictionaries of tensors.
     """
 
-    def __init__(self, size=20, offset=0, keys=("X",), shapes=((1,),)):
+    def __init__(self, size=20, offset=0, keys=("X",), shapes=((1,),), sample_name="mock_sample"):
         self.size = size
         self.offset = offset
         self.keys = keys
         self.shapes = shapes
+        self.sample_name = sample_name
 
     def __len__(self):
         return self.size
@@ -27,6 +28,8 @@ class MockDictDataset(Dataset):
             # Fill with index + offset for traceability
             val = torch.full(shape, float(idx + self.offset))
             ret[key] = val
+        # TFDSDataSource.__getitem__ tags every record with its dataset name
+        ret["sample_name"] = self.sample_name
         return ret
 
 
