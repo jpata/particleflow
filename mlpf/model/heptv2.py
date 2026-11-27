@@ -178,6 +178,16 @@ def fixed_point_coordinates(features):
     return torch.stack((eta, phi), dim=-1)
 
 
+def float_coordinates(features, fixed_coords):
+    if fixed_coords is not None:
+        return fixed_coords.to(torch.float32) / HASH_COORD_SCALE
+    eta = features[..., 2:3].float()
+    sin_phi = features[..., 3:4].float()
+    cos_phi = features[..., 4:5].float()
+    cos_phi = torch.where((sin_phi == 0) & (cos_phi == 0), torch.ones_like(cos_phi), cos_phi)
+    return torch.cat((eta, torch.atan2(sin_phi, cos_phi)), dim=-1)
+
+
 def fixed_point_projection(alpha, coords):
     """Project two integer coordinates without a floating-point GEMM."""
     coeff = torch.round(alpha.float().clamp(-16, 16) * HASH_COEFF_SCALE).to(torch.int64)
@@ -677,7 +687,7 @@ class HEPTv2Layer(nn.Module):
             f"n_hashes={self.n_hashes}, num_regions={self.num_regions}, num_w_per_dist={self.num_w_per_dist}"
         )
 
-    def forward(self, x, mask, X_features, return_attn=False, *, fixed_coords=None, padding_layout=None):
+    def forward(self, x, mask, X_features, return_attn=False, *, fixed_coords=None, padding_layout=None, shared_position_embedding=None):
         _debug_shape("HEPTv2Layer in x", x)
         if mask is not None:
             _debug_shape("HEPTv2Layer in mask", mask)
@@ -689,21 +699,14 @@ class HEPTv2Layer(nn.Module):
         if mask is not None:
             x = x * mask_
 
-        if self.deterministic_hashing:
-            if fixed_coords is None:
-                fixed_coords = fixed_point_coordinates(X_features)
-            coords = fixed_coords.to(torch.float32) / HASH_COORD_SCALE
-            sort_coords = fixed_coords
-            padding_key = HASH_PADDING_KEY
-        else:
+        if not self.deterministic_hashing:
             fixed_coords = None
-            eta = X_features[..., 2:3].float()
-            sin_phi = X_features[..., 3:4].float()
-            cos_phi = X_features[..., 4:5].float()
-            cos_phi = torch.where((sin_phi == 0) & (cos_phi == 0), torch.ones_like(cos_phi), cos_phi)
-            coords = torch.cat((eta, torch.atan2(sin_phi, cos_phi)), dim=-1)
-            sort_coords = coords
-            padding_key = torch.finfo(coords.dtype).max
+        elif fixed_coords is None:
+            fixed_coords = fixed_point_coordinates(X_features)
+
+        coords = float_coordinates(X_features, fixed_coords)
+        sort_coords = fixed_coords if self.deterministic_hashing else coords
+        padding_key = HASH_PADDING_KEY if self.deterministic_hashing else torch.finfo(coords.dtype).max
 
         x_flat = x.view(B * S, D)
         coords_flat = coords.view(B * S, 2)
@@ -736,11 +739,11 @@ class HEPTv2Layer(nn.Module):
             coords_flat = coords_flat.index_select(0, padding_layout.active_tokens)
 
         # Positional embedding
-        if self.pe_func is not None:
-            pe_flat = self.pe_func(coords_flat)
-            x_pe = x_flat + pe_flat
+        if shared_position_embedding is not None:
+            x_pe = x_flat + shared_position_embedding
+        elif self.pe_func is not None:
+            x_pe = x_flat + self.pe_func(coords_flat)
         else:
-            pe_flat = None
             x_pe = x_flat
 
         x_normed = self.norm1(x_pe)

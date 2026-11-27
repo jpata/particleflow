@@ -1078,6 +1078,7 @@ class HEPTv2Config(BaseModel):
     dropout_ff: float = 0.1
     activation: Activation = Activation.ELU
     pe_type: str = "learned"
+    share_position_embedding: bool = False
     block_size: int = 100
     n_hashes: int = 3
     num_regions: int = 140
