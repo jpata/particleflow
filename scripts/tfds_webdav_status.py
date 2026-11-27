@@ -55,7 +55,7 @@ def summary(status):
 
 
 class TransferStatus:
-    def __init__(self, path, *, direction, label, local, remote, total_files, total_bytes, progress_every=20):
+    def __init__(self, path, *, direction, label, local, remote, total_files, total_bytes, progress_every=20, stream=None):
         self.path = Path(path).expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.started = time.monotonic()
@@ -83,7 +83,7 @@ class TransferStatus:
             "updated_at": None,
         }
         self.update(force=True)
-        print(f"Transfer status: {self.path}", flush=True)
+        print(f"Transfer status: {self.path}", file=stream, flush=True)
 
     def update(self, *, force=False, **changes):
         self.status.update(changes)
@@ -124,25 +124,24 @@ class TransferStatus:
         self.update(force=True, error_count=self.status["error_count"] + 1)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", type=Path, nargs="?", help="status JSON path; default: newest job")
     parser.add_argument("--watch", action="store_true", help="refresh until the job completes")
     parser.add_argument("--json", action="store_true", help="print the complete JSON status")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.path is None:
         candidates = list(state_dir().glob("*.json"))
         if not candidates:
             parser.error(f"no transfer status files in {state_dir()}")
         args.path = max(candidates, key=lambda p: p.stat().st_mtime)
+    inline = args.watch and not args.json and sys.stdout.isatty()
     while True:
         status = json.loads(args.path.read_text())
-        line = json.dumps(status, indent=2) if args.json else f"{status['label']}: {summary(status)}"
-        print(
-            "\r" + line + ("\033[K" if args.watch and sys.stdout.isatty() else ""), end="" if args.watch and sys.stdout.isatty() else "\n", flush=True
-        )
+        line = json.dumps(status, indent=None if args.watch else 2) if args.json else f"{status['label']}: {summary(status)}"
+        print(f"\r{line}\033[K" if inline else line, end="" if inline else "\n", flush=True)
         if not args.watch or status["phase"] in {"complete", "failed"}:
-            if args.watch and sys.stdout.isatty():
+            if inline:
                 print()
             break
         time.sleep(2)

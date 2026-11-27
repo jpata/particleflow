@@ -56,8 +56,10 @@ dependencies = [
     #needed to prevent mutex lock error on OSX
     "pyarrow~=22.0.0; sys_platform == 'darwin'",
     "pydantic",
+    "pyyaml",
     "pytest",
     "ray[tune]",
+    "requests",
     "scikit-learn",
     "scikit-optimize",
     "scipy",
