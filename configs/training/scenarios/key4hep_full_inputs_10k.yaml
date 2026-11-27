@@ -1,0 +1,106 @@
+# Short check of the general *_full 1.0.0 datasets (key4hep v1.4.0, 50k events per sample):
+# the HEPTv2 set recipe on raw hits and on tracks + calorimeter hits, for CLD, CLIC, IDEA and
+# ILD. 10k steps on one GPU, to see that the validation losses and physics metrics improve.
+# The variants are separate per-detector, per-input runs, not a controlled comparison.
+name: key4hep_full_inputs_10k
+spec_file: particleflow_spec.yaml
+production_name: cld
+
+variants:
+  cld_hits:
+    model_name: pyg-cld-hits-heptv2-set-v1
+  cld_track_calohit:
+    model_name: pyg-cld-hits-heptv2-set-v1
+    overrides: &track_calohit
+      full_elements: [track, hit_calo]
+  clic_hits:
+    model_name: pyg-clic-hits-heptv2-set-v1
+    production_name: clic
+  clic_track_calohit:
+    model_name: pyg-clic-hits-heptv2-set-v1
+    production_name: clic
+    overrides: *track_calohit
+  idea_hits:
+    model_name: pyg-idea-hits-heptv2-set-v1
+    production_name: idea
+    global_batch_size: 1
+  idea_track_calohit:
+    model_name: pyg-idea-hits-heptv2-set-v1
+    production_name: idea
+    global_batch_size: 1
+    overrides: *track_calohit
+  ild_hits:
+    model_name: pyg-ild-hits-heptv2-set-v1
+    production_name: ild
+    global_batch_size: 1
+  ild_track_calohit:
+    model_name: pyg-ild-hits-heptv2-set-v1
+    production_name: ild
+    overrides: *track_calohit
+
+seeds: [12345]
+
+training:
+  # Sized for the 8 GB RTX cards of the Tallinn gpu1 node in float32: three events per step, or one
+  # where a single event already takes more than half of the card (IDEA, ILD raw hits).
+  global_batch_size: 3
+  parameters:
+    optimizer: lamb
+    lr: 0.001  # OneCycle peak
+    lr_schedule: onecycle
+    lr_schedule_config.onecycle.pct_start: 0.3
+    num_steps: 10000
+    patience: 10000
+    val_freq: 1000
+    checkpoint_freq: 1000
+    nvalid: 512
+    ntest: 512
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 4
+    validation_linear_probe: true
+    validation_linear_probe_max_events: 16
+    pad_to_multiple_elements: 128
+    make_plots: true
+    load: null
+
+# Decoder and feature settings of the release hit recipe (release_checkpoints).
+common_overrides:
+  model.trainable: all
+  model.task_queries: false
+  model.backbone.mode: shared
+  model.backbone.num_convs: 6
+  model.heptv2.embedding_dim: 256
+  model.heptv2.width: 256
+  model.heptv2.num_convs: 6
+  model.heptv2.num_heads: 16
+  model.heptv2.dropout_ff: 0.0
+  model.heptv2.block_size: 128
+  model.heptv2.deterministic_hashing: true
+  model.heptv2.activation_checkpointing: true
+  model.set_decoder.hit_grouping_background_weight: 0.1
+  model.set_decoder.hit_grouping_sparse: false
+  model.set_decoder.hit_grouping_tracker_particle_balanced: false
+  model.set_decoder.tracker_momentum_readout: true
+  model.set_decoder.tracker_overlap_loss_weight: 0.0
+  model.set_decoder.tracker_geometry_loss_weight: 0.0
+  model.set_decoder.tracker_curvature_loss_weight: 0.0
+  model.hit_feature_engineering.enabled: true
+  model.hit_feature_engineering.geometry: true
+  model.hit_feature_engineering.calorimeter_neighborhood: true
+  model.hit_feature_engineering.tracker_neighborhood: true
+  model.hit_feature_engineering.tracker_momentum: false
+  model.hit_feature_engineering.tracker_doublets: false
+
+allowed_variant_differences:
+  - data_dir
+  - dataset
+  - elemtypes_nonzero
+  - enabled_test_datasets
+  - full_elements
+  - hyperparameters
+  - input_dim
+  - num_classes
+  - model
+  - train_dataset
+  - valid_dataset
+  - test_dataset

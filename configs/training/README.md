@@ -126,6 +126,14 @@ Training recipe for the recommended CLD hit model `pyg-cld-hits-heptv2-set-v1`: 
 scripts/lumi/train_scenario.sh cld_pf_heptv2_default_50k mi250x --dry-run
 ```
 
+### `key4hep_full_inputs_10k`
+
+Short check of the general `*_full` 1.0.0 datasets from the key4hep v1.4.0 campaign: the HEPTv2 set recipe on raw hits and on tracks + calorimeter hits (`full_elements: [track, hit_calo]`) for CLD, CLIC, IDEA and ILD, 10k steps each with validation every 1,000 steps. The batch sizes fit the 8 GB RTX cards of the Tallinn `gpu1` node (`tallinn_rtx_key4hep_v140_full`): three events per step, or one for IDEA and for ILD raw hits. Those cards predate Ampere, so the profile trains in float32 and the set decoder uses its chunked attention instead of FlashAttention. `tallinn_l40_key4hep_v140_full` is the L40 profile for the same datasets.
+
+```bash
+scripts/tallinn/train_scenario.sh key4hep_full_inputs_10k configs/training/platforms/tallinn_rtx_key4hep_v140_full.yaml --dry-run
+```
+
 ### Portable benchmarks
 
 `cld_hits_heptv2_benchmark` (HEPTv2 set hit model) is the fixed recipe for GPU comparisons. Preview a sweep with `python -m scripts.training.submit_batch_sweep --platform <profile.yaml> --dry-run` (add `--python-wrapper` for a site environment adapter). See [benchmark portability](../../docs/training/benchmark-portability.md) and the [site setup](../../docs/training/hpc-batch-sweep.md). `cld_gh200_smoke` runs a short HEPTv2 hit-model smoke test on the EmpireAI GH200 node; see [`scripts/empireai/README.md`](../../scripts/empireai/README.md). The earlier attention/HEPTv2 benchmark scenarios were removed together with the attention hit recipes.

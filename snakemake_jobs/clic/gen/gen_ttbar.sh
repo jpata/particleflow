@@ -6,6 +6,7 @@ export NUMEXPR_NUM_THREADS=1
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export VECLIB_MAXIMUM_THREADS=1
+export PYTHONDONTWRITEBYTECODE=1
 export TMPDIR="/scratch/local/joosep/tmp/job_${SLURM_JOB_ID:-manual-$$}"
 export TEMPDIR=$TMPDIR
 export TEMP=$TMPDIR

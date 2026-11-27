@@ -24,6 +24,8 @@ def write_bash_script(path, content, project_root=None, tmpdir=None):
         f.write("export OMP_NUM_THREADS=1\n")
         f.write("export OPENBLAS_NUM_THREADS=1\n")
         f.write("export VECLIB_MAXIMUM_THREADS=1\n")
+        # Bytecode written into a container's --writable-tmpfs overlay fills it and leaves corrupt .pyc files.
+        f.write("export PYTHONDONTWRITEBYTECODE=1\n")
         if tmpdir:
             f.write(f'export TMPDIR="{tmpdir}/job_${{SLURM_JOB_ID:-manual-$$}}"\n')
             f.write("export TEMPDIR=$TMPDIR\n")
@@ -216,7 +218,8 @@ def main(argv=None, *, spec=None):  # noqa: C901
     for sample_key, sample_data in samples.items():
         process_name = sample_data["process_name"]
         seed_start, seed_end = sample_data["seed_range"]
-        gen_script = sample_data["gen_script"]
+        # dataset_only productions that convert existing files (MAIA) have no generator
+        gen_script = sample_data.get("gen_script")
         output_subdir = sample_data.get("output_subdir", process_name)
         events_per_job = sample_data.get("events_per_job", 100)
         pu_type = sample_data.get("pu_type", "nopu")
@@ -248,7 +251,10 @@ def main(argv=None, *, spec=None):  # noqa: C901
             root_file_proto = os.path.join(sample_gen_root_dir, f"reco_{process_name}_" + "${seed}.root")
             gen_base_dir = os.path.join(workspace_dir, "gen")
 
-        gen_cmd = f"bash {gen_script} {process_name} $seed {pu_type}"
+        if gen_script is None:
+            gen_cmd = f"(echo 'No generator is configured for {args.production}/{sample_key}; supply the ROOT files' >&2; exit 1)"
+        else:
+            gen_cmd = f"bash {gen_script} {process_name} $seed {pu_type}"
         if copy_step2:
             gen_cmd += " True"
         if prod_type == "key4hep":

@@ -1,0 +1,26 @@
+# gpu1: nine 8 GB RTX 2070 Super cards sharing 24 schedulable CPUs and 100 GB of memory. These cards predate
+# Ampere: no bfloat16 compilation and no FlashAttention, and float16 gives NaN, so train in float32.
+name: tallinn_rtx_key4hep_v140_full
+gpus: 1
+data_dir:
+  cld: /local/joosep/mlpf/cld/v1.4.0/50k_full/tfds
+  clic: /local/joosep/mlpf/clic/v1.4.0/50k_full/tfds
+  ild: /local/joosep/mlpf/ild/v1.4.0/50k_full/tfds
+  idea: /local/joosep/mlpf/idea/v1.4.0/50k_full/tfds
+experiments_dir: /home/${USER}/particleflow/experiments
+environment:
+  PF_SITE: tallinn
+runtime_overrides:
+  dtype: float32
+  num_workers: 2
+  prefetch_factor: 2
+  model.attention.use_flash_attn_varlen: false
+slurm:
+  partition: gpu
+  time: "24:00:00"
+  nodes: 1
+  tasks_per_node: 1
+  cpus_per_task: 3
+  gpu_request: gres
+  gpu_type: rtx
+  memory_per_gpu: 11G

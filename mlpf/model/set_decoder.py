@@ -1,3 +1,4 @@
+import functools
 import math
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
@@ -88,13 +89,20 @@ def _flash_attn_varlen_eager(*args, **kwargs):
     return flash_attn_varlen_func(*args, **kwargs)
 
 
+@functools.lru_cache(maxsize=None)
+def _supports_flash_attention(device_index):
+    """FlashAttention needs an Ampere or newer NVIDIA GPU (compute capability 8.0); ROCm builds bring their own kernel."""
+    return torch.version.hip is not None or torch.cuda.get_device_capability(device_index)[0] >= 8
+
+
 def _flash_multihead_attention(module, queries, memory, memory_mask=None):
     """Cross/self attention without a query-by-memory allocation.
 
     GPU execution uses packed variable-length FlashAttention. PyTorch's native
     kernel handles zero dropout on NVIDIA; the optional external library retains
     dropout and ROCm support. The streaming fallback
-    keeps CPU tests and inference bounded too; it is not the production kernel.
+    keeps CPU tests and inference bounded too, and runs on GPUs older than
+    Ampere, which FlashAttention does not support; it is not the production kernel.
     """
     batch_size, num_queries, embedding_dim = queries.shape
     num_heads = module.num_heads
@@ -110,7 +118,7 @@ def _flash_multihead_attention(module, queries, memory, memory_mask=None):
         memory_mask = memory_mask.bool()
     empty_events = ~memory_mask.any(dim=1)
 
-    if queries.is_cuda:
+    if queries.is_cuda and _supports_flash_attention(queries.device.index or 0):
         if q.dtype not in (torch.float16, torch.bfloat16):
             raise TypeError("Set decoder FlashAttention requires float16 or bfloat16; enable mixed precision")
         if memory.shape[1] == 0:

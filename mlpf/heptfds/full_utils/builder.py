@@ -1,5 +1,6 @@
 """Common ArrayRecord builder for the full reconstruction view."""
 
+import inspect
 import os
 
 import numpy as np
@@ -24,6 +25,12 @@ class FullBuilder(tfds.core.GeneratorBasedBuilder, skip_registration=True):
     BUILDER_CONFIGS = [tfds.core.BuilderConfig(name=str(i)) for i in range(1, 11)]
     DETECTOR = None
     PROCESS = None
+
+    @tfds.core.utils.classproperty
+    @classmethod
+    def code_path(cls):
+        # The stock lookup imports importlib_resources for builders loaded as a package, which older images lack.
+        return tfds.core.Path(inspect.getfile(cls))
 
     def __init__(self, *args, **kwargs):
         kwargs["file_format"] = tfds.core.FileFormat.ARRAY_RECORD

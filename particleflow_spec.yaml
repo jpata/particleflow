@@ -87,14 +87,31 @@ campaigns:
     expected_events_per_sample_overrides: {idea: 10000}
 
 productions:
+  # MAIA has no generator in this repository: dataset_only converts existing EDM4hep files.
+  # Place or link them as <workspace_dir>/gen/ttbar/root/reco_ttbar_<seed>.root and set seed_range
+  # to the seeds present (end exclusive). The general builder splits train/test by file, so it
+  # needs at least two files. scripts/local_test_maia.sh covers the single public file instead.
   maia:
-    type: "maia"
+    type: "key4hep"
     model: "pyg-maia-v1"
-    comment: "Local MAIA ttbar EDM4hep validation sample"
+    dataset_only: true
+    comment: "MAIA ttbar EDM4hep sample (muon collider), converted from existing reconstruction files"
     workspace_dir: "${project.paths.project_root}/local_test_data/maia_smoke"
     config_dir: "${project.paths.project_root}"
+    memory:
+      post: 8000
+      tfds: 16000
+    samples:
+      ttbar:
+        process_name: "ttbar"
+        seed_range: [10000, 10002]
     postprocessing:
       script: "mlpf/data/key4hep/postprocessing.py"
+    tfds_full_mapping:
+      ttbar:
+        builder_path: "mlpf/heptfds/maia_full/ttbar"
+        version: "1.0.0"
+        config_ids: [10]
 
   # CMS Production Campaign
   cms_run3:
@@ -382,7 +399,7 @@ productions:
 
     memory:
       gen: 2800
-      post: 1000
+      post: 2000
       tfds: 16000
 
     slurm_partition: "main"
@@ -479,7 +496,7 @@ productions:
 
     memory:
       gen: 2800
-      post: 1000
+      post: 2000
       tfds: 16000
 
     slurm_partition: "main"
@@ -635,7 +652,7 @@ productions:
     gen_environment:
       LD_PRELOAD: "/usr/lib64/libffi.so.8"
       KEY4HEP_RELEASE: "2026-04-08"
-    memory: {gen: 2900, post: 1200, tfds: 16000}
+    memory: {gen: 2900, post: 2000, tfds: 16000}
     slurm_partition: "main"
     slurm_runtime: "48h"
     samples:
