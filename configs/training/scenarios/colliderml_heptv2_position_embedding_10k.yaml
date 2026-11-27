@@ -1,0 +1,44 @@
+name: colliderml_heptv2_position_embedding_10k
+production_name: colliderml
+seeds: [12345]
+
+variants:
+  per_layer:
+    model_name: pyg-colliderml-heptv2-v2
+    gpus: 1
+    overrides:
+      model.heptv2.share_position_embedding: false
+  shared:
+    model_name: pyg-colliderml-heptv2-v2
+    gpus: 1
+
+training:
+  global_batch_size: 32
+  parameters:
+    optimizer: lamb
+    lr: 0.001
+    lr_schedule: onecycle
+    lr_schedule_config.onecycle.pct_start: 0.3
+    num_steps: 10000
+    patience: 10000
+    val_freq: 2000
+    checkpoint_freq: 1000
+    tensorboard_step_freq: 100
+    nvalid: 1024
+    ntest: 2048
+    sampler_mode: interleaved-shards
+    validation_diagnostics_batches: 0
+    validation_linear_probe: false
+    pad_to_multiple_elements: 128
+    make_plots: true
+    benchmark.enabled: true
+    benchmark.sample_interval_seconds: 1.0
+    benchmark.warmup_steps: 100
+    benchmark.gpu_timing_interval: 100
+
+common_overrides:
+  valid_dataset.colliderml.physical.samples.colliderml_ttbar_nopu_pf.splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+  test_dataset.colliderml_ttbar_nopu_pf.splits: ["10"]
+
+allowed_variant_differences:
+  - model.heptv2.share_position_embedding

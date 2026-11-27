@@ -1070,6 +1070,7 @@ class HEPTConfig(BaseModel):
 class HEPTv2Config(BaseModel):
     model_config = ConfigDict(extra="forbid")
     activation_checkpointing: bool = False
+    pack_padding: bool = False
     embedding_dim: int = 128
     width: int = 512
     num_convs: int = 6
@@ -1077,6 +1078,7 @@ class HEPTv2Config(BaseModel):
     dropout_ff: float = 0.1
     activation: Activation = Activation.ELU
     pe_type: str = "learned"
+    share_position_embedding: bool = False
     block_size: int = 100
     n_hashes: int = 3
     num_regions: int = 140

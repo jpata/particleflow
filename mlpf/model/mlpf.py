@@ -17,7 +17,7 @@ except ImportError:
     LitePTLayer = None
 
 from mlpf.model.hept import HEPTLayer, trunc_normal_
-from mlpf.model.heptv2 import HEPTv2Layer
+from mlpf.model.heptv2 import HEPTv2Layer, fixed_point_coordinates, float_coordinates, heptv2_padding_layout
 from mlpf.model.input_normalization import InputNormalization
 from mlpf.model.feature_bag import FeatureBag
 from mlpf.model.calo_entry import ClusterCentroid, MultiSourceTrackCaloEntry, TrackCaloEntry
@@ -1641,6 +1641,11 @@ class MLPF(nn.Module):
                     layer_params=layer_params,
                 )
             )
+        if self.conv_type == ModelType.HEPTV2 and self.config.heptv2.share_position_embedding:
+            # Initialize the complete layer stack before removing the extra
+            # MLPs so all weights common to both variants share initialization.
+            for layer in list(layers)[1:]:
+                layer.pe_func = None
         return layers
 
     def _build_backbone_layer(
@@ -1717,6 +1722,8 @@ class MLPF(nn.Module):
         if self.conv_type == ModelType.HEPTV2:
             heptv2_conf = self.config.heptv2.model_dump()
             heptv2_conf.pop("activation_checkpointing")
+            heptv2_conf.pop("pack_padding")
+            heptv2_conf.pop("share_position_embedding")
             for key in [
                 "num_convs",
                 "conv_type",
@@ -1790,13 +1797,31 @@ class MLPF(nn.Module):
         if self.cluster_centroid is not None:
             X_features = self.cluster_centroid(X_features)
 
+        is_heptv2 = self.conv_type == ModelType.HEPTV2
+        heptv2_kwargs = {}
+        if is_heptv2 and self.config.heptv2.deterministic_hashing:
+            heptv2_kwargs["fixed_coords"] = fixed_point_coordinates(X_features)
+            if (
+                self.config.heptv2.pack_padding
+                and mask is not None
+                and (not self.training or self.config.heptv2.dropout_ff == 0)
+                and not torch.onnx.is_in_onnx_export()
+            ):
+                heptv2_kwargs["padding_layout"] = heptv2_padding_layout(mask, self.config.heptv2.block_size)
+        if is_heptv2 and self.config.heptv2.share_position_embedding and backbone[0].pe_func is not None:
+            coords = float_coordinates(X_features, heptv2_kwargs.get("fixed_coords")).reshape(-1, 2)
+            if (layout := heptv2_kwargs.get("padding_layout")) is not None:
+                coords = coords.index_select(0, layout.active_tokens)
+            heptv2_kwargs["shared_position_embedding"] = backbone[0].pe_func(coords)
+        checkpoint_heptv2 = is_heptv2 and self.config.heptv2.activation_checkpointing and self.training and torch.is_grad_enabled()
+
         for conv in backbone:
-            if self.conv_type == ModelType.HEPTV2 and self.config.heptv2.activation_checkpointing and self.training and torch.is_grad_enabled():
-                # Pass the module directly: a closure over `conv` would replay
-                # the final layer during backward. Non-reentrant checkpointing
-                # also supports frozen inputs and DDP without changing weights.
-                x = checkpoint(conv, x, mask, X_features, use_reentrant=False, preserve_rng_state=True)
-            elif self.conv_type in [ModelType.LITEPT, ModelType.HEPT, ModelType.HEPTV2]:
+            if checkpoint_heptv2:
+                # Passing the module directly also supports frozen inputs and DDP.
+                x = checkpoint(conv, x, mask, X_features, use_reentrant=False, preserve_rng_state=True, **heptv2_kwargs)
+            elif is_heptv2:
+                x = conv(x, mask, X_features, **heptv2_kwargs)
+            elif self.conv_type in (ModelType.LITEPT, ModelType.HEPT):
                 x = conv(x, mask, X_features)
             else:
                 x = conv(x, mask, initial_embedding)

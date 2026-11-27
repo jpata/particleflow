@@ -19,6 +19,7 @@ Start with the [CLD hit-model evidence](cld_hit_results.md), which summarizes th
 | [Tracker momentum readout](tracker_momentum_readout.md) | Tracker-only momentum head and sparse hit-to-slot pooling |
 | [Charged fit correction](charged_fit_correction.md) | Circle-fit charged pT with a bounded learned correction |
 | [HEPTv2 activation checkpointing](heptv2_checkpointing.md) | Recomputing backbone activations to reduce training memory |
+| [HEPTv2 and Attention on ColliderML PU0](heptv2_colliderml_pu0.md) | L40S replay of coordinate reuse, padding compaction, and batch scaling |
 | [Reconstruction diagnostics](reconstruction_diagnostics.md) | Optional hit-grouping and momentum diagnostics during validation |
 
 ## Ablations and scaling

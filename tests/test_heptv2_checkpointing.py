@@ -10,7 +10,7 @@ from mlpf.conf import MLPFConfig
 from mlpf.model.mlpf import MLPF
 
 
-def make_model(checkpointing=False, dropout=0.2):
+def make_model(checkpointing=False, dropout=0.2, shared=False):
     config = MLPFConfig.model_validate(
         {
             "dataset": "cld_hits",
@@ -30,6 +30,7 @@ def make_model(checkpointing=False, dropout=0.2):
                     "n_hashes": 3,
                     "dropout_ff": dropout,
                     "activation_checkpointing": checkpointing,
+                    "share_position_embedding": shared,
                 },
                 "hit_feature_engineering": {"enabled": False},
                 "set_decoder": {
@@ -110,3 +111,65 @@ def test_checkpoint_bypassed_outside_opt_in_training(monkeypatch, training, grad
     with torch.set_grad_enabled(grad_enabled):
         outputs = model(x, mask)
     assert torch.isfinite(outputs[2]).all()
+
+
+def test_checkpoint_reuses_coordinates_after_backbone_transform(monkeypatch):
+    import mlpf.model.heptv2 as heptv2
+
+    model = make_model(checkpointing=True)
+    x, mask = make_inputs("cpu")
+    transformed = x.clone()
+    transformed[..., 2] += 1
+
+    class TrackTransform(torch.nn.Module):
+        def forward(self, features, source_id):
+            torch.testing.assert_close(features[..., 2:5], x[..., 2:5])
+            return transformed
+
+    def convert(features):
+        calls.append(features)
+        return reference_conversion(features)
+
+    calls = []
+    reference_conversion = heptv2.fixed_point_coordinates
+    monkeypatch.setattr(mlpf_module, "fixed_point_coordinates", convert)
+    monkeypatch.setattr(heptv2, "fixed_point_coordinates", convert)
+    model.track_calo_entry = TrackTransform()
+
+    model.encode_backbone(x, mask).square().mean().backward()
+    assert len(calls) == 1
+    assert calls[0] is transformed
+
+
+@pytest.mark.parametrize("packed_checkpoint", [False, True])
+def test_shared_position_embedding_matches_tied_layers(packed_checkpoint):
+    torch.manual_seed(12)
+    reference = make_model(dropout=0.0)
+    torch.manual_seed(12)
+    shared = make_model(checkpointing=packed_checkpoint, dropout=0.0, shared=True)
+
+    # The paired scenario starts all remaining parameters from the same values.
+    assert shared.backbone[1].pe_func is None
+    reference_state = reference.state_dict()
+    for name, value in shared.state_dict().items():
+        torch.testing.assert_close(value, reference_state[name], atol=0, rtol=0)
+
+    reference.backbone[1].pe_func = reference.backbone[0].pe_func
+    reference.config.heptv2.pack_padding = packed_checkpoint
+    shared.config.heptv2.pack_padding = packed_checkpoint
+    calls = []
+
+    def observe_embedding(_module, _args, _output):
+        calls.append(1)
+
+    x, mask = make_inputs("cpu")
+    expected = reference.encode_backbone(x, mask)
+    expected.square().mean().backward()
+    with shared.backbone[0].pe_func.register_forward_hook(observe_embedding):
+        actual = shared.encode_backbone(x, mask)
+        actual.square().mean().backward()
+    assert len(calls) == 1
+    torch.testing.assert_close(actual, expected)
+    for actual_param, expected_param in zip(shared.backbone[0].pe_func.parameters(), reference.backbone[0].pe_func.parameters(), strict=True):
+        assert actual_param.grad is not None
+        torch.testing.assert_close(actual_param.grad, expected_param.grad)

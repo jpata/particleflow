@@ -20,7 +20,7 @@ Local modifications in this repository:
 - Batched `[B, S, D]` handling in `HEPTv2Layer.forward`, including mask-aware
   per-event hashing and flattened batch-offset gather indices.
 - Dense bucket attention only on CPU; GPU execution requires compiled
-  `flex_attention`, with dynamic bucket counts and optional shape/debug logging.
+  `flex_attention`, with dynamic bucket counts, or the experimental indexed Triton path.
 - Integration with the MLPF stack through the repo-specific feature layout
   (`eta`, `sin_phi`, `cos_phi` -> eta-phi coordinates).
 - Several `HEPTV2_*` environment switches are preserved from the upstream
@@ -29,6 +29,8 @@ Local modifications in this repository:
 
 import math
 import os
+from typing import NamedTuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -74,6 +76,7 @@ _HEPTV2_COMBINED_UNSORT = _env_bool("HEPTV2_COMBINED_UNSORT", _HEPTV2_DEFAULTS["
 _HEPTV2_MANUAL_HASH_SOFTMAX = _env_bool("HEPTV2_MANUAL_HASH_SOFTMAX", _HEPTV2_DEFAULTS["HEPTV2_MANUAL_HASH_SOFTMAX"])
 _HEPTV2_DIRECT_BUCKET_GATHER = _env_bool("HEPTV2_DIRECT_BUCKET_GATHER", _HEPTV2_DEFAULTS["HEPTV2_DIRECT_BUCKET_GATHER"])
 _HEPTV2_E2LSH_COORDS_EINSUM = _env_bool("HEPTV2_E2LSH_COORDS_EINSUM", _HEPTV2_DEFAULTS["HEPTV2_E2LSH_COORDS_EINSUM"])
+_HEPTV2_INDEXED_BUCKET_ATTENTION = _env_bool("HEPTV2_INDEXED_BUCKET_ATTENTION")
 _HEPTV2_DEBUG_SHAPES = _env_bool("HEPTV2_DEBUG_SHAPES", _HEPTV2_DEFAULTS["HEPTV2_DEBUG_SHAPES"])
 
 
@@ -173,6 +176,16 @@ def fixed_point_coordinates(features):
     angle_sign = (angle > 0).to(torch.int64) - (angle < 0).to(torch.int64)
     phi = angle_sign * torch.div(torch.abs(angle) + 512, 1024, rounding_mode="trunc")
     return torch.stack((eta, phi), dim=-1)
+
+
+def float_coordinates(features, fixed_coords):
+    if fixed_coords is not None:
+        return fixed_coords.to(torch.float32) / HASH_COORD_SCALE
+    eta = features[..., 2:3].float()
+    sin_phi = features[..., 3:4].float()
+    cos_phi = features[..., 4:5].float()
+    cos_phi = torch.where((sin_phi == 0) & (cos_phi == 0), torch.ones_like(cos_phi), cos_phi)
+    return torch.cat((eta, torch.atan2(sin_phi, cos_phi)), dim=-1)
 
 
 def fixed_point_projection(alpha, coords):
@@ -387,6 +400,44 @@ def get_geo_shift_single(regions_h, hash_shift, region_indices, num_or_hashes):
         return rearrange(hash_shift_phi + hash_shift_eta, "(c h) n -> c h n", c=num_or_hashes)
 
 
+class HEPTv2PaddingLayout(NamedTuple):
+    # Original token indices for all buckets that contain at least one valid token.
+    active_tokens: torch.Tensor
+    # Original indices and packed indices of valid tokens within those buckets.
+    valid_tokens: torch.Tensor
+    valid_lanes: torch.Tensor
+    # Slots in the release's sorted layout and the map from dense to packed tokens.
+    occupied_slots: torch.Tensor
+    token_to_lane: torch.Tensor
+
+
+def heptv2_padding_layout(mask, block_size):
+    """Build a shared packed layout within the original bucket boundaries."""
+    batch_size, width = mask.shape
+    if width % block_size != 0 or batch_size == 0:
+        return None
+
+    valid = mask.bool()
+    valid_tokens = valid.flatten().nonzero().squeeze(-1)
+    if valid_tokens.numel() in (0, valid.numel()):
+        return None
+
+    lengths = valid.sum(dim=-1)
+    occupied_width = ((lengths + block_size - 1) // block_size) * block_size
+
+    # Stable hashing puts masked tokens at the end in their original order. The
+    # first masked tokens can still affect valid outputs from the final bucket.
+    padding = ~valid
+    active = valid | (padding.cumsum(dim=-1) <= (occupied_width - lengths)[:, None])
+    active = active.flatten()
+    active_tokens = active.nonzero().squeeze(-1)
+    token_to_lane = active.cumsum(dim=0) - 1
+    valid_lanes = token_to_lane.index_select(0, valid_tokens)
+    slots = torch.arange(width, device=mask.device) < occupied_width[:, None]
+    occupied_slots = slots.flatten().nonzero().squeeze(-1)
+    return HEPTv2PaddingLayout(active_tokens, valid_tokens, valid_lanes, occupied_slots, token_to_lane)
+
+
 class HEPTv2Attention(nn.Module):
     def __init__(self, hash_dim, **kwargs):
         super().__init__()
@@ -413,13 +464,9 @@ class HEPTv2Attention(nn.Module):
         key = key.view(-1, self.num_heads, self.dim_per_head)
         value = value.view(-1, self.num_heads, self.dim_per_head)
 
-        q_hat = rearrange(query, "n h d -> h n d")
-        k_hat = rearrange(key, "n h d -> h n d")
-        value = rearrange(value, "n h d -> h n d")
-
         valid_mask = kwargs.get("valid_mask")
         if valid_mask is None:
-            valid_mask = torch.ones(q_hat.shape[1], dtype=torch.bool, device=q_hat.device)
+            valid_mask = torch.ones(query.shape[0], dtype=torch.bool, device=query.device)
         else:
             valid_mask = valid_mask.bool()
         coords2 = kwargs["coords"][..., :2]
@@ -508,23 +555,46 @@ class HEPTv2Attention(nn.Module):
             batch_offsets = torch.arange(B, device=positions.device).view(1, 1, B, 1) * S
             positions = (positions + batch_offsets).view(active_hashes, self.num_heads, B * S)
 
+        padding_layout = kwargs.get("padding_layout")
+        if padding_layout is not None:
+            # Keep the dense quantile regions and per-event bucket boundaries.
+            # Only gather the positions of buckets that have a valid query.
+            positions = padding_layout.token_to_lane[positions.index_select(-1, padding_layout.occupied_slots)]
+
         _debug_shape("HEPTv2Attention hash positions", positions)
-        s_query, s_key, s_value = sort_qkv_to_buckets(q_hat, k_hat, value, positions, self.block_size)
-        _debug_shape("HEPTv2Attention buckets s_query", s_query)
+        if (
+            _HEPTV2_INDEXED_BUCKET_ATTENTION
+            and query.is_cuda
+            and torch.version.hip is None
+            and query.dtype == key.dtype == value.dtype == torch.bfloat16
+            and torch.cuda.get_device_capability(query.device)[0] >= 8
+            and self.block_size == 128
+            and self.dim_per_head == 16
+            and not torch.onnx.is_in_onnx_export()
+        ):
+            from mlpf.model.heptv2_indexed import indexed_bucket_attention
 
-        if torch.onnx.is_in_onnx_export() and self.onnx_attention_dtype is not None:
-            s_query, s_key, s_value = (t.to(self.onnx_attention_dtype) for t in (s_query, s_key, s_value))
-        denom, so = qkv_res(s_query, s_key, s_value, attention_format=self.onnx_attention_format)
-        q_rev_positions = invert_permutation(positions)
-
-        if _HEPTV2_COMBINED_UNSORT:
-            combined = torch.cat([so, denom], dim=-1)
-            combined = unsort_from_buckets(combined, q_rev_positions)
-            o = combined[..., : self.dim_per_head]
-            logits = combined[..., self.dim_per_head :]
+            logits, o = indexed_bucket_attention(query, key, value, positions, self.block_size)
         else:
-            o = unsort_from_buckets(so, q_rev_positions)
-            logits = unsort_from_buckets(denom, q_rev_positions)
+            q_hat = rearrange(query, "n h d -> h n d")
+            k_hat = rearrange(key, "n h d -> h n d")
+            v_hat = rearrange(value, "n h d -> h n d")
+            s_query, s_key, s_value = sort_qkv_to_buckets(q_hat, k_hat, v_hat, positions, self.block_size)
+            _debug_shape("HEPTv2Attention buckets s_query", s_query)
+
+            if torch.onnx.is_in_onnx_export() and self.onnx_attention_dtype is not None:
+                s_query, s_key, s_value = (t.to(self.onnx_attention_dtype) for t in (s_query, s_key, s_value))
+            denom, so = qkv_res(s_query, s_key, s_value, attention_format=self.onnx_attention_format)
+            q_rev_positions = invert_permutation(positions)
+
+            if _HEPTV2_COMBINED_UNSORT:
+                combined = torch.cat([so, denom], dim=-1)
+                combined = unsort_from_buckets(combined, q_rev_positions)
+                o = combined[..., : self.dim_per_head]
+                logits = combined[..., self.dim_per_head :]
+            else:
+                o = unsort_from_buckets(so, q_rev_positions)
+                logits = unsort_from_buckets(denom, q_rev_positions)
 
         if _HEPTV2_MANUAL_HASH_SOFTMAX:
             weights = torch.exp(logits - logits.max(dim=0, keepdim=True).values)
@@ -617,7 +687,7 @@ class HEPTv2Layer(nn.Module):
             f"n_hashes={self.n_hashes}, num_regions={self.num_regions}, num_w_per_dist={self.num_w_per_dist}"
         )
 
-    def forward(self, x, mask, X_features, return_attn=False):
+    def forward(self, x, mask, X_features, return_attn=False, *, fixed_coords=None, padding_layout=None, shared_position_embedding=None):
         _debug_shape("HEPTv2Layer in x", x)
         if mask is not None:
             _debug_shape("HEPTv2Layer in mask", mask)
@@ -629,20 +699,14 @@ class HEPTv2Layer(nn.Module):
         if mask is not None:
             x = x * mask_
 
-        if self.deterministic_hashing:
-            fixed_coords = fixed_point_coordinates(X_features)
-            coords = fixed_coords.to(torch.float32) / HASH_COORD_SCALE
-            sort_coords = fixed_coords
-            padding_key = HASH_PADDING_KEY
-        else:
+        if not self.deterministic_hashing:
             fixed_coords = None
-            eta = X_features[..., 2:3].float()
-            sin_phi = X_features[..., 3:4].float()
-            cos_phi = X_features[..., 4:5].float()
-            cos_phi = torch.where((sin_phi == 0) & (cos_phi == 0), torch.ones_like(cos_phi), cos_phi)
-            coords = torch.cat((eta, torch.atan2(sin_phi, cos_phi)), dim=-1)
-            sort_coords = coords
-            padding_key = torch.finfo(coords.dtype).max
+        elif fixed_coords is None:
+            fixed_coords = fixed_point_coordinates(X_features)
+
+        coords = float_coordinates(X_features, fixed_coords)
+        sort_coords = fixed_coords if self.deterministic_hashing else coords
+        padding_key = HASH_PADDING_KEY if self.deterministic_hashing else torch.finfo(coords.dtype).max
 
         x_flat = x.view(B * S, D)
         coords_flat = coords.view(B * S, 2)
@@ -670,12 +734,16 @@ class HEPTv2Layer(nn.Module):
             region_indices_phi = quantile_partition(sorted_phi_idx, regions_h[1][:, None], self.deterministic_hashing)
             region_indices = [region_indices_eta, region_indices_phi]
 
+        if padding_layout is not None:
+            x_flat = x_flat.index_select(0, padding_layout.active_tokens)
+            coords_flat = coords_flat.index_select(0, padding_layout.active_tokens)
+
         # Positional embedding
-        if self.pe_func is not None:
-            pe_flat = self.pe_func(coords_flat)
-            x_pe = x_flat + pe_flat
+        if shared_position_embedding is not None:
+            x_pe = x_flat + shared_position_embedding
+        elif self.pe_func is not None:
+            x_pe = x_flat + self.pe_func(coords_flat)
         else:
-            pe_flat = None
             x_pe = x_flat
 
         x_normed = self.norm1(x_pe)
@@ -703,14 +771,20 @@ class HEPTv2Layer(nn.Module):
             region_indices=region_indices,
             raw_size=raw_size,
             valid_mask=valid_mask,
+            padding_layout=padding_layout,
         )
 
-        attn_out = attn_out.view(B, S, D)
+        if padding_layout is not None:
+            x_flat = x_flat.index_select(0, padding_layout.valid_lanes)
+            attn_out = attn_out.index_select(0, padding_layout.valid_lanes)
 
         # Residual + MLP (FNN)
-        x_flat_pe = x_flat + self.dropout(attn_out.view(B * S, D))
+        x_flat_pe = x_flat + self.dropout(attn_out)
         ff_out = self.ff(self.norm2(x_flat_pe))
         x_out = x_flat_pe + self.dropout(ff_out)
+
+        if padding_layout is not None:
+            x_out = x_out.new_zeros((B * S, D)).index_copy_(0, padding_layout.valid_tokens, x_out)
 
         x_out = x_out.view(B, S, D)
 
