@@ -376,8 +376,7 @@ gradients to BF16, accumulates across hashes in FP32, and processes
 hashes in order when deterministic algorithms are enabled.
 The experimental switch is off by default.
 
-L40S resources were queued (Slurm array 62903767). The paired BF16
-measurements below used an A100 80 GB PCIe (array 62904029), the
+The paired BF16 measurements below used an A100 80 GB PCIe (array 62904029), the
 matched-capacity recipes and the same ColliderML PU0 inputs as the
 earlier studies. HEPTv2 arms used packed padding, three hashes,
 `HEPTV2_FAST_INVERT_PERM=1` and `HEPTV2_COMBINED_UNSORT=0`.
@@ -411,6 +410,73 @@ an explicit experiment for checkpoint evaluation.
 
 Raw measurements and Slurm launchers are in the worktree's
 `experiments/issue588/indexed-a100/` and `experiments/issue588/indexed/`.
+
+The L40S training and inference tasks in array 62903767 also completed.
+At batch 128, indexing raised training throughput from 206 to 215
+events/s and inference throughput from 603 to 699 events/s. The
+training allocation peak fell from 29.43 to 24.68 GiB. The L40S
+checkpoint replay measured an 11.72% aggregate gradient difference.
+
+## Closing the remaining throughput gap
+
+The batch-128 L40S training replay had 1,024 timed events with
+a median of 734 valid elements, p95 of 1,038, and a maximum of 1,368.
+Global Flash runs separately inside each event, so increasing the
+number of short events per batch preserves short attention sequences.
+
+A100 job 62904484 compared five variants on the same GPU and identical
+ordered TFDS inputs. Each point uses three warmup and eight timed
+optimizer steps. The HEPTv2 global-Flash probe keeps its coordinate
+transform, positional MLPs, Q/K norms, 256-wide projections, and gated
+feed-forward blocks. It substitutes jagged Flash over the valid tokens
+within each event for the hash routing and attention. Both the global
+and one-hash probes change the model's token neighborhoods.
+
+| Batch-128 training variant | Events/s | Peak allocated GiB | Sampled device GiB |
+|---|---:|---:|---:|
+| Matched Flash Attention | 735.3 | 13.13 | 20.65 |
+| Indexed HEPTv2, three hashes | 404.7 | 24.68 | 33.00 |
+| Indexed HEPTv2 + positional checkpoint | 387.7 | 18.77 | 22.64 |
+| Indexed HEPTv2, one hash | 466.6 | 23.80 | 32.01 |
+| HEPTv2 block with global Flash | 485.7 | 22.50 | 32.09 |
+
+Indexed HEPTv2 spent 107 ms in forward/loss and 180 ms in backward,
+versus 55 and 94 ms for matched Flash. The backward phase accounts for
+about 86 ms of the 142 ms step-time gap. Substituting global Flash
+inside HEPTv2 recovered about 52 ms per step. Its remaining gap
+motivates work on the tokenwise projections, per-layer position
+embeddings and normalization alongside routing.
+
+The positional checkpoint alone reduced sampled device VRAM by
+31% with a 4% throughput cost. It recomputes the same position
+embedding, which preserves the indexed path's routing and precision.
+
+A second A100 replay (job 62904571) tested sharing the positional
+embedding across all six layers. One learned positional MLP ran once
+on the corresponding packed tokens, and the other five position
+embeddings were removed. This probe has 7.30M trainable parameters,
+compared with 8.64M for unmodified HEPTv2.
+
+| Batch-128 training variant | Events/s | Peak allocated GiB | Sampled device GiB |
+|---|---:|---:|---:|
+| HEPTv2 block with global Flash, repeat | 484.4 | 22.50 | 32.09 |
+| HEPTv2 block with global Flash + positional checkpoint | 461.6 | 17.07 | 21.79 |
+| Indexed HEPTv2 + shared positional embedding | 456.7 | 19.74 | 27.08 |
+| HEPTv2 block with global Flash + shared positional embedding | 557.0 | 17.95 | 26.64 |
+
+Global Flash plus the shared embedding reached 76% of the matched
+Flash recipe's throughput, with 27% less peak allocated memory than
+the indexed baseline. The short-event probe changes the model. A
+length-based variant could use this path for ordinary PU0 events and
+indexed buckets on the long-sequence regime, with its threshold
+chosen from the hardware crossover. Training and physics evaluation
+would establish the effect on reconstruction quality.
+
+For the three-hash architecture, follow positional checkpointing with
+a backward profile of RMSNorm, the gated MLP, and the indexed attention
+gradient accumulation. Candidate fusions should account for the
+precision sensitivity in the published-checkpoint comparison. The two
+A100 runs and the probe source are in `experiments/issue588/gap/`.
 
 ## Reproduce
 
