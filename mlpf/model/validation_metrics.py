@@ -54,7 +54,7 @@ def validation_particle_collections(batch, predictions, output_mode):
     return targets, target_mask, predictions, prediction_mask
 
 
-def _empty_metrics(num_classes):
+def empty_validation_particle_metrics(num_classes, detailed=False):
     names = [
         "count/target_mean",
         "count/prediction_mean",
@@ -88,7 +88,10 @@ def _empty_metrics(num_classes):
                 f"class_{class_id}/pid_accuracy",
             ]
         )
-    return {name: [0.0, 0.0] for name in names}
+    metrics = {name: [0.0, 0.0] for name in names}
+    if detailed:
+        metrics.update(empty_momentum_metrics(num_classes))
+    return metrics
 
 
 def _add(metrics, name, total, count):
@@ -289,9 +292,7 @@ def compute_validation_particle_metrics(targets, target_mask, predictions, predi
     and event sums, so the ordinary accepted-match errors retain their meaning.
     """
 
-    metrics = _empty_metrics(num_classes)
-    if detailed:
-        metrics.update(empty_momentum_metrics(num_classes))
+    metrics = empty_validation_particle_metrics(num_classes, detailed)
     for event_idx in range(target_mask.shape[0]):
         event_targets = _clean_kinematics(
             {name: value[event_idx] for name, value in targets.items()},

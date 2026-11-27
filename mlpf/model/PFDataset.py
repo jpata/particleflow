@@ -76,6 +76,7 @@ class TFDSDataSource:
         assert len(ret) == 1
         ret = ret[0]
         ds_name = self.ds.dataset_info.name
+        ret["sample_name"] = ds_name
         ret["source_id"] = np.int64(dataset_source_id(ds_name))
         ret["input_type_id"] = np.int64(dataset_input_type_id(ds_name))
 
@@ -251,8 +252,9 @@ class PFDataset:
 
 
 class PFBatch:
-    def __init__(self, **kwargs):
+    def __init__(self, *, sample_names=None, **kwargs):
         self.attrs = list(kwargs.keys())
+        self.sample_names = sample_names
 
         # write out the possible attributes here explicitly
         self.X = kwargs["X"]
@@ -278,15 +280,16 @@ class PFBatch:
         for attr in self.attrs:
             this_attr = getattr(self, attr)
             attrs[attr] = this_attr.to(device, **kwargs) if this_attr is not None else None
-        return PFBatch(**attrs)
+        return PFBatch(sample_names=self.sample_names, **attrs)
 
 
 # pads items with variable lengths (seq_len1, seq_len2, ...) to [batch, max(seq_len), ...]
 class Collater:
-    def __init__(self, per_particle_keys_to_get, per_event_keys_to_get, **kwargs):
+    def __init__(self, per_particle_keys_to_get, per_event_keys_to_get, *, include_sample_names=False, **kwargs):
         super(Collater, self).__init__(**kwargs)
         self.per_particle_keys_to_get = per_particle_keys_to_get  # these quantities are a variable-length tensor per each event
         self.per_event_keys_to_get = per_event_keys_to_get  # these quantities are one value (scalar) per event
+        self.include_sample_names = include_sample_names
 
     def __call__(self, inputs):
         ret = {}
@@ -303,7 +306,8 @@ class Collater:
             if not all(key_to_get in inp for inp in inputs):
                 continue
             ret[key_to_get] = torch.stack([torch.as_tensor(inp[key_to_get]) for inp in inputs])
-        return PFBatch(**ret)
+        sample_names = tuple(inp["sample_name"] for inp in inputs) if self.include_sample_names else None
+        return PFBatch(sample_names=sample_names, **ret)
 
 
 class ShardConsecutiveSampler(torch.utils.data.Sampler):
@@ -859,7 +863,11 @@ def get_interleaved_dataloaders(world_size, rank, config: MLPFConfig, use_cuda, 
             loader = torch.utils.data.DataLoader(
                 dataset,
                 batch_size=batch_size,
-                collate_fn=Collater(per_particle_keys, ["genmet", "source_id", "input_type_id"]),
+                collate_fn=Collater(
+                    per_particle_keys,
+                    ["genmet", "source_id", "input_type_id"],
+                    include_sample_names=split == "valid" and config.validation_particle_metrics,
+                ),
                 sampler=sampler,
                 num_workers=config.num_workers,
                 # Training uses fixed-size batches, but a bounded validation
