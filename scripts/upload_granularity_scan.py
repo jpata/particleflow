@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Upload all CLD granularity scan TFDS roots with verified Davix transfers."""
+"""Upload all CLD granularity scan TFDS roots with verified WebDAV transfers."""
 
 import argparse
-import subprocess
-import sys
 from pathlib import Path
+
+from tfds_webdav import main as webdav_main
 
 ROOT = Path("/local/joosep/mlpf/cld/granularity_scan_2025-05-29")
 POINTS = (
@@ -26,8 +26,8 @@ POINTS = (
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--local-root", type=Path, default=ROOT, help="directory containing scan-point workspaces")
-    parser.add_argument("--image", type=Path, default=Path("davix.sif"))
     parser.add_argument("--proxy", type=Path)
+    parser.add_argument("--capath", type=Path)
     parser.add_argument("--remote-root")
     parser.add_argument("--point", action="append", choices=POINTS, help="repeat to select scan points; default: all twelve")
     parser.add_argument("--jobs", type=int, default=8)
@@ -59,18 +59,16 @@ def main():
                 total_files += len(members)
                 total_bytes += sum(p.stat().st_size for p in members)
             tasks.append((point, tfds, dataset, version))
-    print(f"Selected {len(selected)} scan points, {len(tasks)} datasets, " f"{total_files} files, {total_bytes:,} bytes", flush=True)
+    print(f"Selected {len(selected)} scan points, {len(tasks)} datasets, {total_files} files, {total_bytes:,} bytes", flush=True)
     if args.dry_run:
         for point, _, dataset, version in tasks:
             print(f"cld/granularity_scan_2025-05-29/{point}/{dataset}/*/{version}")
         return
 
-    uploader = Path(__file__).with_name("tfds_webdav_upload.py")
     for index, (point, tfds, dataset, version) in enumerate(tasks, 1):
         print(f"[{index}/{len(tasks)}] {point}/{dataset} {version}", flush=True)
         command = [
-            sys.executable,
-            str(uploader),
+            "upload",
             "--local-root",
             str(tfds),
             "--detector",
@@ -85,14 +83,14 @@ def main():
             version,
             "--jobs",
             str(args.jobs),
-            "--image",
-            str(args.image),
         ]
         if args.proxy:
             command += ["--proxy", str(args.proxy)]
+        if args.capath:
+            command += ["--capath", str(args.capath)]
         if args.remote_root:
             command += ["--remote-root", args.remote_root]
-        subprocess.run(command, check=True)
+        webdav_main(command)
     print(f"Completed {len(tasks)} datasets, {total_files} files, {total_bytes:,} bytes.", flush=True)
 
 

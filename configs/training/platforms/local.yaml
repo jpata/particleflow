@@ -3,6 +3,9 @@ gpus: 1
 data_dir:
   cld: /mnt/work/mlpf/tensorflow_datasets/cld
   clic: /mnt/work/mlpf/tensorflow_datasets/clic
+  ild: /mnt/work/mlpf/tensorflow_datasets/ild
+  idea: /mnt/work/mlpf/tensorflow_datasets/idea
+  colliderml: /mnt/work/mlpf/tensorflow_datasets/colliderml
 experiments_dir: experiments
 environment:
   PF_SITE: local
