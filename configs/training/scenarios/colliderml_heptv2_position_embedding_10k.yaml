@@ -4,13 +4,13 @@ seeds: [12345]
 
 variants:
   per_layer:
-    model_name: pyg-colliderml-v1
-    gpus: 1
-  shared:
-    model_name: pyg-colliderml-v1
+    model_name: pyg-colliderml-heptv2-v2
     gpus: 1
     overrides:
-      model.heptv2.share_position_embedding: true
+      model.heptv2.share_position_embedding: false
+  shared:
+    model_name: pyg-colliderml-heptv2-v2
+    gpus: 1
 
 training:
   global_batch_size: 32
@@ -37,23 +37,6 @@ training:
     benchmark.gpu_timing_interval: 100
 
 common_overrides:
-  model.type: heptv2
-  model.attention: null
-  model.trainable: all
-  model.input_normalization: true
-  model.task_queries: false
-  model.backbone.mode: shared
-  model.backbone.num_convs: 6
-  model.heptv2.embedding_dim: 256
-  model.heptv2.width: 256
-  model.heptv2.num_convs: 6
-  model.heptv2.num_heads: 16
-  model.heptv2.dropout_ff: 0.0
-  model.heptv2.block_size: 128
-  model.heptv2.n_hashes: 3
-  model.heptv2.deterministic_hashing: true
-  model.heptv2.pack_padding: true
-  model.heptv2.activation_checkpointing: false
   valid_dataset.colliderml.physical.samples.colliderml_ttbar_nopu_pf.splits: ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
   test_dataset.colliderml_ttbar_nopu_pf.splits: ["10"]
 

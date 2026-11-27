@@ -56,6 +56,21 @@ Reference checkpoints published with each release under `{cld,clic,colliderml}/{
 scripts/lumi/train_scenario.sh release_checkpoints mi250x --dry-run
 ```
 
+### `colliderml_heptv2_position_embedding_10k`
+
+ColliderML PU0 comparison at global batch 32 on one L40S per variant. The
+`shared` variant uses the `pyg-colliderml-heptv2-v2` recipe with one learned
+positional embedding across six layers, packed padding, and three hashes.
+Select this variant to train the optimized model from scratch. The study
+reports 10,000-step training and held-out jet metrics. [ColliderML HEPTv2 study](../../docs/studies/heptv2_colliderml_pu0.md#training-with-a-shared-positional-embedding-on-l40s)
+
+```bash
+export HEPTV2_FAST_INVERT_PERM=1 HEPTV2_COMBINED_UNSORT=0 HEPTV2_INDEXED_BUCKET_ATTENTION=0
+uv run python3 scripts/training/run_scenario.py \
+  --scenario configs/training/scenarios/colliderml_heptv2_position_embedding_10k.yaml \
+  --platform configs/training/platforms/tallinn_l40.yaml --variant shared
+```
+
 ### `clic_cld_backbone_benchmark`
 
 CLIC/CLD × tracks-and-clusters/hits × attention/HEPTv2 (`{cld,clic}_{pf,hits}_{attention,heptv2}`), from scratch, 50k steps at global batch 128, LAMB, LR 0.001, cosine decay. Both backbones have six layers of width 256 with 16 heads; HEPTv2 uses block size 128 and activation checkpointing. This matches event exposure and width, not parameter count. Track/cluster jobs use one GPU, hit jobs the platform count. The hit recipe is described in [CLD hit-model campaigns](../../docs/studies/cld_hit_campaigns.md#hit-recipe-in-the-backbone-benchmark). The older `clic_cld_pf_set_hits_comparison` keeps its historical attention-only recipe.

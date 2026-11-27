@@ -525,7 +525,21 @@ F1 difference. The paired intervals for the jet response median
 and IQR differences also included zero. These intervals reflect
 test-event variation for this training seed.
 
-The scenario is
+Job 62905261 replayed both final checkpoints on one L40S with the
+same ordered test events and packing. Each point used six warmup
+and 36 timed BF16 requests with inputs already on the GPU.
+
+| Events per batch | Median latency (ms), per-layer / shared | Events/s, per-layer / shared | Peak PyTorch allocated (GiB), per-layer / shared | Peak sampled device (GiB), per-layer / shared |
+|---:|---:|---:|---:|---:|
+| 1 | 26.45 / 23.19 | 36.6 / 42.8 | 0.061 / 0.056 | 0.577 / 0.573 |
+| 8 | 24.67 / 23.10 | 322.8 / 345.7 | 0.248 / 0.246 | 0.800 / 0.810 |
+| 32 | 41.56 / 35.29 | 762.8 / 895.8 | 0.799 / 0.808 | 1.479 / 1.437 |
+| 64 | 91.45 / 78.08 | 698.8 / 817.0 | 1.568 / 1.588 | 2.442 / 2.386 |
+| 128 | 219.40 / 192.48 | 582.9 / 664.1 | 3.380 / 3.426 | 4.825 / 4.665 |
+
+The optimized training recipe is `pyg-colliderml-heptv2-v2` in
+`particleflow_spec.yaml`. Its shared embedding, packing, and hash
+configuration match the 10,000-step run. The comparison scenario is
 `configs/training/scenarios/colliderml_heptv2_position_embedding_10k.yaml`
 with `configs/training/platforms/tallinn_l40.yaml`. Both tasks used
 `HEPTV2_FAST_INVERT_PERM=1`, `HEPTV2_COMBINED_UNSORT=0`, and
