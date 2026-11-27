@@ -547,6 +547,44 @@ with `configs/training/platforms/tallinn_l40.yaml`. Both tasks used
 logs, histories, checkpoints, and per-event predictions are in
 `experiments/issue588/position_embedding_10k/` in the worktree.
 
+### Shared embedding with indexed Triton attention
+
+Slurm job 62905422 trained a third arm for 10,000 steps on L40S from
+the same `3009f335` source revision. It used the same seed, resolved
+training configuration and data as the shared FlexAttention arm,
+with `HEPTV2_INDEXED_BUCKET_ATTENTION=1` to select the indexed Triton
+kernel. The kernel uses the same three-hash bucket assignments and
+loads Q, K and V directly through those indices.
+
+| Measure | Per-layer FlexAttention | Shared FlexAttention | Shared indexed Triton |
+|---|---:|---:|---:|
+| Training events/s | 197.84 | 212.37 | 240.37 |
+| Median training step (ms) | 154.24 | 140.02 | 125.13 |
+| p99 training step (ms) | 216.97 | 272.19 | 321.07 |
+| Peak PyTorch allocated VRAM (GiB) | 8.51 | 7.16 | 5.88 |
+| Peak sampled device VRAM (GiB) | 11.48 | 11.07 | 9.02 |
+| Final unweighted validation loss | 3.09365 | 3.09754 | 3.09726 |
+| Final matched jet pT response median | 0.99672 | 0.99619 | 0.99600 |
+| Final matched jet pT response IQR | 0.12441 | 0.12327 | 0.12238 |
+| Final response-qualified jet F1 | 0.75989 | 0.76068 | 0.75971 |
+
+Compared with shared FlexAttention, Triton increased steady training
+throughput by 13.2% and reduced peak PyTorch allocated memory by
+17.9%. The recorded p99 step time increased. The Triton minus shared
+FlexAttention jet F1 difference was −0.10 percentage points, with a
+paired 95% test-event bootstrap interval from −0.30 to +0.11 points
+for this training seed.
+
+Slurm job 62905429 replayed all three final checkpoints on one L40S.
+It verified that the indexed kernel ran in all six Triton layers,
+then timed 36 BF16 requests per batch size after six warmup requests.
+The variants used identical ordered test events at every batch size.
+Compared with shared FlexAttention, Triton reduced median batch-one
+latency from 27.87 to 22.17 ms and raised batch-32 throughput from
+838.5 to 1,029.1 events/s. At batch 128, peak PyTorch allocated VRAM
+fell from 3.43 to 2.76 GiB. The three plots and benchmark summary are
+in `experiments/issue588/position_embedding_10k/three-variant-evidence/`.
+
 ## Reproduce
 
 Run on a single GPU with the release weights downloaded to `attention.pth`
